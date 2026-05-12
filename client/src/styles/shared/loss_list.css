@@ -1,0 +1,266 @@
+/* =========================================================
+   LOSS LIST — Triangle-style cells, compact layout
+   Shared by Large Loss + Cat Loss (Prop & NP)
+========================================================= */
+
+/* ── Toolbar ── */
+.LOSS_LIST_PAGE .ll-toolbar{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.LOSS_LIST_PAGE .ll-toolbar-left,
+.LOSS_LIST_PAGE .ll-toolbar-right{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.LOSS_LIST_PAGE .ll-report-date{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.LOSS_LIST_PAGE .ll-label{
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: rgba(148,163,184,.80);
+}
+
+.LOSS_LIST_PAGE .ll-date-input{
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--accent-rgb),.30) !important;
+  background: rgba(8,16,40,.30) !important;
+  color: rgba(226,232,240,.90);
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: none !important;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.LOSS_LIST_PAGE .ll-date-input:focus{
+  border-color: rgba(var(--accent-rgb),.55) !important;
+  outline: none;
+}
+
+.LOSS_LIST_PAGE .ll-count{
+  font-size: 11px;
+  color: rgba(148,163,184,.65);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148,163,184,.15);
+  background: rgba(8,16,40,.20);
+}
+
+/* Buttons */
+.LOSS_LIST_PAGE .ll-btn{
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid rgba(148,163,184,.22);
+  background: rgba(8,16,40,.25);
+  color: rgba(226,232,240,.80);
+  transition: all .15s ease;
+}
+.LOSS_LIST_PAGE .ll-btn:hover{
+  border-color: rgba(148,163,184,.40);
+  background: rgba(148,163,184,.10);
+}
+
+.LOSS_LIST_PAGE .ll-btn--save{
+  border-color: rgba(var(--accent-rgb),.30);
+  color: rgba(var(--accent-rgb),.90);
+}
+.LOSS_LIST_PAGE .ll-btn--save:hover{
+  border-color: rgba(var(--accent-rgb),.55);
+  background: rgba(var(--accent-rgb),.08);
+}
+.LOSS_LIST_PAGE .ll-btn--dirty{
+  border-color: rgba(251,146,60,.50);
+  color: rgba(251,146,60,.95);
+  animation: ll-pulse 1.5s infinite;
+}
+@keyframes ll-pulse{
+  0%,100%{ box-shadow: 0 0 0 0 rgba(251,146,60,.15); }
+  50%{ box-shadow: 0 0 0 4px rgba(251,146,60,.10); }
+}
+
+.LOSS_LIST_PAGE .ll-btn--clear{
+  border-color: rgba(239,68,68,.25);
+  color: rgba(239,68,68,.75);
+}
+.LOSS_LIST_PAGE .ll-btn--clear:hover{
+  border-color: rgba(239,68,68,.50);
+  background: rgba(239,68,68,.06);
+}
+
+.LOSS_LIST_PAGE .ll-btn--load{
+  border-color: rgba(59,130,246,.30);
+  color: rgba(59,130,246,.85);
+}
+.LOSS_LIST_PAGE .ll-btn--load:hover{
+  border-color: rgba(59,130,246,.55);
+  background: rgba(59,130,246,.08);
+}
+
+.LOSS_LIST_PAGE .ll-msg{
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  animation: ll-fadein .2s ease;
+}
+.LOSS_LIST_PAGE .ll-msg--ok{ color: rgba(var(--accent-rgb),.90); background: rgba(var(--accent-rgb),.08); }
+.LOSS_LIST_PAGE .ll-msg--err{ color: rgba(239,68,68,.90); background: rgba(239,68,68,.08); }
+@keyframes ll-fadein{ from{ opacity:0; transform:translateY(-4px); } to{ opacity:1; transform:translateY(0); } }
+
+.LOSS_LIST_PAGE .ll-loading{
+  padding: 30px;
+  text-align: center;
+  color: rgba(148,163,184,.65);
+  font-size: 13px;
+}
+
+/* ── Table ── */
+.LOSS_LIST_PAGE .ll-table-wrap{
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,.12);
+  background: rgba(8,16,40,.18);
+}
+
+.LOSS_LIST_PAGE .ll-table{
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 3px;
+  table-layout: auto;
+}
+
+/* Headers */
+.LOSS_LIST_PAGE .ll-th{
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: rgba(var(--accent-rgb),.80);
+  text-align: center;
+  white-space: nowrap;
+}
+.LOSS_LIST_PAGE .ll-th--num{
+  width: 32px;
+  text-align: center;
+  color: rgba(148,163,184,.50);
+}
+.LOSS_LIST_PAGE .ll-th--calc{
+  text-align: center;
+  color: rgba(148,163,184,.70);
+}
+
+/* Cells */
+.LOSS_LIST_PAGE .ll-td{
+  padding: 0;
+  vertical-align: middle;
+}
+.LOSS_LIST_PAGE .ll-td--num{
+  width: 32px;
+  text-align: center;
+  font-size: 10px;
+  color: rgba(148,163,184,.40);
+  padding: 0 4px;
+}
+.LOSS_LIST_PAGE .ll-td--calc{
+  text-align: center;
+  font-size: 12px;
+  color: rgba(226,232,240,.70);
+  padding: 0 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.LOSS_LIST_PAGE .ll-td--total{
+  color: rgba(226,232,240,.95);
+  font-weight: 700;
+}
+
+/* Input cells — triangle style */
+.LOSS_LIST_PAGE .ll-inp{
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid rgba(var(--accent-rgb),.15);
+  border-radius: 4px;
+  background: rgba(var(--accent-rgb),.03);
+  color: rgba(226,232,240,.90);
+  font-size: 12px;
+  font-family: inherit;
+  box-shadow: none !important;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: border-color .12s ease, background .12s ease;
+}
+.LOSS_LIST_PAGE .ll-inp:focus{
+  border-color: rgba(var(--accent-rgb),.45);
+  background: rgba(var(--accent-rgb),.06);
+  outline: none;
+}
+.LOSS_LIST_PAGE .ll-inp::placeholder{
+  color: rgba(148,163,184,.25);
+}
+
+/* Numeric cells — right-aligned */
+.LOSS_LIST_PAGE .ll-inp--num{
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Date inputs */
+.LOSS_LIST_PAGE .ll-inp[type="date"]{
+  font-size: 11px;
+  padding: 0 6px;
+}
+.LOSS_LIST_PAGE .ll-inp[type="date"]::-webkit-calendar-picker-indicator{
+  filter: invert(.7);
+  cursor: pointer;
+}
+
+/* Empty rows dimmed */
+.LOSS_LIST_PAGE .ll-row--empty .ll-inp{
+  border-color: rgba(148,163,184,.08);
+  background: transparent;
+}
+.LOSS_LIST_PAGE .ll-row--empty .ll-td--num{
+  opacity: .3;
+}
+
+/* Hover row */
+.LOSS_LIST_PAGE .ll-table tbody tr:hover .ll-inp{
+  border-color: rgba(var(--accent-rgb),.28);
+  background: rgba(var(--accent-rgb),.05);
+}
+
+/* Total row */
+.LOSS_LIST_PAGE .ll-total{
+  border-top: 1px solid rgba(var(--accent-rgb),.20);
+}
+.LOSS_LIST_PAGE .ll-total .ll-td{
+  padding: 6px 10px;
+}
+.LOSS_LIST_PAGE .ll-total-label{
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: rgba(var(--accent-rgb),.70);
+}

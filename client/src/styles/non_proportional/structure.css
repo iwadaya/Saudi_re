@@ -1,0 +1,759 @@
+/* =========================================================
+   NP STRUCTURE — master stylesheet (deduplicated)
+   ========================================================= */
+
+/* NP workflow: tables + cells centred */
+.np-structure-step table th,
+.np-structure-step table td {
+  text-align: center;
+  vertical-align: middle;
+}
+.np-structure-step table input,
+.np-structure-step table select {
+  text-align: center;
+}
+
+.np-structure-step .np-hero { margin: 8px 0 14px; }
+.np-structure-step .np-hero-title { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.2px; }
+.np-structure-step .np-hero-subtitle { margin-top: 6px; font-size: 0.92rem; color: rgba(255,255,255,0.68); max-width: 980px; }
+
+/* ── Card ── */
+.np-struct-card { border-radius: 18px; padding: 16px 16px 14px; margin-top: 16px; border: 1px solid rgba(255,255,255,0.10); background: rgba(8,12,20,0.55); box-shadow: 0 12px 40px rgba(0,0,0,0.35); }
+.np-struct-card-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 2px 2px 10px; }
+.np-struct-card-header--plain { padding-bottom: 12px; }
+.np-struct-card-title { font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(255,255,255,0.65); }
+.np-struct-card-actions { display: flex; align-items: center; gap: 10px; }
+.np-struct-card-h2 { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.2px; }
+.np-struct-card-hint { margin-top: 4px; font-size: 0.86rem; color: rgba(255,255,255,0.65); }
+
+/* ── Pills / Tags ── */
+.np-green-pill { appearance: none; border: 0; border-radius: 999px; padding: 9px 16px; font-weight: 700; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; cursor: pointer; color: rgba(0,0,0,0.88); background: linear-gradient(180deg, rgba(0,255,170,0.95), rgba(0,200,140,0.92)); box-shadow: 0 10px 28px rgba(0,255,170,0.18); }
+.np-green-pill:hover { filter: brightness(1.03); transform: translateY(-0.5px); }
+.np-tag { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,0.70); border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.18); backdrop-filter: blur(8px); }
+
+/* Treaty type pills */
+.np-type-pills { display: inline-flex; gap: 8px; align-items: center; }
+.np-type-pill { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(226,232,240,0.75); border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.18); backdrop-filter: blur(8px); user-select: none; }
+.np-type-pill.is-on { border: 1px solid rgba(var(--accent-rgb),0.65); color: #bbf7d0; background: rgba(var(--accent-rgb),0.10); box-shadow: 0 0 0 2px rgba(var(--accent-rgb),0.10), 0 0 16px rgba(var(--accent-rgb),0.35); }
+.np-type-pill.is-off { border: 1px solid rgba(148,163,184,0.25); color: rgba(226,232,240,0.52); background: rgba(15,23,42,0.35); box-shadow: none; }
+.np-cover-cell.is-off { opacity: 0.6; }
+.np-cover-cell.is-locked input[disabled] { cursor: not-allowed; opacity: 0.6; }
+
+/* ─────────────────────────────────────────────
+   TABLE SCROLL WRAPPER — single source of truth
+   ───────────────────────────────────────────── */
+.np-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(0,0,0,0.08);
+}
+.np-table-wrap--scroll { overflow: auto; }
+
+/* --wide is used on the 16-column layer grid — ALWAYS scroll */
+.np-table-wrap--wide {
+  overflow-x: scroll !important;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ─────────────────────────────────────────────
+   TABLE BASE — single source of truth
+   ───────────────────────────────────────────── */
+.np-struct-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.82rem;
+  table-layout: fixed;          /* columns honour width/min-width */
+  width: max-content;           /* grow as wide as columns need    */
+  min-width: 100%;
+}
+
+/* The 16-column layer table — fixed total width prevents compression */
+.np-struct-table--wide {
+  width:     3100px !important;
+  min-width: 3100px !important;
+}
+.np-struct-table--curve {
+  width: 100%;
+  min-width: 900px;
+}
+
+/* Headers */
+.np-struct-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  text-align: center; vertical-align: middle;
+  padding: 11px 14px;
+  font-size: 0.68rem; font-weight: 800;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: rgba(255,255,255,0.52);
+  background: rgba(5,8,16,0.92);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  white-space: nowrap;
+}
+
+/* Body cells */
+.np-struct-table tbody td,
+.np-struct-table tbody th {
+  padding: 8px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.85);
+  text-align: center;
+  white-space: nowrap;
+}
+.np-struct-table tbody tr:hover td,
+.np-struct-table tbody tr:hover th { background: rgba(255,255,255,0.02); }
+.np-struct-table tbody tr:last-child td,
+.np-struct-table tbody tr:last-child th { border-bottom: 0; }
+.np-struct-table--tight tbody td,
+.np-struct-table--tight tbody th { padding-top: 9px; padding-bottom: 9px; }
+
+/* Sticky layer # column */
+.np-table-sticky {
+  position: sticky; left: 0; z-index: 2;
+  width: 56px !important; min-width: 56px !important; max-width: 56px !important;
+  text-align: center !important; font-weight: 800;
+  background: rgba(8,16,40,0.92);
+}
+
+/* ─────────────────────────────────────────────
+   COLUMN WIDTHS — wide enough to never compress
+   ───────────────────────────────────────────── */
+
+/* Standard money columns (LIMIT, DEDUCTIBLE, AGG LIMIT, EGNPI, EARNED PREM, MDP, AAD AMOUNT) */
+.np-struct-table th.np-col,
+.np-struct-table td.np-col {
+  width:     220px;
+  min-width: 220px;
+}
+
+/* Rate */
+.np-struct-table th.np-col-rate,
+.np-struct-table td.np-col-rate {
+  width:     150px;
+  min-width: 150px;
+}
+
+/* MDP% */
+.np-struct-table th.np-col-mdp-pct,
+.np-struct-table td.np-col-mdp-pct {
+  width:     120px;
+  min-width: 120px;
+}
+
+/* Reinstatement columns */
+.np-struct-table th.np-col-reinst,
+.np-struct-table td.np-col-reinst {
+  width:     170px;
+  min-width: 170px;
+}
+
+/* ROL */
+.np-struct-table th.np-col-rol,
+.np-struct-table td.np-col-rol {
+  width:     120px;
+  min-width: 120px;
+}
+
+/* Narrow checkbox-only columns (AAD, RISK, CAT) */
+.np-struct-table th.np-col-chk,
+.np-struct-table td.np-col-chk {
+  width:     50px;
+  min-width: 50px;
+  max-width: 50px;
+}
+
+/* Half-width (covered props) */
+.np-struct-table th.np-col-half,
+.np-struct-table td.np-col-half {
+  width:     130px;
+  min-width: 130px;
+}
+
+/* Proportional Programme column — narrower than money columns */
+.np-struct-table th.np-col-prog,
+.np-struct-table td.np-col-prog {
+  width:     100px;
+  min-width: 100px;
+}
+
+/* ─────────────────────────────────────────────
+   INPUTS INSIDE TABLE
+   ───────────────────────────────────────────── */
+.np-cell-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
+
+.np-mini-input {
+  width: 100%;
+  min-width: 80px;
+  height: 30px;
+  border-radius: 6px;
+  padding: 0 10px;
+  border: 1px solid rgba(255,255,255,0.09);
+  background: rgba(255,255,255,0.03);
+  color: rgba(226,232,240,0.90);
+  text-align: center;
+  outline: none;
+  font-size: 0.82rem;
+  transition: border-color .13s, background .13s;
+}
+.np-mini-input::placeholder { color: rgba(255,255,255,0.28); }
+.np-mini-input:focus { border-color: rgba(35,209,139,0.45); background: rgba(35,209,139,0.04); box-shadow: none; }
+.np-mini-input--readonly { opacity: 1; border-color: transparent; background: transparent; cursor: default; }
+.np-mini-input--center { text-align: center; }
+
+.np-sfx {
+  font-size: 0.72rem; letter-spacing: 0.10em; text-transform: uppercase;
+  color: rgba(255,255,255,0.50); flex-shrink: 0; white-space: nowrap;
+}
+
+.np-mini-select { appearance: none; -webkit-appearance: none; -moz-appearance: none; padding-right: 28px; box-sizing: border-box; height: 32px; line-height: 32px; }
+.np-mini-select::-ms-expand { display: none; }
+.np-check {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255,255,255,0.9);
+  border-radius: 4px;
+  background: rgba(255,255,255,0.15);
+  cursor: pointer;
+  position: relative;
+  transition: all 150ms ease;
+}
+.np-check:hover {
+  border-color: #fff;
+  background: rgba(255,255,255,0.25);
+  box-shadow: 0 0 8px rgba(255,255,255,0.3);
+}
+.np-check:checked {
+  border-color: #16a34a;
+  background: #16a34a;
+}
+.np-check:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+}
+.np-check:checked:hover {
+  background: #15803d;
+  border-color: #15803d;
+  box-shadow: 0 0 10px rgba(22,163,74,0.5);
+}
+.np-check:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  border-color: rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.08);
+}
+.np-check:disabled:checked {
+  opacity: 0.6;
+  background: #166534;
+  border-color: #166534;
+}
+
+/* Utilities */
+.cell-center { text-align: center !important; }
+.cell-right  { text-align: right !important; }
+
+/* Footnotes */
+.np-struct-footnote { margin-top: 10px; font-size: 0.78rem; color: rgba(255,255,255,0.55); }
+.np-struct-footnote--right { text-align: center; }
+
+/* COB pill */
+.np-cob-pill { width: 100%; display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(148,163,184,.22); background: rgba(8,16,40,.35); color: rgba(226,232,240,.92); cursor: pointer; text-align: center; }
+.np-cob-pill:hover { border-color: rgba(var(--accent-rgb),.35); box-shadow: 0 0 0 6px rgba(var(--accent-rgb),.06); }
+.np-cob-pill-sfx { opacity: .7; font-size: 12px; }
+
+.is-hidden { display: none !important; }
+
+/* ── Modal ── */
+body.np-modal-open { overflow: hidden; }
+.np-modal-backdrop { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 22px; background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); }
+.np-modal { width: min(980px, 100%); max-height: min(78vh, 760px); position: relative; overflow: auto; border-radius: 18px; border: 1px solid rgba(255,255,255,0.12); background: rgba(8,12,20,0.78); box-shadow: 0 20px 70px rgba(0,0,0,0.55); }
+.np-modal-inner { padding: 14px; }
+.np-modal-close { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.25); color: rgba(255,255,255,0.86); cursor: pointer; font-size: 18px; line-height: 1; }
+.np-modal-close:hover { border-color: rgba(0,255,170,0.38); box-shadow: 0 0 0 3px rgba(0,255,170,0.10); }
+
+/* ── Glow cells ── */
+.np-glow-input { border-color: rgba(56,189,248,0.22) !important; box-shadow: inset 0 0 0 1px rgba(56,189,248,0.10), 0 0 0 2px rgba(56,189,248,0.06); background: rgba(6,18,38,0.55) !important; }
+.np-glow-input:focus { border-color: rgba(56,189,248,0.40) !important; box-shadow: inset 0 0 0 1px rgba(56,189,248,0.20), 0 0 0 3px rgba(56,189,248,0.14) !important; }
+.np-struct-table tbody td, .np-struct-table tbody th,
+.np-premiums-table tbody td, .np-premiums-table tbody th,
+.np-final-table tbody td, .np-final-table tbody th { box-shadow: inset 0 0 0 1px rgba(56,189,248,0.06); }
+
+/* ── Totals row (tfoot) — neon blue ── */
+.np-struct-table tfoot tr td,
+.np-struct-table tfoot tr th {
+  border-bottom: 0;
+}
+.np-struct-table tfoot .np-mini-input,
+.np-struct-table tfoot .np-sfx {
+  color: #00d4ff !important;
+  font-weight: 700;
+}
+.np-struct-table tfoot .np-mini-input--readonly {
+  border-color: rgba(0, 212, 255, 0.30);
+}
+
+/* ── Structure action buttons ── */
+.np-struct-btn {
+  height: 32px; padding: 0 14px; border-radius: 8px;
+  border: 1px solid rgba(148,163,184,.3);
+  background: rgba(15,23,42,.55); color: #e2e8f0;
+  font-size: 12px; font-weight: 600; cursor: pointer; letter-spacing: .04em;
+  transition: background .15s, border-color .15s;
+}
+.np-struct-btn:hover { background: rgba(15,23,42,.8); }
+.np-struct-btn--accent {
+  border-color: rgba(0,212,255,.45);
+  background: rgba(0,212,255,.08);
+  color: #00d4ff;
+}
+.np-struct-btn--accent:hover { background: rgba(0,212,255,.15); }
+.np-struct-btn--ghost { background: transparent; border-color: rgba(255,255,255,.15); }
+
+/* ── Quote structure table — expiring structure minus Rate/EP/MDP/MDP%/ROL (11 cols) ── */
+/* Expiring is 3100px for 16 cols. Removed cols: rate(150)+EP(220)+MDP(220)+MDP%(120)+ROL(120)=830. */
+/* Quote width: 3100 - 830 = 2270px */
+.np-struct-table--wide.np-struct-table--quote,
+.np-struct-table--quote {
+  width:     2350px !important;
+  min-width: 2350px !important;
+}
+
+/* Aggregate Limit column wider in quote table */
+.np-struct-table--quote th.np-col-agg,
+.np-struct-table--quote td.np-col-agg {
+  width:     300px !important;
+  min-width: 300px !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   QUOTE STRUCTURE SECTION  (.qss-*)
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Card header ── */
+.qss-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  flex-wrap: wrap;
+}
+.qss-struct-badge {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(0,212,255,0.18), rgba(0,255,170,0.10));
+  border: 1px solid rgba(0,212,255,0.30);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.78rem; font-weight: 900; letter-spacing: 0.04em;
+  color: #00d4ff;
+  flex-shrink: 0;
+}
+.qss-struct-title {
+  font-size: 0.95rem; font-weight: 700; color: rgba(255,255,255,0.92);
+}
+.qss-struct-sub {
+  margin-top: 2px; font-size: 0.78rem; color: rgba(255,255,255,0.45);
+}
+.qss-cover-pill {
+  display: inline-flex; align-items: center;
+  height: 28px; padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14);
+  font-size: 0.70rem; font-weight: 800; letter-spacing: 0.16em;
+  text-transform: uppercase; color: rgba(255,255,255,0.75);
+  white-space: nowrap;
+}
+
+/* ── Layer cards container ── */
+.qss-layers {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+}
+
+/* ── Individual layer card ── */
+.qss-layer-card {
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.09);
+  background: rgba(0,0,0,0.20);
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.qss-layer-card:hover {
+  border-color: rgba(0,212,255,0.20);
+}
+
+/* Layer head: badge + cover toggles */
+.qss-layer-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: rgba(0,0,0,0.15);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.qss-layer-badge {
+  width: 28px; height: 22px;
+  border-radius: 6px;
+  background: rgba(0,212,255,0.12);
+  border: 1px solid rgba(0,212,255,0.25);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.68rem; font-weight: 900; letter-spacing: 0.06em;
+  color: #00d4ff;
+}
+.qss-cover-toggle {
+  display: inline-flex; align-items: center;
+  height: 26px; padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,255,170,0.25);
+  background: rgba(0,255,170,0.06);
+  font-size: 0.68rem; font-weight: 800; letter-spacing: 0.14em;
+  color: rgba(0,255,170,0.80);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s, border-color 0.12s;
+}
+.qss-cover-toggle:hover { background: rgba(0,255,170,0.10); }
+.qss-cover-toggle--dim {
+  border-color: rgba(148,163,184,0.20);
+  background: rgba(15,23,42,0.30);
+  color: rgba(148,163,184,0.40);
+}
+
+/* ── Two-column layout inside card ── */
+.qss-layer-body {
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  min-height: 160px;
+}
+.qss-col {
+  padding: 14px 16px;
+}
+.qss-col-label {
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.32);
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.qss-col--quote .qss-col-label {
+  color: rgba(0,212,255,0.50);
+}
+.qss-divider {
+  background: rgba(255,255,255,0.07);
+  width: 1px;
+}
+
+/* ── Fields inside each column ── */
+.qss-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.qss-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.qss-field-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.40);
+  white-space: nowrap;
+  flex-shrink: 0;
+  width: 130px;
+}
+.qss-field .np-cell-input { flex: 1; }
+.qss-field-row {
+  display: flex;
+  gap: 8px;
+}
+.qss-field--half {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.qss-field--half .qss-field-label { width: auto; min-width: 56px; }
+.qss-field--half .np-cell-input { flex: 1; }
+.qss-field--aad-chk {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+}
+.qss-field--aad-chk .qss-field-label { width: auto; }
+.qss-field--aad-amt { flex: 1; display: flex; align-items: center; gap: 8px; }
+.qss-field--aad-amt .qss-field-label { width: auto; min-width: 80px; }
+.qss-field--aad-amt .np-cell-input { flex: 1; }
+
+/* ── Economics summary bar (per layer) ── */
+.qss-layer-summary {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  background: rgba(0,0,0,0.18);
+  padding: 0;
+  overflow: hidden;
+}
+.qss-summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 8px 12px;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  gap: 2px;
+}
+.qss-summary-item:last-child { border-right: 0; }
+.qss-summary-label {
+  font-size: 0.60rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+}
+.qss-summary-val {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.qss-summary-val--blue  { color: #00d4ff; }
+.qss-summary-val--green { color: #4ade80; }
+.qss-summary-val--amber { color: #fbbf24; }
+
+/* ── Structure totals bar ── */
+.qss-totals {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 18px;
+  margin: 0 16px 16px;
+  border-radius: 10px;
+  background: rgba(0,212,255,0.05);
+  border: 1px solid rgba(0,212,255,0.14);
+  flex-wrap: wrap;
+}
+.qss-totals-label {
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: rgba(0,212,255,0.55);
+  flex-shrink: 0;
+}
+.qss-totals-items {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+.qss-totals-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.qss-totals-key {
+  font-size: 0.60rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+}
+.qss-totals-val {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.88);
+}
+
+/* ── QuoteStructureSection card — benchmark style ──────────────────────
+   Overrides the default np-struct-card glass look so it matches
+   the bm-card aesthetic used in the Quick Benchmark screen.
+   ─────────────────────────────────────────────────────────────────── */
+.qss-section.np-struct-card {
+  background:    rgba(8, 14, 30, 0.72) !important;
+  border:        1px solid rgba(255, 255, 255, 0.09) !important;
+  border-radius: 14px !important;
+  box-shadow:    0 8px 32px rgba(0, 0, 0, 0.40) !important;
+  padding:       0 !important;
+  overflow:      hidden;
+}
+
+/* Header bar */
+.qss-section .qss-header {
+  background:    rgba(5, 8, 16, 0.60);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding:       14px 18px;
+}
+
+/* S1 / S2 badge */
+.qss-section .qss-struct-badge {
+  width:         36px;
+  height:        36px;
+  border-radius: 10px;
+  background:    linear-gradient(135deg, rgba(0, 212, 255, 0.20), rgba(0, 255, 170, 0.10));
+  border:        1px solid rgba(0, 212, 255, 0.35);
+  color:         #00d4ff;
+  font-size:     0.80rem;
+  font-weight:   900;
+  letter-spacing:.04em;
+  display:       flex;
+  align-items:   center;
+  justify-content: center;
+}
+
+/* Title / subtitle */
+.qss-section .qss-struct-title {
+  font-size:   0.95rem;
+  font-weight: 700;
+  color:       rgba(226, 232, 240, 0.95);
+}
+.qss-section .qss-struct-sub {
+  font-size: 0.78rem;
+  color:     rgba(148, 163, 184, 0.50);
+  margin-top: 2px;
+}
+
+/* NUMBER OF LAYERS label */
+.qss-section .qss-field-label {
+  font-size:      9px;
+  font-weight:    800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color:          rgba(148, 163, 184, 0.50);
+}
+
+/* NUMBER OF LAYERS select */
+.qss-section .np-mini-select {
+  background:    rgba(255, 255, 255, 0.04);
+  border:        1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color:         rgba(226, 232, 240, 0.90);
+  font-size:     13px;
+  font-weight:   600;
+  padding:       7px 12px;
+  height:        36px;
+}
+
+/* Table headers — match bm-np-table exactly */
+.qss-section .bm-np-table thead th {
+  background:     rgba(5, 8, 16, 0.85);
+  color:          rgba(148, 163, 184, 0.60);
+  font-size:      9px;
+  font-weight:    800;
+  letter-spacing: .14em;
+  padding:        11px 14px;
+  border-bottom:  1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Body rows */
+.qss-section .bm-np-table tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.015);
+}
+.qss-section .bm-np-table tbody tr:hover td {
+  background: rgba(0, 212, 255, 0.04);
+}
+.qss-section .bm-np-row td {
+  padding:       11px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Totals row */
+.qss-section .bm-np-table tfoot tr {
+  background: rgba(0, 212, 255, 0.05);
+  border-top: 2px solid rgba(0, 212, 255, 0.35);
+}
+.qss-section .bm-np-table tfoot td {
+  color:       #00d4ff;
+  font-weight: 700;
+  padding:     10px 10px;
+}
+
+/* Layer badge (L1 L2 …) */
+.qss-section .np-layer-badge,
+.qss-section .np-layer-num-badge {
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  min-width:       28px;
+  padding:         3px 8px;
+  border-radius:   6px;
+  border:          1px solid rgba(0, 212, 255, 0.35);
+  background:      rgba(0, 212, 255, 0.10);
+  color:           #00d4ff;
+  font-size:       10px;
+  font-weight:     900;
+  letter-spacing:  .06em;
+}
+
+/* Cell inputs inside the table */
+.qss-section .np-mini-input:not(.np-mini-select) {
+  background:    rgba(255, 255, 255, 0.03);
+  border:        1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 7px;
+  color:         rgba(226, 232, 240, 0.90);
+  font-size:     12px;
+  height:        32px;
+  padding:       0 10px;
+  transition:    border-color .14s, background .14s;
+}
+.qss-section .np-mini-input:not(.np-mini-select):focus {
+  border-color: rgba(35, 209, 139, 0.45);
+  background:   rgba(35, 209, 139, 0.04);
+}
+
+/* COB section header */
+.qss-section .bm-cob-section-header {
+  padding:       16px 18px 10px;
+  border-top:    1px solid rgba(255, 255, 255, 0.07);
+}
+.qss-section .bm-cob-section-title {
+  font-size:   13px;
+  font-weight: 700;
+  color:       rgba(226, 232, 240, 0.85);
+}
+.qss-section .bm-cob-section-hint {
+  font-size:  11px;
+  color:      rgba(148, 163, 184, 0.45);
+  margin-top: 3px;
+}
+
+/* Footnote */
+.qss-section .np-struct-footnote {
+  padding:    8px 18px 12px;
+  font-size:  11px;
+  color:      rgba(148, 163, 184, 0.40);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Cover pill (RISK XL / CAT XL) */
+.qss-section .qss-cover-pill {
+  height:         30px;
+  padding:        0 14px;
+  border-radius:  999px;
+  font-size:      0.72rem;
+  font-weight:    800;
+  letter-spacing: .14em;
+}

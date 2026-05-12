@@ -1,0 +1,279 @@
+import cors from 'cors';
+import compression from 'compression';
+import express from 'express';
+import fs from 'fs';
+import helmet from 'helmet';
+import path from 'path';
+import rateLimit from 'express-rate-limit';
+import { pool, getPoolStats } from './db/pool.js';
+import { env } from './config/env.js';
+import { logger } from './lib/logger.js';
+import { attachRequestContext } from './middleware/requestContext.js';
+import { attachRequestId } from './middleware/requestId.js';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { cacheStats } from './middleware/httpCache.js';
+import { requestTimeout } from './middleware/requestTimeout.js';
+
+import authRouter from './routes/auth.js';
+import { registerApiRoutes } from './routes/registerApiRoutes.js';
+
+// Pagination metadata + error codes exposed so browsers can read them.
+const EXPOSED_HEADERS = ['X-Total-Count', 'X-Page', 'X-Page-Size', 'X-Request-Id', 'X-Pricing-Drift-Count'];
+
+// Cache CORS preflight for 24h. Without this every cross-origin XHR
+// pays a synchronous OPTIONS round-trip — on a chatty page that's
+// dozens of extra requests stacked on top of the real ones. 86400
+// is the maximum Chromium honours; Firefox caps at 7200 but still
+// benefits.
+const CORS_PREFLIGHT_MAX_AGE = 86400;
+
+function createCorsOptions() {
+  if (env.corsOrigin === '*') {
+    return {
+      origin: true,
+      credentials: false,
+      exposedHeaders: EXPOSED_HEADERS,
+      maxAge: CORS_PREFLIGHT_MAX_AGE,
+    };
+  }
+  const allowedOrigins = new Set(env.corsOrigin.split(',').map((item) => item.trim()).filter(Boolean));
+  // When the API also serves the built SPA, browsers may still attach an
+  // Origin header to module/CSS asset requests. Always allow the server's
+  // own localhost origins so local single-port deployments don't 500 on
+  // hashed assets if CORS_ORIGIN omits the active PORT override.
+  allowedOrigins.add(`http://localhost:${env.port}`);
+  allowedOrigins.add(`http://127.0.0.1:${env.port}`);
+  return {
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+      return callback(new Error(`Origin not allowed by CORS: ${origin}`));
+    },
+    credentials: true,
+    exposedHeaders: EXPOSED_HEADERS,
+    maxAge: CORS_PREFLIGHT_MAX_AGE,
+  };
+}
+
+function registerHealthRoutes(app) {
+  // Lightweight health check — no DB round-trip. Used by load balancers
+  // that hammer this every few seconds; keeping it DB-free means health
+  // polling never competes with user traffic for pool connections.
+  app.get('/api/health', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ status: 'ok', timestamp: new Date().toISOString(), env: env.nodeEnv, requestId: res.locals.requestId || null });
+  });
+
+  // Deep health — verifies DB reachability + returns pool + cache stats.
+  // Watch X-Pool-Waiting in production: > 0 sustained = bump DB_POOL_MAX.
+  app.get('/api/health/deep', async (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    try {
+      const started = Date.now();
+      await pool.query('SELECT 1');
+      const dbMs = Date.now() - started;
+      const ps = getPoolStats();
+      res.setHeader('X-Pool-Waiting', String(ps.waitingCount));
+      res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        env: env.nodeEnv,
+        db: { ok: true, pingMs: dbMs, pool: ps },
+        cache: cacheStats(),
+        requestId: res.locals.requestId || null,
+      });
+    } catch (error) {
+      res.status(503).json({ status: 'error', message: error.message, requestId: res.locals.requestId || null });
+    }
+  });
+}
+
+function registerClient(app) {
+  // Try multiple path strategies to find client/dist — no __dirname (ESM)
+  const candidates = [
+    env.clientDistDir,
+    path.resolve(process.cwd(), 'client/dist'),
+    path.resolve(process.cwd(), '../client/dist'),
+  ];
+
+  const clientDir = candidates.find(p => fs.existsSync(p) && fs.existsSync(path.join(p, 'index.html')));
+
+  logger.info('[static] resolving client dist', {
+    cwd: process.cwd(),
+    candidates,
+    clientDir: clientDir || null,
+  });
+
+  if (!clientDir) {
+    logger.warn('[static] client/dist not found — SPA will not be served');
+    return;
+  }
+
+  // JS/CSS assets have content-hash in filename — long cache fine
+  // index.html and manifest must never be cached so fresh chunk hashes load
+  //
+  // For the hashed bundle in /assets/ we send `immutable` so browsers skip
+  // the conditional GET entirely on revisits. Vite emits content-hashed
+  // filenames there, so a different hash means a different URL — there is
+  // never a case where the cached bytes for a given URL go stale.
+  app.use(express.static(clientDir, {
+    maxAge: '1y',
+    etag: false,        // hashed filenames already invalidate; ETag is wasted CPU
+    lastModified: false,
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('index.html') || filePath.endsWith('manifest.json') || filePath.endsWith('.webmanifest')) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        return;
+      }
+      if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    }
+  }));
+  // SPA fallback: serve index.html for all non-API, non-asset routes.
+  // IMPORTANT: exclude /assets/ so stale chunk URLs return 404 instead of index.html.
+  // A 404 is correctly handled by the chunk error handler; index.html with text/html
+  // MIME type causes browser to throw a MIME type mismatch error.
+  app.get(/^(?!\/api\/)(?!\/assets\/).*/, (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.sendFile(path.join(clientDir, 'index.html'));
+  });
+
+  logger.info('[static] serving client', { clientDir });
+}
+
+// ── Rate limiter: 300 req/min per user, falling back to IP ──
+// Behind Render's proxy every user shares one IP, so a plain per-IP
+// limit would throttle the whole team whenever one person loops on
+// something. Key by x-user-id first (set by the auth middleware);
+// fall back to the IP only for pre-auth requests (e.g. /api/health
+// which bypasses this limiter anyway, or /api/auth/login).
+//
+// skip() excludes endpoints that must never be rate-limited at this
+// layer (health probes, lightweight webhooks from ourselves).
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please slow down.' },
+  keyGenerator(req) {
+    // Prefer an authenticated user id; trim so whitespace variants
+    // don't create separate buckets.
+    const uid = String(req.headers['x-user-id'] || '').trim();
+    if (uid) return `u:${uid}`;
+    // ipKeyGenerator (added in express-rate-limit v7) handles IPv6
+    // normalisation; if it's not available we fall back to req.ip.
+    return `ip:${req.ip || 'unknown'}`;
+  },
+  // Client-event telemetry should never be throttled below the
+  // telemetry budget — losing crash reports to rate limits is worse
+  // than the extra capacity. The reporter has its own cap (20/min).
+  skip(req) {
+    const path = req.path || '';
+    const original = req.originalUrl || req.url || '';
+    return path.startsWith('/health') ||
+           original.startsWith('/api/health') ||
+           path === '/client-events' ||
+           original === '/api/client-events';
+  },
+});
+
+// ── Role auth: require x-user-role header on all API calls ──
+// In production swap this for real JWT/session validation.
+const VALID_ROLES = new Set(['CE', 'CU', 'TD', 'TM', 'TUW', 'UW']); // UW kept for backward compat
+
+function requireRole(req, res, next) {
+  if (req.path === '/health') return next();
+  // Auth routes handle their own auth
+  if (req.path.startsWith('/auth/')) return next();
+  // AI proxy routes use server-side API key — no user role needed
+  if (req.path.startsWith('/ai/')) return next();
+  const role = req.headers['x-user-role'];
+  if (!role || !VALID_ROLES.has(role)) {
+    return res.status(401).json({ error: 'Unauthorised: missing or invalid x-user-role header.', code: 'UNAUTHORIZED', requestId: res.locals.requestId || req.id || null });
+  }
+  next();
+}
+
+export function createApp() {
+  const app = express();
+
+  // Trust Render's proxy so rate-limiter reads the real client IP
+  app.set('trust proxy', 1);
+  // Weak ETag is a fast non-cryptographic hash of the body; strong ETag
+  // is a full md5. Hot JSON endpoints already set their own ETag in the
+  // cache middleware, so the only consumer of Express's default is rare
+  // payloads we haven't explicitly cached — weak is cheaper there and
+  // still produces correct 304s.
+  app.set('etag', 'weak');
+
+  fs.mkdirSync(env.uploadDir, { recursive: true });
+
+  app.disable('x-powered-by');
+
+  app.use(attachRequestId);
+
+  // Fast path: health checks skip the heavy middleware chain entirely.
+  // They still get request IDs above, and the handlers set their own
+  // Cache-Control. Load-balancer polling should never queue behind
+  // real user traffic waiting on helmet/compression/CORS.
+  registerHealthRoutes(app);
+
+  // Security headers (CSP disabled — client uses inline styles in dev)
+  app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+
+  // Compression — gzip responses > 1KB. Skip already-compressed bodies
+  // (images, PDFs) by default via compression's filter.
+  //
+  // Level 4 trades ~3-5% larger payloads for roughly half the CPU cost of
+  // level 6 — a worthwhile swap for a JSON-heavy API where TTFB matters
+  // more than wire bytes. memLevel 9 lets zlib keep more state in RAM,
+  // which removes a small per-call allocation hit at high concurrency.
+  app.use(compression({
+    level: 4,
+    memLevel: 9,
+    threshold: 1024,
+    filter: (req, res) => {
+      if (req.headers['x-no-compression']) return false;
+      return compression.filter(req, res);
+    },
+  }));
+
+  // Per-request timeout so a stuck handler never pins a pool connection
+  // forever. Set slightly above the DB statement_timeout so Postgres'
+  // own error surfaces first with a more useful message.
+  app.use('/api', requestTimeout(Number(process.env.REQUEST_TIMEOUT_MS) || 35_000));
+
+  app.use(cors(createCorsOptions()));
+
+  // Rate limiting on all /api — intentionally before JSON parsing so
+  // throttled clients do not make the process spend CPU/memory parsing
+  // a body that will be rejected anyway. In-memory store is fine for a
+  // single Node process; swap to Redis when scaling horizontally.
+  app.use('/api', apiLimiter);
+
+  // Body parser — 1MB is plenty for any realistic pricing payload.
+  // File uploads use multer and bypass this. 5MB was unnecessarily
+  // generous and just made DoS-via-fat-body easier.
+  app.use(express.json({ limit: '1mb' }));
+
+  // Auth routes bypass role check — register BEFORE requireRole
+  app.use('/api', authRouter);
+
+  // All other API routes require a valid role header
+  app.use('/api', requireRole);
+
+  app.use(attachRequestContext);
+
+  registerApiRoutes(app);
+  registerClient(app);
+
+  app.use(notFoundHandler);
+  app.use(errorHandler);
+
+  return app;
+}

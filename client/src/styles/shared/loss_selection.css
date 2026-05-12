@@ -1,0 +1,216 @@
+/* =========================================================
+   LOSS SELECTION — Compact, triangle-style
+========================================================= */
+
+.LOSS_SELECTION_PAGE{ font-size: 13px; }
+.ls-loading{ padding: 30px; text-align: center; color: rgba(148,163,184,.6); }
+
+/* ── KPIs ── */
+.LOSS_SELECTION_PAGE .ls-kpis{
+  display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
+}
+.LOSS_SELECTION_PAGE .ls-kpi{
+  padding: 10px 14px; border-radius: 12px; min-width: 100px; text-align: center;
+  border: 1px solid rgba(148,163,184,.16); background: rgba(8,16,40,.25);
+}
+.LOSS_SELECTION_PAGE .ls-kpi--green{ border-color: rgba(var(--accent-rgb),.28); }
+.LOSS_SELECTION_PAGE .ls-kpi--blue{ border-color: rgba(59,130,246,.28); }
+.LOSS_SELECTION_PAGE .ls-kpi--amber{ border-color: rgba(245,158,11,.28); }
+.LOSS_SELECTION_PAGE .ls-kpi-label{
+  font-size: 10px; text-transform: uppercase; letter-spacing: .10em; color: rgba(148,163,184,.70); margin-bottom: 4px;
+}
+.LOSS_SELECTION_PAGE .ls-kpi-value{
+  font-size: 16px; font-weight: 800; color: rgba(226,232,240,.92);
+}
+
+/* ── Toolbar ── */
+.LOSS_SELECTION_PAGE .ls-toolbar{
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-bottom: 8px; flex-wrap: wrap;
+}
+.LOSS_SELECTION_PAGE .ls-toolbar-left,
+.LOSS_SELECTION_PAGE .ls-toolbar-right{
+  display: flex; align-items: center; gap: 8px;
+}
+
+.LOSS_SELECTION_PAGE .ls-field{
+  display: flex; align-items: center; gap: 6px;
+}
+.LOSS_SELECTION_PAGE .ls-flabel{
+  font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: rgba(148,163,184,.70);
+}
+.LOSS_SELECTION_PAGE .ls-finput{
+  height: 28px; padding: 0 8px; border-radius: 6px;
+  border: 1px solid rgba(var(--accent-rgb),.25) !important;
+  background: rgba(8,16,40,.25) !important; color: rgba(226,232,240,.90);
+  font-size: 12px; box-shadow: none !important; appearance: none; -webkit-appearance: none;
+}
+.LOSS_SELECTION_PAGE .ls-finput:focus{ border-color: rgba(var(--accent-rgb),.50) !important; outline: none; }
+.LOSS_SELECTION_PAGE .ls-finput--sm{ width: 64px; text-align: center; padding: 0 4px; }
+
+/* Buttons */
+.LOSS_SELECTION_PAGE .ls-btn{
+  height: 28px; padding: 0 10px; border-radius: 6px; font-size: 11px; font-weight: 700;
+  cursor: pointer; border: 1px solid rgba(148,163,184,.22); background: rgba(8,16,40,.20);
+  color: rgba(226,232,240,.80); transition: all .12s ease; white-space: nowrap;
+}
+.LOSS_SELECTION_PAGE .ls-btn:hover{ border-color: rgba(148,163,184,.40); background: rgba(148,163,184,.08); }
+.LOSS_SELECTION_PAGE .ls-btn--green{ border-color: rgba(var(--accent-rgb),.30); color: rgba(var(--accent-rgb),.90); }
+.LOSS_SELECTION_PAGE .ls-btn--green:hover{ border-color: rgba(var(--accent-rgb),.55); background: rgba(var(--accent-rgb),.06); }
+.LOSS_SELECTION_PAGE .ls-btn--blue{ border-color: rgba(59,130,246,.30); color: rgba(59,130,246,.85); }
+.LOSS_SELECTION_PAGE .ls-btn--blue:hover{ border-color: rgba(59,130,246,.55); background: rgba(59,130,246,.06); }
+.LOSS_SELECTION_PAGE .ls-btn--save{ border-color: rgba(var(--accent-rgb),.30); color: rgba(var(--accent-rgb),.90); }
+.LOSS_SELECTION_PAGE .ls-btn--dirty{ border-color: rgba(251,146,60,.50); color: rgba(251,146,60,.95); animation: ls-pulse 1.5s infinite; }
+@keyframes ls-pulse{ 0%,100%{ box-shadow:none; } 50%{ box-shadow: 0 0 0 3px rgba(251,146,60,.10); } }
+.LOSS_SELECTION_PAGE .ls-btn--sm{ height: 24px; font-size: 10px; padding: 0 8px; }
+.LOSS_SELECTION_PAGE .ls-btn--x{ width: 24px; height: 24px; padding: 0; border-color: rgba(239,68,68,.25); color: rgba(239,68,68,.70); display: flex; align-items: center; justify-content: center; }
+.LOSS_SELECTION_PAGE .ls-btn--x:hover{ border-color: rgba(239,68,68,.50); background: rgba(239,68,68,.06); }
+
+.LOSS_SELECTION_PAGE .ls-msg{
+  font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 4px;
+}
+.LOSS_SELECTION_PAGE .ls-msg--ok{ color: rgba(var(--accent-rgb),.90); background: rgba(var(--accent-rgb),.08); }
+.LOSS_SELECTION_PAGE .ls-msg--err{ color: rgba(239,68,68,.90); background: rgba(239,68,68,.08); }
+
+/* ── Table ── */
+.LOSS_SELECTION_PAGE .ls-table-wrap{
+  overflow-x: auto; border-radius: 10px; border: 1px solid rgba(148,163,184,.12); background: rgba(8,16,40,.15);
+}
+.LOSS_SELECTION_PAGE .ls-table{
+  width: 100%; border-collapse: separate; border-spacing: 3px;
+}
+.LOSS_SELECTION_PAGE .ls-th{
+  padding: 5px 8px; font-size: 10px; font-weight: 700; letter-spacing: .10em;
+  text-transform: uppercase; color: rgba(var(--accent-rgb),.75); text-align: center; white-space: nowrap;
+}
+.LOSS_SELECTION_PAGE .ls-th--r{ text-align: center; }
+.LOSS_SELECTION_PAGE .ls-th--c{ text-align: center; }
+
+.LOSS_SELECTION_PAGE .ls-td{
+  padding: 4px 8px; font-size: 12px; color: rgba(226,232,240,.85);
+  border: 1px solid rgba(var(--accent-rgb),.10); border-radius: 4px;
+  background: rgba(var(--accent-rgb),.02); white-space: nowrap; text-align: center;
+}
+.LOSS_SELECTION_PAGE .ls-td--r{ text-align: center; font-variant-numeric: tabular-nums; }
+.LOSS_SELECTION_PAGE .ls-td--c{ text-align: center; }
+.LOSS_SELECTION_PAGE .ls-td--bold{ font-weight: 700; }
+.LOSS_SELECTION_PAGE .ls-td--inflated{ color: rgba(59,130,246,.90); }
+.LOSS_SELECTION_PAGE .ls-td--chk{ width: 36px; text-align: center; border: none; background: transparent; }
+.LOSS_SELECTION_PAGE .ls-td--chk input{ width: 15px; height: 15px; accent-color: #22c55e; cursor: pointer; }
+
+.LOSS_SELECTION_PAGE .ls-row--off{ opacity: .35; }
+.LOSS_SELECTION_PAGE .ls-row--off .ls-td{ border-color: rgba(148,163,184,.06); background: transparent; }
+.LOSS_SELECTION_PAGE .ls-table tbody tr:hover .ls-td{ border-color: rgba(var(--accent-rgb),.25); background: rgba(var(--accent-rgb),.04); }
+
+.LOSS_SELECTION_PAGE .ls-empty{ text-align: center; padding: 24px; color: rgba(148,163,184,.50); border: none !important; background: transparent !important; }
+
+/* ── Loadings ── */
+.LOSS_SELECTION_PAGE .ls-loadings{
+  margin-top: 12px; padding: 12px; border-radius: 10px;
+  border: 1px solid rgba(148,163,184,.12); background: rgba(8,16,40,.15);
+}
+.LOSS_SELECTION_PAGE .ls-loadings-head{
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+}
+.LOSS_SELECTION_PAGE .ls-loadings-title{
+  font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: rgba(226,232,240,.80);
+}
+.LOSS_SELECTION_PAGE .ls-loadings-empty{
+  font-size: 11px; color: rgba(148,163,184,.50); padding: 8px 0;
+}
+.LOSS_SELECTION_PAGE .ls-loadings-grid{ display: flex; flex-direction: column; gap: 6px; }
+.LOSS_SELECTION_PAGE .ls-loading-row{ display: flex; align-items: center; gap: 8px; }
+.LOSS_SELECTION_PAGE .ls-loading-total{
+  margin-top: 8px; font-size: 12px; color: rgba(226,232,240,.75); padding-top: 8px;
+  border-top: 1px solid rgba(148,163,184,.10);
+}
+.LOSS_SELECTION_PAGE .ls-loading-total strong{ color: rgba(var(--accent-rgb),.90); }
+
+/* ── Modal ── */
+.LOSS_SELECTION_PAGE .ls-modal-backdrop{
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,.70); backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+}
+.LOSS_SELECTION_PAGE .ls-modal{
+  width: 560px; max-width: 92vw; max-height: 85vh; display: flex; flex-direction: column;
+  border-radius: 16px; border: 1px solid rgba(var(--accent-rgb),.18);
+  background: rgba(15,23,42,.95); box-shadow: 0 30px 60px rgba(0,0,0,.50);
+  overflow: hidden;
+}
+.LOSS_SELECTION_PAGE .ls-modal-head{
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 18px; border-bottom: 1px solid rgba(var(--accent-rgb),.12);
+  background: rgba(8,16,40,.40);
+}
+.LOSS_SELECTION_PAGE .ls-modal-title{
+  font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; color: rgba(226,232,240,.92);
+}
+.LOSS_SELECTION_PAGE .ls-modal-x{
+  background: none; border: 1px solid rgba(148,163,184,.18); border-radius: 999px;
+  padding: 4px 10px; color: rgba(148,163,184,.80); cursor: pointer; font-size: 14px;
+}
+.LOSS_SELECTION_PAGE .ls-modal-x:hover{ color: #fff; border-color: rgba(148,163,184,.40); }
+
+.LOSS_SELECTION_PAGE .ls-modal-body{
+  padding: 18px; overflow-y: auto; flex: 1;
+}
+.LOSS_SELECTION_PAGE .ls-modal-sub{
+  font-size: 12px; color: rgba(148,163,184,.70); margin-bottom: 12px; line-height: 1.4;
+}
+.LOSS_SELECTION_PAGE .ls-modal-section{ margin-top: 8px; }
+.LOSS_SELECTION_PAGE .ls-modal-empty{
+  padding: 16px; text-align: center; font-size: 12px; color: rgba(148,163,184,.45);
+  border: 1px dashed rgba(148,163,184,.15); border-radius: 8px;
+}
+.LOSS_SELECTION_PAGE .ls-modal-avg{
+  margin-top: 10px; font-size: 12px; color: rgba(226,232,240,.75);
+}
+.LOSS_SELECTION_PAGE .ls-modal-avg strong{ color: rgba(var(--accent-rgb),.90); }
+
+.LOSS_SELECTION_PAGE .ls-modal-actions{
+  display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; padding-top: 12px;
+  border-top: 1px solid rgba(148,163,184,.10);
+}
+
+/* Mode toggle */
+.LOSS_SELECTION_PAGE .ls-mode-toggle{
+  display: flex; gap: 4px; margin-bottom: 12px; padding: 3px;
+  border-radius: 8px; border: 1px solid rgba(148,163,184,.15); background: rgba(8,16,40,.20);
+}
+.LOSS_SELECTION_PAGE .ls-mode-btn{
+  flex: 1; height: 28px; border: none; border-radius: 6px;
+  font-size: 11px; font-weight: 700; cursor: pointer;
+  background: transparent; color: rgba(148,163,184,.65); transition: all .12s ease;
+}
+.LOSS_SELECTION_PAGE .ls-mode-btn:hover{ color: rgba(226,232,240,.80); }
+.LOSS_SELECTION_PAGE .ls-mode-btn.active{
+  background: rgba(var(--accent-rgb),.12); color: rgba(var(--accent-rgb),.95);
+  border: 1px solid rgba(var(--accent-rgb),.30);
+}
+
+/* Inflation table inside modal */
+.LOSS_SELECTION_PAGE .ls-infl-table-wrap{
+  max-height: 220px; overflow-y: auto; border-radius: 8px;
+  border: 1px solid rgba(148,163,184,.12); background: rgba(8,16,40,.20);
+}
+.LOSS_SELECTION_PAGE .ls-infl-table{
+  width: 100%; border-collapse: collapse;
+}
+.LOSS_SELECTION_PAGE .ls-infl-table th{
+  padding: 6px 12px; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: rgba(148,163,184,.70); text-align: center;
+  background: rgba(8,16,40,.40); position: sticky; top: 0;
+}
+.LOSS_SELECTION_PAGE .ls-infl-table td{
+  padding: 5px 12px; font-size: 12px; color: rgba(226,232,240,.80);
+  border-bottom: 1px solid rgba(148,163,184,.08);
+}
+.LOSS_SELECTION_PAGE .ls-neg{ color: rgba(251,113,133,.90); }
+
+/* Auto-calculated year */
+.LOSS_SELECTION_PAGE .ls-td--year{
+  color: rgba(var(--accent-rgb),.80);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

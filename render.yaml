@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: universe
+    runtime: node
+    nodeVersion: 20.18.0
+    buildCommand: npm install && npm install --prefix client && npm install --prefix server && npm run build --prefix client
+    startCommand: node server/src/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: RUN_MIGRATIONS_ON_BOOT
+        value: "true"

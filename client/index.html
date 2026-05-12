@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Universe™</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231fe08d'/><text x='16' y='23' text-anchor='middle' font-size='20' fill='%23041209'>M</text></svg>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <!-- Global chunk error recovery: catches module fetch failures after new deploys -->
+    <script>
+      (function() {
+        var RELOAD_KEY = 'u3_chunk_reload_v';
+        // Store the deploy timestamp to detect new deploys
+        window.__u3DeployTs = '__DEPLOY_TS__';
+
+        window.addEventListener('unhandledrejection', function(e) {
+          var msg = (e.reason && e.reason.message) || String(e.reason || '');
+          var isChunkError =
+            msg.indexOf('Failed to fetch dynamically imported module') !== -1 ||
+            msg.indexOf('Loading chunk') !== -1 ||
+            msg.indexOf('MIME type') !== -1 ||
+            (e.reason && e.reason.name === 'ChunkLoadError');
+
+          if (isChunkError) {
+            e.preventDefault();
+            var lastReload = sessionStorage.getItem(RELOAD_KEY);
+            var now = Date.now();
+            // Only reload if we haven't reloaded in the last 10 seconds (prevent loop)
+            if (!lastReload || (now - parseInt(lastReload, 10)) > 10000) {
+              sessionStorage.setItem(RELOAD_KEY, String(now));
+              // Hard reload — bypass cache
+              window.location.reload(true);
+            }
+          }
+        });
+
+        // Also intercept module errors at the window level
+        window.addEventListener('error', function(e) {
+          if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
+            var src = e.target.src || e.target.href || '';
+            if (src.indexOf('/assets/') !== -1) {
+              var lastReload = sessionStorage.getItem(RELOAD_KEY);
+              var now = Date.now();
+              if (!lastReload || (now - parseInt(lastReload, 10)) > 10000) {
+                sessionStorage.setItem(RELOAD_KEY, String(now));
+                window.location.reload(true);
+              }
+            }
+          }
+        }, true); // capture phase
+      })();
+    </script>
+
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

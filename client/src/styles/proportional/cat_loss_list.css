@@ -1,0 +1,326 @@
+/* src/styles/pages/CatLossList.css
+   Scope: .CAT_LOSS_LIST_PAGE
+   Goal: Match Large Loss List styling + compact layout
+*/
+
+/* =========================
+   Page spacing + tokens
+========================= */
+.CAT_LOSS_LIST_PAGE{
+  --stroke: rgba(148,163,184,.16);
+  --stroke-2: rgba(148,163,184,.12);
+  --panel: rgba(8,16,40,.18);
+  --panel-2: rgba(8,16,40,.28);
+  --head: rgba(12,14,16,.86);
+
+  --text: rgba(226,232,240,.92);
+  --muted: rgba(148,163,184,.86);
+
+  --green: rgba(var(--accent-rgb),1);
+  --green-soft: rgba(var(--accent-rgb),.22);
+
+  padding-bottom: 120px; /* dock clearance */
+}
+
+.CAT_LOSS_LIST_PAGE .sheet-panel-inner{ padding-bottom: 10px; }
+
+/* =========================
+   Heading (smaller)
+========================= */
+.CAT_LOSS_LIST_PAGE .ll-head{ margin-top: 12px; margin-bottom: 10px; }
+
+.CAT_LOSS_LIST_PAGE .ll-title{
+  font-size: 18px;        /* smaller than large loss list */
+  font-weight: 900;
+  letter-spacing: .1px;
+  color: rgba(241,245,249,.96);
+  margin: 0;
+}
+
+.CAT_LOSS_LIST_PAGE .ll-sub{
+  margin-top: 6px;
+  font-size: 13px;
+  opacity: .80;
+  line-height: 1.35;
+  max-width: 980px;
+  color: var(--muted);
+}
+
+/* =========================
+   Toolbar (same layout)
+========================= */
+.CAT_LOSS_LIST_PAGE .ll-toolbar{
+  margin-top: 12px;
+  border-radius: 18px;
+  padding: 12px 12px;
+  border: 1px solid rgba(148,163,184,.14);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: rgba(8,16,40,.18);
+}
+
+.CAT_LOSS_LIST_PAGE .ll-toolbar-left{ min-width: 260px; }
+.CAT_LOSS_LIST_PAGE .ll-field{ display:flex; flex-direction:column; gap: 8px; }
+
+.CAT_LOSS_LIST_PAGE .ll-field-label{
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(148,163,184,.85);
+  font-weight: 850;
+}
+
+.CAT_LOSS_LIST_PAGE .ll-date-shell{
+  border-radius: 999px;
+  border: 1px solid rgba(148,163,184,.18);
+  background: rgba(8,16,40,.28);
+  padding: 8px 12px;
+  display:flex;
+  align-items:center;
+  min-height: 40px;
+}
+
+.CAT_LOSS_LIST_PAGE .ll-date-input{
+  width: 220px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: rgba(226,232,240,.92);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.CAT_LOSS_LIST_PAGE .ll-toolbar-right{
+  display:flex;
+  gap: 10px;
+  align-items:center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* =========================
+   Buttons (pill + glossy green)
+========================= */
+.CAT_LOSS_LIST_PAGE .ll-btn{
+  border-radius: 999px;
+  border: 1px solid rgba(148,163,184,.20);
+  background: rgba(8,16,40,.40);
+  color: rgba(226,232,240,.90);
+  padding: 9px 14px;     /* slightly tighter */
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+  box-shadow: 0 10px 26px rgba(0,0,0,.18);
+  transition: transform .15s ease, filter .15s ease, background .15s ease, border-color .15s ease;
+}
+
+.CAT_LOSS_LIST_PAGE .ll-btn:hover{
+  transform: translateY(-1px);
+  border-color: rgba(90,170,200,.30);
+  background: rgba(7,14,26,.55);
+}
+
+.CAT_LOSS_LIST_PAGE .ll-btn--primary{
+  border: 1px solid rgba(var(--accent-rgb),.48); /* slightly more visible */
+  background: linear-gradient(180deg, rgba(var(--accent-rgb),.90), rgba(var(--accent2-rgb),.78));
+  color: #001b12;
+  box-shadow:
+    0 0 22px rgba(var(--accent-rgb),.18),
+    inset 0 1px 0 rgba(255,255,255,.22);
+}
+
+.CAT_LOSS_LIST_PAGE .ll-btn--primary:hover{
+  filter: brightness(1.04);
+}
+
+.CAT_LOSS_LIST_PAGE .ll-btn--danger{
+  border: 1px solid rgba(248,113,113,.34);
+}
+.CAT_LOSS_LIST_PAGE .ll-btn--danger:hover{
+  border-color: rgba(248,113,113,.48);
+  background: rgba(248,113,113,.06);
+}
+
+/* =========================
+   Section + table container
+========================= */
+.CAT_LOSS_LIST_PAGE .ll-section{
+  margin-top: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(148,163,184,.14);
+  background: rgba(8,16,40,.18);
+  padding: 12px;
+}
+
+.CAT_LOSS_LIST_PAGE .ll-section-title{
+  font-size: 13px;      /* compact */
+  font-weight: 900;
+  letter-spacing: .2px;
+  margin: 0 0 8px;
+  color: rgba(226,232,240,.92);
+}
+
+.CAT_LOSS_LIST_PAGE .ll-table-wrap{
+  margin-top: 10px;
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid rgba(148,163,184,.12);
+  background: rgba(8,16,40,.22);
+}
+
+/* =========================
+   Table
+========================= */
+.CAT_LOSS_LIST_PAGE .ll-table{
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1220px;
+}
+
+.CAT_LOSS_LIST_PAGE .ll-table thead th{
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(12,14,16,.88);
+  backdrop-filter: blur(8px);
+
+  padding: 9px 10px;     /* tighter */
+  border-bottom: 1px solid rgba(148,163,184,.14);
+
+  font-size: 10.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  opacity: .86;
+
+  text-align: center;
+  white-space: nowrap;
+}
+
+.CAT_LOSS_LIST_PAGE .ll-table tbody td{
+  padding: 7px 8px;      /* compact cells */
+  border-bottom: 1px solid rgba(148,163,184,.09);
+  vertical-align: middle;
+}
+
+.CAT_LOSS_LIST_PAGE .ll-table tbody tr:hover td{
+  background: rgba(255,255,255,.02);
+}
+
+/* Column sizing */
+.CAT_LOSS_LIST_PAGE .ll-td--tight{ width: 140px; }
+.CAT_LOSS_LIST_PAGE .ll-td--date{ width: 170px; }
+.CAT_LOSS_LIST_PAGE .ll-td--num{ text-align: center; }
+
+/* =========================
+   Inputs (pill, compact)
+========================= */
+.CAT_LOSS_LIST_PAGE .ll-input{
+  width: 100%;
+  height: 32px;              /* more compact */
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,.16);
+  background: rgba(8,16,40,.45);
+  color: rgba(226,232,240,.92);
+  padding: 0 10px;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+.CAT_LOSS_LIST_PAGE .ll-input:focus{
+  border-color: rgba(var(--accent-rgb),.48); /* more visible */
+  box-shadow: 0 0 0 6px rgba(var(--accent-rgb),.08);
+}
+
+.CAT_LOSS_LIST_PAGE .ll-input--readonly{
+  opacity: .82;
+  background: rgba(8,16,40,.35);
+}
+
+.CAT_LOSS_LIST_PAGE .ll-input--num{
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Datetime-local: keep compact */
+.CAT_LOSS_LIST_PAGE .ll-input[type="datetime-local"]{
+  padding-right: 10px;
+}
+
+/* =========================
+   Wizard dock (unchanged, but ensure it stays consistent)
+========================= */
+.CAT_LOSS_LIST_PAGE .wizard-dock{
+  display:flex;
+  gap: 12px;
+}
+/* =========================================================
+   CAT LOSS LIST — Center everything + green touch on cells
+   Paste at END of CatLossList.css
+========================================================= */
+
+/* Center table headers + body cells */
+.CAT_LOSS_LIST_PAGE .ll-table thead th{
+  text-align: center !important;
+}
+
+.CAT_LOSS_LIST_PAGE .ll-table tbody td{
+  text-align: center !important;
+}
+
+/* Center numeric columns too (user request: everything centered) */
+.CAT_LOSS_LIST_PAGE .ll-td--num,
+.CAT_LOSS_LIST_PAGE .ll-input--num{
+  text-align: center !important;
+}
+
+/* Center inputs text */
+.CAT_LOSS_LIST_PAGE .ll-input{
+  text-align: center !important;
+}
+
+/* Make computed readonly inputs still centered */
+.CAT_LOSS_LIST_PAGE .ll-input--readonly{
+  text-align: center !important;
+}
+
+/* ---- Green “touch” around each cell ---- */
+/* Add a subtle green inner ring + slightly greener border */
+.CAT_LOSS_LIST_PAGE .ll-table tbody td{
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--accent-rgb),.10),
+    inset 0 0 18px rgba(var(--accent-rgb),.04);
+}
+
+/* Stronger + cleaner border on the actual input pill */
+.CAT_LOSS_LIST_PAGE .ll-input{
+  border-color: rgba(var(--accent-rgb),.22) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--accent-rgb),.10),
+    0 0 0 1px rgba(var(--accent-rgb),.06);
+}
+
+/* On hover: slightly more visible green */
+.CAT_LOSS_LIST_PAGE .ll-table tbody tr:hover td{
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--accent-rgb),.16),
+    inset 0 0 22px rgba(var(--accent-rgb),.06);
+}
+
+/* On focus: crisp green ring */
+.CAT_LOSS_LIST_PAGE .ll-input:focus{
+  border-color: rgba(var(--accent-rgb),.55) !important;
+  box-shadow:
+    0 0 0 6px rgba(var(--accent-rgb),.10),
+    inset 0 0 0 1px rgba(var(--accent-rgb),.12);
+}
+
+/* Optional: make readonly a touch “glowy” but muted */
+.CAT_LOSS_LIST_PAGE .ll-input--readonly{
+  border-color: rgba(var(--accent-rgb),.16) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--accent-rgb),.08),
+    inset 0 0 16px rgba(var(--accent-rgb),.03);
+}

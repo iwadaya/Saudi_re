@@ -1,0 +1,830 @@
+/* styles/pages/projectedSummary.css
+   ============================
+   PROJECTED SUMMARY (page CSS)
+   Scope: .PROJECTED_SUMMARY_PAGE
+   ============================ */
+
+.PROJECTED_SUMMARY_PAGE .ps-page {
+  margin-top: 10px;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-sub {
+  margin-top: 6px;
+  font-size: 13px;
+  opacity: 0.85;
+  line-height: 1.35;
+}
+
+/* 2-column layout */
+.PROJECTED_SUMMARY_PAGE .ps-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 1100px) {
+  .PROJECTED_SUMMARY_PAGE .ps-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-col {
+  min-width: 0;
+}
+
+/* stacked cards on left column */
+.PROJECTED_SUMMARY_PAGE .ps-stack {
+  display: grid;
+  gap: 14px;
+}
+
+/* Card */
+.PROJECTED_SUMMARY_PAGE .ps-card {
+  border-radius: 16px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(20, 24, 28, 0.55);
+  backdrop-filter: blur(10px);
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-card-head-left {
+  min-width: 0;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-card-title {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-card-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.75;
+  line-height: 1.3;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-card-head-right {
+  flex: 0 0 auto;
+}
+
+/* Metric toggle (reuses global toggle styles, only spacing tweaks here) */
+.PROJECTED_SUMMARY_PAGE .ps-metric-toggle .toggle-group {
+  transform: translateY(2px);
+}
+
+/* Legend */
+.PROJECTED_SUMMARY_PAGE .ps-legend {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08) inset;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-legend-dot--proj {
+  background: rgba(70, 200, 140, 0.9);
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-legend-dot--act {
+  background: rgba(255, 180, 70, 0.9);
+}
+
+/* Chart shell */
+.PROJECTED_SUMMARY_PAGE .ps-chart-shell {
+  margin-top: 8px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 12, 14, 0.55);
+}
+
+/* Chart surface */
+.PROJECTED_SUMMARY_PAGE .ps-chart-surface {
+  position: relative;
+  height: 210px;
+  padding: 10px 10px 12px;
+  display: flex;
+  align-items: flex-end;
+
+  background-image:
+    linear-gradient(to top, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 100% 42px, 42px 100%;
+}
+
+/* Dummy bars */
+.PROJECTED_SUMMARY_PAGE .ps-bars {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
+  align-items: end;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-bars-col {
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-bars-pair {
+  width: 100%;
+  max-width: 16px;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  align-items: end;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-bar {
+  border-radius: 6px 6px 2px 2px;
+  min-height: 2px;
+  opacity: 0.9;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-bar--proj {
+  background: rgba(70, 200, 140, 0.85);
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-bar--act {
+  background: rgba(255, 180, 70, 0.85);
+}
+
+/* X axis ticks */
+.PROJECTED_SUMMARY_PAGE .ps-x-axis {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 0;
+  padding: 8px 10px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-x-tick {
+  font-size: 11px;
+  text-align: center;
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Summary tables */
+.PROJECTED_SUMMARY_PAGE .ps-block {
+  margin-top: 12px;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-block-title {
+  font-size: 12px;
+  font-weight: 800;
+  opacity: 0.85;
+  margin-bottom: 8px;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-table-wrap {
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 12, 14, 0.4);
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 520px;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-table thead th {
+  position: sticky;
+  top: 0;
+  background: rgba(12, 14, 16, 0.9);
+  backdrop-filter: blur(8px);
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  opacity: 0.9;
+  padding: 10px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-table td {
+  padding: 10px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-year {
+  font-weight: 700;
+  opacity: 0.95;
+  width: 96px;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-dash {
+  text-align: center;
+  opacity: 0.85;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-total td {
+  font-weight: 800;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* reuse your df placeholder look */
+.PROJECTED_SUMMARY_PAGE .df-cell-placeholder {
+  opacity: 0.7;
+}
+/* =========================================================
+   styles/pages/projectedSummary.css
+   Changes:
+   1) DULL chart colors (less bright)
+   2) Add “pill cells” around table values (like Dev Factors)
+   3) Slightly reduce boldness (optional but matches your style)
+========================================================= */
+
+/* ---------- Dull the graph colors ---------- */
+.PROJECTED_SUMMARY_PAGE .ps-bar{
+  opacity: .78; /* slightly dull */
+}
+
+/* projected: dull green */
+.PROJECTED_SUMMARY_PAGE .ps-bar--proj{
+  background: rgba(var(--accent-rgb),.45); /* was 70,200,140 bright */
+}
+
+/* actual: dull amber/grey (less loud) */
+.PROJECTED_SUMMARY_PAGE .ps-bar--act{
+  background: rgba(148,163,184,.45); /* calm slate instead of orange */
+}
+
+/* Optional: legend dots if you use them elsewhere */
+.PROJECTED_SUMMARY_PAGE .ps-legend-dot--proj{ background: rgba(var(--accent-rgb),.55); }
+.PROJECTED_SUMMARY_PAGE .ps-legend-dot--act{ background: rgba(148,163,184,.55); }
+
+/* ---------- Table: make the table itself less “grid”, more “pill” ---------- */
+.PROJECTED_SUMMARY_PAGE .ps-table{
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-table td{
+  padding: 6px 8px;     /* compact */
+  border-bottom: none;  /* remove flat grid lines */
+  font-size: 12px;
+}
+
+/* make headers match the premium sticky look a bit more */
+.PROJECTED_SUMMARY_PAGE .ps-table thead th{
+  font-weight: 600;     /* was 800 */
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+/* wrap values in a pill */
+.PROJECTED_SUMMARY_PAGE .ps-cell{
+  height: 32px;
+  border-radius: 999px;
+  padding: 0 10px;
+  margin: 2px 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: rgba(8,16,40,.22);
+  border: 1px solid rgba(148,163,184,.18);
+  color: rgba(226,232,240,.88);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* numbers right-ish but still centered by default */
+.PROJECTED_SUMMARY_PAGE .ps-cell--num{
+  justify-content: flex-end;
+  text-align: center;
+}
+
+/* total row: slightly stronger border only */
+.PROJECTED_SUMMARY_PAGE .ps-total .ps-cell{
+  border-color: rgba(148,163,184,.28);
+  background: rgba(148,163,184,.08);
+  font-weight: 600;
+}
+
+/* subtle hover like Dev Factors */
+.PROJECTED_SUMMARY_PAGE .ps-table tbody tr:hover .ps-cell{
+  background: rgba(148,163,184,.12);
+  border-color: rgba(148,163,184,.30);
+}
+
+/* Optional: reduce heavy bold headings (matches your “no bold” preference) */
+.PROJECTED_SUMMARY_PAGE .ps-h2{ font-weight: 650; }
+.PROJECTED_SUMMARY_PAGE .ps-card-title{ font-weight: 650; }
+.PROJECTED_SUMMARY_PAGE .ps-block-title{ font-weight: 650; }
+/* =========================================================
+   styles/pages/projectedSummary.css  (ADD / OVERRIDE)
+   - Center/justify EVERYTHING inside table cells
+   - Faint green border/glow around value pills (like dev triangles)
+   - Add a legend for charts + dull colors
+   Paste at the VERY bottom so it wins
+========================================================= */
+
+/* ---------- Dull chart colors (calm, not bright) ---------- */
+.PROJECTED_SUMMARY_PAGE .ps-bar{ opacity: .72; }
+
+.PROJECTED_SUMMARY_PAGE .ps-bar--proj{
+  background: rgba(var(--accent-rgb),.38);   /* faint green */
+}
+.PROJECTED_SUMMARY_PAGE .ps-bar--act{
+  background: rgba(148,163,184,.38); /* muted slate */
+}
+
+/* ---------- Legend (visible + consistent) ---------- */
+.PROJECTED_SUMMARY_PAGE .ps-legend{
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 10px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-legend-item{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-legend-dot{
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+  background: rgba(148,163,184,.38);
+  box-shadow: 0 0 0 2px rgba(255,255,255,.06) inset;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-legend-dot--proj{ background: rgba(var(--accent-rgb),.38); }
+.PROJECTED_SUMMARY_PAGE .ps-legend-dot--act{ background: rgba(148,163,184,.38); }
+
+/* ---------- Tables: compact + centered everywhere ---------- */
+.PROJECTED_SUMMARY_PAGE .ps-table{
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-table thead th{
+  text-align: center;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-table td{
+  padding: 6px 8px;
+  border-bottom: none;           /* remove flat grid lines */
+  text-align: center;            /* ✅ center everything */
+  vertical-align: middle;
+}
+
+/* Ensure any legacy classes don't force alignment */
+.PROJECTED_SUMMARY_PAGE .ps-year,
+.PROJECTED_SUMMARY_PAGE .ps-dash{
+  text-align: center;
+  font-weight: 600;
+}
+
+/* ---------- “Cell pills” around numbers: centered + faint green outline ---------- */
+.PROJECTED_SUMMARY_PAGE .ps-cell{
+  height: 32px;
+  border-radius: 999px;
+  padding: 0 10px;
+  margin: 2px 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;       /* ✅ center horizontally */
+  text-align: center;            /* ✅ center text */
+
+  background: rgba(8,16,40,.22);
+  border: 1px solid rgba(var(--accent-rgb),.22);   /* faint green */
+
+  /* faint glossy edge like dev triangles */
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.05),
+    0 0 0 1px rgba(var(--accent-rgb),.10),
+    0 0 6px rgba(var(--accent-rgb),.10);
+
+  color: rgba(226,232,240,.88);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* If you still have ps-cell--num, make it centered too */
+.PROJECTED_SUMMARY_PAGE .ps-cell--num{
+  justify-content: center;
+  text-align: center;
+}
+
+/* Total row: slightly stronger, still subtle */
+.PROJECTED_SUMMARY_PAGE .ps-total .ps-cell{
+  border-color: rgba(var(--accent-rgb),.26);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 0 0 1px rgba(var(--accent-rgb),.14),
+    0 0 7px rgba(var(--accent-rgb),.12);
+  font-weight: 600;
+  background: rgba(var(--accent-rgb),.06);
+}
+
+/* Hover: very calm */
+.PROJECTED_SUMMARY_PAGE .ps-table tbody tr:hover .ps-cell{
+  background: rgba(var(--accent-rgb),.08);
+  border-color: rgba(var(--accent-rgb),.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 0 0 1px rgba(var(--accent-rgb),.16),
+    0 0 8px rgba(var(--accent-rgb),.14);
+}
+/* =========================================================
+   styles/pages/projectedSummary.css  (ADD / OVERRIDE)
+   Bluish background + subtle grid lines like Dev Triangles
+   Paste at VERY bottom so it wins
+========================================================= */
+
+.PROJECTED_SUMMARY_PAGE .sheet-panel-inner{
+  /* bluish depth */
+  background: rgba(2, 6, 23, .22);
+  border: 1px solid rgba(148,163,184,.10);
+  border-radius: 18px;
+}
+
+/* give the page area the “triangle” surface feel */
+.PROJECTED_SUMMARY_PAGE .ps-page{
+  border-radius: 18px;
+  padding: 10px 0 0;
+}
+
+/* grid-lined surface behind cards (same vibe as dev triangle table area) */
+.PROJECTED_SUMMARY_PAGE .ps-grid{
+  position: relative;
+  border-radius: 18px;
+  padding: 10px;
+  background: rgba(2, 6, 23, .18);
+
+  /* subtle grid lines */
+  background-image:
+    linear-gradient(to top, rgba(148,163,184,.08) 1px, transparent 1px),
+    linear-gradient(to right, rgba(148,163,184,.06) 1px, transparent 1px);
+  background-size: 100% 44px, 44px 100%;
+
+  border: 1px solid rgba(148,163,184,.10);
+  box-shadow: 0 14px 34px rgba(0,0,0,.18);
+}
+
+/* ensure cards float cleanly on top */
+.PROJECTED_SUMMARY_PAGE .ps-card{
+  background: rgba(8,16,40,.22); /* more “blue glass” */
+  border: 1px solid rgba(148,163,184,.12);
+  box-shadow: 0 12px 30px rgba(0,0,0,.18);
+}
+
+/* charts also match the bluish surface */
+.PROJECTED_SUMMARY_PAGE .ps-chart-shell{
+  border: 1px solid rgba(148,163,184,.12);
+  background: rgba(8,16,40,.22);
+}
+
+/* chart surface uses the same grid style but a touch finer */
+.PROJECTED_SUMMARY_PAGE .ps-chart-surface{
+  background-image:
+    linear-gradient(to top, rgba(148,163,184,.08) 1px, transparent 1px),
+    linear-gradient(to right, rgba(148,163,184,.06) 1px, transparent 1px);
+  background-size: 100% 42px, 42px 100%;
+}
+/* =========================================================
+   Make Projected Summary cells match Dev Triangle cells
+   (green-tinted internal fill + gloss)
+========================================================= */
+
+.PROJECTED_SUMMARY_PAGE .ps-cell{
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(var(--accent-rgb),.10),
+      rgba(8,16,40,.26)
+    );
+
+  border: 1px solid rgba(var(--accent-rgb),.22);
+
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06), /* top gloss */
+    0 0 0 1px rgba(var(--accent-rgb),.12),       /* edge */
+    0 0 6px rgba(var(--accent-rgb),.10);         /* halo */
+}
+
+/* Hover — same behaviour as dev triangles */
+.PROJECTED_SUMMARY_PAGE .ps-table tbody tr:hover .ps-cell{
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(var(--accent-rgb),.14),
+      rgba(8,16,40,.28)
+    );
+
+  border-color: rgba(var(--accent-rgb),.30);
+
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    0 0 0 1px rgba(var(--accent-rgb),.18),
+    0 0 8px rgba(var(--accent-rgb),.14);
+}
+/* Loss Ratio > 100% — red highlight */
+.PROJECTED_SUMMARY_PAGE td.ps-cell--hot .ps-cell{
+  color: rgba(239,68,68,.90);
+
+  border-color: rgba(239,68,68,.40);
+
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(239,68,68,.14),
+      rgba(8,16,40,.28)
+    );
+
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 0 0 1px rgba(239,68,68,.20),
+    0 0 8px rgba(239,68,68,.18);
+}
+/* =========================================================
+   PROJECTED SUMMARY — Excel-style square cells
+========================================================= */
+
+/* table: crisp grid */
+.PROJECTED_SUMMARY_PAGE .ps-table{
+  border-collapse: collapse !important;
+  width: 100%;
+}
+
+/* headers: compact, flat */
+.PROJECTED_SUMMARY_PAGE .ps-table th{
+  background: rgba(8,16,40,.55);
+  border: 1px solid rgba(148,163,184,.22);
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: rgba(226,232,240,.70);
+  text-align: center;
+}
+
+/* cells: remove pill look */
+.PROJECTED_SUMMARY_PAGE .ps-table td{
+  border: 1px solid rgba(148,163,184,.18);
+  padding: 0; /* let inner cell control padding */
+  background: transparent;
+}
+
+/* inner cell becomes the “Excel cell” */
+.PROJECTED_SUMMARY_PAGE .ps-cell{
+  border-radius: 0 !important;     /* ✅ square */
+  box-shadow: none !important;     /* ✅ no glow */
+  border: none !important;         /* borders live on td now */
+  background: rgba(8,16,40,.18);    /* subtle flat fill */
+  height: 36px;                    /* consistent row height */
+  padding: 0 12px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;         /* ✅ centered like Excel */
+
+  color: rgba(226,232,240,.88);
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* left column (UW year) slightly left aligned */
+.PROJECTED_SUMMARY_PAGE .ps-year .ps-cell{
+  justify-content: flex-start;
+}
+
+/* numeric columns slightly right aligned (Excel feel) */
+.PROJECTED_SUMMARY_PAGE .ps-dash .ps-cell{
+  justify-content: flex-end;
+}
+
+/* hot LR cells still red but square */
+.PROJECTED_SUMMARY_PAGE .ps-cell--hot .ps-cell{
+  background: rgba(239,68,68,.10) !important;
+  color: rgba(239,68,68,.95) !important;
+}
+
+/* total row: subtle emphasis without “pill” */
+.PROJECTED_SUMMARY_PAGE .ps-total td .ps-cell{
+  background: rgba(8,16,40,.28);
+}
+/* =========================================================
+   PROJECTED SUMMARY — Centered cells, NO green fill
+========================================================= */
+
+/* Center headers */
+.PROJECTED_SUMMARY_PAGE .ps-table th{
+  text-align: center !important;
+}
+
+/* Center all cells */
+.PROJECTED_SUMMARY_PAGE .ps-cell{
+  justify-content: center !important;
+  text-align: center !important;
+
+  /* remove green / colored fills */
+  background: rgba(8,16,40,.18) !important;
+  color: rgba(226,232,240,.90);
+}
+
+/* Keep grid crisp and neutral */
+.PROJECTED_SUMMARY_PAGE .ps-table td{
+  border-color: rgba(148,163,184,.22) !important;
+}
+
+/* Total row: slightly stronger neutral (not green) */
+.PROJECTED_SUMMARY_PAGE .ps-total td .ps-cell{
+  background: rgba(8,16,40,.28) !important;
+}
+
+/* Hot LR cells stay red and centered */
+.PROJECTED_SUMMARY_PAGE .ps-cell--hot .ps-cell{
+  background: rgba(239,68,68,.14) !important;
+  border-color: rgba(239,68,68,.45) !important;
+  color: rgba(239,68,68,.95) !important;
+}
+/* =========================================================
+   PROJECTED SUMMARY — Green borders + row highlight
+========================================================= */
+
+/* Green grid borders */
+.PROJECTED_SUMMARY_PAGE .ps-table td,
+.PROJECTED_SUMMARY_PAGE .ps-table th{
+  border: 1px solid rgba(var(--accent-rgb),.35) !important; /* green */
+}
+
+/* Neutral cell background (keep clean) */
+.PROJECTED_SUMMARY_PAGE .ps-cell{
+  background: rgba(8,16,40,.18) !important;
+  color: rgba(226,232,240,.92);
+  transition: background .15s ease, box-shadow .15s ease;
+}
+
+/* =======================
+   ROW HIGHLIGHT (HOVER)
+======================= */
+
+.PROJECTED_SUMMARY_PAGE .ps-table tbody tr:hover td .ps-cell{
+  background: rgba(var(--accent-rgb),.14) !important;
+}
+
+/* =======================
+   ROW HIGHLIGHT (SELECTED)
+   (future-proof: add class)
+======================= */
+
+.PROJECTED_SUMMARY_PAGE .ps-table tr.is-selected td .ps-cell{
+  background: rgba(var(--accent-rgb),.22) !important;
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb),.45);
+}
+
+/* =======================
+   HOT CELLS (LR > 100%)
+   stay red, override row
+======================= */
+
+.PROJECTED_SUMMARY_PAGE .ps-cell--hot .ps-cell{
+  background: rgba(239,68,68,.16) !important;
+  border-color: rgba(239,68,68,.55) !important;
+  color: rgba(239,68,68,.95) !important;
+}
+/* =========================================================
+   PROJECTED SUMMARY — 70% compact table density
+========================================================= */
+
+/* Headers: tighter */
+.PROJECTED_SUMMARY_PAGE .ps-table th{
+  padding: 4px 6px !important;
+  font-size: 10px !important;
+}
+
+/* Table cells: tighter grid */
+.PROJECTED_SUMMARY_PAGE .ps-table td{
+  padding: 0 !important;
+}
+
+/* Inner cell (Excel-style) */
+.PROJECTED_SUMMARY_PAGE .ps-cell{
+  height: 26px !important;          /* was ~36px */
+  padding: 0 6px !important;        /* was ~12px */
+  font-size: 11px !important;       /* slightly smaller */
+  line-height: 1 !important;
+}
+
+/* Total row stays readable */
+.PROJECTED_SUMMARY_PAGE .ps-total td .ps-cell{
+  height: 28px !important;
+  font-size: 11px !important;
+}
+/* =========================================================
+   PROJECTED SUMMARY — Border color by table type
+   1st table = Projected (green)
+   2nd table = Actual (blue)
+========================================================= */
+
+/* =========================
+   PROJECTED (GREEN)
+========================= */
+
+.PROJECTED_SUMMARY_PAGE .ps-block:nth-of-type(1) .ps-table td,
+.PROJECTED_SUMMARY_PAGE .ps-block:nth-of-type(1) .ps-table th{
+  border-color: rgba(var(--accent-rgb),.40) !important; /* green */
+}
+
+/* Hover stays green */
+.PROJECTED_SUMMARY_PAGE .ps-block:nth-of-type(1) tbody tr:hover td .ps-cell{
+  background: rgba(var(--accent-rgb),.14) !important;
+}
+
+/* =========================
+   ACTUAL (BLUE)
+========================= */
+
+.PROJECTED_SUMMARY_PAGE .ps-block:nth-of-type(2) .ps-table td,
+.PROJECTED_SUMMARY_PAGE .ps-block:nth-of-type(2) .ps-table th{
+  border-color: rgba(59,130,246,.45) !important; /* blue */
+}
+
+/* Hover stays blue */
+.PROJECTED_SUMMARY_PAGE .ps-block:nth-of-type(2) tbody tr:hover td .ps-cell{
+  background: rgba(59,130,246,.14) !important;
+}
+
+/* =========================
+   SELECTED ROW SUPPORT
+========================= */
+
+.PROJECTED_SUMMARY_PAGE .ps-block:nth-of-type(1) tr.is-selected td .ps-cell{
+  background: rgba(var(--accent-rgb),.22) !important;
+}
+
+.PROJECTED_SUMMARY_PAGE .ps-block:nth-of-type(2) tr.is-selected td .ps-cell{
+  background: rgba(59,130,246,.22) !important;
+}
+
+/* =========================
+   HOT CELLS (LR > 100%)
+   Always win
+========================= */
+
+.PROJECTED_SUMMARY_PAGE .ps-cell--hot .ps-cell{
+  background: rgba(239,68,68,.16) !important;
+  border-color: rgba(239,68,68,.55) !important;
+  color: rgba(239,68,68,.95) !important;
+}

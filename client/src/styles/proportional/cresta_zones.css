@@ -1,0 +1,279 @@
+/* =========================================================
+   CRESTA AGGREGATES — Triangle-style, compact
+========================================================= */
+.CRESTA_AGGREGATES_PAGE{ font-size: 13px; }
+
+/* Hero */
+.CRESTA_AGGREGATES_PAGE .ca-hero{ margin-bottom: 10px; }
+.CRESTA_AGGREGATES_PAGE .ca-title{
+  font-size: 16px; font-weight: 900; color: rgba(226,232,240,.92);
+  letter-spacing: .02em;
+}
+.CRESTA_AGGREGATES_PAGE .ca-sub{
+  font-size: 12px; color: rgba(148,163,184,.65); margin-top: 4px;
+}
+
+/* Saved country pills */
+.CRESTA_AGGREGATES_PAGE .ca-savedline{
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
+}
+.CRESTA_AGGREGATES_PAGE .ca-savedlabel{
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .10em;
+  color: rgba(148,163,184,.65);
+}
+.CRESTA_AGGREGATES_PAGE .ca-pills-area{ display: flex; gap: 6px; flex-wrap: wrap; }
+.CRESTA_AGGREGATES_PAGE .ca-pill-none{ font-size: 11px; color: rgba(148,163,184,.40); font-style: italic; }
+.CRESTA_AGGREGATES_PAGE .ca-saved-pill{
+  height: 26px; padding: 0 12px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; cursor: pointer;
+  border: 1px solid rgba(var(--accent-rgb),.25); background: rgba(var(--accent-rgb),.04);
+  color: rgba(var(--accent-rgb),.80); transition: all .12s ease;
+}
+.CRESTA_AGGREGATES_PAGE .ca-saved-pill:hover{
+  border-color: rgba(var(--accent-rgb),.45); background: rgba(var(--accent-rgb),.08);
+}
+.CRESTA_AGGREGATES_PAGE .ca-saved-pill.active{
+  border-color: rgba(var(--accent-rgb),.55); background: rgba(var(--accent-rgb),.12);
+  color: rgba(var(--accent-rgb),1); box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.08);
+}
+
+/* Control bar */
+.CRESTA_AGGREGATES_PAGE .ca-goldbar{
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 8px; flex-wrap: wrap;
+}
+.CRESTA_AGGREGATES_PAGE .ca-gold-left,
+.CRESTA_AGGREGATES_PAGE .ca-gold-right{
+  display: flex; align-items: center; gap: 10px;
+}
+.CRESTA_AGGREGATES_PAGE .ca-field{
+  display: flex; align-items: center; gap: 6px;
+}
+.CRESTA_AGGREGATES_PAGE .ca-flabel{
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+  color: rgba(148,163,184,.70);
+}
+.CRESTA_AGGREGATES_PAGE .ca-select{
+  height: 30px; padding: 0 10px; border-radius: 8px;
+  border: 1px solid rgba(var(--accent-rgb),.30) !important;
+  background: rgba(8,16,40,.30) !important; color: rgba(226,232,240,.90);
+  font-size: 12px; font-weight: 500; appearance: none; -webkit-appearance: none;
+  min-width: 160px;
+}
+.CRESTA_AGGREGATES_PAGE .ca-select:focus{ border-color: rgba(var(--accent-rgb),.55) !important; outline: none; }
+
+/* Treaty type toggle */
+.CRESTA_AGGREGATES_PAGE .ca-toggle-group{
+  display: flex; gap: 2px; padding: 2px; border-radius: 8px;
+  border: 1px solid rgba(148,163,184,.15); background: rgba(8,16,40,.20);
+}
+.CRESTA_AGGREGATES_PAGE .ca-toggle-btn{
+  height: 26px; padding: 0 10px; border: none; border-radius: 6px;
+  font-size: 11px; font-weight: 700; cursor: pointer;
+  background: transparent; color: rgba(148,163,184,.60); transition: all .12s ease;
+}
+.CRESTA_AGGREGATES_PAGE .ca-toggle-btn:hover{ color: rgba(226,232,240,.80); }
+.CRESTA_AGGREGATES_PAGE .ca-toggle-btn.active{
+  background: rgba(var(--accent-rgb),.12); color: rgba(var(--accent-rgb),.95);
+  border: 1px solid rgba(var(--accent-rgb),.30);
+}
+
+/* Buttons */
+.CRESTA_AGGREGATES_PAGE .ca-btn{
+  height: 28px; padding: 0 12px; border-radius: 6px; font-size: 11px; font-weight: 700;
+  cursor: pointer; border: 1px solid rgba(148,163,184,.22); background: rgba(8,16,40,.20);
+  color: rgba(226,232,240,.80); transition: all .12s ease; white-space: nowrap;
+}
+.CRESTA_AGGREGATES_PAGE .ca-btn:hover{ border-color: rgba(148,163,184,.40); background: rgba(148,163,184,.08); }
+.CRESTA_AGGREGATES_PAGE .ca-btn--ghost{ border-color: rgba(239,68,68,.25); color: rgba(239,68,68,.70); }
+.CRESTA_AGGREGATES_PAGE .ca-btn--ghost:hover{ border-color: rgba(239,68,68,.45); background: rgba(239,68,68,.06); }
+.CRESTA_AGGREGATES_PAGE .ca-btn--save{ border-color: rgba(var(--accent-rgb),.30); color: rgba(var(--accent-rgb),.90); }
+.CRESTA_AGGREGATES_PAGE .ca-btn--save:hover{ border-color: rgba(var(--accent-rgb),.55); background: rgba(var(--accent-rgb),.06); }
+.CRESTA_AGGREGATES_PAGE .ca-btn--dirty{ border-color: rgba(251,146,60,.50); color: rgba(251,146,60,.95); animation: ca-pulse 1.5s infinite; }
+@keyframes ca-pulse{ 0%,100%{box-shadow:none;} 50%{box-shadow:0 0 0 3px rgba(251,146,60,.10);} }
+.CRESTA_AGGREGATES_PAGE .ca-btn[disabled]{ opacity:.4; cursor:not-allowed; }
+
+.CRESTA_AGGREGATES_PAGE .ca-msg{ font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 4px; }
+.CRESTA_AGGREGATES_PAGE .ca-msg--ok{ color: rgba(var(--accent-rgb),.90); background: rgba(var(--accent-rgb),.08); }
+.CRESTA_AGGREGATES_PAGE .ca-msg--err{ color: rgba(239,68,68,.90); background: rgba(239,68,68,.08); }
+
+/* Info bar */
+.CRESTA_AGGREGATES_PAGE .ca-info-bar{
+  display: flex; gap: 12px; margin-bottom: 10px; flex-wrap: wrap;
+}
+.CRESTA_AGGREGATES_PAGE .ca-info-tag{
+  font-size: 11px; color: rgba(148,163,184,.60); padding: 3px 10px;
+  border-radius: 6px; border: 1px solid rgba(148,163,184,.10); background: rgba(8,16,40,.15);
+}
+.CRESTA_AGGREGATES_PAGE .ca-info-tag strong{ color: rgba(226,232,240,.85); }
+
+/* Table */
+.CRESTA_AGGREGATES_PAGE .ca-table-wrap{
+  overflow-x: auto; border-radius: 10px;
+  border: 1px solid rgba(148,163,184,.12); background: rgba(8,16,40,.15);
+}
+.CRESTA_AGGREGATES_PAGE .ca-table{
+  width: 100%; border-collapse: separate; border-spacing: 3px;
+}
+.CRESTA_AGGREGATES_PAGE .ca-th{
+  padding: 6px 10px; font-size: 10px; font-weight: 700; letter-spacing: .10em;
+  text-transform: uppercase; color: rgba(var(--accent-rgb),.75); text-align: center; white-space: nowrap;
+}
+.CRESTA_AGGREGATES_PAGE .ca-th--c{ text-align: center; }
+.CRESTA_AGGREGATES_PAGE .ca-td{ padding: 0; vertical-align: middle; text-align: center; }
+.CRESTA_AGGREGATES_PAGE .ca-td--id{ width: 80px; }
+.CRESTA_AGGREGATES_PAGE .ca-td--name{ min-width: 160px; }
+.CRESTA_AGGREGATES_PAGE .ca-td--total{
+  text-align: center; font-size: 12px; font-weight: 700; color: rgba(226,232,240,.90);
+  font-variant-numeric: tabular-nums; padding: 4px 10px;
+}
+
+.CRESTA_AGGREGATES_PAGE .ca-inp{
+  width: 100%; height: 26px; padding: 0 8px;
+  border: 1px solid rgba(var(--accent-rgb),.15); border-radius: 4px;
+  background: rgba(var(--accent-rgb),.03); color: rgba(226,232,240,.90);
+  font-size: 12px; font-family: inherit;
+  box-shadow: none !important; appearance: none; -webkit-appearance: none;
+  transition: border-color .12s ease, background .12s ease;
+}
+.CRESTA_AGGREGATES_PAGE .ca-inp:focus{ border-color: rgba(var(--accent-rgb),.45); background: rgba(var(--accent-rgb),.06); outline: none; }
+.CRESTA_AGGREGATES_PAGE .ca-inp::placeholder{ color: rgba(148,163,184,.25); }
+.CRESTA_AGGREGATES_PAGE .ca-inp--num{ text-align: center; font-variant-numeric: tabular-nums; }
+.CRESTA_AGGREGATES_PAGE .ca-inp--ro{
+  border-color: rgba(148,163,184,.08); background: rgba(148,163,184,.03);
+  color: rgba(148,163,184,.70); cursor: default;
+}
+.CRESTA_AGGREGATES_PAGE .ca-table tbody tr:hover .ca-inp{ border-color: rgba(var(--accent-rgb),.28); background: rgba(var(--accent-rgb),.04); }
+.CRESTA_AGGREGATES_PAGE .ca-table tbody tr:hover .ca-inp--ro{ border-color: rgba(148,163,184,.15); background: rgba(148,163,184,.04); }
+
+/* Total row */
+.CRESTA_AGGREGATES_PAGE .ca-total-row .ca-td{ padding: 6px 10px; }
+.CRESTA_AGGREGATES_PAGE .ca-total-label{
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: rgba(var(--accent-rgb),.70);
+}
+
+/* Modal */
+.CRESTA_AGGREGATES_PAGE .ca-modal-backdrop{
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,.70); backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+}
+.CRESTA_AGGREGATES_PAGE .ca-modal{
+  width: 520px; max-width: 92vw; border-radius: 16px;
+  border: 1px solid rgba(var(--accent-rgb),.18); background: rgba(15,23,42,.96);
+  box-shadow: 0 30px 60px rgba(0,0,0,.50); overflow: hidden;
+}
+.CRESTA_AGGREGATES_PAGE .ca-modal-head{
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 18px; border-bottom: 1px solid rgba(var(--accent-rgb),.12); background: rgba(8,16,40,.40);
+}
+.CRESTA_AGGREGATES_PAGE .ca-modal-title{
+  font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; color: rgba(226,232,240,.92);
+}
+.CRESTA_AGGREGATES_PAGE .ca-modal-x{
+  background: none; border: 1px solid rgba(148,163,184,.18); border-radius: 999px;
+  padding: 4px 10px; color: rgba(148,163,184,.80); cursor: pointer; font-size: 14px;
+}
+.CRESTA_AGGREGATES_PAGE .ca-modal-x:hover{ color: #fff; border-color: rgba(148,163,184,.40); }
+.CRESTA_AGGREGATES_PAGE .ca-modal-body{ padding: 18px; }
+.CRESTA_AGGREGATES_PAGE .ca-modal-sub{
+  font-size: 12px; color: rgba(148,163,184,.70); margin-bottom: 16px; line-height: 1.4;
+}
+.CRESTA_AGGREGATES_PAGE .ca-modal-foot{
+  display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px;
+  border-top: 1px solid rgba(148,163,184,.10);
+}
+
+/* Distribution grid */
+.CRESTA_AGGREGATES_PAGE .ca-dist-grid{ display: flex; flex-direction: column; gap: 10px; }
+.CRESTA_AGGREGATES_PAGE .ca-dist-row{
+  display: grid; grid-template-columns: 180px 90px 1fr; gap: 10px; align-items: center;
+}
+.CRESTA_AGGREGATES_PAGE .ca-dist-label{
+  font-size: 12px; font-weight: 600; color: rgba(226,232,240,.85);
+}
+.CRESTA_AGGREGATES_PAGE .ca-dist-inp-wrap{
+  display: flex; align-items: center; gap: 4px;
+}
+.CRESTA_AGGREGATES_PAGE .ca-dist-inp{
+  width: 64px; height: 28px; padding: 0 8px; border-radius: 6px; text-align: center;
+  border: 1px solid rgba(var(--accent-rgb),.25) !important;
+  background: rgba(8,16,40,.25) !important; color: rgba(226,232,240,.90);
+  font-size: 12px; box-shadow: none !important;
+}
+.CRESTA_AGGREGATES_PAGE .ca-dist-inp:focus{ border-color: rgba(var(--accent-rgb),.50) !important; outline: none; }
+.CRESTA_AGGREGATES_PAGE .ca-dist-pct{ font-size: 11px; color: rgba(148,163,184,.60); }
+.CRESTA_AGGREGATES_PAGE .ca-dist-bar{
+  height: 8px; border-radius: 4px; background: rgba(148,163,184,.10); overflow: hidden;
+}
+.CRESTA_AGGREGATES_PAGE .ca-dist-fill{
+  height: 100%; border-radius: 4px; background: rgba(var(--accent-rgb),.45); transition: width .15s ease;
+}
+.CRESTA_AGGREGATES_PAGE .ca-dist-total{
+  margin-top: 12px; font-size: 12px; padding: 8px 12px; border-radius: 8px;
+  border: 1px solid rgba(148,163,184,.15); background: rgba(8,16,40,.20);
+}
+.CRESTA_AGGREGATES_PAGE .ca-dist-total--ok{ color: rgba(var(--accent-rgb),.90); border-color: rgba(var(--accent-rgb),.25); }
+.CRESTA_AGGREGATES_PAGE .ca-dist-total--err{ color: rgba(251,146,60,.90); border-color: rgba(251,146,60,.25); }
+
+/* ═══ COB TABS ═══ */
+.ca-cob-tabs {
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ca-cob-tabs-label {
+  font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+  color: rgba(148,163,184,.7); font-weight: 800;
+}
+.ca-cob-tabs-row {
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+.ca-cob-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.04);
+  color: rgba(255,255,255,.7);
+  font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all .15s;
+  font-family: inherit; white-space: nowrap;
+}
+.ca-cob-tab:hover:not(:disabled) {
+  border-color: rgba(255,255,255,.25);
+  background: rgba(255,255,255,.08);
+}
+.ca-cob-tab.active {
+  font-weight: 900;
+  box-shadow: 0 0 12px rgba(255,255,255,.05);
+}
+.ca-cob-tab--disabled {
+  opacity: .45;
+  cursor: not-allowed !important;
+}
+.ca-cob-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  display: inline-block; flex-shrink: 0;
+}
+.ca-cob-lock {
+  font-size: 10px; margin-left: 2px;
+}
+
+/* ═══ DISABLED BANNER ═══ */
+.ca-disabled-banner {
+  padding: 12px 16px;
+  background: rgba(251,191,36,.08);
+  border: 1px solid rgba(251,191,36,.25);
+  border-radius: 10px;
+  color: rgba(251,191,36,.9);
+  font-size: 13px; font-weight: 600;
+  margin-bottom: 12px;
+}
+
+/* ═══ GREYED OUT SECTION ═══ */
+.ca-greyed {
+  opacity: .3;
+  pointer-events: none;
+  filter: grayscale(.6);
+}

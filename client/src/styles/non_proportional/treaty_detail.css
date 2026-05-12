@@ -1,0 +1,397 @@
+/* styles/pages/npTreatyDetail.css
+   Non-Proportional Treaty Detail page
+   (two cards, pill inputs, matches the reference layout)
+*/
+
+/* NP workflow: tables + cells should be centred/justified */
+.workspace[class*="NP_"] table th,
+.workspace[class*="NP_"] table td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.workspace[class*="NP_"] table input,
+.workspace[class*="NP_"] table select {
+  text-align: center;
+}
+
+.np-treaty-step {
+  padding-bottom: 24px;
+}
+
+
+/* =========================================================
+   HEADER STRIPS + COB PILLS (match proportional)
+========================================================= */
+
+.NP_TREATY_DETAIL{
+  padding-bottom: 120px; /* room for dock */
+}
+
+.NP_TREATY_DETAIL .sheet-header-row{
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(148,163,184,.14);
+}
+
+.NP_TREATY_DETAIL .sheet-pill{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(8,16,40,.25);
+  border: 1px solid rgba(148,163,184,.20);
+  color: rgba(226,232,240,.85);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+}
+
+.NP_TREATY_DETAIL .sheet-pill-dot{
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb),.92);
+  box-shadow: 0 0 0 4px rgba(var(--accent-rgb),.10);
+}
+
+.NP_TREATY_DETAIL .treaty-header{
+  display:flex;
+  align-items:center;
+  gap: 12px;
+  margin: 4px 0 6px;
+}
+
+.NP_TREATY_DETAIL .treaty-title{
+  font-size: 20px;
+  font-weight: 750;
+  letter-spacing: .01em;
+}
+
+.NP_TREATY_DETAIL .treaty-subtitle-row{
+  display:flex;
+  justify-content:space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(148,163,184,.10);
+}
+
+.NP_TREATY_DETAIL .treaty-subtitle{
+  font-size: 12px;
+  color: rgba(226,232,240,.78);
+  padding: 8px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(148,163,184,.10);
+  background: rgba(8,16,40,.20);
+}
+
+/* ===== COB pills beside header ===== */
+.NP_TREATY_DETAIL .cob-pills{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  max-width: 55vw;
+}
+
+.NP_TREATY_DETAIL .cob-pill{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(8,16,40,.22);
+  border: 1px solid rgba(var(--accent-rgb),.70);
+  box-shadow: 0 0 0 5px rgba(var(--accent-rgb),.08);
+  color: rgba(226,232,240,.92);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.NP_TREATY_DETAIL .cob-pill-code{ opacity: .95; }
+.NP_TREATY_DETAIL .cob-pill-name{
+  opacity: .70;
+  font-weight: 650;
+  letter-spacing: .04em;
+  text-transform: none;
+}
+
+.NP_TREATY_DETAIL .cob-pill--more{
+  border-color: rgba(148,163,184,.35);
+  box-shadow: none;
+  opacity: .85;
+}
+
+/* ---- Header spacing (uses your existing treaty-header styles if present) ---- */
+.np-treaty-step .treaty-header {
+  margin-top: 10px;
+  margin-bottom: 8px;
+}
+
+/* ---- Two-card grid ---- */
+.np-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 14px;
+}
+
+@media (max-width: 1024px) {
+  .np-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---- Card ---- */
+.np-card {
+  border-radius: 22px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  padding: 18px 18px 16px;
+  overflow: hidden;
+}
+
+.np-card-cap {
+  text-align: center;
+  letter-spacing: 0.18em;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #9ca3af;
+  margin-bottom: 14px;
+  text-transform: uppercase;
+}
+
+/* ---- Form rows ---- */
+.np-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.np-field {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .np-field {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+}
+
+.np-label {
+  color: #9ca3af;
+  font-weight: 700;
+  font-size: 0.84rem;
+  line-height: 1.2;
+}
+
+.np-control {
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+/* ---- Pill inputs ---- */
+.np-pill-input {
+  width: 100%;
+  /* Match global control sizing used across the app */
+  padding: 6px 12px;
+  min-height: 40px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.25);
+  color: #e5e7eb;
+  font-weight: 800;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.np-pill-input::placeholder {
+  color: rgba(229, 231, 235, 0.35);
+  font-weight: 700;
+}
+
+.np-pill-input:focus {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
+}
+
+/* Select styling */
+select.np-pill-input {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 38px;
+  cursor: pointer;
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(229,231,235,.75) 50%),
+    linear-gradient(135deg, rgba(229,231,235,.75) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 55%,
+    calc(100% - 12px) 55%;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+/* Date input should match pill look */
+input.np-pill-input[type="date"] {
+  color-scheme: dark;
+}
+
+/* ---- Suffix pill (SAR / %) ---- */
+.np-pill-input--suffix {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.np-pill-input--suffix:focus-within {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
+}
+
+.np-pill-input--suffix .np-pill-input-inner {
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  color: #e5e7eb;
+  font-weight: 800;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.np-pill-input--suffix .np-pill-input-inner::placeholder {
+  color: rgba(229, 231, 235, 0.35);
+  font-weight: 700;
+}
+
+.np-suffix {
+  padding: 10px 12px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  color: #9ca3af;
+  font-weight: 900;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ---- Optional: tighten spacing inside sheet panel on large screens ---- */
+@media (min-width: 1200px) {
+  .np-detail-grid {
+    gap: 22px;
+  }
+}
+
+/* ---- Optional: make the whole section feel centered like the reference ---- */
+.np-treaty-step .sheet-panel-inner {
+  padding-bottom: 88px; /* keep room for wizard dock */
+}
+
+
+/* Layer Rates table (captured on Treaty Terms) */
+.np-layer-rates{
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(148,163,184,.18);
+}
+.np-layer-rates-head{
+  display:flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px 8px;
+}
+.np-layer-rates-title{
+  font-size: 12px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.70);
+}
+.np-layer-rates-hint{
+  font-size: 12px;
+  color: rgba(255,255,255,.55);
+}
+.np-layer-rates-wrap{
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.14);
+  overflow: hidden;
+}
+.np-layer-rates-table{
+  width:100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: .82rem;
+}
+.np-layer-rates-table thead th{
+  text-align:center;
+  padding: 10px 10px;
+  font-size: .68rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.70);
+  background: rgba(7,10,16,.78);
+  border-bottom: 1px solid rgba(255,255,255,.10);
+}
+.np-layer-rates-table tbody td{
+  text-align:center;
+  padding: 10px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  color: rgba(255,255,255,.85);
+}
+.np-layer-rates-table tbody tr:last-child td{ border-bottom:0; }
+.np-rate-shell{ width:100%; justify-content:center; }
+.np-rate-input{ width: 100%; text-align: center; background: transparent; border:0; color: rgba(255,255,255,.92); outline:none; }
+
+
+/* Chief Underwriter review bar */
+.CU_REVIEW_BAR{
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 50;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(20,20,28,.92);
+  backdrop-filter: blur(10px);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.CU_REVIEW_BAR .cu-title{ font-weight: 800; white-space: nowrap; }
+.CU_REVIEW_BAR textarea{
+  flex: 1 1 auto;
+  min-height: 44px;
+  max-height: 96px;
+  resize: vertical;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.CU_REVIEW_BAR .cu-actions{ display:flex; gap: 10px; }
+.dock-btn--danger{ background: rgba(255, 80, 80, .18); }
+
+/* Read-only mode: dim page content but keep CU bar interactive */
+.is-readonly .wizard-dock{ display:none !important; }
+.is-readonly .panel, .is-readonly .glass{ opacity: .92; }

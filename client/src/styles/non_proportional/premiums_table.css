@@ -1,0 +1,121 @@
+/* styles/non_proportional/premiums_table.css */
+
+.np-premiums-step .np-prem-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 14px;
+}
+
+@media (max-width: 1024px) {
+  .np-premiums-step .np-prem-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.np-premiums-step .np-prem-card {
+  min-height: 420px;
+}
+
+.np-premiums-step .np-prem-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.92rem;
+}
+
+.np-premiums-step .np-prem-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(5, 8, 16, 0.92);
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+}
+
+.np-premiums-step .np-prem-table tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  vertical-align: middle;
+  text-align: center;
+}
+
+.np-premiums-step .np-cell-year {
+  width: 90px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.np-premiums-step .np-cell-right,
+.np-premiums-step .cell-right {
+  text-align: center;
+}
+
+.np-premiums-step .np-inp {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.09);
+  background: rgba(255,255,255,0.03);
+  color: rgba(226,232,240,0.90);
+  font-size: 0.88rem;
+  text-align: center;
+  outline: none;
+  transition: border-color .13s, background .13s;
+}
+
+.np-premiums-step .np-inp:focus {
+  border-color: rgba(var(--accent-rgb), 0.35);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
+}
+
+.np-premiums-step .np-muted {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.np-premiums-step .np-pos {
+  color: rgba(var(--accent-rgb), 0.95);
+  font-weight: 900;
+}
+
+.np-premiums-step .np-neg {
+  color: rgba(239, 68, 68, 0.95);
+  font-weight: 900;
+}
+
+.np-premiums-step .np-prem-foot {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+
+/* NP standard "blueish lighting" cells */
+.np-glow-input{
+  border-color: rgba(255,255,255,0.09) !important;
+  border-radius: 6px !important;
+  background: rgba(255,255,255,0.03) !important;
+}
+
+.np-glow-input:focus{
+  border-color: rgba(56, 189, 248, 0.40) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(56, 189, 248, 0.20),
+    0 0 0 3px rgba(56, 189, 248, 0.14) !important;
+}
+
+/* Apply subtle glow on table cells for NP grids */
+.np-struct-table tbody td,
+.np-struct-table tbody th,
+.np-premiums-table tbody td,
+.np-premiums-table tbody th,
+.np-final-table tbody td,
+.np-final-table tbody th{
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.06);
+}

@@ -1,0 +1,1448 @@
+/* =========================================
+   QUICK SUMMARY PAGE STYLES
+   Path: src/styles/pages/quickSummary.css
+   ========================================= */
+
+/* --- 1. Hero Section --- */
+.qs-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 32px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
+  margin-bottom: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.qs-hero-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+
+.qs-hero-sub {
+  color: #94a3b8;
+  font-size: 14px;
+  max-width: 600px;
+  line-height: 1.5;
+}
+
+.qs-view-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.qs-view-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+/* --- 2. Main Layout --- */
+.qs-page {
+  animation: fadeIn 0.4s ease-out;
+}
+
+.qs-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.qs-section-head {
+  margin-bottom: 16px;
+}
+
+.qs-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin-bottom: 4px;
+}
+
+.qs-section-sub {
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* --- 3. Tables --- */
+.qs-table-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.3);
+}
+
+.qs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.qs-table th, 
+.qs-table td {
+  padding: 12px 16px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.qs-table th {
+  background: rgba(30, 41, 59, 0.5);
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+.qs-table th.qs-left {
+  text-align: center;
+  position: sticky;
+  left: 0;
+  background: rgba(30, 41, 59, 0.9); /* Sticky contrast */
+  z-index: 10;
+}
+
+.qs-table .qs-year {
+  text-align: center;
+  color: #fff;
+  font-weight: 600;
+  position: sticky;
+  left: 0;
+  background: inherit; 
+}
+
+.qs-total {
+  background: rgba(255, 255, 255, 0.03);
+  font-weight: 700;
+  color: #fff;
+  border-top: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+/* --- 4. Modals (Portfolio Stats) --- */
+.qs-modal-backdrop {
+  position: fixed;
+  top: 0; 
+  left: 0; 
+  width: 100vw; 
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  z-index: 9999; /* High Z-index */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.qs-modal-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.qs-modal {
+  width: 1000px;
+  max-width: 95vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: #1e293b;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  transform: scale(0.95);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.qs-modal-backdrop.is-open .qs-modal {
+  transform: scale(1);
+}
+
+.qs-modal-head {
+  padding: 20px 32px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.qs-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.qs-x {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.qs-x:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.qs-modal-body {
+  padding: 32px;
+  overflow-y: auto;
+  background: #0f172a; /* Darker interior */
+}
+
+.qs-modal-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 32px;
+}
+
+/* --- 5. Modal Sections --- */
+.qs-right-h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 4px;
+  border-left: 3px solid #3b82f6;
+  padding-left: 12px;
+}
+
+.qs-right-sub {
+  font-size: 13px;
+  color: #94a3b8;
+  margin-bottom: 20px;
+  padding-left: 15px;
+}
+
+.qs-table-wrap--tight {
+  margin-top: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.qs-table.qs-terms th.qs-term {
+  text-align: center;
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+/* --- 6. Metrics Grid --- */
+.qs-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.qs-metric-card {
+  background: rgba(30, 41, 59, 0.4);
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-left: 4px solid #3b82f6;
+  transition: transform 0.2s;
+}
+
+.qs-metric-card:hover {
+  transform: translateY(-2px);
+  background: rgba(30, 41, 59, 0.6);
+}
+
+.qs-metric--green { border-left-color: #22c55e; }
+.qs-metric--slate { border-left-color: #94a3b8; }
+.qs-metric--blue { border-left-color: #3b82f6; }
+.qs-metric--amber { border-left-color: #f59e0b; }
+
+.qs-metric-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  letter-spacing: 0.05em;
+}
+
+.qs-metric-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.1;
+}
+
+.qs-metric-unit {
+  font-size: 16px;
+  color: #64748b;
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+.qs-metric-desc {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 8px;
+}
+
+/* --- 7. Utility Classes --- */
+.qs-neg { color: #f87171; font-weight: 600; } /* Red for negative results */
+.qs-pos { color: #4ade80; font-weight: 600; } /* Green for positive results */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* =========================================================
+   QUICK SUMMARY — Dev Triangle style "pill cells"
+   Paste at VERY BOTTOM of src/styles/pages/quickSummary.css
+   This keeps your table layout, but makes EACH VALUE look
+   like the Dev Triangle cells (glossy faint green, rounded),
+   and turns the LAST 3 columns red when negative.
+========================================================= */
+
+/* make table more compact + centered like triangles */
+.QUICK_SUMMARY_PAGE .qs-table{
+  font-size: 12px;
+}
+
+.QUICK_SUMMARY_PAGE .qs-table th,
+.QUICK_SUMMARY_PAGE .qs-table td{
+  /* tighter padding because the "pill" has its own padding */
+  padding: 6px 8px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* sticky left column stays left aligned, but pill content is centered */
+.QUICK_SUMMARY_PAGE .qs-table th.qs-left,
+.QUICK_SUMMARY_PAGE .qs-table .qs-year{
+  text-align: center;
+}
+
+/* remove default cell borders feel (we'll use pill borders) */
+.QUICK_SUMMARY_PAGE .qs-table td,
+.QUICK_SUMMARY_PAGE .qs-table th{
+  border-bottom: 1px solid rgba(148,163,184,.08);
+}
+
+/* ---------------------------------------------------------
+   ✅ The Dev-Triangle style cell wrapper used by JS:
+   <div class="qs-cell-pill ...">value</div>
+--------------------------------------------------------- */
+.QUICK_SUMMARY_PAGE .qs-cell-pill{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-width: 92px;           /* keeps table tidy */
+  height: 34px;              /* compact like triangles */
+  padding: 0 10px;
+
+  border-radius: 12px;
+
+  /* faint green internal shade (like dev triangles) */
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(var(--accent-rgb),.08),
+      rgba(8,16,40,.26)
+    );
+
+  border: 1px solid rgba(var(--accent-rgb),.18);
+
+  /* subtle gloss + very faint halo */
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 0 0 1px rgba(var(--accent-rgb),.10),
+    0 0 6px rgba(var(--accent-rgb),.08);
+
+  color: rgba(226,232,240,.88);
+  font-weight: 650;          /* not bold-heavy */
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* hover similar to triangle */
+.QUICK_SUMMARY_PAGE .qs-table tbody tr:hover .qs-cell-pill{
+  border-color: rgba(var(--accent-rgb),.24);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    0 0 0 1px rgba(var(--accent-rgb),.14),
+    0 0 8px rgba(var(--accent-rgb),.10);
+}
+
+/* make the year pill look consistent but slightly more neutral */
+.QUICK_SUMMARY_PAGE .qs-year .qs-cell-pill,
+.QUICK_SUMMARY_PAGE th.qs-year .qs-cell-pill{
+  min-width: 86px;
+  justify-content: flex-start;
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(148,163,184,.08),
+      rgba(8,16,40,.26)
+    );
+  border-color: rgba(148,163,184,.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 0 0 1px rgba(148,163,184,.10),
+    0 0 6px rgba(148,163,184,.08);
+}
+
+/* ---------------------------------------------------------
+   ✅ Negative variant used by JS:
+   <div class="qs-cell-pill qs-cell-pill--neg">
+--------------------------------------------------------- */
+.QUICK_SUMMARY_PAGE .qs-cell-pill.qs-cell-pill--neg{
+  color: rgba(248,113,113,.92);
+
+  border-color: rgba(248,113,113,.38);
+
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(248,113,113,.14),
+      rgba(8,16,40,.28)
+    );
+
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 0 0 1px rgba(248,113,113,.18),
+    0 0 8px rgba(248,113,113,.14);
+}
+
+/* totals row still reads as total, but uses same pill */
+.QUICK_SUMMARY_PAGE .qs-total{
+  background: rgba(8,16,40,.12);
+}
+.QUICK_SUMMARY_PAGE .qs-total .qs-cell-pill{
+  font-weight: 750;
+}
+
+/* optional: keep old qs-neg/qs-pos from modal tables if you still use them */
+/* =========================================================
+   QUICK SUMMARY HERO — compact + green pill buttons
+   (Paste at bottom of quickSummary.css)
+========================================================= */
+
+/* Compact the hero container */
+.QUICK_SUMMARY_PAGE .qs-hero{
+  padding: 14px 18px;              /* was 24px 32px */
+  margin-bottom: 16px;             /* was 30px */
+  border-radius: 16px;
+
+  /* keep your blue-ish base but tighter + slightly cleaner */
+  background: linear-gradient(
+    135deg,
+    rgba(30, 41, 59, 0.55) 0%,
+    rgba(15, 23, 42, 0.70) 100%
+  );
+
+  border: 1px solid rgba(148,163,184,.14);
+  box-shadow: 0 10px 24px rgba(0,0,0,.20);
+}
+
+/* Tighten left side typography */
+.QUICK_SUMMARY_PAGE .qs-hero-title{
+  font-size: 18px;                 /* was 24px */
+  font-weight: 850;
+  margin-bottom: 2px;
+  letter-spacing: .01em;
+}
+
+.QUICK_SUMMARY_PAGE .qs-hero-sub{
+  font-size: 12px;                 /* was 14px */
+  line-height: 1.35;
+  max-width: 720px;
+  color: rgba(148,163,184,.86);
+}
+
+/* Align buttons nicely and keep them compact */
+.QUICK_SUMMARY_PAGE .qs-hero-right{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ✅ Pill buttons — glossy + faint green glow */
+.QUICK_SUMMARY_PAGE .qs-view-btn{
+  border-radius: 999px;
+  padding: 9px 14px;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: .02em;
+
+  color: rgba(226,232,240,.92);
+  background:
+    linear-gradient(to bottom,
+      rgba(var(--accent-rgb),.14),
+      rgba(8,16,40,.22)
+    );
+
+  border: 1px solid rgba(var(--accent-rgb),.38);
+
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    0 0 0 6px rgba(var(--accent-rgb),.08),
+    0 10px 18px rgba(0,0,0,.20);
+
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+
+.QUICK_SUMMARY_PAGE .qs-view-btn:hover{
+  transform: translateY(-1px);
+  border-color: rgba(var(--accent-rgb),.52);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.10),
+    0 0 0 7px rgba(var(--accent-rgb),.10),
+    0 12px 22px rgba(0,0,0,.22);
+}
+
+.QUICK_SUMMARY_PAGE .qs-view-btn:active{
+  transform: translateY(0px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 0 0 5px rgba(var(--accent-rgb),.07),
+    0 8px 16px rgba(0,0,0,.18);
+}
+
+.QUICK_SUMMARY_PAGE .qs-view-btn:focus-visible{
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    0 0 0 3px rgba(var(--accent-rgb),.22),
+    0 0 0 8px rgba(var(--accent-rgb),.10),
+    0 12px 22px rgba(0,0,0,.22);
+}
+
+/* Optional: make hero row wrap tighter on small screens */
+@media (max-width: 860px){
+  .QUICK_SUMMARY_PAGE .qs-hero{
+    padding: 12px 14px;
+    gap: 10px;
+  }
+}
+/* =========================================================
+   FUTURISTIC MODAL SKIN (Portfolio Analysis / Stats)
+   Paste at bottom of quickSummary.css
+========================================================= */
+
+/* Backdrop: deeper + slight color bloom */
+.QUICK_SUMMARY_PAGE .qs-modal-backdrop{
+  background: radial-gradient(1200px 600px at 50% 30%,
+      rgba(var(--accent-rgb),.10),
+      rgba(0,0,0,.78) 55%,
+      rgba(0,0,0,.86) 100%);
+  backdrop-filter: blur(8px);
+}
+
+/* Modal shell: glass + neon edge + subtle grid */
+.QUICK_SUMMARY_PAGE .qs-modal{
+  border-radius: 22px;
+  background:
+    radial-gradient(900px 420px at 30% 0%,
+      rgba(var(--accent-rgb),.10),
+      rgba(8,16,40,.72) 55%,
+      rgba(8,16,40,.86) 100%),
+    linear-gradient(180deg,
+      rgba(255,255,255,.06),
+      rgba(255,255,255,0));
+
+  border: 1px solid rgba(var(--accent-rgb),.22);
+  box-shadow:
+    0 30px 70px rgba(0,0,0,.55),
+    0 0 0 6px rgba(var(--accent-rgb),.08),
+    0 0 28px rgba(var(--accent-rgb),.14);
+
+  position: relative;
+  overflow: hidden;
+}
+
+/* Gridlines overlay inside modal */
+.QUICK_SUMMARY_PAGE .qs-modal::before{
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .35;
+  background-image:
+    linear-gradient(to top, rgba(148,163,184,.10) 1px, transparent 1px),
+    linear-gradient(to right, rgba(148,163,184,.08) 1px, transparent 1px);
+  background-size: 100% 44px, 44px 100%;
+  mask-image: radial-gradient(closest-side at 40% 15%, black 0%, transparent 65%);
+}
+
+/* Neon rim highlight */
+.QUICK_SUMMARY_PAGE .qs-modal::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 22px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    inset 0 0 0 1px rgba(var(--accent-rgb),.16);
+  opacity: .9;
+}
+
+/* Header: cleaner + glow divider */
+.QUICK_SUMMARY_PAGE .qs-modal-head{
+  background: rgba(8,16,40,.55);
+  border-bottom: 1px solid rgba(var(--accent-rgb),.16);
+  padding: 16px 22px;
+}
+
+.QUICK_SUMMARY_PAGE .qs-modal-title{
+  font-size: 16px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 900;
+  color: rgba(226,232,240,.92);
+}
+
+.QUICK_SUMMARY_PAGE .qs-modal-head{
+  position: relative;
+}
+.QUICK_SUMMARY_PAGE .qs-modal-head::after{
+  content:"";
+  position:absolute;
+  left: 18px;
+  right: 18px;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(var(--accent-rgb),.30),
+    transparent);
+  opacity: .9;
+}
+
+/* Close button: neon hover */
+.QUICK_SUMMARY_PAGE .qs-x{
+  border-radius: 999px;
+  padding: 6px 10px;
+  border: 1px solid rgba(148,163,184,.18);
+  background: rgba(8,16,40,.30);
+  color: rgba(148,163,184,.90);
+}
+.QUICK_SUMMARY_PAGE .qs-x:hover{
+  color: rgba(226,232,240,.92);
+  border-color: rgba(var(--accent-rgb),.35);
+  box-shadow:
+    0 0 0 6px rgba(var(--accent-rgb),.08),
+    0 0 16px rgba(var(--accent-rgb),.12);
+}
+
+/* Body: deeper glass */
+.QUICK_SUMMARY_PAGE .qs-modal-body{
+  background: rgba(8,16,40,.55);
+  padding: 22px;
+}
+
+/* Section headings: “HUD” look */
+.QUICK_SUMMARY_PAGE .qs-right-h2{
+  border-left: none;
+  padding-left: 0;
+  margin-bottom: 6px;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+
+  font-size: 14px;
+  font-weight: 950;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(226,232,240,.92);
+}
+.QUICK_SUMMARY_PAGE .qs-right-h2::before{
+  content:"";
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb),.85);
+  box-shadow:
+    0 0 0 5px rgba(var(--accent-rgb),.10),
+    0 0 18px rgba(var(--accent-rgb),.18);
+}
+
+.QUICK_SUMMARY_PAGE .qs-right-sub{
+  padding-left: 0;
+  margin-bottom: 16px;
+  color: rgba(148,163,184,.88);
+  font-size: 12px;
+}
+
+/* Metrics grid: tighter + more “cardy” */
+.QUICK_SUMMARY_PAGE .qs-metrics-grid{
+  gap: 12px;
+}
+
+/* Metric cards: glass + faint green rim + glow */
+.QUICK_SUMMARY_PAGE .qs-metric-card{
+  border-radius: 18px;
+  border: 1px solid rgba(var(--accent-rgb),.16);
+  border-left: 1px solid rgba(var(--accent-rgb),.16); /* override old left stripe */
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0)),
+    rgba(8,16,40,.38);
+
+  box-shadow:
+    0 12px 26px rgba(0,0,0,.28),
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 0 0 6px rgba(var(--accent-rgb),.06);
+
+  padding: 16px 16px;
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+
+.QUICK_SUMMARY_PAGE .qs-metric-card:hover{
+  transform: translateY(-2px);
+  border-color: rgba(var(--accent-rgb),.26);
+  box-shadow:
+    0 14px 30px rgba(0,0,0,.32),
+    inset 0 1px 0 rgba(255,255,255,.08),
+    0 0 0 7px rgba(var(--accent-rgb),.08),
+    0 0 18px rgba(var(--accent-rgb),.10);
+}
+
+/* Metric title/value: more “dashboard” */
+.QUICK_SUMMARY_PAGE .qs-metric-title{
+  font-size: 10px;
+  letter-spacing: .14em;
+  color: rgba(148,163,184,.80);
+}
+
+.QUICK_SUMMARY_PAGE .qs-metric-value{
+  font-size: 26px;
+  font-weight: 950;
+  color: rgba(226,232,240,.94);
+}
+
+.QUICK_SUMMARY_PAGE .qs-metric-unit{
+  color: rgba(148,163,184,.85);
+}
+
+/* Optional: tint per card type without harsh colors */
+.QUICK_SUMMARY_PAGE .qs-metric--green{ border-color: rgba(var(--accent-rgb),.22); }
+.QUICK_SUMMARY_PAGE .qs-metric--blue{  border-color: rgba(59,130,246,.20); box-shadow: 0 12px 26px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06), 0 0 0 6px rgba(59,130,246,.06); }
+.QUICK_SUMMARY_PAGE .qs-metric--amber{ border-color: rgba(245,158,11,.20); box-shadow: 0 12px 26px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06), 0 0 0 6px rgba(245,158,11,.06); }
+.QUICK_SUMMARY_PAGE .qs-metric--purple{border-color: rgba(168,85,247,.20); box-shadow: 0 12px 26px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06), 0 0 0 6px rgba(168,85,247,.06); }
+.QUICK_SUMMARY_PAGE .qs-metric--slate{ border-color: rgba(148,163,184,.18); box-shadow: 0 12px 26px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06), 0 0 0 6px rgba(148,163,184,.05); }
+/* =========================================================
+   QUICK SUMMARY — FUTURISTIC DASHBOARD
+========================================================= */
+
+.QUICK_SUMMARY_PAGE .qs-page{
+  display: flex;
+  justify-content: center;
+}
+
+.QUICK_SUMMARY_PAGE .qs-modern{
+  width: min(1100px, 70vw); /* ✅ compact ~70% */
+  margin: 6px auto 0;
+  padding-bottom: 20px;
+}
+
+.QUICK_SUMMARY_PAGE .qs-hero2{
+  display:flex;
+  align-items:flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(148,163,184,.16);
+  background: rgba(8,16,40,.35);
+  backdrop-filter: blur(14px);
+}
+
+.QUICK_SUMMARY_PAGE .qs-hero2-title{
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -.02em;
+  color: rgba(226,232,240,.94);
+}
+
+.QUICK_SUMMARY_PAGE .qs-hero2-sub{
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(148,163,184,.78);
+}
+
+.QUICK_SUMMARY_PAGE .qs-hero2-right{
+  display:flex;
+  gap: 10px;
+}
+
+.QUICK_SUMMARY_PAGE .qs-neo-btn{
+  border-radius: 999px;
+  padding: 9px 14px;
+  border: 1px solid rgba(148,163,184,.22);
+  background: rgba(8,16,40,.25);
+  color: rgba(226,232,240,.85);
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+.QUICK_SUMMARY_PAGE .qs-neo-btn:hover{
+  transform: translateY(-1px);
+  border-color: rgba(148,163,184,.35);
+  box-shadow: 0 0 0 6px rgba(148,163,184,.08);
+}
+
+.QUICK_SUMMARY_PAGE .qs-kpis{
+  margin-top: 12px;
+  display:grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.QUICK_SUMMARY_PAGE .qs-kpi{
+  padding: 12px 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(148,163,184,.16);
+  background: rgba(8,16,40,.30);
+  backdrop-filter: blur(12px);
+}
+
+.QUICK_SUMMARY_PAGE .qs-kpi--green{
+  border-color: rgba(var(--accent-rgb),.28);
+  box-shadow: 0 0 0 6px rgba(var(--accent-rgb),.06);
+}
+.QUICK_SUMMARY_PAGE .qs-kpi--blue{
+  border-color: rgba(59,130,246,.28);
+  box-shadow: 0 0 0 6px rgba(59,130,246,.06);
+}
+
+.QUICK_SUMMARY_PAGE .qs-kpi-label{
+  font-size: 11px;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: rgba(148,163,184,.75);
+}
+
+.QUICK_SUMMARY_PAGE .qs-kpi-value{
+  margin-top: 6px;
+  font-size: 18px;
+  font-weight: 900;
+  color: rgba(226,232,240,.95);
+}
+
+.QUICK_SUMMARY_PAGE .qs-kpi-sub{
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(148,163,184,.78);
+}
+
+.QUICK_SUMMARY_PAGE .qs-grid2{
+  margin-top: 12px;
+  display:grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.QUICK_SUMMARY_PAGE .qs-card{
+  border-radius: 20px;
+  border: 1px solid rgba(148,163,184,.16);
+  background: rgba(8,16,40,.28);
+  backdrop-filter: blur(14px);
+  padding: 12px;
+}
+
+.QUICK_SUMMARY_PAGE .qs-card--green{
+  border-color: rgba(var(--accent-rgb),.24);
+}
+.QUICK_SUMMARY_PAGE .qs-card--blue{
+  border-color: rgba(59,130,246,.24);
+}
+
+.QUICK_SUMMARY_PAGE .qs-card-head{
+  display:flex;
+  justify-content: space-between;
+  align-items:center;
+  gap: 10px;
+  padding: 0 4px 10px;
+}
+
+.QUICK_SUMMARY_PAGE .qs-card-title{
+  font-size: 14px;
+  font-weight: 900;
+  color: rgba(226,232,240,.92);
+}
+
+.QUICK_SUMMARY_PAGE .qs-card-sub{
+  font-size: 12px;
+  color: rgba(148,163,184,.78);
+  margin-top: 2px;
+}
+
+.QUICK_SUMMARY_PAGE .qs-card-chip{
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .02em;
+  border: 1px solid rgba(148,163,184,.18);
+  color: rgba(226,232,240,.86);
+  background: rgba(8,16,40,.25);
+}
+
+.QUICK_SUMMARY_PAGE .qs-card-chip--green{
+  border-color: rgba(var(--accent-rgb),.40);
+  box-shadow: 0 0 0 6px rgba(var(--accent-rgb),.08);
+}
+.QUICK_SUMMARY_PAGE .qs-card-chip--blue{
+  border-color: rgba(59,130,246,.40);
+  box-shadow: 0 0 0 6px rgba(59,130,246,.08);
+}
+
+.QUICK_SUMMARY_PAGE .qs-table-shell{
+  overflow:auto;
+  border-radius: 14px;
+  outline: none;
+  border: 1px solid rgba(148,163,184,.10);
+  background: rgba(8,16,40,.22);
+}
+
+/* Excel-ish clean table, still futuristic */
+.QUICK_SUMMARY_PAGE .qs-table-modern{
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  min-width: 920px; /* keeps columns readable; scrolls on small screens */
+}
+
+.QUICK_SUMMARY_PAGE .qs-table-modern thead th{
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: rgba(8,16,40,.65);
+  backdrop-filter: blur(10px);
+  padding: 10px 10px;
+  font-size: 11px;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: rgba(148,163,184,.88);
+  border-bottom: 1px solid rgba(148,163,184,.14);
+}
+
+.QUICK_SUMMARY_PAGE .qs-table-modern td{
+  padding: 10px 10px;
+  border-bottom: 1px solid rgba(148,163,184,.10);
+  border-right: 1px solid rgba(148,163,184,.06);
+}
+
+.QUICK_SUMMARY_PAGE .qs-table-modern tr:hover td{
+  background: rgba(148,163,184,.06);
+}
+
+/* row selection highlight */
+.QUICK_SUMMARY_PAGE .qs-table-modern tr.is-selected td{
+  background: rgba(226,232,240,.06);
+  box-shadow: inset 0 0 0 999px rgba(59,130,246,.06);
+}
+.QUICK_SUMMARY_PAGE .qs-card--green .qs-table-modern tr.is-selected td{
+  box-shadow: inset 0 0 0 999px rgba(var(--accent-rgb),.06);
+}
+
+/* first column (year) subtle */
+.QUICK_SUMMARY_PAGE .qs-col-year .qs-td{
+  font-weight: 900;
+  color: rgba(226,232,240,.88);
+}
+
+.QUICK_SUMMARY_PAGE .qs-td{
+  font-size: 13px;
+  color: rgba(226,232,240,.86);
+  white-space: nowrap;
+}
+
+.QUICK_SUMMARY_PAGE .qs-td--num{
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.QUICK_SUMMARY_PAGE .qs-val--neg .qs-td{
+  color: rgba(251,113,133,.95);
+  font-weight: 900;
+}
+
+.QUICK_SUMMARY_PAGE .qs-val--pos .qs-td{
+  color: rgba(74,222,128,.95);
+  font-weight: 900;
+}
+
+.QUICK_SUMMARY_PAGE .qs-total td{
+  background: rgba(8,16,40,.40);
+  border-bottom: none;
+}
+.QUICK_SUMMARY_PAGE .qs-total .qs-td{
+  font-weight: 900;
+}
+
+/* hint */
+.QUICK_SUMMARY_PAGE .qs-hint{
+  margin-top: 10px;
+  font-size: 12px;
+  color: rgba(148,163,184,.75);
+  text-align: center;
+}
+
+/* responsive */
+@media (max-width: 1100px){
+  .QUICK_SUMMARY_PAGE .qs-modern{
+    width: min(980px, 92vw);
+  }
+  .QUICK_SUMMARY_PAGE .qs-kpis{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+/* =========================================================
+   QUICK SUMMARY — CENTER EVERYTHING + GREEN GLOW CELLS
+   Paste at VERY BOTTOM so it wins
+========================================================= */
+
+/* Center the whole dashboard block */
+.QUICK_SUMMARY_PAGE .qs-modern{
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+
+/* Hero: center both sides (title/sub + buttons) */
+.QUICK_SUMMARY_PAGE .qs-hero2{
+  justify-content: center !important;
+  align-items: center !important;
+  text-align: center;
+}
+
+.QUICK_SUMMARY_PAGE .qs-hero2-left{
+  display:flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.QUICK_SUMMARY_PAGE .qs-hero2-right{
+  justify-content: center;
+}
+
+/* KPIs centered */
+.QUICK_SUMMARY_PAGE .qs-kpis{
+  justify-items: center;
+}
+
+.QUICK_SUMMARY_PAGE .qs-kpi{
+  width: 100%;
+  text-align: center;
+}
+
+.QUICK_SUMMARY_PAGE .qs-kpi-value,
+.QUICK_SUMMARY_PAGE .qs-kpi-sub{
+  text-align: center;
+}
+
+/* Cards title/sub centered */
+.QUICK_SUMMARY_PAGE .qs-card-head{
+  justify-content: center;
+  text-align: center;
+}
+
+.QUICK_SUMMARY_PAGE .qs-card-head > div:first-child{
+  display:flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* chip stays visible but centered */
+.QUICK_SUMMARY_PAGE .qs-card-chip{
+  margin-left: 10px;
+}
+
+/* Table: center shell */
+.QUICK_SUMMARY_PAGE .qs-table-shell{
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Table headers centered (Excel-ish) */
+.QUICK_SUMMARY_PAGE .qs-table-modern thead th{
+  text-align: center;
+}
+
+/* Cells: keep numbers right-aligned INSIDE but center the cell box itself */
+.QUICK_SUMMARY_PAGE .qs-table-modern td{
+  text-align: center;
+}
+
+/* keep numeric content right-aligned but centered vertically */
+.QUICK_SUMMARY_PAGE .qs-td--num{
+  text-align: center;
+}
+
+/* --- GREEN GLOW: each cell gets a subtle shadow glow --- */
+.QUICK_SUMMARY_PAGE .qs-table-modern td{
+  background: rgba(8,16,40,.22);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--accent-rgb),.18),
+    0 0 0 1px rgba(var(--accent-rgb),.10),
+    0 8px 22px rgba(var(--accent-rgb),.06);
+  border-bottom: 1px solid rgba(var(--accent-rgb),.16) !important;
+  border-right: 1px solid rgba(var(--accent-rgb),.12) !important;
+}
+
+/* soften hover but keep glow */
+.QUICK_SUMMARY_PAGE .qs-table-modern tr:hover td{
+  background: rgba(var(--accent-rgb),.06);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--accent-rgb),.26),
+    0 0 18px rgba(var(--accent-rgb),.10),
+    0 10px 28px rgba(0,0,0,.30);
+}
+
+/* selected row: stronger glow + subtle fill */
+.QUICK_SUMMARY_PAGE .qs-table-modern tr.is-selected td{
+  background: rgba(var(--accent-rgb),.08) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--accent-rgb),.35),
+    0 0 22px rgba(var(--accent-rgb),.16),
+    0 12px 34px rgba(0,0,0,.34) !important;
+}
+
+/* totals: keep it premium but still glowing */
+.QUICK_SUMMARY_PAGE .qs-total td{
+  background: rgba(8,16,40,.38) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--accent-rgb),.22),
+    0 0 18px rgba(var(--accent-rgb),.10) !important;
+}
+
+/* Center the hint text */
+.QUICK_SUMMARY_PAGE .qs-hint{
+  text-align: center;
+}
+/* =========================================================
+   QUICK SUMMARY — ROUNDED TABLE CELLS
+========================================================= */
+
+/* round every cell box */
+.QUICK_SUMMARY_PAGE .qs-table-modern td{
+  border-radius: 10px;
+}
+
+/* ensure rounding is visible (separate boxes, not merged grid) */
+.QUICK_SUMMARY_PAGE .qs-table-modern{
+  border-collapse: separate !important;
+  border-spacing: 8px 8px !important; /* space between rounded cells */
+}
+
+/* optional: keep headers aligned nicely with the new spacing */
+.QUICK_SUMMARY_PAGE .qs-table-modern thead th{
+  padding-bottom: 6px;
+}
+/* =========================================================
+   QUICK SUMMARY — FIX: DO NOT FLEX <td> (keeps columns)
+   Center content via inner pill instead
+========================================================= */
+
+/* restore normal table-cell behavior */
+.QUICK_SUMMARY_PAGE .qs-table-modern td{
+  display: table-cell !important;
+  vertical-align: middle !important;
+  text-align: center !important;
+}
+
+/* center the content inside the cell */
+.QUICK_SUMMARY_PAGE .qs-table-modern td .qs-cell-pill{
+  display: flex !important;
+  align-items: center !important;     /* vertical */
+  justify-content: center !important; /* horizontal */
+  text-align: center !important;
+  width: 100%;
+  height: 100%;
+}
+
+/* if you previously forced numeric right alignment, kill it */
+.QUICK_SUMMARY_PAGE .qs-td--num{
+  text-align: center !important;
+}
+/* =========================================================
+   QUICK SUMMARY — REMOVE BOLD FROM ALL TABLE CELLS
+========================================================= */
+
+/* kill bold anywhere inside table cells */
+.QUICK_SUMMARY_PAGE td,
+.QUICK_SUMMARY_PAGE td *,
+.QUICK_SUMMARY_PAGE th.qs-year,
+.QUICK_SUMMARY_PAGE th.qs-year *{
+  font-weight: 400 !important;
+}
+
+/* ensure totals row is NOT bold */
+.QUICK_SUMMARY_PAGE .qs-total td,
+.QUICK_SUMMARY_PAGE .qs-total td *{
+  font-weight: 400 !important;
+}
+
+/* ensure negative styling doesn't reintroduce bold */
+.QUICK_SUMMARY_PAGE .qs-cell-pill--neg{
+  font-weight: 400 !important;
+}
+/* =========================================================
+   QUICK SUMMARY — FLAT GREEN BORDERS (NO SHADOWS)
+========================================================= */
+
+/* remove all shadows everywhere in table */
+.QUICK_SUMMARY_PAGE .qs-table-modern td,
+.QUICK_SUMMARY_PAGE .qs-table-modern th,
+.QUICK_SUMMARY_PAGE .qs-table-modern td *,
+.QUICK_SUMMARY_PAGE .qs-table-modern th *{
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+/* clean flat green borders */
+.QUICK_SUMMARY_PAGE .qs-table-modern td,
+.QUICK_SUMMARY_PAGE .qs-table-modern th{
+  border: 1px solid rgba(var(--accent-rgb),.45) !important;
+  background: rgba(8,16,40,.18) !important;
+}
+
+/* hover: flat highlight only (no glow) */
+.QUICK_SUMMARY_PAGE .qs-table-modern tbody tr:hover td{
+  background: rgba(var(--accent-rgb),.06) !important;
+}
+
+/* selected row (if used) — still flat */
+.QUICK_SUMMARY_PAGE .qs-table-modern tr.is-selected td{
+  background: rgba(var(--accent-rgb),.10) !important;
+}
+
+/* totals row — slightly stronger but still flat */
+.QUICK_SUMMARY_PAGE .qs-total td{
+  background: rgba(8,16,40,.28) !important;
+}
+/* =========================================================
+   QUICK SUMMARY — FLAT GREY BORDERS (NO SHADOWS)
+========================================================= */
+
+/* remove any remaining shadows */
+.QUICK_SUMMARY_PAGE .qs-table-modern td,
+.QUICK_SUMMARY_PAGE .qs-table-modern th,
+.QUICK_SUMMARY_PAGE .qs-table-modern td *,
+.QUICK_SUMMARY_PAGE .qs-table-modern th *{
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+/* neutral grey borders */
+.QUICK_SUMMARY_PAGE .qs-table-modern td,
+.QUICK_SUMMARY_PAGE .qs-table-modern th{
+  border: 1px solid rgba(148,163,184,.35) !important; /* slate-400 */
+  background: rgba(8,16,40,.18) !important;
+}
+
+/* hover: subtle neutral highlight */
+.QUICK_SUMMARY_PAGE .qs-table-modern tbody tr:hover td{
+  background: rgba(148,163,184,.08) !important;
+}
+
+/* selected row (if used) */
+.QUICK_SUMMARY_PAGE .qs-table-modern tr.is-selected td{
+  background: rgba(148,163,184,.14) !important;
+}
+
+/* totals row: slightly stronger neutral */
+.QUICK_SUMMARY_PAGE .qs-total td{
+  background: rgba(8,16,40,.28) !important;
+}
+/* =========================================================
+   QUICK SUMMARY — EXCEL GRID (RECTANGLE CELLS) + UW FIX
+   Paste at VERY bottom of your CSS
+========================================================= */
+
+.QUICK_SUMMARY_PAGE .qs-table-modern,
+.QUICK_SUMMARY_PAGE .qs-table.qs-stats {
+  border-collapse: collapse !important;
+  table-layout: fixed;
+  width: 100%;
+}
+
+/* Make all TH/TD true grid cells (no flex/pills), rectangular */
+.QUICK_SUMMARY_PAGE .qs-table-modern th,
+.QUICK_SUMMARY_PAGE .qs-table-modern td,
+.QUICK_SUMMARY_PAGE .qs-table.qs-stats th,
+.QUICK_SUMMARY_PAGE .qs-table.qs-stats td {
+  border-radius: 0 !important;         /* ✅ no rounded corners */
+  box-shadow: none !important;         /* ✅ no glow/shadow */
+  background: transparent !important;  /* allow row backgrounds if any */
+  padding: 8px 10px !important;
+  line-height: 1.15 !important;
+  vertical-align: middle !important;
+  overflow: hidden !important;         /* ✅ prevents overlap */
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;      /* ✅ stop UW wrapping */
+}
+
+/* Greyish borders for all cells */
+.QUICK_SUMMARY_PAGE .qs-table-modern th,
+.QUICK_SUMMARY_PAGE .qs-table-modern td,
+.QUICK_SUMMARY_PAGE .qs-table.qs-stats th,
+.QUICK_SUMMARY_PAGE .qs-table.qs-stats td {
+  border: 1px solid rgba(148,163,184,.24) !important; /* greyish */
+}
+
+/* Center all numeric cells, keep first column readable */
+.QUICK_SUMMARY_PAGE .qs-table-modern td,
+.QUICK_SUMMARY_PAGE .qs-table.qs-stats td {
+  text-align: center !important;
+  font-weight: 400 !important; /* remove bold */
+}
+
+.QUICK_SUMMARY_PAGE .qs-table-modern th,
+.QUICK_SUMMARY_PAGE .qs-table.qs-stats th {
+  text-align: center !important;
+  font-weight: 400 !important; /* remove bold */
+}
+
+/* UW Year column: give it a stable width so it never overlaps */
+.QUICK_SUMMARY_PAGE .qs-table-modern th.qs-left,
+.QUICK_SUMMARY_PAGE .qs-table-modern th.qs-year,
+.QUICK_SUMMARY_PAGE .qs-table-modern td.qs-left,
+.QUICK_SUMMARY_PAGE .qs-table.qs-stats th.qs-left,
+.QUICK_SUMMARY_PAGE .qs-table.qs-stats th.qs-year,
+.QUICK_SUMMARY_PAGE .qs-table.qs-stats td.qs-left {
+  width: 160px !important;
+  min-width: 160px !important;
+  max-width: 160px !important;
+  text-align: center !important;     /* better readability */
+  padding-left: 12px !important;
+  white-space: nowrap !important;
+}
+
+/* If any legacy "pill" wrappers exist inside cells, neutralize them */
+.QUICK_SUMMARY_PAGE .qs-cell,
+.QUICK_SUMMARY_PAGE .qs-cell-pill {
+  display: inline !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Optional: keep header distinct but still rectangular */
+.QUICK_SUMMARY_PAGE .qs-table-modern thead th,
+.QUICK_SUMMARY_PAGE .qs-table.qs-stats thead th {
+  background: rgba(8,16,40,.45) !important;
+}
+
+/* Total row subtle (still rectangular) */
+.QUICK_SUMMARY_PAGE .qs-table-modern .qs-total th,
+.QUICK_SUMMARY_PAGE .qs-table-modern .qs-total td,
+.QUICK_SUMMARY_PAGE .qs-table.qs-stats .qs-total th,
+.QUICK_SUMMARY_PAGE .qs-table.qs-stats .qs-total td {
+  background: rgba(8,16,40,.28) !important;
+}
+/* QUICK SUMMARY: remove background grid lines */
+.QUICK_SUMMARY_PAGE .sheet-grid{
+  display: none !important;
+}
+
+/* (optional) if your grid is a background on the panel instead */
+.QUICK_SUMMARY_PAGE .sheet-panel,
+.QUICK_SUMMARY_PAGE .sheet-panel-inner{
+  background-image: none !important;
+}
+
+/* =========================================================
+   QUICK SUMMARY — FULL WIDTH + COMPACT ANALYSIS MODAL
+========================================================= */
+
+/* Full width layout — remove 70vw constraint */
+.QUICK_SUMMARY_PAGE .qs-modern{
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.QUICK_SUMMARY_PAGE .qs-sections{
+  width: 100%;
+}
+
+.QUICK_SUMMARY_PAGE .qs-page{
+  width: 100%;
+}
+
+/* KPIs inside cards — compact, same style */
+.QUICK_SUMMARY_PAGE .qs-card > .qs-kpis{
+  margin: 8px 0 14px;
+}
+
+/* Compact analysis modal */
+.QUICK_SUMMARY_PAGE .qs-modal--compact{
+  width: 780px !important;
+  max-width: 90vw !important;
+}
+
+.QUICK_SUMMARY_PAGE .qs-analysis-centered{
+  text-align: center;
+}
+
+.QUICK_SUMMARY_PAGE .qs-analysis-centered .qs-right-h2{
+  justify-content: center;
+  text-align: center;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.QUICK_SUMMARY_PAGE .qs-analysis-sub{
+  font-size: 12px;
+  color: rgba(148,163,184,0.75);
+  margin-bottom: 16px;
+}
+
+.QUICK_SUMMARY_PAGE .qs-analysis-centered .qs-metrics-grid{
+  gap: 10px;
+}
+
+.QUICK_SUMMARY_PAGE .qs-analysis-centered .qs-metric-card{
+  padding: 14px 12px;
+}
+
+.QUICK_SUMMARY_PAGE .qs-analysis-centered .qs-metric-value{
+  font-size: 22px;
+}
+
+.QUICK_SUMMARY_PAGE .qs-metric-desc{
+  font-size: 10px;
+  color: rgba(148,163,184,0.65);
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.QUICK_SUMMARY_PAGE .qs-metric--purple{
+  border-color: rgba(168,85,247,0.22);
+  box-shadow: 0 12px 26px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 6px rgba(168,85,247,0.06);
+}

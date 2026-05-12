@@ -1,0 +1,79 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20.18.0'
+
+jobs:
+  lint-and-unit:
+    name: lint + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install (root + server + client)
+        run: npm run install:all
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests (server)
+        run: npm run test:server
+
+      - name: Unit tests + coverage (client)
+        run: npm run test:client -- --coverage
+
+  integration:
+    name: integration tests (postgres)
+    runs-on: ubuntu-latest
+    needs: lint-and-unit
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reinsurance_tool
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/reinsurance_tool
+      NODE_ENV: test
+      TEST_WITH_DB: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install (root + server)
+        run: |
+          npm ci
+          npm ci --prefix server
+
+      - name: Run DB migrations
+        run: npm run migrate --prefix server
+
+      - name: Integration tests
+        run: npm run test:server

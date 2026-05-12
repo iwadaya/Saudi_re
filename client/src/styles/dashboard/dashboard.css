@@ -1,0 +1,261 @@
+.dash-filterbar{
+  display: grid;
+  grid-template-columns: repeat(5, minmax(140px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+/* ===== Full-screen dashboard ===== */
+.dashboard-screen{
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: auto;
+}
+
+/* Allow the dashboard content to use the full width of the viewport */
+.dashboard-container{
+  max-width: var(--app-max-content);
+  width: calc(100% - 2 * var(--app-gutter));
+  margin: 0 auto;
+}
+
+/* Let the dashboard breathe edge-to-edge while keeping consistent side padding */
+.dashboard-container{
+  padding: 0 14px;
+}
+
+.dash-tabs{
+  margin-top: 12px;
+  padding: 8px;
+  display:flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dash-tab{
+  border: 1px solid rgba(90,170,200,.18);
+  background: rgba(10,18,32,.35);
+  color: rgba(255,255,255,.88);
+  padding: 9px 12px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: .02em;
+  cursor: pointer;
+}
+
+.dash-tab--active{
+  border-color: rgba(0,255,153,.35);
+  box-shadow: 0 0 0 3px rgba(0,255,153,.08);
+}
+
+.dash-block{
+  padding: 14px;
+  border-radius: 16px;
+}
+
+.dash-block-title{
+  font-size: 12px;
+  letter-spacing: .08em;
+  font-weight: 800;
+  opacity: .85;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+/* More compact typography + spacing for the Premium-by-Region block */
+.dash-block--premium-region .dash-block-title{
+  font-size: 10px;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.dash-block--premium-region .dash-table th,
+.dash-block--premium-region .dash-table td{
+  font-size: 10px;
+  padding: 5px 6px;
+  font-weight: 400;
+}
+
+.dash-block--premium-region .dash-table thead th{
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.dash-table-wrap{
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Tables may become very wide (Excel-style matrices). Allow horizontal scroll. */
+.dash-table{
+  width: max-content;
+  min-width: 100%;
+}
+
+/* Center + justify cells/columns */
+.dash-table th,
+.dash-table td{
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.dash-th{
+  position: sticky;
+  top: 0;
+  background: rgba(8,14,24,.88);
+  cursor: pointer;
+}
+
+.dash-th--orange{
+  background: #ffb020 !important;
+  color: #0b1020 !important;
+  font-weight: 800;
+}
+
+.dash-td{ font-variant-numeric: tabular-nums; }
+
+.dash-sort{ opacity: .6; font-size: 11px; }
+
+.dash-spark-svg{ opacity: .95; }
+
+.dash-spark-meta{ display:flex; flex-direction:column; gap: 4px; }
+
+.dash-spark-big{ font-size: 20px; font-weight: 800; }
+
+.dash-filter{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+
+.dash-filter-label{
+  font-size: 11px;
+  letter-spacing: .08em;
+  opacity: .7;
+  font-weight: 600;
+}
+
+.dash-select{
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(90,170,200,.24);
+  background: rgba(10,18,32,.40);
+  color: var(--text);
+  padding: 10px 10px;
+  outline: none;
+}
+
+.dash-filter-actions{
+  display:flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.dash-alert{
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 90, 90, .22);
+  background: rgba(255, 90, 90, .08);
+  color: rgba(255,255,255,.9);
+}
+
+/* KPI tiles (Portfolio Overview top cards)
+   Goal: small rectangles aligned in a 3x2 grid on desktop */
+.dash-kpis{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+/* Stacked layout for Excel-style long dashboards */
+.dash-stack{
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.dash-grid{
+  display:grid;
+  grid-template-columns: repeat(6, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.dash-tile{
+  padding: 14px;
+  border-radius: 16px;
+  position: relative;
+  overflow: hidden;
+  min-height: 92px;
+}
+
+.dash-tile:before{
+  content: "";
+  position:absolute;
+  inset:0;
+  background: radial-gradient(700px 180px at 10% 0%, rgba(90,170,200,.18), transparent 55%);
+  pointer-events:none;
+}
+
+.dash-tile-label{
+  font-size: 11px;
+  letter-spacing: .10em;
+  opacity: .65;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.dash-tile-value{
+  margin-top: 8px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: .01em;
+}
+
+.dash-tile-sub{
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: .65;
+}
+
+.dash-panels{
+  display:grid;
+  grid-template-columns: 1.2fr 1.8fr;
+  gap: 12px;
+}
+
+.dash-panels .panel{
+  min-height: 210px;
+}
+
+.dash-spark{
+  display:flex;
+  align-items:flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dash-table th.num,
+.dash-table td.num{
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1100px){
+  .dash-filterbar{ grid-template-columns: repeat(2, minmax(160px, 1fr)); }
+  .dash-filter-actions{ justify-content: flex-start; }
+  .dash-kpis{ grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+  .dash-grid{ grid-template-columns: repeat(2, minmax(160px, 1fr)); }
+  .dash-panels{ grid-template-columns: 1fr; }
+  .dash-table{ min-width: 420px; }
+}
+
+@media (max-width: 620px){
+  .dash-kpis{ grid-template-columns: 1fr; }
+}

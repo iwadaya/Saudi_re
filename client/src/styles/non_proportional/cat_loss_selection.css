@@ -1,0 +1,365 @@
+/* =========================================================
+   NON-PROP CAT LOSS SELECTION
+   Scope: .CAT_LOSS_SELECTION_PAGE (Non-prop screen uses .catsel-* classes)
+
+   Fixes:
+   1) Add missing styling so the selection grid matches the app theme.
+   2) Fix modal layering/positioning: the inflation modal must be fixed,
+      centered, and above everything (not rendered below the screen).
+========================================================= */
+
+.CAT_LOSS_SELECTION_PAGE{
+  --catsel-bg-1: rgba(15, 23, 42, 0.35);
+  --catsel-bg-2: rgba(15, 23, 42, 0.60);
+  --catsel-stroke-1: rgba(255, 255, 255, 0.10);
+  --catsel-stroke-2: rgba(148, 163, 184, 0.25);
+  --catsel-text-1: rgba(241, 245, 249, 0.96);
+  --catsel-text-2: rgba(226, 232, 240, 0.90);
+  --catsel-text-3: rgba(148, 163, 184, 0.95);
+  --catsel-shadow-1: 0 4px 24px -1px rgba(0, 0, 0, 0.25);
+  --catsel-shadow-2: 0 18px 45px rgba(0, 0, 0, 0.35);
+  --catsel-radius-1: 12px;
+  --catsel-radius-2: 16px;
+}
+
+/* ---------------- Header area ---------------- */
+.CAT_LOSS_SELECTION_PAGE .catsel-head{
+  margin-top: 18px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.10);
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-title{
+  font-size: 20px;
+  font-weight: 850;
+  color: var(--catsel-text-1);
+  letter-spacing: -0.01em;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.30);
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-sub{
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--catsel-text-3);
+  max-width: 920px;
+  line-height: 1.5;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-pillbtn{
+  appearance: none;
+  border: 1px solid var(--catsel-stroke-2);
+  background: rgba(30, 41, 59, 0.60);
+  color: var(--catsel-text-2);
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  user-select: none;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-pillbtn:hover{
+  background: rgba(51, 65, 85, 0.75);
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-pillbtn:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---------------- Table card ---------------- */
+.CAT_LOSS_SELECTION_PAGE .catsel-table-card{
+  margin-top: 14px;
+  border-radius: var(--catsel-radius-2);
+  border: 1px solid var(--catsel-stroke-1);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.60) 0%, rgba(15, 23, 42, 0.35) 100%);
+  box-shadow: var(--catsel-shadow-1);
+  backdrop-filter: blur(6px);
+  overflow: hidden;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-table-headrow{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(30, 41, 59, 0.45);
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-table-label{
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--catsel-text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-table-actions{
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Ensure the scroll area behaves (prevents the modal looking like it's "below") */
+.CAT_LOSS_SELECTION_PAGE .catsel-table-scroll{
+  max-height: 560px;
+  overflow: auto;
+}
+
+/* Scrollbar */
+.CAT_LOSS_SELECTION_PAGE .catsel-table-scroll::-webkit-scrollbar{ width: 10px; height: 10px; }
+.CAT_LOSS_SELECTION_PAGE .catsel-table-scroll::-webkit-scrollbar-track{ background: rgba(2, 6, 23, 0.25); }
+.CAT_LOSS_SELECTION_PAGE .catsel-table-scroll::-webkit-scrollbar-thumb{
+  background: rgba(148, 163, 184, 0.28);
+  border-radius: 10px;
+  border: 2px solid rgba(2, 6, 23, 0.25);
+}
+.CAT_LOSS_SELECTION_PAGE .catsel-table-scroll::-webkit-scrollbar-thumb:hover{ background: rgba(148, 163, 184, 0.42); }
+
+/* ---------------- Table ---------------- */
+.CAT_LOSS_SELECTION_PAGE table.catsel-table{
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 1200px;
+}
+
+.CAT_LOSS_SELECTION_PAGE table.catsel-table thead th{
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(2, 6, 23, 0.85);
+  color: var(--catsel-text-2);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  padding: 10px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+  white-space: nowrap;
+}
+
+.CAT_LOSS_SELECTION_PAGE table.catsel-table tbody td{
+  padding: 9px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--catsel-text-2);
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+.CAT_LOSS_SELECTION_PAGE table.catsel-table tbody tr:hover td{
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-cell-center{ text-align: center; }
+.CAT_LOSS_SELECTION_PAGE .catsel-cell-right{ text-align: center; }
+
+.CAT_LOSS_SELECTION_PAGE .catsel-text{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-col-select{ width: 84px; }
+
+.CAT_LOSS_SELECTION_PAGE .catsel-th-select{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* Inputs */
+.CAT_LOSS_SELECTION_PAGE .catsel-input{
+  width: 100%;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: #ffffff;
+  padding: 7px 8px;
+  border-radius: 10px;
+  font-size: 13px;
+  outline: none;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-input:focus{
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-input-readonly{
+  opacity: 0.9;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-check{
+  width: 16px;
+  height: 16px;
+  accent-color: #22c55e;
+}
+
+/* ---------------- Modal (Inflation assumptions) ---------------- */
+.CAT_LOSS_SELECTION_PAGE .catsel-modal-backdrop{
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.70);
+  backdrop-filter: blur(4px);
+  z-index: 10000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-modal-backdrop.is-open{
+  display: flex;
+  animation: catselFadeIn 0.2s ease-out;
+}
+
+@keyframes catselFadeIn{
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-modal{
+  width: 100%;
+  max-width: 860px;
+  max-height: 85vh;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 16px;
+  box-shadow: var(--catsel-shadow-2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-modal-head{
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(30, 41, 59, 0.50);
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-modal-title{
+  font-size: 14px;
+  font-weight: 800;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-x{
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-x:hover{
+  background: rgba(255, 255, 255, 0.10);
+  color: #ffffff;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-modal-body{
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-modal-sub{
+  color: var(--catsel-text-3);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-modal-grid{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 980px){
+  .CAT_LOSS_SELECTION_PAGE .catsel-modal-grid{ grid-template-columns: 1fr; }
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-modal-card{
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.35);
+  padding: 14px;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-mini-title{
+  font-size: 12px;
+  font-weight: 850;
+  color: var(--catsel-text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-row{
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-row-actions{
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-label{
+  font-size: 12px;
+  color: var(--catsel-text-3);
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-note{
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--catsel-text-3);
+}
+
+/* Simple year table stub */
+.CAT_LOSS_SELECTION_PAGE .catsel-year-table{
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-year-head,
+.CAT_LOSS_SELECTION_PAGE .catsel-year-row{
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-year-head{
+  background: rgba(30, 41, 59, 0.50);
+  color: var(--catsel-text-2);
+  font-weight: 800;
+}
+
+.CAT_LOSS_SELECTION_PAGE .catsel-year-row{
+  background: rgba(2, 6, 23, 0.22);
+  color: var(--catsel-text-3);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+

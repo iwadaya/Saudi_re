@@ -1,0 +1,118 @@
+:root{
+  /* Page background — two ends of a vertical gradient */
+  --bg0:#0d1525;
+  --bg1:#111e35;
+  --bg-plane:#0a1220;
+  /* Directional washes overlaid on the page background */
+  --body-spot-1: rgba(31,224,141,.22);
+  --body-spot-2: rgba(0,170,255,.14);
+  --bg-wash-1: rgba(31,224,141,.14);
+  --bg-wash-2: rgba(56,189,248,.10);
+  --bg-depth-line: rgba(148,163,184,.08);
+
+  /* Surfaces */
+  --surface: rgba(20,38,70,.82);
+  --surface-2: rgba(20,38,70,.55);
+  --surface-solid: #131f38;
+  --surface-elevated: rgba(18,31,55,.92);
+  --surface-muted: rgba(9,17,31,.58);
+  --surface-hover: rgba(255,255,255,.055);
+  --panel-bg: linear-gradient(180deg, rgba(18,31,55,.91), rgba(10,18,32,.78));
+  --panel-bg-strong: linear-gradient(180deg, rgba(21,35,61,.96), rgba(9,17,31,.90));
+  --topbar-bg: linear-gradient(180deg, rgba(16,28,50,.92), rgba(9,17,31,.80));
+  --sidebar-bg: linear-gradient(180deg, rgba(7,13,24,.76), rgba(7,13,24,.54));
+  --control-bg: rgba(8,16,30,.64);
+  --control-hover: rgba(255,255,255,.065);
+  --table-head-bg: rgba(8,16,30,.72);
+  --table-row-bg: rgba(9,17,31,.48);
+  --table-row-alt: rgba(255,255,255,.026);
+  --table-row-hover: rgba(var(--accent-rgb),.07);
+  /* Endpoints of the frosted-glass gradient used on cards/headers */
+  --glass-grad-top: rgba(20,38,70,.88);
+  --glass-grad-bot: rgba(18,34,62,.65);
+
+  /* Text */
+  --text:#f1f5f9;
+  --text-strong: rgba(241,245,249,1);
+  --muted:#c8daf0;
+  --muted-2: rgba(184,204,223,.8);
+  --text-muted: var(--muted);
+  --text-subtle: rgba(226,232,240,.62);
+
+  /* Brand */
+  --accent:#1fe08d;
+  --accent2:#12c97a;
+  --accent-contrast:#07140f;
+  --accent-blue:#38bdf8;
+  --accent-amber:#fbbf24;
+  --accent-rose:#fb7185;
+  --warn:#ffcc00;
+  /* Raw RGB components of the accents — use with rgba() when you need
+     to vary alpha (e.g. rgba(var(--accent-rgb), 0.18)). Themes override
+     these so screens that mix transparencies still reskin. */
+  --accent-rgb: 31, 224, 141;
+  --accent2-rgb: 18, 201, 122;
+  --accent-blue-rgb: 56, 189, 248;
+  --accent-amber-rgb: 251, 191, 36;
+  --accent-rose-rgb: 251, 113, 133;
+
+  /* Borders + shadows */
+  --stroke: rgba(90,120,180,.45);
+  --stroke-soft: rgba(148,163,184,.22);
+  --hairline: rgba(255,255,255,.075);
+  --hairline-strong: rgba(255,255,255,.14);
+  --shadow2: 0 10px 30px rgba(0,0,0,.45);
+  --shadow-soft: 0 12px 28px rgba(0,0,0,.38);
+  --shadow-high: 0 22px 70px rgba(0,0,0,.48);
+  --shadow-control: 0 10px 24px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.06);
+
+  /* Radii */
+  --radius: 14px;
+  --radius-lg: 16px;
+  --radius-sm: 8px;
+  --radius-pill: 999px;
+
+  /* Spacing */
+  --pad: 14px;
+  --gap: 14px;
+
+  /* Focus ring */
+  --focus: rgba(31,224,141,.28);
+
+  /* Content width — let the app fill wide displays. Containers still use
+     --app-gutter for breathing room from the viewport edge, but no longer
+     cap at 1920px. Bump the gutter on wide screens for visual balance. */
+  --app-max-content: 100%;
+  --app-gutter: 32px;
+
+  /* HUD overlay tokens — used by cockpit.css for the grid + scanline
+     background and HUD-styled cards. Moved here from cockpit.css so
+     tokens.css remains the single source of truth. */
+  --hud-line: rgba(148,163,184,.10);
+  --hud-line-2: rgba(148,163,184,.16);
+  --hud-glow-g: rgba(var(--accent-rgb),.22);
+  --hud-glow-b: rgba(56,189,248,.12);
+  --hud-shadow: 0 18px 50px rgba(0,0,0,.55);
+  --hud-inner: inset 0 0 0 1px rgba(255,255,255,.06);
+
+  /* Sliding-scale modal button gloss — only consumed inside
+     .slide-modal in layout.css. Moved here from layout.css. */
+  --g1: #23d18b;
+  --g2: #0aa36a;
+  --g3: #087a52;
+  --gGlow: rgba(35,209,139,.35);
+  --gRing: rgba(35,209,139,.28);
+  /* Canonical numeric typography — consumed by numbers.css.
+     Reference: the dev-factors screen ("professional, calm").
+     Change a value here to update every harmonized screen at once. */
+  --num-cell-fs: 12px;
+  --num-cell-fw: 500;
+  --num-cell-lh: 1.4;
+  --num-title-fs: 16px;
+  --num-section-fs: 14px;
+  --num-muted-fs: 12px;
+  --num-th-fs: 11px;
+  --num-th-letter-spacing: .12em;
+  --num-bbg-v-fs: 14px;
+  --num-th-color: rgba(226,232,240,.65);
+}

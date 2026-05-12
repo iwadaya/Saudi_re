@@ -1,0 +1,494 @@
+/* =========================================
+   TRIANGLES — FIXED GRID + INTERNAL SCROLL
+   - Fixed column widths (no compression)
+   - Horizontal scroll inside tri-scroll
+   - Wizard dock uses GLOBAL (fixed) behavior
+========================================= */
+
+.TRIANGLES_PAGE .sheet-panel-inner{
+  padding-top: 12px;
+}
+
+/* header pill row spacing tighter */
+.TRIANGLES_PAGE .sheet-header-row{
+  margin-bottom: 10px;
+}
+
+/* Controls area: compact card */
+.TRIANGLES_PAGE .tri-controls.card{
+  padding: 10px 12px;
+  border-radius: 18px;
+  gap: 8px;
+}
+
+/* One tight row */
+.TRIANGLES_PAGE .tri-controls-row{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Field cluster */
+.TRIANGLES_PAGE .tri-field{
+  display:flex;
+  align-items:center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(148,163,184,.22);
+  background: rgba(8,16,40,.35);
+}
+
+.TRIANGLES_PAGE .tri-label{
+  font-size: 12px;
+  color: rgba(226,232,240,.72);
+  white-space: nowrap;
+}
+
+/* Compact input = “pill” */
+.TRIANGLES_PAGE .tri-pill-input{
+  width: 92px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: rgba(226,232,240,.92);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.TRIANGLES_PAGE .tri-pill-input[disabled]{
+  opacity: .55;
+  filter: saturate(.9);
+  cursor: not-allowed;
+}
+
+/* N display as pill */
+.TRIANGLES_PAGE .tri-pill{
+  min-width: 52px;
+  padding: 0 8px;
+  height: 28px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(148,163,184,.18);
+  background: rgba(8,16,40,.25);
+  color: rgba(226,232,240,.9);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.TRIANGLES_PAGE .tri-field-wide{
+  flex: 1 1 320px;
+  justify-content: space-between;
+}
+
+/* Build button styling is now global (.btn-green-outline in components.css) */
+
+.TRIANGLES_PAGE .tri-note{
+  font-size: 12px;
+  color: rgba(148,163,184,.78);
+  margin-top: 6px;
+}
+
+/* Title row */
+.TRIANGLES_PAGE .tri-title-row{
+  margin-top: 12px;
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.TRIANGLES_PAGE .tri-h2{
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  color: rgba(226,232,240,.95);
+}
+
+/* Reduce card padding around table */
+.TRIANGLES_PAGE .tri-table-card.card{
+  padding: 10px 10px 12px;
+  border-radius: 18px;
+}
+
+/* =========================================================
+   TABLE SCROLL + FIXED COLUMN WIDTHS (NO COMPRESSION)
+========================================================= */
+
+/* Scroll container: both directions */
+.TRIANGLES_PAGE .tri-scroll{
+  overflow: auto;
+  outline: none;
+  border-radius: 16px;
+
+  /* keep some space so content doesn't hide under the global wizard dock */
+  padding-bottom: 12px;
+}
+
+/* Table grows with columns (so horizontal scroll appears) */
+.TRIANGLES_PAGE .tri-table{
+  border-collapse: separate;
+  border-spacing: 0;
+
+  /* key: let it be wider than viewport when many dev columns */
+  width: max-content;
+  table-layout: fixed;
+}
+
+/* Fixed widths per dev column + td */
+.TRIANGLES_PAGE .tri-table thead th:not(.tri-sticky-left),
+.TRIANGLES_PAGE .tri-table td{
+  width: 140px;       /* ✅ fixed */
+  min-width: 140px;   /* ✅ fixed */
+}
+
+/* Header sticky */
+.TRIANGLES_PAGE .tri-table thead th{
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: rgba(8,16,40,.70);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(148,163,184,.14);
+  font-size: 12px;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: rgba(226,232,240,.70);
+  padding: 10px 8px;
+}
+
+/* Grid lines */
+.TRIANGLES_PAGE .tri-table td{
+  padding: 6px 6px;
+  border-bottom: 1px solid rgba(148,163,184,.08);
+  border-right: 1px solid rgba(148,163,184,.06);
+}
+
+/* Sticky left column */
+.TRIANGLES_PAGE .tri-sticky-left{
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  background: rgba(8,16,40,.80);
+  border-right: 1px solid rgba(148,163,184,.14);
+
+  width: 110px;
+  min-width: 110px;
+}
+
+.TRIANGLES_PAGE .tri-uy{
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(226,232,240,.75);
+  padding: 10px 10px !important;
+  white-space: nowrap;
+}
+
+/* cell input */
+.TRIANGLES_PAGE .tri-cell{
+  width: 100%;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid rgba(148,163,184,.14);
+  background: rgba(8,16,40,.30);
+  color: rgba(226,232,240,.92);
+  padding: 0 8px;
+  font-size: 13px;
+  outline: none;
+
+  /* prevents "trillions" from wrapping and visually shrinking */
+  white-space: nowrap;
+  text-align: center;
+}
+
+.TRIANGLES_PAGE .tri-cell:focus{
+  border-color: rgba(90,170,200,.55);
+  box-shadow: 0 0 0 4px rgba(90,170,200,.12);
+}
+
+.TRIANGLES_PAGE .tri-cell--active{ background: rgba(7,14,26,.35); }
+.TRIANGLES_PAGE .tri-cell--diagonal{
+  background: rgba(var(--accent-rgb),.16);
+  border-color: rgba(var(--accent-rgb),.28);
+}
+.TRIANGLES_PAGE .tri-cell--disabled{
+  opacity: .35;
+  background: rgba(8,16,40,.18);
+  border-color: rgba(148,163,184,.08);
+}
+
+.TRIANGLES_PAGE .tri-cell--selected{
+  box-shadow: 0 0 0 4px rgba(148,163,184,.10);
+  border-color: rgba(148,163,184,.30);
+}
+.TRIANGLES_PAGE .tri-cell--focus{
+  border-color: rgba(90,170,200,.75);
+  box-shadow: 0 0 0 4px rgba(90,170,200,.18);
+}
+
+/* Hide legacy row if it exists */
+.TRIANGLES_PAGE .wizard-nav-row{ display:none; }
+
+/* IMPORTANT:
+   DO NOT override .wizard-dock in triangles.
+   Global .wizard-dock is fixed bottom-right (target behavior). */
+
+/* Give the page content bottom breathing room for the fixed dock + tabs */
+.TRIANGLES_PAGE .sheet-panel{
+  padding-bottom: 120px; /* avoids dock overlay on small screens */
+}
+/* =========================================================
+   TRIANGLES — Wizard dock must match Treaty/Documents
+   Paste at VERY bottom of triangles css
+========================================================= */
+
+.TRIANGLES_PAGE{
+  padding-bottom: 120px; /* so content never hides under dock */
+}
+
+/* Use the SAME floating behavior as treaty */
+.TRIANGLES_PAGE .wizard-dock{
+  position: fixed !important;
+  right: 22px !important;
+  bottom: 84px !important;     /* above tabs-dock */
+  display: flex !important;
+  gap: 12px !important;
+  z-index: 2000 !important;
+}
+
+/* Same button base as treaty */
+.TRIANGLES_PAGE .wizard-dock .dock-btn{
+  border-radius: 999px !important;
+  padding: 10px 16px !important;
+  min-width: 160px !important;
+
+  border: 1px solid rgba(148,163,184,.35) !important;
+  background: rgba(8,16,40,.25) !important;
+
+  color: rgba(226,232,240,.85) !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+}
+
+/* Primary = green outline only (NOT filled) */
+.TRIANGLES_PAGE .wizard-dock .dock-btn--primary{
+  background: transparent !important;
+  border: 1px solid rgba(var(--accent-rgb),.75) !important;
+  box-shadow: 0 0 0 6px rgba(var(--accent-rgb),.10) !important;
+
+  color: rgba(226,232,240,.92) !important;
+  font-weight: 500 !important;
+}
+
+.TRIANGLES_PAGE .wizard-dock .dock-btn:disabled{
+  opacity: .45 !important;
+  cursor: not-allowed !important;
+}
+/* =========================================================
+   PREMIUM TRIANGLE — DENSITY & TYPOGRAPHY FIX
+   No bold text. Centered numeric cells.
+========================================================= */
+
+/* ---------- TITLE ---------- */
+
+.PROP_PREMIUM_TRIANGLES .screen-title,
+.PROP_PREMIUM_TRIANGLES h1,
+.PROP_PREMIUM_TRIANGLES h2{
+  font-size: 12px;
+  font-weight: 400 !important;
+  letter-spacing: .02em;
+  color: rgba(226,232,240,.65);
+  margin-bottom: 6px;
+}
+
+/* remove bold anywhere in triangle view */
+.PROP_PREMIUM_TRIANGLES *{
+  font-weight: 400 !important;
+}
+
+/* ---------- TRIANGLE TABLE ---------- */
+
+.PROP_PREMIUM_TRIANGLES table{
+  border-collapse: collapse;
+}
+
+/* header cells */
+.PROP_PREMIUM_TRIANGLES th{
+  text-align: center;
+  font-size: 11px;
+  font-weight: 400 !important;
+  color: rgba(226,232,240,.60);
+  padding: 4px 6px;
+}
+
+/* numeric cells */
+.PROP_PREMIUM_TRIANGLES td{
+  text-align: center;          /* horizontal centering */
+  vertical-align: middle;      /* vertical centering */
+  font-size: 11px;
+  font-weight: 400 !important;
+  line-height: 1.1;
+  padding: 4px 6px;
+
+  /* numeric justification feel */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* inputs inside cells (if editable) */
+.PROP_PREMIUM_TRIANGLES td input{
+  text-align: center;
+  font-size: 11px;
+  font-weight: 400 !important;
+  padding: 0;
+  line-height: 1.1;
+}
+
+/* ---------- ROW / COLUMN LABELS ---------- */
+
+.PROP_PREMIUM_TRIANGLES .row-label,
+.PROP_PREMIUM_TRIANGLES .col-label{
+  text-align: center;
+  font-size: 11px;
+  font-weight: 400 !important;
+  color: rgba(226,232,240,.55);
+}
+/* =========================================================
+   TRIANGLES (ALL) — Premium Triangle typography + cells
+   Requirements:
+   - Cells with numbers centered
+   - "Premium Triangle Runoff Triangle" title small and not bold
+   - NOTHING bold anywhere on triangle page
+   (Uses existing TRIANGLES_PAGE markup)
+========================================================= */
+
+/* 1) Kill bold everywhere on triangle page */
+.TRIANGLES_PAGE,
+.TRIANGLES_PAGE *{
+  font-weight: 400 !important;
+}
+
+/* If any <b> tags exist (Autosave: ON), neutralize them */
+.TRIANGLES_PAGE b,
+.TRIANGLES_PAGE strong{
+  font-weight: 400 !important;
+}
+
+/* 2) Title: small, quiet, not bold */
+.TRIANGLES_PAGE .tri-h2{
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  letter-spacing: .01em !important;
+  color: rgba(226,232,240,.65) !important;
+}
+
+/* 3) Center the UW/dev headers too (optional, matches your request vibe) */
+.TRIANGLES_PAGE .tri-table thead th{
+  text-align: center !important;
+  font-weight: 400 !important;
+}
+
+/* 4) UW year column: no bold */
+.TRIANGLES_PAGE .tri-uy{
+  font-weight: 400 !important;
+  text-align: center !important;
+  color: rgba(226,232,240,.65) !important;
+}
+
+/* 5) Numeric cells: centered + “justified feel” using tabular numerals */
+.TRIANGLES_PAGE .tri-cell{
+  text-align: center !important;           /* center numbers */
+  font-weight: 400 !important;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* also ensure input text sits vertically centered */
+.TRIANGLES_PAGE .tri-cell{
+  height: 30px;            /* keep your existing height */
+  line-height: 30px;       /* helps vertical centering for inputs in many browsers */
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+/* ------------------------------
+   Link Ratio / Dev Factor subtabs
+------------------------------ */
+.TRIANGLES_PAGE .tri-subtabs{
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.TRIANGLES_PAGE .tri-subtab{
+  border: 1px solid rgba(148,163,184,.35);
+  background: rgba(15,23,42,.35);
+  color: rgba(226,232,240,.85);
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 12px;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+}
+
+.TRIANGLES_PAGE .tri-subtab--active{
+  border-color: rgba(var(--accent-rgb),.55);
+  background: rgba(var(--accent-rgb),.12);
+  color: rgba(226,232,240,.95);
+}
+
+.TRIANGLES_PAGE .lr-cell{
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid rgba(148,163,184,.25);
+  background: rgba(8,16,40,.35);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.TRIANGLES_PAGE .lr-cell--na{
+  border-color: transparent;
+  background: transparent;
+  cursor: default;
+}
+
+.TRIANGLES_PAGE .lr-cell--excluded{
+  opacity: .55;
+  text-decoration: line-through;
+}
+
+.TRIANGLES_PAGE .lr-x{
+  font-size: 10px;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  color: rgba(226,232,240,.6);
+}
+
+.TRIANGLES_PAGE .tri-df-table{
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 520px;
+}
+
+.TRIANGLES_PAGE .tri-df-table th,
+.TRIANGLES_PAGE .tri-df-table td{
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(148,163,184,.15);
+  text-align: center;
+}
+
+.TRIANGLES_PAGE .tri-df-table th{
+  font-weight: 500;
+  color: rgba(226,232,240,.85);
+}

@@ -1,0 +1,1956 @@
+/* =========================================================
+   GLOBAL UI — Single Source of Truth (CLEAN / CANONICAL)
+   (Topbar + shared shells + cards + inputs + tabs + modal + wizard dock)
+========================================================= */
+
+/* ================================
+   BASE GLASS
+================================ */
+.glass{
+  background: linear-gradient(180deg, var(--glass-grad-top), var(--glass-grad-bot));
+  border: 1px solid var(--stroke);
+  box-shadow: var(--shadow2);
+  backdrop-filter: blur(10px);
+}
+
+/* Soften typography globally */
+body,
+button{
+  font-weight: 500;
+}
+
+/* Avoid mobile auto-inflation that can blur small text */
+html{
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+/* Better font rendering + numeric alignment.
+   Smoothing + line-height live here; the canonical body{} below
+   (with font-family, text-rendering, feature-settings, letter-spacing)
+   is the single source of truth — keep these complementary, not duplicated. */
+body{
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-optical-sizing: auto;
+  line-height: 1.35;
+}
+
+/* Make numbers easier to scan in tables/inputs */
+:is(input,textarea,select,table){
+  font-variant-numeric: tabular-nums;
+}
+
+/* ================================
+   CRISP RENDERING — global
+   - geometricPrecision keeps SVG paths/text sharp at any zoom
+   - non-scaling-stroke (applied per-svg) keeps hairlines true 1px
+   - high-quality image scaling for raster assets
+================================ */
+svg{
+  shape-rendering: geometricPrecision;
+  text-rendering: geometricPrecision;
+}
+/* Charts that draw orthogonal grids/axes get crisp pixel snapping */
+svg.crisp-grid line,
+svg.crisp-grid path.axis,
+svg.crisp-grid .gridline,
+svg.crisp-grid [data-crisp]{
+  shape-rendering: crispEdges;
+}
+/* Hairline strokes that should remain exactly 1px regardless of viewBox */
+svg [data-hairline],
+svg .hairline{
+  vector-effect: non-scaling-stroke;
+}
+img{
+  image-rendering: -webkit-optimize-contrast;
+}
+.pixel-art{
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* ================================
+   TYPOGRAPHY
+================================ */
+h1,h2,h3{ margin: 0; }
+
+.page-title,
+.screen-title,
+.title-xl{
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+}
+
+.subtitle,
+.helptext,
+.muted-2{
+  color: var(--muted-2);
+}
+
+/* ================================
+   FORMS (inputs / selects)
+================================ */
+:is(input[type="text"],input[type="number"],input[type="search"],input[type="email"],textarea,select){
+  appearance: none;
+  border-radius: 12px;
+  padding: 9px 10px;
+  border: 1px solid rgba(148,163,184,.18);
+  background: rgba(8,16,40,.40);
+  color: var(--text);
+  outline: none;
+  box-shadow: 0 10px 22px rgba(0,0,0,.28);
+  transition: border-color .12s ease, box-shadow .12s ease, transform .12s ease;
+}
+
+:is(input,textarea,select)::placeholder{ color: rgba(155,176,207,.55); }
+
+:is(input[type="text"],input[type="number"],input[type="search"],input[type="email"],textarea,select):focus{
+  border-color: rgba(var(--accent-rgb),.32);
+  box-shadow:
+    0 12px 26px rgba(0,0,0,.34),
+    0 0 0 4px var(--focus);
+}
+
+/* Read-only calculated cells (used in NP Structure tables). */
+.np-input--readonly{
+  pointer-events: none;
+  opacity: .92;
+}
+
+label{ color: rgba(226,232,240,.82); font-weight: 600; }
+
+/* ================================
+   BUTTONS (unified)
+================================ */
+:where(button){
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn,
+.chip-btn,
+.topbar-btn,
+.btn-green-outline,
+.ms-btn{
+  appearance: none;
+  border: 1px solid rgba(148,163,184,.18);
+  background: rgba(8,16,40,.45);
+  color: rgba(226,232,240,.90);
+  border-radius: 999px;
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: .02em;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(0,0,0,.32), 0 1px 0 rgba(255,255,255,.06) inset;
+  transition: transform .12s ease, background .12s ease, border-color .12s ease, box-shadow .12s ease, filter .12s ease;
+}
+
+.btn:hover,
+.chip-btn:hover,
+.topbar-btn:hover,
+.btn-green-outline:hover,
+.ms-btn:hover{
+  background: rgba(255,255,255,.06);
+  border-color: rgba(148,163,184,.24);
+  transform: translateY(-1px);
+}
+
+.btn:active,
+.chip-btn:active,
+.topbar-btn:active,
+.btn-green-outline:active,
+.ms-btn:active{
+  transform: translateY(0px);
+  filter: brightness(.98);
+}
+
+.btn:focus-visible,
+.chip-btn:focus-visible,
+.topbar-btn:focus-visible,
+.btn-green-outline:focus-visible,
+.ms-btn:focus-visible{
+  outline: none;
+  box-shadow:
+    0 10px 22px rgba(0,0,0,.32),
+    0 1px 0 rgba(255,255,255,.06) inset,
+    0 0 0 4px var(--focus);
+}
+
+.btn[disabled],
+.chip-btn[disabled],
+.topbar-btn[disabled],
+.btn-green-outline[disabled],
+.ms-btn[disabled]{
+  opacity: .50;
+  cursor: not-allowed;
+  transform: none;
+  filter: saturate(.85);
+}
+
+/* Ghost / secondary */
+.btn--ghost,
+.dock-btn--ghost{
+  background: rgba(8,16,40,.38);
+}
+
+/* Outline accent buttons used in triangles/docs */
+.btn-green-outline{
+  border-color: rgba(var(--accent-rgb), .40);
+  background: rgba(var(--accent-rgb), .08);
+  color: var(--text);
+}
+
+.btn-green-outline:hover{
+  background: rgba(var(--accent-rgb), .12);
+  border-color: rgba(var(--accent-rgb), .55);
+}
+
+/* Catch-all focus ring for buttons/links not covered above */
+a:focus-visible,
+button:focus-visible,
+.dock-btn:focus-visible{
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Skip link — keyboard-only users can jump past the topbar/sidebar
+   with a single Tab keystroke. Hidden until focused.
+   ──────────────────────────────────────────────────────────────── */
+.skip-link{
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  z-index: 10002;
+}
+.skip-link:focus{
+  left: 16px;
+  top: 16px;
+  width: auto;
+  height: auto;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--surface-solid);
+  color: var(--text);
+  border: 1px solid var(--stroke);
+  box-shadow: 0 0 0 3px var(--focus);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* Screen-reader-only helper (for aria labels that need visible fallback text) */
+.sr-only{
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Make topbar button sizing consistent */
+.topbar-btn{ padding: 8px 12px; }
+
+/* ================================
+   TABLES (generic)
+================================ */
+table{ border-collapse: separate; border-spacing: 0; }
+
+.table,
+.data-table{
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(148,163,184,.14);
+  background: rgba(11,22,39,.55);
+  box-shadow: 0 18px 45px rgba(0,0,0,.35);
+}
+
+.table th,
+.table td,
+.data-table th,
+.data-table td{
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(148,163,184,.10);
+  text-align: center;
+}
+
+.table th,
+.data-table th{
+  font-size: 11px;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: rgba(226,232,240,.85);
+  background: rgba(8,16,40,.35);
+}
+
+.table tr:nth-child(even) td,
+.data-table tr:nth-child(even) td{
+  background: rgba(8,16,40,.18);
+}
+
+.table tr:hover td,
+.data-table tr:hover td{
+  background: rgba(255,255,255,.03);
+}
+
+/* ================================
+   UTILITIES
+================================ */
+.muted{ color: var(--muted); }
+.is-hidden{ display:none !important; }
+
+.is-disabled{
+  opacity: 0.45;
+  filter: saturate(0.85);
+}
+.is-disabled :is(button,a,input,select,textarea){ pointer-events: none; }
+.is-disabled input{ opacity: 0.75; }
+
+/* ================================
+   GLOBAL PAGE SHELL + SPACING
+================================ */
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+
+body{
+  margin:0;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'cv11', 'ss01', 'ss03', 'tnum', 'kern', 'liga', 'calt';
+  font-optical-sizing: auto;
+  letter-spacing: -0.005em;
+  background:
+    radial-gradient(1200px 700px at 20% -10%, rgba(var(--accent-rgb),.18), transparent 55%),
+    radial-gradient(900px 600px at 80% 10%, rgba(0,170,255,.10), transparent 60%),
+    linear-gradient(180deg, var(--bg0), var(--bg1));
+}
+
+button{ font-family:inherit; }
+
+.app-shell{ min-height: 100vh; }
+
+/* IMPORTANT: pages that use bottom fixed UI should opt-in with this class */
+.workspace{
+  padding: 14px 0 24px;
+}
+
+/* Global: space between sticky topbar and page content */
+.main{ padding-top: 14px; }
+
+.container{
+  width: min(1280px, calc(100% - 32px));
+  margin: 0 auto;
+}
+
+.grid-bg{
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(148,163,184,.08) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+/* ================================
+   TOP BAR (single source of truth)
+================================ */
+.topbar{
+  position: sticky;
+  top: 0;
+  z-index: 10000;
+
+  /* Full-width header — spans the entire viewport edge-to-edge. */
+  margin: 0 0 14px;
+  width: 100%;
+  max-width: none;
+
+  border-radius: 0;
+
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+
+  padding: 14px 24px;
+
+  border: 1px solid rgba(148,163,184,.16);
+  border-top: 0;
+  border-left: 0;
+  border-right: 0;
+  box-shadow: 0 18px 45px rgba(0,0,0,.40);
+  backdrop-filter: blur(10px);
+}
+
+/* keep your glass look */
+.topbar.glass{
+  background: linear-gradient(180deg, rgba(20,38,70,.88), rgba(18,34,62,.65));
+}
+
+.topbar-left{ display:flex; align-items:center; gap:12px; }
+.topbar-right{ display:flex; align-items:center; gap:10px; }
+
+.brand-dot{
+  width:34px;height:34px;border-radius: 12px;
+  display:grid;place-items:center;
+  background: radial-gradient(circle at 30% 30%, rgba(var(--accent-rgb),.35), rgba(var(--accent-rgb),.10));
+  border: 1px solid rgba(var(--accent-rgb),.45);
+  font-weight:600;
+}
+
+.logo-badge{
+  width:34px;height:34px;border-radius:999px;
+  display:flex;align-items:center;justify-content:center;
+  background: radial-gradient(circle at 30% 30%, rgba(var(--accent-rgb),.35), rgba(8,16,40,.9));
+  border: 1px solid rgba(var(--accent-rgb),.35);
+  color:#e5e7eb;
+  font-weight:700;
+}
+
+.brand-title{ font-size: 13px; letter-spacing: .06em; font-weight: 600; }
+.topbar-title{ letter-spacing:.08em; font-size:12px; color:rgba(226,232,240,.9); }
+
+.topbar-btn,
+.topbar-pill{
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(148,163,184,.18);
+  background: rgba(8,16,40,.45);
+  color: rgba(226,232,240,.85);
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.topbar-pill b{ color:#34d399; font-weight:700; }
+
+.topbar-home{
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(var(--accent-rgb),.35);
+  background: linear-gradient(180deg, rgba(var(--accent-rgb),.85), rgba(var(--accent2-rgb),.75));
+  color: #001b12;
+  padding: 9px 14px;
+  font-size: 12px;
+  cursor:pointer;
+  box-shadow: 0 0 18px rgba(var(--accent-rgb),.25);
+}
+
+/* ================================
+   SHEET PANEL (global)
+================================ */
+.sheet-panel{
+  position: relative;
+  border-radius: 22px;
+  overflow: hidden;
+
+  background: radial-gradient(circle at top left,
+    rgba(148,163,184,.14) 0%,
+    rgba(15,23,42,.92) 38%,
+    rgba(8,16,40,.98) 100%);
+
+  border: 1px solid rgba(148,163,184,.16);
+  box-shadow: 0 18px 45px rgba(0,0,0,.65);
+  padding: 12px 12px 14px;
+}
+
+.sheet-grid{
+  position:absolute;
+  inset:0;
+  background-image:
+    linear-gradient(to right, rgba(148,163,184,.11) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148,163,184,.11) 1px, transparent 1px);
+  background-size: 60px 60px;
+  opacity: .55;
+  pointer-events:none;
+}
+
+.sheet-panel-inner{
+  position: relative;
+  z-index: 1;
+}
+
+/* ================================
+   PILLS / CHIPS
+================================ */
+.welcome-pill,
+.pill-mini{
+  padding: 5px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(var(--accent-rgb),.45);
+  background: rgba(var(--accent-rgb),.08);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.chip-btn,
+.chip-toggle{
+  border-radius: var(--radius-pill);
+  padding: 8px 12px;
+  border: 1px solid rgba(60,80,120,.45);
+  background: rgba(10,18,32,.55);
+  color: var(--text);
+  cursor:pointer;
+  font-weight: 500;
+}
+
+/* Orange variant used for Dashboard CTA */
+.primary-pill.primary-pill--orange{
+  border-color: rgba(255, 140, 0, .60);
+  background: linear-gradient(180deg, rgba(255, 140, 0, .22), rgba(10,18,32,.55));
+  box-shadow: 0 10px 24px rgba(0,0,0,.22), 0 0 0 1px rgba(255, 140, 0, .12) inset;
+}
+.primary-pill.primary-pill--orange:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(0,0,0,.26), 0 0 0 1px rgba(255, 140, 0, .18) inset;
+}
+
+.chip-label{ opacity:.6; margin-right:6px; }
+.chip-value{ color: var(--accent); }
+
+/* ================================
+   WORKSPACE BADGE
+================================ */
+.crumb{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  margin-bottom: 12px;
+  background: linear-gradient(180deg, rgba(40,110,140,.18), rgba(10,18,32,.35));
+  border: 1px solid rgba(90,170,200,.22);
+  box-shadow: 0 10px 24px rgba(0,0,0,.22);
+}
+
+.dot{
+  width:10px;height:10px;border-radius: var(--radius-pill);
+  background: rgba(90,170,200,.85);
+  box-shadow: 0 0 0 4px rgba(90,170,200,.12);
+}
+
+.crumb-text{
+  font-size: 12px;
+  letter-spacing: .08em;
+  opacity: .80;
+  font-weight: 600;
+}
+
+/* ================================
+   GENERIC PANELS
+================================ */
+.panel{ border-radius: var(--radius); padding: 14px; }
+.panel-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom: 12px;
+}
+.panel-title{
+  font-size: 11px;
+  letter-spacing: .10em;
+  opacity: .7;
+  font-weight: 600;
+}
+.divider{
+  height:1px;
+  background: rgba(60,80,120,.45);
+  margin: 18px 0;
+}
+
+/* ================================
+   FORM / CARD SYSTEM (shared)
+================================ */
+.cards-grid-4{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  width: 100%;
+  align-items: stretch;
+  margin-top: 14px;
+}
+@media (max-width: 1024px){
+  .cards-grid-4{ grid-template-columns: minmax(0, 1fr); }
+}
+
+.card{
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.9);
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+}
+
+.card-header{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-muted);
+}
+.card-header-label{ font-weight: 500; }
+
+.card-header-tag{
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  color: #e5e7eb;
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.form-grid{ display: flex; flex-direction: column; gap: 8px; }
+.form-row{
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(0, 1.5fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.form-label{ font-size: 12px; color: rgba(255,255,255,0.55); display:block; margin-bottom:0; }
+
+/* ===== Form Inputs ===== */
+.form-input{
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  margin-top: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  color: rgba(255,255,255,0.92);
+  background: rgba(15,23,42,0.92);
+  border: 1px solid rgba(148,163,184,0.35);
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.form-input:focus{
+  border-color: rgba(35,209,139,0.5);
+  box-shadow: 0 0 0 3px rgba(35,209,139,0.1);
+}
+.form-input::placeholder{ color: rgba(255,255,255,0.3); }
+select.form-input{ cursor:pointer; appearance:auto; }
+
+.form-grid{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 20px;
+}
+@media (max-width: 600px){
+  .form-grid{ grid-template-columns: 1fr; }
+}
+
+.form-check{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.form-check input[type="checkbox"]{
+  width: 16px;
+  height: 16px;
+  accent-color: #23d18b;
+}
+
+/* ===== Wizard Dock Buttons (Back/Next) ===== */
+.wizard-dock-btn{
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s, border-color 0.15s;
+}
+.wizard-dock-btn:disabled{
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.wizard-dock-btn--back{
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.8);
+}
+.wizard-dock-btn--back:hover:not(:disabled){
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.22);
+}
+.wizard-dock-btn--next{
+  background: linear-gradient(180deg, #23d18b, #0aa36a);
+  color: #08140e;
+  border-color: transparent;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.3), 0 0 16px rgba(35,209,139,0.2);
+}
+.wizard-dock-btn--next:hover:not(:disabled){
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+.wizard-dock-btn--next.is-busy{
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.input-shell{
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(15, 23, 42, 0.96);
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 13px;
+  /* Keep control heights consistent across pages */
+  min-height: 40px;
+}
+
+/* Generic "saved" pills used across multiple screens */
+.saved-pills{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+
+.saved-pill{
+  display:inline-flex;
+  gap:8px;
+  align-items:center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  color:#e5e7eb;
+  font-size:12px;
+}
+
+.saved-pill .dot{
+  width:10px;
+  height:10px;
+  border-radius:999px;
+  background: rgba(var(--accent-rgb), 0.95);
+  box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.14);
+}
+
+.saved-pill.is-empty{
+  opacity:0.7;
+}
+
+.saved-pill.is-empty .dot{
+  background: rgba(148, 163, 184, 0.7);
+  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.12);
+}
+
+.input-shell :is(select,input,textarea,button){
+  width: 100%;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #e5e7eb;
+  font-size: 13px;
+}
+
+.input-shell input::placeholder{ color: rgba(148, 163, 184, 0.7); }
+
+.input-shell span.icon{
+  font-size: 11px;
+  color: rgba(148, 163, 184, 0.8);
+  white-space: nowrap;
+}
+
+.input-shell.number{ justify-content: flex-end; }
+.input-shell.number input{ text-align: center; }
+
+/* Make selects consistent across browsers */
+.input-shell select{
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
+/* Toggle system (shared) */
+.toggle-group{
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  position: relative;
+}
+
+.toggle-option{
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  color: rgba(255,255,255,0.45);
+  user-select: none;
+  font-weight: 600;
+  transition: all 0.15s;
+  /* Reset <button> defaults so .toggle-option styles itself when rendered
+     as a real button (kept tabbable + keyboard-activatable). */
+  background: none;
+  border: none;
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.toggle-option.active{
+  background: linear-gradient(180deg, rgba(var(--accent-rgb),0.85), rgba(var(--accent2-rgb),0.75));
+  color: #001b12;
+  border: none;
+  box-shadow: 0 0 12px rgba(var(--accent-rgb),0.25);
+}
+
+.section-subtitle{ font-size: 11px; color: var(--text-muted); }
+
+.inline-two{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 640px){
+  .inline-two{ grid-template-columns: minmax(0, 1fr); }
+}
+
+/* If any page has global button background, keep cob-control clean */
+.input-shell .cob-control{
+  padding: 0;
+  height: auto;
+  line-height: normal;
+}
+
+/* ================================
+   WORKFLOW TABS — COMPACT
+================================ */
+.workspace--with-tabs{ padding-bottom: 64px; }
+
+.tabs-dock{
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 60;
+
+  padding: 6px 8px;
+  border-radius: 12px;
+
+  background: linear-gradient(180deg, rgba(10,18,32,.55), rgba(10,18,32,.35));
+  border: 1px solid rgba(90,170,200,.18);
+
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 26px rgba(0,0,0,.35);
+}
+
+
+
+.tabsbar{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.tabsbar::-webkit-scrollbar{ display: none; }
+
+.tab{
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  border: 1px solid rgba(60,80,120,.35);
+  background: rgba(7,14,26,.45);
+  color: rgba(226,232,240,.75);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .18s ease, color .18s ease, border-color .18s ease, transform .12s ease;
+}
+
+.tab:hover{
+  color: rgba(226,232,240,.92);
+  background: rgba(7,14,26,.65);
+  border-color: rgba(90,170,200,.35);
+  transform: translateY(-1px);
+}
+
+.tab--active{
+  background: linear-gradient(90deg, rgba(var(--accent-rgb),.95), rgba(var(--accent2-rgb),.95));
+  color: #04120b;
+  border-color: rgba(var(--accent-rgb),.65);
+  box-shadow: 0 6px 16px rgba(var(--accent-rgb),.22);
+  transform: translateY(-1px);
+}
+
+.tab--active:hover{ transform: translateY(-1px); }
+.tab:active{ transform: translateY(0); }
+
+/* ================================
+   MULTI-SELECT MODAL (shared)
+================================ */
+.ms-backdrop{
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(0,0,0,.55);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.ms-modal{
+  width: min(720px, 95vw);
+  max-height: min(78vh, 760px);
+  overflow: hidden;
+
+  border-radius: 18px;
+  border: 1px solid rgba(148,163,184,.18);
+  background: rgba(8,16,40,.70);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 24px 80px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.05);
+
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+}
+
+.ms-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid rgba(148,163,184,.12);
+}
+
+.ms-title{
+  font-size: 13px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: rgba(226,232,240,.9);
+}
+
+.ms-x{
+  border-radius: 10px;
+  border: 1px solid rgba(148,163,184,.18);
+  background: rgba(8,16,40,.35);
+  color: rgba(226,232,240,.85);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.ms-search{
+  position: relative;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(148,163,184,.12);
+}
+
+.ms-search-input{
+  width: 100%;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(148,163,184,.20);
+  background: rgba(8,16,40,.35);
+  color: rgba(226,232,240,.9);
+  padding: 10px 38px 10px 14px;
+  outline: none;
+}
+
+.ms-search-icon{
+  position:absolute;
+  right: 26px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(148,163,184,.8);
+  font-size: 12px;
+}
+
+.ms-list{ padding: 12px 14px; overflow: auto; }
+
+.ms-item{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(148,163,184,.10);
+  background: rgba(8,16,40,.25);
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+.ms-item:hover{
+  border-color: rgba(var(--accent-rgb),.25);
+  box-shadow: 0 0 0 6px rgba(var(--accent-rgb),.06);
+}
+
+.ms-check{ width: 18px; height: 18px; accent-color: #22c55e; }
+
+.ms-item-main{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap: 10px;
+  width: 100%;
+}
+
+.ms-item-name{ color: rgba(226,232,240,.92); font-weight: 600; font-size: 13px; }
+.ms-item-code{ color: rgba(148,163,184,.85); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+
+.ms-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid rgba(148,163,184,.12);
+}
+
+.ms-btn{
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(148,163,184,.20);
+  background: rgba(8,16,40,.35);
+  color: rgba(226,232,240,.85);
+  padding: 10px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/*
+  Class-of-business (Line of Business) picker
+  Fix: selected text was getting squashed in some layouts (showing only 1 character).
+  Ensure the label can grow and the caret stays at the far right.
+*/
+.cob-control{ display:flex; align-items:center; gap: 10px; width: 100%; cursor: pointer; }
+.cob-control > .icon{ margin-left: auto; flex: 0 0 auto; }
+.cob-value{ flex: 1 1 auto; min-width: 0; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ================================
+   WIZARD DOCK (Back / Save & Continue)
+   Single source of truth
+   NOTE: pages that have their own scroll containers
+   MUST provide bottom padding to avoid overlap.
+================================ */
+.wizard-dock{
+  position: fixed;
+  right: 18px;
+  bottom: 76px;  /* above tabs-dock */
+  z-index: 70;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Wide screen: keep dock near content edge, not at screen edge */
+@media (min-width: 1720px) {
+  .wizard-dock{
+    right: calc((100vw - 1680px) / 2 + 18px);
+  }
+}
+
+/* Button styles */
+.dock-btn{
+  border-radius: 12px;
+  height: 40px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  border: 1px solid rgba(148,163,184,.22);
+  background: rgba(8,16,40,.55);
+  color: rgba(226,232,240,.92);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 26px rgba(0,0,0,.35);
+}
+
+.dock-btn--ghost:hover{
+  border-color: rgba(90,170,200,.35);
+  background: rgba(7,14,26,.65);
+}
+
+.dock-btn[disabled]{
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+/* On very small screens, keep dock visible */
+@media (max-width: 520px){
+  .wizard-dock{
+    left: 12px;
+    right: 12px;
+    justify-content: space-between;
+  }
+}
+/* Save & Continue = green OUTLINE (not filled) */
+.wizard-dock .dock-btn--primary{
+  background: rgba(8,16,40,.55) !important;      /* dark */
+  color: rgba(226,232,240,.92) !important;      /* light text */
+  border: 1px solid rgba(var(--accent-rgb),.55) !important; /* green outline */
+  box-shadow: 0 10px 26px rgba(0,0,0,.35) !important;
+}
+
+.wizard-dock .dock-btn--primary:hover{
+  background: rgba(var(--accent-rgb),.08) !important;   /* subtle glow */
+  box-shadow: 0 0 18px rgba(var(--accent-rgb),.12) !important;
+}
+
+/* optional: keep arrow/text crisp */
+.wizard-dock .dock-btn--primary:active{
+  transform: translateY(0);
+}
+/* ================================
+   WIZARD DOCK (Back / Save & Continue)
+   Single source of truth
+   NOTE: pages that have their own scroll containers
+   MUST provide bottom padding to avoid overlap.
+================================ */
+.wizard-dock{
+  position: fixed;
+  right: 18px;
+  bottom: 76px;  /* above tabs-dock */
+  z-index: 70;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* ✅ Pill-style buttons (GLOBAL) */
+.dock-btn{
+  border-radius: var(--radius-pill);
+  height: 40px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+
+  border: 1px solid rgba(148,163,184,.22);
+  background: rgba(8,16,40,.55);
+  color: rgba(226,232,240,.92);
+
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 26px rgba(0,0,0,.35);
+  transition:
+    background .18s ease,
+    box-shadow .18s ease,
+    border-color .18s ease,
+    transform .12s ease;
+}
+
+/* Back (ghost) */
+.dock-btn--ghost:hover{
+  border-color: rgba(90,170,200,.35);
+  background: rgba(7,14,26,.65);
+}
+
+/* Save & Continue = green OUTLINE (not filled) */
+.wizard-dock .dock-btn--primary{
+  background: rgba(8,16,40,.55) !important;
+  color: rgba(226,232,240,.92) !important;
+  border: 1px solid rgba(var(--accent-rgb),.55) !important;
+  box-shadow: 0 10px 26px rgba(0,0,0,.35) !important;
+}
+
+.wizard-dock .dock-btn--primary:hover{
+  background: rgba(var(--accent-rgb),.08) !important;
+  box-shadow: 0 0 18px rgba(var(--accent-rgb),.12) !important;
+}
+
+.wizard-dock .dock-btn--primary:active{
+  transform: translateY(0);
+}
+
+.dock-btn[disabled]{
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+/* Small screens */
+@media (max-width: 520px){
+  .wizard-dock{
+    left: 12px;
+    right: 12px;
+    justify-content: space-between;
+  }
+}
+/* ================================
+   NP STRUCTURE — tables should scroll, not compress
+================================ */
+.NP_EXPIRING_STRUCTURE .np-table-wrap--scroll{
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.NP_EXPIRING_STRUCTURE .np-table-wrap--scroll::-webkit-scrollbar{ display:none; }
+
+/* ================================
+   NP STRUCTURE — compress (no horizontal scroll)
+================================ */
+.NP_STRUCTURE .np-table-wrap--scroll{
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.NP_STRUCTURE .np-table-wrap--scroll::-webkit-scrollbar{ display:none; }
+
+/* Quote mode tables (multiple structures) should scroll horizontally instead of compressing */
+.NP_STRUCTURE .np-table-wrap--compact{
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.NP_STRUCTURE .np-table-wrap--compact::-webkit-scrollbar{ display:none; }
+
+.NP_STRUCTURE .sheet-panel-inner,
+.NP_STRUCTURE .sheet-panel,
+.NP_STRUCTURE .np-struct-card{
+  overflow-x: hidden;
+}
+
+.NP_STRUCTURE .np-struct-table--wide{
+  width: 3100px;
+  min-width: 3100px;
+  table-layout: fixed;
+}
+
+/* Center tables within their scroll/compact wrappers (quote flow uses horizontal scroll) */
+.NP_STRUCTURE .np-struct-table{
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Tighten quote structure layer table to fit without collisions */
+.NP_STRUCTURE .np-struct-table--quote th,
+.NP_STRUCTURE .np-struct-table--quote td{
+  padding: 6px 6px;
+  font-size: 12px;
+}
+
+.NP_STRUCTURE .np-struct-table--quote .np-cell-input{
+  justify-content: center;
+  gap: 6px;
+}
+
+.NP_STRUCTURE .np-struct-table--quote .np-mini-input{
+  text-align: center;
+  padding: 0 8px;
+}
+
+/* Quote COB tables: keep first column centered like the rest */
+.NP_STRUCTURE .np-cob-table--quote th:first-child,
+.NP_STRUCTURE .np-cob-table--quote td:first-child{
+  text-align: center;
+  padding-left: 8px;
+}
+
+.NP_STRUCTURE .np-struct-table--quote th:nth-child(1),
+.NP_STRUCTURE .np-struct-table--quote td:nth-child(1){ width: 6%; }
+.NP_STRUCTURE .np-struct-table--quote th:nth-child(2),
+.NP_STRUCTURE .np-struct-table--quote td:nth-child(2){ width: 16%; }
+.NP_STRUCTURE .np-struct-table--quote th:nth-child(3),
+.NP_STRUCTURE .np-struct-table--quote td:nth-child(3){ width: 18%; }
+.NP_STRUCTURE .np-struct-table--quote th:nth-child(4),
+.NP_STRUCTURE .np-struct-table--quote td:nth-child(4){ width: 6%; }
+.NP_STRUCTURE .np-struct-table--quote th:nth-child(5),
+.NP_STRUCTURE .np-struct-table--quote td:nth-child(5){ width: 18%; }
+.NP_STRUCTURE .np-struct-table--quote th:nth-child(6),
+.NP_STRUCTURE .np-struct-table--quote td:nth-child(6){ width: 12%; }
+.NP_STRUCTURE .np-struct-table--quote th:nth-child(7),
+.NP_STRUCTURE .np-struct-table--quote td:nth-child(7){ width: 12%; }
+.NP_STRUCTURE .np-struct-table--quote th:nth-child(8),
+.NP_STRUCTURE .np-struct-table--quote td:nth-child(8){ width: 12%; }
+
+.NP_STRUCTURE .np-cell-input{
+  min-width: 0;
+}
+
+.NP_STRUCTURE .np-mini-input{
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.NP_STRUCTURE .np-sfx{
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.NP_STRUCTURE .np-struct-table th,
+.NP_STRUCTURE .np-struct-table td{
+  white-space: nowrap;
+  vertical-align: middle;
+  padding: 10px 8px;
+}
+
+.NP_STRUCTURE .np-struct-table input[type="checkbox"].np-check{
+  /* Let structure.css np-check styles apply — do not override */
+  width: 20px;
+  height: 20px;
+}
+
+/* Let tables be wider than container so horizontal scroll works */
+.NP_EXPIRING_STRUCTURE .np-struct-table--wide{
+  width: max-content;
+  min-width: 1400px;
+  table-layout: auto;
+}
+
+/* Prevent header/cells wrapping + keep columns readable */
+.NP_EXPIRING_STRUCTURE .np-struct-table th,
+.NP_EXPIRING_STRUCTURE .np-struct-table td{
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* Center + justify headings like your screenshot */
+.NP_EXPIRING_STRUCTURE .np-struct-table thead th{
+  text-align: center;
+}
+
+/* Sticky first column stays centered */
+.NP_EXPIRING_STRUCTURE .np-table-sticky{
+  text-align: center;
+}
+
+/* COB multi-select button inside cell */
+.NP_EXPIRING_STRUCTURE .np-cob-btn{
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,.22);
+  background: rgba(8,16,40,.35);
+  color: rgba(226,232,240,.92);
+  cursor: pointer;
+}
+.NP_EXPIRING_STRUCTURE .np-cob-btn:hover{
+  border-color: rgba(var(--accent-rgb),.35);
+  box-shadow: 0 0 0 6px rgba(var(--accent-rgb),.06);
+}
+.NP_EXPIRING_STRUCTURE .np-cob-btn__value{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.NP_EXPIRING_STRUCTURE .np-cob-btn__chev{
+  opacity: .75;
+  flex: 0 0 auto;
+}
+
+/* Small helpers */
+.NP_EXPIRING_STRUCTURE .cell-center{ text-align:center; }
+.NP_EXPIRING_STRUCTURE .cell-right{ text-align:right; }
+
+
+/* Auto-hide wizard dock (shows on mouse/key movement) */
+.wizard-dock--autohide{
+  transition: opacity .22s ease, transform .22s ease;
+}
+.wizard-dock--autohide.is-hidden{
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+}
+/* Keep the dock reachable even while fading — hover or keyboard focus
+   pins it visible so clicks/Tab never hit an invisible target. */
+.wizard-dock--autohide.is-hidden:hover,
+.wizard-dock--autohide.is-hidden:focus-within{
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Event loss tables: place Continue lower but still above tabs dock */
+.EVENT_LOSS_TABLES_PAGE .wizard-dock{
+  bottom: 56px;
+}
+.EVENT_LOSS_TABLES_PAGE .table-wrap,
+.EVENT_LOSS_TABLES_PAGE .elt-table-wrap{
+  padding-bottom: 110px; /* prevents last rows under dock */
+}
+
+
+#app{
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+
+/* ===== Checklist Modal ===== */
+.chk-modal .screen-modal-body{
+  padding: 16px 18px 14px;
+}
+
+.chk-wrap{
+  display: grid;
+  gap: 14px;
+}
+
+.chk-sec{
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255,255,255,0.02);
+}
+
+.chk-sec-title{
+  font-weight: 800;
+  margin-bottom: 10px;
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+}
+
+.chk-grid{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+
+@media (max-width: 820px){
+  .chk-grid{ grid-template-columns: 1fr; }
+}
+
+.chk-row{
+  display:flex;
+  gap: 10px;
+  align-items:flex-start;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.03);
+  cursor: pointer;
+}
+
+.chk-row:hover{
+  background: rgba(255,255,255,0.05);
+}
+
+.chk-row input{
+  margin-top: 2px;
+}
+
+.chk-footer{
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.chk-actions{
+  display:flex;
+  gap: 10px;
+  align-items:center;
+}
+
+
+/* === Table alignment + COB width fixes === */
+.NP_STRUCTURE .np-struct-table thead th{ text-align: center; }
+.NP_STRUCTURE .np-struct-table td{ text-align: center; }
+
+/* COB participation tables: keep COB readable and prevent underwriting limit cell overflow */
+.NP_STRUCTURE .np-cob-table{
+  table-layout: fixed;
+  width: 100%;
+}
+.NP_STRUCTURE .np-cob-table th,
+.NP_STRUCTURE .np-cob-table td{
+  overflow: hidden;
+}
+.NP_STRUCTURE .np-cob-table th:first-child,
+.NP_STRUCTURE .np-cob-table td:first-child{
+  text-align: center;
+  padding-left: 14px;
+  width: 22%;
+}
+
+/* Quote workflow: keep COB rows centered/justified like the rest of the quote tables */
+.NP_STRUCTURE .np-cob-table--quote th:first-child,
+.NP_STRUCTURE .np-cob-table--quote td:first-child{
+  text-align: center;
+  padding-left: 8px;
+}
+.NP_STRUCTURE .np-cob-table th:nth-child(2),
+.NP_STRUCTURE .np-cob-table td:nth-child(2){
+  width: 26%;
+}
+
+/* Center inputs inside cells but keep them from spilling into adjacent columns */
+.NP_STRUCTURE .np-cob-table .np-cell-input{ justify-content: center; }
+.NP_STRUCTURE .np-cob-table td:first-child .np-cell-input{ justify-content: flex-start; }
+
+/* Quote workflow: don't left-justify the first COB column */
+.NP_STRUCTURE .np-cob-table--quote td:first-child .np-cell-input{ justify-content: center; }
+
+/* Percent suffix spacing */
+.NP_STRUCTURE .np-cell-input .np-sfx{ margin-left: 6px; }
+.NP_EXPIRING_STRUCTURE .np-cell-input .np-sfx{ margin-left: 6px; }
+
+.NP_EXPIRING_STRUCTURE .np-struct-table td{ text-align: center; }
+.NP_EXPIRING_STRUCTURE .np-struct-table td:first-child{ text-align: center; }
+
+
+/* ===== Card Grid Layout ===== */
+.cards-grid{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+@media(max-width:960px){ .cards-grid{ grid-template-columns:1fr; } }
+.card.glass{
+  background:rgba(255,255,255,0.055); border:1px solid rgba(255,255,255,0.11);
+  border-radius:14px; padding:0; overflow:hidden;
+}
+.card-header{
+  display:flex; align-items:center; justify-content:space-between; padding:14px 18px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+}
+.card-header-label{ font-weight:700; font-size:14px; letter-spacing:0.3px; }
+.card-tag{ font-size:10px; text-transform:uppercase; letter-spacing:0.1em; padding:3px 8px;
+  border-radius:20px; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.5); }
+.card-desc{ padding:8px 18px 0; font-size:12px; color:rgba(255,255,255,0.4); }
+
+/* card-head (alias for card-header used in treaty detail) */
+.card-head{
+  display:flex; align-items:center; justify-content:space-between; padding:14px 18px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+}
+.card-title{ font-weight:700; font-size:14px; letter-spacing:0.3px; }
+
+/* Toggle button (Fixed/Sliding, Yes/No) */
+.toggle-btn{
+  padding:5px 12px; border-radius:6px; font-size:11px; font-weight:600;
+  letter-spacing:0.5px; cursor:pointer; border:1px solid rgba(255,255,255,0.1);
+  background:rgba(255,255,255,0.04); color:rgba(255,255,255,0.45); transition:all 0.15s;
+}
+.toggle-btn:hover{ background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.7); }
+.toggle-btn--active{ background:rgba(35,209,139,0.15); color:#23d18b; border-color:rgba(35,209,139,0.3); }
+
+/* Card inner padding for form content */
+.card.glass .form-grid{ padding:14px 18px; }
+.card.glass .mini-title{ padding:0 18px; }
+.card.glass > p{ padding:0 18px; }
+.card.glass > div:not(.card-head):not(.form-grid){ padding:0 18px; }
+.card.glass > div:last-child{ padding-bottom:18px; }
+
+/* Form grid inside cards */
+.form-grid-rows{ padding:12px 18px 18px; display:flex; flex-direction:column; gap:8px; }
+.form-row{ display:grid; grid-template-columns:minmax(140px,1fr) minmax(0,1.4fr); gap:8px; align-items:center; }
+.form-row--wide{ grid-template-columns:1fr; }
+.form-label{ font-size:12px; color:rgba(255,255,255,0.55); }
+.input-shell{
+  display:flex; align-items:center; background:rgba(15,23,42,0.8);
+  border:1px solid rgba(148,163,184,0.25); border-radius:10px; padding:0 10px;
+  min-height:36px; font-size:13px; position:relative;
+}
+.input-shell input, .input-shell select{
+  flex:1; background:transparent; border:none; outline:none; color:#fff;
+  font-size:13px; font-family:inherit; padding:6px 0; min-width:0;
+}
+.input-shell input.readonly{ color:rgba(255,255,255,0.4); }
+.input-shell input::placeholder{ color:rgba(255,255,255,0.25); }
+.input-shell select{ cursor:pointer; appearance:auto; }
+.input-suffix{ font-size:11px; color:rgba(255,255,255,0.35); margin-left:4px; white-space:nowrap; }
+.icon{ font-size:11px; color:rgba(255,255,255,0.3); }
+
+/* Two-col sub-grid */
+.two-col{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+
+/* Toggle group - use the primary definition above (pill-shaped) */
+.toggle-opt{
+  padding:5px 12px; border-radius:6px; font-size:11px; font-weight:600;
+  letter-spacing:0.5px; cursor:pointer; border:none;
+  background:transparent; color:rgba(255,255,255,0.45); transition:all 0.15s;
+}
+.toggle-opt.active{ background:rgba(35,209,139,0.15); color:#23d18b; }
+.toggle-opt:hover:not(.active){ background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.7); }
+
+/* Mini section title */
+.mini-title{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px;
+  color:rgba(255,255,255,0.35); margin:4px 0; }
+
+/* Small buttons */
+.btn-sm{ padding:6px 14px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;
+  border:none; transition:all 0.12s; }
+.btn-accent{ background:linear-gradient(180deg,#23d18b,#0aa36a); color:#08140e; }
+.btn-accent:hover{ filter:brightness(1.08); transform:translateY(-1px); }
+.btn-danger-sm{ background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.2);
+  border-radius:6px; padding:4px 8px; cursor:pointer; font-size:12px; }
+.btn-danger-sm:hover{ background:rgba(239,68,68,0.25); }
+
+/* COB dropdown */
+.cob-control{ display:flex; align-items:center; justify-content:space-between; width:100%;
+  background:transparent; border:none; color:#fff; font-size:13px; cursor:pointer; padding:6px 0; }
+.cob-dropdown{ display:none; position:absolute; top:100%; left:0; right:0; z-index:50;
+  background:#0f1a2e; border:1px solid rgba(255,255,255,0.12); border-radius:10px;
+  max-height:200px; overflow-y:auto; padding:6px; box-shadow:0 12px 32px rgba(0,0,0,0.5); }
+.cob-dropdown.open{ display:block; }
+.cob-option{ display:flex; align-items:center; gap:8px; padding:6px 8px; font-size:13px;
+  color:rgba(255,255,255,0.8); cursor:pointer; border-radius:6px; }
+.cob-option:hover{ background:rgba(255,255,255,0.06); }
+.cob-option input{ accent-color:#23d18b; }
+
+/* Action pill buttons */
+.action-pill{
+  padding:6px 14px; border-radius:20px; font-size:12px; font-weight:600; cursor:pointer;
+  border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.04); color:rgba(255,255,255,0.7);
+  transition:all 0.12s;
+}
+.action-pill:hover{ background:rgba(255,255,255,0.08); }
+
+/* Glass panel */
+.panel.glass{
+  background:rgba(255,255,255,0.055); border:1px solid rgba(255,255,255,0.11);
+  border-radius:14px; overflow:hidden;
+}
+.panel-head{ padding:14px 18px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:space-between; }
+.panel-title{ font-weight:700; font-size:14px; }
+.panel-body{ padding:14px 18px; }
+
+/* Data table */
+.data-table{ width:100%; border-collapse:collapse; font-size:13px; }
+.data-table th{ text-align:center; padding:8px 10px; font-size:11px; font-weight:600;
+  text-transform:uppercase; letter-spacing:0.06em; color:rgba(255,255,255,0.55);
+  border-bottom:1px solid rgba(255,255,255,0.08); }
+.data-table td{ padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.04); color:rgba(255,255,255,0.92); text-align:center; }
+.data-table tbody tr:hover{ background:rgba(255,255,255,0.025); }
+.data-table input.form-input{ padding:4px 8px; }
+
+.muted{ color:rgba(255,255,255,0.4); font-size:12px; }
+
+/* ── Treaty Detail compact form input ── */
+.fi{
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: rgba(255,255,255,0.9);
+  background: rgba(15,23,42,0.7);
+  border: 1px solid rgba(148,163,184,0.26);
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.fi:focus{ border-color: rgba(var(--accent-rgb),0.5); }
+.fi:disabled, .fi[readonly]{ opacity: 0.5; cursor: default; }
+.fi::placeholder{ color: rgba(255,255,255,0.2); }
+select.fi{ cursor: pointer; appearance: auto; }
+
+/* ── Modal overlay (fixed, centered) ── */
+.modal-backdrop{
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(3, 7, 18, 0.78);
+  backdrop-filter: blur(4px);
+}
+.modal{
+  position: relative;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;
+  overflow: hidden;
+}
+.modal.glass{
+  background: linear-gradient(180deg, rgba(18,30,60,0.97), rgba(16,27,55,0.94));
+  border: 1px solid rgba(148,163,184,0.26);
+  box-shadow: 0 24px 70px rgba(0,0,0,0.72);
+}
+.modal-title{
+  padding: 18px 24px 14px;
+  font-size: 16px;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.modal-actions{
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 24px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.btn.ghost{
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: transparent;
+  color: rgba(255,255,255,0.7);
+  font-size: 13px;
+  cursor: pointer;
+}
+.btn.primary{
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(180deg, rgba(var(--accent-rgb),0.85), rgba(var(--accent2-rgb),0.75));
+  color: #001b12;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(var(--accent-rgb),0.2);
+}
+
+/* ── Orange pill button (global) ── */
+.orange-gloss-btn{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(251,146,60,0.55);
+  background: linear-gradient(180deg, rgba(251,146,60,0.22), rgba(8,16,40,0.30));
+  color: rgba(251,146,60,0.95);
+  padding: 7px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  box-shadow: 0 0 0 4px rgba(251,146,60,0.08);
+  transition: transform 0.12s, box-shadow 0.18s, filter 0.18s;
+}
+.orange-gloss-btn:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 5px rgba(251,146,60,0.14), 0 10px 20px rgba(0,0,0,0.15);
+  filter: brightness(1.05);
+}
+.orange-gloss-btn:disabled{
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+/* ── Triangle table ── */
+.tri-table{
+  border-collapse: separate;
+  border-spacing: 3px;
+  width: max-content;
+  min-width: 100%;
+  font-size: 12px;
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+}
+.tri-hdr{
+  text-align: center;
+  padding: 6px 10px;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #23d18b;
+  background: rgba(8,16,40,0.72);
+  white-space: nowrap;
+}
+.tri-yr-hdr{ min-width: 56px; }
+.tri-yr{
+  text-align: center;
+  font-weight: 600;
+  font-size: 13px;
+  color: #23d18b;
+  padding: 4px 12px;
+  white-space: nowrap;
+  min-width: 56px;
+  background: rgba(8,16,40,0.72);
+  position: sticky;
+  left: 0;
+  z-index: 5;
+}
+.tri-cell{
+  padding: 0;
+  background: rgba(var(--accent-rgb),0.03);
+  border: 1px solid rgba(var(--accent-rgb),0.15);
+  border-radius: 4px;
+}
+.tri-off{
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+}
+.tri-inp,
+input.tri-inp,
+input.tri-inp[type="text"]{
+  display: block !important;
+  width: 100% !important;
+  min-width: 120px !important;
+  height: 21px !important;
+  padding: 0 10px !important;
+  margin: 0 !important;
+  font-size: 12px !important;
+  font-family: inherit !important;
+  font-weight: 500 !important;
+  font-variant-numeric: tabular-nums !important;
+  text-align: center !important;
+  color: rgba(226,232,240,0.88) !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  line-height: 21px !important;
+}
+input.tri-inp:focus{
+  background: rgba(255,255,255,0.03) !important;
+  box-shadow: inset 0 0 0 1px rgba(148,163,184,0.2) !important;
+}
+/* Hover on row */
+.tri-table tbody tr:hover td:not(.tri-yr){
+  background: rgba(255,255,255,0.02);
+}
+
+/* ── np-check: custom styled checkbox — defined in structure.css.
+   Do NOT redefine here; this block reserved for disabled state only. */
+.np-check:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LOGIN SCREEN
+═══════════════════════════════════════════════════════════════ */
+.LOGIN_SCREEN {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: radial-gradient(ellipse at 30% 20%, rgba(35,209,139,0.08) 0%, transparent 60%),
+              radial-gradient(ellipse at 80% 80%, rgba(96,165,250,0.06) 0%, transparent 50%);
+}
+
+/* Admin / User Management screen */
+.USER_MANAGEMENT { padding: 0 0 40px; }
+
+/* ================================
+   GLOBAL TYPOGRAPHY NORMALISE
+   Force every element to a single non-bold weight. Heavier weights
+   were rendering blurry on some displays; capping at 500 keeps
+   hierarchy via a slight medium-vs-regular contrast without ever
+   crossing into bold territory. !important is intentional so that
+   inline `fontWeight` props in JSX and per-component CSS rules all
+   collapse to this scale.
+================================ */
+:root,
+body,
+button,
+input,
+select,
+textarea,
+optgroup {
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  font-weight: 400 !important;
+}
+
+/* Section headings — full hierarchy weight */
+h1, h2, h3,
+strong, b,
+.page-title,
+.screen-title,
+.title-xl,
+.welcome-title,
+.panel-title,
+.card-title,
+.card-header-label {
+  font-weight: 700 !important;
+}
+/* Secondary titles / chips / labels — readable bold without heaviness */
+h4, h5, h6,
+.mini-title,
+.panel-head,
+.brand-title,
+.topbar-title,
+.crumb-text,
+.topbar-home,
+.topbar-pill,
+.topbar-btn,
+.action-pill,
+.btn-sm,
+[class*="-title"],
+[class*="-label"],
+[class*="-name"] {
+  font-weight: 600 !important;
+}
+
+/* ================================
+   HOVER-REVEAL SCROLLBARS
+   Default: track + thumb both transparent so scrollable areas look
+   clean. On hover the thumb fades in to a visible alpha so users can
+   grab and drag it. Per-element rules with higher specificity (e.g.
+   .wizard-tabs, .ll-table-wrap, .tabsbar { scrollbar-width: none })
+   still win, so opt-outs and bespoke styling are preserved.
+================================ */
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover {
+  scrollbar-color: rgba(255,255,255,0.28) transparent;
+}
+
+/* Webkit / Chromium / Safari */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: transparent;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background-color 160ms ease;
+}
+:hover::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.28);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.50);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}

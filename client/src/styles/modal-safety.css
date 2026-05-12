@@ -1,0 +1,213 @@
+/* Global modal layering and viewport safety.
+   Keep this late in the CSS stack so screen-level modal skins can remain local
+   while every dialog still clears the sticky app header. */
+
+:root{
+  --modal-safe-block: clamp(12px, 2vh, 28px);
+  --modal-safe-inline: clamp(12px, 2vw, 32px);
+  --modal-stack: 120000;
+}
+
+.modal-backdrop,
+.slide-modal-backdrop,
+.screen-modal-backdrop,
+.bbg-modal-backdrop,
+.bbg-modal-overlay,
+.bm-modal-backdrop,
+.qs-modal-backdrop,
+.llp-modal-backdrop,
+.llsel-modal-backdrop,
+.ls-modal-backdrop,
+.ca-modal-backdrop,
+.renew-modal,
+.np-modal-backdrop,
+.catsel-modal-backdrop,
+.ia-backdrop{
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: var(--modal-stack) !important;
+  box-sizing: border-box;
+  padding:
+    max(var(--modal-safe-block), env(safe-area-inset-top))
+    max(var(--modal-safe-inline), env(safe-area-inset-right))
+    max(var(--modal-safe-block), env(safe-area-inset-bottom))
+    max(var(--modal-safe-inline), env(safe-area-inset-left)) !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.modal,
+.slide-modal,
+.screen-modal,
+.bbg-modal,
+.bbg-modal-full,
+.bm-modal,
+.qs-modal,
+.llp-modal,
+.llsel-modal,
+.ls-modal,
+.ca-modal,
+.renew-panel,
+.np-modal,
+.catsel-modal,
+.ms-modal,
+.glass[role="dialog"]{
+  box-sizing: border-box;
+  max-width: calc(100vw - var(--modal-safe-inline) - var(--modal-safe-inline)) !important;
+  max-height: calc(100dvh - var(--modal-safe-block) - var(--modal-safe-block)) !important;
+}
+
+.modal,
+.slide-modal,
+.screen-modal,
+.bbg-modal,
+.bbg-modal-full,
+.bm-modal,
+.qs-modal,
+.llp-modal,
+.llsel-modal,
+.ls-modal,
+.ca-modal,
+.renew-panel,
+.catsel-modal,
+.ms-modal,
+.glass[role="dialog"]{
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+.modal-title,
+.screen-modal-header,
+.slide-modal-header,
+.bbg-modal-head,
+.bm-modal-title,
+.qs-modal-head,
+.llp-modal-head,
+.llsel-modal-head,
+.ls-modal-head,
+.ca-modal-head,
+.renew-head,
+.np-modal-head,
+.catsel-modal-head{
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-title > span,
+.screen-modal-title,
+.bbg-modal-title,
+.bm-modal-title > span,
+.qs-modal-title,
+.llp-modal-title,
+.llsel-modal-title,
+.ls-modal-title,
+.ca-modal-title,
+.renew-title,
+.np-modal-title,
+.catsel-modal-title{
+  min-width: 0;
+}
+
+.modal-close,
+.screen-modal-close,
+.bbg-modal-x,
+.bbg-modal-close,
+.bm-modal-title .bm-pill,
+.qs-x,
+.llp-modal-x,
+.llp-x,
+.llsel-modal-x,
+.ls-modal-x,
+.ca-modal-x,
+.renew-x,
+.np-modal-close,
+.catsel-modal-x,
+.ms-close,
+[role="dialog"] [aria-label="Close"]{
+  flex: 0 0 auto;
+  margin-left: auto;
+  position: relative;
+  z-index: 5;
+}
+
+.modal-close{
+  appearance: none;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.86);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.modal-close:hover{
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.22);
+}
+
+.screen-modal-body,
+.slide-modal-body,
+.bbg-modal-body,
+.bm-modal-body,
+.qs-modal-body,
+.llp-modal-body,
+.llsel-modal-body,
+.ls-modal-body,
+.ca-modal-body,
+.renew-body,
+.np-modal-body,
+.catsel-modal-body,
+.modal-body{
+  min-height: 0;
+}
+
+/* Fullscreen insight/action modals still need to respect the safe modal
+   inset. Keep them wide, but let the backdrop center them instead of
+   pinning the shrunken panel to the viewport's top-left corner. */
+.bbg-modal.bbg-modal--fullscreen{
+  position: relative !important;
+  inset: auto !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  width: calc(100vw - var(--modal-safe-inline) - var(--modal-safe-inline)) !important;
+  max-width: calc(100vw - var(--modal-safe-inline) - var(--modal-safe-inline)) !important;
+  height: calc(100dvh - var(--modal-safe-block) - var(--modal-safe-block)) !important;
+  max-height: calc(100dvh - var(--modal-safe-block) - var(--modal-safe-block)) !important;
+  margin: auto !important;
+  border-radius: 18px !important;
+}
+
+.bbg-modal-body--embed,
+.bbg-embed-screen{
+  width: 100%;
+  max-width: 100%;
+}
+
+.bbg-embed-screen .LOSS_SELECTION_PAGE,
+.bbg-embed-screen .PROFILE_SCREEN,
+.bbg-embed-screen .CRESTA_AGGREGATES_PAGE{
+  width: 100%;
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+  box-sizing: border-box;
+}
+
+@media (max-width: 700px){
+  .bbg-modal.bbg-modal--fullscreen{
+    border-radius: 14px !important;
+  }
+}

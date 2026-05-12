@@ -1,0 +1,11 @@
+node_modules/
+client/node_modules/
+server/node_modules/
+server/uploads/
+uploads/
+coverage/
+.env
+*.log
+.DS_Store
+client/.npmrc
+client/dist/

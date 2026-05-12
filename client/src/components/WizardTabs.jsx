@@ -1,0 +1,81 @@
+// src/components/WizardTabs.jsx — Sidebar tabs for wizard navigation
+import { useNavigate } from 'react-router-dom';
+import { useAppState } from '../context/AppContext';
+import { PROP_TAB_GROUPS, NP_TAB_GROUPS, FAC_TAB_GROUPS, STEP_LABELS, ROUTE_PATHS } from '../config/wizard';
+import { isNpCatFlowDisabled, isNpRiskFlowDisabled } from '../utils/npTreatyType';
+
+export default function WizardTabs({ activeKey }) {
+  const navigate = useNavigate();
+  const { state } = useAppState();
+  const mode = activeKey?.startsWith('FAC_') ? 'FAC' : activeKey?.startsWith('NP_') ? 'NP' : 'PROP';
+  const groups = mode === 'FAC' ? FAC_TAB_GROUPS : mode === 'NP' ? NP_TAB_GROUPS : PROP_TAB_GROUPS;
+  const triEnabled = state.propTreatyDetail?.triangulationsAvailable !== false;
+  const npCatDisabled  = mode === 'NP' && isNpCatFlowDisabled(state);   // RISK XL → hide CAT tabs
+  const npRiskDisabled = mode === 'NP' && isNpRiskFlowDisabled(state);  // CAT XL  → hide risk/large-loss tabs
+
+  function shouldShow(key) {
+    if (mode === 'PROP') {
+      if (!triEnabled && (key.includes('TRIANGLES') || key.includes('DEV_FACTORS') || key === 'PROP_PROJECTED_SUMMARY')) return false;
+      if (triEnabled && key === 'PROP_NO_TRIANGULATION') return false;
+    }
+    if (mode === 'NP') {
+      // Quote-mode tab visibility — keep this list aligned with
+      // NP_QUOTE_WIZARD_ORDER in config/wizard.js. Anything dropped from
+      // the quote workflow has to also be hidden from the left sidebar,
+      // otherwise users see tabs that aren't part of the flow.
+      if (state.quoteMode) {
+        const QUOTE_HIDDEN = new Set([
+          'NP_EXPIRING_STRUCTURE',
+          'NP_STRUCTURE',
+          'NP_EXCESS_DEV_FACTORS',
+          'NP_CLAIMS_PROFILE',
+          'NP_EVENT_LOSS_TABLES',
+          'NP_FINAL_PRICING',
+        ]);
+        if (QUOTE_HIDDEN.has(key)) return false;
+      } else {
+        // Contract mode hides quote-only screens.
+        if (key === 'NP_EXPIRING_STRUCTURE') return false;
+        if (key === 'NP_FINAL_QUOTE') return false;
+      }
+      // RISK XL: hide all CAT-related tabs + CRESTA + Event Loss Tables
+      if (npCatDisabled && (
+        key.startsWith('NP_CAT_LOSS_') ||
+        key === 'NP_CRESTA_AGGREGATES' ||
+        key === 'NP_EVENT_LOSS_TABLES'
+      )) return false;
+      // CAT XL: hide all risk/large-loss tabs
+      if (npRiskDisabled && key.startsWith('NP_LARGE_LOSS_')) return false;
+    }
+    return true;
+  }
+
+  return (
+    <nav className="wizard-tabs" aria-label="Wizard steps">
+      {groups.map((g) => {
+        const visibleKeys = g.keys.filter(shouldShow);
+        if (visibleKeys.length === 0) return null;
+        const groupId = `wiz-group-${g.label.replace(/\s+/g, '-').toLowerCase()}`;
+        return (
+          <div key={g.label} className="wizard-tab-group" role="group" aria-labelledby={groupId}>
+            <div className="wizard-tab-group-label" id={groupId}>{g.label}</div>
+            {visibleKeys.map((key) => {
+              const isActive = key === activeKey;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={`wizard-tab ${isActive ? 'wizard-tab--active' : ''}`}
+                  aria-current={isActive ? 'step' : undefined}
+                  onClick={() => navigate(ROUTE_PATHS[key])}
+                >
+                  {STEP_LABELS[key] || key}
+                </button>
+              );
+            })}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}

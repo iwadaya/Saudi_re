@@ -1,0 +1,266 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Themes — selected via <html data-theme="...">.
+   Each theme overrides a handful of CSS custom properties from tokens.css.
+   Screens with hardcoded colors (Bloomberg panels etc.) won't reskin, but
+   the shell, login, topbar, wizard sidebar, cards, inputs and glass
+   surfaces all change.
+═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Midnight (default) — executive dark + mint/blue accents ─────────────── */
+html[data-theme="midnight"]{
+  --bg0:#08111f;
+  --bg1:#111b2d;
+  --bg-plane:#070d18;
+  --body-spot-1: rgba(31,224,141,.16);
+  --body-spot-2: rgba(56,189,248,.10);
+  --bg-wash-1: rgba(31,224,141,.12);
+  --bg-wash-2: rgba(56,189,248,.10);
+  --bg-depth-line: rgba(148,163,184,.075);
+  --surface: rgba(18,31,55,.84);
+  --surface-2: rgba(18,31,55,.56);
+  --surface-solid: #111c30;
+  --surface-elevated: rgba(19,32,56,.94);
+  --surface-muted: rgba(7,13,24,.60);
+  --surface-hover: rgba(255,255,255,.055);
+  --panel-bg: linear-gradient(180deg, rgba(19,32,56,.92), rgba(8,15,28,.78));
+  --panel-bg-strong: linear-gradient(180deg, rgba(21,36,62,.97), rgba(8,15,28,.92));
+  --topbar-bg: linear-gradient(180deg, rgba(18,31,55,.94), rgba(8,15,28,.82));
+  --sidebar-bg: linear-gradient(180deg, rgba(7,13,24,.78), rgba(7,13,24,.55));
+  --control-bg: rgba(8,16,30,.66);
+  --control-hover: rgba(255,255,255,.065);
+  --table-head-bg: rgba(8,16,30,.74);
+  --table-row-bg: rgba(9,17,31,.50);
+  --table-row-alt: rgba(255,255,255,.026);
+  --table-row-hover: rgba(31,224,141,.07);
+  --glass-grad-top: rgba(19,32,56,.90);
+  --glass-grad-bot: rgba(10,18,32,.70);
+  --text:#f1f5f9;
+  --text-strong: rgba(241,245,249,1);
+  --muted:#c8daf0;
+  --muted-2: rgba(184,204,223,.8);
+  --text-subtle: rgba(226,232,240,.62);
+  --accent:#1fe08d;
+  --accent2:#12c97a;
+  --accent-contrast:#07140f;
+  --accent-blue:#38bdf8;
+  --accent-amber:#fbbf24;
+  --accent-rose:#fb7185;
+  --accent-rgb: 31, 224, 141;
+  --accent2-rgb: 18, 201, 122;
+  --accent-blue-rgb: 56, 189, 248;
+  --accent-amber-rgb: 251, 191, 36;
+  --accent-rose-rgb: 251, 113, 133;
+  --stroke: rgba(90,120,180,.45);
+  --stroke-soft: rgba(148,163,184,.22);
+  --hairline: rgba(255,255,255,.075);
+  --hairline-strong: rgba(255,255,255,.14);
+  --focus: rgba(31,224,141,.28);
+}
+
+/* ── Ocean — precise teal + steel blue ─────────────────────────────────── */
+html[data-theme="ocean"]{
+  --bg0:#051722;
+  --bg1:#0a2737;
+  --bg-plane:#041019;
+  --body-spot-1: rgba(34,211,238,.17);
+  --body-spot-2: rgba(94,234,212,.10);
+  --bg-wash-1: rgba(34,211,238,.13);
+  --bg-wash-2: rgba(94,234,212,.09);
+  --bg-depth-line: rgba(125,211,252,.08);
+  --surface: rgba(9,37,54,.85);
+  --surface-2: rgba(9,37,54,.56);
+  --surface-solid: #0d2b3d;
+  --surface-elevated: rgba(10,40,58,.94);
+  --surface-muted: rgba(4,16,25,.62);
+  --surface-hover: rgba(255,255,255,.06);
+  --panel-bg: linear-gradient(180deg, rgba(10,40,58,.93), rgba(4,18,28,.80));
+  --panel-bg-strong: linear-gradient(180deg, rgba(13,48,70,.97), rgba(4,18,28,.92));
+  --topbar-bg: linear-gradient(180deg, rgba(9,37,54,.95), rgba(4,18,28,.84));
+  --sidebar-bg: linear-gradient(180deg, rgba(4,16,25,.80), rgba(4,16,25,.58));
+  --control-bg: rgba(5,23,35,.68);
+  --control-hover: rgba(255,255,255,.065);
+  --table-head-bg: rgba(5,23,35,.75);
+  --table-row-bg: rgba(5,23,35,.50);
+  --table-row-alt: rgba(255,255,255,.028);
+  --table-row-hover: rgba(34,211,238,.075);
+  --glass-grad-top: rgba(10,40,58,.91);
+  --glass-grad-bot: rgba(5,23,35,.68);
+  --text:#e0f2fe;
+  --text-strong: #f0f9ff;
+  --muted:#a7d7ef;
+  --muted-2: rgba(167,215,239,.8);
+  --text-subtle: rgba(224,242,254,.62);
+  --accent:#22d3ee;
+  --accent2:#06b6d4;
+  --accent-contrast:#031316;
+  --accent-blue:#60a5fa;
+  --accent-amber:#fbbf24;
+  --accent-rose:#fb7185;
+  --accent-rgb: 34, 211, 238;
+  --accent2-rgb: 6, 182, 212;
+  --accent-blue-rgb: 96, 165, 250;
+  --accent-amber-rgb: 251, 191, 36;
+  --accent-rose-rgb: 251, 113, 133;
+  --stroke: rgba(56,189,248,.38);
+  --stroke-soft: rgba(125,211,252,.22);
+  --hairline: rgba(186,230,253,.075);
+  --hairline-strong: rgba(186,230,253,.15);
+  --focus: rgba(34,211,238,.32);
+}
+
+/* ── Graphite — neutral charcoal + violet/mint accents ─────────────────── */
+html[data-theme="graphite"]{
+  --bg0:#0a0b10;
+  --bg1:#161820;
+  --bg-plane:#08090d;
+  --body-spot-1: rgba(167,139,250,.15);
+  --body-spot-2: rgba(45,212,191,.08);
+  --bg-wash-1: rgba(167,139,250,.12);
+  --bg-wash-2: rgba(45,212,191,.08);
+  --bg-depth-line: rgba(196,181,253,.07);
+  --surface: rgba(27,29,38,.84);
+  --surface-2: rgba(27,29,38,.56);
+  --surface-solid: #1b1d26;
+  --surface-elevated: rgba(28,31,41,.94);
+  --surface-muted: rgba(10,11,16,.62);
+  --surface-hover: rgba(255,255,255,.055);
+  --panel-bg: linear-gradient(180deg, rgba(28,31,41,.93), rgba(11,12,18,.80));
+  --panel-bg-strong: linear-gradient(180deg, rgba(34,36,48,.97), rgba(11,12,18,.92));
+  --topbar-bg: linear-gradient(180deg, rgba(27,29,38,.95), rgba(10,11,16,.84));
+  --sidebar-bg: linear-gradient(180deg, rgba(10,11,16,.80), rgba(10,11,16,.58));
+  --control-bg: rgba(14,15,21,.70);
+  --control-hover: rgba(255,255,255,.06);
+  --table-head-bg: rgba(14,15,21,.76);
+  --table-row-bg: rgba(14,15,21,.52);
+  --table-row-alt: rgba(255,255,255,.027);
+  --table-row-hover: rgba(167,139,250,.075);
+  --glass-grad-top: rgba(28,31,41,.91);
+  --glass-grad-bot: rgba(14,15,21,.70);
+  --text:#ede9fe;
+  --text-strong: #f5f3ff;
+  --muted:#c4b5fd;
+  --muted-2: rgba(196,181,253,.75);
+  --text-subtle: rgba(237,233,254,.60);
+  --accent:#a78bfa;
+  --accent2:#8b5cf6;
+  --accent-contrast:#120d20;
+  --accent-blue:#60a5fa;
+  --accent-amber:#fbbf24;
+  --accent-rose:#fb7185;
+  --accent-rgb: 167, 139, 250;
+  --accent2-rgb: 139, 92, 246;
+  --accent-blue-rgb: 96, 165, 250;
+  --accent-amber-rgb: 251, 191, 36;
+  --accent-rose-rgb: 251, 113, 133;
+  --stroke: rgba(167,139,250,.35);
+  --stroke-soft: rgba(167,139,250,.18);
+  --hairline: rgba(237,233,254,.075);
+  --hairline-strong: rgba(237,233,254,.14);
+  --focus: rgba(167,139,250,.3);
+}
+
+/* ── Sunset — aubergine dusk + amber/blue accents ──────────────────────── */
+html[data-theme="sunset"]{
+  --bg0:#170d16;
+  --bg1:#241725;
+  --bg-plane:#100910;
+  --body-spot-1: rgba(251,191,36,.15);
+  --body-spot-2: rgba(96,165,250,.08);
+  --bg-wash-1: rgba(251,191,36,.12);
+  --bg-wash-2: rgba(96,165,250,.08);
+  --bg-depth-line: rgba(253,186,116,.07);
+  --surface: rgba(45,29,43,.84);
+  --surface-2: rgba(45,29,43,.56);
+  --surface-solid: #2a1b29;
+  --surface-elevated: rgba(49,32,47,.94);
+  --surface-muted: rgba(16,9,16,.62);
+  --surface-hover: rgba(255,255,255,.055);
+  --panel-bg: linear-gradient(180deg, rgba(49,32,47,.93), rgba(18,10,18,.80));
+  --panel-bg-strong: linear-gradient(180deg, rgba(57,36,53,.97), rgba(18,10,18,.92));
+  --topbar-bg: linear-gradient(180deg, rgba(45,29,43,.95), rgba(18,10,18,.84));
+  --sidebar-bg: linear-gradient(180deg, rgba(16,9,16,.80), rgba(16,9,16,.58));
+  --control-bg: rgba(23,13,22,.70);
+  --control-hover: rgba(255,255,255,.06);
+  --table-head-bg: rgba(23,13,22,.76);
+  --table-row-bg: rgba(23,13,22,.52);
+  --table-row-alt: rgba(255,255,255,.027);
+  --table-row-hover: rgba(251,191,36,.075);
+  --glass-grad-top: rgba(49,32,47,.91);
+  --glass-grad-bot: rgba(23,13,22,.70);
+  --text:#fff7ed;
+  --text-strong: #fffbeb;
+  --muted:#fed7aa;
+  --muted-2: rgba(254,215,170,.75);
+  --text-subtle: rgba(255,247,237,.60);
+  --accent:#fbbf24;
+  --accent2:#f97316;
+  --accent-contrast:#1e1304;
+  --accent-blue:#60a5fa;
+  --accent-amber:#fbbf24;
+  --accent-rose:#fb7185;
+  --accent-rgb: 251, 191, 36;
+  --accent2-rgb: 249, 115, 22;
+  --accent-blue-rgb: 96, 165, 250;
+  --accent-amber-rgb: 251, 191, 36;
+  --accent-rose-rgb: 251, 113, 133;
+  --stroke: rgba(251,191,36,.34);
+  --stroke-soft: rgba(251,191,36,.18);
+  --hairline: rgba(255,247,237,.075);
+  --hairline-strong: rgba(255,247,237,.14);
+  --focus: rgba(251,191,36,.30);
+}
+
+/* ── Daylight — clear light + emerald/blue accents ─────────────────────── */
+html[data-theme="daylight"]{
+  --bg0:#f8fafc;
+  --bg1:#e6edf5;
+  --bg-plane:#f1f5f9;
+  --body-spot-1: rgba(5,150,105,.11);
+  --body-spot-2: rgba(37,99,235,.07);
+  --bg-wash-1: rgba(5,150,105,.08);
+  --bg-wash-2: rgba(37,99,235,.06);
+  --bg-depth-line: rgba(15,23,42,.07);
+  --surface: rgba(255,255,255,.88);
+  --surface-2: rgba(255,255,255,.68);
+  --surface-solid: #ffffff;
+  --surface-elevated: rgba(255,255,255,.96);
+  --surface-muted: rgba(241,245,249,.72);
+  --surface-hover: rgba(15,23,42,.045);
+  --panel-bg: linear-gradient(180deg, rgba(255,255,255,.96), rgba(241,245,249,.82));
+  --panel-bg-strong: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.94));
+  --topbar-bg: linear-gradient(180deg, rgba(255,255,255,.94), rgba(241,245,249,.84));
+  --sidebar-bg: linear-gradient(180deg, rgba(255,255,255,.80), rgba(241,245,249,.66));
+  --control-bg: rgba(255,255,255,.74);
+  --control-hover: rgba(15,23,42,.045);
+  --table-head-bg: rgba(241,245,249,.86);
+  --table-row-bg: rgba(255,255,255,.56);
+  --table-row-alt: rgba(15,23,42,.024);
+  --table-row-hover: rgba(5,150,105,.07);
+  --glass-grad-top: rgba(255,255,255,.96);
+  --glass-grad-bot: rgba(248,250,252,.82);
+  --text:#0f172a;
+  --text-strong:#020617;
+  --muted:#475569;
+  --muted-2: rgba(71,85,105,.85);
+  --text-subtle: rgba(51,65,85,.68);
+  --accent:#059669;
+  --accent2:#047857;
+  --accent-contrast:#f8fafc;
+  --accent-blue:#2563eb;
+  --accent-amber:#b45309;
+  --accent-rose:#e11d48;
+  --accent-rgb: 5, 150, 105;
+  --accent2-rgb: 4, 120, 87;
+  --accent-blue-rgb: 37, 99, 235;
+  --accent-amber-rgb: 180, 83, 9;
+  --accent-rose-rgb: 225, 29, 72;
+  --stroke: rgba(148,163,184,.45);
+  --stroke-soft: rgba(148,163,184,.22);
+  --hairline: rgba(15,23,42,.08);
+  --hairline-strong: rgba(15,23,42,.14);
+  --focus: rgba(5,150,105,.28);
+  --shadow2: 0 10px 30px rgba(15,23,42,.08);
+  --shadow-soft: 0 12px 28px rgba(15,23,42,.06);
+  --shadow-high: 0 24px 70px rgba(15,23,42,.12);
+  --shadow-control: 0 10px 24px rgba(15,23,42,.08), inset 0 1px 0 rgba(255,255,255,.78);
+}
