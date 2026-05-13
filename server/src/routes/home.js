@@ -1,58 +1,15 @@
-// server/src/routes/home.js — Home summary aligned to actual schema
+// server/src/routes/home.js — Home summary aligned to actual schema.
+// Canonical column names are enforced by migrations 000_core_schema and
+// 038_fix_schema_column_gaps:
+//   class_of_business (class_of_business_id, class_of_business, code)
+//   brokers           (broker_id, broker_name)
+//   contract_class_of_business / quote_class_of_business (class_of_business_id)
+// Reference them directly — if a deployment ever lacks them, fail loud
+// rather than silently dropping COB tags or broker names.
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { asyncHandler } from "../helpers.js";
 const router = Router();
-
-/*
-  Detect class_of_business column names once on first call.
-  Uses information_schema — the only approach that never throws.
-*/
-let _cobCols = null;
-let _brokerInfo = null;
-
-async function cobCols() {
-  if (_cobCols) return _cobCols;
-  try {
-    const { rows } = await pool.query(
-      `SELECT column_name FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'class_of_business'
-       ORDER BY ordinal_position`
-    );
-    const colNames = rows.map(r => r.column_name);
-    const pk = colNames.includes('class_id') ? 'class_id'
-             : colNames.includes('class_of_business_id') ? 'class_of_business_id'
-             : colNames[0] || 'class_of_business_id';
-    const name = colNames.includes('class_name') ? 'class_name'
-               : colNames.includes('class_of_business') ? 'class_of_business'
-               : colNames.includes('name') ? 'name'
-               : 'class_name';
-    _cobCols = { pk, name };
-  } catch {
-    _cobCols = { pk: 'class_of_business_id', name: 'class_of_business' };
-  }
-  return _cobCols;
-}
-
-async function brokerInfo() {
-  if (_brokerInfo) return _brokerInfo;
-  try {
-    const { rows } = await pool.query(
-      `SELECT column_name FROM information_schema.columns
-       WHERE table_schema='public' AND table_name='brokers' LIMIT 1`
-    );
-    if (rows.length) { _brokerInfo = { join: 'LEFT JOIN public.brokers bk ON bk.broker_id=c.broker_id', col: ',bk.broker_name AS broker' }; return _brokerInfo; }
-  } catch {}
-  try {
-    const { rows } = await pool.query(
-      `SELECT column_name FROM information_schema.columns
-       WHERE table_schema='public' AND table_name='broker' LIMIT 1`
-    );
-    if (rows.length) { _brokerInfo = { join: 'LEFT JOIN public.broker bk ON bk.broker_id=c.broker_id', col: ',bk.broker_name AS broker' }; return _brokerInfo; }
-  } catch {}
-  _brokerInfo = { join: '', col: '' };
-  return _brokerInfo;
-}
 
 // UUID v4-ish format check. We don't need RFC strictness — any non-UUID
 // shape is rejected so it can never reach a SQL bind.
@@ -104,31 +61,26 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
     }
   }
 
-  const cols = await cobCols();
-  const bk = await brokerInfo();
-
   // Pre-aggregate COB per contract in one query — avoids N correlated subqueries
   const cobAgg = async () => {
-    try {
-      const { rows } = await pool.query(
-        `SELECT ccb.contract_id, string_agg(cob.${cols.name}, ', ' ORDER BY cob.${cols.name}) AS cob
+    const { rows } = await pool.query(
+      `SELECT ccb.contract_id,
+              string_agg(cob.class_of_business, ', ' ORDER BY cob.class_of_business) AS cob
          FROM public.contract_class_of_business ccb
-         JOIN public.class_of_business cob ON cob.${cols.pk} = ccb.class_of_business_id
-         GROUP BY ccb.contract_id`
-      );
-      return Object.fromEntries(rows.map(r => [r.contract_id, r.cob]));
-    } catch { return {}; }
+         JOIN public.class_of_business cob ON cob.class_of_business_id = ccb.class_of_business_id
+        GROUP BY ccb.contract_id`
+    );
+    return Object.fromEntries(rows.map(r => [r.contract_id, r.cob]));
   };
   const cobAggQuote = async () => {
-    try {
-      const { rows } = await pool.query(
-        `SELECT qcb.quote_id, string_agg(cob.${cols.name}, ', ' ORDER BY cob.${cols.name}) AS cob
+    const { rows } = await pool.query(
+      `SELECT qcb.quote_id,
+              string_agg(cob.class_of_business, ', ' ORDER BY cob.class_of_business) AS cob
          FROM public.quote_class_of_business qcb
-         JOIN public.class_of_business cob ON cob.${cols.pk} = qcb.class_of_business_id
-         GROUP BY qcb.quote_id`
-      );
-      return Object.fromEntries(rows.map(r => [r.quote_id, r.cob]));
-    } catch { return {}; }
+         JOIN public.class_of_business cob ON cob.class_of_business_id = qcb.class_of_business_id
+        GROUP BY qcb.quote_id`
+    );
+    return Object.fromEntries(rows.map(r => [r.quote_id, r.cob]));
   };
 
   // Bind the user-filter as $1 in every contract query so the value
@@ -144,16 +96,15 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
     cnt.country_name AS country, cnt.country_code, tt.treaty_type AS treaty_type,
     tt.category AS treaty_category, c.uw_year, c.renewal_date, c.updated_at,
     c.contract_description, c.parent_contract_id,
-    EXISTS(SELECT 1 FROM public.contract_np_details nd WHERE nd.contract_id=c.contract_id) AS has_np_details
-    ${bk.col}`;
+    EXISTS(SELECT 1 FROM public.contract_np_details nd WHERE nd.contract_id=c.contract_id) AS has_np_details,
+    bk.broker_name AS broker`;
   const contractJoins = `
     FROM public.contract c
     LEFT JOIN public.companies ced ON ced.company_id=c.cedant_id
     LEFT JOIN public.country cnt ON cnt.country_id=c.country_id
     LEFT JOIN public.treaty_type tt ON tt.treaty_type_id=c.treaty_type_id
-    ${bk.join}`;
+    LEFT JOIN public.brokers bk ON bk.broker_id=c.broker_id`;
 
-  const bkQ = bk.join.replace(/=c\./g, '=q.').replace(/c\.broker_id/g, 'q.broker_id');
   const qParams = [];
   let qWhere = `WHERE q.status NOT IN ('BOUND','SUPERSEDED')`;
   if (filterUserId) {
@@ -224,13 +175,13 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
       SELECT q.quote_id AS id, q.status, ced.company_name AS name,
         cnt.country_name AS country, tt.treaty_type AS treaty_type,
         tt.treaty_type AS treaty_type_name, tt.category AS treaty_category,
-        q.uw_year, q.updated_at, q.parent_contract_id
-        ${bk.col}
+        q.uw_year, q.updated_at, q.parent_contract_id,
+        bk.broker_name AS broker
       FROM public.quote q
       LEFT JOIN public.companies ced ON ced.company_id=q.cedant_id
       LEFT JOIN public.country cnt ON cnt.country_id=q.country_id
       LEFT JOIN public.treaty_type tt ON tt.treaty_type_id=q.treaty_type_id
-      ${bkQ}
+      LEFT JOIN public.brokers bk ON bk.broker_id=q.broker_id
       ${qWhere}
       ORDER BY q.updated_at DESC LIMIT 50`, qParams
     ).catch(() => ({ rows: [] })),
@@ -278,8 +229,6 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
 // PROP: one row per contract.
 // NP:   one row per layer (layer_number, attachment, limit, earned_premium, rol, rate).
 router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
-  const cols = await cobCols();
-
   // Prop contracts — one row each
   const { rows: prop } = await pool.query(`
     SELECT
@@ -314,9 +263,9 @@ router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
       -- 100% limit: total programme capacity
       COALESCE(pd.total_capacity, 0)                AS limit_100,
       -- COB
-      (SELECT string_agg(cob.${cols.name}, ', ' ORDER BY cob.${cols.name})
+      (SELECT string_agg(cob.class_of_business, ', ' ORDER BY cob.class_of_business)
        FROM public.contract_class_of_business ccb
-       JOIN public.class_of_business cob ON cob.${cols.pk}=ccb.class_of_business_id
+       JOIN public.class_of_business cob ON cob.class_of_business_id=ccb.class_of_business_id
        WHERE ccb.contract_id=c.contract_id)         AS cob
     FROM public.contract c
     LEFT JOIN public.companies ced            ON ced.company_id=c.cedant_id
@@ -356,9 +305,9 @@ router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
         0
       )                                             AS written_line_pct,
       COALESCE(c.signed_line_pct, 0)                AS signed_line_pct,
-      (SELECT string_agg(cob.${cols.name}, ', ' ORDER BY cob.${cols.name})
+      (SELECT string_agg(cob.class_of_business, ', ' ORDER BY cob.class_of_business)
        FROM public.contract_class_of_business ccb
-       JOIN public.class_of_business cob ON cob.${cols.pk}=ccb.class_of_business_id
+       JOIN public.class_of_business cob ON cob.class_of_business_id=ccb.class_of_business_id
        WHERE ccb.contract_id=c.contract_id)         AS cob
     FROM public.contract c
     LEFT JOIN public.companies ced            ON ced.company_id=c.cedant_id
