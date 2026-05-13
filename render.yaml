@@ -4,7 +4,6 @@ services:
     runtime: node
     region: frankfurt
     plan: starter
-    nodeVersion: 20.18.0
     buildCommand: npm install && npm install --prefix client && npm install --prefix server && npm run build --prefix client
     startCommand: node server/src/index.js
     healthCheckPath: /api/health
