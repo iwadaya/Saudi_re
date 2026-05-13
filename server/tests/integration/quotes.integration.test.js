@@ -210,4 +210,41 @@ describe.skipIf(shouldSkipDb)('integration: /api/quotes end-to-end', () => {
     const history = await harness.fetchApp('GET', `/api/quotes/${created.quote_id}/negotiation-history`).then((r) => r.json());
     expect(history.events.some((event) => event.event_type === 'QUOTE_FINAL_PRICING_SAVED')).toBe(true);
   });
+
+  it('round-trips NP quote historical performance rows', async () => {
+    const created = await harness.fetchApp('POST', '/api/quotes', {
+      body: {
+        uw_year: 2026,
+        status: 'DRAFT',
+        contract_description: 'np quote historical performance',
+      },
+    }).then((r) => r.json());
+    createdQuoteIds.push(created.quote_id);
+
+    const saveRes = await harness.fetchApp('PUT', `/api/quotes/${created.quote_id}/np/historical-performance`, {
+      body: {
+        rows: [
+          {
+            uw_year: 2024,
+            premiums: 1000000,
+            claims: 420000,
+            egnpi: 1250000,
+            result: 580000,
+            loss_ratio: 42,
+            expense_ratio: 10,
+            combined_ratio: 52,
+          },
+        ],
+      },
+    });
+    expect(saveRes.status).toBe(200);
+
+    const loadRes = await harness.fetchApp('GET', `/api/quotes/${created.quote_id}/np/historical-performance`);
+    expect(loadRes.status).toBe(200);
+    const rows = await loadRes.json();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].uw_year).toBe(2024);
+    expect(Number(rows[0].premiums)).toBe(1000000);
+    expect(Number(rows[0].combined_ratio)).toBe(52);
+  });
 });

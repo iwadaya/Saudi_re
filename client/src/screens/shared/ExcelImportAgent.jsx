@@ -17,12 +17,13 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { readWorkbook } from '../../utils/excel';
 import { api } from '../../api';
 import { useAppState } from '../../context/AppContext';
 import { formatWithCommas } from '../../utils/format';
 import { useGlobalToast } from '../../hooks/useToast';
+import useContractId from '../../hooks/useContractId';
 
 // ── tiny helpers ──────────────────────────────────────────────────────────────
 const fmt  = v => (v != null && v !== '') ? formatWithCommas(Math.round(Number(v))) : '–';
@@ -466,7 +467,7 @@ function countRows(sheet) {
 export default function ExcelImportAgent() {
   const { state: appState } = useAppState();
   const showToast = useGlobalToast();
-  const contractId = appState?.activeContractId || appState?.npTreatyDetail?.contract_id || appState?.propTreatyDetail?.contract_id || '';
+  const contractId = useContractId();
 
   const [sheets, setSheets]           = useState([]);        // parsed sheets
   const [selected, setSelected]       = useState({});        // sheetName → bool
@@ -478,6 +479,11 @@ export default function ExcelImportAgent() {
   const [fileName, setFileName]       = useState('');
   const [detectedType, setDetectedType] = useState('');      // 'prop' | 'np' | 'mixed'
   const fileRef = useRef();
+  const contractInputTouched = useRef(false);
+
+  useEffect(() => {
+    if (!contractInputTouched.current) setContractInput(contractId || '');
+  }, [contractId]);
 
   const processFile = useCallback((file) => {
     if (!file) return;
@@ -535,7 +541,7 @@ export default function ExcelImportAgent() {
     const out = [];
     for (const sheet of selectedSheets) {
       try {
-        await pushSheet(contractInput.trim(), sheet);
+        await pushSheet(contractInput.trim(), sheet, appState.quoteMode ? { quote: true } : undefined);
         out.push({ name: sheet.label, ok: true });
       } catch (err) {
         out.push({ name: sheet.label, ok: false, error: err?.message || 'Failed' });
@@ -543,7 +549,7 @@ export default function ExcelImportAgent() {
       setResults([...out]);
     }
     setImporting(false);
-  }, [contractInput, selectedSheets, showToast]);
+  }, [appState.quoteMode, contractInput, selectedSheets, showToast]);
 
   const hasFile  = sheets.length > 0;
   const allDone  = results.length > 0 && results.length === selectedSheets.length;
@@ -828,12 +834,15 @@ export default function ExcelImportAgent() {
 
             {/* Contract ID */}
             <div className="ia-contract-row" style={{ marginTop: 20 }}>
-              <div className="ia-input-label">Contract ID</div>
+              <div className="ia-input-label">{appState.quoteMode ? 'Quote ID' : 'Contract ID'}</div>
               <input
                 className="ia-input"
                 value={contractInput}
-                onChange={e => setContractInput(e.target.value)}
-                placeholder="e.g. 3f8a1c2d-… (UUID from URL or treaty list)"
+                onChange={e => {
+                  contractInputTouched.current = true;
+                  setContractInput(e.target.value);
+                }}
+                placeholder={appState.quoteMode ? 'Quote UUID from URL or quote list' : 'Contract UUID from URL or treaty list'}
               />
             </div>
 

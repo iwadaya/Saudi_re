@@ -774,29 +774,29 @@ function makeLossLdfRoutes(lossType) {
 makeLossLdfRoutes('large_loss');
 makeLossLdfRoutes('cat_loss');
 
-// ── GET /api/treaties/:id/np/historical-performance ──
-router.get("/treaties/:id/np/historical-performance", asyncHandler(async (req, res) => {
+async function historicalPerformanceGet(req, res) {
+  const ctx = entityContext(req);
   const { rows } = await pool.query(
     `SELECT uw_year, premiums, claims, egnpi, result, loss_ratio, expense_ratio, combined_ratio
-     FROM public.contract_np_historical_performance
-     WHERE contract_id = $1 ORDER BY uw_year`,
+     FROM public.${ctx.npTable('historical_performance')}
+     WHERE ${ctx.idColumn} = $1 ORDER BY uw_year`,
     [req.params.id]
   );
   res.json(rows);
-}));
+}
 
-// ── PUT /api/treaties/:id/np/historical-performance ──
-router.put("/treaties/:id/np/historical-performance", validateBody(historicalPerfPutSchema), asyncHandler(async (req, res) => {
+async function historicalPerformancePut(req, res) {
+  const ctx = entityContext(req);
   const { id } = req.params;
   const inputRows = req.body.rows ?? [];
   const cl = await pool.connect();
   try {
     await cl.query("BEGIN");
-    await cl.query(`DELETE FROM public.contract_np_historical_performance WHERE contract_id = $1`, [id]);
+    await cl.query(`DELETE FROM public.${ctx.npTable('historical_performance')} WHERE ${ctx.idColumn} = $1`, [id]);
     for (const r of inputRows) {
       await cl.query(
-        `INSERT INTO public.contract_np_historical_performance
-           (contract_id, uw_year, premiums, claims, egnpi, result, loss_ratio, expense_ratio, combined_ratio)
+        `INSERT INTO public.${ctx.npTable('historical_performance')}
+           (${ctx.idColumn}, uw_year, premiums, claims, egnpi, result, loss_ratio, expense_ratio, combined_ratio)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [id, r.uw_year,
          numOrNull(r.premiums), numOrNull(r.claims), numOrNull(r.egnpi),
@@ -804,10 +804,21 @@ router.put("/treaties/:id/np/historical-performance", validateBody(historicalPer
          numOrNull(r.expense_ratio), numOrNull(r.combined_ratio)]
       );
     }
+    const updatedAt = await touchParentEntity(cl, {
+      parentTable: ctx.parentTable,
+      idColumn: ctx.idColumn,
+      id,
+    });
     await cl.query("COMMIT");
-    res.json({ ok: true });
+    res.json({ ok: true, updated_at: updatedAt });
   } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; }
   finally { cl.release(); }
-}));
+}
+
+// ── GET/PUT /api/{treaties|quotes}/:id/np/historical-performance ──
+router.get("/treaties/:id/np/historical-performance", asyncHandler(historicalPerformanceGet));
+router.get("/quotes/:id/np/historical-performance", asyncHandler(historicalPerformanceGet));
+router.put("/treaties/:id/np/historical-performance", validateBody(historicalPerfPutSchema), asyncHandler(historicalPerformancePut));
+router.put("/quotes/:id/np/historical-performance", validateBody(historicalPerfPutSchema), asyncHandler(historicalPerformancePut));
 
 export default router;

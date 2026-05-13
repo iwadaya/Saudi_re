@@ -67,6 +67,7 @@ const PATHS = {
   nonPropTreaty: (id) => `/api/treaties/${enc(id)}/non-prop`,
   nonPropTreatySave: (id) => `/api/treaties/${enc(id)}/non-prop/save`,
   npEgnpiYear: (id) => `/api/treaties/${enc(id)}/np/egnpi-year`,
+  npHistoricalPerformance: (id) => `/api/treaties/${enc(id)}/np/historical-performance`,
   npLargeLossLdfs: (id) => `/api/treaties/${enc(id)}/np/large-loss-ldfs`,
   npCatLossLdfs: (id) => `/api/treaties/${enc(id)}/np/cat-loss-ldfs`,
   triangle: (id, type) => `/api/treaties/${enc(id)}/triangles/${enc(type)}`,
@@ -123,6 +124,7 @@ const QUOTE_PATHS = {
   nonPropQuote: (id) => `/api/quotes/${enc(id)}/non-prop`,
   nonPropQuoteSave: (id) => `/api/quotes/${enc(id)}/non-prop/save`,
   npEgnpiYear: (id) => `/api/quotes/${enc(id)}/np/egnpi-year`,
+  npHistoricalPerformance: (id) => `/api/quotes/${enc(id)}/np/historical-performance`,
   npLargeLossLdfs: (id) => `/api/quotes/${enc(id)}/np/large-loss-ldfs`,
   npCatLossLdfs: (id) => `/api/quotes/${enc(id)}/np/cat-loss-ldfs`,
   triangle: (id, type) => `/api/quotes/${enc(id)}/triangles/${enc(type)}`,
@@ -411,8 +413,12 @@ export const api = {
     const requestOpts = withOptimisticLockHeader(opts);
     return request(isQuoteMode(opts) ? QUOTE_PATHS.npExpiring(id) : PATHS.npExpiring(id), { method: 'PUT', body: payload, ...requestOpts });
   },
-  getNpHistoricalPerformance(id) { return request(`/api/treaties/${enc(id)}/np/historical-performance`); },
-  saveNpHistoricalPerformance(id, rows) { return request(`/api/treaties/${enc(id)}/np/historical-performance`, { method: 'PUT', body: { rows } }); },
+  getNpHistoricalPerformance(id, opts) {
+    return request(isQuoteMode(opts) ? QUOTE_PATHS.npHistoricalPerformance(id) : PATHS.npHistoricalPerformance(id), opts);
+  },
+  saveNpHistoricalPerformance(id, rows, opts) {
+    return request(isQuoteMode(opts) ? QUOTE_PATHS.npHistoricalPerformance(id) : PATHS.npHistoricalPerformance(id), { method: 'PUT', body: { rows }, ...opts });
+  },
   getNpLargeLossLdfs(id, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.npLargeLossLdfs(id) : PATHS.npLargeLossLdfs(id), opts); },
   saveNpLargeLossLdfs(id, payload, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.npLargeLossLdfs(id) : PATHS.npLargeLossLdfs(id), { method: 'PUT', body: payload, ...opts }); },
   getNpCatLossLdfs(id, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.npCatLossLdfs(id) : PATHS.npCatLossLdfs(id), opts); },

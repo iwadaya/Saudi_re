@@ -47,8 +47,9 @@ export function entityContext(req) {
   // silently stopped working on Express 5 because the mutation lands on
   // a throwaway object. The path is the canonical source of truth anyway.
   const url = req.originalUrl || req.url || '';
+  const quoteFlag = req.query?.quote;
   const isQuote = /^\/(?:api\/)?quotes?\//.test(url)
-    || req.query?.quote === 'true' || req.query?.quote === true;
+    || quoteFlag === true || quoteFlag === 'true' || quoteFlag === '1';
   const parentTable = isQuote ? 'quote' : 'contract';
   const idColumn = isQuote ? 'quote_id' : 'contract_id';
   const prefix = isQuote ? 'quote_' : 'contract_';

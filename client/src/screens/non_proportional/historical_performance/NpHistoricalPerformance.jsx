@@ -19,6 +19,7 @@ const EDIT_FIELDS = ['premiums', 'claims', 'egnpi', 'expense_ratio'];
 export default function NpHistoricalPerformance() {
   const contractId = useContractId();
   const { state: appState } = useAppState();
+  const apiOpts = useMemo(() => (appState.quoteMode ? { quote: true } : undefined), [appState.quoteMode]);
 
   const npDetail = appState.npTreatyDetail || {};
   const startYear = parseInt(npDetail.experienceStartYear || npDetail.startYear || '2015', 10);
@@ -64,12 +65,16 @@ export default function NpHistoricalPerformance() {
       expense_ratio: toN(r.expense_ratio) || null,
       combined_ratio: r.combined_ratio || null,
     }));
-    return api.saveNpHistoricalPerformance(id, payload);
-  }, []);
+    return api.saveNpHistoricalPerformance(id, payload, apiOpts);
+  }, [apiOpts]);
+
+  const loadHistoricalPerformance = useCallback((id) => (
+    api.getNpHistoricalPerformance(id, apiOpts)
+  ), [apiOpts]);
 
   const { save, markDirty, loadedRef } = useScreenSave({
     entityId: contractId || '',
-    load: api.getNpHistoricalPerformance,
+    load: loadHistoricalPerformance,
     save: persist,
     currentState: () => computedRows,
     onLoaded: hydrate,

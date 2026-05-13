@@ -38,10 +38,11 @@ describe('entityContext', () => {
     expect(ctx.isQuote).toBe(false);
   });
 
-  it('does not flip on truthy strings like "1" or "yes"', () => {
-    // Explicit — only "true" or boolean true counts, matching existing
-    // route behaviour. Narrower acceptance = fewer surprises.
-    expect(entityContext(mkReq('1')).isQuote).toBe(false);
+  it('flips on the same string forms the client treats as quote mode', () => {
+    expect(entityContext(mkReq('1')).isQuote).toBe(true);
+  });
+
+  it('does not flip on unrelated truthy strings like "yes"', () => {
     expect(entityContext(mkReq('yes')).isQuote).toBe(false);
   });
 
