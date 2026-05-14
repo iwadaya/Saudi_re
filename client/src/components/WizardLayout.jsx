@@ -7,6 +7,7 @@ import ThemeSwitcher from './ThemeSwitcher';
 import useWizard from '../hooks/useWizard';
 import Toast from './Toast';
 import SaveStateIndicator from './SaveStateIndicator';
+import FacPendingRecsBanner from './FacPendingRecsBanner';
 import { useToast } from '../hooks/useToast';
 import { useAppState } from '../context/AppContext';
 import { clearRole } from '../utils/auth';
@@ -139,6 +140,10 @@ export default function WizardLayout({
           )}
           {!suppressSaveIndicator && (
             <SaveStateIndicator saveState={saveState} onRetry={retrySave} />
+          )}
+          {/* AI-driven pending recommendations banner — fac screens only. */}
+          {typeof routeKey === 'string' && routeKey.startsWith('FAC_') && (
+            <FacPendingRecsBanner routeKey={routeKey} />
           )}
           <div className="wizard-page-body">
             {typeof children === 'function' ? children({ showToast, wizard, saveState }) : children}
