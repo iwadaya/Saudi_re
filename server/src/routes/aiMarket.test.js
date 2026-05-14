@@ -119,12 +119,17 @@ const state = {
   insertedStaging: null,
   updatedRecStatus: null,
   updatedMarketRecStatus: null,
+  countryAxcoCode: null,   // set to e.g. 'SA' to exercise the Axco path
+  cobAxcoCode:     null,
 };
 
 function fakePoolQuery(sql, params = []) {
   // ── country / cob lookups ──
   if (/FROM public\.country WHERE country_id/.test(sql)) {
-    return Promise.resolve({ rows: [{ country_id: params[0], name: 'Kenya', code: 'KE' }] });
+    return Promise.resolve({ rows: [{
+      country_id: params[0], name: 'Kenya', code: 'KE',
+      axco_country_code: state.countryAxcoCode || null,
+    }] });
   }
   if (/information_schema\.columns/.test(sql)) {
     return Promise.resolve({
@@ -132,7 +137,10 @@ function fakePoolQuery(sql, params = []) {
     });
   }
   if (/FROM public\.class_of_business WHERE/.test(sql)) {
-    return Promise.resolve({ rows: [{ class_of_business_id: params[0], name: 'Fire' }] });
+    return Promise.resolve({ rows: [{
+      class_of_business_id: params[0], name: 'Fire',
+      axco_class_code: state.cobAxcoCode || null,
+    }] });
   }
 
   // ── report cache check (with TTL) ──
@@ -158,6 +166,7 @@ function fakePoolQuery(sql, params = []) {
       sources: JSON.parse(params[8]),
       model: params[9], raw_response: JSON.parse(params[10]),
       generated_by_user_id: params[11], generation_duration_ms: params[12],
+      axco_snapshot: params[13] ? JSON.parse(params[13]) : null,
       generated_at: new Date().toISOString(),
     };
     return Promise.resolve({ rows: [state.insertedReport] });
@@ -265,6 +274,14 @@ vi.mock('../services/audit.js', () => ({
   logAudit: logAuditMock,
 }));
 
+// Axco client is mocked so tests can deterministically choose whether
+// a snapshot is "available". The real lib makes a network call; we
+// just intercept fetchMarketSnapshot's return value.
+const axcoFetchMock = vi.fn(async () => null);
+vi.mock('../lib/axcoClient.js', () => ({
+  fetchMarketSnapshot: axcoFetchMock,
+}));
+
 const { default: aiMarketRouter } = await import('./aiMarket.js');
 const { attachRequestContext }    = await import('../middleware/requestContext.js');
 
@@ -355,11 +372,15 @@ function resetState() {
   state.insertedStaging = null;
   state.updatedRecStatus = null;
   state.updatedMarketRecStatus = null;
+  state.countryAxcoCode = null;
+  state.cobAxcoCode = null;
 }
 
 beforeEach(() => {
   resetState();
   logAuditMock.mockClear();
+  axcoFetchMock.mockClear();
+  axcoFetchMock.mockResolvedValue(null);
   fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
     ok: true,
     json: async () => openaiResponseWith(JSON.stringify(VALID_REPORT_OUTPUT)),
@@ -967,5 +988,87 @@ describe('POST /api/ai/market/log-view', () => {
       body: { report_id: REPORT_ID, contract_id: CONTRACT_ID },
     });
     expect(res.status).toBe(401);
+  });
+});
+
+// ── Axco enrichment ───────────────────────────────────────────────
+describe('Axco enrichment', () => {
+  const AXCO_SNAPSHOT = {
+    source: 'AXCO',
+    axco_country_code: 'SA',
+    axco_class_code:   'PROP',
+    regulator: { name: 'IA', recent_actions: ['Action 1'] },
+    top_carriers: [{ name: 'Carrier A', market_share_pct: 22, am_best_rating: 'A' }],
+    market_size_premium: { value: 783660000, currency: 'USD', year: 2024 },
+    market_growth_pct: 7.5,
+    benchmarks: { loss_ratio_pct: 62, commission_pct: 25, retention_pct: 30, roe_pct: 12, year: 2024 },
+    fetched_at: new Date().toISOString(),
+  };
+
+  it('does not call Axco when country/cob have no axco_*_code', async () => {
+    // state.countryAxcoCode + cobAxcoCode are null by default
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/generate-report',
+      body: { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR },
+    });
+    expect(res.status).toBe(201);
+    expect(axcoFetchMock).not.toHaveBeenCalled();
+    expect(state.insertedReport.axco_snapshot).toBeNull();
+    const generated = logAuditMock.mock.calls.map(c => c[1]).find(e => e.eventType === 'REPORT_GENERATED');
+    expect(generated.payload.axco_used).toBe(false);
+  });
+
+  it('persists axco_snapshot and audits axco_used:true when Axco returns data', async () => {
+    state.countryAxcoCode = 'SA';
+    state.cobAxcoCode = 'PROP';
+    axcoFetchMock.mockResolvedValue(AXCO_SNAPSHOT);
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/generate-report',
+      body: { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR },
+    });
+    expect(res.status).toBe(201);
+    expect(axcoFetchMock).toHaveBeenCalledWith({ countryCode: 'SA', cobCode: 'PROP' });
+    expect(state.insertedReport.axco_snapshot).toMatchObject({
+      source: 'AXCO',
+      axco_country_code: 'SA',
+      axco_class_code: 'PROP',
+    });
+    const generated = logAuditMock.mock.calls.map(c => c[1]).find(e => e.eventType === 'REPORT_GENERATED');
+    expect(generated.payload.axco_used).toBe(true);
+  });
+
+  it('injects AXCO data into the user prompt when present', async () => {
+    state.countryAxcoCode = 'SA';
+    state.cobAxcoCode = 'PROP';
+    axcoFetchMock.mockResolvedValue(AXCO_SNAPSHOT);
+    const app = buildApp();
+    await call(app, {
+      method: 'POST', path: '/api/ai/market/generate-report',
+      body: { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR },
+    });
+    // The route serialised the OpenAI request body via fetch; pull it
+    // back and assert the user prompt was enriched.
+    const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    const userMsg = sentBody.input.find(m => m.role === 'user');
+    const userText = userMsg.content[0].text;
+    expect(userText).toMatch(/AUTHORITATIVE AXCO DATA/);
+    expect(userText).toMatch(/783660000/);
+  });
+
+  it('Axco fetch failure is non-fatal — report still generates without snapshot', async () => {
+    state.countryAxcoCode = 'SA';
+    state.cobAxcoCode = 'PROP';
+    axcoFetchMock.mockRejectedValue(new Error('boom'));
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/generate-report',
+      body: { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR },
+    });
+    expect(res.status).toBe(201);
+    expect(state.insertedReport.axco_snapshot).toBeNull();
+    const generated = logAuditMock.mock.calls.map(c => c[1]).find(e => e.eventType === 'REPORT_GENERATED');
+    expect(generated.payload.axco_used).toBe(false);
   });
 });
