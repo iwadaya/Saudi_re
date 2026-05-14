@@ -245,17 +245,51 @@ export async function getAggDrilldown(contractId) {
 }
 
 export async function getMarketAverage(countryId, exclude) {
+  // Weighted average across all contracts in the country, weighted by 100% premium
+  // (quota_share_epi + surplus_epi for proportional; est_gnpi for non-proportional).
+  // Excludes contracts in QUOTED status; includes DRAFT, SIGNED, NTU, DECLINED, and others.
+  // Returns avg_value as a decimal (e.g. 0.0062 for 0.62%, 0.05 for 5%).
   const baseQuery = `
-    SELECT pc.component_name,
-           AVG(NULLIF(replace(replace(pc.actuarial_value, '%', ''), ',', ''), '')::numeric) AS avg_value,
-           COUNT(DISTINCT pc.contract_id) AS contract_count
-    FROM public.pricing_components pc
-    JOIN public.contract c ON c.contract_id = pc.contract_id
-    WHERE c.country_id = $1
-      AND pc.actuarial_value IS NOT NULL
-      AND pc.actuarial_value != ''
-      ${exclude ? 'AND pc.contract_id != $2' : ''}
-    GROUP BY pc.component_name`;
+    WITH parsed AS (
+      SELECT pc.contract_id,
+             pc.component_name,
+             NULLIF(replace(replace(pc.actuarial_value, '%', ''), ',', ''), '')::numeric / 100.0 AS value_decimal
+      FROM public.pricing_components pc
+      JOIN public.contract c ON c.contract_id = pc.contract_id
+      LEFT JOIN public.contract_prop_details pd ON pd.contract_id = c.contract_id
+      LEFT JOIN public.contract_np_details   nd ON nd.contract_id = c.contract_id
+      WHERE c.country_id = $1
+        AND COALESCE(c.status::text, '') <> 'QUOTED'
+        AND pc.actuarial_value IS NOT NULL
+        AND pc.actuarial_value <> ''
+        ${exclude ? 'AND pc.contract_id <> $2' : ''}
+    ),
+    weights AS (
+      SELECT c.contract_id,
+             GREATEST(0,
+               COALESCE(pd.quota_share_epi, 0)
+               + COALESCE(pd.surplus_epi, 0)
+               + COALESCE(nd.est_gnpi, 0)
+             ) AS total_premium
+      FROM public.contract c
+      LEFT JOIN public.contract_prop_details pd ON pd.contract_id = c.contract_id
+      LEFT JOIN public.contract_np_details   nd ON nd.contract_id = c.contract_id
+      WHERE c.country_id = $1
+        AND COALESCE(c.status::text, '') <> 'QUOTED'
+        ${exclude ? 'AND c.contract_id <> $2' : ''}
+    )
+    SELECT parsed.component_name,
+           CASE
+             WHEN SUM(CASE WHEN w.total_premium > 0 THEN w.total_premium ELSE 0 END) > 0
+               THEN SUM(parsed.value_decimal * w.total_premium)
+                    / SUM(CASE WHEN w.total_premium > 0 THEN w.total_premium ELSE 0 END)
+             ELSE AVG(parsed.value_decimal)
+           END AS avg_value,
+           COUNT(DISTINCT parsed.contract_id) AS contract_count
+    FROM parsed
+    JOIN weights w ON w.contract_id = parsed.contract_id
+    WHERE parsed.value_decimal IS NOT NULL
+    GROUP BY parsed.component_name`;
   const params = exclude ? [countryId, exclude] : [countryId];
   const { rows } = await pool.query(baseQuery, params);
   return rows;

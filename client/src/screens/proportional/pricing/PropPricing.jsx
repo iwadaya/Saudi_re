@@ -392,7 +392,7 @@ export default function PropPricing() {
             sc('Cat Loss Loading', 'exposure', catLoad);
           }
           sc('Commissions', 'exposure', commissionPct); sc('Brokerage', 'exposure', brokeragePct); sc('Taxes', 'exposure', taxesPct);
-          const mktSet = (row, data) => { if (data?.avg != null) { const val = data.avg > 1.5 ? data.avg / 100 : data.avg; sc(row, 'market', val); } };
+          const mktSet = (row, data) => { if (data?.avg != null) sc(row, 'market', Number(data.avg)); };
           mktSet('Attritional Loss Ratio', marketAvg['Attritional Loss Ratio']);
           mktSet('Large Loss Loading', marketAvg['Large Loss Loading']);
           mktSet('Cat Loss Loading', marketAvg['Cat Loss Loading']);
