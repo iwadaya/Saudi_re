@@ -221,6 +221,60 @@ router.get("/cedants/:cedantId/cedant-summary", asyncHandler(async (req, res) =>
   res.json(merged);
 }));
 
+// Per-layer NP rows for a cedant, used by the In-depth tab
+router.get("/cedants/:cedantId/np-layers", asyncHandler(async (req, res) => {
+  const { cedantId } = req.params;
+
+  // Introspect class_of_business name column (same pattern as cedant-summary)
+  const cobCols = await pool.query(
+    `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='class_of_business' ORDER BY ordinal_position`
+  );
+  const cobColNames = cobCols.rows.map(r => r.column_name);
+  const cobIdCol   = cobColNames.find(c => c === 'class_of_business_id') || cobColNames.find(c => c === 'class_id') || cobColNames[0];
+  const cobNameCol = cobColNames.find(c => c === 'class_of_business') || cobColNames.find(c => c === 'class_name') || cobColNames[1] || cobColNames[0];
+
+  const cobSubquery = `(
+    SELECT string_agg(cob.${cobNameCol}, ', ')
+    FROM public.contract_class_of_business ccb
+    JOIN public.class_of_business cob ON cob.${cobIdCol} = ccb.class_of_business_id
+    WHERE ccb.contract_id = c.contract_id
+  )`;
+
+  const layers = await tryQuery(`
+    SELECT
+      c.contract_id,
+      c.uw_year,
+      c.contract_description,
+      c.status,
+      tt.treaty_type                                                  AS treaty_type,
+      ${cobSubquery}                                                  AS cob,
+      l.layer_number,
+      NULL::text                                                      AS layer_name,
+      l.layer_limit,
+      l.attachment                                                    AS layer_deductible,
+      l.num_reinstatements                                            AS reinstatements,
+      l.rol,
+      l.uw_price,
+      l.earned_premium,
+      l.modelled_margin,
+      l.hist_margin,
+      CASE
+        WHEN l.modelled_margin IS NOT NULL
+          THEN l.earned_premium * l.modelled_margin
+        WHEN l.uw_price IS NOT NULL
+          THEN l.earned_premium * (1.0 - l.uw_price / 100.0)
+        ELSE NULL
+      END                                                             AS net_technical_result
+    FROM public.contract c
+    JOIN public.contract_np_layers l ON l.contract_id = c.contract_id
+    LEFT JOIN public.treaty_type tt ON c.treaty_type_id = tt.treaty_type_id
+    WHERE c.cedant_id = $1
+    ORDER BY c.uw_year DESC, l.layer_number ASC
+  `, [cedantId]);
+
+  res.json({ layers });
+}));
+
 
 // Brokers
 router.get("/brokers", asyncHandler(async (req, res) => {

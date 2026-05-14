@@ -51,6 +51,7 @@ const PATHS = {
   homeSummary: '/api/home/summary',
   cedants: '/api/cedants',
   cedantSummary: (cedantId, uwYear) => `/api/cedants/${enc(cedantId)}/cedant-summary${uwYear ? `?uw_year=${enc(uwYear)}` : ''}`,
+  cedantNpLayers: (cedantId) => `/api/cedants/${enc(cedantId)}/np-layers`,
   reinsurers: '/api/reinsurers',
   brokers: '/api/brokers',
   classOfBusiness: '/api/class-of-business',
@@ -258,6 +259,7 @@ export const api = {
     return request(`${PATHS.cedants}${qs ? '?' + qs : ''}`);
   },
   getCedantSummary(cedantId, uwYear, opts) { return request(PATHS.cedantSummary(cedantId, uwYear), opts); },
+  getCedantNpLayers(cedantId, opts) { return request(PATHS.cedantNpLayers(cedantId), opts); },
   listBrokers(opts) { return request(PATHS.brokers, opts); },
   listReinsurers(opts) { return request(PATHS.reinsurers, opts); },
   listTreatyTypes(opts) { return request(PATHS.treatyTypes, opts); },
