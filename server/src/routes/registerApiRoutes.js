@@ -10,6 +10,7 @@ import dashboardRouter from './dashboard.js';
 import quoteLifecycleRouter from './quoteLifecycle.js';
 import aiRouter from './ai.js';
 import facultativeRouter from './facultative.js';
+import facultativeReferenceRouter from './facultativeReference.js';
 import clientEventsRouter from './clientEvents.js';
 import workbenchRouter from './workbench.js';
 
@@ -26,6 +27,7 @@ const routers = [
   quoteLifecycleRouter,
   aiRouter,
   facultativeRouter,
+  facultativeReferenceRouter,
   clientEventsRouter,
   workbenchRouter,
 ];
