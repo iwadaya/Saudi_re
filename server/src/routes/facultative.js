@@ -1,8 +1,12 @@
 // server/src/routes/facultative.js
 // Facultative reinsurance module — CRUD for risks, locations, COPE,
 // loss history, dual pricing, documents, market rates, and home listing.
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { Router } from 'express';
+import multer from 'multer';
 import { pool } from '../db/pool.js';
+import { env } from '../config/env.js';
 import { asyncHandler, numOrNull, dateOrNull } from '../helpers.js';
 import { validateBody } from '../lib/validate.js';
 import {
@@ -12,6 +16,7 @@ import {
   facSubmitForApprovalSchema,
   facBindSchema,
 } from '../validation/facultative.js';
+import { applyRecommendation } from '../lib/facRecommendationApply.js';
 
 const router = Router();
 
@@ -538,6 +543,81 @@ router.delete('/fac/documents/:docId', asyncHandler(async (req, res) => {
   res.json({ deleted: true });
 }));
 
+// ── Multipart upload (the AI analyse flow reads the bytes back) ──
+//
+// The legacy JSON POST above only stores metadata. The AI runner
+// needs real bytes, so we add a separate route that accepts a
+// multipart 'file' field + document_kind. Storage strategy mirrors
+// the quotes upload: Cloudinary if configured, local upload-dir
+// otherwise. 20MB cap matches the client-side guard.
+const _facDocUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+});
+
+let _facCloudinary = null;
+async function _getFacCloudinary() {
+  if (!_facCloudinary && process.env.CLOUDINARY_URL) {
+    const mod = await import('cloudinary');
+    _facCloudinary = mod.v2;
+    _facCloudinary.config({ secure: true });
+  }
+  return _facCloudinary;
+}
+
+router.post(
+  '/fac/risks/:id/documents/upload',
+  _facDocUpload.single('file'),
+  asyncHandler(async (req, res) => {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: 'No file provided' });
+    const riskId = req.params.id;
+    const kind = req.body?.document_kind || 'OTHER';
+
+    // Default to a local path under env.uploadDir; swap for the
+    // Cloudinary URL if we managed to upload there.
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const relPath = `fac/${riskId}/${Date.now()}_${safeName}`;
+    let storageKey = relPath;
+    try {
+      const cld = await _getFacCloudinary();
+      if (cld) {
+        storageKey = await new Promise((resolve, reject) => cld.uploader.upload_stream(
+          {
+            folder: `fac/${riskId}`,
+            public_id: `${Date.now()}_${safeName}`,
+            resource_type: 'raw',
+            type: 'upload',
+            access_mode: 'public',
+          },
+          (err, result) => (err ? reject(err) : resolve(result.secure_url)),
+        ).end(file.buffer));
+      } else {
+        const absDir = path.resolve(env.uploadDir, `fac/${riskId}`);
+        await fs.mkdir(absDir, { recursive: true });
+        const absPath = path.resolve(env.uploadDir, relPath);
+        await fs.writeFile(absPath, file.buffer);
+      }
+    } catch (e) {
+      return res.status(502).json({ error: `Upload storage failed: ${e?.message || e}` });
+    }
+
+    const { rows } = await pool.query(`
+      INSERT INTO public.fac_document
+        (fac_risk_id, doc_type, document_kind, file_name, file_path,
+         storage_key, file_size, byte_size, mime_type, uploaded_at, uploaded_by_user_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), $10)
+      RETURNING *
+    `, [
+      riskId, kind, kind,
+      file.originalname, storageKey, storageKey,
+      file.size, file.size, file.mimetype || null,
+      actorUserUuid(req),
+    ]);
+    res.status(201).json(rows[0]);
+  }),
+);
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FAC KPIs — summary stats for the home screen
@@ -799,6 +879,16 @@ function actorLabel(req) {
   return req.headers['x-user-id'] || 'unknown';
 }
 
+// req.user.userId comes from the x-user-id header which may carry a
+// free-form login slug in dev (e.g. "test-user") rather than a UUID.
+// Only forward it to columns typed as uuid when it parses as one;
+// otherwise persist NULL.
+const _UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+function actorUserUuid(req) {
+  const id = req.user?.userId || null;
+  return id && _UUID_RE.test(id) ? id : null;
+}
+
 router.get('/fac/risks/:id/audit-events', asyncHandler(async (req, res) => {
   // Surfaces the FAC_* rows the workflow endpoints write into
   // contract_audit_event. Used by the Summary screen to populate the
@@ -925,6 +1015,191 @@ router.post(
     res.json({ risk: updated[0], status: 'DECLINED' });
   }),
 );
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DOCUMENT AI — accept / reject recommendations
+//
+// Accept runs the apply-dispatch (see lib/facRecommendationApply.js)
+// inside a transaction that also marks the recommendation ACCEPTED,
+// supersedes other PENDING recs on the same field, and writes a
+// FAC_AI_ACCEPTED audit row. Reject is pure status / audit; no data
+// change.
+// ═══════════════════════════════════════════════════════════════════════════
+
+router.post('/fac/recommendation/:recId/accept', asyncHandler(async (req, res) => {
+  const { recId } = req.params;
+  const override = req.body?.override_value;
+
+  // Load the recommendation up-front so we know the risk / field even
+  // if the apply step needs a different table.
+  const { rows: recRows } = await pool.query(
+    `SELECT * FROM public.fac_ai_recommendation WHERE recommendation_id = $1`,
+    [recId],
+  );
+  if (!recRows.length) return res.status(404).json({ error: 'Recommendation not found' });
+  const rec = recRows[0];
+  if (rec.status !== 'PENDING') {
+    return res.status(409).json({
+      error: `Recommendation is ${rec.status}; only PENDING recommendations can be accepted.`,
+      code: 'INVALID_STATE',
+    });
+  }
+  const value = override !== undefined ? override : rec.suggested_value;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let applyResult;
+    try {
+      applyResult = await applyRecommendation({
+        client, riskId: rec.fac_risk_id, targetField: rec.target_field, value,
+      });
+    } catch (applyErr) {
+      await client.query('ROLLBACK');
+      // Surface a 400 for "unknown target_field" — anything else escalates.
+      if (applyErr.status === 400) {
+        return res.status(400).json({ error: applyErr.message, code: 'UNKNOWN_TARGET_FIELD' });
+      }
+      throw applyErr;
+    }
+
+    // Update the accepted rec.
+    await client.query(
+      `UPDATE public.fac_ai_recommendation
+          SET status='ACCEPTED',
+              acted_at = now(),
+              acted_by_user_id = $2
+        WHERE recommendation_id = $1`,
+      [recId, actorUserUuid(req)],
+    );
+    // Supersede every other PENDING rec targeting the same field on
+    // the same risk — accepting one effectively answers the others.
+    await client.query(
+      `UPDATE public.fac_ai_recommendation
+          SET status='SUPERSEDED', acted_at = now()
+        WHERE fac_risk_id = $1
+          AND target_field = $2
+          AND status = 'PENDING'
+          AND recommendation_id <> $3`,
+      [rec.fac_risk_id, rec.target_field, recId],
+    );
+    // Audit row — same contract_audit_event table used by the
+    // submit/decline/bind flow.
+    await client.query(
+      `INSERT INTO public.contract_audit_event (contract_id, event_type, actor, payload)
+       VALUES ($1, 'FAC_AI_ACCEPTED', $2, $3::jsonb)`,
+      [rec.fac_risk_id, actorLabel(req), JSON.stringify({
+        recommendation_id: recId,
+        target_field: rec.target_field,
+        before: applyResult?.beforeValue ?? null,
+        after:  applyResult?.afterValue ?? null,
+        no_op:  Boolean(applyResult?.noOp),
+      })],
+    );
+    await client.query('COMMIT');
+    res.json({
+      recommendation_id: recId,
+      status: 'ACCEPTED',
+      target_field: rec.target_field,
+      before: applyResult?.beforeValue ?? null,
+      after:  applyResult?.afterValue ?? null,
+    });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}));
+
+router.post('/fac/recommendation/:recId/reject', asyncHandler(async (req, res) => {
+  const { recId } = req.params;
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason : null;
+  const { rows } = await pool.query(
+    `UPDATE public.fac_ai_recommendation
+        SET status='REJECTED',
+            acted_at = now(),
+            acted_by_user_id = $2
+      WHERE recommendation_id = $1 AND status = 'PENDING'
+      RETURNING *`,
+    [recId, actorUserUuid(req)],
+  );
+  if (!rows.length) {
+    const { rows: existing } = await pool.query(
+      `SELECT status FROM public.fac_ai_recommendation WHERE recommendation_id = $1`, [recId],
+    );
+    if (!existing.length) return res.status(404).json({ error: 'Recommendation not found' });
+    return res.status(409).json({
+      error: `Recommendation is ${existing[0].status}; only PENDING recommendations can be rejected.`,
+      code: 'INVALID_STATE',
+    });
+  }
+  await pool.query(
+    `INSERT INTO public.contract_audit_event (contract_id, event_type, actor, payload)
+     VALUES ($1, 'FAC_AI_REJECTED', $2, $3::jsonb)`,
+    [rows[0].fac_risk_id, actorLabel(req), JSON.stringify({
+      recommendation_id: recId, target_field: rows[0].target_field, reason,
+    })],
+  );
+  res.json({ recommendation_id: recId, status: 'REJECTED' });
+}));
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DOCUMENT AI — list + detail
+//
+// Tenancy: this codebase doesn't model tenants — every authenticated
+// user has access to every fac_risk. The 403 path below covers the
+// shape needed once a tenant scope is added; for now it never fires.
+// ═══════════════════════════════════════════════════════════════════════════
+
+router.get('/fac/risks/:id/analyses', asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(`
+    SELECT a.analysis_id,
+           a.document_id,
+           d.file_name           AS document_filename,
+           a.analysis_kind       AS document_kind,
+           a.status,
+           a.summary,
+           a.created_at,
+           (SELECT count(*)::int FROM public.fac_ai_recommendation r
+              WHERE r.analysis_id = a.analysis_id)                       AS recommendation_count,
+           (SELECT count(*)::int FROM public.fac_ai_recommendation r
+              WHERE r.analysis_id = a.analysis_id AND r.status = 'PENDING') AS pending_count
+      FROM public.fac_document_analysis a
+      LEFT JOIN public.fac_document d ON d.document_id = a.document_id
+     WHERE a.fac_risk_id = $1
+     ORDER BY a.created_at DESC
+  `, [req.params.id]);
+  res.json({ analyses: rows });
+}));
+
+router.get('/fac/analysis/:analysisId', asyncHandler(async (req, res) => {
+  const { analysisId } = req.params;
+  const { rows: aRows } = await pool.query(`
+    SELECT a.*, d.file_name AS document_filename
+      FROM public.fac_document_analysis a
+      LEFT JOIN public.fac_document d ON d.document_id = a.document_id
+     WHERE a.analysis_id = $1
+  `, [analysisId]);
+  if (!aRows.length) return res.status(404).json({ error: 'Analysis not found' });
+
+  // Hook for future tenant isolation. The current auth model gives
+  // every authenticated user access — so this 403 path is dead code
+  // right now but keeps the response shape stable for later.
+  // if (!userCanAccessRisk(req.user, aRows[0].fac_risk_id))
+  //   return res.status(403).json({ error: 'Forbidden' });
+
+  const { rows: rRows } = await pool.query(`
+    SELECT *
+      FROM public.fac_ai_recommendation
+     WHERE analysis_id = $1
+     ORDER BY (status = 'PENDING') DESC, created_at DESC
+  `, [analysisId]);
+
+  res.json({ analysis: aRows[0], recommendations: rRows });
+}));
+
 
 router.post(
   '/fac/risks/:id/bind',

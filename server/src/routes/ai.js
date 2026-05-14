@@ -6,7 +6,9 @@ import { env } from '../config/env.js';
 import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { validateBody } from '../lib/validate.js';
-import { slipIngestSchema, aiCompleteSchema } from '../validation/ai.js';
+import { slipIngestSchema, aiCompleteSchema, facAnalyseDocumentSchema } from '../validation/ai.js';
+import { pool } from '../db/pool.js';
+import { runFacDocumentAnalysis } from '../lib/facDocAi.js';
 
 const router = Router();
 
@@ -197,5 +199,52 @@ router.post('/ai/complete', validateBody(aiCompleteSchema), asyncHandler(async (
   const data = await anthropicRes.json();
   res.json(data);
 }));
+
+// ── POST /api/ai/fac/analyse-document ─────────────────────────────
+// Triggers a fac_document_analysis run. The route is a thin shell:
+// the heavy lifting (reading bytes, prompting OpenAI, persisting the
+// analysis + recommendations) lives in lib/facDocAi.js so it can be
+// unit-tested without spinning up Express.
+router.post(
+  '/ai/fac/analyse-document',
+  validateBody(facAnalyseDocumentSchema),
+  asyncHandler(async (req, res) => {
+    const { fac_risk_id: facRiskId, document_id: documentId, document_kind: documentKind } = req.body;
+
+    // Access check + correlation: the document must belong to the
+    // risk in the payload. Anything else is a 403 (or 404 if either
+    // entity is gone).
+    const { rows: docRows } = await pool.query(
+      `SELECT * FROM public.fac_document WHERE document_id = $1`,
+      [documentId],
+    );
+    if (!docRows.length) return res.status(404).json({ error: 'Document not found' });
+    if (docRows[0].fac_risk_id !== facRiskId) {
+      return res.status(403).json({
+        error: 'Document does not belong to the supplied fac_risk_id.',
+        code: 'CROSS_RISK',
+      });
+    }
+
+    try {
+      const out = await runFacDocumentAnalysis({
+        facRiskId, document: docRows[0], documentKind,
+      });
+      res.json({
+        analysis_id:    out.analysisId,
+        summary:        out.summary,
+        extracted:      out.extracted,
+        recommendations: out.recommendations,
+      });
+    } catch (err) {
+      logger.error('[ai/fac/analyse-document] failed', { error: err?.message });
+      return res.status(502).json({
+        error:        err?.message || 'AI analysis failed',
+        analysis_id:  err.analysisId || null,
+      });
+    }
+  }),
+);
+
 
 export default router;
