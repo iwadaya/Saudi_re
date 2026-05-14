@@ -29,6 +29,9 @@ import { validateBody } from '../lib/validate.js';
 import { logAudit } from '../services/audit.js';
 import { checkPortfolioCompliance } from '../lib/portfolioCompliance.js';
 import { fetchMarketSnapshot as fetchAxcoSnapshot } from '../lib/axcoClient.js';
+import { fetchWorldBankSnapshot } from '../lib/worldBankClient.js';
+import { fetchImfSnapshot } from '../lib/imfClient.js';
+import { alpha2ToAlpha3 } from '../lib/iso3166.js';
 import {
   marketReportRequestSchema,
   marketReportSchema,
@@ -1173,5 +1176,116 @@ router.post(
     res.status(204).end();
   }),
 );
+
+// ──────────────────────────────────────────────────────────────────
+// GET /api/ai/market/macro/:country_id
+//
+// Open-source macro snapshot — population, GDP (current + per capita),
+// growth, inflation, unemployment, gov debt — pulled from the World
+// Bank Open Data API and the IMF Datamapper. Both are free, no key
+// required.
+//
+// Cached per (country, source) for 30 days in country_macro_snapshot.
+// World Bank covers historical to current year; IMF adds forecasts
+// 1-2 years ahead. The route returns whatever it has — if a source
+// fails, the other still surfaces.
+// ──────────────────────────────────────────────────────────────────
+const MACRO_CACHE_TTL_DAYS = 30;
+
+router.get(
+  '/ai/market/macro/:country_id',
+  asyncHandler(async (req, res) => {
+    const { country_id: countryId } = req.params;
+    const forceRefresh = String(req.query.force_refresh || '').toLowerCase() === 'true';
+
+    // Pull country to derive its ISO codes.
+    const { rows: countryRows } = await pool.query(
+      `SELECT country_id, country_name AS name, country_code AS code
+         FROM public.country WHERE country_id=$1`,
+      [countryId],
+    );
+    if (!countryRows.length) return res.status(404).json({ error: 'country not found' });
+    const country = countryRows[0];
+    if (!country.code) {
+      return res.status(422).json({ error: 'country_code missing on country row' });
+    }
+    const iso2 = country.code;
+    const iso3 = alpha2ToAlpha3(iso2);
+
+    // Cache check (per source) unless force_refresh.
+    let cachedWB = null, cachedIMF = null;
+    if (!forceRefresh) {
+      const { rows } = await pool.query(
+        `SELECT source, payload, fetched_at, expires_at
+           FROM public.country_macro_snapshot
+          WHERE country_id=$1 AND expires_at > now()
+          ORDER BY fetched_at DESC`,
+        [countryId],
+      );
+      for (const r of rows) {
+        if (r.source === 'WORLD_BANK' && !cachedWB) cachedWB = r;
+        if (r.source === 'IMF'        && !cachedIMF) cachedIMF = r;
+      }
+    }
+
+    // Refresh whichever source is cold. World Bank accepts iso2; IMF
+    // needs iso3 (skip when we don't have a mapping).
+    const fetched = { worldBank: null, imf: null };
+    const tasks = [];
+    if (cachedWB) {
+      fetched.worldBank = cachedWB.payload;
+    } else {
+      tasks.push((async () => {
+        try {
+          const snap = await fetchWorldBankSnapshot({ countryCode: iso2 });
+          if (snap) {
+            fetched.worldBank = snap;
+            await persistSnapshot({ countryId, source: 'WORLD_BANK', payload: snap });
+          }
+        } catch (e) {
+          logger.warn('[macro] World Bank fetch failed', { error: e?.message });
+        }
+      })());
+    }
+    if (cachedIMF) {
+      fetched.imf = cachedIMF.payload;
+    } else if (iso3) {
+      tasks.push((async () => {
+        try {
+          const snap = await fetchImfSnapshot({ countryCodeIso3: iso3 });
+          if (snap) {
+            fetched.imf = snap;
+            await persistSnapshot({ countryId, source: 'IMF', payload: snap });
+          }
+        } catch (e) {
+          logger.warn('[macro] IMF fetch failed', { error: e?.message });
+        }
+      })());
+    }
+    if (tasks.length) await Promise.all(tasks);
+
+    res.json({
+      country_id: countryId,
+      country_name: country.name,
+      iso2, iso3,
+      fetched_at: new Date().toISOString(),
+      cached: {
+        world_bank: !!cachedWB,
+        imf:        !!cachedIMF,
+      },
+      world_bank: fetched.worldBank,
+      imf:        fetched.imf,
+    });
+  }),
+);
+
+async function persistSnapshot({ countryId, source, payload }) {
+  const expiresAt = new Date(Date.now() + MACRO_CACHE_TTL_DAYS * 24 * 3600 * 1000).toISOString();
+  await pool.query(
+    `INSERT INTO public.country_macro_snapshot (country_id, source, payload, expires_at)
+     VALUES ($1, $2, $3::jsonb, $4)`,
+    [countryId, source, JSON.stringify(payload), expiresAt],
+  );
+}
 
 export default router;

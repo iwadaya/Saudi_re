@@ -69,6 +69,10 @@ const PATHS = {
   aiMarketRecStage: (recId) => `/api/ai/market/recommendation/${enc(recId)}/stage`,
   aiMarketRecReject: (recId) => `/api/ai/market/recommendation/${enc(recId)}/reject`,
   aiMarketLogView: '/api/ai/market/log-view',
+  aiMarketMacro: (countryId, opts) => {
+    const force = opts?.forceRefresh ? '?force_refresh=true' : '';
+    return `/api/ai/market/macro/${enc(countryId)}${force}`;
+  },
   reinsurers: '/api/reinsurers',
   brokers: '/api/brokers',
   classOfBusiness: '/api/class-of-business',
@@ -325,6 +329,11 @@ export const api = {
   },
   logMarketReportView(body, opts) {
     return request(PATHS.aiMarketLogView, { ...opts, method: 'POST', body });
+  },
+  // Open-source macro snapshot (World Bank + IMF). Cached server-side
+  // for 30 days; { forceRefresh: true } bypasses.
+  getCountryMacro(countryId, opts) {
+    return request(PATHS.aiMarketMacro(countryId, opts), opts);
   },
   listBrokers(opts) { return request(PATHS.brokers, opts); },
   listReinsurers(opts) { return request(PATHS.reinsurers, opts); },

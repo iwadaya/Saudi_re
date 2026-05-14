@@ -98,6 +98,7 @@ export default function MarketIntelligenceModal({
   const [report, setReport] = useState(null);
   const [benchmarks, setBenchmarks] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
+  const [macro, setMacro] = useState(null);
   const [progressIdx, setProgressIdx] = useState(0);
   const sourceRowRefs = useRef(new Map());
   const [highlightedSourceIdx, setHighlightedSourceIdx] = useState(null);
@@ -147,19 +148,23 @@ export default function MarketIntelligenceModal({
     if (epoch !== epochRef.current) return;
     setReport(rep);
 
-    // 2) Benchmarks + recommendations in parallel.
+    // 2) Benchmarks, macro snapshot, and recommendations in parallel.
+    //    Macro is best-effort — World Bank or IMF unavailability never
+    //    blocks the report; the section just hides on null.
     setState(STATES.LOADING_BENCHMARKS);
-    let bench;
-    try {
-      bench = await api.getTreatyBenchmarks(contractId, rep.report_id);
-    } catch (e) {
-      // Benchmarks 404 is unexpected here since we just have a report,
-      // but tolerate it so the user can still see the report.
-      if (!(e instanceof HttpError && e.status === 404)) return failHard(epoch, e);
-      bench = null;
-    }
+    const [benchResult, macroResult] = await Promise.allSettled([
+      api.getTreatyBenchmarks(contractId, rep.report_id),
+      countryId ? api.getCountryMacro(countryId, { forceRefresh }) : Promise.resolve(null),
+    ]);
     if (epoch !== epochRef.current) return;
-    setBenchmarks(bench);
+    if (benchResult.status === 'fulfilled') {
+      setBenchmarks(benchResult.value);
+    } else if (benchResult.reason instanceof HttpError && benchResult.reason.status === 404) {
+      setBenchmarks(null);
+    } else {
+      return failHard(epoch, benchResult.reason);
+    }
+    setMacro(macroResult.status === 'fulfilled' ? macroResult.value : null);
 
     setState(STATES.LOADING_RECS);
     let recs;
@@ -205,7 +210,7 @@ export default function MarketIntelligenceModal({
   useEffect(() => {
     if (!show) {
       epochRef.current++;       // invalidate any in-flight resolves
-      setReport(null); setBenchmarks(null); setRecommendations([]);
+      setReport(null); setBenchmarks(null); setRecommendations([]); setMacro(null);
       setState(STATES.LOADING_REPORT); setError(null);
       return;
     }
@@ -371,6 +376,7 @@ export default function MarketIntelligenceModal({
                 targetYear={targetYear}
               />
               <SectionLandscape report={report} currency={currency} jumpToSource={jumpToSource} />
+              <SectionMacro macro={macro} />
               <SectionBenchmarks
                 benchmarks={benchmarks}
                 treatyMetrics={treatyMetrics}
@@ -687,6 +693,123 @@ function CitableProse({ text, jumpToSource }) {
   }
   if (cursor < text.length) parts.push(<span key={`t-${key++}`}>{text.slice(cursor)}</span>);
   return <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6, color: 'rgba(255,255,255,0.85)' }}>{parts}</p>;
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Section 2.5 — Macro Snapshot (open-source: World Bank + IMF)
+// ──────────────────────────────────────────────────────────────────
+function SectionMacro({ macro }) {
+  // Hide the section entirely when neither source returned data —
+  // typically because the country has no usable ISO code mapping.
+  const wb  = macro?.world_bank || null;
+  const imf = macro?.imf || null;
+  if (!wb && !imf) return null;
+
+  // Pick the cleanest source for each canonical metric. World Bank
+  // is preferred for historicals; IMF fills in current-year and
+  // forecast values where WB lags.
+  const rows = MACRO_DISPLAY.map(d => {
+    const wbInd  = wb?.indicators?.[d.wbKey];
+    const imfInd = imf?.indicators?.[d.imfKey];
+    const latest =
+      wbInd?.latest_value != null  ? { value: wbInd.latest_value,  year: wbInd.latest_year,  source: 'World Bank' }
+      : imfInd?.latest_value != null ? { value: imfInd.latest_value, year: imfInd.latest_year, source: 'IMF', unit: d.imfUnit }
+      : null;
+    const forecast = imfInd?.forecast_value != null
+      ? { value: imfInd.forecast_value, year: imfInd.forecast_year, unit: d.imfUnit }
+      : null;
+    return { ...d, latest, forecast };
+  });
+
+  return (
+    <section>
+      <SectionHeader>Macro Snapshot</SectionHeader>
+      <Card>
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12,
+        }}>
+          {rows.map((r, i) => <MacroCell key={i} row={r} />)}
+        </div>
+        <div style={{
+          marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)',
+          fontSize: 11, color: 'rgba(255,255,255,0.40)',
+        }}>
+          Sources:
+          {wb  ? <> <a href="https://data.worldbank.org/" target="_blank" rel="noreferrer noopener" style={{ color: '#67e8f9' }}>World Bank Open Data</a></> : null}
+          {wb && imf ? ' · ' : ''}
+          {imf ? <a href="https://www.imf.org/external/datamapper/" target="_blank" rel="noreferrer noopener" style={{ color: '#67e8f9' }}>IMF Datamapper</a> : null}
+        </div>
+      </Card>
+    </section>
+  );
+}
+
+const MACRO_DISPLAY = [
+  { label: 'Population',           wbKey: 'population',         imfKey: 'population_imf',     unit: 'count',           imfUnit: 'PERSONS_MILLIONS' },
+  { label: 'Population growth',    wbKey: 'population_growth',  imfKey: null,                 unit: '%' },
+  { label: 'GDP (USD)',            wbKey: 'gdp_usd',            imfKey: 'gdp_usd_imf',        unit: 'USD',             imfUnit: 'USD_BILLIONS' },
+  { label: 'GDP per capita (USD)', wbKey: 'gdp_per_capita_usd', imfKey: 'gdp_per_capita_imf', unit: 'USD' },
+  { label: 'GDP growth',           wbKey: 'gdp_growth',         imfKey: null,                 unit: '%' },
+  { label: 'Inflation (CPI)',      wbKey: 'inflation_cpi',      imfKey: 'inflation_imf',      unit: '%' },
+  { label: 'Unemployment',         wbKey: 'unemployment',       imfKey: 'unemployment_imf',   unit: '%' },
+  { label: 'Gov debt (% of GDP)',  wbKey: 'gov_debt_pct_gdp',   imfKey: 'gov_debt_imf',       unit: '%' },
+];
+
+function MacroCell({ row }) {
+  const v = row.latest;
+  const f = row.forecast;
+  return (
+    <div style={{
+      background: 'rgba(255,255,255,0.025)',
+      border: '0.5px solid rgba(255,255,255,0.08)',
+      borderRadius: 8, padding: '10px 12px',
+    }}>
+      <div style={{
+        fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase',
+        color: 'rgba(255,255,255,0.50)', marginBottom: 6,
+      }}>{row.label}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+        <span style={{ fontSize: 18, fontWeight: 800, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
+          {formatMacroValue(v?.value, row.unit, v?.unit)}
+        </span>
+        {v?.year ? <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.40)' }}>({v.year})</span> : null}
+      </div>
+      {f && f.value != null && (
+        <div style={{ fontSize: 11, color: 'rgba(167,139,250,0.85)', marginTop: 4 }}>
+          IMF forecast {f.year}: <b>{formatMacroValue(f.value, row.unit, f.unit)}</b>
+        </div>
+      )}
+      {v?.source && (
+        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.30)', marginTop: 4 }}>
+          via {v.source}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Display-side formatters. Some indicators arrive in raw units (USD,
+// people) while IMF reports macro magnitudes already scaled to
+// billions or millions — convert into a single canonical display.
+function formatMacroValue(value, unit, sourceUnit) {
+  if (value == null || !Number.isFinite(Number(value))) return '—';
+  let v = Number(value);
+  if (sourceUnit === 'USD_BILLIONS' && unit === 'USD') v *= 1_000_000_000;
+  if (sourceUnit === 'PERSONS_MILLIONS' && unit === 'count') v *= 1_000_000;
+  if (unit === 'USD') {
+    if (Math.abs(v) >= 1e12) return `$${(v / 1e12).toFixed(2)} T`;
+    if (Math.abs(v) >= 1e9)  return `$${(v / 1e9).toFixed(2)} B`;
+    if (Math.abs(v) >= 1e6)  return `$${(v / 1e6).toFixed(2)} M`;
+    return `$${v.toLocaleString('en-US')}`;
+  }
+  if (unit === 'count') {
+    if (Math.abs(v) >= 1e9) return `${(v / 1e9).toFixed(2)} B`;
+    if (Math.abs(v) >= 1e6) return `${(v / 1e6).toFixed(2)} M`;
+    if (Math.abs(v) >= 1e3) return `${(v / 1e3).toFixed(1)} k`;
+    return `${v.toLocaleString('en-US')}`;
+  }
+  if (unit === '%') return `${v.toFixed(2)}%`;
+  return v.toLocaleString('en-US');
 }
 
 // ──────────────────────────────────────────────────────────────────
