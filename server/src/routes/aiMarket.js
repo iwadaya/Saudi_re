@@ -14,6 +14,11 @@
 // target_year). 8.3 computes live per-treaty deltas against it. 8.4
 // generates per-treaty recommendations referencing the report context
 // and feeds the staging table that 7.5.b already drives.
+//
+// AI provider: OpenAI Responses API (gpt-4o). /generate-report uses
+// the web_search_preview tool so the model can verify numbers against
+// live sources; /treaty-recommendations passes withWebSearch=false
+// since the report already supplies the context.
 
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
@@ -35,12 +40,10 @@ import {
 
 const router = Router();
 
-const ANTHROPIC_API        = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_MODEL      = 'claude-sonnet-4-20250514';
-const ANTHROPIC_VERSION    = '2023-06-01';
-const ANTHROPIC_MAX_TOKENS = 4000;
+const OPENAI_API           = 'https://api.openai.com/v1/responses';
+const OPENAI_MODEL         = 'gpt-4o';
+const OPENAI_MAX_TOKENS    = 4000;
 const TREATY_REC_MAX_TOKENS = 1500;
-const WEB_SEARCH_MAX_USES  = 8;
 const CACHE_TTL_DAYS       = 30;
 
 // Server-side defaults for portfolioCompliance when run on a single
@@ -169,33 +172,38 @@ async function findFreshReport({ countryId, cobId, targetYear, ttlDays }) {
   return rows[0] || null;
 }
 
-async function callAnthropic({ system, userPrompt, withWebSearch = true, maxTokens = ANTHROPIC_MAX_TOKENS }) {
-  if (!env.anthropicApiKey) {
-    const err = new Error('ANTHROPIC_API_KEY not configured on server');
+// OpenAI Responses API call. /generate-report uses the
+// web_search_preview tool so the model can verify numbers against live
+// sources; /treaty-recommendations passes withWebSearch=false because
+// the report already provides the context. Same shape as the slip-
+// ingest call in routes/ai.js (Bearer auth, /v1/responses, `input`
+// array of role+content messages).
+async function callOpenAI({ system, userPrompt, withWebSearch = true, maxTokens = OPENAI_MAX_TOKENS }) {
+  if (!env.openaiApiKey) {
+    const err = new Error('OPENAI_API_KEY not configured on server');
     err.statusCode = 503;
     throw err;
   }
   const payload = {
-    model: ANTHROPIC_MODEL,
-    max_tokens: maxTokens,
-    system,
-    messages: [{ role: 'user', content: userPrompt }],
-    ...(withWebSearch
-      ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: WEB_SEARCH_MAX_USES }] }
-      : {}),
+    model: OPENAI_MODEL,
+    max_output_tokens: maxTokens,
+    input: [
+      { role: 'system', content: [{ type: 'input_text', text: system }] },
+      { role: 'user',   content: [{ type: 'input_text', text: userPrompt }] },
+    ],
+    ...(withWebSearch ? { tools: [{ type: 'web_search_preview' }] } : {}),
   };
-  const resp = await fetch(ANTHROPIC_API, {
+  const resp = await fetch(OPENAI_API, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': env.anthropicApiKey,
-      'anthropic-version': ANTHROPIC_VERSION,
+      'Authorization': `Bearer ${env.openaiApiKey}`,
     },
     body: JSON.stringify(payload),
   });
   if (!resp.ok) {
     const errBody = await resp.json().catch(() => ({}));
-    const msg = errBody?.error?.message || `Anthropic API error ${resp.status}`;
+    const msg = errBody?.error?.message || `OpenAI API error ${resp.status}`;
     const err = new Error(msg);
     err.statusCode = 502;
     throw err;
@@ -203,24 +211,26 @@ async function callAnthropic({ system, userPrompt, withWebSearch = true, maxToke
   return await resp.json();
 }
 
-// The model loops web_search → result → reasoning. The final answer
-// lives in one or more `text` content blocks. Concatenate them, strip
-// any accidental ``` fences or leading/trailing prose, and return the
-// trimmed string. The system prompt asks for raw JSON but we tolerate
-// minor deviation.
-function extractJsonText(anthropicResponse) {
-  const blocks = anthropicResponse?.content || [];
-  let text = blocks
-    .filter(b => b && b.type === 'text' && typeof b.text === 'string')
-    .map(b => b.text)
-    .join('')
-    .trim();
+// Walks the OpenAI Responses output shape and returns the JSON body.
+// Prefer the convenience `output_text` aggregator when present;
+// otherwise concatenate every text block in `output[*].content[*]`.
+// Strips ``` fences and prose around the first `{ … }` since the
+// system prompt asks for raw JSON but we stay tolerant.
+function extractJsonText(openaiResponse) {
+  let text = openaiResponse?.output_text;
+  if (!text) {
+    const parts = [];
+    for (const item of openaiResponse?.output || []) {
+      for (const c of item?.content || []) {
+        if (typeof c?.text === 'string') parts.push(c.text);
+      }
+    }
+    text = parts.join('');
+  }
+  text = (text || '').trim();
   if (!text) return '';
-  // Strip ```json … ``` fences if the model wrapped the JSON anyway.
   const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fenceMatch) text = fenceMatch[1].trim();
-  // Trim any prose before the first `{` and after the last `}` so the
-  // JSON parser sees only the object.
   const first = text.indexOf('{');
   const last  = text.lastIndexOf('}');
   if (first > 0 || (last >= 0 && last < text.length - 1)) {
@@ -280,9 +290,9 @@ router.post(
     const t0 = Date.now();
     let raw;
     try {
-      raw = await callAnthropic({ system: SYSTEM_PROMPT, userPrompt });
+      raw = await callOpenAI({ system: SYSTEM_PROMPT, userPrompt });
     } catch (e) {
-      logger.error('[ai/market] Anthropic call failed', {
+      logger.error('[ai/market] OpenAI call failed', {
         error: e?.message, statusCode: e?.statusCode,
       });
       return res.status(e.statusCode || 502).json({ error: e?.message || 'AI call failed' });
@@ -330,7 +340,7 @@ router.post(
         JSON.stringify(data.trends),
         JSON.stringify(data.recommendations),
         JSON.stringify(data.sources),
-        ANTHROPIC_MODEL, JSON.stringify(raw), userId, durationMs,
+        OPENAI_MODEL, JSON.stringify(raw), userId, durationMs,
       ],
     );
 
@@ -351,7 +361,7 @@ router.post(
           country_id:          countryId,
           class_of_business_id: cobId,
           target_year:         targetYear,
-          model:               ANTHROPIC_MODEL,
+          model:               OPENAI_MODEL,
           duration_ms:         durationMs,
         },
       });
@@ -365,7 +375,7 @@ router.post(
           country_id:          countryId,
           class_of_business_id: cobId,
           target_year:         targetYear,
-          model:               ANTHROPIC_MODEL,
+          model:               OPENAI_MODEL,
           duration_ms:         durationMs,
         },
       });
@@ -736,14 +746,14 @@ router.post(
 
     let raw;
     try {
-      raw = await callAnthropic({
+      raw = await callOpenAI({
         system: TREATY_REC_SYSTEM_PROMPT,
         userPrompt: JSON.stringify(userPromptObj),
         withWebSearch: false,
         maxTokens: TREATY_REC_MAX_TOKENS,
       });
     } catch (e) {
-      logger.error('[ai/market] treaty-rec Anthropic call failed', { error: e?.message });
+      logger.error('[ai/market] treaty-rec OpenAI call failed', { error: e?.message });
       return res.status(e.statusCode || 502).json({ error: e?.message || 'AI call failed' });
     }
 
