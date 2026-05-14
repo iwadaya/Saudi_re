@@ -45,3 +45,58 @@ export const facAnalyseDocumentSchema = z.object({
   document_kind: z.enum(['PLACEMENT_SLIP', 'SURVEY_REPORT', 'CLAIMS_BORDEREAU',
                          'COPE_REPORT', 'WORDING', 'OTHER']),
 });
+
+// ── /ai/cedant/:cedantId/portfolio-recommendations (prompt 7.5.a) ──
+// Body fields define how aggressive the recommendation should be and
+// the underwriter's caps. Percentages are stored as fractions (0..1).
+export const portfolioRecommendationsRequestSchema = z.object({
+  target_year:               z.number().int().min(1900).max(2100),
+  risk_appetite:             z.enum(['CONSERVATIVE','BALANCED','OPPORTUNISTIC']),
+  max_line_size_pct:         z.number().min(0).max(1),
+  max_cob_concentration_pct: z.number().min(0).max(1),
+});
+
+// Shape the model is required to return. Used to validate the parsed
+// Claude response before persisting. Anything that fails this schema
+// produces a 502 with raw_response echoed for debugging.
+export const portfolioRecommendationsResponseSchema = z.object({
+  summary: z.string().max(2000),
+  portfolio_metrics: z.object({
+    current_expected_return:     z.number(),
+    recommended_expected_return: z.number(),
+    return_uplift_pct:           z.number(),
+    diversification_score:       z.number().min(0).max(1),
+  }),
+  recommendations: z.array(z.object({
+    contract_id:          z.string().uuid(),
+    current_line_pct:     z.number().min(0).max(1),
+    recommended_line_pct: z.number().min(0).max(1),
+    rationale:            z.string().max(500),
+    confidence:           z.number().min(0).max(1),
+    impact_on_return:     z.number(),
+  })),
+});
+
+export const rejectRecommendationSchema = z.object({
+  reason: z.string().max(2000).optional(),
+});
+
+// ── Staging endpoints (prompt 7.5.b) ───────────────────────────────
+export const stageLineChangeSchema = z.object({
+  contract_id:           z.string().uuid(),
+  proposed_line_pct:     z.number().min(0).max(1),
+  source:                z.enum(['AI_RECOMMENDATION','MANUAL_OVERRIDE']),
+  source_rec_id:         z.string().uuid().optional(),
+  warning_acknowledged:  z.boolean().optional(),
+}).refine(
+  v => v.source !== 'AI_RECOMMENDATION' || !!v.source_rec_id,
+  { message: 'source_rec_id is required when source=AI_RECOMMENDATION', path: ['source_rec_id'] },
+);
+
+export const discardStagingSchema = z.object({
+  reason: z.string().max(2000).optional(),
+});
+
+export const commitStagingSchema = z.object({
+  staging_ids: z.array(z.string().uuid()).optional(),
+});
