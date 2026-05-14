@@ -103,7 +103,14 @@ router.get("/cedants/:cedantId/cedant-summary", asyncHandler(async (req, res) =>
       d.retention_pct,
       d.cession_pct,
       d.brokerage_pct,
+      d.event_limit                                                  AS event_limit,
+      d.aal                                                          AS aal,
       ${margCols}
+      COALESCE(
+        po.technical_result,
+        (COALESCE(d.quota_share_epi,0) + COALESCE(d.surplus_epi,0))
+          * COALESCE(po.actuarial_margin, 0)
+      )::numeric                                                     AS net_technical_result,
       co.written_line_pct,
       COALESCE(c.signed_line_pct, co.written_line_pct)               AS effective_line_pct,
       ${lrSubquery('c')}                                             AS triangle_loss_ratio
@@ -158,6 +165,20 @@ router.get("/cedants/:cedantId/cedant-summary", asyncHandler(async (req, res) =>
       END                                                             AS actual_margin,
       NULL::numeric                                                   AS uw_margin,
       NULL::numeric                                                   AS technical_result,
+      NULL::numeric                                                   AS event_limit,
+      NULL::numeric                                                   AS aal,
+      COALESCE(
+        nl.total_earned_premium * (
+          CASE
+            WHEN nl.total_earned_premium > 0 AND nl.weighted_modelled IS NOT NULL
+              THEN nl.weighted_modelled / nl.total_earned_premium
+            WHEN nl.total_earned_premium > 0 AND nl.weighted_uw_price IS NOT NULL
+              THEN 1.0 - (nl.weighted_uw_price / nl.total_earned_premium / 100.0)
+            ELSE 0
+          END
+        ),
+        0
+      )::numeric                                                      AS net_technical_result,
       co.written_line_pct,
       COALESCE(c.signed_line_pct, co.written_line_pct)               AS effective_line_pct,
       ${lrSubquery('c')}                                             AS triangle_loss_ratio
