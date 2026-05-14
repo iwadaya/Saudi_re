@@ -1,38 +1,14 @@
-// server/src/routes/dashboard.js — Live data, all amounts converted to USD
+// server/src/routes/dashboard.js — Live data, all amounts converted to USD.
+// Canonical column names are enforced by migrations 000_core_schema and
+// 038_fix_schema_column_gaps:
+//   class_of_business (class_of_business_id, class_of_business, code)
+//   contract_class_of_business (class_of_business_id)
+// Reference them directly — if a deployment ever lacks them, fail loud
+// rather than silently dropping rows from dashboard aggregates.
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { asyncHandler } from "../helpers.js";
 const router = Router();
-
-// ── Schema introspection (cached) ────────────────────────────────────────
-// The class_of_business table's name-column has drifted across schema
-// versions: early dumps use `class_of_business` (literally reusing the
-// table name), later migrations introduced `class_name`, and some
-// environments carry `name`. We probe information_schema once per boot
-// and cache the answer so every dashboard query uses the right
-// identifier — otherwise every row returns a 500 with
-// `column cob.class_name does not exist`.
-let _cobCols = null;
-async function cobCols() {
-  if (_cobCols) return _cobCols;
-  try {
-    const { rows } = await pool.query(
-      `SELECT column_name FROM information_schema.columns
-       WHERE table_schema='public' AND table_name='class_of_business' ORDER BY ordinal_position`
-    );
-    const names = rows.map(r => r.column_name);
-    _cobCols = {
-      pk:   names.find(n => ['class_of_business_id', 'class_id'].includes(n)) || names[0],
-      // Order matters: prefer the self-named column that the core dump
-      // ships with, then the rename variants. Fall back to whatever
-      // non-id column exists rather than a hardcoded guess.
-      name: names.find(n => ['class_of_business', 'class_name', 'name'].includes(n))
-            || names.find(n => n !== 'class_of_business_id' && n !== 'class_id' && n !== 'code')
-            || 'class_of_business',
-    };
-  } catch { _cobCols = { pk: 'class_of_business_id', name: 'class_of_business' }; }
-  return _cobCols;
-}
 
 // ── Filters ───────────────────────────────────────────────────────────────
 router.get("/dashboard/filters", asyncHandler(async (_req, res) => {
@@ -62,7 +38,6 @@ router.get("/dashboard/filters", asyncHandler(async (_req, res) => {
 router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
   const { tab } = req.params;
   const { uwYear, region, treatyType, currency: reqCurrency } = req.query;
-  const cols = await cobCols();
 
   // Target display currency (default USD)
   const ALLOWED = ['USD','SAR','GBP'];
@@ -168,13 +143,13 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
         GROUP BY 1 ORDER BY 1`, params),
 
       pool.query(`SELECT
-        cob.${cols.name}                        AS lob,
+        cob.class_of_business                        AS lob,
         COUNT(DISTINCT c.contract_id)::int      AS contracts,
         COALESCE(SUM(${effPremUSD}),0)          AS premium,
         COALESCE(SUM(${effLimUSD}),0)           AS exposure
         ${baseJoins}
         JOIN public.contract_class_of_business ccb ON ccb.contract_id=c.contract_id
-        JOIN public.class_of_business cob ON cob.${cols.pk}=ccb.class_of_business_id
+        JOIN public.class_of_business cob ON cob.class_of_business_id=ccb.class_of_business_id
         ${where} GROUP BY 1 ORDER BY 3 DESC`, params),
 
       pool.query(`SELECT
@@ -187,23 +162,23 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
         GROUP BY 1,2 ORDER BY 1,2`, params),
 
       pool.query(`SELECT
-        cob.${cols.name}                        AS lob,
+        cob.class_of_business                        AS lob,
         COALESCE(tt.treaty_type,'Unknown')      AS treaty_type,
         COALESCE(SUM(${effPremUSD}),0)          AS premium,
         COALESCE(SUM(${effLimUSD}),0)           AS exposure,
         COUNT(DISTINCT c.contract_id)::int      AS contracts
         ${baseJoins}
         JOIN public.contract_class_of_business ccb ON ccb.contract_id=c.contract_id
-        JOIN public.class_of_business cob ON cob.${cols.pk}=ccb.class_of_business_id
+        JOIN public.class_of_business cob ON cob.class_of_business_id=ccb.class_of_business_id
         ${where} GROUP BY 1,2 ORDER BY 1,2`, params),
 
       pool.query(`SELECT
-        cob.${cols.name}                        AS lob,
+        cob.class_of_business                        AS lob,
         ${regionBucket}                         AS region,
         COALESCE(SUM(${effPremUSD}),0)          AS premium
         ${baseJoins}
         JOIN public.contract_class_of_business ccb ON ccb.contract_id=c.contract_id
-        JOIN public.class_of_business cob ON cob.${cols.pk}=ccb.class_of_business_id
+        JOIN public.class_of_business cob ON cob.class_of_business_id=ccb.class_of_business_id
         ${where} GROUP BY 1,2 ORDER BY 1,2`, params),
     ]);
 
@@ -276,13 +251,13 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
         COALESCE(SUM(${effPremUSD}),0) AS premium,
         COALESCE(SUM(${effLimUSD}),0)  AS exposure
         ${baseJoins} ${where} GROUP BY 1 ORDER BY 1`, params),
-      pool.query(`SELECT cob.${cols.name} AS lob,
+      pool.query(`SELECT cob.class_of_business AS lob,
         COUNT(DISTINCT c.contract_id)::int AS contracts,
         COALESCE(SUM(${effPremUSD}),0) AS premium,
         COALESCE(SUM(${effLimUSD}),0)  AS exposure
         ${baseJoins}
         JOIN public.contract_class_of_business ccb ON ccb.contract_id=c.contract_id
-        JOIN public.class_of_business cob ON cob.${cols.pk}=ccb.class_of_business_id
+        JOIN public.class_of_business cob ON cob.class_of_business_id=ccb.class_of_business_id
         ${where} GROUP BY 1 ORDER BY 3 DESC`, params),
     ]);
     return res.json({
