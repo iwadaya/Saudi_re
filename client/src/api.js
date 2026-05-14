@@ -525,6 +525,12 @@ export const api = {
   facDeleteDocument(docId, opts) { return request(`/api/fac/documents/${enc(docId)}`, { method: 'DELETE', ...opts }); },
   facGetLinkedTreaties(id, opts) { return request(`/api/fac/risks/${enc(id)}/linked-treaties`, opts); },
 
+  // ── Facultative underwriting factor selections (per risk) ────────────────
+  facGetUwFactors(id, opts) { return request(`/api/fac/risks/${enc(id)}/uw-factors`, opts); },
+  facSaveUwFactors(id, payload, opts) {
+    return request(`/api/fac/risks/${enc(id)}/uw-factors`, { method: 'POST', body: payload, ...opts });
+  },
+
   // ── Facultative reference data (cached via CACHEABLE_PATHS) ──────────────
   facGetOccupancies(opts)    { return request('/api/fac/reference/occupancies', opts); },
   facGetFactors(opts)        { return request('/api/fac/reference/factors', opts); },
