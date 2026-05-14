@@ -421,6 +421,38 @@ describe('POST /api/ai/market/generate-report', () => {
     expect(state.insertedReport).toBeNull();
   });
 
+  // Regression: gpt-4o sometimes starts source idx at 0. The Zod
+  // schema used to enforce min(1) and produced a 502; the relaxed
+  // rule accepts any non-negative integer.
+  it('accepts 0-indexed sources and persists the report', async () => {
+    const zeroIndexed = {
+      ...VALID_REPORT_OUTPUT,
+      market_landscape: {
+        ...VALID_REPORT_OUTPUT.market_landscape,
+        market_size_premium: { value: 500_000_000, currency: 'USD', year: 2024, source_idx: 0 },
+      },
+      trends: [{ title: 'Hardening', body: 'Rates up 5%.', severity: 'OPPORTUNITY', source_idx: 0 }],
+      recommendations: [
+        { title: 'Hold', body: 'Stay flat.', action_type: 'WATCH', confidence: 0.7, source_idx: 0 },
+      ],
+      sources: [
+        { idx: 0, url: 'https://example.com/zero', title: 'Zero-Indexed Source', snippet: 'snippet' },
+      ],
+    };
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: async () => openaiResponseWith(JSON.stringify(zeroIndexed)),
+    });
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/generate-report',
+      body: { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR },
+    });
+    expect(res.status).toBe(201);
+    expect(state.insertedReport).not.toBeNull();
+    expect(state.insertedReport.sources[0].idx).toBe(0);
+  });
+
   it('missing x-user-id → 401', async () => {
     const app = buildApp();
     const res = await call(app, {
