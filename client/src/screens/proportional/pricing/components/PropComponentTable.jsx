@@ -22,12 +22,18 @@ import { formatDate } from '../../../../utils/format.js';
     onSaveSnapshot    – fn(label)
     onDeleteSnapshot  – fn(snapId)
     onShowQuickSummary– fn
+    onShowMarketIntelligence – fn (called when 📊 Market Intelligence is clicked)
+    marketIntelligenceAvailable – bool (false when country/cob/year missing)
+    marketIntelligenceDisabledReason – string (tooltip when disabled)
 */
 export default function PropComponentTable({
   getC, setC, calcResult, calcMaxComm,
   snapshots, snapLabel, setSnapLabel, showSnapHistory, setShowSnapHistory,
   dirty, saveMsg, isReadOnly,
   onSave, onSaveSnapshot, onDeleteSnapshot, onShowQuickSummary, onShowInDepth,
+  onShowMarketIntelligence,
+  marketIntelligenceAvailable = false,
+  marketIntelligenceDisabledReason = 'Country and class of business required for market intelligence.',
 }) {
   const roCol = col => col==='actuarial'||col==='actual'||col==='market'||col==='downside';
 
@@ -36,6 +42,19 @@ export default function PropComponentTable({
       <div className="bbg-block-head">
         <div className="bbg-block-title">Component Pricing Comparison</div>
         <div className="bbg-block-right" style={{display:'flex',gap:8,alignItems:'center'}}>
+          <button
+            className="bbg-btn bbg-btn--outline"
+            disabled={!marketIntelligenceAvailable}
+            title={marketIntelligenceAvailable
+              ? 'Open the cached market intelligence report for this treaty'
+              : marketIntelligenceDisabledReason}
+            onClick={() => marketIntelligenceAvailable && onShowMarketIntelligence?.()}
+            style={{
+              borderColor: marketIntelligenceAvailable ? 'rgba(103,232,249,0.45)' : 'rgba(255,255,255,0.14)',
+              color: marketIntelligenceAvailable ? '#67e8f9' : 'rgba(255,255,255,0.30)',
+              cursor: marketIntelligenceAvailable ? 'pointer' : 'not-allowed',
+            }}
+          >📊 Market Intelligence</button>
           <button className="bbg-btn bbg-btn--outline" onClick={onShowQuickSummary}>📊 Quick Summary</button>
           <button className="bbg-btn bbg-btn--outline" onClick={onShowInDepth} style={{borderColor:'rgba(96,165,250,0.4)',color:'#60a5fa'}}>🔬 In-Depth Analysis</button>
           <button className="bbg-btn bbg-btn--outline" onClick={()=>setShowSnapHistory(!showSnapHistory)}>📋 History ({snapshots.length})</button>

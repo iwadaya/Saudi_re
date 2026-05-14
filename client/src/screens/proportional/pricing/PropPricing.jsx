@@ -28,6 +28,7 @@ import PropMovingAverageCharts from './components/PropMovingAverageCharts';
 import { ChecklistPanel } from './components/insight/ChecklistPanel';
 import { AggCobBreakdownModal } from './components/insight/AggCobBreakdownModal';
 import CedantSummaryTabs from '../../../components/cedant/CedantSummaryTabs';
+import MarketIntelligenceModal from '../../../components/market/MarketIntelligenceModal.jsx';
 import { CompareTermsPanel } from './components/insight/CompareTermsPanel';
 import { InternalMetricsPanel } from './components/insight/InternalMetricsPanel';
 import { TreatyMetricsPanel } from './components/insight/TreatyMetricsPanel';
@@ -86,6 +87,7 @@ export default function PropPricing() {
   const [showUSD, setShowUSD] = useState(false);
   const [worstLR, setWorstLR] = useState({ lr: null, year: '' });
   const [showQuickSummary, setShowQuickSummary] = useState(false);
+  const [showMarketIntelligence, setShowMarketIntelligence] = useState(false);
   const [showAggBreakdown, setShowAggBreakdown] = useState(false);
   const [showInDepth, setShowInDepth] = useState(false);
   const [showAggDrilldown, setShowAggDrilldown] = useState(false);
@@ -809,6 +811,12 @@ export default function PropPricing() {
             onSave={save} onSaveSnapshot={handleSaveSnapshot} onDeleteSnapshot={handleDeleteSnapshot}
             onShowQuickSummary={() => setShowQuickSummary(true)}
             onShowInDepth={() => setShowInDepth(true)}
+            onShowMarketIntelligence={() => setShowMarketIntelligence(true)}
+            marketIntelligenceAvailable={!!(
+              (hdr.country_id || td.countryId || td.country_id)
+              && (hdr.primary_class_of_business_id || td.primaryClassOfBusinessId)
+              && Number.isFinite(Number(uwYear))
+            )}
           />
 
           {/* ═══ QUICK SUMMARY MODAL ═══ */}
@@ -993,14 +1001,28 @@ export default function PropPricing() {
             onMarkSigned={doMarkSigned} onMarkNTU={doMarkNTU} onDecline={doDecline} onRecall={doRecall}
             eligibleApprovers={eligibleApprovers}
             isQuote={!!appState.quoteMode}
+          />
+
+          {/* ═══ MARKET INTELLIGENCE MODAL ═══
+              Trigger lives on the Component Pricing toolbar so the
+              underwriter can review market context without entering
+              the offer flow. */}
+          <MarketIntelligenceModal
+            show={showMarketIntelligence}
+            onClose={() => setShowMarketIntelligence(false)}
+            contractId={cid}
             countryId={hdr.country_id || td.countryId || td.country_id || null}
             classOfBusinessId={hdr.primary_class_of_business_id || td.primaryClassOfBusinessId || null}
             countryName={country}
             cobName={(cobLabel || '').split(',')[0]?.trim() || ''}
             targetYear={Number.isFinite(Number(uwYear)) ? Number(uwYear) : null}
-            commissionPct={brokeragePctVal || null}
-            retentionPct={cn(td.retentionPct) || cn(det2.retention_pct) || null}
-            lossRatioPct={null}
+            currency={safeCcy}
+            treatyMetrics={{
+              loss_ratio_pct: null,
+              commission_pct: brokeragePctVal || null,
+              retention_pct: cn(td.retentionPct) || cn(det2.retention_pct) || null,
+              margin_pct: typeof marginAct === 'number' ? marginAct * 100 : null,
+            }}
           />
 
           {/* ═══ INSIGHT MODAL ═══ */}

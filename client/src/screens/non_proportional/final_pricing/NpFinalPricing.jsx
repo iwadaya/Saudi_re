@@ -3027,9 +3027,39 @@ export default function NpFinalPricing() {
               {/* Combined Pricing + Programme Limits (standard only) */}
               {!isQuote && layers.length > 0 && (<>
               <section className="np-final-section">
-                <div className="np-final-section-head">
+                <div className="np-final-section-head" style={{ display:'flex', alignItems:'center', gap:8 }}>
                   <div className="np-final-section-title">Pricing</div>
                   <span className="np-badge">Combined</span>
+                  <div style={{ flex:1 }} />
+                  {/* Market intelligence trigger. Same call as the
+                      pricing screen header used to host inside the
+                      offer modal — now reachable without entering
+                      the offer flow. */}
+                  {(() => {
+                    const npCountryId = appState.npTreatyDetail?.countryId || null;
+                    const npCobIds = Array.isArray(appState.npTreatyDetail?.classOfBusinessIds)
+                      ? appState.npTreatyDetail.classOfBusinessIds : [];
+                    const npPrimaryCobId = npCobIds[0]
+                      || appState.npTreatyDetail?.primaryClassOfBusinessId || null;
+                    const npTargetYear = Number(npDetail?.startYear) || Number(npDetail?.uwYear) || null;
+                    const marketAvailable = !!(npCountryId && npPrimaryCobId && npTargetYear);
+                    return (
+                      <button
+                        type="button"
+                        className="bbg-btn bbg-btn--outline"
+                        disabled={!marketAvailable}
+                        title={marketAvailable
+                          ? 'Open the cached market intelligence report for this treaty'
+                          : 'Country and class of business required for market intelligence.'}
+                        onClick={() => marketAvailable && setMarketModalOpen(true)}
+                        style={{
+                          borderColor: marketAvailable ? 'rgba(103,232,249,0.45)' : 'rgba(255,255,255,0.14)',
+                          color: marketAvailable ? '#67e8f9' : 'rgba(255,255,255,0.30)',
+                          cursor: marketAvailable ? 'pointer' : 'not-allowed',
+                        }}
+                      >📊 Market Intelligence</button>
+                    );
+                  })()}
                 </div>
                 <div className="np-final-card np-final-card--flush">
                   <div className="np-final-table-wrap np-final-table-wrap--wide">
@@ -3529,16 +3559,8 @@ export default function NpFinalPricing() {
                           const bQB = Math.max(0,Math.min(1,balRatioB/60));
                           const aiLinePctB = Math.max(1,Math.min(20,Math.round((mQB*0.6+bQB*0.4)*20*10)/10||10));
                           const aiReasonB  = mActB>=0.15?`Strong margin (${(mActB*100).toFixed(1)}%) — full line supportable.`:mActB>=0.08?`Acceptable margin (${(mActB*100).toFixed(1)}%) — moderate line.`:techRB>0?`Thin margin (${(mActB*100).toFixed(1)}%) — conservative line advised.`:'Run pricing engine to generate suggestion.';
-                          const npCountryId = appState.npTreatyDetail?.countryId || null;
-                          const npCobIds = Array.isArray(appState.npTreatyDetail?.classOfBusinessIds)
-                            ? appState.npTreatyDetail.classOfBusinessIds
-                            : [];
-                          const npPrimaryCobId = npCobIds[0] || appState.npTreatyDetail?.primaryClassOfBusinessId || null;
-                          const npTargetYear = Number(npDetail?.startYear) || Number(npDetail?.uwYear) || null;
-                          const marketAvailable = !!(npCountryId && npPrimaryCobId && npTargetYear);
                           return (
-                            <div style={{ display:'flex', flexDirection:'column', gap:8, flexShrink:0 }}>
-                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, flexShrink:0 }}>
                               <div className="off-ai">
                                 <div className="off-ai-head">
                                   <div className="off-ai-label">✦ AI Suggested Line Size</div>
@@ -3574,27 +3596,6 @@ export default function NpFinalPricing() {
                                   <div className="off-hm-score-item">Classification <b style={{color:heatColor}}>{heatLabel}</b></div>
                                 </div>
                               </div>
-                            </div>
-                            {/* Market intelligence trigger — same off-ai-apply
-                                pill style with a cyan accent. Stays enabled in
-                                terminal states; disabled with tooltip when the
-                                contract is missing country / cob / year. */}
-                            <button
-                              type="button"
-                              className="off-ai-apply"
-                              disabled={!marketAvailable}
-                              title={marketAvailable
-                                ? 'Open the cached market intelligence report for this country / class'
-                                : 'Country and class of business required for market intelligence.'}
-                              style={{
-                                width:'100%', justifyContent:'center',
-                                borderColor: marketAvailable ? 'rgba(103,232,249,0.45)' : 'rgba(255,255,255,0.10)',
-                                color: marketAvailable ? '#67e8f9' : 'rgba(255,255,255,0.30)',
-                                background: marketAvailable ? 'rgba(103,232,249,0.06)' : 'rgba(255,255,255,0.02)',
-                                cursor: marketAvailable ? 'pointer' : 'not-allowed',
-                              }}
-                              onClick={() => marketAvailable && setMarketModalOpen(true)}
-                            >📊 Market Intelligence Report</button>
                             </div>
                           );
                         })()}
