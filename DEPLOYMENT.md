@@ -1,8 +1,8 @@
 # Universe — Deployment Handover
 
 **Audience:** IT team standing up the Universe reinsurance pricing tool on an Ubuntu server.
-**Source repo:** https://github.com/iwadaya/Darchville-Universe
-**Snapshot date:** 2 May 2026
+**Source repo:** https://github.com/Darchville-Analytics/modelling_tool
+**Snapshot date:** 14 May 2026
 **Maintainer contact:** Isheanesu Wadaya (Riyadh, UTC+3)
 
 ---
@@ -37,7 +37,7 @@ Target user base: ~30 underwriters in a single office. The app is internal only 
 
 The Express server serves both the API under `/api/*` and the built SPA from `client/dist`. There is no separate frontend host required.
 
-Migrations live in `server/src/db/migrations/` (74 files at time of writing) and run automatically on boot when `RUN_MIGRATIONS_ON_BOOT=true`. They are idempotent and safe to re-run.
+Migrations live in `server/src/db/migrations/` (73 files at time of writing) and run automatically on boot when `RUN_MIGRATIONS_ON_BOOT=true`. They are idempotent and safe to re-run.
 
 ## 3. Server requirements
 
@@ -66,9 +66,9 @@ Before starting deployment, the IT team should obtain or decide:
 - [ ] Which runtime to use: PM2 + Nginx, Docker Compose, or systemd (§6)
 - [ ] Public DNS name for the application (e.g. `universe.internal.company.com`)
 - [ ] TLS certificate strategy (Let's Encrypt via certbot, internal CA, or terminate at upstream proxy)
-- [ ] An `OPENAI_API_KEY` for AI slip ingestion (optional — feature degrades gracefully if absent)
+- [ ] AI keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`) — all optional. Slip ingestion falls back across providers; without any AI key, the slip-ingest feature is unavailable but the rest of the app runs normally.
 - [ ] A 64-byte random `SESSION_SECRET` (generate with `openssl rand -hex 32`)
-- [ ] Confirmation that the server can reach `https://api.openai.com` if the AI feature is required
+- [ ] Confirmation the server can reach the relevant AI provider endpoints (`api.openai.com`, `generativelanguage.googleapis.com`, `api.anthropic.com`) for any AI keys you intend to use
 - [ ] Backup strategy for Postgres (recommended: nightly `pg_dump` to off-host storage)
 
 ## 5. PostgreSQL setup
@@ -152,7 +152,7 @@ Clone and build:
 
 ```bash
 cd /opt
-sudo git clone https://github.com/iwadaya/Darchville-Universe.git universe
+sudo git clone https://github.com/Darchville-Analytics/modelling_tool.git universe
 sudo chown -R $USER:$USER /opt/universe
 cd /opt/universe
 npm run install:all
@@ -242,7 +242,7 @@ Clone and configure:
 
 ```bash
 cd /opt
-sudo git clone https://github.com/iwadaya/Darchville-Universe.git universe
+sudo git clone https://github.com/Darchville-Analytics/modelling_tool.git universe
 sudo chown -R $USER:$USER /opt/universe
 cd /opt/universe
 cp .env.example .env
@@ -284,7 +284,7 @@ Create a service user and clone:
 
 ```bash
 sudo useradd --system --create-home --shell /bin/false universe
-sudo -u universe git clone https://github.com/iwadaya/Darchville-Universe.git /home/universe/app
+sudo -u universe git clone https://github.com/Darchville-Analytics/modelling_tool.git /home/universe/app
 cd /home/universe/app
 sudo -u universe npm run install:all
 sudo -u universe npm run build
