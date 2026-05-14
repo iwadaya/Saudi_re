@@ -40,8 +40,8 @@
   font-family: inherit !important;
   font-size: var(--num-cell-fs) !important;
   font-weight: var(--num-cell-fw) !important;
-  font-variant-numeric: tabular-nums !important;
-  font-feature-settings: "tnum" !important;
+  font-variant-numeric: tabular-nums slashed-zero lining-nums !important;
+  font-feature-settings: "tnum", "zero", "lnum" !important;
   text-align: center !important;
   line-height: var(--num-cell-lh) !important;
   letter-spacing: 0 !important;
@@ -49,8 +49,8 @@
 
 input[type="number"],
 input.num-input{
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums slashed-zero lining-nums;
+  font-feature-settings: "tnum", "zero", "lnum";
 }
 
 td.num,
@@ -58,8 +58,8 @@ td[data-numeric],
 .num-value{
   font-size: var(--num-cell-fs);
   font-weight: var(--num-cell-fw);
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums slashed-zero lining-nums;
+  font-feature-settings: "tnum", "zero", "lnum";
   text-align: center;
 }
 
