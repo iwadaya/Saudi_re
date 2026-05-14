@@ -94,6 +94,13 @@ export default function FacRiskDetail() {
     total_sum_insured: '', pd_sum_insured: '', bi_sum_insured: '',
     pml_amount: '', pml_pct: '', mfl_amount: '', mfl_pct: '',
     underwriter_notes: '', fac_ref: '',
+    // Summary Sheet top-half additions
+    cedant_region: '', renewal_or_new: 'New', expiring_reference: '',
+    risk_country_zone: '', multi_location_flag: false, multi_occupancy_flag: false,
+    risk_location_top_address: '',
+    occupancy_code: '', occupancy_name: '',
+    hazard_grade_override: '', hazard_category: '',
+    risk_category: '', frequency_category: '',
   });
 
   const [numSections, setNumSections] = useState(1);
@@ -106,20 +113,43 @@ export default function FacRiskDetail() {
   const [countries, setCountries] = useState([]);
   const [currencies, setCurrencies] = useState([]);
   const [facClasses, setFacClasses] = useState([]);
+  // Reference lists for the Summary Sheet additions. Cached in api.js via
+  // CACHEABLE_PATHS so navigating into / out of the wizard doesn't refetch.
+  const [occupancies, setOccupancies] = useState([]);
+  const [natcatRates, setNatcatRates] = useState([]);
+  const [scoringTables, setScoringTables] = useState(null);
 
   useEffect(() => {
     Promise.all([
       api.listCedants(), api.listBrokers(),
       api.getRefListItems('country'), api.getRefListItems('currency'),
       api.facListClasses(),
-    ]).then(([c, b, co, cu, fc]) => {
+      api.facGetOccupancies(), api.facGetNatcatRates(), api.facGetScoringTables(),
+    ]).then(([c, b, co, cu, fc, occ, nc, st]) => {
       setAllCedants(Array.isArray(c) ? c : c?.rows || []);
       setBrokers(Array.isArray(b) ? b : b?.rows || []);
       setCountries(Array.isArray(co) ? co : co?.items || []);
       setCurrencies(Array.isArray(cu) ? cu : cu?.items || []);
       setFacClasses(fc || []);
+      setOccupancies(occ?.occupancies || []);
+      setNatcatRates(nc?.rates || []);
+      setScoringTables(st || null);
     }).catch(console.error);
   }, []);
+
+  const regions = useMemo(
+    () => (scoringTables?.territorial_capacity || []).map((t) => t.region),
+    [scoringTables],
+  );
+
+  // Pre-build a code→occupancy map so selection is O(1) and doesn't hit
+  // the network (the prompt is explicit: no API round-trip beyond the
+  // initial fetch).
+  const occByCode = useMemo(() => {
+    const map = new Map();
+    for (const o of occupancies) map.set(Number(o.occupancy_code), o);
+    return map;
+  }, [occupancies]);
 
   const filteredCedants = useMemo(() => {
     if (!f.country_id) return [];
@@ -173,6 +203,20 @@ export default function FacRiskDetail() {
       pml_amount: cleanNum(r.pml_amount) || '', pml_pct: cleanNum(r.pml_pct) || '',
       mfl_amount: cleanNum(r.mfl_amount) || '', mfl_pct: cleanNum(r.mfl_pct) || '',
       underwriter_notes: r.underwriter_notes || '', fac_ref: r.fac_ref || '',
+      // Summary Sheet top-half additions
+      cedant_region: r.cedant_region || '',
+      renewal_or_new: r.renewal_or_new || 'New',
+      expiring_reference: r.expiring_reference || '',
+      risk_country_zone: r.risk_country_zone || '',
+      multi_location_flag: Boolean(r.multi_location_flag),
+      multi_occupancy_flag: Boolean(r.multi_occupancy_flag),
+      risk_location_top_address: r.risk_location_top_address || '',
+      occupancy_code: cleanNum(r.occupancy_code) || '',
+      occupancy_name: r.occupancy_name || '',
+      hazard_grade_override: cleanNum(r.hazard_grade_override) || '',
+      hazard_category: r.hazard_category || '',
+      risk_category: cleanNum(r.risk_category) || '',
+      frequency_category: cleanNum(r.frequency_category) || '',
     });
     if (r.fac_cob_id) {
       setSectionCobs([new Set([r.fac_cob_id])]);
@@ -190,6 +234,20 @@ export default function FacRiskDetail() {
       policy_period_months: numOrNull(state.policy_period_months), uw_year: numOrNull(state.uw_year),
       cedant_id: state.cedant_id || null, broker_id: state.broker_id || null,
       country_id: state.country_id || null, currency_id: state.currency_id || null, fac_cob_id: state.fac_cob_id || null,
+      // Summary Sheet top-half additions
+      cedant_region: state.cedant_region || null,
+      renewal_or_new: state.renewal_or_new || null,
+      expiring_reference: state.expiring_reference || null,
+      risk_country_zone: state.risk_country_zone || null,
+      multi_location_flag: Boolean(state.multi_location_flag),
+      multi_occupancy_flag: Boolean(state.multi_occupancy_flag),
+      risk_location_top_address: state.risk_location_top_address || null,
+      occupancy_code: numOrNull(state.occupancy_code),
+      occupancy_name: state.occupancy_name || null,
+      hazard_grade_override: numOrNull(state.hazard_grade_override),
+      hazard_category: state.hazard_category || null,
+      risk_category: numOrNull(state.risk_category),
+      frequency_category: numOrNull(state.frequency_category),
     }),
     [],
   );
@@ -207,6 +265,44 @@ export default function FacRiskDetail() {
     setF(prev => ({ ...prev, [key]: val }));
     markDirty();
   }, [markDirty]);
+
+  // Single source of truth for picking an occupancy: locks in code, name,
+  // and the denormalised hazard / risk / frequency fields in one go so a
+  // selection never leaves the screen in an inconsistent state. Bypasses
+  // the per-key `set` to avoid a React batch glitch where intermediate
+  // renders would briefly show stale values.
+  const handleOccupancySelect = useCallback((occupancyCode) => {
+    const code = numOrNull(occupancyCode);
+    if (code == null) {
+      setF(prev => ({
+        ...prev,
+        occupancy_code: '', occupancy_name: '',
+        hazard_category: '', risk_category: '', frequency_category: '',
+      }));
+      markDirty();
+      return;
+    }
+    const occ = occByCode.get(Number(code));
+    if (!occ) return;
+    setF(prev => ({
+      ...prev,
+      occupancy_code: cleanNum(occ.occupancy_code),
+      occupancy_name: occ.occupancy_name || '',
+      hazard_category: occ.hazard_category || '',
+      risk_category: cleanNum(occ.risk_category) || '',
+      frequency_category: cleanNum(occ.frequency_category) || '',
+    }));
+    markDirty();
+  }, [occByCode, markDirty]);
+
+  // Effective hazard grade: the override (if set) wins; otherwise the
+  // selected occupancy's default.
+  const effectiveHazardGrade = useMemo(() => {
+    const override = numOrNull(f.hazard_grade_override);
+    if (override != null) return override;
+    const occ = f.occupancy_code ? occByCode.get(Number(f.occupancy_code)) : null;
+    return occ ? occ.hazard_grade : null;
+  }, [f.hazard_grade_override, f.occupancy_code, occByCode]);
 
   const handleNumSectionsChange = (n) => {
     const num = Math.max(1, Math.min(5, Number(n) || 1));
@@ -299,6 +395,110 @@ export default function FacRiskDetail() {
         <FR label="Insured Name"><input className="fi" value={f.insured_name} onChange={e => set('insured_name', e.target.value)} placeholder="e.g. SABIC Petrochemical Plant" /></FR>
         <FR label="Insured Address"><input className="fi" value={f.insured_address} onChange={e => set('insured_address', e.target.value)} placeholder="Physical address of premises" /></FR>
         <FR label="Nature of Business" hint="Occupation / activity"><input className="fi" value={f.nature_of_business} onChange={e => set('nature_of_business', e.target.value)} placeholder="e.g. Petrochemical manufacturing" /></FR>
+
+        {/* ── Risk Profile (Summary Sheet top half) ── */}
+        <SectionTitle>Risk Profile</SectionTitle>
+        <FR label="Cedant Region" hint="Used to look up territorial capacity">
+          <select className="fi" value={f.cedant_region} onChange={e => set('cedant_region', e.target.value)}>
+            <option value="">— Select —</option>
+            {regions.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </FR>
+        <FR label="Renewal / New">
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            {['New', 'Renewal'].map(opt => (
+              <label key={opt} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                <input type="radio" name="renewal_or_new" value={opt} checked={f.renewal_or_new === opt} onChange={e => set('renewal_or_new', e.target.value)} style={{ accentColor: '#00d4ff' }} />
+                {opt}
+              </label>
+            ))}
+          </div>
+        </FR>
+        {f.renewal_or_new === 'Renewal' && (
+          <FR label="Expiring Reference">
+            <input className="fi" value={f.expiring_reference} onChange={e => set('expiring_reference', e.target.value)} placeholder="Previous policy reference" />
+          </FR>
+        )}
+        <FR label="Risk Country / Zone" hint="Drives flood + EQ rates">
+          <input className="fi" list="fac-natcat-zones" value={f.risk_country_zone}
+            onChange={e => set('risk_country_zone', e.target.value)}
+            placeholder="Start typing to search…" />
+          <datalist id="fac-natcat-zones">
+            {natcatRates.map(r => <option key={r.rate_id || r.country_zone} value={r.country_zone} />)}
+          </datalist>
+        </FR>
+        <FR label="Multi-Location">
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            {[['Yes', true], ['No', false]].map(([label, val]) => (
+              <label key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                <input type="radio" name="multi_location_flag" checked={f.multi_location_flag === val} onChange={() => set('multi_location_flag', val)} style={{ accentColor: '#00d4ff' }} />
+                {label}
+              </label>
+            ))}
+          </div>
+        </FR>
+        <FR label="Multi-Occupancy">
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            {[['Yes', true], ['No', false]].map(([label, val]) => (
+              <label key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                <input type="radio" name="multi_occupancy_flag" checked={f.multi_occupancy_flag === val} onChange={() => set('multi_occupancy_flag', val)} style={{ accentColor: '#00d4ff' }} />
+                {label}
+              </label>
+            ))}
+          </div>
+        </FR>
+        <FR label="Risk Top Location Address" hint="Address of the largest exposure">
+          <textarea className="fi" value={f.risk_location_top_address}
+            onChange={e => set('risk_location_top_address', e.target.value)}
+            rows={2} style={{ width: '100%', resize: 'vertical' }}
+            placeholder="Street / city / country of the top exposed site" />
+        </FR>
+        <FR label="Occupancy" hint="Drives FLEXA base rate, hazard grade and frequency">
+          <input className="fi" list="fac-occupancies"
+            value={f.occupancy_name}
+            onChange={(e) => {
+              const name = e.target.value;
+              // Resolve typed name → code via the in-memory list. If the
+              // user types a partial / unknown name we still keep the raw
+              // text so the field reflects what they've typed.
+              const match = occupancies.find(o => (o.occupancy_name || '').trim() === name.trim());
+              if (match) handleOccupancySelect(match.occupancy_code);
+              else setF(prev => ({ ...prev, occupancy_name: name }));
+              markDirty();
+            }}
+            placeholder="Start typing to search…" />
+          <datalist id="fac-occupancies">
+            {occupancies.map(o => (
+              <option key={o.occupancy_code} value={o.occupancy_name}>
+                {`#${o.occupancy_code} · ${o.industry_type || ''}`.trim()}
+              </option>
+            ))}
+          </datalist>
+          {f.occupancy_code && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 8, fontSize: 11 }}>
+              <div>
+                <div style={{ color: 'rgba(148,163,184,0.45)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Hazard Grade</div>
+                <div style={{ color: '#e2e8f0', fontWeight: 700 }}>{effectiveHazardGrade ?? '—'}</div>
+              </div>
+              <div>
+                <div style={{ color: 'rgba(148,163,184,0.45)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Hazard Category</div>
+                <div style={{ color: '#e2e8f0', fontWeight: 700 }}>{f.hazard_category || '—'}</div>
+              </div>
+              <div>
+                <div style={{ color: 'rgba(148,163,184,0.45)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Risk Category</div>
+                <div style={{ color: '#e2e8f0', fontWeight: 700 }}>{f.risk_category || '—'}</div>
+              </div>
+              <div>
+                <div style={{ color: 'rgba(148,163,184,0.45)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Frequency</div>
+                <div style={{ color: '#e2e8f0', fontWeight: 700 }}>{f.frequency_category || '—'}</div>
+              </div>
+            </div>
+          )}
+        </FR>
+        <FR label="Hazard Grade Override" hint={`Leave blank to use the occupancy's default (${effectiveHazardGrade ?? '—'}); 1 = lowest, 10 = highest`}>
+          <input className="fi" type="number" min={1} max={10} value={f.hazard_grade_override}
+            onChange={e => set('hazard_grade_override', e.target.value)} style={{ width: 100 }} />
+        </FR>
 
         {/* ── Sections & COBs ── */}
         <SectionTitle>Sections &amp; Classes of Business</SectionTitle>

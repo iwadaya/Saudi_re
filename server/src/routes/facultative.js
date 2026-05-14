@@ -4,6 +4,8 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { asyncHandler, numOrNull, dateOrNull } from '../helpers.js';
+import { validateBody } from '../lib/validate.js';
+import { facRiskSaveSchema } from '../validation/facultative.js';
 
 const router = Router();
 
@@ -106,7 +108,7 @@ router.get('/fac/risks/:id', asyncHandler(async (req, res) => {
 }));
 
 // CREATE new risk
-router.post('/fac/risks', asyncHandler(async (req, res) => {
+router.post('/fac/risks', validateBody(facRiskSaveSchema), asyncHandler(async (req, res) => {
   const b = req.body;
   const { rows } = await pool.query(`
     INSERT INTO public.fac_risk (
@@ -121,11 +123,16 @@ router.post('/fac/risks', asyncHandler(async (req, res) => {
       original_premium, ri_premium, original_rate,
       pml_amount, pml_pct, mfl_amount, mfl_pct,
       created_by_user_id, assigned_to_user_id,
-      linked_contract_id, underwriter_notes, status
+      linked_contract_id, underwriter_notes, status,
+      cedant_region, renewal_or_new, expiring_reference, risk_country_zone,
+      multi_location_flag, multi_occupancy_flag, risk_location_top_address,
+      occupancy_code, occupancy_name, hazard_grade_override,
+      hazard_category, risk_category, frequency_category
     ) VALUES (
       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
       $16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
-      $31,$32,$33,$34,$35,$36,$37,$38,$39
+      $31,$32,$33,$34,$35,$36,$37,$38,$39,
+      $40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52
     ) RETURNING *
   `, [
     b.cedant_id || null, b.broker_id || null, b.country_id || null, b.currency_id || null,
@@ -140,12 +147,16 @@ router.post('/fac/risks', asyncHandler(async (req, res) => {
     numOrNull(b.pml_amount), numOrNull(b.pml_pct), numOrNull(b.mfl_amount), numOrNull(b.mfl_pct),
     b.created_by_user_id || null, b.assigned_to_user_id || null,
     b.linked_contract_id || null, b.underwriter_notes || null, b.status || 'DRAFT',
+    b.cedant_region || null, b.renewal_or_new || null, b.expiring_reference || null, b.risk_country_zone || null,
+    b.multi_location_flag ?? false, b.multi_occupancy_flag ?? false, b.risk_location_top_address || null,
+    numOrNull(b.occupancy_code), b.occupancy_name || null, numOrNull(b.hazard_grade_override),
+    b.hazard_category || null, numOrNull(b.risk_category), numOrNull(b.frequency_category),
   ]);
   res.status(201).json(rows[0]);
 }));
 
 // UPDATE risk
-router.put('/fac/risks/:id', asyncHandler(async (req, res) => {
+router.put('/fac/risks/:id', validateBody(facRiskSaveSchema), asyncHandler(async (req, res) => {
   const { id } = req.params;
   const b = req.body;
   const { rows } = await pool.query(`
@@ -161,7 +172,12 @@ router.put('/fac/risks/:id', asyncHandler(async (req, res) => {
       original_premium = $29, ri_premium = $30, original_rate = $31,
       pml_amount = $32, pml_pct = $33, mfl_amount = $34, mfl_pct = $35,
       assigned_to_user_id = $36,
-      linked_contract_id = $37, underwriter_notes = $38, status = $39
+      linked_contract_id = $37, underwriter_notes = $38, status = $39,
+      cedant_region = $40, renewal_or_new = $41, expiring_reference = $42,
+      risk_country_zone = $43, multi_location_flag = $44, multi_occupancy_flag = $45,
+      risk_location_top_address = $46, occupancy_code = $47, occupancy_name = $48,
+      hazard_grade_override = $49, hazard_category = $50, risk_category = $51,
+      frequency_category = $52
     WHERE fac_risk_id = $1
     RETURNING *
   `, [
@@ -178,6 +194,11 @@ router.put('/fac/risks/:id', asyncHandler(async (req, res) => {
     numOrNull(b.pml_amount), numOrNull(b.pml_pct), numOrNull(b.mfl_amount), numOrNull(b.mfl_pct),
     b.assigned_to_user_id || null,
     b.linked_contract_id || null, b.underwriter_notes || null, b.status || 'DRAFT',
+    b.cedant_region || null, b.renewal_or_new || null, b.expiring_reference || null,
+    b.risk_country_zone || null, b.multi_location_flag ?? false, b.multi_occupancy_flag ?? false,
+    b.risk_location_top_address || null, numOrNull(b.occupancy_code), b.occupancy_name || null,
+    numOrNull(b.hazard_grade_override), b.hazard_category || null, numOrNull(b.risk_category),
+    numOrNull(b.frequency_category),
   ]);
   if (!rows.length) return res.status(404).json({ error: 'Risk not found' });
   res.json(rows[0]);
