@@ -26,6 +26,13 @@ export function clearClientRefCache() { _clientCache.clear(); }
 const CACHEABLE_PATHS = new Set([
   '/api/brokers', '/api/reinsurers', '/api/treaty-types', '/api/class-of-business',
   '/api/ref/lists/country/items', '/api/ref/lists/currency/items',
+  '/api/fac/reference/occupancies',
+  '/api/fac/reference/factors',
+  '/api/fac/reference/factor-weights',
+  '/api/fac/reference/scoring-tables',
+  '/api/fac/reference/bi-indemnity',
+  '/api/fac/reference/natcat-rates',
+  '/api/fac/reference/clauses',
 ]);
 
 const API_BASE = (() => {
@@ -517,6 +524,15 @@ export const api = {
   facUploadDocument(id, payload, opts) { return request(`/api/fac/risks/${enc(id)}/documents`, { method: 'POST', body: payload, ...opts }); },
   facDeleteDocument(docId, opts) { return request(`/api/fac/documents/${enc(docId)}`, { method: 'DELETE', ...opts }); },
   facGetLinkedTreaties(id, opts) { return request(`/api/fac/risks/${enc(id)}/linked-treaties`, opts); },
+
+  // ── Facultative reference data (cached via CACHEABLE_PATHS) ──────────────
+  facGetOccupancies(opts)    { return request('/api/fac/reference/occupancies', opts); },
+  facGetFactors(opts)        { return request('/api/fac/reference/factors', opts); },
+  facGetFactorWeights(opts)  { return request('/api/fac/reference/factor-weights', opts); },
+  facGetScoringTables(opts)  { return request('/api/fac/reference/scoring-tables', opts); },
+  facGetBiIndemnity(opts)    { return request('/api/fac/reference/bi-indemnity', opts); },
+  facGetNatcatRates(opts)    { return request('/api/fac/reference/natcat-rates', opts); },
+  facGetClauses(opts)        { return request('/api/fac/reference/clauses', opts); },
 
   // ── Workbench (Actuarial Formula Workbench) ──────────────────────────────
   workbenchListFormulas(opts) { return request('/api/workbench/formulas', opts); },
