@@ -84,3 +84,39 @@ export const marketReportSchema = z.object({
   recommendations:   z.array(reportRecommendationSchema),
   sources:           z.array(sourceSchema),
 });
+
+// ── 8.4 per-treaty recommendation generation ──────────────────────
+
+export const treatyRecommendationsRequestSchema = z.object({
+  contract_id:   z.string().uuid('contract_id must be a UUID'),
+  report_id:     z.string().uuid('report_id must be a UUID'),
+  force_refresh: z.boolean().optional(),
+});
+
+const termsChangesSchema = z.object({
+  commission_pct:        z.number().nullable().optional(),
+  brokerage_pct:         z.number().nullable().optional(),
+  profit_commission_pct: z.number().nullable().optional(),
+}).partial();
+
+const treatyRecommendationItemSchema = z.object({
+  action_type:               z.enum(['LINE_SIZE', 'TERMS', 'EXIT', 'WATCH']),
+  title:                     z.string().min(1).max(200),
+  body:                      z.string().max(500),
+  recommended_line_pct:      z.number().nullable().optional(),
+  recommended_terms_changes: termsChangesSchema.nullable().optional(),
+  rationale:                 z.string().max(600),
+  confidence:                z.number().min(0).max(1),
+});
+
+export const treatyRecommendationsResponseSchema = z.object({
+  recommendations: z.array(treatyRecommendationItemSchema).min(1),
+});
+
+export const marketRecStageSchema = z.object({
+  warning_acknowledged: z.boolean().optional(),
+});
+
+export const marketRecRejectSchema = z.object({
+  reason: z.string().max(2000).optional(),
+});

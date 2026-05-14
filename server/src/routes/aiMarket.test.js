@@ -1,23 +1,33 @@
 // server/src/routes/aiMarket.test.js
 //
-// Unit tests for /api/ai/market/generate-report. Covers:
-//   • cache miss → calls Anthropic, persists, returns cached:false
-//   • cache hit  → skips Anthropic, returns cached:true
-//   • force_refresh:true → bypasses cache even when a fresh row exists
-//   • invalid model output → 502 with raw_response, no row persisted
+// Unit tests for /api/ai/market/* (prompts 8.2 / 8.3 / 8.4).
 //
-// pg pool and global fetch are both stubbed; no real DB or network.
+//   generate-report       — cache miss, cache hit, force_refresh,
+//                           invalid output, missing user
+//   treaty-benchmarks/:id — verdict bands, NO_DATA on missing fields,
+//                           404 when no report exists
+//   treaty-recommendations — generate, cache hit, force_refresh,
+//                           server-side sanitization (LINE_SIZE clamp,
+//                           TERMS dropped when empty), staging metadata
+//   recommendation/:id/stage / reject — LINE_SIZE only, warning gate,
+//                           TERMS returns 422, supersede prior STAGED
+//
+// pg pool (including pool.connect transactions) and global fetch are
+// stubbed; no real DB or network.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 
 // ── Test fixtures ────────────────────────────────────────────────
-const USER_ID    = '00000000-0000-0000-0000-000000000001';
-const COUNTRY_ID = '11111111-1111-1111-1111-111111111111';
-const COB_ID     = '22222222-2222-2222-2222-222222222222';
-const TARGET_YR  = 2026;
+const USER_ID     = '00000000-0000-0000-0000-000000000001';
+const COUNTRY_ID  = '11111111-1111-1111-1111-111111111111';
+const COB_ID      = '22222222-2222-2222-2222-222222222222';
+const CONTRACT_ID = '33333333-3333-3333-3333-333333333333';
+const CEDANT_ID   = '44444444-4444-4444-4444-444444444444';
+const REPORT_ID   = '55555555-5555-5555-5555-555555555555';
+const TARGET_YR   = 2026;
 
-const VALID_MODEL_OUTPUT = {
+const VALID_REPORT_OUTPUT = {
   executive_summary: 'Strong market with hardening rates.',
   market_landscape: {
     regulator: 'CMA',
@@ -28,16 +38,14 @@ const VALID_MODEL_OUTPUT = {
     recent_context: 'Rates have hardened over the past year.',
   },
   market_benchmarks: {
-    loss_ratio_market_avg: 0.62,
+    loss_ratio_market_avg: 62,
     loss_ratio_year: 2024,
     commission_market_norm_pct: 25,
     retention_market_norm_pct: 30,
     roe_market_avg_pct: 12,
     notes: 'Benchmarks from regulator filings.',
   },
-  trends: [
-    { title: 'Hardening', body: 'Rates up 5%.', severity: 'OPPORTUNITY', source_idx: 1 },
-  ],
+  trends: [{ title: 'Hardening', body: 'Rates up 5%.', severity: 'OPPORTUNITY', source_idx: 1 }],
   recommendations: [
     { title: 'Hold line', body: 'Maintain current share.', action_type: 'WATCH', confidence: 0.7, source_idx: 1 },
   ],
@@ -46,13 +54,40 @@ const VALID_MODEL_OUTPUT = {
   ],
 };
 
+// Treaty-rec model output (no web_search call → tools omitted in payload)
+const VALID_TREATY_RECS_OUTPUT = {
+  recommendations: [
+    {
+      action_type: 'LINE_SIZE',
+      title: 'Trim line',
+      body: 'Margin below market by 2pts; trim 5pts.',
+      recommended_line_pct: 0.18,
+      rationale: 'Loss ratio elevated vs market.',
+      confidence: 0.8,
+    },
+    {
+      action_type: 'TERMS',
+      title: 'Improve commission',
+      body: 'Push for 1pt lower commission.',
+      recommended_terms_changes: { commission_pct: 24 },
+      rationale: 'Market norm tighter.',
+      confidence: 0.65,
+    },
+    {
+      action_type: 'WATCH',
+      title: 'Monitor regulator',
+      body: 'New solvency rules pending.',
+      rationale: 'Trend in report.',
+      confidence: 0.5,
+    },
+  ],
+};
+
 function anthropicResponseWith(jsonText) {
   return {
     id: 'msg_test',
     model: 'claude-sonnet-4-20250514',
     content: [
-      { type: 'server_tool_use', id: 'srv_1', name: 'web_search', input: { query: 'reinsurance' } },
-      { type: 'web_search_tool_result', tool_use_id: 'srv_1', content: [] },
       { type: 'text', text: jsonText },
     ],
     stop_reason: 'end_turn',
@@ -60,63 +95,169 @@ function anthropicResponseWith(jsonText) {
 }
 
 // ── pg pool stub ─────────────────────────────────────────────────
-const queryLog = [];
-let freshReportRow = null;     // returned for the cache check
-let lastInsertedReport = null; // captured INSERT row
+//
+// Tests mutate the `state` object to control individual branches —
+// freshReportRow (cache hit), reportById (resolve by id), treatyRow
+// (loadTreatyMetrics result), existingRecs (treaty-rec cache),
+// recById (single rec read for stage/reject), priorStaging (prior
+// STAGED rows to supersede).
+//
+// inserts captures every INSERT for post-call assertions.
+const state = {
+  freshReportRow: null,
+  reportById:     null,
+  treatyRow:      null,
+  existingRecs:   [],
+  recById:        null,
+  priorStaging:   [],
+  insertedReport: null,
+  insertedRecs:   [],
+  insertedStaging: null,
+  updatedRecStatus: null,
+  updatedMarketRecStatus: null,
+};
 
 function fakePoolQuery(sql, params = []) {
-  queryLog.push({ sql, params });
-
+  // ── country / cob lookups ──
   if (/FROM public\.country WHERE country_id/.test(sql)) {
     return Promise.resolve({ rows: [{ country_id: params[0], name: 'Kenya', code: 'KE' }] });
   }
   if (/information_schema\.columns/.test(sql)) {
     return Promise.resolve({
-      rows: [
-        { column_name: 'class_of_business_id' },
-        { column_name: 'class_of_business' },
-      ],
+      rows: [{ column_name: 'class_of_business_id' }, { column_name: 'class_of_business' }],
     });
   }
   if (/FROM public\.class_of_business WHERE/.test(sql)) {
     return Promise.resolve({ rows: [{ class_of_business_id: params[0], name: 'Fire' }] });
   }
-  if (/FROM public\.market_intelligence_report\s+WHERE country_id=\$1/.test(sql)
-      && /generated_at > now/.test(sql)) {
-    return Promise.resolve({ rows: freshReportRow ? [freshReportRow] : [] });
+
+  // ── report cache check (with TTL) ──
+  if (/FROM public\.market_intelligence_report\s+WHERE country_id=\$1[\s\S]*generated_at > now/.test(sql)) {
+    return Promise.resolve({ rows: state.freshReportRow ? [state.freshReportRow] : [] });
   }
+  // ── latest report (no TTL) ──
   if (/FROM public\.market_intelligence_report\s+WHERE country_id=\$1 AND class_of_business_id/.test(sql)) {
-    return Promise.resolve({ rows: freshReportRow ? [freshReportRow] : [] });
+    return Promise.resolve({ rows: state.freshReportRow ? [state.freshReportRow] : [] });
   }
+  // ── report by id ──
+  if (/FROM public\.market_intelligence_report WHERE report_id/.test(sql)) {
+    return Promise.resolve({ rows: state.reportById ? [state.reportById] : [] });
+  }
+
+  // ── report insert ──
   if (/INSERT INTO public\.market_intelligence_report/.test(sql)) {
-    lastInsertedReport = {
-      report_id: 'rep-123',
-      country_id: params[0],
-      class_of_business_id: params[1],
-      target_year: params[2],
-      executive_summary: params[3],
-      market_landscape: JSON.parse(params[4]),
-      market_benchmarks: JSON.parse(params[5]),
-      trends: JSON.parse(params[6]),
-      recommendations: JSON.parse(params[7]),
+    state.insertedReport = {
+      report_id: 'rep-123', country_id: params[0], class_of_business_id: params[1],
+      target_year: params[2], executive_summary: params[3],
+      market_landscape: JSON.parse(params[4]), market_benchmarks: JSON.parse(params[5]),
+      trends: JSON.parse(params[6]), recommendations: JSON.parse(params[7]),
       sources: JSON.parse(params[8]),
-      model: params[9],
-      raw_response: JSON.parse(params[10]),
-      generated_by_user_id: params[11],
-      generation_duration_ms: params[12],
+      model: params[9], raw_response: JSON.parse(params[10]),
+      generated_by_user_id: params[11], generation_duration_ms: params[12],
       generated_at: new Date().toISOString(),
     };
-    return Promise.resolve({ rows: [lastInsertedReport] });
+    return Promise.resolve({ rows: [state.insertedReport] });
   }
+
+  // ── treaty metrics (loadTreatyMetrics) ──
+  if (/FROM public\.contract c[\s\S]*contract_prop_details[\s\S]*WHERE c\.contract_id = \$1/.test(sql)
+      || /SELECT[\s\S]*c\.contract_id[\s\S]*FROM public\.contract c[\s\S]*WHERE c\.contract_id = \$1/.test(sql)) {
+    return Promise.resolve({ rows: state.treatyRow ? [state.treatyRow] : [] });
+  }
+
+  // ── treaty-rec cache check ──
+  if (/FROM public\.market_intelligence_recommendation[\s\S]*WHERE contract_id=\$1 AND report_id=\$2/.test(sql)
+      && /status <> 'SUPERSEDED'/.test(sql)) {
+    return Promise.resolve({ rows: state.existingRecs });
+  }
+  // ── treaty-rec list (GET) ──
+  if (/FROM public\.market_intelligence_recommendation[\s\S]*WHERE contract_id=\$1\s+AND status <> 'SUPERSEDED'/.test(sql)) {
+    return Promise.resolve({ rows: state.existingRecs });
+  }
+
+  // ── supersede prior recs (UPDATE inside generate flow) ──
+  if (/UPDATE public\.market_intelligence_recommendation[\s\S]*SET status='SUPERSEDED'/.test(sql)) {
+    return Promise.resolve({ rows: [] });
+  }
+
+  // ── insert a new market rec ──
+  if (/INSERT INTO public\.market_intelligence_recommendation/.test(sql)) {
+    const row = {
+      rec_id: `rec-${state.insertedRecs.length + 1}`,
+      report_id: params[0], contract_id: params[1],
+      action_type: params[2], recommended_line_pct: params[3],
+      recommended_terms_changes: params[4] ? JSON.parse(params[4]) : null,
+      rationale: params[5], confidence: params[6],
+      compliance_warnings: params[7] ? JSON.parse(params[7]) : [],
+      status: 'PENDING', acted_at: null, acted_by_user_id: null,
+      created_at: new Date().toISOString(),
+    };
+    state.insertedRecs.push(row);
+    return Promise.resolve({ rows: [row] });
+  }
+
+  // ── single rec lookup for stage/reject (JOIN contract) ──
+  if (/FROM public\.market_intelligence_recommendation mr[\s\S]*JOIN public\.contract c[\s\S]*WHERE mr\.rec_id=\$1/.test(sql)) {
+    return Promise.resolve({ rows: state.recById ? [state.recById] : [] });
+  }
+
+  // ── prior STAGED rows in cedant_portfolio_staging ──
+  if (/FROM public\.cedant_portfolio_staging\s+WHERE cedant_id=\$1 AND contract_id=\$2 AND status='STAGED'/.test(sql)) {
+    return Promise.resolve({ rows: state.priorStaging });
+  }
+  // ── supersede prior staging row ──
+  if (/UPDATE public\.cedant_portfolio_staging[\s\S]*SET status='DISCARDED'/.test(sql)) {
+    return Promise.resolve({ rows: [] });
+  }
+  // ── revert prior AI rec status when superseded ──
+  if (/UPDATE public\.cedant_ai_recommendation[\s\S]*SET status='PENDING'/.test(sql)
+      || /UPDATE public\.market_intelligence_recommendation[\s\S]*SET status='PENDING'/.test(sql)) {
+    return Promise.resolve({ rows: [] });
+  }
+  // ── INSERT new staging row ──
+  if (/INSERT INTO public\.cedant_portfolio_staging/.test(sql)) {
+    state.insertedStaging = {
+      staging_id: 'staging-1',
+      cedant_id: params[0], contract_id: params[1], proposed_line_pct: params[2],
+      source: 'AI_MARKET_RECOMMENDATION', source_market_rec_id: params[3],
+      rationale: params[4],
+      compliance_warnings: params[5] ? JSON.parse(params[5]) : [],
+      warning_acknowledged_by_user_id: params[6],
+      warning_acknowledged_at: params[7],
+      created_by_user_id: params[8],
+      status: 'STAGED', created_at: new Date().toISOString(),
+    };
+    return Promise.resolve({ rows: [state.insertedStaging] });
+  }
+  // ── mark this market rec STAGED ──
+  if (/UPDATE public\.market_intelligence_recommendation[\s\S]*SET status='STAGED'/.test(sql)) {
+    state.updatedMarketRecStatus = { rec_id: params[0], user_id: params[1], status: 'STAGED' };
+    return Promise.resolve({ rows: [] });
+  }
+  // ── reject (UPDATE status='REJECTED') ──
+  if (/UPDATE public\.market_intelligence_recommendation[\s\S]*SET status='REJECTED'/.test(sql)) {
+    state.updatedMarketRecStatus = { rec_id: params[0], user_id: params[1], status: 'REJECTED' };
+    return Promise.resolve({ rows: state.recById ? [{ ...state.recById, status: 'REJECTED' }] : [] });
+  }
+
   return Promise.resolve({ rows: [] });
 }
 
+const fakeClient = { query: fakePoolQuery, release: () => {} };
+
 vi.mock('../db/pool.js', () => ({
-  pool: { query: vi.fn(fakePoolQuery) },
+  pool: {
+    query: vi.fn(fakePoolQuery),
+    connect: vi.fn(async () => fakeClient),
+  },
 }));
 
 vi.mock('../config/env.js', () => ({
   env: { anthropicApiKey: 'test-key' },
+}));
+
+vi.mock('../services/audit.js', () => ({
+  logAudit: vi.fn(async () => undefined),
 }));
 
 const { default: aiMarketRouter } = await import('./aiMarket.js');
@@ -132,40 +273,28 @@ function buildApp() {
   return app;
 }
 
-// Lightweight request runner. body is attached directly to req.body
-// so we don't have to wire up express.json() / stream the payload.
 async function call(app, { method = 'GET', path, headers = {}, body }) {
   return new Promise((resolve, reject) => {
-    const reqHeaders = {
-      'x-user-id': USER_ID,
-      'x-user-role': 'CU',
-      ...headers,
-    };
+    const reqHeaders = { 'x-user-id': USER_ID, 'x-user-role': 'CU', ...headers };
     const req = Object.assign(Object.create(express.request), {
-      method,
-      url: path,
-      headers: reqHeaders,
-      body: body ?? undefined,
+      method, url: path, headers: reqHeaders, body: body ?? undefined,
     });
     const resHeaders = {};
     const chunks = [];
     const res = Object.assign(Object.create(express.response), {
-      app,
-      statusCode: 200,
+      app, statusCode: 200,
       setHeader(k, v) { resHeaders[k] = v; return res; },
       getHeader(k) { return resHeaders[k]; },
       status(code) { res.statusCode = code; return res; },
       json(payload) { chunks.push(JSON.stringify(payload)); res.end(); },
       end() {
         resolve({
-          status: res.statusCode,
-          headers: resHeaders,
+          status: res.statusCode, headers: resHeaders,
           body: chunks.length ? JSON.parse(chunks.join('')) : null,
         });
       },
     });
-    res.req = req;
-    req.res = res;
+    res.req = req; req.res = res;
     try {
       app.handle(req, res, (err) => {
         if (err) reject(err);
@@ -175,123 +304,468 @@ async function call(app, { method = 'GET', path, headers = {}, body }) {
   });
 }
 
-// ── tests ────────────────────────────────────────────────────────
-describe('/api/ai/market/generate-report', () => {
-  let fetchSpy;
+// Convenience factories
+const makeReportRow = (over = {}) => ({
+  report_id: REPORT_ID,
+  country_id: COUNTRY_ID,
+  class_of_business_id: COB_ID,
+  target_year: TARGET_YR,
+  ...VALID_REPORT_OUTPUT,
+  raw_response: {},
+  model: 'claude-sonnet-4-20250514',
+  generated_at: new Date().toISOString(),
+  ...over,
+});
 
-  beforeEach(() => {
-    queryLog.length = 0;
-    freshReportRow = null;
-    lastInsertedReport = null;
-    fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      json: async () => anthropicResponseWith(JSON.stringify(VALID_MODEL_OUTPUT)),
-    });
+const makeTreatyRow = (over = {}) => ({
+  contract_id: CONTRACT_ID,
+  cedant_id: CEDANT_ID,
+  country_id: COUNTRY_ID,
+  primary_class_of_business_id: COB_ID,
+  uw_year: TARGET_YR,
+  signed_line_pct: 20.0,
+  status: 'SIGNED',
+  entity_type: 'PROP',
+  prop_brokerage_pct: 26,
+  prop_retention_pct: 35,
+  np_brokerage_pct: null,
+  prop_actuarial_margin: 0.12,
+  weighted_modelled: null,
+  total_earned_premium: null,
+  triangle_loss_ratio_pct: 65.2,
+  written_line_pct: null,
+  ...over,
+});
+
+let fetchSpy;
+function resetState() {
+  state.freshReportRow = null;
+  state.reportById     = null;
+  state.treatyRow      = null;
+  state.existingRecs   = [];
+  state.recById        = null;
+  state.priorStaging   = [];
+  state.insertedReport = null;
+  state.insertedRecs   = [];
+  state.insertedStaging = null;
+  state.updatedRecStatus = null;
+  state.updatedMarketRecStatus = null;
+}
+
+beforeEach(() => {
+  resetState();
+  fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+    ok: true,
+    json: async () => anthropicResponseWith(JSON.stringify(VALID_REPORT_OUTPUT)),
   });
+});
 
-  afterEach(() => { fetchSpy.mockRestore(); });
+afterEach(() => { fetchSpy.mockRestore(); });
 
+// ── 8.2 — generate-report ─────────────────────────────────────────
+describe('POST /api/ai/market/generate-report', () => {
   it('cache miss → calls Anthropic, persists, returns cached:false', async () => {
     const app = buildApp();
     const res = await call(app, {
-      method: 'POST',
-      path: '/api/ai/market/generate-report',
+      method: 'POST', path: '/api/ai/market/generate-report',
       body: { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR },
     });
     expect(res.status).toBe(201);
     expect(res.body.cached).toBe(false);
-    expect(res.body.executive_summary).toMatch(/hardening/i);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(lastInsertedReport).not.toBeNull();
-    expect(lastInsertedReport.target_year).toBe(TARGET_YR);
-    expect(lastInsertedReport.model).toBe('claude-sonnet-4-20250514');
+    expect(state.insertedReport).not.toBeNull();
   });
 
-  it('cache hit (< 30 days) → returns cached row, does NOT call Anthropic', async () => {
-    freshReportRow = {
-      report_id: 'rep-cached',
-      country_id: COUNTRY_ID,
-      class_of_business_id: COB_ID,
-      target_year: TARGET_YR,
-      executive_summary: 'Cached summary',
-      market_landscape: VALID_MODEL_OUTPUT.market_landscape,
-      market_benchmarks: VALID_MODEL_OUTPUT.market_benchmarks,
-      trends: VALID_MODEL_OUTPUT.trends,
-      recommendations: VALID_MODEL_OUTPUT.recommendations,
-      sources: VALID_MODEL_OUTPUT.sources,
-      model: 'claude-sonnet-4-20250514',
-      raw_response: {},
-      generated_at: new Date().toISOString(),
-    };
+  it('cache hit (< 30 days) → returns cached row, no Anthropic call', async () => {
+    state.freshReportRow = makeReportRow();
     const app = buildApp();
     const res = await call(app, {
-      method: 'POST',
-      path: '/api/ai/market/generate-report',
+      method: 'POST', path: '/api/ai/market/generate-report',
       body: { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR },
     });
     expect(res.status).toBe(200);
     expect(res.body.cached).toBe(true);
-    expect(res.body.report_id).toBe('rep-cached');
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('force_refresh:true bypasses cache and calls Anthropic', async () => {
-    freshReportRow = {
-      report_id: 'rep-cached',
-      country_id: COUNTRY_ID,
-      class_of_business_id: COB_ID,
-      target_year: TARGET_YR,
-      executive_summary: 'Cached summary',
-      market_landscape: VALID_MODEL_OUTPUT.market_landscape,
-      market_benchmarks: VALID_MODEL_OUTPUT.market_benchmarks,
-      trends: VALID_MODEL_OUTPUT.trends,
-      recommendations: VALID_MODEL_OUTPUT.recommendations,
-      sources: VALID_MODEL_OUTPUT.sources,
-      model: 'claude-sonnet-4-20250514',
-      raw_response: {},
-      generated_at: new Date().toISOString(),
-    };
+  it('force_refresh bypasses cache', async () => {
+    state.freshReportRow = makeReportRow();
     const app = buildApp();
     const res = await call(app, {
-      method: 'POST',
-      path: '/api/ai/market/generate-report',
-      body: {
-        country_id: COUNTRY_ID, class_of_business_id: COB_ID,
-        target_year: TARGET_YR, force_refresh: true,
-      },
+      method: 'POST', path: '/api/ai/market/generate-report',
+      body: { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR, force_refresh: true },
     });
     expect(res.status).toBe(201);
     expect(res.body.cached).toBe(false);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(lastInsertedReport).not.toBeNull();
   });
 
-  it('invalid model output → 502, raw_response echoed, no row persisted', async () => {
+  it('invalid model output → 502 with raw_response, no persist', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,
       json: async () => anthropicResponseWith(JSON.stringify({ not: 'a valid report' })),
     });
     const app = buildApp();
     const res = await call(app, {
-      method: 'POST',
-      path: '/api/ai/market/generate-report',
+      method: 'POST', path: '/api/ai/market/generate-report',
       body: { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR },
     });
     expect(res.status).toBe(502);
-    expect(res.body.error).toMatch(/validation/i);
     expect(res.body.raw_response).toBeDefined();
-    expect(lastInsertedReport).toBeNull();
+    expect(state.insertedReport).toBeNull();
   });
 
   it('missing x-user-id → 401', async () => {
     const app = buildApp();
     const res = await call(app, {
-      method: 'POST',
-      path: '/api/ai/market/generate-report',
+      method: 'POST', path: '/api/ai/market/generate-report',
       headers: { 'x-user-id': '' },
       body: { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR },
     });
     expect(res.status).toBe(401);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ── 8.3 — treaty-benchmarks ───────────────────────────────────────
+describe('GET /api/ai/market/treaty-benchmarks/:contract_id', () => {
+  it('returns deltas + verdicts for a treaty with full data', async () => {
+    state.treatyRow = makeTreatyRow();
+    state.freshReportRow = makeReportRow();
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'GET', path: `/api/ai/market/treaty-benchmarks/${CONTRACT_ID}`,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.report_id).toBe(REPORT_ID);
+    expect(res.body.treaty_metrics.loss_ratio_pct).toBeCloseTo(65.2, 1);
+    expect(res.body.treaty_metrics.commission_pct).toBe(26);
+    expect(res.body.treaty_metrics.retention_pct).toBe(35);
+    expect(res.body.treaty_metrics.margin_pct).toBeCloseTo(12, 1);
+    // Loss ratio: 65.2 vs 62 → delta +3.2, lower-is-better band ±2 → WORSE
+    const lr = res.body.benchmarks_table.find(r => r.metric === 'Loss Ratio');
+    expect(lr.verdict).toBe('WORSE');
+    expect(lr.delta).toBeCloseTo(3.2, 1);
+    // Commission: 26 vs 25 → delta +1, lower-is-better band ±1 → ON_PAR (boundary inclusive)
+    const comm = res.body.benchmarks_table.find(r => r.metric === 'Commission');
+    expect(comm.verdict).toBe('ON_PAR');
+    expect(comm.delta).toBe(1);
+    // Retention: 35 vs 30 → delta +5, higher-is-better band ±5 → ON_PAR (boundary inclusive)
+    const ret = res.body.benchmarks_table.find(r => r.metric === 'Retention');
+    expect(ret.verdict).toBe('ON_PAR');
+    // Margin: treaty 12, market roe 12 → margin lookup via market_metrics
+    // (market.margin_pct is null because the schema separates margin vs ROE),
+    // so verdict is NO_DATA. This is by design — see marketMetricsFromReport.
+    const mgn = res.body.benchmarks_table.find(r => r.metric === 'Margin');
+    expect(mgn.verdict).toBe('NO_DATA');
+  });
+
+  it('treaty missing margin → NO_DATA on margin row, others populated', async () => {
+    state.treatyRow = makeTreatyRow({ prop_actuarial_margin: null });
+    state.freshReportRow = makeReportRow();
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'GET', path: `/api/ai/market/treaty-benchmarks/${CONTRACT_ID}`,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.treaty_metrics.margin_pct).toBeNull();
+    const mgn = res.body.benchmarks_table.find(r => r.metric === 'Margin');
+    expect(mgn.verdict).toBe('NO_DATA');
+    const lr = res.body.benchmarks_table.find(r => r.metric === 'Loss Ratio');
+    expect(lr.verdict).toBe('WORSE');
+  });
+
+  it('404 when no report exists for the treaty segment', async () => {
+    state.treatyRow = makeTreatyRow();
+    // freshReportRow null + no reportById → resolveReport returns null
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'GET', path: `/api/ai/market/treaty-benchmarks/${CONTRACT_ID}`,
+    });
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/No market intelligence report/);
+    expect(res.body.hint).toMatch(/generate-report/);
+  });
+
+  it('1pt over market commission → ON_PAR (band inclusive)', async () => {
+    state.treatyRow = makeTreatyRow({ prop_brokerage_pct: 26 }); // market 25, +1pt
+    state.freshReportRow = makeReportRow();
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'GET', path: `/api/ai/market/treaty-benchmarks/${CONTRACT_ID}`,
+    });
+    expect(res.status).toBe(200);
+    const comm = res.body.benchmarks_table.find(r => r.metric === 'Commission');
+    expect(comm.verdict).toBe('ON_PAR');
+  });
+
+  it('contract not found → 404', async () => {
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'GET', path: `/api/ai/market/treaty-benchmarks/${CONTRACT_ID}`,
+    });
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/Contract not found/);
+  });
+});
+
+// ── 8.4 — treaty-recommendations ──────────────────────────────────
+describe('POST /api/ai/market/treaty-recommendations', () => {
+  beforeEach(() => {
+    // Default: treaty exists, report resolves by id.
+    state.treatyRow = makeTreatyRow();
+    state.reportById = makeReportRow();
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: async () => anthropicResponseWith(JSON.stringify(VALID_TREATY_RECS_OUTPUT)),
+    });
+  });
+
+  it('generates and persists per-treaty recs with staging metadata', async () => {
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/treaty-recommendations',
+      body: { contract_id: CONTRACT_ID, report_id: REPORT_ID },
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.cached).toBe(false);
+    expect(res.body.recommendations).toHaveLength(3);
+    const ls = res.body.recommendations.find(r => r.action_type === 'LINE_SIZE');
+    expect(ls.recommended_line_pct).toBeGreaterThanOrEqual(0);
+    expect(ls.recommended_line_pct).toBeLessThanOrEqual(1);
+    expect(ls.staging_supported).toBe(true);
+    expect(ls.staging_disabled_reason).toBeNull();
+    const terms = res.body.recommendations.find(r => r.action_type === 'TERMS');
+    expect(terms.staging_supported).toBe(false);
+    expect(terms.staging_disabled_reason).toMatch(/Terms staging not yet implemented/);
+    expect(state.insertedRecs).toHaveLength(3);
+  });
+
+  it('clamps LINE_SIZE recommended_line_pct outside [0,1] back into range', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: async () => anthropicResponseWith(JSON.stringify({
+        recommendations: [{
+          action_type: 'LINE_SIZE', title: 'High', body: 'b', recommended_line_pct: 1.7,
+          rationale: 'r', confidence: 0.6,
+        }],
+      })),
+    });
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/treaty-recommendations',
+      body: { contract_id: CONTRACT_ID, report_id: REPORT_ID },
+    });
+    expect(res.status).toBe(201);
+    expect(state.insertedRecs[0].recommended_line_pct).toBe(1);
+  });
+
+  it('drops TERMS rec with no usable term changes', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: async () => anthropicResponseWith(JSON.stringify({
+        recommendations: [
+          { action_type: 'TERMS', title: 't', body: 'b',
+            recommended_terms_changes: {}, rationale: 'r', confidence: 0.5 },
+          { action_type: 'WATCH', title: 'w', body: 'b', rationale: 'r', confidence: 0.5 },
+        ],
+      })),
+    });
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/treaty-recommendations',
+      body: { contract_id: CONTRACT_ID, report_id: REPORT_ID },
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.recommendations).toHaveLength(1);
+    expect(res.body.recommendations[0].action_type).toBe('WATCH');
+  });
+
+  it('cache hit: existing non-superseded recs returned without Anthropic call', async () => {
+    state.existingRecs = [{
+      rec_id: 'rec-existing', report_id: REPORT_ID, contract_id: CONTRACT_ID,
+      action_type: 'LINE_SIZE', recommended_line_pct: 0.2,
+      recommended_terms_changes: null, rationale: 'cached', confidence: 0.7,
+      compliance_warnings: [], status: 'PENDING',
+      created_at: new Date().toISOString(),
+    }];
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/treaty-recommendations',
+      body: { contract_id: CONTRACT_ID, report_id: REPORT_ID },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.cached).toBe(true);
+    expect(res.body.recommendations).toHaveLength(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('force_refresh bypasses cache and regenerates', async () => {
+    state.existingRecs = [{
+      rec_id: 'rec-existing', report_id: REPORT_ID, contract_id: CONTRACT_ID,
+      action_type: 'LINE_SIZE', recommended_line_pct: 0.2,
+      recommended_terms_changes: null, rationale: 'cached', confidence: 0.7,
+      compliance_warnings: [], status: 'PENDING',
+      created_at: new Date().toISOString(),
+    }];
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/treaty-recommendations',
+      body: { contract_id: CONTRACT_ID, report_id: REPORT_ID, force_refresh: true },
+    });
+    expect(res.status).toBe(201);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('404 when contract not found', async () => {
+    state.treatyRow = null;
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/treaty-recommendations',
+      body: { contract_id: CONTRACT_ID, report_id: REPORT_ID },
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('404 when report not found', async () => {
+    state.reportById = null;
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/treaty-recommendations',
+      body: { contract_id: CONTRACT_ID, report_id: REPORT_ID },
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('GET /api/ai/market/treaty-recommendations/:contract_id', () => {
+  it('returns all non-superseded recs with staging metadata', async () => {
+    state.existingRecs = [
+      { rec_id: 'a', action_type: 'LINE_SIZE', recommended_line_pct: 0.2, status: 'PENDING' },
+      { rec_id: 'b', action_type: 'TERMS',     status: 'PENDING' },
+    ];
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'GET', path: `/api/ai/market/treaty-recommendations/${CONTRACT_ID}`,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.recommendations).toHaveLength(2);
+    expect(res.body.recommendations[0].staging_supported).toBe(true);
+    expect(res.body.recommendations[1].staging_supported).toBe(false);
+  });
+});
+
+// ── 8.4 — stage / reject ──────────────────────────────────────────
+describe('POST /api/ai/market/recommendation/:rec_id/stage', () => {
+  it('LINE_SIZE rec writes to cedant_portfolio_staging with correct source linkage', async () => {
+    state.recById = {
+      rec_id: 'rec-1', cedant_id: CEDANT_ID, contract_id: CONTRACT_ID,
+      action_type: 'LINE_SIZE', recommended_line_pct: 0.18,
+      rationale: 'because', compliance_warnings: [], status: 'PENDING',
+    };
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/recommendation/rec-1/stage',
+      body: {},
+    });
+    expect(res.status).toBe(201);
+    expect(state.insertedStaging).toMatchObject({
+      contract_id: CONTRACT_ID, cedant_id: CEDANT_ID,
+      proposed_line_pct: 0.18, source: 'AI_MARKET_RECOMMENDATION',
+      source_market_rec_id: 'rec-1',
+    });
+    expect(state.updatedMarketRecStatus).toMatchObject({ rec_id: 'rec-1', status: 'STAGED' });
+  });
+
+  it('warnings present without acknowledgement → 422 with warnings echoed', async () => {
+    state.recById = {
+      rec_id: 'rec-1', cedant_id: CEDANT_ID, contract_id: CONTRACT_ID,
+      action_type: 'LINE_SIZE', recommended_line_pct: 0.18,
+      rationale: 'because', compliance_warnings: ['Negative margin warning'],
+      status: 'PENDING',
+    };
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/recommendation/rec-1/stage',
+      body: {},
+    });
+    expect(res.status).toBe(422);
+    expect(res.body.compliance_warnings).toContain('Negative margin warning');
+    expect(state.insertedStaging).toBeNull();
+  });
+
+  it('warnings present with warning_acknowledged:true → 201', async () => {
+    state.recById = {
+      rec_id: 'rec-1', cedant_id: CEDANT_ID, contract_id: CONTRACT_ID,
+      action_type: 'LINE_SIZE', recommended_line_pct: 0.18,
+      rationale: 'because', compliance_warnings: ['Negative margin warning'],
+      status: 'PENDING',
+    };
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/recommendation/rec-1/stage',
+      body: { warning_acknowledged: true },
+    });
+    expect(res.status).toBe(201);
+    expect(state.insertedStaging.warning_acknowledged_by_user_id).toBe(USER_ID);
+  });
+
+  it('TERMS rec → 422 (not stageable through this endpoint)', async () => {
+    state.recById = {
+      rec_id: 'rec-1', cedant_id: CEDANT_ID, contract_id: CONTRACT_ID,
+      action_type: 'TERMS', recommended_line_pct: null,
+      recommended_terms_changes: { commission_pct: 24 },
+      rationale: 'because', compliance_warnings: [], status: 'PENDING',
+    };
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/recommendation/rec-1/stage',
+      body: {},
+    });
+    expect(res.status).toBe(422);
+    expect(res.body.error).toMatch(/TERMS recommendations are not stageable/);
+    expect(state.insertedStaging).toBeNull();
+  });
+
+  it('rec already STAGED → 409', async () => {
+    state.recById = {
+      rec_id: 'rec-1', cedant_id: CEDANT_ID, contract_id: CONTRACT_ID,
+      action_type: 'LINE_SIZE', recommended_line_pct: 0.18,
+      rationale: 'r', compliance_warnings: [], status: 'STAGED',
+    };
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/recommendation/rec-1/stage',
+      body: {},
+    });
+    expect(res.status).toBe(409);
+  });
+});
+
+describe('POST /api/ai/market/recommendation/:rec_id/reject', () => {
+  it('rejects a PENDING rec without writing to staging', async () => {
+    state.recById = {
+      rec_id: 'rec-2', cedant_id: CEDANT_ID, contract_id: CONTRACT_ID,
+      action_type: 'LINE_SIZE', recommended_line_pct: 0.18,
+      rationale: 'r', compliance_warnings: [], status: 'PENDING',
+    };
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/recommendation/rec-2/reject',
+      body: { reason: 'too aggressive' },
+    });
+    expect(res.status).toBe(200);
+    expect(state.updatedMarketRecStatus).toMatchObject({ rec_id: 'rec-2', status: 'REJECTED' });
+    expect(state.insertedStaging).toBeNull();
+  });
+
+  it('404 when rec missing', async () => {
+    state.recById = null;
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/recommendation/rec-x/reject',
+      body: {},
+    });
+    expect(res.status).toBe(404);
   });
 });

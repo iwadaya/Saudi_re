@@ -62,6 +62,12 @@ const PATHS = {
   aiMarketGenerate: '/api/ai/market/generate-report',
   aiMarketLatest: (countryId, cobId, targetYear) =>
     `/api/ai/market/latest-report?country_id=${enc(countryId)}&class_of_business_id=${enc(cobId)}&target_year=${enc(targetYear)}`,
+  aiMarketTreatyBenchmarks: (contractId, reportId) =>
+    `/api/ai/market/treaty-benchmarks/${enc(contractId)}${reportId ? `?report_id=${enc(reportId)}` : ''}`,
+  aiMarketTreatyRecsGenerate: '/api/ai/market/treaty-recommendations',
+  aiMarketTreatyRecsList: (contractId) => `/api/ai/market/treaty-recommendations/${enc(contractId)}`,
+  aiMarketRecStage: (recId) => `/api/ai/market/recommendation/${enc(recId)}/stage`,
+  aiMarketRecReject: (recId) => `/api/ai/market/recommendation/${enc(recId)}/reject`,
   reinsurers: '/api/reinsurers',
   brokers: '/api/brokers',
   classOfBusiness: '/api/class-of-business',
@@ -300,6 +306,21 @@ export const api = {
   },
   getLatestMarketReport(countryId, cobId, targetYear, opts) {
     return request(PATHS.aiMarketLatest(countryId, cobId, targetYear), opts);
+  },
+  getTreatyBenchmarks(contractId, reportId, opts) {
+    return request(PATHS.aiMarketTreatyBenchmarks(contractId, reportId), opts);
+  },
+  generateTreatyRecommendations(body, opts) {
+    return request(PATHS.aiMarketTreatyRecsGenerate, { ...opts, method: 'POST', body });
+  },
+  getTreatyRecommendations(contractId, opts) {
+    return request(PATHS.aiMarketTreatyRecsList(contractId), opts);
+  },
+  stageMarketRec(recId, body, opts) {
+    return request(PATHS.aiMarketRecStage(recId), { ...opts, method: 'POST', body: body || {} });
+  },
+  rejectMarketRec(recId, body, opts) {
+    return request(PATHS.aiMarketRecReject(recId), { ...opts, method: 'POST', body: body || {} });
   },
   listBrokers(opts) { return request(PATHS.brokers, opts); },
   listReinsurers(opts) { return request(PATHS.reinsurers, opts); },
