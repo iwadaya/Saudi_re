@@ -28,6 +28,7 @@ import { logger } from '../lib/logger.js';
 import { validateBody } from '../lib/validate.js';
 import { logAudit } from '../services/audit.js';
 import { checkPortfolioCompliance } from '../lib/portfolioCompliance.js';
+import { fetchMarketSnapshot as fetchAxcoSnapshot } from '../lib/axcoClient.js';
 import {
   marketReportRequestSchema,
   marketReportSchema,
@@ -109,13 +110,23 @@ Rules:
 - The sources array must list every web page you actually used. Don't pad it with unread results.
 - Numbers are bare (no commas, no symbols, no percent sign — those are formatting concerns for the UI).`;
 
-function buildUserPrompt({ country, cob, target_year }) {
+function buildUserPrompt({ country, cob, target_year, axcoSnapshot = null }) {
   const today = new Date().toISOString().slice(0, 10);
-  return `Generate a market intelligence report for:
+  const head = `Generate a market intelligence report for:
 Country: ${country.name}
 Class of business: ${cob.name}
 Target underwriting year: ${target_year}
 The current date is ${today}. Focus on recent data (last 24 months) and forward-looking views for the target_year.`;
+  if (!axcoSnapshot) return head;
+  // When Axco supplied a snapshot, hand the model the raw JSON and
+  // tell it (a) to treat these numbers as primary truth and (b) to
+  // still validate via web search for anything missing or stale.
+  return `${head}
+
+AUTHORITATIVE AXCO DATA (treat as the primary source of truth — supersedes web-search disagreements unless the web data is clearly fresher):
+${JSON.stringify(axcoSnapshot, null, 2)}
+
+Cite Axco as a source by including it in the sources array (idx of your choosing, title "Axco Insurance Intelligence", url "https://www.axcoinfo.com/"). Reference that idx wherever you use an Axco fact.`;
 }
 
 function requireUser(req, res) {
@@ -127,19 +138,24 @@ function requireUser(req, res) {
   return uid;
 }
 
-// Pull country name from the canonical lookup. Returns null if missing.
+// Pull country name + Axco code from the canonical lookup. Returns
+// null if missing. axco_country_code is nullable — the route treats
+// "no Axco code" the same as "no Axco subscription" (web search only).
 async function resolveCountry(countryId) {
   const { rows } = await pool.query(
-    `SELECT country_id, country_name AS name, country_code AS code
+    `SELECT country_id,
+            country_name AS name,
+            country_code AS code,
+            axco_country_code
        FROM public.country WHERE country_id=$1`,
     [countryId],
   );
   return rows[0] || null;
 }
 
-// Pull class-of-business name with the same introspection pattern as
-// routes/lookups.js — the live DB has used either `class_of_business`
-// or `class_name` as the display column historically.
+// Pull class-of-business name + Axco code with the same introspection
+// pattern as routes/lookups.js — the live DB has used either
+// `class_of_business` or `class_name` as the display column historically.
 async function resolveCob(cobId) {
   const colRes = await pool.query(
     `SELECT column_name FROM information_schema.columns
@@ -149,11 +165,25 @@ async function resolveCob(cobId) {
   const cols = colRes.rows.map(r => r.column_name);
   const idCol   = cols.find(c => c === 'class_of_business_id') || cols.find(c => c === 'class_id') || cols[0];
   const nameCol = cols.find(c => c === 'class_of_business')    || cols.find(c => c === 'class_name') || cols[1] || cols[0];
-  const { rows } = await pool.query(
-    `SELECT ${idCol} AS class_of_business_id, ${nameCol} AS name
-       FROM public.class_of_business WHERE ${idCol}=$1`,
-    [cobId],
-  );
+  // axco_class_code is added by migration 096; older installs may not
+  // have it yet, so we still try to read it but tolerate the absence
+  // by falling back to a plain select.
+  let rows;
+  try {
+    const r = await pool.query(
+      `SELECT ${idCol} AS class_of_business_id, ${nameCol} AS name, axco_class_code
+         FROM public.class_of_business WHERE ${idCol}=$1`,
+      [cobId],
+    );
+    rows = r.rows;
+  } catch {
+    const r = await pool.query(
+      `SELECT ${idCol} AS class_of_business_id, ${nameCol} AS name
+         FROM public.class_of_business WHERE ${idCol}=$1`,
+      [cobId],
+    );
+    rows = r.rows;
+  }
   return rows[0] || null;
 }
 
@@ -285,8 +315,33 @@ router.post(
       priorReport = priorRows[0] || null;
     }
 
-    // Build prompt + call Claude
-    const userPrompt = buildUserPrompt({ country, cob, target_year: targetYear });
+    // Optional Axco enrichment. Returns null when:
+    //   • the country/cob has no axco_*_code populated, or
+    //   • AXCO_API_KEY is not set on this server.
+    // We log but never fail the request — Axco is an upgrade, not a
+    // dependency. The model falls back to web-search-only generation.
+    let axcoSnapshot = null;
+    if (country.axco_country_code && cob.axco_class_code) {
+      try {
+        axcoSnapshot = await fetchAxcoSnapshot({
+          countryCode: country.axco_country_code,
+          cobCode:     cob.axco_class_code,
+        });
+        if (axcoSnapshot) {
+          logger.info('[ai/market] Axco snapshot fetched', {
+            country: country.axco_country_code, cob: cob.axco_class_code,
+          });
+        }
+      } catch (e) {
+        logger.warn('[ai/market] Axco fetch failed — proceeding without it', { error: e?.message });
+      }
+    }
+
+    // Build prompt + call OpenAI. axcoSnapshot is null when absent —
+    // buildUserPrompt drops the Axco section in that case.
+    const userPrompt = buildUserPrompt({
+      country, cob, target_year: targetYear, axcoSnapshot,
+    });
     const t0 = Date.now();
     let raw;
     try {
@@ -329,8 +384,9 @@ router.post(
          (country_id, class_of_business_id, target_year,
           executive_summary, market_landscape, market_benchmarks,
           trends, recommendations, sources,
-          model, raw_response, generated_by_user_id, generation_duration_ms)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+          model, raw_response, generated_by_user_id, generation_duration_ms,
+          axco_snapshot)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING *`,
       [
         countryId, cobId, targetYear,
@@ -341,6 +397,7 @@ router.post(
         JSON.stringify(data.recommendations),
         JSON.stringify(data.sources),
         OPENAI_MODEL, JSON.stringify(raw), userId, durationMs,
+        axcoSnapshot ? JSON.stringify(axcoSnapshot) : null,
       ],
     );
 
@@ -363,6 +420,7 @@ router.post(
           target_year:         targetYear,
           model:               OPENAI_MODEL,
           duration_ms:         durationMs,
+          axco_used:           !!axcoSnapshot,
         },
       });
     } else {
@@ -377,6 +435,7 @@ router.post(
           target_year:         targetYear,
           model:               OPENAI_MODEL,
           duration_ms:         durationMs,
+          axco_used:           !!axcoSnapshot,
         },
       });
     }
