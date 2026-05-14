@@ -103,7 +103,14 @@ router.get("/cedants/:cedantId/cedant-summary", asyncHandler(async (req, res) =>
       d.retention_pct,
       d.cession_pct,
       d.brokerage_pct,
+      d.event_limit                                                  AS event_limit,
+      d.aal                                                          AS aal,
       ${margCols}
+      COALESCE(
+        po.technical_result,
+        (COALESCE(d.quota_share_epi,0) + COALESCE(d.surplus_epi,0))
+          * COALESCE(po.actuarial_margin, 0)
+      )::numeric                                                     AS net_technical_result,
       co.written_line_pct,
       COALESCE(c.signed_line_pct, co.written_line_pct)               AS effective_line_pct,
       ${lrSubquery('c')}                                             AS triangle_loss_ratio
@@ -158,6 +165,20 @@ router.get("/cedants/:cedantId/cedant-summary", asyncHandler(async (req, res) =>
       END                                                             AS actual_margin,
       NULL::numeric                                                   AS uw_margin,
       NULL::numeric                                                   AS technical_result,
+      NULL::numeric                                                   AS event_limit,
+      NULL::numeric                                                   AS aal,
+      COALESCE(
+        nl.total_earned_premium * (
+          CASE
+            WHEN nl.total_earned_premium > 0 AND nl.weighted_modelled IS NOT NULL
+              THEN nl.weighted_modelled / nl.total_earned_premium
+            WHEN nl.total_earned_premium > 0 AND nl.weighted_uw_price IS NOT NULL
+              THEN 1.0 - (nl.weighted_uw_price / nl.total_earned_premium / 100.0)
+            ELSE 0
+          END
+        ),
+        0
+      )::numeric                                                      AS net_technical_result,
       co.written_line_pct,
       COALESCE(c.signed_line_pct, co.written_line_pct)               AS effective_line_pct,
       ${lrSubquery('c')}                                             AS triangle_loss_ratio
@@ -198,6 +219,60 @@ router.get("/cedants/:cedantId/cedant-summary", asyncHandler(async (req, res) =>
   }
   merged.sort((a, b) => (b.uw_year || 0) - (a.uw_year || 0));
   res.json(merged);
+}));
+
+// Per-layer NP rows for a cedant, used by the In-depth tab
+router.get("/cedants/:cedantId/np-layers", asyncHandler(async (req, res) => {
+  const { cedantId } = req.params;
+
+  // Introspect class_of_business name column (same pattern as cedant-summary)
+  const cobCols = await pool.query(
+    `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='class_of_business' ORDER BY ordinal_position`
+  );
+  const cobColNames = cobCols.rows.map(r => r.column_name);
+  const cobIdCol   = cobColNames.find(c => c === 'class_of_business_id') || cobColNames.find(c => c === 'class_id') || cobColNames[0];
+  const cobNameCol = cobColNames.find(c => c === 'class_of_business') || cobColNames.find(c => c === 'class_name') || cobColNames[1] || cobColNames[0];
+
+  const cobSubquery = `(
+    SELECT string_agg(cob.${cobNameCol}, ', ')
+    FROM public.contract_class_of_business ccb
+    JOIN public.class_of_business cob ON cob.${cobIdCol} = ccb.class_of_business_id
+    WHERE ccb.contract_id = c.contract_id
+  )`;
+
+  const layers = await tryQuery(`
+    SELECT
+      c.contract_id,
+      c.uw_year,
+      c.contract_description,
+      c.status,
+      tt.treaty_type                                                  AS treaty_type,
+      ${cobSubquery}                                                  AS cob,
+      l.layer_number,
+      NULL::text                                                      AS layer_name,
+      l.layer_limit,
+      l.attachment                                                    AS layer_deductible,
+      l.num_reinstatements                                            AS reinstatements,
+      l.rol,
+      l.uw_price,
+      l.earned_premium,
+      l.modelled_margin,
+      l.hist_margin,
+      CASE
+        WHEN l.modelled_margin IS NOT NULL
+          THEN l.earned_premium * l.modelled_margin
+        WHEN l.uw_price IS NOT NULL
+          THEN l.earned_premium * (1.0 - l.uw_price / 100.0)
+        ELSE NULL
+      END                                                             AS net_technical_result
+    FROM public.contract c
+    JOIN public.contract_np_layers l ON l.contract_id = c.contract_id
+    LEFT JOIN public.treaty_type tt ON c.treaty_type_id = tt.treaty_type_id
+    WHERE c.cedant_id = $1
+    ORDER BY c.uw_year DESC, l.layer_number ASC
+  `, [cedantId]);
+
+  res.json({ layers });
 }));
 
 

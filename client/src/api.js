@@ -51,6 +51,14 @@ const PATHS = {
   homeSummary: '/api/home/summary',
   cedants: '/api/cedants',
   cedantSummary: (cedantId, uwYear) => `/api/cedants/${enc(cedantId)}/cedant-summary${uwYear ? `?uw_year=${enc(uwYear)}` : ''}`,
+  cedantNpLayers: (cedantId) => `/api/cedants/${enc(cedantId)}/np-layers`,
+  cedantPortfolioRecs: (cedantId) => `/api/ai/cedant/${enc(cedantId)}/portfolio-recommendations`,
+  cedantPortfolioRecsLatest: (cedantId) => `/api/ai/cedant/${enc(cedantId)}/portfolio-recommendations/latest`,
+  cedantPortfolioRecReject: (recId) => `/api/ai/cedant/recommendation/${enc(recId)}/reject`,
+  cedantStaging: (cedantId) => `/api/cedants/${enc(cedantId)}/staging`,
+  cedantStagingDiscard: (cedantId, stagingId) => `/api/cedants/${enc(cedantId)}/staging/${enc(stagingId)}/discard`,
+  cedantStagingCommitAll: (cedantId) => `/api/cedants/${enc(cedantId)}/staging/commit-all`,
+  cedantStagingImpact: (cedantId) => `/api/cedants/${enc(cedantId)}/staging/portfolio-impact`,
   reinsurers: '/api/reinsurers',
   brokers: '/api/brokers',
   classOfBusiness: '/api/class-of-business',
@@ -258,6 +266,32 @@ export const api = {
     return request(`${PATHS.cedants}${qs ? '?' + qs : ''}`);
   },
   getCedantSummary(cedantId, uwYear, opts) { return request(PATHS.cedantSummary(cedantId, uwYear), opts); },
+  getCedantNpLayers(cedantId, opts) { return request(PATHS.cedantNpLayers(cedantId), opts); },
+  generateCedantPortfolioRecs(cedantId, body, opts) {
+    return request(PATHS.cedantPortfolioRecs(cedantId), { ...opts, method: 'POST', body });
+  },
+  getCedantPortfolioRecsLatest(cedantId, opts) {
+    return request(PATHS.cedantPortfolioRecsLatest(cedantId), opts);
+  },
+  rejectCedantPortfolioRec(recId, body, opts) {
+    return request(PATHS.cedantPortfolioRecReject(recId), { ...opts, method: 'POST', body: body || {} });
+  },
+  stageLineChange(cedantId, body, opts) {
+    return request(PATHS.cedantStaging(cedantId), { ...opts, method: 'POST', body });
+  },
+  discardStagedChange(cedantId, stagingId, body, opts) {
+    return request(PATHS.cedantStagingDiscard(cedantId, stagingId), { ...opts, method: 'POST', body: body || {} });
+  },
+  commitStagedChanges(cedantId, body, opts) {
+    return request(PATHS.cedantStagingCommitAll(cedantId), { ...opts, method: 'POST', body: body || {} });
+  },
+  getStaging(cedantId, includeOpts, opts) {
+    const include = Array.isArray(includeOpts?.include) ? `?include=${enc(includeOpts.include.join(','))}` : '';
+    return request(`${PATHS.cedantStaging(cedantId)}${include}`, opts);
+  },
+  getStagingImpact(cedantId, opts) {
+    return request(PATHS.cedantStagingImpact(cedantId), opts);
+  },
   listBrokers(opts) { return request(PATHS.brokers, opts); },
   listReinsurers(opts) { return request(PATHS.reinsurers, opts); },
   listTreatyTypes(opts) { return request(PATHS.treatyTypes, opts); },
