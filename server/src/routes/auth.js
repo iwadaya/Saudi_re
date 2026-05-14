@@ -421,7 +421,7 @@ router.get('/auth/mandate-check', asyncHandler(async (req, res) => {
   // Check COB authority requirements from cob_authority_requirement table
   if (cobList.length) {
     const { rows: cobAuthRows } = await pool.query(
-      `SELECT c.class_of_business_id, c.min_hierarchy_level, c.requires_dual_approval, cb.class_name
+      `SELECT c.class_of_business_id, c.min_hierarchy_level, c.requires_dual_approval, cb.class_of_business AS class_name
        FROM public.cob_authority_requirement c
        JOIN public.class_of_business cb ON cb.class_of_business_id = c.class_of_business_id
        WHERE c.class_of_business_id = ANY($1::uuid[])
