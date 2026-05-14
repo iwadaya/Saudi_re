@@ -27,7 +27,7 @@ import PropOfferModal from './components/PropOfferModal';
 import PropMovingAverageCharts from './components/PropMovingAverageCharts';
 import { ChecklistPanel } from './components/insight/ChecklistPanel';
 import { AggCobBreakdownModal } from './components/insight/AggCobBreakdownModal';
-import { CedantSummaryPanel } from './components/insight/CedantSummaryPanel';
+import CedantSummaryTabs from '../../../components/cedant/CedantSummaryTabs';
 import { CompareTermsPanel } from './components/insight/CompareTermsPanel';
 import { InternalMetricsPanel } from './components/insight/InternalMetricsPanel';
 import { TreatyMetricsPanel } from './components/insight/TreatyMetricsPanel';
@@ -1008,7 +1008,7 @@ export default function PropPricing() {
                   {insightKey === 'INTERNAL_METRICS' && <InternalMetricsPanel contractId={cid} td={td} yearly={yearly} currency={safeCcy} />}
                   {insightKey === 'TREATY_METRICS' && <TreatyMetricsPanel shareGrid={shareGrid} contract={contract} td={td} epi={epi} limit={limit} yearly={yearly} contractId={cid} />}
                   {insightKey === 'COMPARE_TERMS' && <CompareTermsPanel contractId={cid} contract={contract} td={td} />}
-                  {insightKey === 'CEDANT_SUMMARY' && <CedantSummaryPanel contractId={cid} currency={safeCcy} contract={contract} liveModelledMargin={marginAct} liveActualMargin={1 - calcCR('actual')} />}
+                  {insightKey === 'CEDANT_SUMMARY' && <CedantSummaryTabs contractId={cid} currency={safeCcy} contract={contract} liveModelledMargin={marginAct} liveActualMargin={1 - calcCR('actual')} mode="PROP" />}
                   {insightKey === 'LARGE_LOSSES' && <div className="bbg-embed-screen"><LossSelectionScreen routeKey="PROP_LARGE_LOSS_SELECTION" title="Large Loss Selection" headerPill="" lossType="large" embedded /></div>}
                   {insightKey === 'CAT_LOSSES' && <div className="bbg-embed-screen"><LossSelectionScreen routeKey="PROP_CAT_LOSS_SELECTION" title="CAT Loss Selection" headerPill="" lossType="cat" embedded /></div>}
                   {insightKey === 'RISK_PROFILES' && <div className="bbg-embed-screen"><ProfileScreen routeKey="PROP_RISK_PROFILE" title="Risk Profile" headerPill="" profileType="risk" embedded /></div>}

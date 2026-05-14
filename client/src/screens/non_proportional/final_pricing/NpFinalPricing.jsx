@@ -33,7 +33,7 @@ import { ROUTE_KEY } from './constants.js';
 import { toN, fmtC, pct, emptyLayerPricing, deriveCombinedUwPrice, deriveComponentTotal } from './formatters.js';
 import SaveStateIndicator from './components/SaveStateIndicator.jsx';
 import NpBloombergHero from './components/NpBloombergHero.jsx';
-import NpCedantSummaryPanel from './components/NpCedantSummaryPanel.jsx';
+import CedantSummaryTabs from '../../../components/cedant/CedantSummaryTabs';
 import NpChecklistPanel from './components/NpChecklistPanel.jsx';
 import NpReinsurerModal from './components/NpReinsurerModal.jsx';
 import NpTechAnalysisModal from './components/NpTechAnalysisModal.jsx';
@@ -3926,11 +3926,12 @@ export default function NpFinalPricing() {
                         />
                       )}
                       {insightKey === 'CEDANT' && (
-                        <NpCedantSummaryPanel
+                        <CedantSummaryTabs
                           contractId={contractId}
                           currency={currency}
                           layers={layers}
                           isQuote={isQuote}
+                          mode="NP"
                         />
                       )}
                     </div>
