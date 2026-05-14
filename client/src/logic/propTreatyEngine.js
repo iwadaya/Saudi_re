@@ -24,7 +24,7 @@ export function applyLossCap(claims, prem, t) {
 }
 
 // Sliding-commission table lookup with linear interpolation between points.
-export function commPctFromTable(lr, table) {
+function commPctFromTable(lr, table) {
   const pts = (table || [])
     .map(r => ({ lr: cn(r.loss_ratio_pct ?? r.lossRatioPct), c: cn(r.commission_pct ?? r.commissionPct) }))
     .filter(p => Number.isFinite(p.lr) && Number.isFinite(p.c))

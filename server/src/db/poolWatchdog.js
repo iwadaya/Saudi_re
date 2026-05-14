@@ -33,11 +33,7 @@ export function startPoolWatchdog(intervalMs = DEFAULT_INTERVAL_MS) {
       peakWaiting = 0;
     }
   }, intervalMs);
+  // Timer is unref'd so it never blocks process exit; no separate
+  // stop function is needed for graceful shutdown.
   timer.unref?.();
-}
-
-export function stopPoolWatchdog() {
-  if (timer) { clearInterval(timer); timer = null; }
-  wasQueuing = false;
-  peakWaiting = 0;
 }

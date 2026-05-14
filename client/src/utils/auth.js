@@ -1,6 +1,5 @@
 const SESSION_KEY = 'UNIVERSE3_SESSION_V2';
 
-export const ROLE_CODES = { CE:'CE', CU:'CU', TD:'TD', TM:'TM', TUW:'TUW' };
 export const ROLE_LABELS = {
   CE:'Chief Executive', CU:'Chief Underwriter',
   TD:'Treaty Director', TM:'Treaty Manager', TUW:'Treaty Underwriter',
@@ -68,6 +67,5 @@ export function getAuthHeaders() {
   };
 }
 
-// Backward compat aliases
-export function setRole() {}
+// Backward-compat alias used by WizardLayout's logout button.
 export function clearRole() { clearSession(); }
