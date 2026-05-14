@@ -20,8 +20,13 @@ export const marketReportRequestSchema = z.object({
   force_refresh:        z.boolean().optional(),
 });
 
-// ── shape Claude must return ──────────────────────────────────────
-const sourceIdx = z.number().int().min(1);
+// ── shape the AI must return ──────────────────────────────────────
+// Source citation index. The system prompt suggests 1-indexed but
+// real-world output sometimes starts at 0 (or the model picks its
+// own base). Citation linking only requires that the idx used in
+// references matches the idx assigned in the sources array, not a
+// specific base — so accept any non-negative integer.
+const sourceIdx = z.number().int().min(0);
 
 const topCarrierSchema = z.object({
   name:             z.string().min(1).max(200),
