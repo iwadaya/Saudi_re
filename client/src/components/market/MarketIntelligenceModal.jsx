@@ -311,8 +311,7 @@ export default function MarketIntelligenceModal({
       style={{ zIndex: 1400 }}
     >
       <div
-        className="bbg-modal off-modal"
-        style={{ width: 'min(880px, 100%)', maxHeight: '92vh', minHeight: 480 }}
+        className="bbg-modal bbg-modal--fullscreen off-modal"
         role="dialog"
         aria-modal="true"
         aria-label="Market Intelligence"
@@ -337,7 +336,14 @@ export default function MarketIntelligenceModal({
           </div>
         </div>
 
-        <div className="bbg-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* Body sections are centered in a max-width column so the
+            fullscreen modal stays readable on ultrawide monitors —
+            cards still fill that column for visual balance. */}
+        <div
+          className="bbg-modal-body"
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 14 }}
+        >
+         <div style={{ width: '100%', maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
           {disabled && (
             <ErrorBox message="Country and class of business required for market intelligence." />
           )}
@@ -401,25 +407,30 @@ export default function MarketIntelligenceModal({
               }}
             />
           )}
+         </div>
         </div>
 
         <div style={{
-          padding: '10px 20px', borderTop: '1px solid rgba(255,255,255,0.07)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexShrink: 0,
+          padding: '10px 20px', borderTop: '1px solid rgba(255,255,255,0.07)', flexShrink: 0,
         }}>
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.40)' }}>
-            {report
-              ? `Generated ${fmtRelativeDate(report.generated_at)} · ${report.model || 'model'}`
-              : 'Generating…'}
-          </span>
-          <button
-            className="bbg-btn"
-            disabled={isLoading || disabled}
-            onClick={() => runFlow({ forceRefresh: true })}
-            title="Bypass cache and regenerate"
-          >
-            Refresh ↻
-          </button>
+          <div style={{
+            width: '100%', maxWidth: 1200, margin: '0 auto',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          }}>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.40)' }}>
+              {report
+                ? `Generated ${fmtRelativeDate(report.generated_at)} · ${report.model || 'model'}`
+                : 'Generating…'}
+            </span>
+            <button
+              className="bbg-btn"
+              disabled={isLoading || disabled}
+              onClick={() => runFlow({ forceRefresh: true })}
+              title="Bypass cache and regenerate"
+            >
+              Refresh ↻
+            </button>
+          </div>
         </div>
       </div>
     </div>
