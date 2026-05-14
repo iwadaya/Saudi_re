@@ -5,7 +5,11 @@ import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { asyncHandler, numOrNull, dateOrNull } from '../helpers.js';
 import { validateBody } from '../lib/validate.js';
-import { facRiskSaveSchema, facLocationsSaveSchema } from '../validation/facultative.js';
+import {
+  facRiskSaveSchema,
+  facLocationsSaveSchema,
+  facPricingSaveSchema,
+} from '../validation/facultative.js';
 
 const router = Router();
 
@@ -392,12 +396,14 @@ router.get('/fac/risks/:id/pricing', asyncHandler(async (req, res) => {
   res.json(rows[0] || null);
 }));
 
-router.put('/fac/risks/:id/pricing', asyncHandler(async (req, res) => {
+router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHandler(async (req, res) => {
   const riskId = req.params.id;
   const b = req.body;
   // ui_state is JSONB for UI-only data (selected extensions, custom extensions)
   // that doesn't warrant its own typed columns.
   const uiState = (b.ui_state && typeof b.ui_state === 'object') ? b.ui_state : {};
+  const extraLoadings = Array.isArray(b.extra_cover_loadings) ? b.extra_cover_loadings : [];
+  const engineWarnings = Array.isArray(b.engine_warnings) ? b.engine_warnings : [];
   const { rows } = await pool.query(`
     INSERT INTO public.fac_pricing (fac_risk_id,
       market_rate_per_mille, market_premium, market_source,
@@ -406,8 +412,19 @@ router.put('/fac/risks/:id/pricing', asyncHandler(async (req, res) => {
       market_weight_pct, actuarial_weight_pct,
       blended_rate_per_mille, blended_premium,
       final_rate_per_mille, final_premium, uw_adjustment_pct, uw_adjustment_reason,
-      burning_cost_ratio, avg_loss_years, ui_state
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+      burning_cost_ratio, avg_loss_years, ui_state,
+      indemnity_months, commission_pct, margin_pct, other_expenses_pct,
+      extra_cover_loadings, market_rate_pm,
+      technical_rate_pm, total_rate_pm, bi_rate_pm, net_rate_pm,
+      final_net_rate_pm, final_gross_rate_pm,
+      technical_premium, expected_premium,
+      underwriting_score, capacity_grade, uw_action,
+      max_capacity_pct, max_capacity_sar,
+      market_vs_tech_pct, market_vs_tech_band,
+      engine_version, engine_warnings
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
+      $22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,
+      $36,$37,$38,$39,$40,$41,$42,$43,$44)
     ON CONFLICT (fac_risk_id) DO UPDATE SET
       market_rate_per_mille = EXCLUDED.market_rate_per_mille,
       market_premium = EXCLUDED.market_premium,
@@ -429,6 +446,29 @@ router.put('/fac/risks/:id/pricing', asyncHandler(async (req, res) => {
       burning_cost_ratio = EXCLUDED.burning_cost_ratio,
       avg_loss_years = EXCLUDED.avg_loss_years,
       ui_state = EXCLUDED.ui_state,
+      indemnity_months = EXCLUDED.indemnity_months,
+      commission_pct = EXCLUDED.commission_pct,
+      margin_pct = EXCLUDED.margin_pct,
+      other_expenses_pct = EXCLUDED.other_expenses_pct,
+      extra_cover_loadings = EXCLUDED.extra_cover_loadings,
+      market_rate_pm = EXCLUDED.market_rate_pm,
+      technical_rate_pm = EXCLUDED.technical_rate_pm,
+      total_rate_pm = EXCLUDED.total_rate_pm,
+      bi_rate_pm = EXCLUDED.bi_rate_pm,
+      net_rate_pm = EXCLUDED.net_rate_pm,
+      final_net_rate_pm = EXCLUDED.final_net_rate_pm,
+      final_gross_rate_pm = EXCLUDED.final_gross_rate_pm,
+      technical_premium = EXCLUDED.technical_premium,
+      expected_premium = EXCLUDED.expected_premium,
+      underwriting_score = EXCLUDED.underwriting_score,
+      capacity_grade = EXCLUDED.capacity_grade,
+      uw_action = EXCLUDED.uw_action,
+      max_capacity_pct = EXCLUDED.max_capacity_pct,
+      max_capacity_sar = EXCLUDED.max_capacity_sar,
+      market_vs_tech_pct = EXCLUDED.market_vs_tech_pct,
+      market_vs_tech_band = EXCLUDED.market_vs_tech_band,
+      engine_version = EXCLUDED.engine_version,
+      engine_warnings = EXCLUDED.engine_warnings,
       updated_at = now()
     RETURNING *
   `, [
@@ -442,6 +482,21 @@ router.put('/fac/risks/:id/pricing', asyncHandler(async (req, res) => {
     numOrNull(b.uw_adjustment_pct), b.uw_adjustment_reason || null,
     numOrNull(b.burning_cost_ratio), numOrNull(b.avg_loss_years) || 5,
     JSON.stringify(uiState),
+    // Engine inputs
+    numOrNull(b.indemnity_months), numOrNull(b.commission_pct),
+    numOrNull(b.margin_pct), numOrNull(b.other_expenses_pct),
+    JSON.stringify(extraLoadings), numOrNull(b.market_rate_pm),
+    // Engine outputs — rate path
+    numOrNull(b.technical_rate_pm), numOrNull(b.total_rate_pm),
+    numOrNull(b.bi_rate_pm), numOrNull(b.net_rate_pm),
+    numOrNull(b.final_net_rate_pm), numOrNull(b.final_gross_rate_pm),
+    numOrNull(b.technical_premium), numOrNull(b.expected_premium),
+    // Engine outputs — score + decision
+    numOrNull(b.underwriting_score), b.capacity_grade || null, b.uw_action || null,
+    numOrNull(b.max_capacity_pct), numOrNull(b.max_capacity_sar),
+    numOrNull(b.market_vs_tech_pct), b.market_vs_tech_band || null,
+    // Provenance
+    b.engine_version || null, JSON.stringify(engineWarnings),
   ]);
   res.json(rows[0]);
 }));
