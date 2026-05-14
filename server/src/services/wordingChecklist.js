@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fsp from 'fs/promises';
 import path from 'path';
 import { createRequire } from 'module';
 import { env } from '../config/env.js';
@@ -198,9 +198,14 @@ async function readDocumentBuffer(doc) {
     path.join(env.uploadDir, storagePath),
     path.join(env.rootDir, 'server', 'uploads', storagePath),
   ];
-  const filePath = candidates.find(candidate => fs.existsSync(candidate));
-  if (!filePath) throw new Error('Document file not found on disk');
-  return fs.readFileSync(filePath);
+  for (const candidate of candidates) {
+    try {
+      return await fsp.readFile(candidate);
+    } catch (err) {
+      if (err?.code !== 'ENOENT') throw err;
+    }
+  }
+  throw new Error('Document file not found on disk');
 }
 
 async function extractDocumentText(doc) {

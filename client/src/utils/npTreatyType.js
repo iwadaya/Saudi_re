@@ -42,28 +42,3 @@ export function isNpCatFlowDisabled(appState) {
 export function isNpRiskFlowDisabled(appState) {
   return getNpTreatyTypeMode(appState) === 'CAT';
 }
-
-/**
- * Pareto max limit for large-loss (risk) analysis:
- * Sum of layer limits where riskCover === true.
- */
-export function getNpRiskParetoCap(appState) {
-  return _sumLimits(appState?.npStructureLayers || [], l => l.riskCover === true);
-}
-
-/**
- * Pareto max limit for cat-loss analysis:
- * Sum of layer limits where catCover === true.
- */
-export function getNpCatParetoCap(appState) {
-  return _sumLimits(appState?.npStructureLayers || [], l => l.catCover === true);
-}
-
-function _sumLimits(layers, predicate) {
-  return layers
-    .filter(predicate)
-    .reduce((sum, l) => {
-      const v = parseFloat(String(l.limit ?? '').replace(/,/g, ''));
-      return sum + (Number.isFinite(v) ? v : 0);
-    }, 0);
-}

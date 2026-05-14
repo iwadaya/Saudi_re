@@ -13,6 +13,7 @@ import { getWordingChecklist, runWordingChecklistAi, saveWordingChecklist } from
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import fsp from "fs/promises";
 import { fileURLToPath } from "url";
 import { createRequire } from "module";
 const _require = createRequire(import.meta.url);
@@ -438,12 +439,12 @@ async function storeFile(req, file) {
   }
   // ── Local disk fallback ──
   const dir = path.join(UPLOAD_DIR, req.params.id);
-  fs.mkdirSync(dir, { recursive: true });
+  await fsp.mkdir(dir, { recursive: true });
   const unique = Date.now() + "-" + Math.round(Math.random() * 1e6);
   const ext = path.extname(file.originalname);
   const filename = unique + ext;
   const filepath = path.join(dir, filename);
-  fs.writeFileSync(filepath, file.buffer);
+  await fsp.writeFile(filepath, file.buffer);
   return { storagePath: path.relative(UPLOAD_DIR, filepath), isCloud: false };
 }
 
@@ -500,20 +501,25 @@ router.delete("/documents/:docId", asyncHandler(async (req, res) => {
     try {
       const _cld = await getCloudinary();
       if (_cld) {
-        // Extract everything after /upload/ (with optional version segment), strip extension
         const uploadIdx = sp.indexOf('/upload/');
         if (uploadIdx !== -1) {
           let publicId = sp.slice(uploadIdx + 8); // after '/upload/'
-          // Strip version segment v12345678/
-          publicId = publicId.replace(/^v\d+\//, '');
-          // Strip file extension
-          publicId = publicId.replace(/\.[^/.]+$/, '');
-          await _cld.uploader.destroy(publicId, { resource_type: 'raw' }).catch(() => {});
+          publicId = publicId.replace(/^v\d+\//, '');     // strip version segment
+          publicId = publicId.replace(/\.[^/.]+$/, '');    // strip file extension
+          await _cld.uploader.destroy(publicId, { resource_type: 'raw' })
+            .catch((err) => logger.warn('[doc/delete] cloudinary destroy failed', { storagePath: sp, error: err?.message }));
         }
       }
-    } catch {}
+    } catch (err) {
+      // Cloudinary lib not installed or config invalid — DB row is already gone, log and move on.
+      logger.warn('[doc/delete] cloudinary cleanup skipped', { storagePath: sp, error: err.message });
+    }
   } else if (sp) {
-    fs.unlink(path.join(UPLOAD_DIR, sp), () => {});
+    // Missing-file is expected (already cleaned up), other errors get logged
+    // so we never silently lose disk-space leaks.
+    fsp.unlink(path.join(UPLOAD_DIR, sp)).catch((err) => {
+      if (err?.code !== 'ENOENT') logger.warn('[doc/delete] unlink failed', { storagePath: sp, error: err.message });
+    });
   }
   res.json({ok:true});
 }));
@@ -527,12 +533,19 @@ async function serveDoc(req, res) {
   if (sp.startsWith('http://') || sp.startsWith('https://')) {
     return res.redirect(sp);
   }
-  // Local disk
+  // Local disk — single async stat both confirms existence and supplies
+  // the Content-Length fallback when the DB row predates size_bytes.
   const fp = path.join(UPLOAD_DIR, sp);
-  if (!fs.existsSync(fp)) return res.status(404).json({error:"File not found on disk"});
+  let stat;
+  try {
+    stat = await fsp.stat(fp);
+  } catch (err) {
+    if (err.code === 'ENOENT') return res.status(404).json({error:"File not found on disk"});
+    throw err;
+  }
   res.setHeader("Content-Type", doc.mime_type || "application/octet-stream");
   res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(doc.file_name)}"`);
-  res.setHeader("Content-Length", doc.size_bytes || fs.statSync(fp).size);
+  res.setHeader("Content-Length", doc.size_bytes || stat.size);
   fs.createReadStream(fp).pipe(res);
 }
 
@@ -557,8 +570,12 @@ router.get("/documents/:docId/text", asyncHandler(async (req, res) => {
       buffer = Buffer.from(await r.arrayBuffer());
     } else {
       const fp = path.join(UPLOAD_DIR, sp);
-      if (!fs.existsSync(fp)) return res.json({ text: '', error: 'File not on disk' });
-      buffer = fs.readFileSync(fp);
+      try {
+        buffer = await fsp.readFile(fp);
+      } catch (err) {
+        if (err.code === 'ENOENT') return res.json({ text: '', error: 'File not on disk' });
+        throw err;
+      }
     }
   } catch(e) { return res.json({ text: '', error: e.message }); }
 

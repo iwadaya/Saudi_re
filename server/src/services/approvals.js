@@ -358,17 +358,3 @@ async function logOfferEvent({contractId,quoteId,eventType,actorUserId,actorName
   );
   if (contractId) await logAudit(pool,{entityType:'CONTRACT',entityId:contractId,eventType,actor:actorName||'SYSTEM',payload,comment}).catch(()=>{});
 }
-
-// Legacy compat
-export async function getRoleMandates() {
-  try {
-    const { rows } = await pool.query(`SELECT r.role_id,r.role_name,r.authority_limit_usd,COALESCE(array_agg(rc.class_of_business_id) FILTER (WHERE rc.class_of_business_id IS NOT NULL),'{}') AS restricted_class_ids FROM public.uw_role r LEFT JOIN public.uw_role_class_restriction rc ON r.role_id=rc.role_id GROUP BY r.role_id,r.role_name,r.authority_limit_usd ORDER BY r.authority_limit_usd ASC`);
-    return rows;
-  } catch { return []; }
-}
-export function mandateCovers(mandate,{limitUsd,classOfBusinessIds}) {
-  if (mandate.authority_limit_usd!==null&&limitUsd>mandate.authority_limit_usd) return false;
-  const restricted=new Set(mandate.restricted_class_ids||[]);
-  for (const cobId of classOfBusinessIds||[]) { if (restricted.has(cobId)) return false; }
-  return true;
-}

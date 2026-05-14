@@ -505,7 +505,7 @@ const quoteEnginePct = (value, fallback = '') => {
 };
 
 const mergeQuoteEngineResult = (layer = {}, result = {}) => {
-  let next = { ...layer };
+  const next = { ...layer };
   const applyScope = (scopeKey, component) => {
     const scope = QUOTE_COMPONENT_SCOPES[scopeKey];
     if (!scope || !component) return;
@@ -604,7 +604,7 @@ export default function NpFinalPricing() {
     pAttach: '',
     pExhaust: '',
   });
-  const emptyStrLayer = (i) => {
+  const emptyStrLayer = useCallback((i) => {
     const defaultRisk = !riskDisabled || (riskDisabled && catDisabled);
     const defaultCat = !catDisabled;
     return {
@@ -638,7 +638,7 @@ export default function NpFinalPricing() {
       pAttach: '',
       pExhaust: '',
     };
-  };
+  }, [riskDisabled, catDisabled]);
   // Derived per-layer values for the quote-pricing columns —
   // mirrors NpLayerTable's display logic but stays string-safe for
   // fields the user hasn't typed yet.
@@ -648,9 +648,9 @@ export default function NpFinalPricing() {
   const [clientStructures, setClientStructures] = useState([]); // [{ id, layers: [...] }]
   // Cascade attachments: layer[i].attachment = layer[i-1].attachment + layer[i-1].limit.
   // Only the first layer's attachment is editable — every subsequent
-  // layer attaches at the top of the previous one. Mirrors the helper
-  // in QuickBenchmark.jsx.
-  const cascadeAttachments = cascadeQuoteAttachments;
+  // layer attaches at the top of the previous one. The shared helper
+  // (cascadeQuoteAttachments) is used directly below; defined at module
+  // scope so it stays stable across renders.
   // COB picker — same shape as QuickBenchmark. selectedCobs carries
   // {id, name}. UW limits are per-structure (scope), so the Expiring
   // Structure and each quoted Structure can size their book of risks
@@ -676,15 +676,15 @@ export default function NpFinalPricing() {
   const [cobToggles, setCobToggles] = useState({});
   const [cobManual, setCobManual] = useState({});
   const getCobUwLimit = (scope, cobId) => (quoteCobUwLimits[scope] && quoteCobUwLimits[scope][cobId]) || '';
-  const getCobFlags = (scope, cobId, layers) => {
+  const getCobFlags = useCallback((scope, cobId, layers) => {
     const stored = (cobToggles[scope] && cobToggles[scope][cobId]) || [];
     const manual = (cobManual[scope] && cobManual[scope][cobId]) || [];
-    const ul = toN(getCobUwLimit(scope, cobId));
+    const ul = toN((quoteCobUwLimits[scope] && quoteCobUwLimits[scope][cobId]) || '');
     return layers.map((l, i) => {
       if (manual[i]) return !!stored[i];
       return ul > toN(l.attachment);
     });
-  };
+  }, [cobToggles, cobManual, quoteCobUwLimits]);
   const setCobToggle = (scope, cobId, lIdx, currentFlag) => {
     setCobManual((prev) => {
       const scopeMap = { ...(prev[scope] || {}) };
@@ -723,7 +723,7 @@ export default function NpFinalPricing() {
         j === lIdx ? updateQuotePricingLayer(row, field, val, { curve: quoteCurve }) : row
       ));
       const cascaded = (field === 'limit' || (field === 'attachment' && lIdx === 0))
-        ? cascadeAttachments(updated)
+        ? cascadeQuoteAttachments(updated)
         : updated;
       return { ...s, layers: cascaded };
     }));
@@ -790,9 +790,7 @@ export default function NpFinalPricing() {
     contractId,
     clientStructures,
     selectedCobs,
-    quoteCobUwLimits,
-    cobToggles,
-    cobManual,
+    getCobFlags,
     quoteCurve.baseEgnpi,
     npDetail,
     mode,
@@ -811,19 +809,19 @@ export default function NpFinalPricing() {
       { id: `str-${Date.now()}-${prev.length}`, layers: [emptyStrLayer(0)] },
     ]);
     setApprovedStructures((prev) => [...prev, false]);
-  }, [riskDisabled, catDisabled]);
+  }, [emptyStrLayer]);
 
   const addClientStructureLayer = useCallback((sIdx) => {
     setClientStructures((prev) => prev.map((s, i) => {
       if (i !== sIdx) return s;
-      return { ...s, layers: cascadeAttachments([...s.layers, emptyStrLayer(s.layers.length)]) };
+      return { ...s, layers: cascadeQuoteAttachments([...s.layers, emptyStrLayer(s.layers.length)]) };
     }));
-  }, [riskDisabled, catDisabled]);
+  }, [emptyStrLayer]);
 
   const removeClientStructureLayer = useCallback((sIdx, lIdx) => {
     setClientStructures((prev) => prev.map((s, i) => {
       if (i !== sIdx) return s;
-      return { ...s, layers: cascadeAttachments(s.layers.filter((_, j) => j !== lIdx)) };
+      return { ...s, layers: cascadeQuoteAttachments(s.layers.filter((_, j) => j !== lIdx)) };
     }));
   }, []);
 
@@ -2503,7 +2501,7 @@ export default function NpFinalPricing() {
                               if (n < prev.length) return prev.slice(0, n);
                               const grown = prev.slice();
                               for (let i = prev.length; i < n; i += 1) grown.push(emptyExpLayer(i));
-                              return cascadeAttachments(grown);
+                              return cascadeQuoteAttachments(grown);
                             });
                           }}
                         >
@@ -2562,7 +2560,7 @@ export default function NpFinalPricing() {
                                 });
                                 // Limit on any layer or attachment on layer 0 cascades the rest.
                                 if (field === 'limit' || (field === 'attachment' && i === 0)) {
-                                  return cascadeAttachments(next);
+                                  return cascadeQuoteAttachments(next);
                                 }
                                 return next;
                               });
