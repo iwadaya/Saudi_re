@@ -9,6 +9,8 @@ import {
   facRiskSaveSchema,
   facLocationsSaveSchema,
   facPricingSaveSchema,
+  facSubmitForApprovalSchema,
+  facBindSchema,
 } from '../validation/facultative.js';
 
 const router = Router();
@@ -421,10 +423,11 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
       underwriting_score, capacity_grade, uw_action,
       max_capacity_pct, max_capacity_sar,
       market_vs_tech_pct, market_vs_tech_band,
-      engine_version, engine_warnings
+      engine_version, engine_warnings,
+      capacity_proposed_pct, accepted_rate_pm, uw_note
     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
       $22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,
-      $36,$37,$38,$39,$40,$41,$42,$43,$44)
+      $36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47)
     ON CONFLICT (fac_risk_id) DO UPDATE SET
       market_rate_per_mille = EXCLUDED.market_rate_per_mille,
       market_premium = EXCLUDED.market_premium,
@@ -469,6 +472,9 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
       market_vs_tech_band = EXCLUDED.market_vs_tech_band,
       engine_version = EXCLUDED.engine_version,
       engine_warnings = EXCLUDED.engine_warnings,
+      capacity_proposed_pct = EXCLUDED.capacity_proposed_pct,
+      accepted_rate_pm = EXCLUDED.accepted_rate_pm,
+      uw_note = EXCLUDED.uw_note,
       updated_at = now()
     RETURNING *
   `, [
@@ -497,6 +503,8 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
     numOrNull(b.market_vs_tech_pct), b.market_vs_tech_band || null,
     // Provenance
     b.engine_version || null, JSON.stringify(engineWarnings),
+    // Summary-screen edits (migration 084)
+    numOrNull(b.capacity_proposed_pct), numOrNull(b.accepted_rate_pm), b.uw_note || null,
   ]);
   res.json(rows[0]);
 }));
@@ -768,6 +776,212 @@ router.post('/fac/risks/:id/clauses-checklist', asyncHandler(async (req, res) =>
     client.release();
   }
 }));
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SUMMARY & APPROVAL — submit / decline / bind
+//
+// The existing approvals service in services/approvals.js is built around
+// contract_offer.contract_id (NOT NULL + FK), so we don't go through it
+// here. The fac workflow keeps its approval state on fac_risk.status
+// (the fac_status enum already includes DRAFT / QUOTED / REFERRED /
+// BOUND / DECLINED) and writes "FAC_*" rows into contract_audit_event
+// (no FK after migration 071) so the same audit-log machinery picks
+// them up. A proper fac_approval table can be added later if the
+// workflow grows peer / arbiter steps; right now status + audit is the
+// whole state machine.
+// ═══════════════════════════════════════════════════════════════════════════
+
+function actorLabel(req) {
+  const u = req.user || {};
+  if (u.displayName) return u.displayName;
+  if (u.userId) return u.userId;
+  return req.headers['x-user-id'] || 'unknown';
+}
+
+router.get('/fac/risks/:id/audit-events', asyncHandler(async (req, res) => {
+  // Surfaces the FAC_* rows the workflow endpoints write into
+  // contract_audit_event. Used by the Summary screen to populate the
+  // underwriter / senior signature slots.
+  const { rows } = await pool.query(
+    `SELECT event_id, event_type, actor, payload, created_at
+       FROM public.contract_audit_event
+      WHERE contract_id = $1
+        AND event_type LIKE 'FAC\\_%' ESCAPE '\\'
+      ORDER BY created_at DESC`,
+    [req.params.id],
+  );
+  res.json({ events: rows });
+}));
+
+async function writeFacAuditEvent({ facRiskId, eventType, actor, payload }) {
+  // contract_audit_event lost its FK in migration 071, so reusing it for
+  // fac events avoids a brand-new audit table. event_type is prefixed
+  // with FAC_ so downstream consumers can filter cleanly.
+  await pool.query(
+    `INSERT INTO public.contract_audit_event (contract_id, event_type, actor, payload)
+     VALUES ($1, $2, $3, $4::jsonb)`,
+    [facRiskId, eventType, actor || null, JSON.stringify(payload || {})],
+  );
+}
+
+router.post(
+  '/fac/risks/:id/submit-for-approval',
+  validateBody(facSubmitForApprovalSchema),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    // Risk must exist.
+    const { rows: riskRows } = await pool.query(
+      `SELECT fac_risk_id, status FROM public.fac_risk WHERE fac_risk_id = $1`,
+      [id],
+    );
+    if (!riskRows.length) return res.status(404).json({ error: 'Risk not found' });
+
+    // Pricing must exist with a non-null underwriting_score.
+    const { rows: priceRows } = await pool.query(
+      `SELECT underwriting_score, capacity_grade, final_gross_rate_pm
+         FROM public.fac_pricing
+        WHERE fac_risk_id = $1`,
+      [id],
+    );
+    if (!priceRows.length || priceRows[0].underwriting_score == null) {
+      return res.status(422).json({
+        error: 'Pricing incomplete — underwriting_score must be computed before submission.',
+        code: 'PRICING_INCOMPLETE',
+      });
+    }
+    const grade = priceRows[0].capacity_grade || null;
+    const senior = grade ? grade >= 'H' : false; // 'H','I','J','K' route to senior
+    const nextStatus = senior ? 'REFERRED' : 'QUOTED';
+
+    const actor = actorLabel(req);
+    const { rows: updated } = await pool.query(
+      `UPDATE public.fac_risk
+          SET status = $2::public.fac_status,
+              updated_at = now()
+        WHERE fac_risk_id = $1
+        RETURNING *`,
+      [id, nextStatus],
+    );
+    await writeFacAuditEvent({
+      facRiskId: id,
+      eventType: 'FAC_SUBMITTED',
+      actor,
+      payload: {
+        previous_status: riskRows[0].status,
+        new_status: nextStatus,
+        capacity_grade: grade,
+        underwriting_score: priceRows[0].underwriting_score,
+        comment: req.body?.comment || null,
+        routed_to_senior: senior,
+      },
+    });
+    res.json({
+      risk: updated[0],
+      status: nextStatus,
+      capacity_grade: grade,
+      routed_to_senior: senior,
+    });
+  }),
+);
+
+router.post(
+  '/fac/risks/:id/decline',
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    // Inline validation so we can return 422 (semantic) rather than 400
+    // (malformed) for a missing/short reason — per the workflow spec.
+    const reason = String(req.body?.reason ?? '').trim();
+    if (reason.length < 5) {
+      return res.status(422).json({
+        error: 'Request body failed validation',
+        code: 'VALIDATION_FAILED',
+        fields: [{ path: 'reason', message: 'reason must be at least 5 characters', code: 'too_small' }],
+      });
+    }
+
+    const { rowCount: exists } = await pool.query(
+      `SELECT 1 FROM public.fac_risk WHERE fac_risk_id = $1`, [id],
+    );
+    if (!exists) return res.status(404).json({ error: 'Risk not found' });
+
+    const actor = actorLabel(req);
+    const { rows: updated } = await pool.query(
+      `UPDATE public.fac_risk
+          SET status = 'DECLINED'::public.fac_status,
+              decline_reason = $2,
+              updated_at = now()
+        WHERE fac_risk_id = $1
+        RETURNING *`,
+      [id, reason],
+    );
+    await writeFacAuditEvent({
+      facRiskId: id,
+      eventType: 'FAC_DECLINED',
+      actor,
+      payload: { reason },
+    });
+    res.json({ risk: updated[0], status: 'DECLINED' });
+  }),
+);
+
+router.post(
+  '/fac/risks/:id/bind',
+  validateBody(facBindSchema),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const { rows: riskRows } = await pool.query(
+      `SELECT fac_risk_id, status, bound_reference, uw_year, inception_date
+         FROM public.fac_risk WHERE fac_risk_id = $1`,
+      [id],
+    );
+    if (!riskRows.length) return res.status(404).json({ error: 'Risk not found' });
+
+    // Only QUOTED / APPROVED risks may be bound. The fac_status enum
+    // doesn't carry APPROVED, so we treat QUOTED as the only ready
+    // state right now — when the workflow grows peer/arbiter steps a
+    // dedicated APPROVED row will get added.
+    const currentStatus = riskRows[0].status;
+    if (currentStatus !== 'QUOTED') {
+      return res.status(409).json({
+        error: `Cannot bind from status "${currentStatus}". Risk must be QUOTED first.`,
+        code: 'INVALID_STATE',
+      });
+    }
+
+    // Generate FAC-YYYY-NNNNN. Year prefers explicit effective_date,
+    // falls back to inception_date, then today.
+    const effective = req.body?.effective_date || riskRows[0].inception_date;
+    const year = effective
+      ? new Date(effective).getFullYear()
+      : (riskRows[0].uw_year || new Date().getFullYear());
+    const { rows: seqRows } = await pool.query(
+      `SELECT nextval('public.fac_bound_reference_seq') AS n`,
+    );
+    const padded = String(seqRows[0].n).padStart(5, '0');
+    const boundReference = riskRows[0].bound_reference || `FAC-${year}-${padded}`;
+
+    const actor = actorLabel(req);
+    const { rows: updated } = await pool.query(
+      `UPDATE public.fac_risk
+          SET status = 'BOUND'::public.fac_status,
+              bound_reference = COALESCE(bound_reference, $2),
+              updated_at = now()
+        WHERE fac_risk_id = $1
+        RETURNING *`,
+      [id, boundReference],
+    );
+    await writeFacAuditEvent({
+      facRiskId: id,
+      eventType: 'FAC_BOUND',
+      actor,
+      payload: { bound_reference: updated[0].bound_reference, effective_date: effective || null },
+    });
+    res.json({ risk: updated[0], status: 'BOUND', bound_reference: updated[0].bound_reference });
+  }),
+);
 
 
 export default router;

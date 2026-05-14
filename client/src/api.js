@@ -539,6 +539,20 @@ export const api = {
     return request(`/api/fac/risks/${enc(id)}/clauses-checklist`, { method: 'POST', body: payload, ...opts });
   },
 
+  // ── Facultative summary / approval workflow ──────────────────────────────
+  facSubmitForApproval(id, payload, opts) {
+    return request(`/api/fac/risks/${enc(id)}/submit-for-approval`, { method: 'POST', body: payload || {}, ...opts });
+  },
+  facDecline(id, payload, opts) {
+    return request(`/api/fac/risks/${enc(id)}/decline`, { method: 'POST', body: payload, ...opts });
+  },
+  facBind(id, payload, opts) {
+    return request(`/api/fac/risks/${enc(id)}/bind`, { method: 'POST', body: payload || {}, ...opts });
+  },
+  facGetAuditEvents(id, opts) {
+    return request(`/api/fac/risks/${enc(id)}/audit-events`, opts);
+  },
+
   // ── Facultative reference data (cached via CACHEABLE_PATHS) ──────────────
   facGetOccupancies(opts)    { return request('/api/fac/reference/occupancies', opts); },
   facGetFactors(opts)        { return request('/api/fac/reference/factors', opts); },
