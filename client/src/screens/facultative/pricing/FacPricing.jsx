@@ -281,45 +281,82 @@ function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange }) {
               Loading factor catalogue…
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
-              {qualitativeFactors.map((factor) => {
-                const selectedLabel = selections[factor.factor_code] || '';
-                const selectedOpt = factor.options.find((o) => o.option_label === selectedLabel);
-                return (
-                  <div key={factor.factor_code} style={{ display: 'grid',
-                       gridTemplateColumns: '220px 1fr 90px 90px', gap: 10, alignItems: 'center',
-                       padding: '4px 0' }}>
-                    <div style={{ fontSize: 12, color: 'rgba(226,232,240,0.75)' }}>
-                      {factor.factor_name}
+            (() => {
+              // One grid template shared by the header row and every
+              // factor row, so the columns stay perfectly aligned even
+              // as the panel resizes. The dropdown column is bounded —
+              // otherwise it stretches to the right edge and the score
+              // / loading chips end up orphaned far from the field.
+              const ROW_COLS = '240px minmax(260px, 560px) 90px 110px';
+              return (
+                <div>
+                  {/* Column headers */}
+                  <div style={{ display: 'grid', gridTemplateColumns: ROW_COLS,
+                                 gap: 16, alignItems: 'center',
+                                 padding: '0 0 8px',
+                                 borderBottom: '1px solid rgba(255,255,255,0.06)',
+                                 marginBottom: 8 }}>
+                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+                                   textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>
+                      Factor
                     </div>
-                    <select className="fi" value={selectedLabel}
-                            onChange={(e) => setSelection(factor.factor_code, e.target.value)}
-                            style={{ fontSize: 12 }}>
-                      <option value="">— Select —</option>
-                      {factor.options.map((o) => (
-                        <option key={o.option_id || o.option_label} value={o.option_label}>
-                          {o.option_label}
-                        </option>
-                      ))}
-                    </select>
-                    <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums',
-                                  fontSize: 11, fontWeight: 700,
-                                  color: selectedOpt ? '#23d18b' : 'rgba(148,163,184,0.30)' }}>
-                      {selectedOpt ? `score ${selectedOpt.score}` : '—'}
+                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+                                   textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>
+                      Option
                     </div>
-                    <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums',
-                                  fontSize: 11, fontWeight: 700,
-                                  color: factor.affects_rate
-                                    ? (selectedOpt ? '#fbbf24' : 'rgba(148,163,184,0.30)')
-                                    : 'rgba(148,163,184,0.35)' }}>
-                      {factor.affects_rate
-                        ? (selectedOpt ? pctChip(selectedOpt.discount_loading || 0) : '—')
-                        : 'score only'}
+                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+                                   textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)',
+                                   textAlign: 'right' }}>
+                      Score
+                    </div>
+                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+                                   textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)',
+                                   textAlign: 'right' }}>
+                      Loading
                     </div>
                   </div>
-                );
-              })}
-            </div>
+
+                  {qualitativeFactors.map((factor) => {
+                    const selectedLabel = selections[factor.factor_code] || '';
+                    const selectedOpt = factor.options.find((o) => o.option_label === selectedLabel);
+                    return (
+                      <div key={factor.factor_code} style={{ display: 'grid',
+                           gridTemplateColumns: ROW_COLS, gap: 16, alignItems: 'center',
+                           padding: '8px 0',
+                           borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                        <div style={{ fontSize: 12, color: 'rgba(226,232,240,0.85)' }}>
+                          {factor.factor_name}
+                        </div>
+                        <select className="fi" value={selectedLabel}
+                                onChange={(e) => setSelection(factor.factor_code, e.target.value)}
+                                style={{ fontSize: 12, width: '100%' }}>
+                          <option value="">— Select —</option>
+                          {factor.options.map((o) => (
+                            <option key={o.option_id || o.option_label} value={o.option_label}>
+                              {o.option_label}
+                            </option>
+                          ))}
+                        </select>
+                        <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+                                      fontSize: 11, fontWeight: 700,
+                                      color: selectedOpt ? '#23d18b' : 'rgba(148,163,184,0.30)' }}>
+                          {selectedOpt ? `score ${selectedOpt.score}` : '—'}
+                        </div>
+                        <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+                                      fontSize: 11, fontWeight: 700,
+                                      color: factor.affects_rate
+                                        ? (selectedOpt ? '#fbbf24' : 'rgba(148,163,184,0.30)')
+                                        : 'rgba(148,163,184,0.35)' }}>
+                          {factor.affects_rate
+                            ? (selectedOpt ? pctChip(selectedOpt.discount_loading || 0) : '—')
+                            : 'score only'}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()
           )}
 
           <div style={{ marginTop: 12 }}>
