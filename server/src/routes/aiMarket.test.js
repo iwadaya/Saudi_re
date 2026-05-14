@@ -83,14 +83,18 @@ const VALID_TREATY_RECS_OUTPUT = {
   ],
 };
 
-function anthropicResponseWith(jsonText) {
+// Minimal OpenAI Responses-API shape. Real responses include extra
+// fields (usage, finish_reason, etc.) we don't read. The route prefers
+// `output_text` when present so we set that for the happy path; the
+// walk-the-output-array fallback is exercised by walking when needed.
+function openaiResponseWith(jsonText) {
   return {
-    id: 'msg_test',
-    model: 'claude-sonnet-4-20250514',
-    content: [
-      { type: 'text', text: jsonText },
+    id: 'resp_test',
+    model: 'gpt-4o',
+    output_text: jsonText,
+    output: [
+      { role: 'assistant', content: [{ type: 'output_text', text: jsonText }] },
     ],
-    stop_reason: 'end_turn',
   };
 }
 
@@ -253,7 +257,7 @@ vi.mock('../db/pool.js', () => ({
 }));
 
 vi.mock('../config/env.js', () => ({
-  env: { anthropicApiKey: 'test-key' },
+  env: { openaiApiKey: 'test-key' },
 }));
 
 const logAuditMock = vi.fn(async () => undefined);
@@ -313,7 +317,7 @@ const makeReportRow = (over = {}) => ({
   target_year: TARGET_YR,
   ...VALID_REPORT_OUTPUT,
   raw_response: {},
-  model: 'claude-sonnet-4-20250514',
+  model: 'gpt-4o',
   generated_at: new Date().toISOString(),
   ...over,
 });
@@ -358,7 +362,7 @@ beforeEach(() => {
   logAuditMock.mockClear();
   fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
     ok: true,
-    json: async () => anthropicResponseWith(JSON.stringify(VALID_REPORT_OUTPUT)),
+    json: async () => openaiResponseWith(JSON.stringify(VALID_REPORT_OUTPUT)),
   });
 });
 
@@ -366,7 +370,7 @@ afterEach(() => { fetchSpy.mockRestore(); });
 
 // ── 8.2 — generate-report ─────────────────────────────────────────
 describe('POST /api/ai/market/generate-report', () => {
-  it('cache miss → calls Anthropic, persists, returns cached:false', async () => {
+  it('cache miss → calls OpenAI, persists, returns cached:false', async () => {
     const app = buildApp();
     const res = await call(app, {
       method: 'POST', path: '/api/ai/market/generate-report',
@@ -378,7 +382,7 @@ describe('POST /api/ai/market/generate-report', () => {
     expect(state.insertedReport).not.toBeNull();
   });
 
-  it('cache hit (< 30 days) → returns cached row, no Anthropic call', async () => {
+  it('cache hit (< 30 days) → returns cached row, no OpenAI call', async () => {
     state.freshReportRow = makeReportRow();
     const app = buildApp();
     const res = await call(app, {
@@ -405,7 +409,7 @@ describe('POST /api/ai/market/generate-report', () => {
   it('invalid model output → 502 with raw_response, no persist', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,
-      json: async () => anthropicResponseWith(JSON.stringify({ not: 'a valid report' })),
+      json: async () => openaiResponseWith(JSON.stringify({ not: 'a valid report' })),
     });
     const app = buildApp();
     const res = await call(app, {
@@ -519,7 +523,7 @@ describe('POST /api/ai/market/treaty-recommendations', () => {
     state.reportById = makeReportRow();
     fetchSpy.mockResolvedValue({
       ok: true,
-      json: async () => anthropicResponseWith(JSON.stringify(VALID_TREATY_RECS_OUTPUT)),
+      json: async () => openaiResponseWith(JSON.stringify(VALID_TREATY_RECS_OUTPUT)),
     });
   });
 
@@ -546,7 +550,7 @@ describe('POST /api/ai/market/treaty-recommendations', () => {
   it('clamps LINE_SIZE recommended_line_pct outside [0,1] back into range', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,
-      json: async () => anthropicResponseWith(JSON.stringify({
+      json: async () => openaiResponseWith(JSON.stringify({
         recommendations: [{
           action_type: 'LINE_SIZE', title: 'High', body: 'b', recommended_line_pct: 1.7,
           rationale: 'r', confidence: 0.6,
@@ -565,7 +569,7 @@ describe('POST /api/ai/market/treaty-recommendations', () => {
   it('drops TERMS rec with no usable term changes', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,
-      json: async () => anthropicResponseWith(JSON.stringify({
+      json: async () => openaiResponseWith(JSON.stringify({
         recommendations: [
           { action_type: 'TERMS', title: 't', body: 'b',
             recommended_terms_changes: {}, rationale: 'r', confidence: 0.5 },
@@ -583,7 +587,7 @@ describe('POST /api/ai/market/treaty-recommendations', () => {
     expect(res.body.recommendations[0].action_type).toBe('WATCH');
   });
 
-  it('cache hit: existing non-superseded recs returned without Anthropic call', async () => {
+  it('cache hit: existing non-superseded recs returned without OpenAI call', async () => {
     state.existingRecs = [{
       rec_id: 'rec-existing', report_id: REPORT_ID, contract_id: CONTRACT_ID,
       action_type: 'LINE_SIZE', recommended_line_pct: 0.2,
@@ -789,7 +793,7 @@ describe('8.7 audit + log-view', () => {
       country_id: COUNTRY_ID,
       class_of_business_id: COB_ID,
       target_year: TARGET_YR,
-      model: 'claude-sonnet-4-20250514',
+      model: 'gpt-4o',
     });
     expect(Number.isFinite(generated.payload.duration_ms)).toBe(true);
     expect(events.find(e => e.eventType === 'REPORT_REFRESHED')).toBeUndefined();
