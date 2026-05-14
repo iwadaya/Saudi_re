@@ -11,7 +11,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: RUN_MIGRATIONS_ON_BOOT
-        value: "false"
+        value: "true"
       - key: CORS_ORIGIN
         value: "https://modelling-tool.onrender.com"
       - key: SESSION_TTL_HOURS
