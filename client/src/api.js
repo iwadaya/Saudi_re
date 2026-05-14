@@ -59,6 +59,9 @@ const PATHS = {
   cedantStagingDiscard: (cedantId, stagingId) => `/api/cedants/${enc(cedantId)}/staging/${enc(stagingId)}/discard`,
   cedantStagingCommitAll: (cedantId) => `/api/cedants/${enc(cedantId)}/staging/commit-all`,
   cedantStagingImpact: (cedantId) => `/api/cedants/${enc(cedantId)}/staging/portfolio-impact`,
+  aiMarketGenerate: '/api/ai/market/generate-report',
+  aiMarketLatest: (countryId, cobId, targetYear) =>
+    `/api/ai/market/latest-report?country_id=${enc(countryId)}&class_of_business_id=${enc(cobId)}&target_year=${enc(targetYear)}`,
   reinsurers: '/api/reinsurers',
   brokers: '/api/brokers',
   classOfBusiness: '/api/class-of-business',
@@ -291,6 +294,12 @@ export const api = {
   },
   getStagingImpact(cedantId, opts) {
     return request(PATHS.cedantStagingImpact(cedantId), opts);
+  },
+  generateMarketReport(body, opts) {
+    return request(PATHS.aiMarketGenerate, { ...opts, method: 'POST', body });
+  },
+  getLatestMarketReport(countryId, cobId, targetYear, opts) {
+    return request(PATHS.aiMarketLatest(countryId, cobId, targetYear), opts);
   },
   listBrokers(opts) { return request(PATHS.brokers, opts); },
   listReinsurers(opts) { return request(PATHS.reinsurers, opts); },
