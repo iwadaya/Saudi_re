@@ -525,6 +525,20 @@ export const api = {
   facDeleteDocument(docId, opts) { return request(`/api/fac/documents/${enc(docId)}`, { method: 'DELETE', ...opts }); },
   facGetLinkedTreaties(id, opts) { return request(`/api/fac/risks/${enc(id)}/linked-treaties`, opts); },
 
+  // ── Facultative ↔ treaty links (per risk) ────────────────────────────────
+  facGetEligibleTreaties(id, opts) {
+    return request(`/api/fac/risks/${enc(id)}/eligible-treaties`, opts);
+  },
+  facGetTreatyLinks(id, opts) {
+    return request(`/api/fac/risks/${enc(id)}/treaty-links`, opts);
+  },
+  facCreateTreatyLink(id, payload, opts) {
+    return request(`/api/fac/risks/${enc(id)}/treaty-links`, { method: 'POST', body: payload, ...opts });
+  },
+  facDeleteTreatyLink(id, linkId, opts) {
+    return request(`/api/fac/risks/${enc(id)}/treaty-links/${enc(linkId)}`, { method: 'DELETE', ...opts });
+  },
+
   // ── Facultative underwriting factor selections (per risk) ────────────────
   facGetUwFactors(id, opts) { return request(`/api/fac/risks/${enc(id)}/uw-factors`, opts); },
   facSaveUwFactors(id, payload, opts) {

@@ -268,3 +268,16 @@ export const facDeclineSchema = z.object({
 export const facBindSchema = z.object({
   effective_date: isoDate,
 }).passthrough();
+
+/** POST /risks/:id/treaty-links — body schema. */
+export const facTreatyLinkCreateSchema = z.object({
+  contract_id:   z.string().uuid('contract_id must be a UUID'),
+  link_type:     z.enum([
+    'VOLUNTARY_OVER_TREATY',
+    'OBLIGATORY_OUTSIDE_TREATY',
+    'FAC_INSTEAD_OF_TREATY',
+    'INFORMATIONAL',
+  ]),
+  capacity_used: money,
+  notes:         optionalText,
+}).passthrough();

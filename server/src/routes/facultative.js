@@ -15,6 +15,7 @@ import {
   facPricingSaveSchema,
   facSubmitForApprovalSchema,
   facBindSchema,
+  facTreatyLinkCreateSchema,
 } from '../validation/facultative.js';
 import { applyRecommendation } from '../lib/facRecommendationApply.js';
 
@@ -653,7 +654,7 @@ router.get('/fac/risks/:id/linked-treaties', asyncHandler(async (req, res) => {
   const { rows } = await pool.query(`
     SELECT c.contract_id, c.uw_year, c.status,
            co.company_name AS cedant_name,
-           tt.treaty_type_name, tt.category
+           tt.treaty_type AS treaty_type_name, tt.category
     FROM public.contract c
     LEFT JOIN public.companies co ON co.company_id = c.cedant_id
     LEFT JOIN public.treaty_type tt ON tt.treaty_type_id = c.treaty_type_id
@@ -1257,6 +1258,198 @@ router.post(
     res.json({ risk: updated[0], status: 'BOUND', bound_reference: updated[0].bound_reference });
   }),
 );
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TREATY LINKING — fac_treaty_link + eligibility
+//
+// Eligibility query: same-cedant treaties whose COB overlaps with the
+// fac risk (via fac_to_treaty_cob_map), are in an active status, and
+// whose policy window contains the fac inception date ±30 days. The
+// 30-day padding lets treaties whose effective date is close to the
+// fac inception still appear; without it, a treaty inception of
+// 1 Jan 2026 vs fac inception 28 Dec 2025 would silently drop.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const _LINKABLE_CONTRACT_STATUSES = ['BOUND', 'SIGNED', 'RENEWED'];
+
+router.get('/fac/risks/:id/eligible-treaties', asyncHandler(async (req, res) => {
+  const riskId = req.params.id;
+
+  // Pull the fac risk's cedant + COB + inception once; we'll reuse for
+  // the eligibility filter and the 30-day window. We also fetch the
+  // mapped class_of_business_id — if no map exists yet the eligible
+  // list is empty, which is correct.
+  const { rows: riskRows } = await pool.query(`
+    SELECT r.cedant_id, r.inception_date, r.fac_cob_id,
+           m.class_of_business_id
+      FROM public.fac_risk r
+      LEFT JOIN public.fac_to_treaty_cob_map m ON m.fac_cob_id = r.fac_cob_id
+     WHERE r.fac_risk_id = $1
+  `, [riskId]);
+  if (!riskRows.length) return res.status(404).json({ error: 'Risk not found' });
+  const r = riskRows[0];
+  if (!r.cedant_id || !r.class_of_business_id) return res.json({ treaties: [] });
+
+  // policy_inception defaults to the risk's inception_date; if blank,
+  // we centre on today so the screen still surfaces eligible treaties
+  // for an in-flight quote.
+  const inception = r.inception_date || new Date().toISOString().slice(0, 10);
+
+  const { rows } = await pool.query(`
+    SELECT c.contract_id,
+           c.uw_year, c.status, c.inception_date, c.renewal_date,
+           tt.treaty_type AS treaty_type_name,
+           co.company_name AS cedant_name,
+           (
+             SELECT json_agg(cob.class_of_business)
+               FROM public.contract_class_of_business ccob
+               JOIN public.class_of_business cob
+                 ON cob.class_of_business_id = ccob.class_of_business_id
+              WHERE ccob.contract_id = c.contract_id
+           ) AS classes_of_business
+      FROM public.contract c
+      LEFT JOIN public.treaty_type tt ON tt.treaty_type_id = c.treaty_type_id
+      LEFT JOIN public.companies co   ON co.company_id     = c.cedant_id
+     WHERE c.cedant_id = $1
+       AND c.status::text = ANY($2)
+       AND EXISTS (
+         SELECT 1 FROM public.contract_class_of_business ccob
+          WHERE ccob.contract_id = c.contract_id
+            AND ccob.class_of_business_id = $3
+       )
+       AND ($4::date BETWEEN COALESCE(c.inception_date, '-infinity') - INTERVAL '30 days'
+                          AND COALESCE(c.renewal_date,   'infinity')  + INTERVAL '30 days')
+     ORDER BY c.inception_date DESC NULLS LAST
+  `, [r.cedant_id, _LINKABLE_CONTRACT_STATUSES, r.class_of_business_id, inception]);
+
+  // Compose a human-readable label the UI can drop straight into a
+  // dropdown. Falls back gracefully if any sub-piece is missing.
+  const treaties = rows.map((c) => ({
+    contract_id:        c.contract_id,
+    label:              [
+      c.cedant_name || '—',
+      c.uw_year || '',
+      c.treaty_type_name || 'Treaty',
+    ].filter(Boolean).join(' · ').trim(),
+    status:             c.status,
+    inception_date:     c.inception_date,
+    renewal_date:       c.renewal_date,
+    treaty_type:        c.treaty_type_name,
+    classes_of_business: c.classes_of_business || [],
+    uw_year:            c.uw_year,
+  }));
+  res.json({ treaties });
+}));
+
+// Reuse for both /eligible-treaties and the POST validator below so
+// the eligibility rule lives in exactly one place.
+async function isContractEligibleForFacRisk(riskId, contractId) {
+  const { rows: riskRows } = await pool.query(`
+    SELECT r.cedant_id, r.inception_date, m.class_of_business_id
+      FROM public.fac_risk r
+      LEFT JOIN public.fac_to_treaty_cob_map m ON m.fac_cob_id = r.fac_cob_id
+     WHERE r.fac_risk_id = $1
+  `, [riskId]);
+  if (!riskRows.length) return { ok: false, reason: 'risk_not_found' };
+  const r = riskRows[0];
+  if (!r.cedant_id || !r.class_of_business_id) {
+    return { ok: false, reason: 'risk_missing_cedant_or_cob' };
+  }
+  const inception = r.inception_date || new Date().toISOString().slice(0, 10);
+  const { rowCount } = await pool.query(`
+    SELECT 1
+      FROM public.contract c
+     WHERE c.contract_id = $1
+       AND c.cedant_id = $2
+       AND c.status::text = ANY($3)
+       AND EXISTS (
+         SELECT 1 FROM public.contract_class_of_business ccob
+          WHERE ccob.contract_id = c.contract_id
+            AND ccob.class_of_business_id = $4
+       )
+       AND ($5::date BETWEEN COALESCE(c.inception_date, '-infinity') - INTERVAL '30 days'
+                          AND COALESCE(c.renewal_date,   'infinity')  + INTERVAL '30 days')
+  `, [contractId, r.cedant_id, _LINKABLE_CONTRACT_STATUSES, r.class_of_business_id, inception]);
+  return { ok: rowCount > 0, reason: rowCount > 0 ? null : 'not_eligible' };
+}
+
+router.get('/fac/risks/:id/treaty-links', asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(`
+    SELECT l.link_id, l.contract_id, l.link_type, l.capacity_used,
+           l.notes, l.created_at,
+           c.uw_year, c.status::text AS contract_status,
+           tt.treaty_type AS treaty_type_name,
+           co.company_name AS cedant_name
+      FROM public.fac_treaty_link l
+      JOIN public.contract c       ON c.contract_id = l.contract_id
+      LEFT JOIN public.treaty_type tt ON tt.treaty_type_id = c.treaty_type_id
+      LEFT JOIN public.companies   co ON co.company_id     = c.cedant_id
+     WHERE l.fac_risk_id = $1
+     ORDER BY l.created_at DESC
+  `, [req.params.id]);
+  const links = rows.map((row) => ({
+    link_id:        row.link_id,
+    contract_id:    row.contract_id,
+    contract_label: [row.cedant_name || '—', row.uw_year || '', row.treaty_type_name || 'Treaty']
+                      .filter(Boolean).join(' · ').trim(),
+    contract_status: row.contract_status,
+    link_type:      row.link_type,
+    capacity_used:  row.capacity_used,
+    notes:          row.notes,
+    created_at:     row.created_at,
+  }));
+  res.json({ links });
+}));
+
+router.post(
+  '/fac/risks/:id/treaty-links',
+  validateBody(facTreatyLinkCreateSchema),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { contract_id, link_type, capacity_used, notes } = req.body;
+
+    const eligibility = await isContractEligibleForFacRisk(id, contract_id);
+    if (!eligibility.ok) {
+      return res.status(422).json({
+        error: 'Contract is not eligible for this fac risk.',
+        code: 'NOT_ELIGIBLE',
+        reason: eligibility.reason,
+      });
+    }
+
+    try {
+      const { rows } = await pool.query(`
+        INSERT INTO public.fac_treaty_link
+          (fac_risk_id, contract_id, link_type, capacity_used, notes, created_by_user_id)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *
+      `, [id, contract_id, link_type, capacity_used ?? null, notes || null, actorUserUuid(req)]);
+      return res.status(201).json(rows[0]);
+    } catch (e) {
+      // Surface the UNIQUE (fac_risk_id, contract_id) violation as a
+      // 409 with a clean error code so the client can show a friendly
+      // toast instead of a generic 500.
+      if (e?.code === '23505') {
+        return res.status(409).json({
+          error: 'This treaty is already linked to the risk.',
+          code: 'DUPLICATE_LINK',
+        });
+      }
+      throw e;
+    }
+  }),
+);
+
+router.delete('/fac/risks/:id/treaty-links/:linkId', asyncHandler(async (req, res) => {
+  const { id, linkId } = req.params;
+  const { rowCount } = await pool.query(
+    `DELETE FROM public.fac_treaty_link WHERE link_id = $1 AND fac_risk_id = $2`,
+    [linkId, id],
+  );
+  if (!rowCount) return res.status(404).json({ error: 'Link not found' });
+  res.json({ deleted: true });
+}));
 
 
 export default router;
