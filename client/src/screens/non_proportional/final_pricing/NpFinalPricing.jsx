@@ -268,18 +268,31 @@ const quoteComponentSummary = (layer = {}) => {
   );
   const wtBurn = avg('wtBurn', 50);
   const wtPareto = avg('wtPareto', 0);
+  const wtExp = Math.max(0, 100 - wtBurn - wtPareto);
+  const loading = avg('loading', 15);
+  const pureBurn = sum('pureBurn');
+  const pareto = sum('pareto');
+  const exposure = sum('exposure');
+  // Single weighted-average Total ROL using the row's displayed
+  // (pureBurn, pareto, exposure) and the displayed (wtBurn, wtPareto,
+  // wtExp, loading). Summing the per-component totalRols silently
+  // diverged from this when per-component weights or loadings differed
+  // from their averages — the user-facing row would say e.g. wtBurn=50%
+  // while the Total ROL was computed against wtBurn=60% for risk and
+  // 40% for cat.
+  const totalRol = deriveComponentTotal(pureBurn, pareto, exposure, wtBurn, wtPareto, wtExp, loading);
   return {
     activeScopes,
     components,
-    pureBurn: sum('pureBurn'),
-    pareto: sum('pareto'),
-    exposure: sum('exposure'),
+    pureBurn,
+    pareto,
+    exposure,
     wtBurn,
     wtPareto,
-    loading: avg('loading', 15),
-    wtExp: Math.max(0, 100 - wtBurn - wtPareto),
+    loading,
+    wtExp,
     burnPlusPareto: sum('burnPlusPareto'),
-    totalRol: sum('totalRol'),
+    totalRol,
   };
 };
 
@@ -360,7 +373,12 @@ const applyCurvePricingToQuoteLayer = (layer = {}, curve = null) => {
   if (!priced) return layer;
   const rolPct = priced.y * 100;
   const loading = toN(layer.loading) || 15;
-  const baseRol = rolPct / (1 + loading / 100);
+  // Invert the target-loss-ratio loading used in deriveComponentTotal:
+  //   gross = pure / (1 - loading/100)  →  pure = gross * (1 - loading/100)
+  // (was `gross / (1 + loading/100)`, which assumed a multiplicative
+  // markup and diverged from the canonical loading formula — Total ROL
+  // recomputed downstream would then differ from the seeded UW price.)
+  const baseRol = rolPct * (1 - loading / 100);
   if (!Number.isFinite(baseRol) || baseRol <= 0) return layer;
   return {
     ...layer,
