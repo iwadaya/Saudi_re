@@ -4,6 +4,8 @@ import api from '../../../api';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import { useFacRiskId } from '../../../hooks/useContractId';
+import { useScreenSave } from '../../../hooks/useScreenSave';
+import { computeScoreAndDecision } from '../../../logic/facPropertyPricing';
 
 const ROUTE_KEY = 'FAC_PRICING';
 const numOrNull = v => { const c = String(v ?? '').replace(/,/g,'').trim(); if (!c) return null; const n = Number(c); return Number.isFinite(n) ? n : null; };
@@ -99,6 +101,230 @@ const EXTENSIONS_BY_CATEGORY = {
     { id: 'terrorism_en', label: 'Terrorism',                    loadingPct: 5 },
   ],
 };
+
+// ───────────────────────────────────────────────────────────────────────────
+// Underwriting factors panel — independent entity (fac_underwriting_factors),
+// independent save. Lives at the top of the pricing screen because the
+// 18 selections drive both the rate adjustment and the underwriting score
+// the rest of the screen reasons about.
+// ───────────────────────────────────────────────────────────────────────────
+
+function pctChip(decimal) {
+  // discount_loading is stored as a decimal (e.g. -0.10 = -10%).
+  const n = Number(decimal);
+  if (!Number.isFinite(n) || n === 0) return '0%';
+  const sign = n > 0 ? '+' : '−';
+  return `${sign}${Math.abs(n * 100).toFixed(2)}%`;
+}
+
+function UwFactorsPanel({ riskId, risk, onScoreChange }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [factors, setFactors]       = useState([]);
+  const [weights, setWeights]       = useState(null);
+  const [scoring, setScoring]       = useState(null);
+  const [occupancies, setOccupancies] = useState([]);
+  const [selections, setSelections] = useState({});
+  const [notes, setNotes]           = useState('');
+
+  // Load reference data + the risk's saved selections. Factor master,
+  // weights, scoring tables and occupancies are cached client-side so
+  // navigating between screens does not refetch.
+  useEffect(() => {
+    if (!riskId) return;
+    Promise.all([
+      api.facGetFactors(),
+      api.facGetFactorWeights(),
+      api.facGetScoringTables(),
+      api.facGetOccupancies(),
+    ]).then(([fac, fw, st, occ]) => {
+      setFactors(fac?.factors || []);
+      setWeights(fw?.schemes || null);
+      setScoring(st || null);
+      setOccupancies(occ?.occupancies || []);
+    }).catch(console.error);
+  }, [riskId]);
+
+  // Hydrate selections separately so reloading the saved blob does not
+  // race the reference-data fetch.
+  const hydrateSelections = useCallback((data) => {
+    setSelections(data?.selections || {});
+    setNotes(data?.notes || '');
+  }, []);
+
+  const saveSelections = useCallback(
+    (id, state) => api.facSaveUwFactors(id, { selections: state.selections, notes: state.notes || null }),
+    [],
+  );
+
+  const { save: saveUwFactors, markDirty } = useScreenSave({
+    entityId: riskId || '',
+    load: api.facGetUwFactors,
+    save: saveSelections,
+    currentState: () => ({ selections, notes }),
+    onLoaded: hydrateSelections,
+    errorLabel: 'UW Factors',
+  });
+
+  const setSelection = useCallback((code, label) => {
+    setSelections((prev) => ({ ...prev, [code]: label }));
+    markDirty();
+  }, [markDirty]);
+
+  // Filter the master list down to the 18 qualitative factors — those
+  // with at least one option in fac_factor_option. HAZARD_GRADE and
+  // FREQUENCY_GRADE come from the occupancy + dedicated score tables,
+  // not from a user-picked option.
+  const qualitativeFactors = useMemo(
+    () => factors.filter((f) => Array.isArray(f.options) && f.options.length > 0),
+    [factors],
+  );
+
+  // BI is included when bi_sum_insured > 0 OR pd_sum_insured is 0 with
+  // BI > 0; in practice the existing risk model treats any positive BI
+  // SI as BI-included. Falls through to WITHOUT_BI when there is no
+  // BI exposure.
+  const biIncluded = useMemo(() => {
+    const bi = Number(risk?.bi_sum_insured) || 0;
+    return bi > 0;
+  }, [risk]);
+
+  // Live score — pure client-side compute, no network call.
+  const liveScore = useMemo(() => {
+    if (!risk || !factors.length || !weights || !scoring) return null;
+    try {
+      return computeScoreAndDecision(
+        {
+          occupancy_code: risk.occupancy_code,
+          factor_selections: selections,
+          bi_included: biIncluded,
+          market_rate_pm: 0,
+        },
+        {
+          occupancies,
+          factors,
+          factorWeights: weights,
+          hazardGradeScore: scoring.hazard_grade,
+          frequencyScore: scoring.frequency,
+          capacityBands: scoring.capacity_bands,
+          territorialCapacity: scoring.territorial_capacity,
+        },
+        { final_net_rate_pm: 0 },
+      );
+    } catch {
+      return null;
+    }
+  }, [risk, factors, weights, scoring, occupancies, selections, biIncluded]);
+
+  // Surface the score upwards if the parent wants to compose it with the
+  // pricing screen's other readouts.
+  useEffect(() => {
+    if (onScoreChange) onScoreChange(liveScore);
+  }, [liveScore, onScoreChange]);
+
+  // Lift the save() handle on the parent so WizardLayout's onBeforeNext
+  // can flush both this panel and the pricing screen on navigation.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.__facUwFactorsSave = saveUwFactors;
+    return () => { delete window.__facUwFactorsSave; };
+  }, [saveUwFactors]);
+
+  const scheme = biIncluded ? 'WITH_BI' : 'WITHOUT_BI';
+
+  return (
+    <div style={{ marginBottom: 20, padding: '14px 18px',
+                  background: 'rgba(168,85,247,0.04)',
+                  border: '1px solid rgba(168,85,247,0.25)', borderRadius: 12 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: collapsed ? 0 : 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+             onClick={() => setCollapsed((c) => !c)}>
+          <span style={{ fontSize: 13, color: 'rgba(168,85,247,0.80)' }}>{collapsed ? '▶' : '▼'}</span>
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em',
+                         textTransform: 'uppercase', color: 'rgba(168,85,247,0.80)' }}>
+            Underwriting Factors — Drivers of Rate &amp; Score
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+                          textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>Scheme</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#a855f7', fontVariantNumeric: 'tabular-nums' }}>{scheme}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+                          textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>Score</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: '#23d18b', fontVariantNumeric: 'tabular-nums' }}>
+              {liveScore ? liveScore.underwriting_score.toFixed(2) : '—'}
+              {liveScore?.capacity_grade && (
+                <span style={{ marginLeft: 8, fontSize: 10, color: 'rgba(35,209,139,0.65)' }}>
+                  {liveScore.capacity_grade} · {liveScore.uw_action}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {!collapsed && (
+        <>
+          {qualitativeFactors.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.45)', padding: '8px 0' }}>
+              Loading factor catalogue…
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
+              {qualitativeFactors.map((factor) => {
+                const selectedLabel = selections[factor.factor_code] || '';
+                const selectedOpt = factor.options.find((o) => o.option_label === selectedLabel);
+                return (
+                  <div key={factor.factor_code} style={{ display: 'grid',
+                       gridTemplateColumns: '220px 1fr 90px 90px', gap: 10, alignItems: 'center',
+                       padding: '4px 0' }}>
+                    <div style={{ fontSize: 12, color: 'rgba(226,232,240,0.75)' }}>
+                      {factor.factor_name}
+                    </div>
+                    <select className="fi" value={selectedLabel}
+                            onChange={(e) => setSelection(factor.factor_code, e.target.value)}
+                            style={{ fontSize: 12 }}>
+                      <option value="">— Select —</option>
+                      {factor.options.map((o) => (
+                        <option key={o.option_id || o.option_label} value={o.option_label}>
+                          {o.option_label}
+                        </option>
+                      ))}
+                    </select>
+                    <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+                                  fontSize: 11, fontWeight: 700,
+                                  color: selectedOpt ? '#23d18b' : 'rgba(148,163,184,0.30)' }}>
+                      {selectedOpt ? `score ${selectedOpt.score}` : '—'}
+                    </div>
+                    <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+                                  fontSize: 11, fontWeight: 700,
+                                  color: factor.affects_rate
+                                    ? (selectedOpt ? '#fbbf24' : 'rgba(148,163,184,0.30)')
+                                    : 'rgba(148,163,184,0.35)' }}>
+                      {factor.affects_rate
+                        ? (selectedOpt ? pctChip(selectedOpt.discount_loading || 0) : '—')
+                        : 'score only'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{ marginTop: 12 }}>
+            <textarea className="fi" rows={2} value={notes}
+                      onChange={(e) => { setNotes(e.target.value); markDirty(); }}
+                      placeholder="Underwriter notes on these factor selections…"
+                      style={{ width: '100%', resize: 'vertical', fontSize: 12 }} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function FacPricing() {
   const riskId = useFacRiskId();
@@ -248,7 +474,15 @@ export default function FacPricing() {
   }, [f.blended_rate_per_mille, f.uw_adjustment_pct, extensionsLoadingPct, tsi]);
 
   const save = useCallback(async () => {
-    if (!riskId || !loaded.current || !dirty.current) return true;
+    // Two independent saves: the pricing record (this screen's local
+    // state) and the UW-factor selections (panel-owned). Both have to
+    // succeed before WizardLayout advances.
+    const uwSave = typeof window !== 'undefined' ? window.__facUwFactorsSave : null;
+    let uwOk = true;
+    if (typeof uwSave === 'function') {
+      try { uwOk = await uwSave(); } catch { uwOk = false; }
+    }
+    if (!riskId || !loaded.current || !dirty.current) return uwOk;
     const payload = {};
     for (const k of Object.keys(f)) payload[k] = numOrNull(f[k]) ?? f[k];
     // Persist extension selections so they rehydrate on reload/navigation.
@@ -261,7 +495,7 @@ export default function FacPricing() {
       const fp = numOrNull(f.final_premium);
       if (fp) await api.facUpdateRisk(riskId, { ri_premium: fp, original_rate: numOrNull(f.final_rate_per_mille) });
       dirty.current = false;
-      return true;
+      return uwOk;
     } catch (e) {
       console.error('[FacPricing] save failed:', e);
       window.showToast('Pricing save failed: ' + (e?.message || 'Server error'));
@@ -295,6 +529,8 @@ export default function FacPricing() {
             Total Sum Insured: <span style={{ color: '#00d4ff', fontWeight: 700 }}>{tsi.toLocaleString('en-US')}</span>
           </div>
         )}
+
+        <UwFactorsPanel riskId={riskId} risk={risk} />
 
         {/* ── Extensions — filtered by selected COB categories ── */}
         <Sec title="Extensions" color="rgba(168,85,247,0.55)">

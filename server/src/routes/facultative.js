@@ -5,7 +5,7 @@ import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { asyncHandler, numOrNull, dateOrNull } from '../helpers.js';
 import { validateBody } from '../lib/validate.js';
-import { facRiskSaveSchema } from '../validation/facultative.js';
+import { facRiskSaveSchema, facLocationsSaveSchema } from '../validation/facultative.js';
 
 const router = Router();
 
@@ -223,7 +223,7 @@ router.get('/fac/risks/:id/locations', asyncHandler(async (req, res) => {
   res.json(rows);
 }));
 
-router.put('/fac/risks/:id/locations', asyncHandler(async (req, res) => {
+router.put('/fac/risks/:id/locations', validateBody(facLocationsSaveSchema), asyncHandler(async (req, res) => {
   const riskId = req.params.id;
   const locations = req.body.locations || [];
   const client = await pool.connect();
@@ -233,14 +233,22 @@ router.put('/fac/risks/:id/locations', asyncHandler(async (req, res) => {
     for (let i = 0; i < locations.length; i++) {
       const l = locations[i];
       await client.query(`
-        INSERT INTO public.fac_location (fac_risk_id, location_name, address, latitude, longitude,
-          cresta_zone, country_id, pd_si, bi_si, sort_order)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        INSERT INTO public.fac_location (
+          fac_risk_id, location_name, address, latitude, longitude,
+          cresta_zone, country_id, pd_si, bi_si, sort_order,
+          occupancy_code, pd_pml_pct, bi_pml_pct,
+          original_ccy, original_pd_si, original_bi_si, fx_to_sar,
+          carrier_pd_share_pct, carrier_bi_share_pct
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
       `, [
         riskId, l.location_name || null, l.address || null,
         numOrNull(l.latitude), numOrNull(l.longitude),
         l.cresta_zone || null, l.country_id || null,
-        numOrNull(l.pd_si), numOrNull(l.bi_si), i
+        numOrNull(l.pd_si), numOrNull(l.bi_si), i,
+        numOrNull(l.occupancy_code), numOrNull(l.pd_pml_pct), numOrNull(l.bi_pml_pct),
+        l.original_ccy || null, numOrNull(l.original_pd_si), numOrNull(l.original_bi_si), numOrNull(l.fx_to_sar),
+        numOrNull(l.carrier_pd_share_pct), numOrNull(l.carrier_bi_share_pct),
       ]);
     }
     await client.query('COMMIT');
@@ -511,6 +519,97 @@ router.get('/fac/risks/:id/linked-treaties', asyncHandler(async (req, res) => {
     LIMIT 20
   `, [riskRows[0].cedant_id]);
   res.json(rows);
+}));
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UNDERWRITING FACTORS — per-risk selections (18-factor questionnaire)
+//
+// Selections are validated against the live reference set
+// (fac_factor_master + fac_factor_option) rather than a static Zod enum:
+// the master list is owned by the seed migration, not the route, and a
+// stale enum here would silently reject newly-added factors. The check
+// runs in the same handler so we only fetch the reference once per save.
+// ═══════════════════════════════════════════════════════════════════════════
+
+router.get('/fac/risks/:id/uw-factors', asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT selections, notes, updated_at
+       FROM public.fac_underwriting_factors
+      WHERE fac_risk_id = $1`,
+    [req.params.id],
+  );
+  if (!rows.length) return res.json({ selections: {}, notes: null, updated_at: null });
+  res.json(rows[0]);
+}));
+
+router.post('/fac/risks/:id/uw-factors', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const raw = req.body || {};
+  const selections = (raw.selections && typeof raw.selections === 'object' && !Array.isArray(raw.selections))
+    ? raw.selections : null;
+  if (!selections) {
+    return res.status(400).json({
+      error: 'Request body failed validation',
+      code: 'VALIDATION_FAILED',
+      fields: [{ path: 'selections', message: 'must be an object mapping factor_code → option_label', code: 'invalid_type' }],
+    });
+  }
+  const notes = typeof raw.notes === 'string' ? raw.notes : null;
+
+  // Pull every factor + its allowed options in a single query, then
+  // validate each entry in `selections`. Any unknown factor or option
+  // earns a 422 with the offending paths called out.
+  const { rows: refRows } = await pool.query(`
+    SELECT fm.factor_code, COALESCE(json_agg(fo.option_label) FILTER (WHERE fo.option_label IS NOT NULL), '[]') AS options
+      FROM public.fac_factor_master fm
+      LEFT JOIN public.fac_factor_option fo ON fo.factor_code = fm.factor_code
+     GROUP BY fm.factor_code
+  `);
+  const allowedByFactor = new Map();
+  for (const r of refRows) allowedByFactor.set(r.factor_code, new Set(r.options || []));
+
+  const issues = [];
+  for (const [code, label] of Object.entries(selections)) {
+    if (!allowedByFactor.has(code)) {
+      issues.push({ path: `selections.${code}`, message: `unknown factor_code "${code}"`, code: 'unknown_factor' });
+      continue;
+    }
+    if (label == null || label === '') continue; // blank == "no selection"
+    const allowed = allowedByFactor.get(code);
+    if (allowed.size === 0) continue; // factors like HAZARD_GRADE have no factor_option rows
+    if (!allowed.has(label)) {
+      issues.push({
+        path: `selections.${code}`,
+        message: `option "${label}" is not a valid choice for factor ${code}`,
+        code: 'unknown_option',
+      });
+    }
+  }
+  if (issues.length) {
+    return res.status(422).json({
+      error: 'Request body failed validation',
+      code: 'VALIDATION_FAILED',
+      fields: issues,
+    });
+  }
+
+  // Confirm the risk exists before writing — keeps the response shape
+  // honest if a stale UI saves against a deleted risk.
+  const { rowCount: riskExists } = await pool.query(
+    `SELECT 1 FROM public.fac_risk WHERE fac_risk_id = $1`, [id]
+  );
+  if (!riskExists) return res.status(404).json({ error: 'Risk not found' });
+
+  const { rows } = await pool.query(`
+    INSERT INTO public.fac_underwriting_factors (fac_risk_id, selections, notes)
+    VALUES ($1, $2::jsonb, $3)
+    ON CONFLICT (fac_risk_id) DO UPDATE
+      SET selections = EXCLUDED.selections,
+          notes      = EXCLUDED.notes
+    RETURNING selections, notes, updated_at
+  `, [id, JSON.stringify(selections), notes]);
+  res.json(rows[0]);
 }));
 
 
