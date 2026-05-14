@@ -1,5 +1,5 @@
 // src/screens/facultative/loss_history/FacLossHistory.jsx
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import api from '../../../api';
 import WizardLayout from '../../../components/WizardLayout';
 import { useScreenSave } from '../../../hooks/useScreenSave';
@@ -57,11 +57,107 @@ export default function FacLossHistory() {
   const totalPaid = rows.reduce((s, r) => s + (numOrNull(r.fgu_paid) || 0), 0);
   const totalOS = rows.reduce((s, r) => s + (numOrNull(r.fgu_outstanding) || 0), 0);
 
+  // ── Ten-year rolling matrix ───────────────────────────────────────────
+  // Rows: current UW year + 9 prior years (always 10, even when sparse).
+  // Columns: claim count, FGU paid / O/S / incurred, RI incurred, as-if
+  // claim ratio. Premium-per-year isn't captured anywhere yet, so the
+  // claim-ratio column shows '—' until a future change wires it in.
+  const matrix = useMemo(() => {
+    const thisYear = new Date().getFullYear();
+    const years = Array.from({ length: 10 }, (_, i) => thisYear - i);
+    const buckets = new Map(years.map((y) => [y, {
+      year: y, count: 0, fguPaid: 0, fguOS: 0, fguIncurred: 0, riIncurred: 0,
+    }]));
+    for (const r of rows) {
+      const y = Number(r.loss_year);
+      if (!Number.isFinite(y)) continue;
+      const b = buckets.get(y);
+      if (!b) continue;
+      const paid = numOrNull(r.fgu_paid) || 0;
+      const os = numOrNull(r.fgu_outstanding) || 0;
+      // ri_paid / ri_outstanding aren't captured by this screen yet, but
+      // they may arrive through other flows — include defensively so the
+      // RI incurred column is right when they exist.
+      const riPaid = numOrNull(r.ri_paid) || 0;
+      const riOs = numOrNull(r.ri_outstanding) || 0;
+      b.count += 1;
+      b.fguPaid += paid;
+      b.fguOS += os;
+      b.fguIncurred += paid + os;
+      b.riIncurred += riPaid + riOs;
+    }
+    return Array.from(buckets.values());
+  }, [rows]);
+  const fmt0 = (n) => (Number.isFinite(n) && n !== 0 ? Math.round(n).toLocaleString('en-US') : '—');
+
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Loss History" headerPill="FACULTATIVE" onBeforeNext={save} onBeforeBack={save}>
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: '8px 0 40px' }}>
         <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.55)', marginBottom: 16 }}>
           FGU (from the ground up) loss experience — minimum 3 years. Enter all material losses with details and mitigation measures taken.
+        </div>
+
+        {/* ── Ten-year matrix ── */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em',
+                        textTransform: 'uppercase', color: 'rgba(0,212,255,0.55)',
+                        marginBottom: 10, paddingBottom: 6,
+                        borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            10-Year Loss Matrix
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+            <thead>
+              <tr style={{ background: 'rgba(5,8,16,0.6)' }}>
+                {['Year', 'Claims', 'FGU Paid', 'FGU O/S', 'FGU Incurred', 'RI Incurred', 'As-if Claim Ratio'].map((h) => (
+                  <th key={h} style={{ padding: '8px 10px',
+                                       textAlign: h === 'Year' ? 'left' : 'right',
+                                       fontSize: 9, fontWeight: 800, letterSpacing: '.10em',
+                                       textTransform: 'uppercase', color: 'rgba(148,163,184,0.50)',
+                                       borderBottom: '1px solid rgba(255,255,255,0.08)',
+                                       whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {matrix.map((m) => (
+                <tr key={m.year} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <td style={{ padding: '6px 10px', fontVariantNumeric: 'tabular-nums',
+                                color: 'rgba(226,232,240,0.80)', fontWeight: 700 }}>{m.year}</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right',
+                                fontVariantNumeric: 'tabular-nums',
+                                color: m.count ? 'rgba(226,232,240,0.85)' : 'rgba(148,163,184,0.35)' }}>
+                    {m.count || '—'}
+                  </td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right',
+                                fontVariantNumeric: 'tabular-nums',
+                                color: m.fguPaid ? '#f87171' : 'rgba(148,163,184,0.35)' }}>
+                    {fmt0(m.fguPaid)}
+                  </td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right',
+                                fontVariantNumeric: 'tabular-nums',
+                                color: m.fguOS ? '#fbbf24' : 'rgba(148,163,184,0.35)' }}>
+                    {fmt0(m.fguOS)}
+                  </td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right',
+                                fontVariantNumeric: 'tabular-nums',
+                                fontWeight: 700,
+                                color: m.fguIncurred ? '#23d18b' : 'rgba(148,163,184,0.35)' }}>
+                    {fmt0(m.fguIncurred)}
+                  </td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right',
+                                fontVariantNumeric: 'tabular-nums',
+                                color: m.riIncurred ? 'rgba(226,232,240,0.85)' : 'rgba(148,163,184,0.35)' }}>
+                    {fmt0(m.riIncurred)}
+                  </td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right',
+                                color: 'rgba(148,163,184,0.35)' }}>—</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop: 6, fontSize: 10, color: 'rgba(148,163,184,0.40)' }}>
+            As-if claim ratio shows &lsquo;—&rsquo; until premium-per-year is captured against this risk.
+          </div>
         </div>
 
         {rows.length === 0 ? (

@@ -531,6 +531,14 @@ export const api = {
     return request(`/api/fac/risks/${enc(id)}/uw-factors`, { method: 'POST', body: payload, ...opts });
   },
 
+  // ── Facultative clauses & exclusions checklist (per risk) ────────────────
+  facGetClausesChecklist(id, opts) {
+    return request(`/api/fac/risks/${enc(id)}/clauses-checklist`, opts);
+  },
+  facSaveClausesChecklist(id, payload, opts) {
+    return request(`/api/fac/risks/${enc(id)}/clauses-checklist`, { method: 'POST', body: payload, ...opts });
+  },
+
   // ── Facultative reference data (cached via CACHEABLE_PATHS) ──────────────
   facGetOccupancies(opts)    { return request('/api/fac/reference/occupancies', opts); },
   facGetFactors(opts)        { return request('/api/fac/reference/factors', opts); },

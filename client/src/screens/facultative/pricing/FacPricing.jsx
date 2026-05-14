@@ -5,7 +5,9 @@ import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import { useFacRiskId } from '../../../hooks/useContractId';
 import { useScreenSave } from '../../../hooks/useScreenSave';
-import { computeScoreAndDecision } from '../../../logic/facPropertyPricing';
+import { computeScoreAndDecision, computeFacQuote } from '../../../logic/facPropertyPricing';
+
+const ENGINE_VERSION = '1.0.0';
 
 const ROUTE_KEY = 'FAC_PRICING';
 const numOrNull = v => { const c = String(v ?? '').replace(/,/g,'').trim(); if (!c) return null; const n = Number(c); return Number.isFinite(n) ? n : null; };
@@ -117,7 +119,7 @@ function pctChip(decimal) {
   return `${sign}${Math.abs(n * 100).toFixed(2)}%`;
 }
 
-function UwFactorsPanel({ riskId, risk, onScoreChange }) {
+function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange }) {
   const [collapsed, setCollapsed] = useState(false);
   const [factors, setFactors]       = useState([]);
   const [weights, setWeights]       = useState(null);
@@ -220,6 +222,12 @@ function UwFactorsPanel({ riskId, risk, onScoreChange }) {
   useEffect(() => {
     if (onScoreChange) onScoreChange(liveScore);
   }, [liveScore, onScoreChange]);
+
+  // Mirror selections to the parent so the engine in FacPricing
+  // recomputes in real time as the underwriter ticks options here.
+  useEffect(() => {
+    if (onSelectionsChange) onSelectionsChange(selections);
+  }, [selections, onSelectionsChange]);
 
   // Lift the save() handle on the parent so WizardLayout's onBeforeNext
   // can flush both this panel and the pricing screen on navigation.
@@ -326,6 +334,85 @@ function UwFactorsPanel({ riskId, risk, onScoreChange }) {
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Engine readout — pure display of computeFacQuote's result. Kept side-by-
+// side with the legacy dual-engine sections; once underwriters trust this
+// path we can retire the manual market/blend inputs.
+// ───────────────────────────────────────────────────────────────────────────
+function EngineReadout({ output, premiums, totalLocSar }) {
+  if (!output) {
+    return (
+      <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.45)', padding: '12px 0' }}>
+        Engine waiting for reference data… (occupancies, factors and locations must load first).
+      </div>
+    );
+  }
+  if (output._error) {
+    return (
+      <div style={{ fontSize: 12, color: '#f87171', padding: '12px 0' }}>
+        {(output.warnings || []).join(' / ') || 'Engine error.'}
+      </div>
+    );
+  }
+  const pm = (v) => (Number.isFinite(Number(v)) ? Number(v).toFixed(4) : '—');
+  const money = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)).toLocaleString('en-US') : '—');
+  const pct = (v) => (Number.isFinite(Number(v)) ? `${(Number(v) * 100).toFixed(2)}%` : '—');
+
+  const rows = [
+    ['Flexa Base Rate (‰)',           pm(output.flexa_base_rate_pm)],
+    ['Technical Rate — no NatCat (‰)', pm(output.technical_rate_no_natcat_pm)],
+    ['Flood / Storm Loaded (‰)',       pm(output.flood_storm_rate_loaded_pm)],
+    ['Earthquake Loaded (‰)',          pm(output.earthquake_rate_loaded_pm)],
+    ['Total Rate (‰)',                 pm(output.total_rate_pm)],
+    ['BI Rate (‰)',                    pm(output.bi_rate_pm)],
+    ['Net Rate (‰)',                   pm(output.net_rate_pm)],
+    ['Final Net Rate (‰)',             pm(output.final_net_rate_pm)],
+    ['Final Gross Rate (‰)',           pm(output.final_gross_rate_pm)],
+    ['Technical Premium (SAR)',        money(premiums?.technical)],
+    ['Expected Premium (SAR)',         money(premiums?.expected)],
+    ['Underwriting Score',
+      Number.isFinite(Number(output.underwriting_score))
+        ? Number(output.underwriting_score).toFixed(2) : '—'],
+    ['Capacity Grade',                 output.capacity_grade || '—'],
+    ['UW Action',                      output.uw_action || '—'],
+    ['Max Capacity %',                 pct(output.max_capacity_pct)],
+    ['Max Capacity (SAR)',             money(output.max_capacity_sar)],
+    ['Market vs Tech %',               pct(output.market_vs_tech_pct)],
+    ['Market vs Tech Band',            output.market_vs_tech_band || '—'],
+  ];
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+        {rows.map(([label, value]) => (
+          <div key={label} style={{ display: 'flex', justifyContent: 'space-between',
+               padding: '6px 12px', background: 'rgba(8,14,30,0.40)',
+               border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8 }}>
+            <span style={{ fontSize: 11, color: 'rgba(148,163,184,0.65)' }}>{label}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(226,232,240,0.90)',
+                           fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+          </div>
+        ))}
+      </div>
+      {Number.isFinite(totalLocSar) && totalLocSar > 0 && (
+        <div style={{ marginTop: 8, fontSize: 10, color: 'rgba(148,163,184,0.40)' }}>
+          Premium computed against total location SAR SI = {money(totalLocSar)}.
+        </div>
+      )}
+      {(output.warnings || []).length > 0 && (
+        <div style={{ marginTop: 10, padding: '8px 12px',
+                       background: 'rgba(251,191,36,0.05)',
+                       border: '1px solid rgba(251,191,36,0.25)', borderRadius: 8 }}>
+          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+                        color: 'rgba(251,191,36,0.70)', marginBottom: 4 }}>WARNINGS</div>
+          {output.warnings.map((w, i) => (
+            <div key={i} style={{ fontSize: 11, color: 'rgba(251,191,36,0.80)' }}>{w}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function FacPricing() {
   const riskId = useFacRiskId();
   const loaded = useRef(false);
@@ -348,6 +435,66 @@ export default function FacPricing() {
     burning_cost_ratio: '', avg_loss_years: '5',
   });
 
+  // ── Engine inputs (computeFacQuote) ──────────────────────────────
+  // The five user-controlled fields below feed straight into the engine
+  // along with the UW factor selections (panel) and the locations'
+  // SI / FX figures. Fractions are stored as 0..1 to match the column
+  // conventions; the UI converts on display.
+  const [eng, setEng] = useState({
+    indemnity_months: '12',
+    commission_pct: '0.20',
+    margin_pct: '0.05',
+    other_expenses_pct: '0.005',
+    market_rate_pm: '',
+    extra_cover_loadings: [],
+    _newLabel: '',
+    _newPct: '',
+  });
+  const setEngField = useCallback((key, val) => {
+    setEng((prev) => ({ ...prev, [key]: val }));
+    dirty.current = true;
+  }, []);
+
+  // Reference catalogues — every engine input flows through these.
+  const [occupancies, setOccupancies]     = useState([]);
+  const [factors, setFactors]             = useState([]);
+  const [factorWeights, setFactorWeights] = useState(null);
+  const [scoringTables, setScoringTables] = useState(null);
+  const [biIndemnity, setBiIndemnity]     = useState({});
+  const [natcatRates, setNatcatRates]     = useState([]);
+  // UW factor selections mirrored up from UwFactorsPanel so the engine
+  // recomputes the second a dropdown changes — no API round-trip.
+  const [uwSelections, setUwSelections] = useState({});
+  // Locations drive pd_si_share, total SAR, top-location SAR.
+  const [locations, setLocations] = useState([]);
+  const [engineOutput, setEngineOutput] = useState(null);
+
+  // Single-fetch reference loaders. CACHEABLE_PATHS in api.js dedupes
+  // these across the wizard, so navigating away and back is free.
+  useEffect(() => {
+    Promise.all([
+      api.facGetOccupancies(),
+      api.facGetFactors(),
+      api.facGetFactorWeights(),
+      api.facGetScoringTables(),
+      api.facGetBiIndemnity(),
+      api.facGetNatcatRates(),
+    ]).then(([occ, fac, fw, st, bi, nc]) => {
+      setOccupancies(occ?.occupancies || []);
+      setFactors(fac?.factors || []);
+      setFactorWeights(fw?.schemes || null);
+      setScoringTables(st || null);
+      setBiIndemnity(bi?.loadings || {});
+      setNatcatRates(nc?.rates || []);
+    }).catch(console.error);
+  }, []);
+
+  // Locations — used for pd_si_share / top-location lookups.
+  useEffect(() => {
+    if (!riskId) return;
+    api.facGetLocations(riskId).then((rows) => setLocations(rows || [])).catch(console.error);
+  }, [riskId]);
+
   // Load risk + pricing + fac classes
   useEffect(() => {
     if (!riskId) return;
@@ -364,6 +511,16 @@ export default function FacPricing() {
           const ui = p.ui_state || {};
           if (Array.isArray(ui.selectedExtensions)) setSelectedExtensions(new Set(ui.selectedExtensions));
           if (Array.isArray(ui.customExtensions))   setCustomExtensions(ui.customExtensions);
+          // Rehydrate engine inputs from the persisted pricing row.
+          setEng((prev) => ({
+            ...prev,
+            indemnity_months:   p.indemnity_months   != null ? String(p.indemnity_months)   : prev.indemnity_months,
+            commission_pct:     p.commission_pct     != null ? String(p.commission_pct)     : prev.commission_pct,
+            margin_pct:         p.margin_pct         != null ? String(p.margin_pct)         : prev.margin_pct,
+            other_expenses_pct: p.other_expenses_pct != null ? String(p.other_expenses_pct) : prev.other_expenses_pct,
+            market_rate_pm:     p.market_rate_pm     != null ? String(p.market_rate_pm)     : prev.market_rate_pm,
+            extra_cover_loadings: Array.isArray(p.extra_cover_loadings) ? p.extra_cover_loadings : prev.extra_cover_loadings,
+          }));
         }
         loaded.current = true; dirty.current = false;
       }).catch(console.error);
@@ -371,6 +528,95 @@ export default function FacPricing() {
 
   const set = (k, v) => { setF(prev => ({ ...prev, [k]: v })); dirty.current = true; };
   const tsi = numOrNull(risk?.total_sum_insured) || 0;
+
+  // ── Derived inputs the engine needs but the user doesn't type ────────
+  // pd_si_share: share of total SAR SI sitting in Material Damage.
+  // bi_included: any positive BI exposure on the risk or its locations.
+  // top_location_si_sar: largest single-location combined SAR SI.
+  const { pdSiShare, biIncludedGlobal, topLocationSiSar, totalLocSar } = useMemo(() => {
+    let pdSar = 0, biSar = 0, topSar = 0;
+    for (const l of locations) {
+      const pd = Number(l.pd_si) || 0;
+      const bi = Number(l.bi_si) || 0;
+      pdSar += pd; biSar += bi;
+      if (pd + bi > topSar) topSar = pd + bi;
+    }
+    const total = pdSar + biSar;
+    const share = total > 0 ? pdSar / total : 1;
+    const biFromRisk = Number(risk?.bi_sum_insured) || 0;
+    return {
+      pdSiShare: share,
+      biIncludedGlobal: biSar > 0 || biFromRisk > 0,
+      topLocationSiSar: topSar,
+      totalLocSar: total,
+    };
+  }, [locations, risk]);
+
+  // ── Debounced engine recompute (150ms) ───────────────────────────
+  // The engine is pure JS — debouncing only smooths a fast-typing user;
+  // there is no network round-trip behind it. Recompute fires whenever
+  // any of the engine inputs change.
+  useEffect(() => {
+    if (!risk || !occupancies.length || !factors.length || !factorWeights || !scoringTables) {
+      setEngineOutput(null);
+      return undefined;
+    }
+    const handle = setTimeout(() => {
+      try {
+        const inputs = {
+          occupancy_code: risk.occupancy_code,
+          country_zone:   risk.risk_country_zone,
+          region:         risk.cedant_region,
+          factor_selections: uwSelections,
+          pd_si_share_pct: pdSiShare,
+          indemnity_months: numOrNull(eng.indemnity_months) || 12,
+          commission_pct:   numOrNull(eng.commission_pct),
+          margin_pct:       numOrNull(eng.margin_pct),
+          other_expenses_pct: numOrNull(eng.other_expenses_pct),
+          extra_cover_loadings: (eng.extra_cover_loadings || [])
+            .map((x) => Number(x.pct))
+            .filter((n) => Number.isFinite(n)),
+          bi_included: biIncludedGlobal,
+          market_rate_pm: numOrNull(eng.market_rate_pm),
+          top_location_si_sar: topLocationSiSar || tsi || null,
+        };
+        const refData = {
+          occupancies, factors,
+          factorWeights,
+          hazardGradeScore:     scoringTables.hazard_grade,
+          frequencyScore:       scoringTables.frequency,
+          capacityBands:        scoringTables.capacity_bands,
+          territorialCapacity:  scoringTables.territorial_capacity,
+          biIndemnity, natcatRates,
+        };
+        const out = computeFacQuote(inputs, refData);
+        setEngineOutput(out);
+      } catch (err) {
+        // Surface the problem in-panel rather than swallowing it; the
+        // most common cause is a missing risk_country_zone before the
+        // underwriter has filled out the Risk Detail screen.
+        setEngineOutput({ _error: true, warnings: [String(err?.message || err)] });
+      }
+    }, 150);
+    return () => clearTimeout(handle);
+  }, [
+    risk, occupancies, factors, factorWeights, scoringTables, biIndemnity, natcatRates,
+    uwSelections, eng, pdSiShare, biIncludedGlobal, topLocationSiSar, tsi,
+  ]);
+
+  // ── Engine premiums (derived from engine output + total SI) ─────────
+  // We can't ask the engine for premiums directly — it returns rates
+  // per mille. Multiply by SAR SI here so the persisted snapshot
+  // contains the SAR figures the underwriter actually quoted.
+  const enginePremiums = useMemo(() => {
+    if (!engineOutput || engineOutput._error) return { technical: null, expected: null };
+    const siSar = totalLocSar || tsi || 0;
+    const tech = engineOutput.technical_rate_no_natcat_pm != null
+      ? (engineOutput.technical_rate_no_natcat_pm * siSar) / 1000 : null;
+    const exp = engineOutput.final_gross_rate_pm != null
+      ? (engineOutput.final_gross_rate_pm * siSar) / 1000 : null;
+    return { technical: tech, expected: exp };
+  }, [engineOutput, totalLocSar, tsi]);
 
   // Determine which categories are active from the risk's selected COBs
   // The risk stores fac_cob_id (primary) and cob_category, but we need all selected categories
@@ -490,6 +736,35 @@ export default function FacPricing() {
       selectedExtensions: Array.from(selectedExtensions),
       customExtensions,
     };
+    // Engine inputs (the five fields the underwriter types).
+    payload.indemnity_months   = numOrNull(eng.indemnity_months);
+    payload.commission_pct     = numOrNull(eng.commission_pct);
+    payload.margin_pct         = numOrNull(eng.margin_pct);
+    payload.other_expenses_pct = numOrNull(eng.other_expenses_pct);
+    payload.market_rate_pm     = numOrNull(eng.market_rate_pm);
+    payload.extra_cover_loadings = eng.extra_cover_loadings || [];
+    // Engine outputs — snapshot of what the screen showed. Persisting
+    // here means the DB always has the exact figures the underwriter
+    // signed off on, even if the engine is updated later.
+    if (engineOutput && !engineOutput._error) {
+      payload.technical_rate_pm   = engineOutput.technical_rate_no_natcat_pm ?? null;
+      payload.total_rate_pm       = engineOutput.total_rate_pm ?? null;
+      payload.bi_rate_pm          = engineOutput.bi_rate_pm ?? null;
+      payload.net_rate_pm         = engineOutput.net_rate_pm ?? null;
+      payload.final_net_rate_pm   = engineOutput.final_net_rate_pm ?? null;
+      payload.final_gross_rate_pm = engineOutput.final_gross_rate_pm ?? null;
+      payload.technical_premium   = enginePremiums.technical;
+      payload.expected_premium    = enginePremiums.expected;
+      payload.underwriting_score  = engineOutput.underwriting_score ?? null;
+      payload.capacity_grade      = engineOutput.capacity_grade ?? null;
+      payload.uw_action           = engineOutput.uw_action ?? null;
+      payload.max_capacity_pct    = engineOutput.max_capacity_pct ?? null;
+      payload.max_capacity_sar    = engineOutput.max_capacity_sar ?? null;
+      payload.market_vs_tech_pct  = engineOutput.market_vs_tech_pct ?? null;
+      payload.market_vs_tech_band = engineOutput.market_vs_tech_band ?? null;
+      payload.engine_warnings     = engineOutput.warnings || [];
+      payload.engine_version      = ENGINE_VERSION;
+    }
     try {
       await api.facSavePricing(riskId, payload);
       const fp = numOrNull(f.final_premium);
@@ -501,7 +776,7 @@ export default function FacPricing() {
       window.showToast('Pricing save failed: ' + (e?.message || 'Server error'));
       return false;
     }
-  }, [riskId, f, selectedExtensions, customExtensions]);
+  }, [riskId, f, selectedExtensions, customExtensions, eng, engineOutput, enginePremiums]);
 
   const extCheckbox = (ext, catColor) => {
     const checked = selectedExtensions.has(ext.id);
@@ -530,7 +805,85 @@ export default function FacPricing() {
           </div>
         )}
 
-        <UwFactorsPanel riskId={riskId} risk={risk} />
+        <UwFactorsPanel riskId={riskId} risk={risk} onSelectionsChange={setUwSelections} />
+
+        {/* ── Engine inputs ── */}
+        <Sec title="Engine Inputs" color="rgba(0,212,255,0.65)">
+          <FR label="Indemnity Period (months)" hint="Drives the BI rate multiplier (1–60)">
+            <input className="fi" type="number" min={1} max={60} value={eng.indemnity_months}
+                   onChange={(e) => setEngField('indemnity_months', e.target.value)} style={{ width: 100 }} />
+          </FR>
+          <FR label="Market Rate (‰)" hint="Used for the market-vs-tech band">
+            <input className="fi" type="number" min={0} step={0.0001} value={eng.market_rate_pm}
+                   onChange={(e) => setEngField('market_rate_pm', e.target.value)} style={{ width: 120 }} />
+          </FR>
+          <FR label="Commission %" hint="Stored as 0..1 (e.g. 0.20 = 20%)">
+            <input className="fi" type="number" min={0} max={1} step={0.0001} value={eng.commission_pct}
+                   onChange={(e) => setEngField('commission_pct', e.target.value)} style={{ width: 110 }} />
+          </FR>
+          <FR label="Margin %">
+            <input className="fi" type="number" min={0} max={1} step={0.0001} value={eng.margin_pct}
+                   onChange={(e) => setEngField('margin_pct', e.target.value)} style={{ width: 110 }} />
+          </FR>
+          <FR label="Other Expenses %">
+            <input className="fi" type="number" min={0} max={1} step={0.0001} value={eng.other_expenses_pct}
+                   onChange={(e) => setEngField('other_expenses_pct', e.target.value)} style={{ width: 110 }} />
+          </FR>
+          <FR label="Extra Cover Loadings" hint="Per-cover additive loading; sum applied to net rate">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {(eng.extra_cover_loadings || []).map((ext, i) => (
+                <div key={`${ext.label}-${i}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input className="fi" value={ext.label || ''} placeholder="Cover label"
+                         onChange={(e) => {
+                           const next = [...eng.extra_cover_loadings];
+                           next[i] = { ...next[i], label: e.target.value };
+                           setEngField('extra_cover_loadings', next);
+                         }}
+                         style={{ flex: 1, fontSize: 12 }} />
+                  <input className="fi" type="number" min={0} step={0.0001} value={ext.pct ?? ''}
+                         onChange={(e) => {
+                           const next = [...eng.extra_cover_loadings];
+                           next[i] = { ...next[i], pct: e.target.value === '' ? null : Number(e.target.value) };
+                           setEngField('extra_cover_loadings', next);
+                         }}
+                         placeholder="0..1" style={{ width: 100, fontSize: 12, textAlign: 'right' }} />
+                  <span style={{ cursor: 'pointer', color: '#f87171', fontSize: 14 }}
+                        onClick={() => {
+                          const next = [...eng.extra_cover_loadings];
+                          next.splice(i, 1);
+                          setEngField('extra_cover_loadings', next);
+                        }}>×</span>
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input className="fi" value={eng._newLabel} placeholder="New cover label"
+                       onChange={(e) => setEngField('_newLabel', e.target.value)}
+                       style={{ flex: 1, fontSize: 12 }} />
+                <input className="fi" type="number" min={0} step={0.0001} value={eng._newPct}
+                       onChange={(e) => setEngField('_newPct', e.target.value)}
+                       placeholder="0..1" style={{ width: 100, fontSize: 12, textAlign: 'right' }} />
+                <button type="button" onClick={() => {
+                  const label = (eng._newLabel || '').trim();
+                  const pct = numOrNull(eng._newPct);
+                  if (!label || pct == null) return;
+                  setEng((prev) => ({
+                    ...prev,
+                    extra_cover_loadings: [...(prev.extra_cover_loadings || []), { label, pct }],
+                    _newLabel: '', _newPct: '',
+                  }));
+                  dirty.current = true;
+                }} style={{ appearance: 'none', border: '1px solid rgba(0,212,255,0.30)',
+                            background: 'rgba(0,212,255,0.08)', color: '#00d4ff', borderRadius: 6,
+                            padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>+ Add</button>
+              </div>
+            </div>
+          </FR>
+        </Sec>
+
+        {/* ── Engine output (read-only) ── */}
+        <Sec title="Engine Output" color="rgba(35,209,139,0.65)">
+          <EngineReadout output={engineOutput} premiums={enginePremiums} totalLocSar={totalLocSar} />
+        </Sec>
 
         {/* ── Extensions — filtered by selected COB categories ── */}
         <Sec title="Extensions" color="rgba(168,85,247,0.55)">

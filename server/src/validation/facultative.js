@@ -174,3 +174,73 @@ export const facLocationSchema = z.object({
 export const facLocationsSaveSchema = z.object({
   locations: z.array(facLocationSchema).max(50, 'maximum 50 locations per risk'),
 });
+
+
+/**
+ * PUT /api/fac/risks/:id/pricing — accepts:
+ *   • The historic dual-engine fields (market / actuarial / blend / final).
+ *   • The new engine inputs + outputs from computeFacQuote (migration 082).
+ *
+ * `.passthrough()` keeps unknown keys so the dual-engine ui_state blob
+ * and other historical fields stay backward-compatible while the new
+ * engine columns are validated.
+ */
+export const facPricingSaveSchema = z.object({
+  // ── Historic dual-engine fields (kept as a safety net while the new
+  //    engine becomes the primary writer) ────────────────────────────
+  market_rate_per_mille:    optionalNumber,
+  market_premium:           money,
+  market_source:            optionalText,
+  actuarial_method:         optionalText,
+  actuarial_rate_per_mille: optionalNumber,
+  actuarial_premium:        money,
+  expected_loss_ratio:      optionalNumber,
+  loss_cost:                money,
+  loading_pct:              optionalNumber,
+  market_weight_pct:        pct100,
+  actuarial_weight_pct:     pct100,
+  blended_rate_per_mille:   optionalNumber,
+  blended_premium:          money,
+  final_rate_per_mille:     optionalNumber,
+  final_premium:            money,
+  uw_adjustment_pct:        optionalNumber,
+  uw_adjustment_reason:     optionalText,
+  burning_cost_ratio:       optionalNumber,
+  avg_loss_years:           optionalInt,
+
+  // ── Engine inputs (migration 082) ──────────────────────────────────
+  indemnity_months:         optionalInt,
+  commission_pct:           optionalFraction01,
+  margin_pct:               optionalFraction01,
+  other_expenses_pct:       optionalFraction01,
+  // Free-shape array of { label, pct } pairs; the engine just sums pcts.
+  extra_cover_loadings:     z.array(z.unknown()).optional(),
+  market_rate_pm:           optionalNumber,
+
+  // ── Engine outputs — rate path ─────────────────────────────────────
+  technical_rate_pm:        optionalNumber,
+  total_rate_pm:            optionalNumber,
+  bi_rate_pm:               optionalNumber,
+  net_rate_pm:              optionalNumber,
+  final_net_rate_pm:        optionalNumber,
+  final_gross_rate_pm:      optionalNumber,
+  technical_premium:        money,
+  expected_premium:         money,
+
+  // ── Engine outputs — score + decision ──────────────────────────────
+  underwriting_score:       optionalNumber,
+  capacity_grade:           optionalText,
+  uw_action:                optionalText,
+  max_capacity_pct:         optionalFraction01,
+  max_capacity_sar:         money,
+  market_vs_tech_pct:       optionalNumber,
+  market_vs_tech_band:      optionalText,
+
+  // Provenance
+  engine_version:           optionalText,
+  engine_warnings:          z.array(z.unknown()).optional(),
+
+  // UI-only blob — kept passthrough-style for the dual-engine extensions
+  // selection state that already lives there.
+  ui_state:                 z.record(z.unknown()).optional(),
+}).passthrough();
