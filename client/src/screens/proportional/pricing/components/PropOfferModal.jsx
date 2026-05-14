@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fmtPct, UW_MAX_LIMIT } from './propPricingConstants.js';
 import { useGlobalToast } from '../../../../hooks/useToast';
 import PctInput from '../../../../components/PctInput';
+import MarketIntelligenceModal from '../../../../components/market/MarketIntelligenceModal.jsx';
 
 /*
   PropOfferModal — the full-screen offer, approval & workflow modal.
@@ -34,6 +36,10 @@ export default function PropOfferModal({
   onSubmitForApproval, onMarkApproved, onMarkSigned: _onMarkSigned, onMarkNTU: _onMarkNTU, onReturnToUW,
   onDecline, onRecall,
   eligibleApprovers,
+  // Market intelligence trigger inputs. Wired in PropPricing — the
+  // child modal renders empty/disabled if these are missing.
+  contractId, countryId, classOfBusinessId, countryName, cobName, targetYear,
+  lossRatioPct, commissionPct, retentionPct,
   // Quote → signed/bind is disabled in this build. When true, the
   // AWAITING_SIGNED_LINE workflow renders as a terminal "Quote
   // Approved (standalone)" card instead of showing the Mark
@@ -44,7 +50,9 @@ export default function PropOfferModal({
 }) {
   const showToast = useGlobalToast();
   const navigate = useNavigate();
+  const [marketModalOpen, setMarketModalOpen] = useState(false);
   if(!show) return null;
+  const marketAvailable = !!(countryId && classOfBusinessId && targetYear);
 
   const stepIndex = offerStatus==='DRAFT'?0:offerStatus==='AWAITING_APPROVAL'?1:offerStatus==='AWAITING_SIGNED_LINE'?2:3;
   const steps = [
@@ -175,6 +183,28 @@ export default function PropOfferModal({
                   <div className="off-hm-score-item">Classification <b style={{color:aiCalc.heatColor}}>{aiCalc.heatLabel}</b></div>
                 </div>
               </div>
+              {/* Market intelligence trigger. Same off-ai-apply pill
+                  style with a cyan accent so it reads as a related
+                  AI action without competing with the orange Apply
+                  button. Stays enabled in terminal states — an
+                  underwriter may want the market story on a SIGNED
+                  treaty too. */}
+              <button
+                type="button"
+                className="off-ai-apply"
+                disabled={!marketAvailable}
+                title={marketAvailable
+                  ? 'Open the cached market intelligence report for this country / class'
+                  : 'Country and class of business required for market intelligence.'}
+                style={{
+                  width:'100%', marginTop:8, justifyContent:'center',
+                  borderColor: marketAvailable ? 'rgba(103,232,249,0.45)' : 'rgba(255,255,255,0.10)',
+                  color: marketAvailable ? '#67e8f9' : 'rgba(255,255,255,0.30)',
+                  background: marketAvailable ? 'rgba(103,232,249,0.06)' : 'rgba(255,255,255,0.02)',
+                  cursor: marketAvailable ? 'pointer' : 'not-allowed',
+                }}
+                onClick={() => marketAvailable && setMarketModalOpen(true)}
+              >📊 Market Intelligence Report</button>
             </div>
 
             {/* COL 3: Metrics + CU/UW action cards */}
@@ -314,6 +344,28 @@ export default function PropOfferModal({
           </div>
         </div>
       </div>
+      {/* Market-intelligence child modal sits ON TOP of the offer
+          modal (higher z-index inside the child). Rendering as a
+          sibling here means closing it returns to a fully intact
+          offer modal — typed line size, approver pick, etc. all
+          survive because PropOfferModal state lives upstream. */}
+      <MarketIntelligenceModal
+        show={marketModalOpen}
+        onClose={() => setMarketModalOpen(false)}
+        contractId={contractId}
+        countryId={countryId}
+        classOfBusinessId={classOfBusinessId}
+        countryName={countryName}
+        cobName={cobName}
+        targetYear={targetYear}
+        currency={safeCcy}
+        treatyMetrics={{
+          loss_ratio_pct: lossRatioPct,
+          commission_pct: commissionPct,
+          retention_pct: retentionPct,
+          margin_pct: typeof marginAct === 'number' ? marginAct * 100 : null,
+        }}
+      />
     </div>
   );
 }

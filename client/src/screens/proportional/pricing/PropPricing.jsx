@@ -993,6 +993,14 @@ export default function PropPricing() {
             onMarkSigned={doMarkSigned} onMarkNTU={doMarkNTU} onDecline={doDecline} onRecall={doRecall}
             eligibleApprovers={eligibleApprovers}
             isQuote={!!appState.quoteMode}
+            countryId={hdr.country_id || td.countryId || td.country_id || null}
+            classOfBusinessId={hdr.primary_class_of_business_id || td.primaryClassOfBusinessId || null}
+            countryName={country}
+            cobName={(cobLabel || '').split(',')[0]?.trim() || ''}
+            targetYear={Number.isFinite(Number(uwYear)) ? Number(uwYear) : null}
+            commissionPct={brokeragePctVal || null}
+            retentionPct={cn(td.retentionPct) || cn(det2.retention_pct) || null}
+            lossRatioPct={null}
           />
 
           {/* ═══ INSIGHT MODAL ═══ */}

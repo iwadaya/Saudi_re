@@ -45,6 +45,7 @@ import FQPricingCurve from './components/FQPricingCurve.jsx';
 import FQPricingGraphModal from './components/FQPricingGraphModal.jsx';
 import { calcTechRatio } from './pricingHelpers.js';
 import { FQ_STRUCTURE_COLORS, fqBuildPricingCurve, fqPriceLayerOnCurve, fqQuoteLayerDerived } from './fqHelpers.js';
+import MarketIntelligenceModal from '../../../components/market/MarketIntelligenceModal.jsx';
 
 const fmtAutoPct = (value) => {
   const n = Number(value);
@@ -559,6 +560,7 @@ export default function NpFinalPricing() {
   const [showDeclineModal, setShowDeclineModal] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
   const [showOfferModal, setShowOfferModal] = useState(false);
+  const [marketModalOpen, setMarketModalOpen] = useState(false);
   // Per-layer written line — keyed by layer index (0-based)
   const [layerWrittenLines, setLayerWrittenLines] = useState({});
   const [offerComment, setOfferComment] = useState('');
@@ -3527,8 +3529,16 @@ export default function NpFinalPricing() {
                           const bQB = Math.max(0,Math.min(1,balRatioB/60));
                           const aiLinePctB = Math.max(1,Math.min(20,Math.round((mQB*0.6+bQB*0.4)*20*10)/10||10));
                           const aiReasonB  = mActB>=0.15?`Strong margin (${(mActB*100).toFixed(1)}%) — full line supportable.`:mActB>=0.08?`Acceptable margin (${(mActB*100).toFixed(1)}%) — moderate line.`:techRB>0?`Thin margin (${(mActB*100).toFixed(1)}%) — conservative line advised.`:'Run pricing engine to generate suggestion.';
+                          const npCountryId = appState.npTreatyDetail?.countryId || null;
+                          const npCobIds = Array.isArray(appState.npTreatyDetail?.classOfBusinessIds)
+                            ? appState.npTreatyDetail.classOfBusinessIds
+                            : [];
+                          const npPrimaryCobId = npCobIds[0] || appState.npTreatyDetail?.primaryClassOfBusinessId || null;
+                          const npTargetYear = Number(npDetail?.startYear) || Number(npDetail?.uwYear) || null;
+                          const marketAvailable = !!(npCountryId && npPrimaryCobId && npTargetYear);
                           return (
-                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, flexShrink:0 }}>
+                            <div style={{ display:'flex', flexDirection:'column', gap:8, flexShrink:0 }}>
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                               <div className="off-ai">
                                 <div className="off-ai-head">
                                   <div className="off-ai-label">✦ AI Suggested Line Size</div>
@@ -3564,6 +3574,27 @@ export default function NpFinalPricing() {
                                   <div className="off-hm-score-item">Classification <b style={{color:heatColor}}>{heatLabel}</b></div>
                                 </div>
                               </div>
+                            </div>
+                            {/* Market intelligence trigger — same off-ai-apply
+                                pill style with a cyan accent. Stays enabled in
+                                terminal states; disabled with tooltip when the
+                                contract is missing country / cob / year. */}
+                            <button
+                              type="button"
+                              className="off-ai-apply"
+                              disabled={!marketAvailable}
+                              title={marketAvailable
+                                ? 'Open the cached market intelligence report for this country / class'
+                                : 'Country and class of business required for market intelligence.'}
+                              style={{
+                                width:'100%', justifyContent:'center',
+                                borderColor: marketAvailable ? 'rgba(103,232,249,0.45)' : 'rgba(255,255,255,0.10)',
+                                color: marketAvailable ? '#67e8f9' : 'rgba(255,255,255,0.30)',
+                                background: marketAvailable ? 'rgba(103,232,249,0.06)' : 'rgba(255,255,255,0.02)',
+                                cursor: marketAvailable ? 'pointer' : 'not-allowed',
+                              }}
+                              onClick={() => marketAvailable && setMarketModalOpen(true)}
+                            >📊 Market Intelligence Report</button>
                             </div>
                           );
                         })()}
@@ -3856,6 +3887,40 @@ export default function NpFinalPricing() {
                   </div>
                 );
               })()}
+
+              {/* Market-intelligence child modal — sibling to the
+                  offer modal so closing it returns to the offer
+                  modal with state intact (layer lines, comments etc.
+                  all live on this NpFinalPricing component, not
+                  inside the offer modal IIFE). */}
+              <MarketIntelligenceModal
+                show={marketModalOpen}
+                onClose={() => setMarketModalOpen(false)}
+                contractId={contractId}
+                countryId={appState.npTreatyDetail?.countryId || null}
+                classOfBusinessId={
+                  (Array.isArray(appState.npTreatyDetail?.classOfBusinessIds)
+                    && appState.npTreatyDetail.classOfBusinessIds[0])
+                    || appState.npTreatyDetail?.primaryClassOfBusinessId
+                    || null
+                }
+                countryName={npDetail?.countryName || npDetail?.country || ''}
+                cobName={(() => {
+                  const list = appState.npTreatyDetail?.cobNames
+                    || appState.npTreatyDetail?.classOfBusinessNames
+                    || [];
+                  return Array.isArray(list) ? (list[0] || '') : '';
+                })()}
+                targetYear={Number(npDetail?.startYear) || Number(npDetail?.uwYear) || null}
+                currency={currency}
+                treatyMetrics={{
+                  loss_ratio_pct: null,
+                  commission_pct: Number.isFinite(Number(npDetail?.brokeragePct))
+                    ? Number(npDetail.brokeragePct) : null,
+                  retention_pct: null,
+                  margin_pct: null,
+                }}
+              />
 
                             {/* Decline Modal */}
               {showDeclineModal && (
