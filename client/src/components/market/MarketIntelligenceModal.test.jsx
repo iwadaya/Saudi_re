@@ -18,6 +18,7 @@ const apiMock = {
   stageMarketRec:        vi.fn(),
   rejectMarketRec:       vi.fn(),
   logMarketReportView:   vi.fn(async () => undefined),
+  getCountryMacro:       vi.fn(async () => null),
 };
 
 class FakeHttpError extends Error {
@@ -283,6 +284,53 @@ describe('MarketIntelligenceModal — stale-cache banner', () => {
     renderModal();
     await waitFor(() => expect(screen.getByText(/Executive Summary/i)).toBeInTheDocument());
     expect(screen.queryByText(/days old/i)).toBeNull();
+  });
+});
+
+describe('MarketIntelligenceModal — Macro Snapshot section', () => {
+  const MACRO_FIXTURE = {
+    country_id: baseProps.contractId,
+    iso2: 'KE', iso3: 'KEN',
+    world_bank: {
+      source: 'WORLD_BANK', country_code: 'KE',
+      indicators: {
+        population:         { label: 'Population',           unit: 'count', latest_value: 56_000_000, latest_year: 2024, series: [] },
+        gdp_usd:            { label: 'GDP (USD)',            unit: 'USD',   latest_value: 120_000_000_000, latest_year: 2024, series: [] },
+        inflation_cpi:      { label: 'Inflation (CPI)',      unit: '%',     latest_value: 6.8,             latest_year: 2024, series: [] },
+        gdp_per_capita_usd: { label: 'GDP per capita (USD)', unit: 'USD',   latest_value: 2150,            latest_year: 2024, series: [] },
+      },
+    },
+    imf: {
+      source: 'IMF', country_code: 'KEN',
+      indicators: {
+        gdp_usd_imf: { label: '…', unit: 'USD_BILLIONS',
+                       latest_value: 120, latest_year: 2024,
+                       forecast_value: 135, forecast_year: 2026, series: [] },
+      },
+    },
+    cached: { world_bank: false, imf: false },
+  };
+
+  it('renders the section when macro data is present', async () => {
+    apiMock.getCountryMacro.mockResolvedValueOnce(MACRO_FIXTURE);
+    renderModal();
+    await waitFor(() => expect(screen.getByText(/Macro Snapshot/i)).toBeInTheDocument());
+    // 56M → "56.00 M" (population value rendered)
+    expect(screen.getByText(/56\.00 M/)).toBeInTheDocument();
+    // GDP $120B
+    expect(screen.getByText(/\$120\.00 B/)).toBeInTheDocument();
+    expect(screen.getByText(/IMF forecast 2026/)).toBeInTheDocument();
+  });
+
+  it('hides the section entirely when both sources return null', async () => {
+    apiMock.getCountryMacro.mockResolvedValueOnce({
+      country_id: baseProps.contractId, iso2: 'KE', iso3: 'KEN',
+      world_bank: null, imf: null,
+      cached: { world_bank: false, imf: false },
+    });
+    renderModal();
+    await waitFor(() => expect(screen.getByText(/Executive Summary/i)).toBeInTheDocument());
+    expect(screen.queryByText(/Macro Snapshot/i)).toBeNull();
   });
 });
 

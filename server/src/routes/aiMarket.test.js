@@ -121,6 +121,8 @@ const state = {
   updatedMarketRecStatus: null,
   countryAxcoCode: null,   // set to e.g. 'SA' to exercise the Axco path
   cobAxcoCode:     null,
+  cachedMacroRows: [],     // rows the macro cache select returns
+  insertedMacro:   [],     // capture of macro inserts
 };
 
 function fakePoolQuery(sql, params = []) {
@@ -141,6 +143,19 @@ function fakePoolQuery(sql, params = []) {
       class_of_business_id: params[0], name: 'Fire',
       axco_class_code: state.cobAxcoCode || null,
     }] });
+  }
+
+  // ── macro cache select (GET /macro/:country_id) ──
+  if (/FROM public\.country_macro_snapshot\s+WHERE country_id=\$1 AND expires_at > now/.test(sql)) {
+    return Promise.resolve({ rows: state.cachedMacroRows });
+  }
+  // ── macro cache insert ──
+  if (/INSERT INTO public\.country_macro_snapshot/.test(sql)) {
+    state.insertedMacro.push({
+      country_id: params[0], source: params[1],
+      payload: JSON.parse(params[2]), expires_at: params[3],
+    });
+    return Promise.resolve({ rows: [] });
   }
 
   // ── report cache check (with TTL) ──
@@ -282,6 +297,15 @@ vi.mock('../lib/axcoClient.js', () => ({
   fetchMarketSnapshot: axcoFetchMock,
 }));
 
+const wbFetchMock  = vi.fn(async () => null);
+const imfFetchMock = vi.fn(async () => null);
+vi.mock('../lib/worldBankClient.js', () => ({
+  fetchWorldBankSnapshot: wbFetchMock,
+}));
+vi.mock('../lib/imfClient.js', () => ({
+  fetchImfSnapshot: imfFetchMock,
+}));
+
 const { default: aiMarketRouter } = await import('./aiMarket.js');
 const { attachRequestContext }    = await import('../middleware/requestContext.js');
 
@@ -374,6 +398,8 @@ function resetState() {
   state.updatedMarketRecStatus = null;
   state.countryAxcoCode = null;
   state.cobAxcoCode = null;
+  state.cachedMacroRows = [];
+  state.insertedMacro = [];
 }
 
 beforeEach(() => {
@@ -381,6 +407,10 @@ beforeEach(() => {
   logAuditMock.mockClear();
   axcoFetchMock.mockClear();
   axcoFetchMock.mockResolvedValue(null);
+  wbFetchMock.mockClear();
+  wbFetchMock.mockResolvedValue(null);
+  imfFetchMock.mockClear();
+  imfFetchMock.mockResolvedValue(null);
   fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
     ok: true,
     json: async () => openaiResponseWith(JSON.stringify(VALID_REPORT_OUTPUT)),
@@ -1070,5 +1100,96 @@ describe('Axco enrichment', () => {
     expect(state.insertedReport.axco_snapshot).toBeNull();
     const generated = logAuditMock.mock.calls.map(c => c[1]).find(e => e.eventType === 'REPORT_GENERATED');
     expect(generated.payload.axco_used).toBe(false);
+  });
+});
+
+// ── GET /api/ai/market/macro/:country_id ──────────────────────────
+describe('GET /api/ai/market/macro/:country_id', () => {
+  const WB_SNAP = {
+    source: 'WORLD_BANK', country_code: 'KE',
+    fetched_at: new Date().toISOString(),
+    indicators: {
+      population: { key: 'population', label: 'Population', unit: 'count',
+                    latest_value: 56000000, latest_year: 2024,
+                    series: [{ year: 2023, value: 54000000 }, { year: 2024, value: 56000000 }] },
+    },
+  };
+  const IMF_SNAP = {
+    source: 'IMF', country_code: 'KEN',
+    fetched_at: new Date().toISOString(),
+    indicators: {
+      gdp_usd_imf: { key: 'gdp_usd_imf', label: 'GDP, current prices (USD bn) — IMF', unit: 'USD_BILLIONS',
+                     latest_value: 120, latest_year: 2024,
+                     forecast_value: 135, forecast_year: 2026, series: [] },
+    },
+  };
+
+  it('fetches both sources and persists them when cache is cold', async () => {
+    wbFetchMock.mockResolvedValue(WB_SNAP);
+    imfFetchMock.mockResolvedValue(IMF_SNAP);
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'GET',
+      path: `/api/ai/market/macro/${COUNTRY_ID}`,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.world_bank.source).toBe('WORLD_BANK');
+    expect(res.body.imf.source).toBe('IMF');
+    expect(res.body.cached.world_bank).toBe(false);
+    expect(res.body.cached.imf).toBe(false);
+    // Each source persisted once
+    expect(state.insertedMacro.map(r => r.source).sort()).toEqual(['IMF', 'WORLD_BANK']);
+    expect(wbFetchMock).toHaveBeenCalledWith({ countryCode: 'KE' });
+    expect(imfFetchMock).toHaveBeenCalledWith({ countryCodeIso3: 'KEN' });
+  });
+
+  it('returns cached payloads without re-fetching when both sources are warm', async () => {
+    state.cachedMacroRows = [
+      { source: 'WORLD_BANK', payload: WB_SNAP, fetched_at: new Date().toISOString(), expires_at: new Date(Date.now() + 86400000).toISOString() },
+      { source: 'IMF',        payload: IMF_SNAP, fetched_at: new Date().toISOString(), expires_at: new Date(Date.now() + 86400000).toISOString() },
+    ];
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'GET',
+      path: `/api/ai/market/macro/${COUNTRY_ID}`,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.cached.world_bank).toBe(true);
+    expect(res.body.cached.imf).toBe(true);
+    expect(wbFetchMock).not.toHaveBeenCalled();
+    expect(imfFetchMock).not.toHaveBeenCalled();
+    expect(state.insertedMacro).toHaveLength(0);
+  });
+
+  it('force_refresh=true bypasses cache and re-fetches', async () => {
+    state.cachedMacroRows = [
+      { source: 'WORLD_BANK', payload: WB_SNAP, fetched_at: new Date().toISOString(), expires_at: new Date(Date.now() + 86400000).toISOString() },
+    ];
+    wbFetchMock.mockResolvedValue(WB_SNAP);
+    imfFetchMock.mockResolvedValue(IMF_SNAP);
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'GET',
+      path: `/api/ai/market/macro/${COUNTRY_ID}?force_refresh=true`,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.cached.world_bank).toBe(false);
+    expect(wbFetchMock).toHaveBeenCalledTimes(1);
+    expect(imfFetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 200 with both sources null when fetchers return null', async () => {
+    // Defends the "no data is fine" path — modal hides the section.
+    wbFetchMock.mockResolvedValue(null);
+    imfFetchMock.mockResolvedValue(null);
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'GET',
+      path: `/api/ai/market/macro/${COUNTRY_ID}`,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.world_bank).toBeNull();
+    expect(res.body.imf).toBeNull();
+    expect(state.insertedMacro).toHaveLength(0);
   });
 });
