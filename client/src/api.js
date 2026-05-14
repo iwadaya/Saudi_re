@@ -68,6 +68,7 @@ const PATHS = {
   aiMarketTreatyRecsList: (contractId) => `/api/ai/market/treaty-recommendations/${enc(contractId)}`,
   aiMarketRecStage: (recId) => `/api/ai/market/recommendation/${enc(recId)}/stage`,
   aiMarketRecReject: (recId) => `/api/ai/market/recommendation/${enc(recId)}/reject`,
+  aiMarketLogView: '/api/ai/market/log-view',
   reinsurers: '/api/reinsurers',
   brokers: '/api/brokers',
   classOfBusiness: '/api/class-of-business',
@@ -321,6 +322,9 @@ export const api = {
   },
   rejectMarketRec(recId, body, opts) {
     return request(PATHS.aiMarketRecReject(recId), { ...opts, method: 'POST', body: body || {} });
+  },
+  logMarketReportView(body, opts) {
+    return request(PATHS.aiMarketLogView, { ...opts, method: 'POST', body });
   },
   listBrokers(opts) { return request(PATHS.brokers, opts); },
   listReinsurers(opts) { return request(PATHS.reinsurers, opts); },

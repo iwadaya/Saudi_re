@@ -26,6 +26,7 @@ import { checkPortfolioCompliance } from '../lib/portfolioCompliance.js';
 import {
   marketReportRequestSchema,
   marketReportSchema,
+  marketReportLogViewSchema,
   treatyRecommendationsRequestSchema,
   treatyRecommendationsResponseSchema,
   marketRecStageSchema,
@@ -259,6 +260,21 @@ router.post(
       }
     }
 
+    // Prior report lookup. On force_refresh this drives the
+    // REPORT_REFRESHED audit event's prior_generated_at payload.
+    // On first-time generation it stays null and we emit
+    // REPORT_GENERATED instead below.
+    let priorReport = null;
+    if (forceRefresh) {
+      const { rows: priorRows } = await pool.query(
+        `SELECT report_id, generated_at FROM public.market_intelligence_report
+          WHERE country_id=$1 AND class_of_business_id=$2 AND target_year=$3
+          ORDER BY generated_at DESC LIMIT 1`,
+        [countryId, cobId, targetYear],
+      );
+      priorReport = priorRows[0] || null;
+    }
+
     // Build prompt + call Claude
     const userPrompt = buildUserPrompt({ country, cob, target_year: targetYear });
     const t0 = Date.now();
@@ -317,6 +333,43 @@ router.post(
         ANTHROPIC_MODEL, JSON.stringify(raw), userId, durationMs,
       ],
     );
+
+    // Audit: REPORT_REFRESHED when force_refresh replaced an earlier
+    // report; REPORT_GENERATED for first-time creation. The two are
+    // mutually exclusive so the audit trail tells a single coherent
+    // story per call.
+    if (priorReport) {
+      await logAudit(null, {
+        entityType: 'MARKET_INTELLIGENCE_REPORT',
+        entityId:   rows[0].report_id,
+        eventType:  'REPORT_REFRESHED',
+        actor:      userId,
+        payload: {
+          report_id:           rows[0].report_id,
+          prior_report_id:     priorReport.report_id,
+          prior_generated_at:  priorReport.generated_at,
+          country_id:          countryId,
+          class_of_business_id: cobId,
+          target_year:         targetYear,
+          model:               ANTHROPIC_MODEL,
+          duration_ms:         durationMs,
+        },
+      });
+    } else {
+      await logAudit(null, {
+        entityType: 'MARKET_INTELLIGENCE_REPORT',
+        entityId:   rows[0].report_id,
+        eventType:  'REPORT_GENERATED',
+        actor:      userId,
+        payload: {
+          country_id:          countryId,
+          class_of_business_id: cobId,
+          target_year:         targetYear,
+          model:               ANTHROPIC_MODEL,
+          duration_ms:         durationMs,
+        },
+      });
+    }
     return res.status(201).json({ ...rows[0], cached: false });
   }),
 );
@@ -963,6 +1016,23 @@ router.post(
         [recId, userId],
       );
 
+      // Audit RECOMMENDATION_STAGED inside the same transaction so a
+      // rollback drops the row, not leaves it as ghost trail.
+      await logAudit(client, {
+        entityType: 'MARKET_INTELLIGENCE_RECOMMENDATION',
+        entityId:   recId,
+        eventType:  'RECOMMENDATION_STAGED',
+        actor:      userId,
+        payload: {
+          rec_id:                recId,
+          contract_id:           rec.contract_id,
+          action_type:           rec.action_type,
+          recommended_line_pct:  rec.recommended_line_pct,
+          warnings_acknowledged: warnings.length > 0 && warningAcknowledged === true,
+          staging_id:            ins.rows[0]?.staging_id || null,
+        },
+      });
+
       await client.query('COMMIT');
       res.status(201).json({ staging: ins.rows[0] });
     } catch (e) {
@@ -994,16 +1064,44 @@ router.post(
     if (!rows.length) {
       return res.status(404).json({ error: 'Recommendation not found or not in a rejectable state.' });
     }
-    if (reason) {
-      await logAudit(null, {
-        entityType: 'MARKET_INTELLIGENCE_RECOMMENDATION',
-        entityId: recId,
-        eventType: 'REJECTED',
-        actor: userId,
-        payload: { reason },
-      });
-    }
+    // RECOMMENDATION_REJECTED fires for every reject — reason is
+    // optional payload, not a precondition for the audit row.
+    await logAudit(null, {
+      entityType: 'MARKET_INTELLIGENCE_RECOMMENDATION',
+      entityId:   recId,
+      eventType:  'RECOMMENDATION_REJECTED',
+      actor:      userId,
+      payload: {
+        rec_id:      recId,
+        contract_id: rows[0].contract_id,
+        reason:      reason || null,
+      },
+    });
     res.json({ recommendation: rows[0] });
+  }),
+);
+
+// POST /api/ai/market/log-view
+//
+// Records a REPORT_VIEWED audit row when the client opens the modal.
+// The client debounces per (user, report_id, contract_id) per
+// session — this endpoint trusts that debounce and writes whatever
+// it receives. Both IDs are validated as UUIDs to keep junk out of
+// the audit log.
+router.post(
+  '/ai/market/log-view',
+  validateBody(marketReportLogViewSchema),
+  asyncHandler(async (req, res) => {
+    const userId = requireUser(req, res); if (!userId) return;
+    const { report_id: reportId, contract_id: contractId } = req.body;
+    await logAudit(null, {
+      entityType: 'MARKET_INTELLIGENCE_REPORT',
+      entityId:   reportId,
+      eventType:  'REPORT_VIEWED',
+      actor:      userId,
+      payload: { report_id: reportId, contract_id: contractId },
+    });
+    res.status(204).end();
   }),
 );
 

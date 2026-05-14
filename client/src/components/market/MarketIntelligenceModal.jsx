@@ -17,6 +17,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, HttpError } from '../../api.js';
 import { useGlobalToast } from '../../hooks/useToast.js';
 
+// REPORT_VIEWED audit debounce. Tracks (report_id, contract_id) pairs
+// already logged in this browser session so opening the modal twice
+// for the same treaty/report only writes one audit row. Cleared on
+// page reload, which is the desired session granularity.
+const _viewLogged = new Set();
+
 const STATES = {
   LOADING_REPORT:     'LOADING_REPORT',
   GENERATING_REPORT:  'GENERATING_REPORT',
@@ -279,6 +285,19 @@ export default function MarketIntelligenceModal({
     }
   }, [contractId, report, showToast]);
 
+  // Fire one REPORT_VIEWED audit row per (report, contract) per
+  // session — see _viewLogged above. The endpoint is best-effort:
+  // we don't surface failures to the user.
+  useEffect(() => {
+    if (state !== STATES.READY) return;
+    if (!report?.report_id || !contractId) return;
+    const key = `${report.report_id}::${contractId}`;
+    if (_viewLogged.has(key)) return;
+    _viewLogged.add(key);
+    api.logMarketReportView({ report_id: report.report_id, contract_id: contractId })
+      .catch(() => { _viewLogged.delete(key); });
+  }, [state, report, contractId]);
+
   // Stable header / footer summary fields.
   const isLoading = state !== STATES.READY && state !== STATES.ERROR;
   const isGenerating = state === STATES.GENERATING_REPORT || state === STATES.GENERATING_RECS;
@@ -338,6 +357,7 @@ export default function MarketIntelligenceModal({
 
           {state === STATES.READY && report && (
             <>
+              <StaleBanner report={report} onRefresh={() => runFlow({ forceRefresh: true })} />
               <SectionExecSummary
                 report={report}
                 countryName={countryName}
@@ -437,6 +457,37 @@ function ErrorBox({ message }) {
       background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.30)',
       color: '#f87171', fontSize: 12,
     }}>⚠ {message}</div>
+  );
+}
+
+// Stale-cache amber banner. Renders only when the report was served
+// from cache AND is more than 30 days old. Refreshing replaces the
+// report with a fresh one and the banner naturally disappears.
+function StaleBanner({ report, onRefresh }) {
+  if (!report?.cached) return null;
+  const ageDays = Math.floor((Date.now() - new Date(report.generated_at).getTime()) / 86_400_000);
+  if (!Number.isFinite(ageDays) || ageDays <= 30) return null;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '8px 12px', borderRadius: 8,
+      background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.30)',
+      color: '#fbbf24', fontSize: 12,
+    }}>
+      <span aria-hidden="true">⚠</span>
+      <span style={{ flex: 1 }}>
+        This report is <b>{ageDays} days old</b> — Refresh for the latest.
+      </span>
+      <button
+        type="button" className="bbg-btn"
+        onClick={onRefresh}
+        style={{
+          fontSize: 11, padding: '4px 10px',
+          borderColor: 'rgba(251,191,36,0.45)', color: '#fbbf24',
+          background: 'rgba(251,191,36,0.08)',
+        }}
+      >Refresh now</button>
+    </div>
   );
 }
 

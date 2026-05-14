@@ -120,3 +120,9 @@ export const marketRecStageSchema = z.object({
 export const marketRecRejectSchema = z.object({
   reason: z.string().max(2000).optional(),
 });
+
+// ── 8.7 audit log-view request ────────────────────────────────────
+export const marketReportLogViewSchema = z.object({
+  report_id:   z.string().uuid('report_id must be a UUID'),
+  contract_id: z.string().uuid('contract_id must be a UUID'),
+});

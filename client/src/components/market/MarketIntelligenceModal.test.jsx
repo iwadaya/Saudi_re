@@ -17,6 +17,7 @@ const apiMock = {
   generateTreatyRecommendations: vi.fn(),
   stageMarketRec:        vi.fn(),
   rejectMarketRec:       vi.fn(),
+  logMarketReportView:   vi.fn(async () => undefined),
 };
 
 class FakeHttpError extends Error {
@@ -243,5 +244,62 @@ describe('MarketIntelligenceModal', () => {
     await waitFor(() => expect(screen.getByText(/Executive Summary/i)).toBeInTheDocument());
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('MarketIntelligenceModal — stale-cache banner', () => {
+  it('shows an amber banner when cached report is > 30 days old', async () => {
+    const STALE_AGE_MS = 31 * 24 * 3600 * 1000;
+    const staleReport = {
+      ...REPORT_FIXTURE,
+      cached: true,
+      generated_at: new Date(Date.now() - STALE_AGE_MS).toISOString(),
+    };
+    apiMock.getLatestMarketReport.mockResolvedValue(staleReport);
+    apiMock.getTreatyBenchmarks.mockResolvedValue(BENCHMARKS_FIXTURE);
+    apiMock.getTreatyRecommendations.mockResolvedValue({ recommendations: [LINE_REC] });
+    render(<MemoryRouter><MarketIntelligenceModal {...baseProps} /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText(/Executive Summary/i)).toBeInTheDocument());
+    expect(screen.getByText(/days old/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Refresh now/i })).toBeInTheDocument();
+  });
+
+  it('no banner when cached report is ≤ 30 days old', async () => {
+    const freshReport = {
+      ...REPORT_FIXTURE,
+      cached: true,
+      generated_at: new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString(),
+    };
+    apiMock.getLatestMarketReport.mockResolvedValue(freshReport);
+    apiMock.getTreatyBenchmarks.mockResolvedValue(BENCHMARKS_FIXTURE);
+    apiMock.getTreatyRecommendations.mockResolvedValue({ recommendations: [LINE_REC] });
+    render(<MemoryRouter><MarketIntelligenceModal {...baseProps} /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText(/Executive Summary/i)).toBeInTheDocument());
+    expect(screen.queryByText(/days old/i)).toBeNull();
+  });
+
+  it('no banner when report is freshly generated (cached:false)', async () => {
+    // VALID_REPORT_OUTPUT in REPORT_FIXTURE has cached:false by default
+    renderModal();
+    await waitFor(() => expect(screen.getByText(/Executive Summary/i)).toBeInTheDocument());
+    expect(screen.queryByText(/days old/i)).toBeNull();
+  });
+});
+
+describe('MarketIntelligenceModal — REPORT_VIEWED logging', () => {
+  // The modal's _viewLogged Set is module-scoped — it persists across
+  // tests. Use a unique report_id here so this test isn't a no-op
+  // when prior tests already logged the standard fixture's id.
+  it('calls logMarketReportView with the report and contract IDs', async () => {
+    const uniqueReport = { ...REPORT_FIXTURE, report_id: 'rep-unique-view-log' };
+    apiMock.getLatestMarketReport.mockResolvedValue(uniqueReport);
+    apiMock.getTreatyBenchmarks.mockResolvedValue(BENCHMARKS_FIXTURE);
+    apiMock.getTreatyRecommendations.mockResolvedValue({ recommendations: [LINE_REC] });
+    render(<MemoryRouter><MarketIntelligenceModal {...baseProps} /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText(/Executive Summary/i)).toBeInTheDocument());
+    await waitFor(() => expect(apiMock.logMarketReportView).toHaveBeenCalledWith({
+      report_id: 'rep-unique-view-log',
+      contract_id: baseProps.contractId,
+    }));
   });
 });

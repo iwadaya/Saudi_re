@@ -256,8 +256,9 @@ vi.mock('../config/env.js', () => ({
   env: { anthropicApiKey: 'test-key' },
 }));
 
+const logAuditMock = vi.fn(async () => undefined);
 vi.mock('../services/audit.js', () => ({
-  logAudit: vi.fn(async () => undefined),
+  logAudit: logAuditMock,
 }));
 
 const { default: aiMarketRouter } = await import('./aiMarket.js');
@@ -354,6 +355,7 @@ function resetState() {
 
 beforeEach(() => {
   resetState();
+  logAuditMock.mockClear();
   fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
     ok: true,
     json: async () => anthropicResponseWith(JSON.stringify(VALID_REPORT_OUTPUT)),
@@ -767,5 +769,167 @@ describe('POST /api/ai/market/recommendation/:rec_id/reject', () => {
       body: {},
     });
     expect(res.status).toBe(404);
+  });
+});
+
+// ── 8.7 — audit events ────────────────────────────────────────────
+describe('8.7 audit + log-view', () => {
+  it('first-time generate fires REPORT_GENERATED with country/cob/year/model/duration', async () => {
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/generate-report',
+      body: { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR },
+    });
+    expect(res.status).toBe(201);
+    const events = logAuditMock.mock.calls.map(c => c[1]);
+    const generated = events.find(e => e.eventType === 'REPORT_GENERATED');
+    expect(generated).toBeDefined();
+    expect(generated.entityType).toBe('MARKET_INTELLIGENCE_REPORT');
+    expect(generated.payload).toMatchObject({
+      country_id: COUNTRY_ID,
+      class_of_business_id: COB_ID,
+      target_year: TARGET_YR,
+      model: 'claude-sonnet-4-20250514',
+    });
+    expect(Number.isFinite(generated.payload.duration_ms)).toBe(true);
+    expect(events.find(e => e.eventType === 'REPORT_REFRESHED')).toBeUndefined();
+  });
+
+  it('force_refresh fires REPORT_REFRESHED (with prior_generated_at) instead of REPORT_GENERATED', async () => {
+    state.freshReportRow = makeReportRow({ generated_at: '2026-04-01T00:00:00.000Z' });
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/generate-report',
+      body: { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR, force_refresh: true },
+    });
+    expect(res.status).toBe(201);
+    const events = logAuditMock.mock.calls.map(c => c[1]);
+    const refreshed = events.find(e => e.eventType === 'REPORT_REFRESHED');
+    expect(refreshed).toBeDefined();
+    expect(refreshed.payload.prior_generated_at).toBe('2026-04-01T00:00:00.000Z');
+    expect(events.find(e => e.eventType === 'REPORT_GENERATED')).toBeUndefined();
+  });
+
+  it('cache hit fires no audit row', async () => {
+    state.freshReportRow = makeReportRow();
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/generate-report',
+      body: { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR },
+    });
+    expect(res.status).toBe(200);
+    expect(logAuditMock).not.toHaveBeenCalled();
+  });
+
+  it('stage fires RECOMMENDATION_STAGED with action_type + warnings_acknowledged flag', async () => {
+    state.recById = {
+      rec_id: 'rec-1', cedant_id: CEDANT_ID, contract_id: CONTRACT_ID,
+      action_type: 'LINE_SIZE', recommended_line_pct: 0.18,
+      rationale: 'r', compliance_warnings: [], status: 'PENDING',
+    };
+    const app = buildApp();
+    await call(app, {
+      method: 'POST', path: '/api/ai/market/recommendation/rec-1/stage',
+      body: {},
+    });
+    const events = logAuditMock.mock.calls.map(c => c[1]);
+    const staged = events.find(e => e.eventType === 'RECOMMENDATION_STAGED');
+    expect(staged).toBeDefined();
+    expect(staged.payload).toMatchObject({
+      rec_id: 'rec-1', contract_id: CONTRACT_ID,
+      action_type: 'LINE_SIZE', recommended_line_pct: 0.18,
+      warnings_acknowledged: false,
+    });
+  });
+
+  it('stage with acknowledged warnings sets warnings_acknowledged:true', async () => {
+    state.recById = {
+      rec_id: 'rec-1', cedant_id: CEDANT_ID, contract_id: CONTRACT_ID,
+      action_type: 'LINE_SIZE', recommended_line_pct: 0.18,
+      rationale: 'r', compliance_warnings: ['warn!'], status: 'PENDING',
+    };
+    const app = buildApp();
+    await call(app, {
+      method: 'POST', path: '/api/ai/market/recommendation/rec-1/stage',
+      body: { warning_acknowledged: true },
+    });
+    const events = logAuditMock.mock.calls.map(c => c[1]);
+    const staged = events.find(e => e.eventType === 'RECOMMENDATION_STAGED');
+    expect(staged.payload.warnings_acknowledged).toBe(true);
+  });
+
+  it('reject fires RECOMMENDATION_REJECTED with reason (or null)', async () => {
+    state.recById = {
+      rec_id: 'rec-2', cedant_id: CEDANT_ID, contract_id: CONTRACT_ID,
+      action_type: 'LINE_SIZE', recommended_line_pct: 0.18,
+      rationale: 'r', compliance_warnings: [], status: 'PENDING',
+    };
+    const app = buildApp();
+    await call(app, {
+      method: 'POST', path: '/api/ai/market/recommendation/rec-2/reject',
+      body: { reason: 'too aggressive' },
+    });
+    const events = logAuditMock.mock.calls.map(c => c[1]);
+    const rejected = events.find(e => e.eventType === 'RECOMMENDATION_REJECTED');
+    expect(rejected).toBeDefined();
+    expect(rejected.payload).toMatchObject({
+      rec_id: 'rec-2', contract_id: CONTRACT_ID, reason: 'too aggressive',
+    });
+  });
+
+  it('reject without reason still fires the audit row with reason:null', async () => {
+    state.recById = {
+      rec_id: 'rec-3', cedant_id: CEDANT_ID, contract_id: CONTRACT_ID,
+      action_type: 'LINE_SIZE', recommended_line_pct: 0.18,
+      rationale: 'r', compliance_warnings: [], status: 'PENDING',
+    };
+    const app = buildApp();
+    await call(app, {
+      method: 'POST', path: '/api/ai/market/recommendation/rec-3/reject',
+      body: {},
+    });
+    const rejected = logAuditMock.mock.calls
+      .map(c => c[1]).find(e => e.eventType === 'RECOMMENDATION_REJECTED');
+    expect(rejected).toBeDefined();
+    expect(rejected.payload.reason).toBeNull();
+  });
+});
+
+describe('POST /api/ai/market/log-view', () => {
+  it('writes a REPORT_VIEWED audit row and returns 204', async () => {
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/log-view',
+      body: { report_id: REPORT_ID, contract_id: CONTRACT_ID },
+    });
+    expect(res.status).toBe(204);
+    const events = logAuditMock.mock.calls.map(c => c[1]);
+    const viewed = events.find(e => e.eventType === 'REPORT_VIEWED');
+    expect(viewed).toBeDefined();
+    expect(viewed.entityType).toBe('MARKET_INTELLIGENCE_REPORT');
+    expect(viewed.entityId).toBe(REPORT_ID);
+    expect(viewed.payload).toMatchObject({
+      report_id: REPORT_ID, contract_id: CONTRACT_ID,
+    });
+  });
+
+  it('rejects bad UUIDs with 400', async () => {
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/log-view',
+      body: { report_id: 'not-a-uuid', contract_id: CONTRACT_ID },
+    });
+    expect(res.status).toBe(400);
+    expect(logAuditMock).not.toHaveBeenCalled();
+  });
+
+  it('401 when x-user-id missing', async () => {
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/log-view',
+      headers: { 'x-user-id': '' },
+      body: { report_id: REPORT_ID, contract_id: CONTRACT_ID },
+    });
+    expect(res.status).toBe(401);
   });
 });
