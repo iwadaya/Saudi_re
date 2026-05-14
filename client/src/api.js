@@ -539,6 +539,55 @@ export const api = {
     return request(`/api/fac/risks/${enc(id)}/clauses-checklist`, { method: 'POST', body: payload, ...opts });
   },
 
+  // ── Facultative summary / approval workflow ──────────────────────────────
+  facSubmitForApproval(id, payload, opts) {
+    return request(`/api/fac/risks/${enc(id)}/submit-for-approval`, { method: 'POST', body: payload || {}, ...opts });
+  },
+  facDecline(id, payload, opts) {
+    return request(`/api/fac/risks/${enc(id)}/decline`, { method: 'POST', body: payload, ...opts });
+  },
+  facBind(id, payload, opts) {
+    return request(`/api/fac/risks/${enc(id)}/bind`, { method: 'POST', body: payload || {}, ...opts });
+  },
+  facGetAuditEvents(id, opts) {
+    return request(`/api/fac/risks/${enc(id)}/audit-events`, opts);
+  },
+
+  // ── Facultative document AI ──────────────────────────────────────────────
+  facAnalyseDocument(payload, opts) {
+    return request('/api/ai/fac/analyse-document', { method: 'POST', body: payload, ...opts });
+  },
+  /**
+   * Multipart upload (bytes + document_kind). The legacy facUploadDocument
+   * only saves metadata — this variant actually stores the file so the
+   * AI runner can read it back.
+   * @param {string} id          fac_risk_id
+   * @param {File}   file        DOM File object
+   * @param {string} documentKind PLACEMENT_SLIP / SURVEY_REPORT / …
+   */
+  facUploadDocumentMultipart(id, file, documentKind, opts) {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('document_kind', documentKind || 'OTHER');
+    // request() sends FormData as-is (no JSON body) when method=POST
+    // and body is a FormData instance.
+    return request(`/api/fac/risks/${enc(id)}/documents/upload`, {
+      method: 'POST', body: form, ...opts,
+    });
+  },
+  facGetAnalyses(id, opts) {
+    return request(`/api/fac/risks/${enc(id)}/analyses`, opts);
+  },
+  facGetAnalysis(analysisId, opts) {
+    return request(`/api/fac/analysis/${enc(analysisId)}`, opts);
+  },
+  facAcceptRecommendation(recId, payload, opts) {
+    return request(`/api/fac/recommendation/${enc(recId)}/accept`, { method: 'POST', body: payload || {}, ...opts });
+  },
+  facRejectRecommendation(recId, payload, opts) {
+    return request(`/api/fac/recommendation/${enc(recId)}/reject`, { method: 'POST', body: payload || {}, ...opts });
+  },
+
   // ── Facultative reference data (cached via CACHEABLE_PATHS) ──────────────
   facGetOccupancies(opts)    { return request('/api/fac/reference/occupancies', opts); },
   facGetFactors(opts)        { return request('/api/fac/reference/factors', opts); },

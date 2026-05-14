@@ -33,3 +33,15 @@ export const aiCompleteSchema = z.object({
   system: z.string().optional(),
   max_tokens: z.number().int().positive().max(4000).optional(),
 });
+
+// ── /ai/fac/analyse-document ──────────────────────────────────────
+// Triggers a fac_document_analysis run against a previously uploaded
+// document. The runner reads the file bytes from storage (Cloudinary
+// URL or local upload-dir path) on the server, so the client never
+// re-uploads the payload here.
+export const facAnalyseDocumentSchema = z.object({
+  fac_risk_id:   z.string().uuid('fac_risk_id must be a UUID'),
+  document_id:   z.string().uuid('document_id must be a UUID'),
+  document_kind: z.enum(['PLACEMENT_SLIP', 'SURVEY_REPORT', 'CLAIMS_BORDEREAU',
+                         'COPE_REPORT', 'WORDING', 'OTHER']),
+});

@@ -1,15 +1,22 @@
 // server/src/routes/facultative.js
 // Facultative reinsurance module — CRUD for risks, locations, COPE,
 // loss history, dual pricing, documents, market rates, and home listing.
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { Router } from 'express';
+import multer from 'multer';
 import { pool } from '../db/pool.js';
+import { env } from '../config/env.js';
 import { asyncHandler, numOrNull, dateOrNull } from '../helpers.js';
 import { validateBody } from '../lib/validate.js';
 import {
   facRiskSaveSchema,
   facLocationsSaveSchema,
   facPricingSaveSchema,
+  facSubmitForApprovalSchema,
+  facBindSchema,
 } from '../validation/facultative.js';
+import { applyRecommendation } from '../lib/facRecommendationApply.js';
 
 const router = Router();
 
@@ -421,10 +428,11 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
       underwriting_score, capacity_grade, uw_action,
       max_capacity_pct, max_capacity_sar,
       market_vs_tech_pct, market_vs_tech_band,
-      engine_version, engine_warnings
+      engine_version, engine_warnings,
+      capacity_proposed_pct, accepted_rate_pm, uw_note
     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
       $22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,
-      $36,$37,$38,$39,$40,$41,$42,$43,$44)
+      $36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47)
     ON CONFLICT (fac_risk_id) DO UPDATE SET
       market_rate_per_mille = EXCLUDED.market_rate_per_mille,
       market_premium = EXCLUDED.market_premium,
@@ -469,6 +477,9 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
       market_vs_tech_band = EXCLUDED.market_vs_tech_band,
       engine_version = EXCLUDED.engine_version,
       engine_warnings = EXCLUDED.engine_warnings,
+      capacity_proposed_pct = EXCLUDED.capacity_proposed_pct,
+      accepted_rate_pm = EXCLUDED.accepted_rate_pm,
+      uw_note = EXCLUDED.uw_note,
       updated_at = now()
     RETURNING *
   `, [
@@ -497,6 +508,8 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
     numOrNull(b.market_vs_tech_pct), b.market_vs_tech_band || null,
     // Provenance
     b.engine_version || null, JSON.stringify(engineWarnings),
+    // Summary-screen edits (migration 084)
+    numOrNull(b.capacity_proposed_pct), numOrNull(b.accepted_rate_pm), b.uw_note || null,
   ]);
   res.json(rows[0]);
 }));
@@ -529,6 +542,81 @@ router.delete('/fac/documents/:docId', asyncHandler(async (req, res) => {
   await pool.query(`DELETE FROM public.fac_document WHERE document_id = $1`, [req.params.docId]);
   res.json({ deleted: true });
 }));
+
+// ── Multipart upload (the AI analyse flow reads the bytes back) ──
+//
+// The legacy JSON POST above only stores metadata. The AI runner
+// needs real bytes, so we add a separate route that accepts a
+// multipart 'file' field + document_kind. Storage strategy mirrors
+// the quotes upload: Cloudinary if configured, local upload-dir
+// otherwise. 20MB cap matches the client-side guard.
+const _facDocUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+});
+
+let _facCloudinary = null;
+async function _getFacCloudinary() {
+  if (!_facCloudinary && process.env.CLOUDINARY_URL) {
+    const mod = await import('cloudinary');
+    _facCloudinary = mod.v2;
+    _facCloudinary.config({ secure: true });
+  }
+  return _facCloudinary;
+}
+
+router.post(
+  '/fac/risks/:id/documents/upload',
+  _facDocUpload.single('file'),
+  asyncHandler(async (req, res) => {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: 'No file provided' });
+    const riskId = req.params.id;
+    const kind = req.body?.document_kind || 'OTHER';
+
+    // Default to a local path under env.uploadDir; swap for the
+    // Cloudinary URL if we managed to upload there.
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const relPath = `fac/${riskId}/${Date.now()}_${safeName}`;
+    let storageKey = relPath;
+    try {
+      const cld = await _getFacCloudinary();
+      if (cld) {
+        storageKey = await new Promise((resolve, reject) => cld.uploader.upload_stream(
+          {
+            folder: `fac/${riskId}`,
+            public_id: `${Date.now()}_${safeName}`,
+            resource_type: 'raw',
+            type: 'upload',
+            access_mode: 'public',
+          },
+          (err, result) => (err ? reject(err) : resolve(result.secure_url)),
+        ).end(file.buffer));
+      } else {
+        const absDir = path.resolve(env.uploadDir, `fac/${riskId}`);
+        await fs.mkdir(absDir, { recursive: true });
+        const absPath = path.resolve(env.uploadDir, relPath);
+        await fs.writeFile(absPath, file.buffer);
+      }
+    } catch (e) {
+      return res.status(502).json({ error: `Upload storage failed: ${e?.message || e}` });
+    }
+
+    const { rows } = await pool.query(`
+      INSERT INTO public.fac_document
+        (fac_risk_id, doc_type, document_kind, file_name, file_path,
+         storage_key, file_size, byte_size, mime_type, uploaded_at, uploaded_by_user_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), $10)
+      RETURNING *
+    `, [
+      riskId, kind, kind,
+      file.originalname, storageKey, storageKey,
+      file.size, file.size, file.mimetype || null,
+      actorUserUuid(req),
+    ]);
+    res.status(201).json(rows[0]);
+  }),
+);
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -768,6 +856,407 @@ router.post('/fac/risks/:id/clauses-checklist', asyncHandler(async (req, res) =>
     client.release();
   }
 }));
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SUMMARY & APPROVAL — submit / decline / bind
+//
+// The existing approvals service in services/approvals.js is built around
+// contract_offer.contract_id (NOT NULL + FK), so we don't go through it
+// here. The fac workflow keeps its approval state on fac_risk.status
+// (the fac_status enum already includes DRAFT / QUOTED / REFERRED /
+// BOUND / DECLINED) and writes "FAC_*" rows into contract_audit_event
+// (no FK after migration 071) so the same audit-log machinery picks
+// them up. A proper fac_approval table can be added later if the
+// workflow grows peer / arbiter steps; right now status + audit is the
+// whole state machine.
+// ═══════════════════════════════════════════════════════════════════════════
+
+function actorLabel(req) {
+  const u = req.user || {};
+  if (u.displayName) return u.displayName;
+  if (u.userId) return u.userId;
+  return req.headers['x-user-id'] || 'unknown';
+}
+
+// req.user.userId comes from the x-user-id header which may carry a
+// free-form login slug in dev (e.g. "test-user") rather than a UUID.
+// Only forward it to columns typed as uuid when it parses as one;
+// otherwise persist NULL.
+const _UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+function actorUserUuid(req) {
+  const id = req.user?.userId || null;
+  return id && _UUID_RE.test(id) ? id : null;
+}
+
+router.get('/fac/risks/:id/audit-events', asyncHandler(async (req, res) => {
+  // Surfaces the FAC_* rows the workflow endpoints write into
+  // contract_audit_event. Used by the Summary screen to populate the
+  // underwriter / senior signature slots.
+  const { rows } = await pool.query(
+    `SELECT event_id, event_type, actor, payload, created_at
+       FROM public.contract_audit_event
+      WHERE contract_id = $1
+        AND event_type LIKE 'FAC\\_%' ESCAPE '\\'
+      ORDER BY created_at DESC`,
+    [req.params.id],
+  );
+  res.json({ events: rows });
+}));
+
+async function writeFacAuditEvent({ facRiskId, eventType, actor, payload }) {
+  // contract_audit_event lost its FK in migration 071, so reusing it for
+  // fac events avoids a brand-new audit table. event_type is prefixed
+  // with FAC_ so downstream consumers can filter cleanly.
+  await pool.query(
+    `INSERT INTO public.contract_audit_event (contract_id, event_type, actor, payload)
+     VALUES ($1, $2, $3, $4::jsonb)`,
+    [facRiskId, eventType, actor || null, JSON.stringify(payload || {})],
+  );
+}
+
+router.post(
+  '/fac/risks/:id/submit-for-approval',
+  validateBody(facSubmitForApprovalSchema),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    // Risk must exist.
+    const { rows: riskRows } = await pool.query(
+      `SELECT fac_risk_id, status FROM public.fac_risk WHERE fac_risk_id = $1`,
+      [id],
+    );
+    if (!riskRows.length) return res.status(404).json({ error: 'Risk not found' });
+
+    // Pricing must exist with a non-null underwriting_score.
+    const { rows: priceRows } = await pool.query(
+      `SELECT underwriting_score, capacity_grade, final_gross_rate_pm
+         FROM public.fac_pricing
+        WHERE fac_risk_id = $1`,
+      [id],
+    );
+    if (!priceRows.length || priceRows[0].underwriting_score == null) {
+      return res.status(422).json({
+        error: 'Pricing incomplete — underwriting_score must be computed before submission.',
+        code: 'PRICING_INCOMPLETE',
+      });
+    }
+    const grade = priceRows[0].capacity_grade || null;
+    const senior = grade ? grade >= 'H' : false; // 'H','I','J','K' route to senior
+    const nextStatus = senior ? 'REFERRED' : 'QUOTED';
+
+    const actor = actorLabel(req);
+    const { rows: updated } = await pool.query(
+      `UPDATE public.fac_risk
+          SET status = $2::public.fac_status,
+              updated_at = now()
+        WHERE fac_risk_id = $1
+        RETURNING *`,
+      [id, nextStatus],
+    );
+    await writeFacAuditEvent({
+      facRiskId: id,
+      eventType: 'FAC_SUBMITTED',
+      actor,
+      payload: {
+        previous_status: riskRows[0].status,
+        new_status: nextStatus,
+        capacity_grade: grade,
+        underwriting_score: priceRows[0].underwriting_score,
+        comment: req.body?.comment || null,
+        routed_to_senior: senior,
+      },
+    });
+    res.json({
+      risk: updated[0],
+      status: nextStatus,
+      capacity_grade: grade,
+      routed_to_senior: senior,
+    });
+  }),
+);
+
+router.post(
+  '/fac/risks/:id/decline',
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    // Inline validation so we can return 422 (semantic) rather than 400
+    // (malformed) for a missing/short reason — per the workflow spec.
+    const reason = String(req.body?.reason ?? '').trim();
+    if (reason.length < 5) {
+      return res.status(422).json({
+        error: 'Request body failed validation',
+        code: 'VALIDATION_FAILED',
+        fields: [{ path: 'reason', message: 'reason must be at least 5 characters', code: 'too_small' }],
+      });
+    }
+
+    const { rowCount: exists } = await pool.query(
+      `SELECT 1 FROM public.fac_risk WHERE fac_risk_id = $1`, [id],
+    );
+    if (!exists) return res.status(404).json({ error: 'Risk not found' });
+
+    const actor = actorLabel(req);
+    const { rows: updated } = await pool.query(
+      `UPDATE public.fac_risk
+          SET status = 'DECLINED'::public.fac_status,
+              decline_reason = $2,
+              updated_at = now()
+        WHERE fac_risk_id = $1
+        RETURNING *`,
+      [id, reason],
+    );
+    await writeFacAuditEvent({
+      facRiskId: id,
+      eventType: 'FAC_DECLINED',
+      actor,
+      payload: { reason },
+    });
+    res.json({ risk: updated[0], status: 'DECLINED' });
+  }),
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DOCUMENT AI — accept / reject recommendations
+//
+// Accept runs the apply-dispatch (see lib/facRecommendationApply.js)
+// inside a transaction that also marks the recommendation ACCEPTED,
+// supersedes other PENDING recs on the same field, and writes a
+// FAC_AI_ACCEPTED audit row. Reject is pure status / audit; no data
+// change.
+// ═══════════════════════════════════════════════════════════════════════════
+
+router.post('/fac/recommendation/:recId/accept', asyncHandler(async (req, res) => {
+  const { recId } = req.params;
+  const override = req.body?.override_value;
+
+  // Load the recommendation up-front so we know the risk / field even
+  // if the apply step needs a different table.
+  const { rows: recRows } = await pool.query(
+    `SELECT * FROM public.fac_ai_recommendation WHERE recommendation_id = $1`,
+    [recId],
+  );
+  if (!recRows.length) return res.status(404).json({ error: 'Recommendation not found' });
+  const rec = recRows[0];
+  if (rec.status !== 'PENDING') {
+    return res.status(409).json({
+      error: `Recommendation is ${rec.status}; only PENDING recommendations can be accepted.`,
+      code: 'INVALID_STATE',
+    });
+  }
+  const value = override !== undefined ? override : rec.suggested_value;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let applyResult;
+    try {
+      applyResult = await applyRecommendation({
+        client, riskId: rec.fac_risk_id, targetField: rec.target_field, value,
+      });
+    } catch (applyErr) {
+      await client.query('ROLLBACK');
+      // Surface a 400 for "unknown target_field" — anything else escalates.
+      if (applyErr.status === 400) {
+        return res.status(400).json({ error: applyErr.message, code: 'UNKNOWN_TARGET_FIELD' });
+      }
+      throw applyErr;
+    }
+
+    // Update the accepted rec.
+    await client.query(
+      `UPDATE public.fac_ai_recommendation
+          SET status='ACCEPTED',
+              acted_at = now(),
+              acted_by_user_id = $2
+        WHERE recommendation_id = $1`,
+      [recId, actorUserUuid(req)],
+    );
+    // Supersede every other PENDING rec targeting the same field on
+    // the same risk — accepting one effectively answers the others.
+    await client.query(
+      `UPDATE public.fac_ai_recommendation
+          SET status='SUPERSEDED', acted_at = now()
+        WHERE fac_risk_id = $1
+          AND target_field = $2
+          AND status = 'PENDING'
+          AND recommendation_id <> $3`,
+      [rec.fac_risk_id, rec.target_field, recId],
+    );
+    // Audit row — same contract_audit_event table used by the
+    // submit/decline/bind flow.
+    await client.query(
+      `INSERT INTO public.contract_audit_event (contract_id, event_type, actor, payload)
+       VALUES ($1, 'FAC_AI_ACCEPTED', $2, $3::jsonb)`,
+      [rec.fac_risk_id, actorLabel(req), JSON.stringify({
+        recommendation_id: recId,
+        target_field: rec.target_field,
+        before: applyResult?.beforeValue ?? null,
+        after:  applyResult?.afterValue ?? null,
+        no_op:  Boolean(applyResult?.noOp),
+      })],
+    );
+    await client.query('COMMIT');
+    res.json({
+      recommendation_id: recId,
+      status: 'ACCEPTED',
+      target_field: rec.target_field,
+      before: applyResult?.beforeValue ?? null,
+      after:  applyResult?.afterValue ?? null,
+    });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}));
+
+router.post('/fac/recommendation/:recId/reject', asyncHandler(async (req, res) => {
+  const { recId } = req.params;
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason : null;
+  const { rows } = await pool.query(
+    `UPDATE public.fac_ai_recommendation
+        SET status='REJECTED',
+            acted_at = now(),
+            acted_by_user_id = $2
+      WHERE recommendation_id = $1 AND status = 'PENDING'
+      RETURNING *`,
+    [recId, actorUserUuid(req)],
+  );
+  if (!rows.length) {
+    const { rows: existing } = await pool.query(
+      `SELECT status FROM public.fac_ai_recommendation WHERE recommendation_id = $1`, [recId],
+    );
+    if (!existing.length) return res.status(404).json({ error: 'Recommendation not found' });
+    return res.status(409).json({
+      error: `Recommendation is ${existing[0].status}; only PENDING recommendations can be rejected.`,
+      code: 'INVALID_STATE',
+    });
+  }
+  await pool.query(
+    `INSERT INTO public.contract_audit_event (contract_id, event_type, actor, payload)
+     VALUES ($1, 'FAC_AI_REJECTED', $2, $3::jsonb)`,
+    [rows[0].fac_risk_id, actorLabel(req), JSON.stringify({
+      recommendation_id: recId, target_field: rows[0].target_field, reason,
+    })],
+  );
+  res.json({ recommendation_id: recId, status: 'REJECTED' });
+}));
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DOCUMENT AI — list + detail
+//
+// Tenancy: this codebase doesn't model tenants — every authenticated
+// user has access to every fac_risk. The 403 path below covers the
+// shape needed once a tenant scope is added; for now it never fires.
+// ═══════════════════════════════════════════════════════════════════════════
+
+router.get('/fac/risks/:id/analyses', asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(`
+    SELECT a.analysis_id,
+           a.document_id,
+           d.file_name           AS document_filename,
+           a.analysis_kind       AS document_kind,
+           a.status,
+           a.summary,
+           a.created_at,
+           (SELECT count(*)::int FROM public.fac_ai_recommendation r
+              WHERE r.analysis_id = a.analysis_id)                       AS recommendation_count,
+           (SELECT count(*)::int FROM public.fac_ai_recommendation r
+              WHERE r.analysis_id = a.analysis_id AND r.status = 'PENDING') AS pending_count
+      FROM public.fac_document_analysis a
+      LEFT JOIN public.fac_document d ON d.document_id = a.document_id
+     WHERE a.fac_risk_id = $1
+     ORDER BY a.created_at DESC
+  `, [req.params.id]);
+  res.json({ analyses: rows });
+}));
+
+router.get('/fac/analysis/:analysisId', asyncHandler(async (req, res) => {
+  const { analysisId } = req.params;
+  const { rows: aRows } = await pool.query(`
+    SELECT a.*, d.file_name AS document_filename
+      FROM public.fac_document_analysis a
+      LEFT JOIN public.fac_document d ON d.document_id = a.document_id
+     WHERE a.analysis_id = $1
+  `, [analysisId]);
+  if (!aRows.length) return res.status(404).json({ error: 'Analysis not found' });
+
+  // Hook for future tenant isolation. The current auth model gives
+  // every authenticated user access — so this 403 path is dead code
+  // right now but keeps the response shape stable for later.
+  // if (!userCanAccessRisk(req.user, aRows[0].fac_risk_id))
+  //   return res.status(403).json({ error: 'Forbidden' });
+
+  const { rows: rRows } = await pool.query(`
+    SELECT *
+      FROM public.fac_ai_recommendation
+     WHERE analysis_id = $1
+     ORDER BY (status = 'PENDING') DESC, created_at DESC
+  `, [analysisId]);
+
+  res.json({ analysis: aRows[0], recommendations: rRows });
+}));
+
+
+router.post(
+  '/fac/risks/:id/bind',
+  validateBody(facBindSchema),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const { rows: riskRows } = await pool.query(
+      `SELECT fac_risk_id, status, bound_reference, uw_year, inception_date
+         FROM public.fac_risk WHERE fac_risk_id = $1`,
+      [id],
+    );
+    if (!riskRows.length) return res.status(404).json({ error: 'Risk not found' });
+
+    // Only QUOTED / APPROVED risks may be bound. The fac_status enum
+    // doesn't carry APPROVED, so we treat QUOTED as the only ready
+    // state right now — when the workflow grows peer/arbiter steps a
+    // dedicated APPROVED row will get added.
+    const currentStatus = riskRows[0].status;
+    if (currentStatus !== 'QUOTED') {
+      return res.status(409).json({
+        error: `Cannot bind from status "${currentStatus}". Risk must be QUOTED first.`,
+        code: 'INVALID_STATE',
+      });
+    }
+
+    // Generate FAC-YYYY-NNNNN. Year prefers explicit effective_date,
+    // falls back to inception_date, then today.
+    const effective = req.body?.effective_date || riskRows[0].inception_date;
+    const year = effective
+      ? new Date(effective).getFullYear()
+      : (riskRows[0].uw_year || new Date().getFullYear());
+    const { rows: seqRows } = await pool.query(
+      `SELECT nextval('public.fac_bound_reference_seq') AS n`,
+    );
+    const padded = String(seqRows[0].n).padStart(5, '0');
+    const boundReference = riskRows[0].bound_reference || `FAC-${year}-${padded}`;
+
+    const actor = actorLabel(req);
+    const { rows: updated } = await pool.query(
+      `UPDATE public.fac_risk
+          SET status = 'BOUND'::public.fac_status,
+              bound_reference = COALESCE(bound_reference, $2),
+              updated_at = now()
+        WHERE fac_risk_id = $1
+        RETURNING *`,
+      [id, boundReference],
+    );
+    await writeFacAuditEvent({
+      facRiskId: id,
+      eventType: 'FAC_BOUND',
+      actor,
+      payload: { bound_reference: updated[0].bound_reference, effective_date: effective || null },
+    });
+    res.json({ risk: updated[0], status: 'BOUND', bound_reference: updated[0].bound_reference });
+  }),
+);
 
 
 export default router;
