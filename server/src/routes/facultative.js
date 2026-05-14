@@ -668,4 +668,106 @@ router.post('/fac/risks/:id/uw-factors', asyncHandler(async (req, res) => {
 }));
 
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CLAUSES & EXCLUSIONS CHECKLIST — per-risk LM7 / ABI / LMA 3100 / etc.
+//
+// The master list lives in fac_clause_master; this set of endpoints just
+// stores the underwriter's tick + free-text comment. GET left-joins the
+// master so every clause appears even before the underwriter has touched
+// the form, and POST bulk-upserts whatever the screen sends.
+// ═══════════════════════════════════════════════════════════════════════════
+
+router.get('/fac/risks/:id/clauses-checklist', asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(`
+    SELECT cm.clause_code, cm.clause_name, cm.clause_category, cm.is_mandatory, cm.sort_order,
+           COALESCE(cl.is_checked, false) AS is_checked,
+           cl.comments,
+           cl.updated_at
+      FROM public.fac_clause_master cm
+      LEFT JOIN public.fac_clauses_checklist cl
+        ON cl.clause_code = cm.clause_code AND cl.fac_risk_id = $1
+     ORDER BY cm.sort_order
+  `, [req.params.id]);
+  res.json({ items: rows });
+}));
+
+router.post('/fac/risks/:id/clauses-checklist', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const items = Array.isArray(req.body?.items) ? req.body.items : null;
+  if (!items) {
+    return res.status(400).json({
+      error: 'Request body failed validation',
+      code: 'VALIDATION_FAILED',
+      fields: [{ path: 'items', message: 'must be an array of { clause_code, is_checked, comments }', code: 'invalid_type' }],
+    });
+  }
+
+  // Validate each clause_code against the master before any write so we
+  // either persist the whole batch or reject it cleanly.
+  const { rows: codeRows } = await pool.query(
+    `SELECT clause_code FROM public.fac_clause_master`
+  );
+  const allowed = new Set(codeRows.map((r) => r.clause_code));
+  const issues = [];
+  for (const it of items) {
+    if (!it || typeof it !== 'object') {
+      issues.push({ path: 'items', message: 'each item must be an object', code: 'invalid_type' });
+      break;
+    }
+    if (!allowed.has(it.clause_code)) {
+      issues.push({
+        path: `items[${it.clause_code}]`,
+        message: `unknown clause_code "${it.clause_code}"`,
+        code: 'unknown_clause',
+      });
+    }
+  }
+  if (issues.length) {
+    return res.status(422).json({
+      error: 'Request body failed validation',
+      code: 'VALIDATION_FAILED',
+      fields: issues,
+    });
+  }
+
+  // Confirm the risk exists — keeps the response shape honest if a stale
+  // UI saves against a deleted risk.
+  const { rowCount: riskExists } = await pool.query(
+    `SELECT 1 FROM public.fac_risk WHERE fac_risk_id = $1`, [id]
+  );
+  if (!riskExists) return res.status(404).json({ error: 'Risk not found' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const it of items) {
+      await client.query(`
+        INSERT INTO public.fac_clauses_checklist (fac_risk_id, clause_code, is_checked, comments)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (fac_risk_id, clause_code) DO UPDATE
+          SET is_checked = EXCLUDED.is_checked,
+              comments   = EXCLUDED.comments
+      `, [id, it.clause_code, Boolean(it.is_checked), it.comments || null]);
+    }
+    await client.query('COMMIT');
+    const { rows } = await client.query(`
+      SELECT cm.clause_code, cm.clause_name, cm.clause_category, cm.is_mandatory, cm.sort_order,
+             COALESCE(cl.is_checked, false) AS is_checked,
+             cl.comments,
+             cl.updated_at
+        FROM public.fac_clause_master cm
+        LEFT JOIN public.fac_clauses_checklist cl
+          ON cl.clause_code = cm.clause_code AND cl.fac_risk_id = $1
+       ORDER BY cm.sort_order
+    `, [id]);
+    res.json({ items: rows });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}));
+
+
 export default router;
