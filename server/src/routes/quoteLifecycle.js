@@ -115,9 +115,9 @@ router.post('/quotes/:id/amend', asyncHandler(async (req, res) => {
       { src: 'quote_np_details',            pk: 'quote_id', cols: 'number_of_layers,expiring_number_of_layers,deductible,max_retention,accounting_method,xl_type,accounts,brokerage_pct,taxes_pct,no_claims_bonus_pct,profit_commission_pct,est_gnpi,experience_start_year,structures_to_quote' },
       { src: 'quote_np_layers',             pk: 'quote_id', cols: 'layer_number,attachment,layer_limit,aggregate_limit,egnpi,earned_premium,rate,rol,num_reinstatements,reinstatement_pct,annual_agg_deductible,peril_scope,mdp,mdp_pct' },
       { src: 'quote_np_terms',              pk: 'quote_id', cols: 'terms' },
-      { src: 'quote_np_egnpi_year',         pk: 'quote_id', cols: 'uw_year,gnpi,inflation_pct' },
+      { src: 'quote_np_egnpi_year',         pk: 'quote_id', cols: 'uw_year,egnpi,inflation_pct' },
       { src: 'quote_np_expiring_layers',    pk: 'quote_id', cols: 'layer_number,attachment,layer_limit,aggregate_limit,egnpi,earned_premium,rate,rol,num_reinstatements,reinstatement_pct,annual_agg_deductible,peril_scope,mdp,mdp_pct' },
-      { src: 'quote_np_expiring_terms',     pk: 'quote_id', cols: 'terms' },
+      { src: 'quote_np_expiring_terms',     pk: 'quote_id', cols: 'egnpi,deductible,risk_limit,cat_limit,brokerage_pct,no_claims_bonus_pct,profit_commission_pct,notes,covered_props' },
       { src: 'quote_np_pricing_inputs',     pk: 'quote_id', cols: 'burn_weight_pct,exposure_weight_pct,pareto_weight_pct,pricing_loading_pct,swiss_re_curve_name' },
       { src: 'quote_np_pricing_layer_inputs', pk: 'quote_id', cols: 'layer_number,expiring_pricing_pct' },
       { src: 'quote_np_pricing_outputs',    pk: 'quote_id', cols: 'layer_number,section,pure_burning_cost,pareto_pricing,burn_plus_pareto,exposure_rating,burn_weight_pct,exposure_weight_pct,pareto_weight_pct,pricing_loading_pct,total_price,prob_attach,prob_exhaust' },
@@ -125,18 +125,18 @@ router.post('/quotes/:id/amend', asyncHandler(async (req, res) => {
       { src: 'quote_np_final_structure_layer', pk: 'quote_id', cols: 'structure_no,layer_number,layer_key,layer_limit,attachment,egnpi,earned_premium,rate,rol,risk,cat,pure_burn_pct,pareto_pct,burn_plus_pareto_pct,exposure_pct,burn_weight_pct,pareto_weight_pct,exposure_weight_pct,loading_pct,uw_price_pct,risk_pure_burn_pct,risk_pareto_pct,risk_burn_plus_pareto_pct,risk_exposure_pct,risk_burn_weight_pct,risk_pareto_weight_pct,risk_exposure_weight_pct,risk_loading_pct,risk_uw_price_pct,risk_prob_attach_pct,risk_prob_exhaust_pct,cat_pure_burn_pct,cat_pareto_pct,cat_burn_plus_pareto_pct,cat_exposure_pct,cat_burn_weight_pct,cat_pareto_weight_pct,cat_exposure_weight_pct,cat_loading_pct,cat_uw_price_pct,cat_prob_attach_pct,cat_prob_exhaust_pct,raw_layer' },
       { src: 'quote_np_final_structure_cob', pk: 'quote_id', cols: 'structure_no,scope_key,class_of_business_id,limit_amount,layer_flags,manual_flags' },
       { src: 'quote_np_final_expiring_probability', pk: 'quote_id', cols: 'layer_number,prob_attach_pct,prob_exhaust_pct,raw_layer' },
-      { src: 'quote_prop_details',          pk: 'quote_id', cols: 'triangulations_available,inception_date,renewal_date,experience_start_year,qs_limit,retention_pct,retention_amt,cession_pct,cession_amt,surplus_max_retention,num_lines,total_capacity,event_limit,aal,quota_share_epi,surplus_epi,brokerage_pct,taxes_pct,loss_cap_pct' },
+      { src: 'quote_prop_details',          pk: 'quote_id', cols: 'triangulations_available,renewal_date,experience_start_year,qs_limit,retention_pct,retention_amt,cession_pct,cession_amt,surplus_max_retention,num_lines,total_capacity,event_limit,aal,quota_share_epi,surplus_epi,brokerage_pct,taxes_pct,loss_cap_pct' },
       { src: 'quote_commissions',           pk: 'quote_id', cols: 'mode,fixed_commission_pct,fixed_commission_qs_pct,fixed_commission_surplus_pct,provisional_commission_pct,sliding_min_loss_ratio,sliding_max_loss_ratio,sliding_min_commission,sliding_max_commission,mgmt_expenses_pct,profit_commission_pct' },
       { src: 'quote_commission_slides',     pk: 'quote_id', cols: 'row_no,loss_ratio_pct,commission_pct' },
       { src: 'quote_loss_participation',    pk: 'quote_id', cols: 'enabled,min_loss_ratio_pct,max_loss_ratio_pct,reinsurer_share_pct' },
       { src: 'quote_class_of_business',     pk: 'quote_id', cols: 'class_of_business_id' },
-      { src: 'quote_epi_split',             pk: 'quote_id', cols: 'class_id,premium' },
+      { src: 'quote_epi_split',             pk: 'quote_id', cols: 'class_of_business_id,premium' },
       { src: 'quote_underwriting_limit',    pk: 'quote_id', cols: 'class_of_business_id,limit_amount,basis' },
       { src: 'quote_cresta_data',           pk: 'quote_id', cols: 'country_id,zone_id,zone_name,eq_agg,ws_agg,flood_agg,srcc_agg,others_agg,residential_bldg_pct,commercial_bldg_pct,commercial_cont_pct,industrial_bldg_pct,industrial_cont_pct,cob_id,treaty_type' },
-      { src: 'quote_pricing_outputs',       pk: 'quote_id', cols: 'pricing_json,outputs_json,offer_status,offer_line,offer_comment,offer_approver' },
-      { src: 'quote_pricing_yearly',        pk: 'quote_id', cols: 'year_data' },
-      { src: 'quote_large_loss_report',     pk: 'quote_id', cols: 'report_date,losses' },
-      { src: 'quote_cat_loss_report',       pk: 'quote_id', cols: 'report_date,losses' },
+      { src: 'quote_pricing_outputs',       pk: 'quote_id', cols: 'epi,attritional_ratio,large_loss_load,cat_loss_load,commission_ratio,brokerage_ratio,tax_ratio,technical_result,max_commission,target_margin,combined_ratio,loss_ratio,expense_ratio,technical_price,uw_price,margin' },
+      { src: 'quote_pricing_yearly',        pk: 'quote_id', cols: 'uw_year,ultimate_premium,ultimate_loss,loss_ratio,commission_amt,brokerage_amt,technical_result,record_type,premium,paid_claims,os_claims,incurred_claims,commission,brokerage,net_result' },
+      { src: 'quote_large_loss_report',     pk: 'quote_id', cols: 'report_data' },
+      { src: 'quote_cat_loss_report',       pk: 'quote_id', cols: 'report_data' },
     ];
 
     for (const { src, cols } of copyTables) {
@@ -152,35 +152,54 @@ router.post('/quotes/:id/amend', asyncHandler(async (req, res) => {
       );
     }
 
-    // Copy triangle cells
+    // Copy triangle cells — column names match the live quote_triangle_cells schema
     await cl.query(
-      `INSERT INTO public.quote_triangle_cells (quote_id,tri_type,row_idx,col_idx,val)
-       SELECT $2,tri_type,row_idx,col_idx,val FROM public.quote_triangle_cells WHERE quote_id=$1`,
+      `INSERT INTO public.quote_triangle_cells (quote_id,type,origin_year,dev_months,cum_value)
+       SELECT $2,type,origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1`,
       [id, newQuoteId]
     );
 
-    // Copy dev factors
+    // Copy dev factors — schema uses triangle_type, not dev_type
     await cl.query(
-      `INSERT INTO public.quote_dev_factor (quote_id,dev_type,dev_month,chosen_ldf,chosen_cdf,selection_method,tail_factor,bf_ielr,selected_factors_json)
-       SELECT $2,dev_type,dev_month,chosen_ldf,chosen_cdf,selection_method,tail_factor,bf_ielr,selected_factors_json
+      `INSERT INTO public.quote_dev_factor (quote_id,triangle_type,dev_month,selected_ldf,selected_cdf,chosen_source,chosen_ldf,chosen_cdf,overridden,actual_ldf,actual_cdf,param_ldf,param_cdf,parametrized_ldf,parametrized_cdf)
+       SELECT $2,triangle_type,dev_month,selected_ldf,selected_cdf,chosen_source,chosen_ldf,chosen_cdf,overridden,actual_ldf,actual_cdf,param_ldf,param_cdf,parametrized_ldf,parametrized_cdf
        FROM public.quote_dev_factor WHERE quote_id=$1`,
       [id, newQuoteId]
     );
 
-    // Copy risk/claims profiles
-    for (const profileTable of ['quote_risk_profile','quote_claims_profile']) {
-      await cl.query(
-        `INSERT INTO public.${profileTable} (quote_id,class_of_business_id,c_value,pml_percentage,selected_curve,custom_b,custom_g)
-         SELECT $2,class_of_business_id,c_value,pml_percentage,selected_curve,custom_b,custom_g
-         FROM public.${profileTable} WHERE quote_id=$1`,
+    // Copy risk/claims profiles — band tables are joined via profile_id and
+    // do NOT carry a quote_id; copy parent profiles first, then re-derive
+    // band rows from the new profile_ids.
+    for (const profileTable of ['quote_risk_profile', 'quote_claims_profile']) {
+      const profileCols = profileTable === 'quote_risk_profile'
+        ? 'class_of_business_id,c_value,pml_percentage,selected_curve,custom_b,custom_g,gross_loss_ratio'
+        : 'class_of_business_id,selected_curve,custom_b,custom_g';
+      const bandCols = profileTable === 'quote_risk_profile'
+        ? 'from_amt,to_amt,no_of_risks,total_sum_insured,gross_premium'
+        : 'from_amt,to_amt,no_of_risks,no_of_claims,total_sum_insured,aggregate_incurred,gross_premium';
+      const bandTable = `${profileTable}_band`;
+      // Insert profiles with a fresh profile_id; remember the mapping so
+      // band rows can target the new profile_id rather than the original.
+      const inserted = await cl.query(
+        `WITH src AS (
+            SELECT profile_id AS old_profile_id, ${profileCols.split(',').map(c => c.trim()).join(',')}
+              FROM public.${profileTable} WHERE quote_id=$1
+          ), ins AS (
+            INSERT INTO public.${profileTable} (quote_id, ${profileCols})
+            SELECT $2, ${profileCols} FROM src
+            RETURNING profile_id, class_of_business_id
+          )
+          SELECT src.old_profile_id, ins.profile_id AS new_profile_id
+            FROM src JOIN ins ON ins.class_of_business_id = src.class_of_business_id`,
         [id, newQuoteId]
       );
-      await cl.query(
-        `INSERT INTO public.${profileTable}_band (quote_id,class_of_business_id,from_amt,to_amt,no_of_risks,no_of_claims,total_sum_insured,aggregate_incurred,gross_premium)
-         SELECT $2,class_of_business_id,from_amt,to_amt,no_of_risks,no_of_claims,total_sum_insured,aggregate_incurred,gross_premium
-         FROM public.${profileTable}_band WHERE quote_id=$1`,
-        [id, newQuoteId]
-      );
+      for (const { old_profile_id, new_profile_id } of inserted.rows) {
+        await cl.query(
+          `INSERT INTO public.${bandTable} (profile_id, ${bandCols})
+           SELECT $2, ${bandCols} FROM public.${bandTable} WHERE profile_id=$1`,
+          [old_profile_id, new_profile_id]
+        );
+      }
     }
 
     // Log audit event. Audit-event tables are best-effort: a transient
