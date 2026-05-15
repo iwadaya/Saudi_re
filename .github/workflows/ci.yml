@@ -13,6 +13,30 @@ env:
   NODE_VERSION: '20.18.0'
 
 jobs:
+  audit:
+    name: prod dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Each workspace ships its own lockfile and prod-vs-dev split, so
+      # audit them independently. Failing at `moderate` because anything
+      # higher would still allow `moderate` advisories through, and the
+      # current baseline is zero. Root devDeps are intentionally not
+      # gated here — they're not shipped, and forcing them to zero
+      # would block on a vitest/pm2 advisory we can land separately.
+      - name: Audit server prod deps
+        run: npm audit --omit=dev --audit-level=moderate --prefix server
+
+      - name: Audit client prod deps
+        run: npm audit --omit=dev --audit-level=moderate --prefix client
+
   lint-and-unit:
     name: lint + unit tests
     runs-on: ubuntu-latest
