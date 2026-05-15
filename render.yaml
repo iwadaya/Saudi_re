@@ -5,13 +5,16 @@ services:
     region: frankfurt
     plan: starter
     buildCommand: npm install && npm install --prefix client && npm install --prefix server && npm run build --prefix client
+    # Migrations run as an explicit pre-deploy step. A failing migration
+    # fails the deploy cleanly instead of taking the previous version
+    # down on boot. RUN_MIGRATIONS_ON_BOOT stays at its default (false)
+    # so the server only ever starts against a known-good schema.
+    preDeployCommand: npm run migrate:up --prefix server
     startCommand: node server/src/index.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
-      - key: RUN_MIGRATIONS_ON_BOOT
-        value: "true"
       - key: CORS_ORIGIN
         value: "https://modelling-tool.onrender.com"
       - key: SESSION_TTL_HOURS

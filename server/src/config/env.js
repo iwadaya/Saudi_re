@@ -67,7 +67,11 @@ export const env = Object.freeze({
   clientDistDir: values.CLIENT_DIST_DIR ? path.resolve(rootDir, values.CLIENT_DIST_DIR) : defaultClientDistDir,
   clientSourceDir: path.resolve(rootDir, 'client'),
   corsOrigin: values.CORS_ORIGIN,
-  runMigrationsOnBoot: toBool(values.RUN_MIGRATIONS_ON_BOOT, true),
+  // Default to OFF: a bad migration on boot can take the whole API
+  // down. Run `npm run migrate:up` as an explicit pre-deploy step
+  // (see render.yaml, DEPLOYMENT.md). docker-compose sets this to
+  // true for the convenience of the local dev path.
+  runMigrationsOnBoot: toBool(values.RUN_MIGRATIONS_ON_BOOT, false),
   anthropicApiKey: values.ANTHROPIC_API_KEY || '',
   openaiApiKey: values.OPENAI_API_KEY || '',
   axcoApiKey: values.AXCO_API_KEY || '',

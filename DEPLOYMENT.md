@@ -37,7 +37,16 @@ Target user base: ~30 underwriters in a single office. The app is internal only 
 
 The Express server serves both the API under `/api/*` and the built SPA from `client/dist`. There is no separate frontend host required.
 
-Migrations live in `server/src/db/migrations/` (73 files at time of writing) and run automatically on boot when `RUN_MIGRATIONS_ON_BOOT=true`. They are idempotent and safe to re-run.
+Migrations live in `server/src/db/migrations/` (73 files at time of writing). Each migration runs in a single transaction with per-statement savepoints — a non-skippable failure rolls the whole migration back so a half-applied state is never recorded. They are idempotent and safe to re-run.
+
+Migrations do **not** run on app boot by default (`RUN_MIGRATIONS_ON_BOOT=false`). Run them as an explicit pre-deploy step:
+
+```bash
+npm run migrate:status --prefix server   # show applied vs. pending
+npm run migrate:up     --prefix server   # apply all pending
+```
+
+`render.yaml` wires `migrate:up` into Render's `preDeployCommand` so a bad migration fails the deploy cleanly instead of taking the previous version down on boot. The local `docker-compose.yml` keeps `RUN_MIGRATIONS_ON_BOOT=true` for dev convenience.
 
 ## 3. Server requirements
 
@@ -348,7 +357,7 @@ Key variables (full list in `.env.example`):
 | `PORT` | Yes | App listens here. Default `4000` |
 | `DATABASE_URL` | Yes | Postgres connection string |
 | `SESSION_SECRET` | Yes | At least 64 random hex chars |
-| `RUN_MIGRATIONS_ON_BOOT` | Yes | Set to `true` for first deploy and updates |
+| `RUN_MIGRATIONS_ON_BOOT` | No | Defaults to `false`. Leave unset in production — run `npm run migrate:up --prefix server` as a pre-deploy step instead. Set to `true` only for the local docker-compose path. |
 | `CORS_ORIGIN` | Yes | Set to the public URL, e.g. `https://universe.internal.company.com`. **Do not use `*` in production.** |
 | `OPENAI_API_KEY` | No | Required only for AI slip ingestion |
 | `UPLOAD_DIR` | No | Defaults to `./uploads` relative to project root |
@@ -397,20 +406,23 @@ cd /opt/universe         # or /home/universe/app for Option C
 git pull origin main
 npm run install:all      # only if package.json changed
 npm run build
+
+# Apply schema changes BEFORE restarting the app so a bad migration
+# can't take the running version down. migrate:up is idempotent.
+npm run migrate:status --prefix server   # confirm pending set
+npm run migrate:up     --prefix server
+
 # Then, depending on runtime:
 pm2 reload ecosystem.config.cjs                # Option A
-docker compose up -d --build                   # Option B
+docker compose up -d --build                   # Option B — docker-compose
+                                               # opts back in to boot-time
+                                               # migrations, so the
+                                               # pre-deploy step is
+                                               # optional but harmless
 sudo systemctl restart universe                # Option C
 ```
 
-Migrations run automatically on boot. Keep `RUN_MIGRATIONS_ON_BOOT=true` so schema changes apply on restart.
-
-For tighter change control, an IT team can set `RUN_MIGRATIONS_ON_BOOT=false` and run migrations manually:
-
-```bash
-cd /opt/universe/server
-npm run migrate     # applies all pending migrations
-```
+For an Option B (docker-compose) host that wants the same tighter control as A/C, unset `RUN_MIGRATIONS_ON_BOOT` in `docker-compose.yml` and run `npm run migrate:up --prefix server` (or `docker compose run --rm universe-app npm run migrate:up --prefix server`) before `up -d`.
 
 ## 10. Security notes — read before going live
 

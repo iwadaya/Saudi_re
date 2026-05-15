@@ -197,6 +197,18 @@ export async function runMigrations() {
   }
 }
 
+// Return { applied, pending } so callers (CLI status reporter, ops
+// scripts) can render the state without running anything.
+export async function migrationStatus() {
+  if (!fs.existsSync(migrationsDir)) return { applied: [], pending: [] };
+  await ensureMigrationsTable();
+  const appliedSet = await getAppliedMigrations();
+  const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
+  const applied = files.filter((f) => appliedSet.has(f));
+  const pending = files.filter((f) => !appliedSet.has(f));
+  return { applied, pending };
+}
+
 async function runMigrationsLocked() {
   await ensureMigrationsTable();
   const applied = await getAppliedMigrations();
@@ -219,15 +231,38 @@ async function runMigrationsLocked() {
     const sql   = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
     const stmts = splitStatements(sql);
 
-    let appliedCount = 0;
-    let skippedCount = 0;
+    const result = await runOneMigration(file, stmts);
+    logger.info('migration completed', { file, applied: result.applied, skipped: result.skipped });
+    results.push(result);
+  }
 
+  return results;
+}
+
+// Run a single migration atomically: every statement happens inside one
+// transaction, and the _migrations row is inserted in the same
+// transaction. A non-skippable failure ROLLBACKs both the schema
+// changes and the applied-marker, so a half-applied migration never
+// gets recorded. Skippable errors (duplicate table/column/etc.) are
+// trapped per-statement via SAVEPOINT so they don't poison the outer
+// transaction — they preserve the idempotent re-run behaviour the
+// original loop relied on.
+async function runOneMigration(file, stmts) {
+  const client = await pool.connect();
+  let appliedCount = 0;
+  let skippedCount = 0;
+  try {
+    await client.query('BEGIN');
     for (const stmt of stmts) {
+      await client.query('SAVEPOINT migration_stmt');
       try {
-        await pool.query(stmt);
+        await client.query(stmt);
+        await client.query('RELEASE SAVEPOINT migration_stmt');
         appliedCount++;
       } catch (err) {
         if (isSkippableMigrationError(err)) {
+          await client.query('ROLLBACK TO SAVEPOINT migration_stmt');
+          await client.query('RELEASE SAVEPOINT migration_stmt');
           skippedCount++;
           if (process.env.NODE_ENV !== 'production') {
             logger.debug('migration stmt skipped', { file, code: err.code, error: err.message.split('\n')[0].slice(0, 120) });
@@ -238,17 +273,16 @@ async function runMigrationsLocked() {
         throw err;
       }
     }
-
-    // Record as applied so it never runs again
-    try {
-      await pool.query(`INSERT INTO public._migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING`, [file]);
-    } catch (e) {
-      logger.warn('migration: could not record in _migrations', { file, error: e.message });
-    }
-
-    logger.info('migration completed', { file, applied: appliedCount, skipped: skippedCount });
-    results.push({ file, applied: appliedCount, skipped: skippedCount, status: 'ran' });
+    await client.query(
+      `INSERT INTO public._migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING`,
+      [file],
+    );
+    await client.query('COMMIT');
+    return { file, applied: appliedCount, skipped: skippedCount, status: 'ran' };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
   }
-
-  return results;
 }
