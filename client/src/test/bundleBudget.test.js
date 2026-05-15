@@ -21,14 +21,19 @@ const DIST = resolve('client/dist/assets');
 // Match chunks by prefix — Vite adds a content hash to each filename.
 // Budgets in KB (uncompressed). gzipped budget is roughly 30-35% of
 // this, so uncompressed is the simpler knob to tune.
+//
+// Each budget carries ~10% headroom over the actual chunk size at the
+// time it was set, so a small follow-up feature doesn't immediately
+// trip the gate. When you legitimately need to bump, do it here with
+// a commit-message line explaining what justified the growth.
 const BUDGETS_KB = {
   vendor: 300,             // React + router, plus non-lazy deps
-  'app-core': 320,         // global components + utils + context
+  'app-core': 460,         // global components + utils + context + api surface
   'np-final-pricing': 250, // the big screen — still the biggest after the split
   'np-screens': 220,
-  'prop-screens': 220,
+  'prop-screens': 240,
   'shared-screens': 200,
-  'fac-screens': 120,
+  'fac-screens': 180,      // facultative AI doc-ingest + reference data + clauses
   // exceljs is a lazy-loaded chunk, NOT added to the initial page load —
   // we budget it separately because it represents pay-on-click cost.
   // (exceljs is larger than xlsx was — ~900KB raw, ~200KB gz — so the

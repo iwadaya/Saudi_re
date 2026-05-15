@@ -40,6 +40,8 @@ import {
   treatyRecommendationsResponseSchema,
   marketRecStageSchema,
   marketRecRejectSchema,
+  structureCommentaryRequestSchema,
+  structureCommentarySchema,
 } from '../validation/marketReport.js';
 
 const router = Router();
@@ -1287,5 +1289,122 @@ async function persistSnapshot({ countryId, source, payload }) {
     [countryId, source, JSON.stringify(payload), expiresAt],
   );
 }
+
+// ── Per-structure benchmark commentary ────────────────────────────
+// Companion to GET /api/treaties/:id/peer-structures (peerStructures.js).
+// The route there returns the peer pool + medians; this endpoint takes
+// the source structure's metrics + those medians and asks the model
+// for a tight commentary on positioning. No web search — the peer pool
+// is the ground truth, so the model only has to reason about the
+// numbers in front of it.
+
+const STRUCTURE_COMMENTARY_SYSTEM = `You are a senior reinsurance treaty underwriter writing a one-paragraph commentary on a proposed non-proportional structure's positioning against peer treaties in the same scope (Country, Region, or Global).
+
+Compare these metrics:
+- Deductible (primary attachment point)
+- Total Limit (sum across all layers)
+- Ded / Limit ratio (lower = more exposure ceded)
+- Ded / EGNPI ratio (lower = larger deductible relative to premium base)
+- Limit / EGNPI ratio (higher = more capacity bought relative to premium base)
+- ROL % (rate-on-line, limit-weighted)
+
+Return STRICT JSON only (no markdown, no prose around it) with this shape:
+{
+  "signal": "BETTER" | "ON_PAR" | "WORSE" | "NO_DATA",
+  "commentary": "<one paragraph, 60-120 words, plain text>",
+  "highlights": [
+    { "metric": "Deductible" | "Limit" | "Ded / Limit" | "Ded / EGNPI" | "Limit / EGNPI" | "ROL %",
+      "verdict": "BETTER" | "ON_PAR" | "WORSE" | "NO_DATA",
+      "note": "<short note, <= 25 words>" }
+  ]
+}
+
+"signal" is your overall read of the structure vs the peer pool. For a buyer of reinsurance: higher deductible (more retention), tighter limit relative to premium, and lower ROL are generally BETTER (cheaper / more disciplined). Use ON_PAR when most metrics sit within ±10% of the peer median, WORSE when several lag the median materially, and NO_DATA only when the peer pool is empty or the source metrics are all missing.
+
+Keep "commentary" concrete: name the two or three metrics that drive your verdict. Avoid hedging language ("perhaps", "may"). Cap each "highlights" note at 25 words. Include between 2 and 5 highlights — only metrics where you can say something meaningful given the data provided.`;
+
+router.post(
+  '/ai/market/structure-commentary',
+  validateBody(structureCommentaryRequestSchema),
+  asyncHandler(async (req, res) => {
+    const userId = requireUser(req, res); if (!userId) return;
+
+    const {
+      contract_id: contractId,
+      scope,
+      structure_label: structureLabel,
+      source_metrics: sourceMetrics,
+      peer_medians: peerMedians,
+      peer_count: peerCount,
+      cob_names: cobNames = [],
+      currency = '',
+    } = req.body;
+
+    if (peerCount === 0) {
+      return res.json({
+        signal: 'NO_DATA',
+        commentary: 'No comparable peer treaties were found for this scope. Widen the scope (Country → Region → Global) or relax the COB filter to populate a peer pool.',
+        highlights: [],
+        cached: false,
+      });
+    }
+
+    const userPrompt = [
+      `Scope: ${scope.toUpperCase()}`,
+      `Structure: ${structureLabel}`,
+      cobNames.length ? `Classes of business in scope: ${cobNames.join(', ')}` : null,
+      currency ? `Currency: ${currency}` : null,
+      `Peer pool size: ${peerCount} treaties.`,
+      '',
+      'Source structure metrics (your treaty):',
+      JSON.stringify(sourceMetrics),
+      '',
+      'Peer pool medians:',
+      JSON.stringify(peerMedians),
+    ].filter(Boolean).join('\n');
+
+    let raw;
+    try {
+      raw = await callOpenAI({
+        system: STRUCTURE_COMMENTARY_SYSTEM,
+        userPrompt,
+        withWebSearch: false,
+        maxTokens: 800,
+      });
+    } catch (err) {
+      logger.error('[ai/market] structure-commentary OpenAI call failed', { contractId, scope, error: err.message });
+      throw err;
+    }
+
+    const text = extractJsonText(raw);
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (err) {
+      logger.warn('[ai/market] structure-commentary returned non-JSON', { contractId, scope, sample: text.slice(0, 200) });
+      const error = new Error('AI response was not valid JSON');
+      error.statusCode = 502;
+      throw error;
+    }
+
+    const validated = structureCommentarySchema.safeParse(parsed);
+    if (!validated.success) {
+      logger.warn('[ai/market] structure-commentary failed schema', { contractId, scope, issues: validated.error.issues });
+      const error = new Error('AI response did not match expected shape');
+      error.statusCode = 502;
+      throw error;
+    }
+
+    logger.info('[ai/market] structure-commentary generated', {
+      contractId,
+      scope,
+      peerCount,
+      signal: validated.data.signal,
+      highlightCount: validated.data.highlights.length,
+    });
+
+    res.json({ ...validated.data, cached: false });
+  }),
+);
 
 export default router;

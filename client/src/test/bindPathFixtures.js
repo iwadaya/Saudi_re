@@ -313,6 +313,8 @@ export function makeBindPathApiMock(fn, overrides = {}) {
     saveNpExpiring: fn().mockResolvedValue({ ok: true }),
     saveContractCobs: fn().mockResolvedValue({ ok: true }),
     getCedantProgrammeLimits: fn().mockResolvedValue({ cedant_programme_limit: 10000000 }),
+    getPeerStructures: fn().mockResolvedValue({ scope: 'country', sourceContract: {}, peers: [], peerCount: 0 }),
+    generateStructureCommentary: fn().mockResolvedValue({ signal: 'NO_DATA', commentary: '', highlights: [] }),
   };
   return { ...defaults, ...overrides };
 }

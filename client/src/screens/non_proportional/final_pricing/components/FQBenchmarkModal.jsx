@@ -1,27 +1,87 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { formatWithCommas, toN as toN_ } from '../../../../utils/format';
 import { fqLayerToXY, fqPeerToXY, fqFitPowerLaw } from '../fqHelpers.js';
+import { api, HttpError } from '../../../../api';
 
 /* ─── Analysis Modal — Country / Regional / Global view ───
-   Scaffolding for the three comparative-analysis views the user
-   opens from each structure header. The data plumbing (real
-   peer treaties, market medians, percentiles) wires up next; this
-   pass establishes layout: scope toggle, COB filter chips, 6
-   metric summary cards, 4 chart tabs (Distributions / Rate Curve /
-   Ded vs Limit / Aggregates), and a sortable comparable-treaty
-   table. Mock peer rows are generated from the source structure's
-   own layers so the table doesn't render empty during this
-   scaffold phase. */
+   Per-structure benchmark view opened from each structure header.
+   Peer treaties are fetched from /api/treaties/:id/peer-structures
+   (real portfolio data, scoped by country/region/global and filtered
+   by COB overlap). An optional AI commentary section calls
+   /api/ai/market/structure-commentary to interpret the positioning.
+   Modal layout: scope toggle, COB filter chips, 6 metric summary
+   cards, chart tabs (Distributions / Pricing Curve / Rate Curve /
+   Ded vs Limit / Aggregates), a sortable comparable-treaty table,
+   and an AI commentary panel. */
 export default function FQBenchmarkModal({
-  open, scope: initialScope, sourceLabel, sourceLayers, currency, cobNames, onClose,
+  open, scope: initialScope, sourceLabel, sourceLayers, currency, cobNames, contractId, cobIds, onClose,
 }) {
   const [scope, setScope] = useState(initialScope || 'country');
   const [tab, setTab] = useState('distributions');
   const [cobFilter, setCobFilter] = useState('all');
   const [sortKey, setSortKey] = useState('limit');
   const [sortDir, setSortDir] = useState('desc');
-  // Reset scope when the parent re-opens with a different default
-  useEffect(() => { if (open) setScope(initialScope || 'country'); }, [open, initialScope]);
+
+  // Peer pool fetched per (contractId, scope, cobIds). Stored as a
+  // per-scope map so toggling tabs doesn't refetch already-loaded data.
+  const [peerPools, setPeerPools] = useState({}); // { country: [...], region: [...], global: [...] }
+  const [peerLoading, setPeerLoading] = useState(false);
+  const [peerError, setPeerError] = useState('');
+  const [peerNote, setPeerNote] = useState('');
+
+  // AI commentary state — lazy: nothing fires until the user clicks
+  // Generate. Once generated for a scope we keep it cached client-side
+  // so toggling between scopes doesn't re-spend tokens.
+  const [commentary, setCommentary] = useState({}); // { [scope]: { signal, commentary, highlights } }
+  const [commentaryLoading, setCommentaryLoading] = useState(false);
+  const [commentaryError, setCommentaryError] = useState('');
+
+  // Stable join key for cobIds so the fetch effect doesn't re-run on
+  // a reference-equal array passed from the parent.
+  const cobIdsKey = useMemo(() => (Array.isArray(cobIds) ? cobIds.slice().sort().join(',') : ''), [cobIds]);
+
+  // Reset state when the parent re-opens with a different default
+  useEffect(() => {
+    if (!open) return;
+    setScope(initialScope || 'country');
+    setPeerPools({});
+    setPeerError('');
+    setPeerNote('');
+    setCommentary({});
+    setCommentaryError('');
+  }, [open, initialScope, contractId, cobIdsKey]);
+
+  // Fetch peers when the active scope changes (or we just opened). The
+  // mountedRef guard stops a stale fetch from clobbering state if the
+  // user closes the modal mid-flight.
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  useEffect(() => {
+    if (!open || !contractId) return;
+    if (peerPools[scope]) return; // cached
+    let cancelled = false;
+    setPeerLoading(true);
+    setPeerError('');
+    setPeerNote('');
+    const cobIdList = cobIdsKey ? cobIdsKey.split(',').filter(Boolean) : [];
+    api.getPeerStructures(contractId, { scope, cobIds: cobIdList })
+      .then((data) => {
+        if (cancelled || !mountedRef.current) return;
+        setPeerPools((prev) => ({ ...prev, [scope]: Array.isArray(data?.peers) ? data.peers : [] }));
+        if (data?.note) setPeerNote(data.note);
+      })
+      .catch((err) => {
+        if (cancelled || !mountedRef.current) return;
+        const message = err instanceof HttpError && err.body?.error
+          ? err.body.error
+          : (err?.message || 'Failed to load peer treaties');
+        setPeerError(message);
+        setPeerPools((prev) => ({ ...prev, [scope]: [] }));
+      })
+      .finally(() => { if (!cancelled && mountedRef.current) setPeerLoading(false); });
+    return () => { cancelled = true; };
+  }, [open, contractId, scope, cobIdsKey, peerPools]);
+
   if (!open) return null;
 
   // ── Source-structure metrics (the thing we're benchmarking) ──
@@ -37,31 +97,7 @@ export default function FQBenchmarkModal({
     return totalLim > 0 ? num / totalLim : 0;
   })();
 
-  // ── Mock peer market — seeded from source so totals look plausible ──
-  // Replace with real peers from the API once the data path is wired.
-  // We generate all three pools so the Pricing Curve tab can fit
-  // separate curves per scope without re-running the modal.
-  const buildPeers = (sc) => {
-    const cobs = cobNames && cobNames.length ? cobNames : ['Property', 'Marine', 'Energy'];
-    const N = sc === 'country' ? 8 : sc === 'region' ? 18 : 32;
-    const out = [];
-    for (let i = 0; i < N; i += 1) {
-      const jitter = (k) => 0.55 + (Math.sin((i + 1) * 13 * k) * 0.5 + 0.5) * 0.9; // 0.55..1.45
-      out.push({
-        id: `peer-${sc}-${i}`,
-        cedant: `Cedant ${String.fromCharCode(65 + (i % 26))}${i}`,
-        cob: cobs[i % cobs.length],
-        country: sc === 'country' ? 'KSA' : sc === 'region' ? ['KSA','UAE','EGY','QAT','OMN'][i % 5] : ['KSA','UAE','SGP','UK','BRA','ZAF','JPN'][i % 7],
-        limit:  Math.round((totalLim   || 50_000_000) * jitter(1.1)),
-        ded:    Math.round((ded        || 5_000_000)  * jitter(1.7)),
-        egnpi:  Math.round((totalEgnpi || 100_000_000) * jitter(2.3)),
-        rolPct: Math.max(0.5, Math.round((wRol || 5) * jitter(2.9) * 100) / 100),
-      });
-    }
-    return out;
-  };
-  const peerPools = { country: buildPeers('country'), region: buildPeers('region'), global: buildPeers('global') };
-  const peers = peerPools[scope];
+  const peers = peerPools[scope] || [];
   const filtered = cobFilter === 'all' ? peers : peers.filter((p) => p.cob === cobFilter);
   // Median helper
   const median = (arr) => {
@@ -113,6 +149,61 @@ export default function FQBenchmarkModal({
   const cobColor = (cob) => ({
     Property: '#00d4ff', Marine: '#a78bfa', Energy: '#f59e0b', Aviation: '#4ade80', Liability: '#f87171',
   }[cob] || 'rgba(148,163,184,0.55)');
+
+  // Lazy AI commentary — pulls the modal's already-computed source
+  // metrics + peer medians and asks the server for a paragraph on
+  // positioning. Skipped automatically when the peer pool is empty.
+  const runCommentary = async () => {
+    if (!contractId) {
+      setCommentaryError('Cannot generate commentary: no contract context');
+      return;
+    }
+    setCommentaryLoading(true);
+    setCommentaryError('');
+    try {
+      const result = await api.generateStructureCommentary({
+        contract_id: contractId,
+        scope,
+        structure_label: sourceLabel || 'Structure',
+        source_metrics: {
+          totalLimit: totalLim,
+          totalEgnpi: totalEgnpi,
+          deductible: ded,
+          dOverL,
+          dOverE,
+          lOverE,
+          rolPct: wRol,
+        },
+        peer_medians: {
+          totalLimit: mLimit,
+          totalEgnpi: null,
+          deductible: mDed,
+          dOverL: mDoverL,
+          dOverE: mDoverE,
+          lOverE: mLoverE,
+          rolPct: mRol,
+        },
+        peer_count: filtered.length,
+        cob_names: cobNames || [],
+        currency: currency || '',
+      });
+      setCommentary((prev) => ({ ...prev, [scope]: result }));
+    } catch (err) {
+      const message = err instanceof HttpError && err.body?.error
+        ? err.body.error
+        : (err?.message || 'Failed to generate commentary');
+      setCommentaryError(message);
+    } finally {
+      setCommentaryLoading(false);
+    }
+  };
+  const activeCommentary = commentary[scope] || null;
+  const verdictColor = {
+    BETTER:  '#23d18b',
+    ON_PAR:  '#fbbf24',
+    WORSE:   '#f87171',
+    NO_DATA: 'rgba(148,163,184,0.55)',
+  };
 
   // ── Lightweight inline charts: tiny SVG primitives so we don't pull a
   //    chart lib into the bundle just for the scaffold. ──
@@ -245,7 +336,13 @@ export default function FQBenchmarkModal({
                 </button>
               ))}
             </div>
-            <div style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(148,163,184,0.55)' }}>{filtered.length} comparable treaties</div>
+            <div style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(148,163,184,0.55)' }}>
+              {peerLoading
+                ? 'Loading peers…'
+                : peerError
+                  ? <span style={{ color: '#f87171' }}>Peer load failed — {peerError}</span>
+                  : `${filtered.length} comparable treaties${peerNote ? ` · ${peerNote}` : ''}`}
+            </div>
           </section>
 
           {/* 6 metric summary cards */}
@@ -514,8 +611,90 @@ export default function FQBenchmarkModal({
               </table>
             </div>
             <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.45)', marginTop: 6 }}>
-              Click any column header to sort. {currency ? `Values in ${currency}.` : ''} Peer data is illustrative — wires up to the live treaty index next.
+              Click any column header to sort. {currency ? `Values in ${currency}.` : ''} Peer data is sourced from the live portfolio index.
             </div>
+          </section>
+
+          {/* AI commentary — lazy, triggered by button. */}
+          <section style={sectionStyle}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={sectionTitleStyle}>Market Intelligence · AI Commentary</div>
+              <button
+                onClick={runCommentary}
+                disabled={commentaryLoading || filtered.length === 0 || !contractId}
+                style={{
+                  appearance: 'none',
+                  padding: '6px 14px',
+                  border: '1px solid rgba(0,212,255,0.35)',
+                  borderRadius: 8,
+                  background: 'rgba(0,212,255,0.08)',
+                  color: '#00d4ff',
+                  fontSize: 11,
+                  fontWeight: 800,
+                  letterSpacing: '.08em',
+                  textTransform: 'uppercase',
+                  cursor: commentaryLoading || filtered.length === 0 || !contractId ? 'not-allowed' : 'pointer',
+                  opacity: commentaryLoading || filtered.length === 0 || !contractId ? 0.5 : 1,
+                }}
+              >
+                {commentaryLoading ? 'Generating…' : activeCommentary ? 'Regenerate' : 'Generate'}
+              </button>
+            </div>
+            {commentaryError && (
+              <div style={{ fontSize: 12, color: '#f87171', marginBottom: 8 }}>{commentaryError}</div>
+            )}
+            {!activeCommentary && !commentaryLoading && !commentaryError && (
+              <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.65)' }}>
+                {filtered.length === 0
+                  ? 'No peers available for the current scope — switch to a wider scope to enable commentary.'
+                  : 'Click Generate to surface AI analysis on how this structure\'s deductible, limit, and exposure positioning compare to the peer median.'}
+              </div>
+            )}
+            {activeCommentary && (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <span style={{
+                    display: 'inline-block',
+                    padding: '3px 10px',
+                    borderRadius: 999,
+                    background: `${verdictColor[activeCommentary.signal] || '#94a3b8'}1f`,
+                    border: `1px solid ${verdictColor[activeCommentary.signal] || '#94a3b8'}55`,
+                    color: verdictColor[activeCommentary.signal] || '#94a3b8',
+                    fontSize: 10,
+                    fontWeight: 800,
+                    letterSpacing: '.12em',
+                  }}>
+                    {activeCommentary.signal}
+                  </span>
+                  <span style={{ fontSize: 10, color: 'rgba(148,163,184,0.55)' }}>
+                    {scope.toUpperCase()} scope · {filtered.length} peers
+                  </span>
+                </div>
+                <p style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(226,232,240,0.85)', margin: '0 0 14px' }}>
+                  {activeCommentary.commentary}
+                </p>
+                {Array.isArray(activeCommentary.highlights) && activeCommentary.highlights.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+                    {activeCommentary.highlights.map((h, i) => (
+                      <div key={i} style={{
+                        background: 'rgba(5,8,16,0.46)',
+                        border: '1px solid rgba(255,255,255,0.09)',
+                        borderRadius: 8,
+                        padding: '8px 10px',
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.10em', color: 'rgba(148,163,184,0.65)', textTransform: 'uppercase' }}>{h.metric}</span>
+                          <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.10em', color: verdictColor[h.verdict] || '#94a3b8' }}>
+                            {h.verdict}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.78)', lineHeight: 1.45 }}>{h.note}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         </div>
       </div>

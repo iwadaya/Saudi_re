@@ -15,6 +15,7 @@ import facultativeRouter from './facultative.js';
 import facultativeReferenceRouter from './facultativeReference.js';
 import clientEventsRouter from './clientEvents.js';
 import workbenchRouter from './workbench.js';
+import peerStructuresRouter from './peerStructures.js';
 
 const routers = [
   lookupsRouter,
@@ -34,6 +35,7 @@ const routers = [
   facultativeReferenceRouter,
   clientEventsRouter,
   workbenchRouter,
+  peerStructuresRouter,
 ];
 
 export function registerApiRoutes(app) {

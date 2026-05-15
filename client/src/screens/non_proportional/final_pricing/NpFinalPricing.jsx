@@ -2958,6 +2958,8 @@ export default function NpFinalPricing() {
                 sourceLayers={benchmarkModal.sourceLayers}
                 currency={currency}
                 cobNames={selectedCobs.map((c) => c.name)}
+                contractId={contractId}
+                cobIds={selectedCobs.map((c) => c.id).filter(Boolean)}
                 onClose={() => setBenchmarkModal((prev) => ({ ...prev, open: false }))}
               />
               <FQPricingGraphModal
