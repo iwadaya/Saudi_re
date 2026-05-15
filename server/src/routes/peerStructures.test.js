@@ -77,11 +77,11 @@ describe('GET /api/treaties/:contractId/peer-structures', () => {
     expect(r.body?.code).toBe('VALIDATION_FAILED');
   });
 
-  it('404s when the source contract does not exist', async () => {
+  it('404s when neither a contract nor a quote resolves the source id', async () => {
     pushHandler((sql) => {
-      // Source-context query is the single-row WHERE c.contract_id=$1 lookup.
-      // Match it first so we don't accidentally answer the CTE-based peer query.
+      // Both lookups return empty: contract first, then quote fallback.
       if (sql.includes('WHERE c.contract_id = $1')) return { rows: [] };
+      if (sql.includes('WHERE q.quote_id = $1')) return { rows: [] };
       return undefined;
     });
     const app = buildApp();
@@ -90,11 +90,46 @@ describe('GET /api/treaties/:contractId/peer-structures', () => {
     expect(r.body?.error).toBe('Contract not found');
   });
 
+  it('falls back to public.quote when the id is not in public.contract', async () => {
+    pushHandler((sql) => {
+      if (sql.includes('WHERE c.contract_id = $1')) return { rows: [] };
+      if (sql.includes('WHERE q.quote_id = $1')) {
+        return { rows: [{
+          source_id: UUID, source_kind: 'quote',
+          country_id: 'cn-1', uw_year: 2025,
+          country_code: 'KSA', country_name: 'Saudi Arabia', region: 'Middle East',
+        }] };
+      }
+      if (sql.includes('WITH peer_contracts AS')) {
+        return { rows: [{
+          contract_id: 'p1', uw_year: 2025,
+          country_code: 'KSA', country_name: 'Saudi Arabia', region: 'Middle East',
+          cedant_name: 'Cedant Alpha',
+          total_limit: '10000000', total_egnpi: '20000000',
+          primary_attachment: '1000000', weighted_rol: '0.05',
+          layer_count: 2, cob_name: 'Marine',
+        }] };
+      }
+      return undefined;
+    });
+    const app = buildApp();
+    const r = await call(app, `/api/treaties/${UUID}/peer-structures?scope=country`);
+    expect(r.status).toBe(200);
+    expect(r.body.sourceContract).toMatchObject({
+      contractId: UUID,
+      sourceKind: 'quote',
+      countryCode: 'KSA',
+    });
+    expect(r.body.peerCount).toBe(1);
+    expect(r.body.peers[0]).toMatchObject({ id: 'p1', cob: 'Marine' });
+  });
+
   it('returns an empty peer set with a note when the source has no country_id (country scope)', async () => {
     pushHandler((sql) => {
       if (sql.includes('WHERE c.contract_id = $1')) {
         return { rows: [{
-          contract_id: UUID, country_id: null, uw_year: 2025,
+          source_id: UUID, source_kind: 'contract',
+          country_id: null, uw_year: 2025,
           country_code: null, country_name: null, region: null,
         }] };
       }
@@ -112,7 +147,8 @@ describe('GET /api/treaties/:contractId/peer-structures', () => {
     pushHandler((sql) => {
       if (sql.includes('WHERE c.contract_id = $1')) {
         return { rows: [{
-          contract_id: UUID, country_id: 'cn-1', uw_year: 2025,
+          source_id: UUID, source_kind: 'contract',
+          country_id: 'cn-1', uw_year: 2025,
           country_code: 'KSA', country_name: 'Saudi Arabia', region: 'Middle East',
         }] };
       }
@@ -165,6 +201,7 @@ describe('GET /api/treaties/:contractId/peer-structures', () => {
     });
     expect(r.body.sourceContract).toMatchObject({
       contractId: UUID,
+      sourceKind: 'contract',
       countryCode: 'KSA',
       region: 'Middle East',
     });
@@ -176,7 +213,8 @@ describe('GET /api/treaties/:contractId/peer-structures', () => {
     pushHandler((sql, params) => {
       if (sql.includes('WHERE c.contract_id = $1')) {
         return { rows: [{
-          contract_id: UUID, country_id: 'cn-1', uw_year: 2025,
+          source_id: UUID, source_kind: 'contract',
+          country_id: 'cn-1', uw_year: 2025,
           country_code: 'KSA', country_name: 'KSA', region: 'ME',
         }] };
       }
