@@ -7,6 +7,8 @@ import { contractContextJoins } from "../db/contractJoins.js";
 import { assertEntityUnchanged, optimisticLockOverrideRequested } from "../db/optimisticLock.js";
 import { validateBody } from "../lib/validate.js";
 import { treatyPutBodySchema } from "../validation/treaty.js";
+import { logger } from "../lib/logger.js";
+import { buildBatchInsert } from "../db/batchInsert.js";
 const router = Router();
 
 
@@ -160,7 +162,10 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
           ORDER BY created_at DESC
           LIMIT 1`,
         [id],
-      ).then(r => r.rows).catch(() => []);
+      ).then(r => r.rows).catch((err) => {
+        logger.warn('treaty.audit_lookup_failed', { contractId: id, error: err.message });
+        return [];
+      });
       staleWriteContext = {
         overwrittenUpdatedAt: entityRows[0]?.updated_at || null,
         previousActor: auditRows[0]?.actor || null,
@@ -226,13 +231,19 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
          numOrNull(cm.sliding_min_commission??cm.slidingMinCommission),numOrNull(cm.sliding_max_commission??cm.slidingMaxCommission),
          numOrNull(cm.provisional_commission_pct??cm.provisionalCommissionPct),numOrNull(cm.mgmt_expenses_pct??cm.mgmtExpensesPct),
          numOrNull(cm.profit_commission_pct??cm.profitCommissionPct),numOrNull(cm.lcf_years||null),cm.lcf_extinction?true:false]);
-      // Sliding rows
+      // Sliding rows — drop existing then batch-insert any non-empty rows.
       const slideRows=cm.sliding_table??cm.slidingTable??[];
       await client.query(`DELETE FROM public.contract_commission_slides WHERE contract_id=$1`,[id]);
-      for(let idx=0;idx<slideRows.length;idx++){
-        const r=slideRows[idx];const lr=numOrNull(r.loss_ratio_pct??r.lossRatioPct);const cp=numOrNull(r.commission_pct??r.commissionPct);
-        if(lr!==null||cp!==null) await client.query(`INSERT INTO public.contract_commission_slides (contract_id,row_no,loss_ratio_pct,commission_pct) VALUES ($1,$2,$3,$4)`,[id,idx,lr,cp]);
-      }
+      const slideBatch = slideRows
+        .map((r, idx) => [idx, numOrNull(r.loss_ratio_pct??r.lossRatioPct), numOrNull(r.commission_pct??r.commissionPct)])
+        .filter(([, lr, cp]) => lr !== null || cp !== null);
+      const slideInsert = buildBatchInsert({
+        table: 'public.contract_commission_slides',
+        columns: ['contract_id','row_no','loss_ratio_pct','commission_pct'],
+        rows: slideBatch,
+        leadingId: id,
+      });
+      if (slideInsert) await client.query(slideInsert.sql, slideInsert.params);
     }
 
     // ── Loss participation (only if LP section provided) ──
@@ -250,14 +261,32 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
     if(terms.classIds !== undefined || terms.class_ids !== undefined) {
       const classIds=terms.classIds??terms.class_ids??[];
       await client.query(`DELETE FROM public.contract_class_of_business WHERE contract_id=$1`,[id]);
-      for(const cid of classIds) await client.query(`INSERT INTO public.contract_class_of_business (contract_id,class_of_business_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,[id,cid]);
+      const cobInsert = buildBatchInsert({
+        table: 'public.contract_class_of_business',
+        columns: ['contract_id','class_of_business_id'],
+        rows: classIds.filter((cid) => cid != null).map((cid) => [cid]),
+        leadingId: id,
+        conflict: 'ON CONFLICT DO NOTHING',
+      });
+      if (cobInsert) await client.query(cobInsert.sql, cobInsert.params);
     }
 
     // ── EPI split (only if provided) ──
     if(terms.epi_split !== undefined || terms.epiSplit !== undefined) {
       const epiSplit=terms.epi_split??terms.epiSplit??[];
       await client.query(`DELETE FROM public.contract_epi_split WHERE contract_id=$1`,[id]);
-      for(const r of epiSplit){const cid=r.class_id??r.classId??r.class_of_business_id;if(cid) await client.query(`INSERT INTO public.contract_epi_split (contract_id,class_of_business_id,premium) VALUES ($1,$2,$3)`,[id,cid,numOrNull(r.premium)]);}
+      const epiBatch = [];
+      for (const r of epiSplit) {
+        const cid = r.class_id ?? r.classId ?? r.class_of_business_id;
+        if (cid) epiBatch.push([cid, numOrNull(r.premium)]);
+      }
+      const epiInsert = buildBatchInsert({
+        table: 'public.contract_epi_split',
+        columns: ['contract_id','class_of_business_id','premium'],
+        rows: epiBatch,
+        leadingId: id,
+      });
+      if (epiInsert) await client.query(epiInsert.sql, epiInsert.params);
     }
 
     // ── UW limits (only if provided and non-empty) ──
@@ -265,7 +294,16 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
        && (terms.underwriting_limits??terms.underwritingLimits??[]).length){
       const uwL=terms.underwriting_limits??terms.underwritingLimits;
       await client.query(`DELETE FROM public.contract_underwriting_limit WHERE contract_id=$1`,[id]);
-      for(const r of uwL){if(r.class_of_business_id) await client.query(`INSERT INTO public.contract_underwriting_limit (contract_id,class_of_business_id,limit_amount,basis) VALUES ($1,$2,$3,$4)`,[id,r.class_of_business_id,numOrNull(r.limit_amount)??0,r.basis||"COMBINED"]);}
+      const uwBatch = uwL
+        .filter((r) => r.class_of_business_id)
+        .map((r) => [r.class_of_business_id, numOrNull(r.limit_amount) ?? 0, r.basis || 'COMBINED']);
+      const uwInsert = buildBatchInsert({
+        table: 'public.contract_underwriting_limit',
+        columns: ['contract_id','class_of_business_id','limit_amount','basis'],
+        rows: uwBatch,
+        leadingId: id,
+      });
+      if (uwInsert) await client.query(uwInsert.sql, uwInsert.params);
     }
 
     // ── Event loss tables (pass-through JSON storage, if provided) ──
@@ -278,7 +316,13 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
            data = EXCLUDED.data,
            updated_at = now()`,
         [id, JSON.stringify(terms.event_loss_tables)]
-      ).catch(() => {/* table may not exist in older schemas */});
+      ).catch((err) => {
+        // The contract_event_loss_tables table may not exist in older
+        // schemas. Keep going — losing this slice should not fail the
+        // whole save — but emit a warn-level log so silent failures are
+        // visible in monitoring.
+        logger.warn('treaty.event_loss_tables_upsert_failed', { contractId: id, error: err.message });
+      });
     }
 
     const updatedR = await client.query(
@@ -407,13 +451,14 @@ router.post("/treaties/:id/renew", asyncHandler(async (req, res) => {
     }
 
     // ── 4. Copy COBs (class of business stays the same) ──
-    for (const cobId of renCobs) {
-      await cl.query(
-        `INSERT INTO public.contract_class_of_business (contract_id, class_of_business_id)
-         VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-        [newId, cobId]
-      );
-    }
+    const renCobInsert = buildBatchInsert({
+      table: 'public.contract_class_of_business',
+      columns: ['contract_id','class_of_business_id'],
+      rows: renCobs.filter((cobId) => cobId != null).map((cobId) => [cobId]),
+      leadingId: newId,
+      conflict: 'ON CONFLICT DO NOTHING',
+    });
+    if (renCobInsert) await cl.query(renCobInsert.sql, renCobInsert.params);
 
     // ── 5. Copy best slip as 'Expiring Slip' on the new contract ──
     if (slipDoc) {

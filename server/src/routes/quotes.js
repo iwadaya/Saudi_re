@@ -7,6 +7,7 @@ import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from
 import { logAudit } from '../services/audit.js';
 import { contractContextJoins } from '../db/contractJoins.js';
 import { assertEntityUnchanged, optimisticLockOverrideRequested } from '../db/optimisticLock.js';
+import { buildBatchInsert } from '../db/batchInsert.js';
 import { assertParentEntityUnchanged, touchParentEntity } from '../lib/parentEntityPersistence.js';
 import { validateBody } from '../lib/validate.js';
 import { quotePutBodySchema } from '../validation/quote.js';
@@ -598,13 +599,31 @@ router.put("/quotes/:id", validateBody(quotePutBodySchema), asyncHandler(async (
   if(terms.classIds !== undefined || terms.class_ids !== undefined) {
     const classIds=terms.classIds??terms.class_ids??[];
     await cl.query(`DELETE FROM public.quote_class_of_business WHERE quote_id=$1`,[id]);
-    for(const cid of classIds) await cl.query(`INSERT INTO public.quote_class_of_business (quote_id,class_of_business_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,[id,cid]);
+    const cobInsert = buildBatchInsert({
+      table: 'public.quote_class_of_business',
+      columns: ['quote_id','class_of_business_id'],
+      rows: classIds.filter((cid) => cid != null).map((cid) => [cid]),
+      leadingId: id,
+      conflict: 'ON CONFLICT DO NOTHING',
+    });
+    if (cobInsert) await cl.query(cobInsert.sql, cobInsert.params);
   }
   // EPI split
   if(terms.epi_split !== undefined || terms.epiSplit !== undefined) {
     const epiSplit=terms.epi_split??terms.epiSplit??[];
     await cl.query(`DELETE FROM public.quote_epi_split WHERE quote_id=$1`,[id]);
-    for(const r of epiSplit){const cid=r.class_id??r.classId??r.class_of_business_id;if(cid) await cl.query(`INSERT INTO public.quote_epi_split (quote_id,class_of_business_id,premium) VALUES ($1,$2,$3)`,[id,cid,numOrNull(r.premium)]);}
+    const epiBatch = [];
+    for (const r of epiSplit) {
+      const cid = r.class_id ?? r.classId ?? r.class_of_business_id;
+      if (cid) epiBatch.push([cid, numOrNull(r.premium)]);
+    }
+    const epiInsert = buildBatchInsert({
+      table: 'public.quote_epi_split',
+      columns: ['quote_id','class_of_business_id','premium'],
+      rows: epiBatch,
+      leadingId: id,
+    });
+    if (epiInsert) await cl.query(epiInsert.sql, epiInsert.params);
   }
   // Loss participation
   if(terms.lossParticipation !== undefined || terms.loss_participation !== undefined) {
@@ -1059,39 +1078,43 @@ router.post("/quotes/:id/non-prop/save", asyncHandler(async (req, res) => {
     // ── Replace all layer rows (full columns) ──
     if(Array.isArray(layers) && layers.length>0){
       await cl.query(`DELETE FROM public.quote_np_layers WHERE quote_id=$1`,[id]);
-      for(const l of layers){
-        await cl.query(
-          `INSERT INTO public.quote_np_layers
-             (quote_id,layer_number,attachment,layer_limit,aggregate_limit,egnpi,earned_premium,
-              rate,rol,num_reinstatements,reinstatement_pct,annual_agg_deductible,peril_scope,mdp,mdp_pct,
-              hist_margin,modelled_margin,tech_ratio,uw_price,expiring_price,lead_price)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
-          [id, l.layer_number,
-           numOrNull(l.attachment), numOrNull(l.layer_limit), numOrNull(l.aggregate_limit),
-           numOrNull(l.egnpi), numOrNull(l.earned_premium),
-           numOrNull(l.rate), numOrNull(l.rol),
-           reinstatInt(l.num_reinstatements), numOrNull(l.reinstatement_pct),
-           numOrNull(l.annual_agg_deductible),
-           l.peril_scope||'BOTH',
-           numOrNull(l.mdp), numOrNull(l.mdp_pct),
-           numOrNull(l.hist_margin), numOrNull(l.modelled_margin), numOrNull(l.tech_ratio),
-           numOrNull(l.uw_price), numOrNull(l.expiring_price), numOrNull(l.lead_price)]
-        );
-      }
+      const layersInsert = buildBatchInsert({
+        table: 'public.quote_np_layers',
+        columns: [
+          'quote_id','layer_number','attachment','layer_limit','aggregate_limit','egnpi','earned_premium',
+          'rate','rol','num_reinstatements','reinstatement_pct','annual_agg_deductible','peril_scope','mdp','mdp_pct',
+          'hist_margin','modelled_margin','tech_ratio','uw_price','expiring_price','lead_price',
+        ],
+        rows: layers.map((l) => [
+          l.layer_number,
+          numOrNull(l.attachment), numOrNull(l.layer_limit), numOrNull(l.aggregate_limit),
+          numOrNull(l.egnpi), numOrNull(l.earned_premium),
+          numOrNull(l.rate), numOrNull(l.rol),
+          reinstatInt(l.num_reinstatements), numOrNull(l.reinstatement_pct),
+          numOrNull(l.annual_agg_deductible),
+          l.peril_scope || 'BOTH',
+          numOrNull(l.mdp), numOrNull(l.mdp_pct),
+          numOrNull(l.hist_margin), numOrNull(l.modelled_margin), numOrNull(l.tech_ratio),
+          numOrNull(l.uw_price), numOrNull(l.expiring_price), numOrNull(l.lead_price),
+        ]),
+        leadingId: id,
+      });
+      if (layersInsert) await cl.query(layersInsert.sql, layersInsert.params);
     }
 
     // ── COB underwriting limits ──
     if(Array.isArray(cob_underwriting_limits) && cob_underwriting_limits.length>0){
       await cl.query(`DELETE FROM public.quote_underwriting_limit WHERE quote_id=$1`,[id]);
-      for(const r of cob_underwriting_limits){
-        if(!r.cob_id) continue;
-        await cl.query(
-          `INSERT INTO public.quote_underwriting_limit (quote_id,class_of_business_id,limit_amount,basis)
-           VALUES ($1,$2,$3,$4)
-           ON CONFLICT (quote_id,class_of_business_id) DO UPDATE SET limit_amount=EXCLUDED.limit_amount,updated_at=now()`,
-          [id, r.cob_id, numOrNull(r.limit_amount)??0, 'COMBINED']
-        );
-      }
+      const uwLimitInsert = buildBatchInsert({
+        table: 'public.quote_underwriting_limit',
+        columns: ['quote_id','class_of_business_id','limit_amount','basis'],
+        rows: cob_underwriting_limits
+          .filter((r) => r.cob_id)
+          .map((r) => [r.cob_id, numOrNull(r.limit_amount) ?? 0, 'COMBINED']),
+        leadingId: id,
+        conflict: 'ON CONFLICT (quote_id,class_of_business_id) DO UPDATE SET limit_amount=EXCLUDED.limit_amount,updated_at=now()',
+      });
+      if (uwLimitInsert) await cl.query(uwLimitInsert.sql, uwLimitInsert.params);
     }
 
     // ── Merge JSONB terms ──
@@ -1130,7 +1153,16 @@ router.get("/quotes/:id/np/egnpi-year", asyncHandler(async (req, res) => {
 router.put("/quotes/:id/np/egnpi-year", asyncHandler(async (req, res) => {
   const {id}=req.params;const inputRows=req.body.rows??[];const cl=await pool.connect();
   try{await cl.query("BEGIN");await cl.query(`DELETE FROM public.quote_np_egnpi_year WHERE quote_id=$1`,[id]);
-  for(const r of inputRows) await cl.query(`INSERT INTO public.quote_np_egnpi_year (quote_id,uw_year,egnpi,inflation_pct) VALUES ($1,$2,$3,$4) ON CONFLICT (quote_id,uw_year) DO UPDATE SET egnpi=EXCLUDED.egnpi,inflation_pct=EXCLUDED.inflation_pct,updated_at=now()`,[id,r.uw_year,numOrNull(r.egnpi),numOrNull(r.inflation_pct)]);
+  const egnpiInsert = buildBatchInsert({
+    table: 'public.quote_np_egnpi_year',
+    columns: ['quote_id','uw_year','egnpi','inflation_pct'],
+    rows: inputRows
+      .filter((r) => r && r.uw_year != null)
+      .map((r) => [r.uw_year, numOrNull(r.egnpi), numOrNull(r.inflation_pct)]),
+    leadingId: id,
+    conflict: 'ON CONFLICT (quote_id,uw_year) DO UPDATE SET egnpi=EXCLUDED.egnpi,inflation_pct=EXCLUDED.inflation_pct,updated_at=now()',
+  });
+  if (egnpiInsert) await cl.query(egnpiInsert.sql, egnpiInsert.params);
   // Propagate latest year's EGNPI to est_gnpi on quote_np_details
   const sortedRows=[...inputRows].filter(r=>r.egnpi!=null).sort((a,b)=>(b.uw_year||0)-(a.uw_year||0));
   if(sortedRows.length>0){
@@ -1194,14 +1226,28 @@ router.put("/quotes/:id/np-pricing", asyncHandler(async (req, res) => {
          pricing_loading_pct=EXCLUDED.pricing_loading_pct,swiss_re_curve_name=EXCLUDED.swiss_re_curve_name,updated_at=now()`,
       [id,numOrNull(inputs.burn_weight_pct),numOrNull(inputs.exposure_weight_pct),numOrNull(inputs.pareto_weight_pct),numOrNull(inputs.pricing_loading_pct),inputs.swiss_re_curve_name||null]);
     await cl.query(`DELETE FROM public.quote_np_pricing_layer_inputs WHERE quote_id=$1`,[id]);
-    for(const li of layer_inputs) await cl.query(
-      `INSERT INTO public.quote_np_pricing_layer_inputs (quote_id,layer_number,expiring_pricing_pct) VALUES ($1,$2,$3)`,
-      [id,li.layer_number,numOrNull(li.expiring_pricing_pct)]);
+    const layerInputsInsert = buildBatchInsert({
+      table: 'public.quote_np_pricing_layer_inputs',
+      columns: ['quote_id','layer_number','expiring_pricing_pct'],
+      rows: layer_inputs.map((li) => [li.layer_number, numOrNull(li.expiring_pricing_pct)]),
+      leadingId: id,
+    });
+    if (layerInputsInsert) await cl.query(layerInputsInsert.sql, layerInputsInsert.params);
     await cl.query(`DELETE FROM public.quote_np_pricing_outputs WHERE quote_id=$1`,[id]);
-    for(const o of outputs) await cl.query(
-      `INSERT INTO public.quote_np_pricing_outputs (quote_id,layer_number,section,pure_burning_cost,pareto_pricing,burn_plus_pareto,exposure_rating,burn_weight_pct,exposure_weight_pct,pareto_weight_pct,pricing_loading_pct,total_price,prob_attach,prob_exhaust)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-      [id,o.layer_number,o.section,numOrNull(o.pure_burning_cost),numOrNull(o.pareto_pricing),numOrNull(o.burn_plus_pareto),numOrNull(o.exposure_rating),numOrNull(o.burn_weight_pct),numOrNull(o.exposure_weight_pct),numOrNull(o.pareto_weight_pct),numOrNull(o.pricing_loading_pct),numOrNull(o.total_price),numOrNull(o.prob_attach),numOrNull(o.prob_exhaust)]);
+    const pricingOutputsInsert = buildBatchInsert({
+      table: 'public.quote_np_pricing_outputs',
+      columns: ['quote_id','layer_number','section','pure_burning_cost','pareto_pricing','burn_plus_pareto','exposure_rating','burn_weight_pct','exposure_weight_pct','pareto_weight_pct','pricing_loading_pct','total_price','prob_attach','prob_exhaust'],
+      rows: outputs.map((o) => [
+        o.layer_number, o.section,
+        numOrNull(o.pure_burning_cost), numOrNull(o.pareto_pricing),
+        numOrNull(o.burn_plus_pareto), numOrNull(o.exposure_rating),
+        numOrNull(o.burn_weight_pct), numOrNull(o.exposure_weight_pct),
+        numOrNull(o.pareto_weight_pct), numOrNull(o.pricing_loading_pct),
+        numOrNull(o.total_price), numOrNull(o.prob_attach), numOrNull(o.prob_exhaust),
+      ]),
+      leadingId: id,
+    });
+    if (pricingOutputsInsert) await cl.query(pricingOutputsInsert.sql, pricingOutputsInsert.params);
     for(const m of layer_margins) {
       await cl.query(
         `UPDATE public.quote_np_layers
@@ -1542,10 +1588,28 @@ router.put("/quotes/:id/pricing-outputs", asyncHandler(async (req, res) => {
 // PUT /quotes/:id/pricing-yearly
 router.put("/quotes/:id/pricing-yearly", asyncHandler(async (req, res) => {
   const {id}=req.params;const rows=req.body.rows??req.body??[];const cl=await pool.connect();
-  try{await cl.query("BEGIN");await cl.query(`DELETE FROM public.quote_pricing_yearly WHERE quote_id=$1`,[id]);
-  for(const r of rows) await cl.query(`INSERT INTO public.quote_pricing_yearly (quote_id,uw_year,premium,paid_claims,os_claims,incurred_claims,loss_ratio,commission,brokerage,net_result) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-    [id,r.uw_year,numOrNull(r.premium),numOrNull(r.paid_claims),numOrNull(r.os_claims),numOrNull(r.incurred_claims),numOrNull(r.loss_ratio),numOrNull(r.commission),numOrNull(r.brokerage),numOrNull(r.net_result)]);
-  await cl.query("COMMIT");res.json({ok:true});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
+  try{
+    await cl.query("BEGIN");
+    await cl.query(`DELETE FROM public.quote_pricing_yearly WHERE quote_id=$1`,[id]);
+    const yearlyInsert = buildBatchInsert({
+      table: 'public.quote_pricing_yearly',
+      columns: ['quote_id','uw_year','premium','paid_claims','os_claims','incurred_claims','loss_ratio','commission','brokerage','net_result'],
+      rows: rows.map((r) => [
+        r.uw_year,
+        numOrNull(r.premium), numOrNull(r.paid_claims), numOrNull(r.os_claims), numOrNull(r.incurred_claims),
+        numOrNull(r.loss_ratio), numOrNull(r.commission), numOrNull(r.brokerage), numOrNull(r.net_result),
+      ]),
+      leadingId: id,
+    });
+    if (yearlyInsert) await cl.query(yearlyInsert.sql, yearlyInsert.params);
+    await cl.query("COMMIT");
+    res.json({ok:true});
+  } catch(e) {
+    await cl.query("ROLLBACK").catch(()=>{});
+    throw e;
+  } finally {
+    cl.release();
+  }
 }));
 
 // GET /quotes/:id/loss-selection/:lossType/latest
