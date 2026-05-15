@@ -3,21 +3,36 @@ import { httpFetch, HttpError } from './utils/httpClient.js';
 
 // src/api.js — Centralized API client for React app
 
-// ── Client-side ref data cache (5-min TTL) ───────────────────────────────────
+// ── Client-side ref data cache (5-min TTL, LRU-bounded) ─────────────────────
 // Prevents repeated identical fetches when navigating between wizard screens.
 // Brokers, treaty types, COBs, countries, currencies are static — no need to
 // re-fetch on every screen mount. Cache is cleared on logout.
+//
+// Map iteration order is insertion order, so the oldest key is always the
+// first one yielded by .keys(). The cap is defensive — without it, a long
+// session that fans out to many parameterised cacheable URLs (e.g.
+// per-cedant fac references) could grow the map without bound.
 const _clientCache = new Map();
 const CLIENT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CLIENT_CACHE_MAX = 500;
 
 function clientCacheGet(key) {
   const entry = _clientCache.get(key);
   if (!entry) return null;
   if (Date.now() > entry.expiresAt) { _clientCache.delete(key); return null; }
+  // Refresh LRU order: re-insert so this key is now the most recent.
+  _clientCache.delete(key);
+  _clientCache.set(key, entry);
   return entry.promise; // return the promise so concurrent callers share it
 }
 function clientCacheSet(key, promise) {
+  if (_clientCache.has(key)) _clientCache.delete(key);
   _clientCache.set(key, { promise, expiresAt: Date.now() + CLIENT_CACHE_TTL });
+  while (_clientCache.size > CLIENT_CACHE_MAX) {
+    const oldest = _clientCache.keys().next().value;
+    if (oldest === undefined) break;
+    _clientCache.delete(oldest);
+  }
   return promise;
 }
 export function clearClientRefCache() { _clientCache.clear(); }
