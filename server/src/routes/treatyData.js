@@ -10,25 +10,19 @@ import { crestaSaveSchema } from '../validation/cresta.js';
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
 import { validateBody } from '../lib/validate.js';
 import { getWordingChecklist, runWordingChecklistAi, saveWordingChecklist } from '../services/wordingChecklist.js';
+import {
+  storeUploadedFile,
+  deleteUploadedFile,
+  isRemoteStoragePath,
+  resolveLocalStoragePath,
+} from '../lib/uploadStorage.js';
 import { buildBatchInsert } from '../db/batchInsert.js';
 import { randomUUID } from 'node:crypto';
 import multer from "multer";
-import path from "path";
 import fs from "fs";
 import fsp from "fs/promises";
-import { fileURLToPath } from "url";
 import { createRequire } from "module";
 const _require = createRequire(import.meta.url);
-// Cloudinary - lazy import to avoid crash if not installed yet
-let cloudinary = null;
-async function getCloudinary() {
-  if (!cloudinary && process.env.CLOUDINARY_URL) {
-    const mod = await import('cloudinary');
-    cloudinary = mod.v2;
-    cloudinary.config({ secure: true });
-  }
-  return cloudinary;
-}
 const router = Router();
 function parseDateFlex(v){return dateOrNull(v);}
 
@@ -480,42 +474,13 @@ router.get("/treaties/:id/cedant-exposure", asyncHandler(async (req, res) => {
 }));
 
 // ── DOCUMENTS ──
-const __filename2 = fileURLToPath(import.meta.url);
-const __dirname2 = path.dirname(__filename2);
-// ── Upload: Cloudinary if configured, else local disk fallback ──
-const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || path.join(__dirname2, "../../uploads"));
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+// Storage strategy (Cloudinary if configured, local disk otherwise)
+// lives in lib/uploadStorage.js so it can be shared with quotes.js
+// and facultative.js. Reads still happen here because they're
+// document-table-specific.
 
-// Always use memory storage — we decide where to put it in the route handler
+// Always use memory storage — the helper decides where the bytes land.
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
-
-async function storeFile(req, file) {
-  // ── Cloudinary path ──
-  const cld = await getCloudinary();
-  if (cld) {
-    return new Promise((resolve, reject) => {
-      const folder = `universe3/${req.params.id}`;
-      const publicId = `${Date.now()}-${Math.round(Math.random()*1e6)}`;
-      const stream = cld.uploader.upload_stream(
-        { folder, public_id: publicId, resource_type: 'raw', use_filename: false, type: 'upload', access_mode: 'public' },
-        (err, result) => {
-          if (err) return reject(err);
-          resolve({ storagePath: result.secure_url, isCloud: true });
-        }
-      );
-      stream.end(file.buffer);
-    });
-  }
-  // ── Local disk fallback ──
-  const dir = path.join(UPLOAD_DIR, req.params.id);
-  await fsp.mkdir(dir, { recursive: true });
-  const unique = Date.now() + "-" + Math.round(Math.random() * 1e6);
-  const ext = path.extname(file.originalname);
-  const filename = unique + ext;
-  const filepath = path.join(dir, filename);
-  await fsp.writeFile(filepath, file.buffer);
-  return { storagePath: path.relative(UPLOAD_DIR, filepath), isCloud: false };
-}
 
 router.get("/treaties/:id/documents", asyncHandler(async (req, res) => {
   const {rows}=await pool.query(`SELECT document_id,file_name,mime_type,size_bytes,description,doc_type,title,storage_path,uploaded_at FROM public.contract_document WHERE contract_id=$1 ORDER BY uploaded_at DESC`,[req.params.id]);
@@ -527,7 +492,12 @@ router.post("/treaties/:id/documents", upload.single("file"), asyncHandler(async
   const file = req.file;
   const b = req.body;
   if (!file) return res.status(400).json({ error: "No file uploaded" });
-  const { storagePath } = await storeFile(req, file);
+  let storagePath;
+  try {
+    storagePath = await storeUploadedFile({ folder: `universe3/${id}`, file });
+  } catch (e) {
+    return res.status(502).json({ error: `Upload storage failed: ${e?.message || e}` });
+  }
   const {rows}=await pool.query(
     `INSERT INTO public.contract_document (contract_id,file_name,mime_type,size_bytes,storage_path,description,doc_type,title) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
     [id, file.originalname, file.mimetype, file.size, storagePath, b.description||null, b.doc_type||null, b.title||null]);
@@ -563,33 +533,11 @@ router.delete("/documents/:docId", asyncHandler(async (req, res) => {
   const {rowCount}=await pool.query(`DELETE FROM public.contract_document WHERE document_id=$1`,[req.params.docId]);
   if(!rowCount) return res.status(404).json({error:"Document not found"});
   const sp = rows[0]?.storage_path || '';
-  if (sp.startsWith('http://') || sp.startsWith('https://')) {
-    // Cloudinary: extract public_id from URL
-    // URL format: https://res.cloudinary.com/{cloud}/raw/upload/v{ver}/{public_id}.{ext}
-    // or simply: https://res.cloudinary.com/{cloud}/raw/upload/{public_id}
-    try {
-      const _cld = await getCloudinary();
-      if (_cld) {
-        const uploadIdx = sp.indexOf('/upload/');
-        if (uploadIdx !== -1) {
-          let publicId = sp.slice(uploadIdx + 8); // after '/upload/'
-          publicId = publicId.replace(/^v\d+\//, '');     // strip version segment
-          publicId = publicId.replace(/\.[^/.]+$/, '');    // strip file extension
-          await _cld.uploader.destroy(publicId, { resource_type: 'raw' })
-            .catch((err) => logger.warn('[doc/delete] cloudinary destroy failed', { storagePath: sp, error: err?.message }));
-        }
-      }
-    } catch (err) {
-      // Cloudinary lib not installed or config invalid — DB row is already gone, log and move on.
-      logger.warn('[doc/delete] cloudinary cleanup skipped', { storagePath: sp, error: err.message });
-    }
-  } else if (sp) {
-    // Missing-file is expected (already cleaned up), other errors get logged
-    // so we never silently lose disk-space leaks.
-    fsp.unlink(path.join(UPLOAD_DIR, sp)).catch((err) => {
-      if (err?.code !== 'ENOENT') logger.warn('[doc/delete] unlink failed', { storagePath: sp, error: err.message });
-    });
-  }
+  // Best-effort cleanup — the DB row is already gone, so any failure
+  // here is a logged disk-space leak, not a request failure.
+  deleteUploadedFile(sp).catch((err) => {
+    logger.warn('[doc/delete] storage cleanup failed', { storagePath: sp, error: err?.message });
+  });
   res.json({ok:true});
 }));
 
@@ -599,12 +547,12 @@ async function serveDoc(req, res) {
   const doc = rows[0];
   const sp = doc.storage_path || '';
   // Cloudinary URL — redirect directly
-  if (sp.startsWith('http://') || sp.startsWith('https://')) {
+  if (isRemoteStoragePath(sp)) {
     return res.redirect(sp);
   }
   // Local disk — single async stat both confirms existence and supplies
   // the Content-Length fallback when the DB row predates size_bytes.
-  const fp = path.join(UPLOAD_DIR, sp);
+  const fp = resolveLocalStoragePath(sp);
   let stat;
   try {
     stat = await fsp.stat(fp);
@@ -632,13 +580,13 @@ router.get("/documents/:docId/text", asyncHandler(async (req, res) => {
   let buffer = null;
 
   try {
-    if (sp.startsWith('http://') || sp.startsWith('https://')) {
+    if (isRemoteStoragePath(sp)) {
       const { default: nodeFetch } = await import('node-fetch');
       const r = await nodeFetch(sp);
       if (!r.ok) return res.json({ text: '', error: 'Could not fetch from cloud' });
       buffer = Buffer.from(await r.arrayBuffer());
     } else {
-      const fp = path.join(UPLOAD_DIR, sp);
+      const fp = resolveLocalStoragePath(sp);
       try {
         buffer = await fsp.readFile(fp);
       } catch (err) {

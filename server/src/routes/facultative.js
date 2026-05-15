@@ -1,14 +1,12 @@
 // server/src/routes/facultative.js
 // Facultative reinsurance module — CRUD for risks, locations, COPE,
 // loss history, dual pricing, documents, market rates, and home listing.
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import { Router } from 'express';
 import multer from 'multer';
 import { pool } from '../db/pool.js';
-import { env } from '../config/env.js';
 import { asyncHandler, numOrNull, dateOrNull } from '../helpers.js';
 import { validateBody } from '../lib/validate.js';
+import { storeUploadedFile } from '../lib/uploadStorage.js';
 import {
   facRiskSaveSchema,
   facLocationsSaveSchema,
@@ -548,23 +546,12 @@ router.delete('/fac/documents/:docId', asyncHandler(async (req, res) => {
 //
 // The legacy JSON POST above only stores metadata. The AI runner
 // needs real bytes, so we add a separate route that accepts a
-// multipart 'file' field + document_kind. Storage strategy mirrors
-// the quotes upload: Cloudinary if configured, local upload-dir
-// otherwise. 20MB cap matches the client-side guard.
+// multipart 'file' field + document_kind. 20MB cap matches the
+// client-side guard; storage strategy lives in lib/uploadStorage.js.
 const _facDocUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
 });
-
-let _facCloudinary = null;
-async function _getFacCloudinary() {
-  if (!_facCloudinary && process.env.CLOUDINARY_URL) {
-    const mod = await import('cloudinary');
-    _facCloudinary = mod.v2;
-    _facCloudinary.config({ secure: true });
-  }
-  return _facCloudinary;
-}
 
 router.post(
   '/fac/risks/:id/documents/upload',
@@ -575,30 +562,9 @@ router.post(
     const riskId = req.params.id;
     const kind = req.body?.document_kind || 'OTHER';
 
-    // Default to a local path under env.uploadDir; swap for the
-    // Cloudinary URL if we managed to upload there.
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const relPath = `fac/${riskId}/${Date.now()}_${safeName}`;
-    let storageKey = relPath;
+    let storageKey;
     try {
-      const cld = await _getFacCloudinary();
-      if (cld) {
-        storageKey = await new Promise((resolve, reject) => cld.uploader.upload_stream(
-          {
-            folder: `fac/${riskId}`,
-            public_id: `${Date.now()}_${safeName}`,
-            resource_type: 'raw',
-            type: 'upload',
-            access_mode: 'public',
-          },
-          (err, result) => (err ? reject(err) : resolve(result.secure_url)),
-        ).end(file.buffer));
-      } else {
-        const absDir = path.resolve(env.uploadDir, `fac/${riskId}`);
-        await fs.mkdir(absDir, { recursive: true });
-        const absPath = path.resolve(env.uploadDir, relPath);
-        await fs.writeFile(absPath, file.buffer);
-      }
+      storageKey = await storeUploadedFile({ folder: `fac/${riskId}`, file });
     } catch (e) {
       return res.status(502).json({ error: `Upload storage failed: ${e?.message || e}` });
     }

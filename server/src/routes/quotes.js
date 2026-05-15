@@ -12,6 +12,7 @@ import { assertParentEntityUnchanged, touchParentEntity } from '../lib/parentEnt
 import { validateBody } from '../lib/validate.js';
 import { quotePutBodySchema } from '../validation/quote.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
+import { storeUploadedFile } from '../lib/uploadStorage.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
 import { verifyNpPricingOutputs, summariseDrifts, isStrictMode, pricingDriftStats } from '../lib/pricingVerifier.js';
@@ -964,27 +965,15 @@ router.post("/quotes/:id/wording-checklist/ai-check", asyncHandler(async (req, r
 
 // POST /quotes/:id/documents — upload document to quote
 const _multerQ = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
-let _cloudinary = null;
-async function _getCloudinary() {
-  if (!_cloudinary && process.env.CLOUDINARY_URL) {
-    const mod = await import('cloudinary'); _cloudinary = mod.v2; _cloudinary.config({ secure: true });
-  }
-  return _cloudinary;
-}
 router.post("/quotes/:id/documents", _multerQ.single('file'), asyncHandler(async (req, res) => {
   const file = req.file; const b = req.body || {};
   if (!file) return res.status(400).json({ error: 'No file provided' });
-  let storagePath = `pending/${req.params.id}/${Date.now()}_${file.originalname}`;
+  let storagePath;
   try {
-    const cld = await _getCloudinary();
-    if (cld) {
-      const pid = `quotes/${req.params.id}/${Date.now()}_${file.originalname.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
-      storagePath = await new Promise((res,rej)=>cld.uploader.upload_stream(
-        {folder:`quotes/${req.params.id}`,public_id:pid,resource_type:'raw',use_filename:false,type:'upload',access_mode:'public'},
-        (err,result)=>err?rej(err):res(result.secure_url)
-      ).end(file.buffer));
-    }
-  } catch {}
+    storagePath = await storeUploadedFile({ folder: `quotes/${req.params.id}`, file });
+  } catch (e) {
+    return res.status(502).json({ error: `Upload storage failed: ${e?.message || e}` });
+  }
   const {rows}=await pool.query(
     `INSERT INTO public.contract_document (quote_id,file_name,mime_type,size_bytes,storage_path,description,doc_type,title) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
     [req.params.id,file.originalname,file.mimetype,file.size,storagePath,b.description||null,b.doc_type||null,b.title||null]);

@@ -1,11 +1,12 @@
 // server/src/db/migrate.js
-// Standalone migration runner — `npm run migrate` entry point.
+// Standalone migration runner — `npm run migrate:up` entry point.
 //
-// Migrations normally apply on app boot via runMigrations() from
-// startup/runMigrations.js (gated by RUN_MIGRATIONS_ON_BOOT). CI
-// and ops scripts want to run them out-of-band without booting the
-// full app, so this file calls the same runner with a clean exit
-// code so the shell knows pass / fail.
+// Migrations no longer run on app boot by default — bootstrap.js gates
+// them on RUN_MIGRATIONS_ON_BOOT (default false). Render's predeploy
+// hook and the CI pipeline call this script directly so a bad
+// migration fails the deploy instead of taking the API down on boot.
+// The local docker-compose path still opts back in to boot-time
+// migrations for convenience.
 
 import { runMigrations } from '../startup/runMigrations.js';
 import { closePools } from './pool.js';
@@ -13,8 +14,10 @@ import { logger } from '../lib/logger.js';
 
 (async () => {
   try {
-    await runMigrations();
-    logger.info('migrations complete');
+    const results = await runMigrations();
+    const ran = results.filter((r) => r.status === 'ran').length;
+    const skipped = results.filter((r) => r.status === 'skipped').length;
+    logger.info('migrations complete', { ran, alreadyApplied: skipped });
   } catch (err) {
     logger.error('migrations failed', { error: err?.message, stack: err?.stack });
     process.exitCode = 1;
