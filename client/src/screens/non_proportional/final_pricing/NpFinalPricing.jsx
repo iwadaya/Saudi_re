@@ -209,12 +209,22 @@ const quoteComponentBaseDerived = (layer = {}, scopeKey) => {
   };
 };
 
+// Anything past this is almost certainly corrupted saved data — a real
+// NP layer ROL is at most a few hundred %, never tens of thousands.
+// Past values that landed in the wrong unit (premium-as-percent) read
+// in the millions; clamp here so the displayed Total ROL falls back to
+// the modeled value instead of carrying garbage through the structure
+// rollup.
+const QUOTE_UW_PRICE_SANITY_MAX_PCT = 10000;
+
+const isUwPriceSane = (n) => Number.isFinite(n) && n > 0 && n <= QUOTE_UW_PRICE_SANITY_MAX_PCT;
+
 const quoteComponentDerived = (layer = {}, scopeKey, opts = {}) => {
   const scope = QUOTE_COMPONENT_SCOPES[scopeKey];
   const base = quoteComponentBaseDerived(layer, scopeKey);
   if (!scope || opts.ignoreUw) return base;
   const explicitUw = toN(layer[scope.fields.uwPrice]);
-  return { ...base, totalRol: explicitUw > 0 ? explicitUw : base.modeledRol };
+  return { ...base, totalRol: isUwPriceSane(explicitUw) ? explicitUw : base.modeledRol };
 };
 
 const quoteComponentAutoTracksUw = (layer = {}, scopeKey) => {
@@ -398,6 +408,16 @@ const quoteLayerAutoTracksUw = (layer = {}) => {
   return derived > 0 && Math.abs(toN(raw) - derived) <= 0.01;
 };
 
+// Treat a saved percent-field value as missing when it parses to something
+// that can't represent a real rate (NaN, negative, or absurdly large).
+// This catches legacy rows that landed in the wrong unit and would
+// otherwise persist through the modeled-vs-explicit fallback.
+const sanePctOrEmpty = (raw) => {
+  if (raw == null || raw === '') return '';
+  const n = toN(raw);
+  return isUwPriceSane(n) ? String(raw) : '';
+};
+
 const normalizeQuotePricingLayer = (layer = {}, index = 0, opts = {}) => {
   const hasExplicitRiskFlag = layer.risk != null || layer.riskCover != null || layer.isRisk != null;
   const explicitCatFlag = pickQuoteBool(layer, ['cat', 'catCover', 'isCat'], false);
@@ -410,29 +430,29 @@ const normalizeQuotePricingLayer = (layer = {}, index = 0, opts = {}) => {
     limit: pickQuoteField(layer, ['limit', 'layer_limit']),
     attachment: pickQuoteField(layer, ['attachment', 'deductible']),
     egnpi: pickQuoteField(layer, ['egnpi']),
-    pureBurn: pickQuoteField(layer, ['pureBurn', 'pure_burning_cost', 'riskPureBurn', 'catPureBurn']),
-    pareto: pickQuoteField(layer, ['pareto', 'pareto_pricing', 'riskPareto', 'catPareto']),
-    exposure: pickQuoteField(layer, ['exposure', 'exposure_rating', 'riskExposure', 'catExposure']),
+    pureBurn: sanePctOrEmpty(pickQuoteField(layer, ['pureBurn', 'pure_burning_cost', 'riskPureBurn', 'catPureBurn'])),
+    pareto: sanePctOrEmpty(pickQuoteField(layer, ['pareto', 'pareto_pricing', 'riskPareto', 'catPareto'])),
+    exposure: sanePctOrEmpty(pickQuoteField(layer, ['exposure', 'exposure_rating', 'riskExposure', 'catExposure'])),
     wtBurn: pickQuoteField(layer, ['wtBurn', 'burn_weight_pct', 'riskWeightBurn', 'catWeightBurn'], '50'),
     wtPareto: pickQuoteField(layer, ['wtPareto', 'pareto_weight_pct', 'riskWeightPareto', 'catWeightPareto'], '0'),
     loading: pickQuoteField(layer, ['loading', 'pricing_loading_pct', 'riskLoading', 'catLoading'], '15'),
-    uwPrice: pickQuoteField(layer, ['uwPrice', 'uw_price', 'reinsurerPricing', 'riskUwPrice', 'catUwPrice']),
+    uwPrice: sanePctOrEmpty(pickQuoteField(layer, ['uwPrice', 'uw_price', 'reinsurerPricing', 'riskUwPrice', 'catUwPrice'])),
     pAttach: pickQuoteField(layer, ['pAttach', 'prob_attach']),
     pExhaust: pickQuoteField(layer, ['pExhaust', 'prob_exhaust']),
-    riskPureBurn: pickQuoteField(layer, ['riskPureBurn']),
-    riskPareto: pickQuoteField(layer, ['riskPareto']),
-    riskExposure: pickQuoteField(layer, ['riskExposure']),
+    riskPureBurn: sanePctOrEmpty(pickQuoteField(layer, ['riskPureBurn'])),
+    riskPareto: sanePctOrEmpty(pickQuoteField(layer, ['riskPareto'])),
+    riskExposure: sanePctOrEmpty(pickQuoteField(layer, ['riskExposure'])),
     riskWeightBurn: pickQuoteField(layer, ['riskWeightBurn', 'riskWtBurn']),
     riskWeightPareto: pickQuoteField(layer, ['riskWeightPareto', 'riskWtPareto']),
     riskLoading: pickQuoteField(layer, ['riskLoading']),
-    riskUwPrice: pickQuoteField(layer, ['riskUwPrice', 'riskTotalPrice']),
-    catPureBurn: pickQuoteField(layer, ['catPureBurn']),
-    catPareto: pickQuoteField(layer, ['catPareto']),
-    catExposure: pickQuoteField(layer, ['catExposure']),
+    riskUwPrice: sanePctOrEmpty(pickQuoteField(layer, ['riskUwPrice', 'riskTotalPrice'])),
+    catPureBurn: sanePctOrEmpty(pickQuoteField(layer, ['catPureBurn'])),
+    catPareto: sanePctOrEmpty(pickQuoteField(layer, ['catPareto'])),
+    catExposure: sanePctOrEmpty(pickQuoteField(layer, ['catExposure'])),
     catWeightBurn: pickQuoteField(layer, ['catWeightBurn', 'catWtBurn']),
     catWeightPareto: pickQuoteField(layer, ['catWeightPareto', 'catWtPareto']),
     catLoading: pickQuoteField(layer, ['catLoading']),
-    catUwPrice: pickQuoteField(layer, ['catUwPrice', 'catTotalPrice']),
+    catUwPrice: sanePctOrEmpty(pickQuoteField(layer, ['catUwPrice', 'catTotalPrice'])),
   };
   const priced = syncQuoteLayerFromComponents(applyCurvePricingToQuoteLayer(normalized, opts.curve));
   const derived = quoteLayerDerived(priced);
@@ -2307,7 +2327,12 @@ export default function NpFinalPricing() {
 
     return (
       <div className="bm-modal-backdrop" onClick={(e) => e.target === e.currentTarget && setPricingAnalysisModal({ open: false, structureIndex: null })}>
-        <div className="bm-modal" style={{ width: '96vw', maxWidth: '1500px', maxHeight: '92vh', display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)' }}>
+        <div
+          className="bm-modal"
+          style={isQuote
+            ? { width: '100vw', height: '100vh', maxWidth: 'none', maxHeight: 'none', borderRadius: 0, display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)' }
+            : { width: '96vw', maxWidth: '1500px', maxHeight: '92vh', display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)' }}
+        >
           <div className="bm-modal-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <div>
               <div>Pricing Analysis · Structure {sIdx + 1}</div>
