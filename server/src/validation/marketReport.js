@@ -131,3 +131,43 @@ export const marketReportLogViewSchema = z.object({
   report_id:   z.string().uuid('report_id must be a UUID'),
   contract_id: z.string().uuid('contract_id must be a UUID'),
 });
+
+// ── Per-structure benchmark commentary (FQBenchmarkModal) ─────────
+// Accepts the source structure's headline metrics + the peer-pool
+// medians the client already computes, and returns AI commentary on
+// how the proposed deductible / limit / exposure positioning sits
+// against the peer pool. The model is constrained to a tight JSON
+// shape so the modal can render without further parsing.
+
+const structureMetricsSchema = z.object({
+  totalLimit: z.number().nullable(),
+  totalEgnpi: z.number().nullable(),
+  deductible: z.number().nullable(),
+  dOverL:     z.number().nullable(),
+  dOverE:     z.number().nullable(),
+  lOverE:     z.number().nullable(),
+  rolPct:     z.number().nullable(),
+}).partial();
+
+export const structureCommentaryRequestSchema = z.object({
+  contract_id:    z.string().uuid('contract_id must be a UUID'),
+  scope:          z.enum(['country', 'region', 'global']),
+  structure_label: z.string().min(1).max(120),
+  source_metrics: structureMetricsSchema,
+  peer_medians:   structureMetricsSchema,
+  peer_count:     z.number().int().min(0),
+  cob_names:      z.array(z.string().max(120)).max(20).optional(),
+  currency:       z.string().max(10).optional(),
+});
+
+const HIGHLIGHT_VERDICTS = ['BETTER', 'ON_PAR', 'WORSE', 'NO_DATA'];
+
+export const structureCommentarySchema = z.object({
+  signal:     z.enum(HIGHLIGHT_VERDICTS),
+  commentary: z.string().min(1).max(2000),
+  highlights: z.array(z.object({
+    metric:  z.enum(['Deductible', 'Limit', 'Ded / Limit', 'Ded / EGNPI', 'Limit / EGNPI', 'ROL %']),
+    verdict: z.enum(HIGHLIGHT_VERDICTS),
+    note:    z.string().max(300),
+  })).max(10),
+});

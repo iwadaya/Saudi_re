@@ -335,6 +335,20 @@ export const api = {
   getCountryMacro(countryId, opts) {
     return request(PATHS.aiMarketMacro(countryId, opts), opts);
   },
+  // Per-structure peer benchmark pool (real portfolio treaties scoped
+  // by country/region/global, optionally filtered to a COB overlap).
+  // Feeds FQBenchmarkModal's medians, percentiles, and scatter plots.
+  getPeerStructures(contractId, { scope = 'country', cobIds = [] } = {}, opts) {
+    const qs = new URLSearchParams({ scope });
+    if (Array.isArray(cobIds) && cobIds.length) qs.set('cobIds', cobIds.join(','));
+    return request(`/api/treaties/${enc(contractId)}/peer-structures?${qs.toString()}`, opts);
+  },
+  // Optional AI commentary on a single structure's positioning vs the
+  // peer pool. The peer fetch above must succeed first; this endpoint
+  // is fire-on-demand so we don't burn OpenAI tokens on every modal open.
+  generateStructureCommentary(payload, opts) {
+    return request('/api/ai/market/structure-commentary', { method: 'POST', body: payload, timeoutMs: 60000, ...opts });
+  },
   listBrokers(opts) { return request(PATHS.brokers, opts); },
   listReinsurers(opts) { return request(PATHS.reinsurers, opts); },
   listTreatyTypes(opts) { return request(PATHS.treatyTypes, opts); },
