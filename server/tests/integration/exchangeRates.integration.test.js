@@ -12,14 +12,23 @@
 //   • PUT  /api/ref/exchange-rates/:code    — upsert
 //   • PUT  → GET sees the new rate on the very next call
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { bootApp, shouldSkipDb, closePools } from './helpers.js';
+import { pool } from '../../src/db/pool.js';
 
 describe.skipIf(shouldSkipDb)('integration: /api/ref/exchange-rates', () => {
   let harness;
 
   beforeAll(async () => { harness = await bootApp(); });
-  afterAll(async () => { await harness.close(); await closePools(); });
+  // Test-only ISO codes used below leak across runs without this cleanup.
+  beforeEach(async () => {
+    await pool.query(`DELETE FROM public.ref_exchange_rate WHERE currency_code IN ('ZZT','QQQ')`);
+  });
+  afterAll(async () => {
+    await pool.query(`DELETE FROM public.ref_exchange_rate WHERE currency_code IN ('ZZT','QQQ')`).catch(() => {});
+    await harness.close();
+    await closePools();
+  });
 
   it('GET list returns an array of {currency_code, rate_to_usd}', async () => {
     const res = await harness.fetchApp('GET', '/api/ref/exchange-rates');

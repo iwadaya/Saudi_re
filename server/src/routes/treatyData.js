@@ -10,6 +10,8 @@ import { crestaSaveSchema } from '../validation/cresta.js';
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
 import { validateBody } from '../lib/validate.js';
 import { getWordingChecklist, runWordingChecklistAi, saveWordingChecklist } from '../services/wordingChecklist.js';
+import { buildBatchInsert } from '../db/batchInsert.js';
+import { randomUUID } from 'node:crypto';
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -107,11 +109,33 @@ router.put("/treaties/:id/dev-factors/:type", validateBody(devFactorPutSchema), 
       `DELETE FROM public.contract_dev_factor WHERE contract_id=$1 AND triangle_type=$2::public.triangle_type`,
       [id, t]
     );
-    for (const f of factors) await cl.query(
-      `INSERT INTO public.contract_dev_factor (contract_id,triangle_type,dev_month,selected_ldf,selected_cdf,actual_ldf,actual_cdf,param_ldf,param_cdf,chosen_source,chosen_ldf,chosen_cdf,overridden,parametrized_ldf,parametrized_cdf)
-       VALUES ($1,$2::public.triangle_type,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-      [id, t, f.dev_month, numOrNull(f.selected_ldf), numOrNull(f.selected_cdf), numOrNull(f.actual_ldf), numOrNull(f.actual_cdf), numOrNull(f.param_ldf), numOrNull(f.param_cdf), f.chosen_source || null, numOrNull(f.chosen_ldf), numOrNull(f.chosen_cdf), f.overridden ?? false, numOrNull(f.parametrized_ldf), numOrNull(f.parametrized_cdf)]
-    );
+    if (factors.length) {
+      // Two leading params: contract_id ($1) and triangle_type ($2 with
+      // an explicit ::public.triangle_type cast). buildBatchInsert only
+      // supports a single leading id, so we hand-roll the placeholders
+      // here to keep the type cast and avoid one round-trip per row.
+      const cols = ['contract_id','triangle_type','dev_month','selected_ldf','selected_cdf','actual_ldf','actual_cdf','param_ldf','param_cdf','chosen_source','chosen_ldf','chosen_cdf','overridden','parametrized_ldf','parametrized_cdf'];
+      const params = [id, t];
+      const tuples = [];
+      let p = 3;
+      for (const f of factors) {
+        tuples.push(`($1,$2::public.triangle_type,$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++})`);
+        params.push(
+          f.dev_month,
+          numOrNull(f.selected_ldf), numOrNull(f.selected_cdf),
+          numOrNull(f.actual_ldf),   numOrNull(f.actual_cdf),
+          numOrNull(f.param_ldf),    numOrNull(f.param_cdf),
+          f.chosen_source || null,
+          numOrNull(f.chosen_ldf),   numOrNull(f.chosen_cdf),
+          f.overridden ?? false,
+          numOrNull(f.parametrized_ldf), numOrNull(f.parametrized_cdf),
+        );
+      }
+      await cl.query(
+        `INSERT INTO public.contract_dev_factor (${cols.join(',')}) VALUES ${tuples.join(',')}`,
+        params,
+      );
+    }
     await cl.query("COMMIT");
     await logAudit(pool, {
       entityType: 'CONTRACT', entityId: id, eventType: 'DEV_FACTORS_SAVED',
@@ -140,14 +164,29 @@ router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
   const prevReported=new Map(prev.map(r=>[String(r.loss_id),r.reported_date]));
   await cl.query(`DELETE FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
   const today=new Date().toISOString().slice(0,10);
-  const savedLosses = [];
-  for(const l of losses) {
-    const existedReported=l.loss_id?prevReported.get(String(l.loss_id)):null;
-    const reported=parseDateFlex(l.reported_date)||existedReported||today;
-    const {rows:ins}=await cl.query(`INSERT INTO public.contract_large_losses (report_id,loss_id,uw_year,insured_name,loss_name,date_of_loss,class_of_business,paid,os,incurred,is_selected,inflation_factor,reported_date) VALUES ($1,COALESCE($2,gen_random_uuid()),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING loss_id`,
-    [rid,l.loss_id||null,numOrNull(l.uw_year),l.insured_name,l.loss_name,parseDateFlex(l.date_of_loss),l.class_of_business,numOrNull(l.paid),numOrNull(l.os),numOrNull(l.incurred),l.is_selected??true,numOrNull(l.inflation_factor)??1,reported]);
-    savedLosses.push(ins[0]?.loss_id);
-  }
+  // Generate loss_ids up front so we can batch the insert and still
+  // return the same array of ids one-row-at-a-time used to surface.
+  const largeLossesWithIds = losses.map((l) => {
+    const existedReported = l.loss_id ? prevReported.get(String(l.loss_id)) : null;
+    return {
+      ...l,
+      _loss_id: l.loss_id || randomUUID(),
+      _reported: parseDateFlex(l.reported_date) || existedReported || today,
+      _dol: parseDateFlex(l.date_of_loss),
+    };
+  });
+  const largeLossesInsert = buildBatchInsert({
+    table: 'public.contract_large_losses',
+    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date'],
+    rows: largeLossesWithIds.map((l) => [
+      l._loss_id, numOrNull(l.uw_year), l.insured_name, l.loss_name, l._dol,
+      l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
+      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported,
+    ]),
+    leadingId: rid,
+  });
+  if (largeLossesInsert) await cl.query(largeLossesInsert.sql, largeLossesInsert.params);
+  const savedLosses = largeLossesWithIds.map((l) => l._loss_id);
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
@@ -167,14 +206,27 @@ router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
   const prevReported=new Map(prev.map(r=>[String(r.loss_id),r.reported_date]));
   await cl.query(`DELETE FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
   const today=new Date().toISOString().slice(0,10);
-  const savedLosses = [];
-  for(const l of losses) {
-    const existedReported=l.loss_id?prevReported.get(String(l.loss_id)):null;
-    const reported=parseDateFlex(l.reported_date)||existedReported||today;
-    const {rows:ins}=await cl.query(`INSERT INTO public.contract_cat_losses (report_id,loss_id,uw_year,insured_name,loss_name,date_of_loss,class_of_business,paid,os,incurred,is_selected,inflation_factor,reported_date) VALUES ($1,COALESCE($2,gen_random_uuid()),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING loss_id`,
-    [rid,l.loss_id||null,numOrNull(l.uw_year),l.insured_name,l.loss_name,parseDateFlex(l.date_of_loss),l.class_of_business,numOrNull(l.paid),numOrNull(l.os),numOrNull(l.incurred),l.is_selected??true,numOrNull(l.inflation_factor)??1,reported]);
-    savedLosses.push(ins[0]?.loss_id);
-  }
+  const catLossesWithIds = losses.map((l) => {
+    const existedReported = l.loss_id ? prevReported.get(String(l.loss_id)) : null;
+    return {
+      ...l,
+      _loss_id: l.loss_id || randomUUID(),
+      _reported: parseDateFlex(l.reported_date) || existedReported || today,
+      _dol: parseDateFlex(l.date_of_loss),
+    };
+  });
+  const catLossesInsert = buildBatchInsert({
+    table: 'public.contract_cat_losses',
+    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date'],
+    rows: catLossesWithIds.map((l) => [
+      l._loss_id, numOrNull(l.uw_year), l.insured_name, l.loss_name, l._dol,
+      l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
+      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported,
+    ]),
+    leadingId: rid,
+  });
+  if (catLossesInsert) await cl.query(catLossesInsert.sql, catLossesInsert.params);
+  const savedLosses = catLossesWithIds.map((l) => l._loss_id);
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
@@ -350,7 +402,14 @@ router.put("/treaties/:id/cobs", asyncHandler(async (req, res) => {
   const {id}=req.params;const ids=req.body.class_ids??req.body.classIds??(Array.isArray(req.body)?req.body:[]);
   const cl=await pool.connect();
   try{await cl.query("BEGIN");await cl.query(`DELETE FROM public.contract_class_of_business WHERE contract_id=$1`,[id]);
-  for(const cid of ids) await cl.query(`INSERT INTO public.contract_class_of_business (contract_id,class_of_business_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,[id,cid]);
+  const cobInsert = buildBatchInsert({
+    table: 'public.contract_class_of_business',
+    columns: ['contract_id','class_of_business_id'],
+    rows: ids.filter((cid) => cid != null).map((cid) => [cid]),
+    leadingId: id,
+    conflict: 'ON CONFLICT DO NOTHING',
+  });
+  if (cobInsert) await cl.query(cobInsert.sql, cobInsert.params);
   await cl.query("COMMIT");res.json({ok:true});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
@@ -367,8 +426,13 @@ router.put("/treaties/:id/risk-profiles/:cobId", asyncHandler(async (req, res) =
   const {rows}=await cl.query(`INSERT INTO public.contract_risk_profile (contract_id,class_of_business_id,c_value,pml_percentage,selected_curve,custom_b,custom_g,gross_loss_ratio) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (contract_id,class_of_business_id) DO UPDATE SET c_value=EXCLUDED.c_value,pml_percentage=EXCLUDED.pml_percentage,selected_curve=EXCLUDED.selected_curve,custom_b=EXCLUDED.custom_b,custom_g=EXCLUDED.custom_g,gross_loss_ratio=EXCLUDED.gross_loss_ratio RETURNING profile_id`,
     [id,cobId,numOrNull(c_value)??0,numOrNull(pml_percentage)??100,selected_curve||null,numOrNull(custom_b),numOrNull(custom_g),numOrNull(gross_loss_ratio)]);
   const pid=rows[0].profile_id;await cl.query(`DELETE FROM public.contract_risk_profile_band WHERE profile_id=$1`,[pid]);
-  for(const b of bands) await cl.query(`INSERT INTO public.contract_risk_profile_band (profile_id,from_amt,to_amt,no_of_risks,total_sum_insured,gross_premium) VALUES ($1,$2,$3,$4,$5,$6)`,
-    [pid,numOrNull(b.from_amt),numOrNull(b.to_amt),numOrNull(b.no_of_risks),numOrNull(b.total_sum_insured),numOrNull(b.gross_premium)]);
+  const riskBandsInsert = buildBatchInsert({
+    table: 'public.contract_risk_profile_band',
+    columns: ['profile_id','from_amt','to_amt','no_of_risks','total_sum_insured','gross_premium'],
+    rows: bands.map((b) => [numOrNull(b.from_amt),numOrNull(b.to_amt),numOrNull(b.no_of_risks),numOrNull(b.total_sum_insured),numOrNull(b.gross_premium)]),
+    leadingId: pid,
+  });
+  if (riskBandsInsert) await cl.query(riskBandsInsert.sql, riskBandsInsert.params);
   await cl.query("COMMIT");res.json({ok:true,profile_id:pid});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
@@ -384,8 +448,13 @@ router.put("/treaties/:id/claims-profiles/:cobId", asyncHandler(async (req, res)
   try{await cl.query("BEGIN");
   const {rows}=await cl.query(`INSERT INTO public.contract_claims_profile (contract_id,class_of_business_id) VALUES ($1,$2) ON CONFLICT (contract_id,class_of_business_id) DO UPDATE SET contract_id=EXCLUDED.contract_id RETURNING profile_id`,[id,cobId]);
   const pid=rows[0].profile_id;await cl.query(`DELETE FROM public.contract_claims_profile_band WHERE profile_id=$1`,[pid]);
-  for(const b of rawRows) await cl.query(`INSERT INTO public.contract_claims_profile_band (profile_id,from_amt,to_amt,no_of_claims,aggregate_incurred,no_of_risks,total_sum_insured,gross_premium) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-    [pid,numOrNull(b.from_amt),numOrNull(b.to_amt),numOrNull(b.no_of_claims),numOrNull(b.aggregate_incurred),numOrNull(b.no_of_risks),numOrNull(b.total_sum_insured),numOrNull(b.gross_premium)]);
+  const claimsBandsInsert = buildBatchInsert({
+    table: 'public.contract_claims_profile_band',
+    columns: ['profile_id','from_amt','to_amt','no_of_claims','aggregate_incurred','no_of_risks','total_sum_insured','gross_premium'],
+    rows: rawRows.map((b) => [numOrNull(b.from_amt),numOrNull(b.to_amt),numOrNull(b.no_of_claims),numOrNull(b.aggregate_incurred),numOrNull(b.no_of_risks),numOrNull(b.total_sum_insured),numOrNull(b.gross_premium)]),
+    leadingId: pid,
+  });
+  if (claimsBandsInsert) await cl.query(claimsBandsInsert.sql, claimsBandsInsert.params);
   await cl.query("COMMIT");res.json({ok:true,profile_id:pid});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 

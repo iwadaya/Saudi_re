@@ -15,6 +15,7 @@ import {
 } from '../validation/nonProp.js';
 import { verifyNpPricingOutputs, summariseDrifts, isStrictMode, pricingDriftStats } from '../lib/pricingVerifier.js';
 import { logger } from '../lib/logger.js';
+import { buildBatchInsert } from '../db/batchInsert.js';
 const router = Router();
 // "UNLIMITED" reinstatements stays null in numeric column; preserved in JSONB
 function reinstatInt(v){if(String(v||'').trim().toUpperCase()==='UNLIMITED')return null;return numOrNull(v);}
@@ -220,8 +221,13 @@ router.get("/treaties/:id/np/egnpi-year", asyncHandler(async (req, res) => {
 router.put("/treaties/:id/np/egnpi-year", validateBody(egnpiYearPutSchema), asyncHandler(async (req, res) => {
   const {id}=req.params;const inputRows=req.body.rows??[];const cl=await pool.connect();
   try{await cl.query("BEGIN");await cl.query(`DELETE FROM public.contract_np_egnpi_year WHERE contract_id=$1`,[id]);
-  for(const r of inputRows) await cl.query(`INSERT INTO public.contract_np_egnpi_year (contract_id,uw_year,egnpi,inflation_pct) VALUES ($1,$2,$3,$4)`,
-    [id,r.uw_year,numOrNull(r.egnpi),numOrNull(r.inflation_pct)]);
+  const egnpiInsert = buildBatchInsert({
+    table: 'public.contract_np_egnpi_year',
+    columns: ['contract_id','uw_year','egnpi','inflation_pct'],
+    rows: inputRows.map((r) => [r.uw_year, numOrNull(r.egnpi), numOrNull(r.inflation_pct)]),
+    leadingId: id,
+  });
+  if (egnpiInsert) await cl.query(egnpiInsert.sql, egnpiInsert.params);
   // Propagate latest year's EGNPI as est_gnpi on contract_np_details (used for region premium aggregation)
   const sortedRows = [...inputRows].filter(r => r.egnpi != null).sort((a,b) => (b.uw_year||0)-(a.uw_year||0));
   if (sortedRows.length > 0) {
@@ -296,14 +302,21 @@ router.put("/treaties/:id/np-pricing", validateBody(npPricingPutSchema), asyncHa
          pricing_loading_pct=EXCLUDED.pricing_loading_pct,swiss_re_curve_name=EXCLUDED.swiss_re_curve_name,updated_at=now()`,
       [id,numOrNull(inputs.burn_weight_pct),numOrNull(inputs.exposure_weight_pct),numOrNull(inputs.pareto_weight_pct),numOrNull(inputs.pricing_loading_pct),inputs.swiss_re_curve_name||null]);
     await cl.query(`DELETE FROM public.contract_np_pricing_layer_inputs WHERE contract_id=$1`,[id]);
-    for(const li of layer_inputs) await cl.query(
-      `INSERT INTO public.contract_np_pricing_layer_inputs (contract_id,layer_number,expiring_pricing_pct) VALUES ($1,$2,$3)`,
-      [id,li.layer_number,numOrNull(li.expiring_pricing_pct)]);
+    const layerInputsInsert = buildBatchInsert({
+      table: 'public.contract_np_pricing_layer_inputs',
+      columns: ['contract_id','layer_number','expiring_pricing_pct'],
+      rows: layer_inputs.map((li) => [li.layer_number, numOrNull(li.expiring_pricing_pct)]),
+      leadingId: id,
+    });
+    if (layerInputsInsert) await cl.query(layerInputsInsert.sql, layerInputsInsert.params);
     await cl.query(`DELETE FROM public.contract_np_pricing_outputs WHERE contract_id=$1`,[id]);
-    for(const o of outputs) await cl.query(
-      `INSERT INTO public.contract_np_pricing_outputs (contract_id,layer_number,section,pure_burning_cost,pareto_pricing,burn_plus_pareto,exposure_rating,burn_weight_pct,exposure_weight_pct,pareto_weight_pct,pricing_loading_pct,total_price,prob_attach,prob_exhaust)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-      [id,o.layer_number,o.section,numOrNull(o.pure_burning_cost),numOrNull(o.pareto_pricing),numOrNull(o.burn_plus_pareto),numOrNull(o.exposure_rating),numOrNull(o.burn_weight_pct),numOrNull(o.exposure_weight_pct),numOrNull(o.pareto_weight_pct),numOrNull(o.pricing_loading_pct),numOrNull(o.total_price),numOrNull(o.prob_attach),numOrNull(o.prob_exhaust)]);
+    const outputsInsert = buildBatchInsert({
+      table: 'public.contract_np_pricing_outputs',
+      columns: ['contract_id','layer_number','section','pure_burning_cost','pareto_pricing','burn_plus_pareto','exposure_rating','burn_weight_pct','exposure_weight_pct','pareto_weight_pct','pricing_loading_pct','total_price','prob_attach','prob_exhaust'],
+      rows: outputs.map((o) => [o.layer_number, o.section, numOrNull(o.pure_burning_cost), numOrNull(o.pareto_pricing), numOrNull(o.burn_plus_pareto), numOrNull(o.exposure_rating), numOrNull(o.burn_weight_pct), numOrNull(o.exposure_weight_pct), numOrNull(o.pareto_weight_pct), numOrNull(o.pricing_loading_pct), numOrNull(o.total_price), numOrNull(o.prob_attach), numOrNull(o.prob_exhaust)]),
+      leadingId: id,
+    });
+    if (outputsInsert) await cl.query(outputsInsert.sql, outputsInsert.params);
     // ── Update per-layer margin columns on contract_np_layers (safe: no-op if columns absent)
     // hist_margin     = HIST. MARGIN (actual/historical) → actual_margin in cedant summary
     // modelled_margin = MARGIN (modelled: (expiring-reinsurer)/expiring) → actuarial_margin
