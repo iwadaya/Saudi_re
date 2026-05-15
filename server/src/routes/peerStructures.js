@@ -36,18 +36,34 @@ function parseCobIds(raw) {
     .filter((s) => UUID_RE.test(s));
 }
 
-// Resolve the source contract's country + region so we know which
-// scope buckets to filter against. Returns null when the contract id
-// doesn't resolve, leaving the caller to 404.
-async function loadSourceContext(contractId) {
-  const { rows } = await pool.query(
-    `SELECT c.contract_id, c.country_id, c.uw_year, co.country_code, co.country_name, co.region
+// Resolve the source's country + region so we know which scope buckets
+// to filter against. The route is mounted at /api/treaties/:contractId
+// because the peer pool is always bound NP contracts, but the source
+// ID can be either a contract_id (looking at a bound treaty) or a
+// quote_id (FQBenchmarkModal opened from quote-mode NP final pricing).
+// We try public.contract first, then fall back to public.quote so the
+// modal works in both modes without a frontend change. Returns null
+// when neither table resolves the id — the caller 404s on that.
+async function loadSourceContext(sourceId) {
+  const contractRow = await pool.query(
+    `SELECT c.contract_id AS source_id, 'contract'::text AS source_kind,
+            c.country_id, c.uw_year, co.country_code, co.country_name, co.region
        FROM public.contract c
        LEFT JOIN public.country co ON co.country_id = c.country_id
       WHERE c.contract_id = $1`,
-    [contractId],
+    [sourceId],
   );
-  return rows[0] || null;
+  if (contractRow.rows[0]) return contractRow.rows[0];
+
+  const quoteRow = await pool.query(
+    `SELECT q.quote_id AS source_id, 'quote'::text AS source_kind,
+            q.country_id, q.uw_year, co.country_code, co.country_name, co.region
+       FROM public.quote q
+       LEFT JOIN public.country co ON co.country_id = q.country_id
+      WHERE q.quote_id = $1`,
+    [sourceId],
+  );
+  return quoteRow.rows[0] || null;
 }
 
 // Build a parameterised WHERE that limits peers to the requested
@@ -89,6 +105,16 @@ router.get(
     const source = await loadSourceContext(contractId);
     if (!source) return res.status(404).json({ error: 'Contract not found' });
 
+    const sourceContext = {
+      contractId: source.source_id,
+      sourceKind: source.source_kind,
+      countryId: source.country_id,
+      countryCode: source.country_code,
+      countryName: source.country_name,
+      region: source.region,
+      uwYear: source.uw_year,
+    };
+
     const filter = scopeFilter(scope, source);
     if (!filter) {
       // Source has no country (country) or no resolvable region (region).
@@ -96,14 +122,7 @@ router.get(
       // render a "no comparable scope" hint cleanly.
       return res.json({
         scope,
-        sourceContract: {
-          contractId: source.contract_id,
-          countryId: source.country_id,
-          countryCode: source.country_code,
-          countryName: source.country_name,
-          region: source.region,
-          uwYear: source.uw_year,
-        },
+        sourceContract: sourceContext,
         peers: [],
         peerCount: 0,
         note: scope === 'country' ? 'source contract has no country_id' : 'source contract has no region',
@@ -213,14 +232,7 @@ router.get(
 
     res.json({
       scope,
-      sourceContract: {
-        contractId: source.contract_id,
-        countryId: source.country_id,
-        countryCode: source.country_code,
-        countryName: source.country_name,
-        region: source.region,
-        uwYear: source.uw_year,
-      },
+      sourceContract: sourceContext,
       peers,
       peerCount: peers.length,
       truncated: peers.length >= PEER_LIMIT,
