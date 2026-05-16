@@ -49,15 +49,21 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      # `npm install` hits npm/cli#4828 on the runner — the rolldown
-      # native binding (@rolldown/binding-linux-x64-gnu, pulled in by
-      # vitest 4) is listed in the lockfile as optional but doesn't end
-      # up on disk, so vitest crashes at "Cannot find native binding".
-      # `npm ci` does a clean install straight from the lockfile and
-      # isn't affected by that bug, so we use it here instead of the
-      # convenience `install:all` script (which is still fine for local
-      # dev where the lockfile and node_modules co-evolve).
-      - name: Install root deps (npm ci — avoids optional-deps bug)
+      # Background on the install dance:
+      # vitest 4 → rolldown → @rolldown/binding-linux-x64-gnu. Both
+      # `npm install` and `npm ci` hit npm/cli#4828 on the GitHub
+      # runner: the linux binding is listed in the lockfile as
+      # optional but doesn't land on disk, so vitest crashes at
+      # "Cannot find native binding" before any test runs. The
+      # binding's own tarball is fine — npm just won't extract it
+      # to node_modules under the optional-deps path.
+      #
+      # Workaround per npm/cli#4828 comments: install the binding
+      # explicitly with --no-save after the bulk install. The
+      # convenience `install:all` script (npm install everywhere)
+      # is still fine for local dev where the lockfile and
+      # node_modules co-evolve and the platform bindings line up.
+      - name: Install root deps
         run: npm ci
 
       - name: Install server deps
@@ -65,6 +71,9 @@ jobs:
 
       - name: Install client deps
         run: npm ci --prefix client
+
+      - name: Force-install rolldown linux binding (npm/cli#4828 workaround)
+        run: npm install --no-save --no-audit --no-fund @rolldown/binding-linux-x64-gnu
 
       - name: Lint
         run: npm run lint
