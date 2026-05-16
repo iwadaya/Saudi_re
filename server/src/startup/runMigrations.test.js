@@ -7,7 +7,7 @@
 // strips those statements; this test pins the regex down.
 
 import { describe, it, expect } from 'vitest';
-import { isTxControl } from './runMigrations.js';
+import { isTxControl, stripComments } from './runMigrations.js';
 
 describe('isTxControl', () => {
   it.each([
@@ -41,5 +41,28 @@ describe('isTxControl', () => {
     '',
   ])('does NOT match non-tx-control statement %j', (stmt) => {
     expect(isTxControl(stmt)).toBe(false);
+  });
+
+  // Migration 004 wraps its trailing COMMIT with a block of `-- ...`
+  // line comments. splitStatements keeps the comments in the statement,
+  // so the tx-control filter has to strip them first.
+  it('matches COMMIT preceded by line comments', () => {
+    const stmt = `
+-- Uncomment if you want to enable ON CONFLICT upserts on contract_offer:
+-- ALTER TABLE public.contract_offer ADD CONSTRAINT contract_offer_contract_id_key UNIQUE (contract_id);
+
+COMMIT;`;
+    expect(isTxControl(stmt)).toBe(true);
+  });
+
+  it('matches BEGIN preceded by block comments', () => {
+    const stmt = `/* migration 004 — fix constraints */\nBEGIN;`;
+    expect(isTxControl(stmt)).toBe(true);
+  });
+
+  it('stripComments removes line and block comments', () => {
+    expect(stripComments('-- leading\nBEGIN;')).toBe('BEGIN;');
+    expect(stripComments('/* block */ BEGIN;')).toBe('BEGIN;');
+    expect(stripComments('CREATE TABLE foo (id int); -- trailing')).toBe('CREATE TABLE foo (id int);');
   });
 });

@@ -255,9 +255,24 @@ async function runMigrationsLocked() {
 // integration CI surfaced for the first time on a fresh DB). Strip
 // these tx-control statements at run time so we don't have to edit
 // the eight files (which would also re-apply on existing prod DBs).
+//
+// `splitStatements` preserves comments inside each statement string, so
+// a `COMMIT` that follows a block of `-- ...` line comments arrives
+// with the comments still attached. Strip comments before testing the
+// tx-control shape so we don't miss those.
+const LINE_COMMENT_RE = /--[^\n]*\n?/g;
+const BLOCK_COMMENT_RE = /\/\*[\s\S]*?\*\//g;
 const TX_CONTROL_RE = /^\s*(?:BEGIN|START\s+TRANSACTION|COMMIT|END|ROLLBACK)\s*(?:WORK|TRANSACTION)?\s*;?\s*$/i;
+
+export function stripComments(stmt) {
+  return String(stmt || '')
+    .replace(BLOCK_COMMENT_RE, '')
+    .replace(LINE_COMMENT_RE, '\n')
+    .trim();
+}
+
 export function isTxControl(stmt) {
-  return TX_CONTROL_RE.test(stmt);
+  return TX_CONTROL_RE.test(stripComments(stmt));
 }
 
 async function runOneMigration(file, stmts) {
