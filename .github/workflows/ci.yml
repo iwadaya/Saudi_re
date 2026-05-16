@@ -47,10 +47,41 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          cache: npm
 
-      - name: Install (root + server + client)
-        run: npm run install:all
+      # Root package.json pins the three rolldown platform bindings
+      # (darwin-arm64, darwin-x64, linux-x64-gnu) as optionalDependencies
+      # so the lockfile lists them regardless of which OS regenerates
+      # it. `--include=optional` is explicit (also the default; future-
+      # proofing).
+      - name: Install root deps
+        run: npm ci --include=optional
+
+      - name: Install server deps
+        run: npm ci --include=optional --prefix server
+
+      - name: Install client deps
+        run: npm ci --include=optional --prefix client
+
+      # Workaround for npm/cli#4828: on the GitHub runner `npm ci`
+      # consistently fails to extract the linux-x64 rolldown native
+      # binding even with the root pin, --include=optional, --force,
+      # and cache disabled (verified across five separate workflow
+      # runs). Pull the tarball directly from the npm registry and
+      # drop it into place — sidesteps npm's optional-deps machinery
+      # entirely. Pinned to 1.0.1 to match the lockfile.
+      - name: Plant rolldown linux binding from npm registry
+        run: |
+          set -euo pipefail
+          PKG_DIR=node_modules/@rolldown/binding-linux-x64-gnu
+          if [ ! -f "$PKG_DIR/rolldown-binding.linux-x64-gnu.node" ]; then
+            mkdir -p "$PKG_DIR"
+            curl -sSL https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.0.1.tgz \
+              | tar -xz --strip-components=1 -C "$PKG_DIR"
+            echo "rolldown linux binding planted:"
+            ls -la "$PKG_DIR"
+          else
+            echo "rolldown linux binding already present — no-op"
+          fi
 
       - name: Lint
         run: npm run lint
@@ -82,6 +113,12 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/reinsurance_tool
       NODE_ENV: test
       TEST_WITH_DB: '1'
+      # env.js freezes provider keys at import time, before integration
+      # tests can mutate process.env. Provide stubs at the process
+      # level so the renewal-pack import test's mocked fetch
+      # interceptor takes over — they're never used to call out.
+      GEMINI_API_KEY: ci-stub-gemini-key
+      OPENAI_API_KEY: ci-stub-openai-key
     steps:
       - uses: actions/checkout@v4
 
@@ -89,12 +126,23 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          cache: npm
 
       - name: Install (root + server)
         run: |
-          npm ci
-          npm ci --prefix server
+          npm ci --include=optional
+          npm ci --include=optional --prefix server
+
+      # Same npm/cli#4828 workaround as the lint+unit job — the
+      # integration job runs vitest via `npm run test:server`.
+      - name: Plant rolldown linux binding from npm registry
+        run: |
+          set -euo pipefail
+          PKG_DIR=node_modules/@rolldown/binding-linux-x64-gnu
+          if [ ! -f "$PKG_DIR/rolldown-binding.linux-x64-gnu.node" ]; then
+            mkdir -p "$PKG_DIR"
+            curl -sSL https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.0.1.tgz \
+              | tar -xz --strip-components=1 -C "$PKG_DIR"
+          fi
 
       - name: Run DB migrations
         run: npm run migrate --prefix server

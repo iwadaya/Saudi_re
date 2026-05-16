@@ -370,7 +370,7 @@ async function insertOne(ref, idx, parentContractId = null) {
   const owner = pick(ref.users);
 
   // Avoid CAT-XL + Marine combos because the seed CRESTA assumptions are property only.
-  let primaryCobId = primaryCob.class_of_business_id;
+  const primaryCobId = primaryCob.class_of_business_id;
   const altContractId = `${SEED_TAG}-${String(idx).padStart(5, '0')}`;
 
   const inception = new Date(uwYear, 0, 1);

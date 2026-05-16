@@ -32,6 +32,7 @@ const schema = z.object({
   RUN_MIGRATIONS_ON_BOOT: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
   // Axco Insurance Intelligence — optional. When unset, the market
   // intelligence route falls back to a web-search-only OpenAI call.
   AXCO_API_KEY: z.string().optional(),
@@ -74,6 +75,7 @@ export const env = Object.freeze({
   runMigrationsOnBoot: toBool(values.RUN_MIGRATIONS_ON_BOOT, false),
   anthropicApiKey: values.ANTHROPIC_API_KEY || '',
   openaiApiKey: values.OPENAI_API_KEY || '',
+  geminiApiKey: values.GEMINI_API_KEY || '',
   axcoApiKey: values.AXCO_API_KEY || '',
   axcoBaseUrl: values.AXCO_BASE_URL || '',
 });

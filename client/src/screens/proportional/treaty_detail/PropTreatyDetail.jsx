@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api } from '../../../api';
 import { useAppState } from '../../../context/AppContext';
 import { useContractId, setActiveContractId } from '../../../hooks/useContractId';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import SlipIngestButton from '../../../components/SlipIngestButton';
+import ImportedFromPackBanner from '../../../components/ImportedFromPackBanner';
 import {
   addMonthsClamped,
   dateInputValue,
@@ -632,10 +634,20 @@ export default function PropTreatyDetail() {
   /* ─── input style ─── */
   const fi = "fi"; // className alias
 
+  // Import-flow nav state: when the wizard was reached via the renewal-
+  // pack import modal we land here with location.state.importedFromPack.
+  const location = useLocation();
+  const importedFromState = location?.state?.importedFromPack ? {
+    sourceFilename: location.state.sourceFilename,
+    priorTreatyId: location.state.priorTreatyId,
+  } : null;
+
   /* ═══ RENDER ═══ */
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Treaty Detail" headerPill="PROPORTIONAL TREATY: TREATY DETAIL" onBeforeNext={save} onBeforeBack={save}>
       {({ showToast }) => (<>
+
+        <ImportedFromPackBanner quoteId={contractId} importedFromState={importedFromState} />
 
         {/* ── Summary bar ── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>

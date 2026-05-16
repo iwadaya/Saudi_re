@@ -1,6 +1,8 @@
 // server/src/routes/ai.js — Server-side proxy for AI calls.
-// Treaty-detail slip ingest uses OpenAI only. Other routes in this file may
-// still use Anthropic where their callers depend on that response shape.
+// Slip ingest goes through the shared llmClient (Gemini-first,
+// OpenAI-fallback). The /api/ai/complete pass-through still talks to
+// Anthropic directly because its callers depend on the raw Anthropic
+// response shape.
 import { Router } from 'express';
 import { env } from '../config/env.js';
 import { asyncHandler } from '../helpers.js';
@@ -9,15 +11,13 @@ import { validateBody } from '../lib/validate.js';
 import { slipIngestSchema, aiCompleteSchema, facAnalyseDocumentSchema } from '../validation/ai.js';
 import { pool } from '../db/pool.js';
 import { runFacDocumentAnalysis } from '../lib/facDocAi.js';
+import { callLlmJson } from '../lib/llmClient.js';
 
 const router = Router();
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
 const ANTHROPIC_VERSION = '2023-06-01';
-
-const OPENAI_API = 'https://api.openai.com/v1/responses';
-const OPENAI_MODEL = 'gpt-4o';
 
 // ── System prompts (mirrors SlipIngestButton.jsx — single source of truth on server) ──
 function buildSystemPrompt(mode) {
@@ -97,64 +97,20 @@ Rules:
 
 const USER_INSTRUCTION = 'Extract the treaty details from this reinsurance slip and return the JSON object.';
 
-// ── Provider implementations ──
-
-async function extractSlipData(base64, mode) {
-  if (!env.openaiApiKey) throw new Error('OPENAI_API_KEY not configured');
-  // Responses API accepts PDFs as input_file with a base64 data URL.
-  const payload = {
-    model: OPENAI_MODEL,
-    max_output_tokens: 1000,
-    input: [
-      {
-        role: 'system',
-        content: [{ type: 'input_text', text: buildSystemPrompt(mode) }],
-      },
-      {
-        role: 'user',
-        content: [
-          { type: 'input_file', filename: 'slip.pdf', file_data: `data:application/pdf;base64,${base64}` },
-          { type: 'input_text', text: USER_INSTRUCTION },
-        ],
-      },
-    ],
-  };
-  const r = await fetch(OPENAI_API, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${env.openaiApiKey}`,
-    },
-    body: JSON.stringify(payload),
-  });
-  if (!r.ok) {
-    const errBody = await r.json().catch(() => ({}));
-    throw new Error(errBody?.error?.message || `OpenAI ${r.status}`);
-  }
-  const data = await r.json();
-  // Prefer the convenience aggregator if the SDK-style field is present;
-  // otherwise walk the output array.
-  let text = data?.output_text;
-  if (!text) {
-    const parts = [];
-    for (const item of data?.output || []) {
-      for (const c of item?.content || []) {
-        if (typeof c?.text === 'string') parts.push(c.text);
-      }
-    }
-    text = parts.join('');
-  }
-  if (!text) throw new Error('OpenAI returned no text');
-  logger.info('[ai/slip-ingest] OpenAI extraction succeeded');
-  return { text, provider: 'openai' };
-}
-
 // POST /api/ai/slip-ingest
 // Body: { base64: string, mode: 'NP' | 'PROP' }
 router.post('/ai/slip-ingest', validateBody(slipIngestSchema), asyncHandler(async (req, res) => {
   const { base64, mode } = req.body;
   try {
-    const { text, provider } = await extractSlipData(base64, mode);
+    const { text, provider } = await callLlmJson({
+      systemPrompt: buildSystemPrompt(mode),
+      userPrompt: USER_INSTRUCTION,
+      attachments: [{ filename: 'slip.pdf', mime: 'application/pdf', base64 }],
+      // Slip JSON is bounded; 4k is plenty without re-introducing the
+      // 1000-token truncation bug.
+      maxOutputTokens: 4096,
+    });
+    logger.info('[ai/slip-ingest] extraction succeeded', { provider });
     res.json({ text, provider });
   } catch (e) {
     logger.error('[ai/slip-ingest] extraction failed', { error: e?.message });
