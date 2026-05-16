@@ -49,13 +49,17 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      # --include=optional is technically the default, but stating it
-      # explicitly protects against the npm/cli#4828 cross-platform
-      # optional-deps bug if a future npm release changes the default.
-      # Root package.json now pins the three rolldown platform bindings
-      # the team uses (darwin-arm64, darwin-x64, linux-x64-gnu) so the
-      # lockfile contains all of them regardless of which OS regenerates
-      # it.
+      # Three lines of defence against npm/cli#4828 (optional native
+      # bindings don't land on disk when the lockfile was generated on
+      # a different platform):
+      #   1. Root package.json pins the rolldown bindings the team
+      #      actually uses so the lockfile always lists them.
+      #   2. `--include=optional` is explicit (it is the default, but
+      #      we don't want to depend on that).
+      #   3. The setup-node npm cache (~/.npm) can survive across runs
+      #      with corrupted entries for optional deps; an explicit
+      #      `npm install --no-save` after the bulk install forces
+      #      the linux binding onto disk even if the cache lied.
       - name: Install root deps
         run: npm ci --include=optional
 
@@ -64,6 +68,9 @@ jobs:
 
       - name: Install client deps
         run: npm ci --include=optional --prefix client
+
+      - name: Force-install rolldown linux binding (npm/cli#4828 backstop)
+        run: npm install --no-save --no-audit --no-fund @rolldown/binding-linux-x64-gnu
 
       - name: Lint
         run: npm run lint
@@ -108,6 +115,11 @@ jobs:
         run: |
           npm ci --include=optional
           npm ci --include=optional --prefix server
+
+      # Same npm/cli#4828 backstop as the lint+unit job — the
+      # integration job runs vitest too via `npm run test:server`.
+      - name: Force-install rolldown linux binding (npm/cli#4828 backstop)
+        run: npm install --no-save --no-audit --no-fund @rolldown/binding-linux-x64-gnu
 
       - name: Run DB migrations
         run: npm run migrate --prefix server
