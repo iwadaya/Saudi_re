@@ -70,7 +70,11 @@ jobs:
         run: npm ci --include=optional --prefix client
 
       - name: Force-install rolldown linux binding (npm/cli#4828 backstop)
-        run: npm install --no-save --no-audit --no-fund @rolldown/binding-linux-x64-gnu
+        # --force forces npm to re-extract the binding even when the
+        # lockfile says it's already satisfied — without --force the
+        # post-pin lockfile makes this step a no-op and the binding
+        # never reaches disk.
+        run: npm install --no-save --no-audit --no-fund --force @rolldown/binding-linux-x64-gnu
 
       - name: Lint
         run: npm run lint
@@ -119,7 +123,11 @@ jobs:
       # Same npm/cli#4828 backstop as the lint+unit job — the
       # integration job runs vitest too via `npm run test:server`.
       - name: Force-install rolldown linux binding (npm/cli#4828 backstop)
-        run: npm install --no-save --no-audit --no-fund @rolldown/binding-linux-x64-gnu
+        # --force forces npm to re-extract the binding even when the
+        # lockfile says it's already satisfied — without --force the
+        # post-pin lockfile makes this step a no-op and the binding
+        # never reaches disk.
+        run: npm install --no-save --no-audit --no-fund --force @rolldown/binding-linux-x64-gnu
 
       - name: Run DB migrations
         run: npm run migrate --prefix server
