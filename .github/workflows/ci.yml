@@ -43,23 +43,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `cache: npm` — the setup-node npm cache caches ~/.npm
+      # across runs, and a previous cross-platform install can leave
+      # corrupted entries for optional native deps (npm/cli#4828)
+      # that survive every subsequent `npm ci`, even with --force.
+      # Trading 10–15 s of fresh-download time per run for a
+      # deterministic install of all rolldown platform bindings.
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          cache: npm
 
-      # Three lines of defence against npm/cli#4828 (optional native
-      # bindings don't land on disk when the lockfile was generated on
-      # a different platform):
-      #   1. Root package.json pins the rolldown bindings the team
-      #      actually uses so the lockfile always lists them.
-      #   2. `--include=optional` is explicit (it is the default, but
-      #      we don't want to depend on that).
-      #   3. The setup-node npm cache (~/.npm) can survive across runs
-      #      with corrupted entries for optional deps; an explicit
-      #      `npm install --no-save` after the bulk install forces
-      #      the linux binding onto disk even if the cache lied.
+      # Root package.json pins the three rolldown platform bindings
+      # (darwin-arm64, darwin-x64, linux-x64-gnu) as optionalDependencies
+      # so the lockfile lists them regardless of which OS regenerates
+      # it. `--include=optional` is explicit (also the default; future-
+      # proofing).
       - name: Install root deps
         run: npm ci --include=optional
 
@@ -68,13 +67,6 @@ jobs:
 
       - name: Install client deps
         run: npm ci --include=optional --prefix client
-
-      - name: Force-install rolldown linux binding (npm/cli#4828 backstop)
-        # --force forces npm to re-extract the binding even when the
-        # lockfile says it's already satisfied — without --force the
-        # post-pin lockfile makes this step a no-op and the binding
-        # never reaches disk.
-        run: npm install --no-save --no-audit --no-fund --force @rolldown/binding-linux-x64-gnu
 
       - name: Lint
         run: npm run lint
@@ -109,25 +101,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `cache: npm` — same reason as the lint+unit job: the
+      # cross-platform optional-deps cache (npm/cli#4828) is exactly
+      # the failure mode this job hit before. Fresh download every run.
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          cache: npm
 
       - name: Install (root + server)
         run: |
           npm ci --include=optional
           npm ci --include=optional --prefix server
-
-      # Same npm/cli#4828 backstop as the lint+unit job — the
-      # integration job runs vitest too via `npm run test:server`.
-      - name: Force-install rolldown linux binding (npm/cli#4828 backstop)
-        # --force forces npm to re-extract the binding even when the
-        # lockfile says it's already satisfied — without --force the
-        # post-pin lockfile makes this step a no-op and the binding
-        # never reaches disk.
-        run: npm install --no-save --no-audit --no-fund --force @rolldown/binding-linux-x64-gnu
 
       - name: Run DB migrations
         run: npm run migrate --prefix server
