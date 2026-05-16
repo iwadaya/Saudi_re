@@ -49,31 +49,21 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      # Background on the install dance:
-      # vitest 4 → rolldown → @rolldown/binding-linux-x64-gnu. Both
-      # `npm install` and `npm ci` hit npm/cli#4828 on the GitHub
-      # runner: the linux binding is listed in the lockfile as
-      # optional but doesn't land on disk, so vitest crashes at
-      # "Cannot find native binding" before any test runs. The
-      # binding's own tarball is fine — npm just won't extract it
-      # to node_modules under the optional-deps path.
-      #
-      # Workaround per npm/cli#4828 comments: install the binding
-      # explicitly with --no-save after the bulk install. The
-      # convenience `install:all` script (npm install everywhere)
-      # is still fine for local dev where the lockfile and
-      # node_modules co-evolve and the platform bindings line up.
+      # --include=optional is technically the default, but stating it
+      # explicitly protects against the npm/cli#4828 cross-platform
+      # optional-deps bug if a future npm release changes the default.
+      # Root package.json now pins the three rolldown platform bindings
+      # the team uses (darwin-arm64, darwin-x64, linux-x64-gnu) so the
+      # lockfile contains all of them regardless of which OS regenerates
+      # it.
       - name: Install root deps
-        run: npm ci
+        run: npm ci --include=optional
 
       - name: Install server deps
-        run: npm ci --prefix server
+        run: npm ci --include=optional --prefix server
 
       - name: Install client deps
-        run: npm ci --prefix client
-
-      - name: Force-install rolldown linux binding (npm/cli#4828 workaround)
-        run: npm install --no-save --no-audit --no-fund @rolldown/binding-linux-x64-gnu
+        run: npm ci --include=optional --prefix client
 
       - name: Lint
         run: npm run lint
@@ -116,8 +106,8 @@ jobs:
 
       - name: Install (root + server)
         run: |
-          npm ci
-          npm ci --prefix server
+          npm ci --include=optional
+          npm ci --include=optional --prefix server
 
       - name: Run DB migrations
         run: npm run migrate --prefix server
