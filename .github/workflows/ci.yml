@@ -49,8 +49,22 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      - name: Install (root + server + client)
-        run: npm run install:all
+      # `npm install` hits npm/cli#4828 on the runner — the rolldown
+      # native binding (@rolldown/binding-linux-x64-gnu, pulled in by
+      # vitest 4) is listed in the lockfile as optional but doesn't end
+      # up on disk, so vitest crashes at "Cannot find native binding".
+      # `npm ci` does a clean install straight from the lockfile and
+      # isn't affected by that bug, so we use it here instead of the
+      # convenience `install:all` script (which is still fine for local
+      # dev where the lockfile and node_modules co-evolve).
+      - name: Install root deps (npm ci — avoids optional-deps bug)
+        run: npm ci
+
+      - name: Install server deps
+        run: npm ci --prefix server
+
+      - name: Install client deps
+        run: npm ci --prefix client
 
       - name: Lint
         run: npm run lint
