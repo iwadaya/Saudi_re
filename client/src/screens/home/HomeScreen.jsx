@@ -622,7 +622,6 @@ export default function HomeScreen() {
             <button className="action-pill action-pill--primary" onClick={() => startNew('NP')}><span className="plus">+</span> Price Non-Proportional Treaty</button>
             <button className="action-pill action-pill--primary" onClick={() => setShowRenewal(true)}><span className="plus">+</span> Renew Treaty <span style={{ marginLeft: 8, fontSize: 9, background: 'rgba(255,255,255,0.2)', padding: '2px 6px', borderRadius: 4 }}>NEW</span></button>
             <button className="action-pill action-pill--primary" onClick={startQuote}><span className="plus">+</span> Quote Treaty</button>
-            <button className="action-pill action-pill--primary" onClick={() => setShowImport(true)}><span className="plus">⬆</span> Import Renewal Pack</button>
           </div>
         </section>
         <div className="dash-grid dash-grid--home">

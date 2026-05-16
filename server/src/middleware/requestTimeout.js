@@ -25,7 +25,12 @@ export function requestTimeout(ms = 35_000) {
       mountedPath.startsWith('/ai/') ||
       originalPath.startsWith('/api/ai/') ||
       mountedPath.includes('/documents') ||
-      originalPath.includes('/documents')
+      originalPath.includes('/documents') ||
+      // Renewal-pack import runs parser → LLM extraction → mapping →
+      // DB persist. The LLM step alone is ~10–30 s; bumping the global
+      // timeout would weaken the protection everywhere else.
+      mountedPath.includes('/import-renewal-pack') ||
+      originalPath.includes('/import-renewal-pack')
     ) {
       return next();
     }
