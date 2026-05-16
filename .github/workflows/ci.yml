@@ -113,6 +113,12 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/reinsurance_tool
       NODE_ENV: test
       TEST_WITH_DB: '1'
+      # env.js freezes provider keys at import time, before integration
+      # tests can mutate process.env. Provide stubs at the process
+      # level so the renewal-pack import test's mocked fetch
+      # interceptor takes over — they're never used to call out.
+      GEMINI_API_KEY: ci-stub-gemini-key
+      OPENAI_API_KEY: ci-stub-openai-key
     steps:
       - uses: actions/checkout@v4
 
