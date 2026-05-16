@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import Toast from './Toast.jsx';
 
 // The Toast host carries the live region the rest of the app relies on
@@ -30,5 +30,13 @@ describe('Toast', () => {
     rerender(<Toast toasts={[{ id: 2, msg: 'Second' }]} />);
     expect(screen.queryByText('First')).not.toBeInTheDocument();
     expect(screen.getByText('Second')).toBeInTheDocument();
+  });
+
+  it('renders an actionable toast as a button when onClick is provided', () => {
+    const onClick = vi.fn();
+    render(<Toast toasts={[{ id: 1, msg: 'Tap for details', onClick }]} />);
+    const btn = screen.getByRole('button', { name: 'Tap for details' });
+    fireEvent.click(btn);
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 });

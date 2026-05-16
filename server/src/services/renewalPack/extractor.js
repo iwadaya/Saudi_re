@@ -32,6 +32,14 @@ const DEFAULT_TEMPERATURE = 0;
  * @param {object} [opts]
  * @param {Function} [opts.callLlm] - injected for tests. Defaults to callLlmJson.
  * @param {number} [opts.maxOutputTokens]
+ * @param {'proportional'|'non_proportional'} [opts.forceType] -
+ *   Override parser-detected type. Used by the renewal-pack import
+ *   route to lock extraction to the quote's treaty category (parser
+ *   classification is only advisory now — the quote's treaty detail
+ *   page is authoritative). When the forced type doesn't match the
+ *   pack's actual shape, the LLM will return mostly empty fields with
+ *   warnings; the caller is expected to handle that gracefully rather
+ *   than fail the import.
  * @returns {Promise<{
  *   type: string,
  *   extraction: object | null,
@@ -41,11 +49,11 @@ const DEFAULT_TEMPERATURE = 0;
  * }>}
  */
 export async function extractRenewalPack(parsedPack, opts = {}) {
-  const { callLlm = callLlmJson, maxOutputTokens = DEFAULT_MAX_TOKENS } = opts;
+  const { callLlm = callLlmJson, maxOutputTokens = DEFAULT_MAX_TOKENS, forceType } = opts;
   if (!parsedPack || typeof parsedPack !== 'object') {
     throw new Error('extractRenewalPack: parsedPack must be the parser.js output object');
   }
-  const type = parsedPack.type;
+  const type = forceType || parsedPack.type;
   if (type !== 'proportional' && type !== 'non_proportional') {
     throw new Error(`extractRenewalPack: unsupported type "${type}"`);
   }

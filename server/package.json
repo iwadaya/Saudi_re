@@ -9,7 +9,8 @@
     "migrate": "node src/db/migrate.js",
     "migrate:up": "node src/db/migrate.js",
     "migrate:status": "node src/db/migrateStatus.js",
-    "seed": "node src/db/seeds/run.js"
+    "seed": "node src/db/seeds/run.js",
+    "cleanup:snapshots": "node scripts/cleanup-snapshots.js"
   },
   "dependencies": {
     "cloudinary": "^2.5.1",

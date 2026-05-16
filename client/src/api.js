@@ -697,23 +697,39 @@ export const api = {
   },
 
   /**
-   * POST a renewal-pack workbook to /api/quotes/import-renewal-pack.
-   * Returns { quoteId, type, fieldConfidence, warnings, unmatchedCresta,
-   *   match: { mode: 'new' | 'renewal' | 'ambiguous', ... } }.
+   * Renewal-pack import endpoints.
    *
-   * Server cap is 25 MB; clients should check before upload to avoid a
-   * round-trip on rejection. Long-running call (LLM extraction takes
-   * 10–20s) — the caller should show progress states.
+   * The flow is async: POST kicks off a background job and returns
+   * 202 { jobId }; the caller polls GET .../import-renewal-pack/:jobId
+   * until status is 'done' or 'failed'. Snapshots taken before each
+   * import are restorable for 30 days via the snapshots endpoints.
+   *
+   * Returns from each call:
+   *   importRenewalPack(quoteId, documentId)         → { jobId }
+   *   getRenewalPackImportJob(quoteId, jobId)        → { status, filledPages, warnings, unmatchedCresta, restorePointId } | { status: 'processing' } | { status: 'failed', error }
+   *   getActiveRenewalPackImport(quoteId)            → { activeJob: {jobId, documentId, startedAt} | null }
+   *   listImportSnapshots(quoteId)                   → Array<{ id, capturedAt, filename, filledPages, documentId, restorable, restoredAt }>
+   *   restoreImportSnapshot(quoteId, snapshotId)     → { ok: true, snapshotId } | 404/410
    */
-  importRenewalPack(file, opts = {}) {
-    const form = new FormData();
-    form.append('file', file);
-    return request('/api/quotes/import-renewal-pack', {
+  importRenewalPack(quoteId, documentId, opts = {}) {
+    return request(`/api/quotes/${enc(quoteId)}/import-renewal-pack`, {
       method: 'POST',
-      body: form,
-      // LLM extraction can take ~30s in the worst case; don't let the
-      // default request timeout abort a successful import.
-      timeoutMs: opts.timeoutMs ?? 90_000,
+      body: { documentId },
+      ...opts,
+    });
+  },
+  getRenewalPackImportJob(quoteId, jobId, opts = {}) {
+    return request(`/api/quotes/${enc(quoteId)}/import-renewal-pack/${enc(jobId)}`, opts);
+  },
+  getActiveRenewalPackImport(quoteId, opts = {}) {
+    return request(`/api/quotes/${enc(quoteId)}/import-renewal-pack`, opts);
+  },
+  listImportSnapshots(quoteId, opts = {}) {
+    return request(`/api/quotes/${enc(quoteId)}/import-snapshots`, opts);
+  },
+  restoreImportSnapshot(quoteId, snapshotId, opts = {}) {
+    return request(`/api/quotes/${enc(quoteId)}/import-snapshots/${enc(snapshotId)}/restore`, {
+      method: 'POST',
       ...opts,
     });
   },

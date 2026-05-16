@@ -5,6 +5,9 @@ import WordingChecker from './WordingChecker';
 import { useContractId } from '../../hooks/useContractId';
 import { useGlobalToast } from '../../hooks/useToast';
 import WizardLayout from '../../components/WizardLayout';
+import ImportProgressModal from '../../components/ImportProgressModal';
+import WarningsDrawer from '../../components/WarningsDrawer';
+import RestoreImportConfirm from '../../components/RestoreImportConfirm';
 
 const DOC_TYPES = [
   'Final Slip','Draft Slip','Expiring Slip','Renewal Pack',
@@ -17,6 +20,15 @@ const WORDING_PRIORITY = ['Final Slip','Draft Slip','Expiring Slip'];
 
 const VIEWABLE  = new Set(['application/pdf','image/png','image/jpeg','image/gif','image/webp','text/plain','text/csv']);
 const isViewable = m => VIEWABLE.has(m) || (m||'').startsWith('image/');
+
+// The upload form uses display-cased 'Renewal Pack' but the server's
+// import endpoint accepts either form. Normalise here so the action
+// shows up whether the row came in via the new convention or the old.
+function isRenewalPack(d) {
+  return String(d?.doc_type || '').toLowerCase().replace(/\s+/g, '_') === 'renewal_pack';
+}
+
+const IMPORT_POLL_MS = 2_000;
 
 // Default title suggestion based on doc type
 function defaultTitle(docType) {
@@ -52,6 +64,21 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
   const [dragFile,    setDragFile]    = useState(null); // file from drag — no hidden input needed
   const fileRef = useRef(null);
 
+  // ── Renewal-pack import state ─────────────────────────────────────────────
+  // The Fill button is gated on:
+  //   • the row being a renewal_pack document (rendered conditionally),
+  //   • the quote's treaty detail being saved (treaty_type_id present),
+  //   • no other import currently in flight for this quote.
+  // We load the quote once for the treaty check and poll for the
+  // active job + snapshots list on mount + after each import completes.
+  const [treatyDetailSaved, setTreatyDetailSaved] = useState(false);
+  const [activeJob, setActiveJob] = useState(null); // { jobId, documentId, startedAt } | null
+  const [snapshotsByDocId, setSnapshotsByDocId] = useState({}); // docId → most-recent snapshot
+  const [importingFor, setImportingFor] = useState(null); // { documentId, filename } when modal is open
+  const [drawer, setDrawer] = useState(null); // { warnings, unmatchedCresta } | null
+  const [restoring, setRestoring] = useState(null); // { snapshotId, documentId } | null
+  const [restoreBusy, setRestoreBusy] = useState(false);
+
   const apiOpts = useMemo(() => (quoteMode ? { quote: true } : undefined), [quoteMode]);
 
   const load = useCallback(async () => {
@@ -69,6 +96,109 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
   }, [apiOpts, contractId, quoteMode]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Load import-related state for quotes only (renewal-pack import
+  // doesn't apply to contracts — the endpoint is /api/quotes/...).
+  const loadImportState = useCallback(async () => {
+    if (!contractId || !quoteMode) return;
+    try {
+      const [q, active, snapshots] = await Promise.all([
+        api.getContract(contractId, { quote: true }),
+        api.getActiveRenewalPackImport(contractId).catch(() => ({ activeJob: null })),
+        api.listImportSnapshots(contractId).catch(() => []),
+      ]);
+      setTreatyDetailSaved(!!q?.header?.treaty_type_id);
+      setActiveJob(active?.activeJob || null);
+      const byDoc = {};
+      for (const snap of Array.isArray(snapshots) ? snapshots : []) {
+        if (!snap.documentId) continue;
+        // listImportSnapshots returns newest first; keep the first hit per doc.
+        if (!byDoc[snap.documentId]) byDoc[snap.documentId] = snap;
+      }
+      setSnapshotsByDocId(byDoc);
+    } catch (e) {
+      console.warn('[DocumentsScreen] loadImportState failed:', e?.message);
+    }
+  }, [contractId, quoteMode]);
+
+  useEffect(() => { loadImportState(); }, [loadImportState]);
+
+  // While we own the active job (we just kicked it off), poll every
+  // IMPORT_POLL_MS until terminal. setImmediate-driven job means it
+  // usually flips within a few seconds; the poll cap protects us
+  // against a hung server.
+  useEffect(() => {
+    if (!importingFor || !activeJob?.jobId) return undefined;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await api.getRenewalPackImportJob(contractId, activeJob.jobId);
+        if (cancelled) return;
+        if (res.status === 'done') {
+          finishImportSuccess(res);
+        } else if (res.status === 'failed') {
+          finishImportFailure(res.error || 'Import failed');
+        }
+      } catch (e) {
+        if (!cancelled) finishImportFailure(e?.message || 'Import job poll failed');
+      }
+    };
+    tick(); // immediate first poll — done jobs usually finish in <1s
+    const handle = setInterval(tick, IMPORT_POLL_MS);
+    return () => { cancelled = true; clearInterval(handle); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importingFor, activeJob?.jobId, contractId]);
+
+  const finishImportSuccess = useCallback((res) => {
+    const filename = importingFor?.filename || 'pack';
+    const filled = Array.isArray(res.filledPages) ? res.filledPages : [];
+    const warnings = Array.isArray(res.warnings) ? res.warnings : [];
+    const unmatched = Array.isArray(res.unmatchedCresta) ? res.unmatchedCresta : [];
+    const hasIssues = warnings.length + unmatched.length > 0;
+    setImportingFor(null);
+    setActiveJob(null);
+    loadImportState();
+
+    if (hasIssues) {
+      const total = warnings.length + unmatched.length;
+      showToast(
+        `Filled ${filled.length} pages from ${filename} with ${total} warning${total === 1 ? '' : 's'} — tap to view.`,
+        { duration: 6000, onClick: () => setDrawer({ warnings, unmatchedCresta: unmatched }) },
+      );
+    } else {
+      showToast(
+        `Filled ${filled.length} pages from ${filename}. Review and adjust in the wizard.`,
+        4000,
+      );
+    }
+  }, [importingFor, loadImportState, showToast]);
+
+  const finishImportFailure = useCallback((msg) => {
+    setImportingFor(null);
+    setActiveJob(null);
+    showToast(`Import failed: ${msg}`, 5000);
+    loadImportState();
+  }, [loadImportState, showToast]);
+
+  const startImport = useCallback(async (doc) => {
+    if (!contractId) return;
+    const docId = doc.document_id || doc.id;
+    setImportingFor({ documentId: docId, filename: doc.file_name || doc.name || 'pack' });
+    try {
+      const res = await api.importRenewalPack(contractId, docId);
+      setActiveJob({ jobId: res.jobId, documentId: docId, startedAt: new Date().toISOString() });
+    } catch (e) {
+      const code = e?.body?.code || e?.code;
+      const msg = code === 'NOT_RENEWAL_PACK' ? 'Document is not a renewal pack'
+        : code === 'TREATY_DETAIL_REQUIRED' ? 'Save Treaty Detail first'
+        : code === 'IMPORT_IN_PROGRESS' ? 'An import is already in progress'
+        : (e?.message || 'Could not start import');
+      setImportingFor(null);
+      showToast(msg, 5000);
+      // Refresh in-progress state so the UI catches up if there was a race.
+      loadImportState();
+    }
+  }, [contractId, loadImportState, showToast]);
 
   const handleDocTypeChange = (t) => {
     setDocType(t);
@@ -130,7 +260,32 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
     else window.open(api.getDocumentDownloadUrl(docId), '_blank');
   };
 
+  // ── Restore (Undo) handlers ───────────────────────────────────────────────
+  const confirmRestore = useCallback(async () => {
+    if (!restoring) return;
+    setRestoreBusy(true);
+    try {
+      await api.restoreImportSnapshot(contractId, restoring.snapshotId);
+      showToast('Restored wizard to pre-import state.', 4000);
+      setRestoring(null);
+      await loadImportState();
+    } catch (e) {
+      const status = e?.status;
+      const code = e?.body?.code;
+      if (status === 410 || code === 'SNAPSHOT_ALREADY_RESTORED' || code === 'SNAPSHOT_EXPIRED') {
+        showToast('This import has already been restored, or is older than 30 days.', 5000);
+        setRestoring(null);
+        await loadImportState(); // refresh so the now-stale link disappears
+      } else {
+        showToast(`Restore failed: ${e?.message || e}`, 5000);
+      }
+    } finally {
+      setRestoreBusy(false);
+    }
+  }, [contractId, restoring, loadImportState, showToast]);
+
   const fmtSize = (b) => !b ? '–' : b < 1024 ? b+'B' : b < 1048576 ? Math.round(b/1024)+'KB' : (b/1048576).toFixed(1)+'MB';
+  const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
 
   // Find best wording doc for analysis (priority: Final Slip > Draft Slip > Expiring Slip)
   const bestWordingDoc = WORDING_PRIORITY.reduce((found, type) =>
@@ -144,6 +299,8 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
   const inp       = { width: '100%', borderRadius: 999, border: '1px solid rgba(148,163,184,0.25)', background: 'rgba(2,6,23,0.20)', color: 'rgba(226,232,240,0.88)', padding: '8px 14px', outline: 'none', fontSize: 12, boxSizing: 'border-box' };
   const sel       = { ...inp, appearance: 'none', WebkitAppearance: 'none', paddingRight: 28 };
   const smBtn     = { borderRadius: 999, padding: '6px 14px', border: '1px solid rgba(148,163,184,0.25)', background: 'rgba(2,6,23,0.20)', color: 'rgba(226,232,240,0.86)', fontWeight: 800, fontSize: 12, cursor: 'pointer' };
+  const fillBtn   = { ...smBtn, borderColor: 'rgba(var(--accent-rgb), 0.50)', color: 'var(--accent)', background: 'rgba(var(--accent-rgb), 0.06)' };
+  const fillBtnDisabled = { ...fillBtn, opacity: 0.45, cursor: 'not-allowed' };
 
   const currentFile = dragFile || (fileRef.current?.files?.[0]);
 
@@ -248,6 +405,16 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
                   {docs.map(d => {
                     const docId = d.document_id || d.id;
                     const isWording = WORDING_PRIORITY.includes(d.doc_type);
+                    const isRP = quoteMode && isRenewalPack(d);
+                    const snapshot = isRP ? snapshotsByDocId[docId] : null;
+                    const otherImportRunning = !!(activeJob && activeJob.documentId !== docId);
+                    const thisImportRunning = !!(activeJob && activeJob.documentId === docId);
+                    const fillDisabled = !treatyDetailSaved || !!activeJob;
+                    const fillTitle = !treatyDetailSaved
+                      ? 'Save Treaty Detail first'
+                      : (otherImportRunning || thisImportRunning)
+                        ? 'Import in progress'
+                        : 'Fill the remaining wizard pages from this renewal pack';
                     return (
                       <tr key={docId} style={{ borderBottom:'1px solid rgba(148,163,184,0.08)', background: isWording ? 'rgba(34,197,94,0.03)' : 'transparent' }}>
                         <td style={{ padding:'10px 4px', fontWeight:700, color:'rgba(226,232,240,0.90)' }}>
@@ -255,6 +422,26 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
                             {d.file_name||d.name||'–'}
                           </span>
                           {d.description && <div style={{ marginTop:2, fontSize:11, color:'rgba(148,163,184,0.70)', fontWeight:400 }}>{d.description}</div>}
+                          {isRP && snapshot && (
+                            <div style={{ marginTop:4, fontSize:11, color:'rgba(148,163,184,0.85)', fontWeight:500 }}>
+                              Imported {fmtDate(snapshot.capturedAt)}
+                              {snapshot.restorable && (
+                                <>
+                                  {' · '}
+                                  <button
+                                    type="button"
+                                    onClick={() => setRestoring({ snapshotId: snapshot.id, documentId: docId })}
+                                    style={{ background:'none', border:'none', padding:0, fontFamily:'inherit', fontSize:11, color:'rgba(96,165,250,0.95)', textDecoration:'underline', cursor:'pointer' }}
+                                  >
+                                    Undo
+                                  </button>
+                                </>
+                              )}
+                              {!snapshot.restorable && snapshot.restoredAt && (
+                                <> {' · '} Restored {fmtDate(snapshot.restoredAt)}</>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td style={{ padding:'10px 4px' }}>
                           <span style={{ display:'inline-flex', padding:'3px 9px', borderRadius:999, border:`1px solid ${isWording?'rgba(34,197,94,0.35)':'rgba(148,163,184,0.22)'}`, background: isWording?'rgba(34,197,94,0.08)':'rgba(2,6,23,0.20)', fontSize:11, fontWeight:800, color: isWording?'rgba(34,197,94,0.9)':'inherit' }}>
@@ -265,6 +452,18 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
                         <td style={{ padding:'10px 4px', color:'rgba(226,232,240,0.65)' }}>{fmtSize(d.size_bytes)}</td>
                         <td style={{ padding:'10px 4px', color:'rgba(226,232,240,0.65)' }}>{(d.uploaded_at||'').slice(0,10)}</td>
                         <td style={{ padding:'10px 4px', textAlign:'right', display:'flex', justifyContent:'flex-end', gap:6, flexWrap:'wrap' }}>
+                          {isRP && (
+                            <button
+                              type="button"
+                              title={fillTitle}
+                              aria-label="Fill from renewal pack"
+                              disabled={fillDisabled}
+                              style={fillDisabled ? fillBtnDisabled : fillBtn}
+                              onClick={() => startImport(d)}
+                            >
+                              {thisImportRunning ? '⟳ Filling…' : '✨ Fill from renewal pack'}
+                            </button>
+                          )}
                           {isViewable(d.mime_type) && (
                             <button style={{ ...smBtn, borderColor:'rgba(34,197,94,0.35)', color:'rgba(34,197,94,0.9)' }} onClick={()=>openPreview(d)}>View</button>
                           )}
@@ -310,6 +509,21 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
               </div>
             </div>
           )}
+
+          {/* Renewal-pack import flow */}
+          <ImportProgressModal open={!!importingFor} filename={importingFor?.filename} />
+          <WarningsDrawer
+            open={!!drawer}
+            warnings={drawer?.warnings || []}
+            unmatchedCresta={drawer?.unmatchedCresta || []}
+            onClose={() => setDrawer(null)}
+          />
+          <RestoreImportConfirm
+            open={!!restoring}
+            busy={restoreBusy}
+            onConfirm={confirmRestore}
+            onCancel={() => { if (!restoreBusy) setRestoring(null); }}
+          />
         </div>
       )}
     </WizardLayout>
