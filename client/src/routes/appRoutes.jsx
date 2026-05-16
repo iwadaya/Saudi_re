@@ -54,7 +54,6 @@ const NpCrestaAggregates = lazy(() => import('../screens/non_proportional/cresta
 const NpEventLossTables = lazy(() => import('../screens/non_proportional/event_loss_tables/NpEventLossTables'));
 const NpFinalPricing    = lazy(() => import('../screens/non_proportional/final_pricing/NpFinalPricing'));
 const ExcelImportAgent  = lazy(() => import('../screens/shared/ExcelImportAgent'));
-const ReviewImportScreen = lazy(() => import('../screens/import_review/ReviewImportScreen'));
 const QuickBenchmark    = lazy(() => import('../screens/benchmark/QuickBenchmark'));
 const UserManagementScreen = lazy(() => import('../screens/admin/UserManagementScreen'));
 const FormulaWorkbench     = lazy(() => import('../screens/workbench/FormulaWorkbench'));
@@ -79,7 +78,6 @@ export const appRoutes = [
   { path: '/dashboard', component: DashboardScreen },
   { path: '/approvals', component: ApprovalsScreen, approvalsOnly: true },
   { path: '/import',    component: ExcelImportAgent },
-  { path: '/quotes/:id/review-import', component: ReviewImportScreen },
   { path: '/admin/users', component: UserManagementScreen, approvalsOnly: true },
   { path: '/workbench', component: FormulaWorkbench },
   { path: '/workbench/:module/:name', component: FormulaDetail },

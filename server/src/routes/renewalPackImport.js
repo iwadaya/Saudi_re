@@ -38,7 +38,14 @@ import {
 const router = Router();
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const RENEWAL_PACK_DOC_TYPE = 'renewal_pack';
+
+// The Documents UI uses display-cased "Renewal Pack" in the upload
+// form (see DocumentsScreen DOC_TYPES list); the prompt and server
+// API talk about "renewal_pack". Normalize both to one canonical
+// form so either upload path is accepted as authoritative.
+function isRenewalPackDocType(value) {
+  return String(value || '').toLowerCase().replace(/\s+/g, '_') === 'renewal_pack';
+}
 
 // ── POST /quotes/:quoteId/import-renewal-pack ─────────────────────────────
 
@@ -81,7 +88,7 @@ router.post(
     // Document must be of type renewal_pack (the upload classifier
     // sets doc_type — we only accept docs that were uploaded as
     // renewal packs).
-    if (String(document.doc_type || '').toLowerCase() !== RENEWAL_PACK_DOC_TYPE) {
+    if (!isRenewalPackDocType(document.doc_type)) {
       return res.status(409).json({
         error: 'Document is not a renewal pack',
         code: 'NOT_RENEWAL_PACK',
@@ -144,6 +151,37 @@ router.post(
     });
 
     return res.status(202).json({ jobId });
+  }),
+);
+
+// ── GET /quotes/:quoteId/import-renewal-pack ──────────────────────────────
+// Read the currently-active import job for a quote, if any. The
+// Documents tab calls this on mount so it can disable the "Fill from
+// renewal pack" button while another import is running.
+router.get(
+  '/quotes/:quoteId/import-renewal-pack',
+  asyncHandler(async (req, res) => {
+    const { quoteId } = req.params;
+    if (!UUID_RE.test(quoteId)) {
+      return res.json({ activeJob: null });
+    }
+    const { rows } = await pool.query(
+      `SELECT job_id, document_id, started_at
+         FROM public.import_jobs
+        WHERE quote_id = $1 AND status = 'processing'
+        ORDER BY started_at DESC
+        LIMIT 1`,
+      [quoteId],
+    );
+    if (!rows.length) return res.json({ activeJob: null });
+    const job = rows[0];
+    return res.json({
+      activeJob: {
+        jobId: job.job_id,
+        documentId: job.document_id,
+        startedAt: job.started_at,
+      },
+    });
   }),
 );
 

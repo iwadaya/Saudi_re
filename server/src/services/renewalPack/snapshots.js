@@ -104,14 +104,18 @@ export async function markSnapshotRestored(client, snapshotId) {
 /**
  * List snapshots for a quote. Used by GET /import-snapshots.
  * `restorable` is computed at read time from restored_at + age.
+ * `documentId` comes from the originating job so the UI can match
+ * a snapshot to its source document row.
  */
 export async function listSnapshotsForQuote(client, quoteId) {
   const { rows } = await client.query(
-    `SELECT snapshot_id, filename, filled_pages, captured_at, restored_at,
-            (captured_at < (now() - ($2 || ' days')::interval)) AS expired
-       FROM public.import_snapshots
-      WHERE quote_id=$1
-      ORDER BY captured_at DESC`,
+    `SELECT s.snapshot_id, s.filename, s.filled_pages, s.captured_at, s.restored_at,
+            j.document_id,
+            (s.captured_at < (now() - ($2 || ' days')::interval)) AS expired
+       FROM public.import_snapshots s
+       LEFT JOIN public.import_jobs j ON j.job_id = s.job_id
+      WHERE s.quote_id=$1
+      ORDER BY s.captured_at DESC`,
     [quoteId, String(RETENTION_DAYS)],
   );
   return rows.map((r) => ({
@@ -119,6 +123,7 @@ export async function listSnapshotsForQuote(client, quoteId) {
     capturedAt: r.captured_at,
     filename: r.filename,
     filledPages: r.filled_pages || [],
+    documentId: r.document_id || null,
     restorable: !r.restored_at && !r.expired,
     restoredAt: r.restored_at || null,
   }));
