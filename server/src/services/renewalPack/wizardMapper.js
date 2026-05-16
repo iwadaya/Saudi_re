@@ -1,227 +1,151 @@
-// Maps a validated ProportionalExtraction / NonProportionalExtraction
-// from extractor.js into the shape the existing quote wizard hydrates
-// from — see GET /api/quotes/:id in server/src/routes/quotes.js and the
-// quotePutBodySchema in validation/quote.js.
+// Translates a ProportionalExtraction / NonProportionalExtraction
+// from extractor.js into per-page write data the page registry can
+// persist. One entry per wizard page that the renewal pack actually
+// populates — pages with no data don't appear in the output, so the
+// orchestrator never touches them (and the snapshot doesn't include
+// them either).
 //
-// Two things to keep in mind:
-//   1. Real FKs (cedant_id, broker_id, country_id, currency_id,
-//      treaty_type_id, class_of_business_id) live in lookup tables on
-//      the server. The extractor gives us *names*, not UUIDs. The mapper
-//      surfaces those names in dedicated `*_name` fields and leaves the
-//      FK columns null — the reviewer screen resolves them before save.
-//   2. CRESTA zones MUST match an entry in ref_cresta_zone (per the
-//      uniqueness constraint added in migration 064 on quote_cresta_data).
-//      The mapper takes an injected `crestaLookup` so the unit tests can
-//      run without DB access. Anything that doesn't resolve goes into
-//      unmatchedCresta[] + warnings[] and is left out of the wizard
-//      state — we never invent zone IDs.
+// CRESTA is the one place we can't blindly write: migration 064 has
+// a uniqueness constraint that requires zone_id to match a row in
+// public.ref_cresta_zone. Unresolved zones go into unmatchedCresta[]
+// + warnings; matched zones get written. Zones with no resolution
+// are NOT included in the cresta page write — we never invent zone
+// IDs.
 
 const NUMBER_RE = /^-?\d+(?:\.\d+)?$/;
 
 /**
  * @param {object} extraction - The .extraction field returned by extractRenewalPack.
- * @param {'proportional'|'non_proportional'} extraction's matching schema is enforced upstream.
  * @param {object} [opts]
+ * @param {'PROPORTIONAL'|'NON_PROPORTIONAL'} [opts.treatyCategory] -
+ *   The quote's treaty category, used to gate NP-only or PROP-only
+ *   page writes. When omitted, both branches' pages are produced if
+ *   the extraction contains them.
  * @param {(args: {countryHint?: string, zoneName: string, zoneCode?: string}) =>
  *          Promise<{ zone_db_id: string, country_id: string|null, zone_id: string, zone_name: string } | null>}
- *        [opts.crestaLookup] - Resolves a CRESTA zone name to a DB row.
- *        When omitted, every CRESTA zone falls into unmatchedCresta.
+ *   [opts.crestaLookup] - Resolves a CRESTA zone name to a DB row.
  * @returns {Promise<{
- *   wizardState: object,
+ *   pages: Record<string, object>,
  *   fieldConfidence: Record<string, number>,
  *   warnings: string[],
- *   unmatchedCresta: string[]
+ *   unmatchedCresta: string[],
  * }>}
  */
-export async function mapExtractionToWizardState(extraction, opts = {}) {
-  const { crestaLookup } = opts;
+export async function mapExtractionToPages(extraction, opts = {}) {
+  const { crestaLookup, treatyCategory } = opts;
   if (!extraction || typeof extraction !== 'object') {
-    throw new Error('mapExtractionToWizardState: extraction is required');
+    throw new Error('mapExtractionToPages: extraction is required');
   }
 
   const warnings = [];
   const fieldConfidence = {};
   const unmatchedCresta = [];
+  const pages = {};
 
   const setLeaf = (path, leaf) => {
     if (!leaf) return undefined;
-    fieldConfidence[path] = typeof leaf.confidence === 'number' ? leaf.confidence : 0;
+    if (typeof leaf.confidence === 'number') fieldConfidence[path] = leaf.confidence;
     return leaf.value;
   };
 
-  // ── header (shared) ────────────────────────────────────────────────────────
-  const cedant = setLeaf('header.cedant_name', extraction.cedant);
-  const treatyName = setLeaf('header.contract_description', extraction.treatyName);
-  const classes = setLeaf('header.classes', extraction.classes);
-  const uwRange = setLeaf('header.uw_year_range', extraction.uwYearRange);
+  // ── proportional branches ────────────────────────────────────────────────
+  if (!treatyCategory || treatyCategory === 'PROPORTIONAL') {
+    const premiumTri = extraction?.premium?.triangle;
+    const claimsTri  = extraction?.claims?.triangle;
+    const osTri      = extraction?.osTriangle;
 
-  // Pick the maximum UW year from the range — convention used elsewhere
-  // in the wizard for "this renewal" (the prior years are historical).
-  let inferredUwYear = null;
-  if (Array.isArray(uwRange) && uwRange.length === 2 && Number.isFinite(uwRange[1])) {
-    inferredUwYear = Math.max(Math.trunc(uwRange[0]), Math.trunc(uwRange[1]));
+    const premiumCells = trianglesToCells(premiumTri, 'premium.triangle', setLeaf);
+    if (premiumCells.length) pages.premium_history = { cells: premiumCells };
+
+    const claimsCells = trianglesToCells(claimsTri, 'claims.triangle', setLeaf);
+    const osCells     = trianglesToCells(osTri,    'osTriangle',     setLeaf);
+    // One wizard page (claims_history) covers both paid + OS. We keep
+    // them as two registry pages internally (one per triangle_type
+    // enum) so the snapshot/write helpers stay simple — but they
+    // travel together in filledPages reporting.
+    if (claimsCells.length) pages.claims_history_paid = { cells: claimsCells };
+    if (osCells.length)     pages.claims_history_os   = { cells: osCells };
   }
 
-  const header = {
-    cedant_id: null,
-    cedant_name: cedant ?? null,
-    broker_id: null,
-    currency_id: null,
-    country_id: null,
-    treaty_type_id: null,
-    uw_year: inferredUwYear,
-    status: 'DRAFT',
-    experience_source: 'TRIANGLE',
-    renewal_date: null,
-    inception_date: null,
-    contract_description: treatyName ?? null,
-    classes_text: Array.isArray(classes) ? classes : [],
-  };
-
-  // ── detail (shared scalar bits) ────────────────────────────────────────────
-  const detail = {
-    triangulations_available: !!extraction.hasTriangles,
-    experience_start_year: inferredUwYearStart(uwRange),
-    inception_date: null,
-    renewal_date: null,
-    qs_limit: null,
-    retention_pct: null,
-    retention_amt: null,
-    cession_pct: null,
-    cession_amt: null,
-    surplus_max_retention: null,
-    num_lines: null,
-    total_capacity: null,
-    event_limit: null,
-    aal: null,
-    quota_share_epi: null,
-    surplus_epi: null,
-    brokerage_pct: null,
-    taxes_pct: null,
-    loss_cap_pct: null,
-  };
-
-  // ── losses + profiles + cresta (shared) ────────────────────────────────────
-  const largeLosses = mapLosses(extraction.largeLosses, 'largeLosses', setLeaf);
-  const catLosses = mapLosses(extraction.catLosses, 'catLosses', setLeaf);
-  const riskProfile = mapProfileBooks(extraction.riskProfile, 'riskProfile', setLeaf);
-  const claimsProfile = mapProfileBooks(extraction.claimsProfile, 'claimsProfile', setLeaf);
-  const cresta = await mapCresta(extraction.cresta, setLeaf, { crestaLookup, warnings, unmatchedCresta });
-
-  // ── proportional vs non-proportional branches ──────────────────────────────
-  let triangles = null;
-  let npStructure = null;
-  let egnpiHistory = null;
-  const skipTriangleScreens = !extraction.hasTriangles;
-
-  if ('premium' in extraction || 'claims' in extraction || 'osTriangle' in extraction) {
-    // Proportional
-    if (extraction.hasTriangles) {
-      triangles = {
-        premium: mapTriangle(extraction.premium?.triangle, 'premium.triangle', setLeaf),
-        claims:  mapTriangle(extraction.claims?.triangle, 'claims.triangle', setLeaf),
-        os:      mapTriangle(extraction.osTriangle, 'osTriangle', setLeaf),
-      };
+  // ── non-proportional branches ────────────────────────────────────────────
+  if (!treatyCategory || treatyCategory === 'NON_PROPORTIONAL') {
+    if (Array.isArray(extraction.layers) && extraction.layers.length) {
+      pages.np_structure = { layers: extraction.layers.map((l, i) => mapLayer(l, i, setLeaf)) };
     }
-    const latestEarned     = setLeaf('premium.latestEarned',     extraction.premium?.latestEarned);
-    const growthAssumption = setLeaf('premium.growthAssumption', extraction.premium?.growthAssumption);
-    const ultimateLossRatio= setLeaf('claims.ultimateLossRatio', extraction.claims?.ultimateLossRatio);
-    detail.quota_share_epi = numOrNull(latestEarned);
-    // The wizard exposes growthAssumption + ultimateLossRatio in the
-    // pricing pages; the import flow stashes them on the detail blob so
-    // the underwriter can review/override before pricing runs.
-    detail.growth_assumption_pct = numOrNull(growthAssumption);
-    detail.ultimate_loss_ratio_pct = numOrNull(ultimateLossRatio);
-  } else if ('layers' in extraction || 'egnpiHistory' in extraction) {
-    // Non-proportional
-    npStructure = mapLayers(extraction.layers, setLeaf);
-    egnpiHistory = mapEgnpiHistory(extraction.egnpiHistory, setLeaf);
-    detail.number_of_layers = Array.isArray(npStructure?.layers) ? npStructure.layers.length : null;
-    detail.est_gnpi = sumEgnpiLatest(egnpiHistory);
-  } else {
-    warnings.push('Extraction had neither proportional nor non-proportional fields; nothing to map');
+    if (Array.isArray(extraction.egnpiHistory) && extraction.egnpiHistory.length) {
+      pages.egnpi_history = { rows: extraction.egnpiHistory.map((r, i) => mapEgnpiRow(r, i, setLeaf)) };
+    }
   }
 
-  // ── final wizardState shape (matches GET /api/quotes/:id) ──────────────────
-  const wizardState = {
-    header,
-    detail,
-    commissions: { mode: 'FIXED' },
-    lossParticipation: { enabled: false },
-    epi_split: [],
-    class_ids: [],
-    underwriting_limits: [],
-    triangles,
-    largeLosses,
-    catLosses,
-    riskProfile,
-    claimsProfile,
-    cresta,
-    skipTriangleScreens,
-    np_structure: npStructure,
-    egnpi_history: egnpiHistory,
-  };
+  // ── shared pages (apply to both treaty categories) ───────────────────────
+  const largeLossRecords = mapLossRecords(extraction.largeLosses, 'largeLosses', setLeaf);
+  const catLossRecords   = mapLossRecords(extraction.catLosses,   'catLosses',   setLeaf);
+  if (largeLossRecords.length || catLossRecords.length) {
+    pages.large_losses = {
+      report_data: { large: largeLossRecords, cat: catLossRecords },
+    };
+  }
 
-  return { wizardState, fieldConfidence, warnings, unmatchedCresta };
+  const crestaRows = await mapCrestaRows(extraction.cresta, setLeaf, { crestaLookup, warnings, unmatchedCresta });
+  if (crestaRows.length) pages.cresta = { rows: crestaRows };
+
+  // Cedant / treaty header bits are surfaced as confidences for the
+  // UI's "review highlights" affordance, but we don't write them
+  // here — treaty detail is filled separately (it's a precondition
+  // for this endpoint).
+  setLeaf('header.cedant_name', extraction.cedant);
+  setLeaf('header.contract_description', extraction.treatyName);
+  setLeaf('header.classes', extraction.classes);
+  setLeaf('header.uw_year_range', extraction.uwYearRange);
+
+  return { pages, fieldConfidence, warnings, unmatchedCresta };
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function mapTriangle(tri, pathPrefix, setLeaf) {
-  if (!tri) return null;
+function trianglesToCells(tri, pathPrefix, setLeaf) {
+  if (!tri) return [];
   if (typeof tri.confidence === 'number') {
-    setLeaf(`${pathPrefix}.confidence`, { value: tri.confidence, confidence: tri.confidence, source: tri.source });
+    setLeaf(`${pathPrefix}.confidence`, { value: tri.confidence, confidence: tri.confidence });
   }
-  return {
-    uwYears: Array.isArray(tri.uwYears) ? tri.uwYears.slice() : [],
-    devPeriods: Array.isArray(tri.devPeriods) ? tri.devPeriods.slice() : [],
-    values: Array.isArray(tri.values) ? tri.values.map((row) => Array.isArray(row) ? row.slice() : []) : [],
-    source: tri.source ?? null,
-  };
+  const uwYears = Array.isArray(tri.uwYears) ? tri.uwYears : [];
+  const devPeriods = Array.isArray(tri.devPeriods) ? tri.devPeriods : [];
+  const values = Array.isArray(tri.values) ? tri.values : [];
+  const out = [];
+  for (let i = 0; i < uwYears.length; i++) {
+    const oy = Number(uwYears[i]);
+    if (!Number.isFinite(oy)) continue;
+    const row = Array.isArray(values[i]) ? values[i] : [];
+    for (let j = 0; j < devPeriods.length; j++) {
+      const dm = Number(devPeriods[j]);
+      if (!Number.isFinite(dm)) continue;
+      const cv = row[j];
+      if (cv == null) continue;
+      const n = Number(cv);
+      if (!Number.isFinite(n)) continue;
+      out.push({ origin_year: oy, dev_months: dm, cum_value: n });
+    }
+  }
+  return out;
 }
 
-function mapLosses(records, kind, setLeaf) {
+function mapLossRecords(records, kind, setLeaf) {
   if (!Array.isArray(records)) return [];
-  return records.map((rec, i) => {
-    const out = {};
-    out.uwYear         = setLeaf(`${kind}[${i}].uwYear`,          rec.uwYear);
-    out.insuredName    = setLeaf(`${kind}[${i}].insuredName`,     rec.insuredName);
-    out.description    = setLeaf(`${kind}[${i}].description`,     rec.description);
-    out.date           = setLeaf(`${kind}[${i}].date`,            rec.date);
-    out.classOfBusiness= setLeaf(`${kind}[${i}].classOfBusiness`, rec.classOfBusiness);
-    out.paid           = numOrNull(setLeaf(`${kind}[${i}].paid`,     rec.paid));
-    out.os             = numOrNull(setLeaf(`${kind}[${i}].os`,       rec.os));
-    out.incurred       = numOrNull(setLeaf(`${kind}[${i}].incurred`, rec.incurred));
-    out.is_selected = true; // default selected — UI lets reviewer toggle off
-    return out;
-  });
-}
-
-function mapProfileBooks(profile, kind, setLeaf) {
-  if (!profile || !Array.isArray(profile.books)) return { books: [] };
-  const books = profile.books.map((book, bi) => ({
-    label: typeof book.label === 'string' ? book.label : `Profile ${bi + 1}`,
-    bands: (book.bands || []).map((band, bj) => {
-      const path = `${kind}.books[${bi}].bands[${bj}]`;
-      return {
-        band_min:        numOrNull(setLeaf(`${path}.bandMin`,        band.bandMin)),
-        band_max:        numOrNull(setLeaf(`${path}.bandMax`,        band.bandMax)),
-        num_policies:    numOrNull(setLeaf(`${path}.numPolicies`,    band.numPolicies)),
-        sum_insured:     numOrNull(setLeaf(`${path}.sumInsured`,     band.sumInsured)),
-        premiums:        numOrNull(setLeaf(`${path}.premiums`,       band.premiums)),
-        avg_sum_insured: numOrNull(setLeaf(`${path}.avgSumInsured`,  band.avgSumInsured)),
-        avg_premium:     numOrNull(setLeaf(`${path}.avgPremium`,     band.avgPremium)),
-        rate_pct:        numOrNull(setLeaf(`${path}.ratePct`,        band.ratePct)),
-      };
-    }),
-    source: book.source ?? null,
+  return records.map((rec, i) => ({
+    uwYear: setLeaf(`${kind}[${i}].uwYear`, rec.uwYear),
+    insuredName: setLeaf(`${kind}[${i}].insuredName`, rec.insuredName),
+    description: setLeaf(`${kind}[${i}].description`, rec.description),
+    date: setLeaf(`${kind}[${i}].date`, rec.date),
+    classOfBusiness: setLeaf(`${kind}[${i}].classOfBusiness`, rec.classOfBusiness),
+    paid: numOrNull(setLeaf(`${kind}[${i}].paid`, rec.paid)),
+    os: numOrNull(setLeaf(`${kind}[${i}].os`, rec.os)),
+    incurred: numOrNull(setLeaf(`${kind}[${i}].incurred`, rec.incurred)),
   }));
-  return { books };
 }
 
-async function mapCresta(cresta, setLeaf, { crestaLookup, warnings, unmatchedCresta }) {
-  if (!cresta || !Array.isArray(cresta.countries)) return { zones: [] };
-  const zones = [];
+async function mapCrestaRows(cresta, setLeaf, { crestaLookup, warnings, unmatchedCresta }) {
+  if (!cresta || !Array.isArray(cresta.countries)) return [];
+  const out = [];
   for (let ci = 0; ci < cresta.countries.length; ci++) {
     const country = cresta.countries[ci];
     const countryCode = setLeaf(`cresta.countries[${ci}].countryCode`, country.countryCode);
@@ -249,76 +173,53 @@ async function mapCresta(cresta, setLeaf, { crestaLookup, warnings, unmatchedCre
         }
       }
 
-      const zoneRow = {
-        country_id: resolved?.country_id ?? null,
-        country_code: countryCode ?? null,
-        zone_id: resolved?.zone_id ?? null,
-        zone_name: resolved?.zone_name ?? zoneName ?? null,
-        zone_db_id: resolved?.zone_db_id ?? null,
+      if (!resolved) {
+        const label = zoneName || zoneCode || '<unnamed zone>';
+        if (!unmatchedCresta.includes(label)) unmatchedCresta.push(label);
+        warnings.push(`CRESTA zone "${label}" did not resolve against ref_cresta_zone`);
+        continue; // never write a row with an unresolved zone — the slice-uniqueness index won't allow it cleanly
+      }
+
+      out.push({
+        country_id: resolved.country_id,
+        zone_id: resolved.zone_id,
+        zone_name: resolved.zone_name,
         eq_agg: earthquake,
         ws_agg: windstorm,
         flood_agg: flood,
         srcc_agg: srcc,
         others_agg: others,
-        needsManualCrestaMatch: !resolved,
-      };
-      if (!resolved) {
-        const label = zoneName || zoneCode || '<unnamed zone>';
-        if (!unmatchedCresta.includes(label)) unmatchedCresta.push(label);
-        warnings.push(`CRESTA zone "${label}" did not resolve against ref_cresta_zone`);
-      }
-      zones.push(zoneRow);
+        treaty_type: 'Both',
+      });
     }
   }
-  return { zones };
+  return out;
 }
 
-function mapLayers(layers, setLeaf) {
-  if (!Array.isArray(layers)) return { layers: [] };
-  const out = layers.map((l, i) => {
-    const path = `np_structure.layers[${i}]`;
-    return {
-      layer_number: i + 1,
-      label:             setLeaf(`${path}.layer`,            l.layer),
-      attachment:        numOrNull(setLeaf(`${path}.attachment`,    l.attachment)),
-      layer_limit:       numOrNull(setLeaf(`${path}.limit`,         l.limit)),
-      aggregate_limit:   numOrNull(setLeaf(`${path}.aggLimit`,      l.aggLimit)),
-      egnpi:             numOrNull(setLeaf(`${path}.egnpi`,         l.egnpi)),
-      rate:              numOrNull(setLeaf(`${path}.rate`,          l.rate)),
-      earned_premium:    numOrNull(setLeaf(`${path}.earnedPremium`, l.earnedPremium)),
-      mdp:               numOrNull(setLeaf(`${path}.mdp`,           l.mdp)),
-      mdp_alt:           numOrNull(setLeaf(`${path}.mdpAlt`,        l.mdpAlt)),
-      num_reinstatements: numOrNull(setLeaf(`${path}.reinstatements`,    l.reinstatements)),
-      reinstatement_pct:  numOrNull(setLeaf(`${path}.reinstatementPct`, l.reinstatementPct)),
-    };
-  });
-  return { layers: out };
+function mapLayer(l, i, setLeaf) {
+  const path = `np_structure.layers[${i}]`;
+  return {
+    layer_number: i + 1,
+    label: setLeaf(`${path}.layer`, l.layer),
+    attachment: numOrNull(setLeaf(`${path}.attachment`, l.attachment)),
+    layer_limit: numOrNull(setLeaf(`${path}.limit`, l.limit)),
+    aggregate_limit: numOrNull(setLeaf(`${path}.aggLimit`, l.aggLimit)),
+    egnpi: numOrNull(setLeaf(`${path}.egnpi`, l.egnpi)),
+    rate: numOrNull(setLeaf(`${path}.rate`, l.rate)),
+    earned_premium: numOrNull(setLeaf(`${path}.earnedPremium`, l.earnedPremium)),
+    mdp: numOrNull(setLeaf(`${path}.mdp`, l.mdp)),
+    mdp_pct: numOrNull(setLeaf(`${path}.mdpAlt`, l.mdpAlt)),
+    num_reinstatements: numOrNull(setLeaf(`${path}.reinstatements`, l.reinstatements)),
+    reinstatement_pct: numOrNull(setLeaf(`${path}.reinstatementPct`, l.reinstatementPct)),
+    peril_scope: 'BOTH',
+  };
 }
 
-function mapEgnpiHistory(egnpiHistory, setLeaf) {
-  if (!Array.isArray(egnpiHistory)) return [];
-  return egnpiHistory.map((row, i) => ({
-    uw_year: numOrNull(setLeaf(`egnpiHistory[${i}].year`,  row.year)),
-    egnpi:   numOrNull(setLeaf(`egnpiHistory[${i}].egnpi`, row.egnpi)),
-  }));
-}
-
-function sumEgnpiLatest(history) {
-  if (!Array.isArray(history) || !history.length) return null;
-  // Latest year (max uw_year) → its egnpi.
-  let best = null;
-  for (const r of history) {
-    if (r.uw_year == null) continue;
-    if (!best || r.uw_year > best.uw_year) best = r;
-  }
-  return best?.egnpi ?? null;
-}
-
-function inferredUwYearStart(uwRange) {
-  if (Array.isArray(uwRange) && uwRange.length === 2 && Number.isFinite(uwRange[0])) {
-    return Math.trunc(uwRange[0]);
-  }
-  return null;
+function mapEgnpiRow(r, i, setLeaf) {
+  return {
+    uw_year: numOrNull(setLeaf(`egnpiHistory[${i}].year`, r.year)),
+    egnpi: numOrNull(setLeaf(`egnpiHistory[${i}].egnpi`, r.egnpi)),
+  };
 }
 
 function numOrNull(v) {
@@ -330,4 +231,24 @@ function numOrNull(v) {
     return Number.isFinite(n) ? n : null;
   }
   return Number(s);
+}
+
+// ── reporting helper ────────────────────────────────────────────────────────
+
+/**
+ * Collapse the registry's split (premium_history, claims_history_paid,
+ * claims_history_os) into the wizard-page names the underwriter sees.
+ * The split is an implementation detail of how triangle_type is stored;
+ * the response shouldn't surface it.
+ */
+export function userVisibleFilledPages(pageNames) {
+  const out = new Set();
+  for (const name of pageNames) {
+    if (name === 'claims_history_paid' || name === 'claims_history_os') {
+      out.add('claims_history');
+    } else {
+      out.add(name);
+    }
+  }
+  return Array.from(out);
 }

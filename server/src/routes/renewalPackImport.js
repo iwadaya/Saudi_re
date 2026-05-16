@@ -1,268 +1,289 @@
-// POST /api/quotes/import-renewal-pack
+// Renewal-pack import endpoints.
 //
-// Accepts a single .xlsx workbook, runs it through the
-// parser → extractor → wizardMapper pipeline, and persists a draft
-// quote with the resulting wizard state hung on import_metadata so the
-// reviewer screen can hydrate it.
+// Documents are already classified on upload (doc_type='renewal_pack')
+// and the quote's treaty type is already known once treaty detail is
+// saved. This route is therefore one click for the underwriter:
 //
-// Auth: the global x-user-role middleware at app.js:268 already
-// rejects unauthenticated calls (401, code 'UNAUTHORIZED'). req.user is
-// populated by attachRequestContext at app.js:270 — we read userId from
-// it for the audit log + assigned_to_user_id.
+//   POST /api/quotes/:quoteId/import-renewal-pack
+//        body: { documentId }
+//        → 202 { jobId }
 //
-// Body parser: this is a multipart route — multer.single('file')
-// consumes the request stream before express.json gets a chance, so
-// the 1 MB JSON limit at app.js:262 doesn't apply. The 413 we hit
-// previously was caused by routing the file through the JSON parser
-// by accident; this route bypasses it cleanly.
+//   GET  /api/quotes/:quoteId/import-renewal-pack/:jobId
+//        → { status: 'processing' | 'done' | 'failed', ... }
+//
+//   POST /api/quotes/:quoteId/import-snapshots/:snapshotId/restore
+//        → 200 { ok: true } | 410 (already restored / past retention)
+//
+//   GET  /api/quotes/:quoteId/import-snapshots
+//        → [{ id, capturedAt, filename, filledPages, restorable }]
+//
+// The actual extraction work runs asynchronously via setImmediate so
+// the LLM call doesn't keep the request handler tied up. No external
+// job queue is needed — the import_jobs table holds the state and the
+// polling GET reads from it.
 
 import { Router } from 'express';
-import multer from 'multer';
 import { pool } from '../db/pool.js';
 import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { logAudit } from '../services/audit.js';
-import { parseRenewalPack } from '../services/renewalPack/parser.js';
-import { extractRenewalPack } from '../services/renewalPack/extractor.js';
-import { mapExtractionToWizardState } from '../services/renewalPack/wizardMapper.js';
-import { findRenewalMatch } from '../services/renewalPack/renewalMatcher.js';
+import { runImportJob } from '../services/renewalPack/importJob.js';
+import {
+  loadSnapshot,
+  markSnapshotRestored,
+  restoreSnapshot,
+  listSnapshotsForQuote,
+} from '../services/renewalPack/snapshots.js';
 
 const router = Router();
 
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
-const ALLOWED_MIME_TYPES = new Set([
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-  'application/vnd.ms-excel',                                          // some clients still send this for xlsx
-  'application/octet-stream',                                          // some browsers / curl
-]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const RENEWAL_PACK_DOC_TYPE = 'renewal_pack';
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 },
-});
-
-// Default CRESTA lookup: zone name → ref_cresta_zone row. Used by the
-// wizard mapper; injected here so tests can replace it without DB.
-// public.country (NOT ref_country — there is no such table) is joined
-// optionally so a countryHint of "SA" or "Saudi Arabia" can disambiguate
-// zones whose codes are shared across multiple countries.
-async function defaultCrestaLookup({ zoneName, zoneCode, countryHint }) {
-  if (!zoneName && !zoneCode) return null;
-  const { rows } = await pool.query(
-    `SELECT z.zone_db_id, z.country_id, z.zone_id, z.zone_name
-       FROM public.ref_cresta_zone z
-       LEFT JOIN public.country c ON c.country_id = z.country_id
-      WHERE ( LOWER(z.zone_name) = LOWER($1)
-              OR LOWER(z.zone_id)   = LOWER($1)
-              OR ($2::text IS NOT NULL AND LOWER(z.zone_id) = LOWER($2)) )
-        AND ($3::text IS NULL
-             OR LOWER(c.country_code) = LOWER($3)
-             OR LOWER(c.country_name) = LOWER($3))
-      ORDER BY z.sort_order, z.zone_id
-      LIMIT 1`,
-    [zoneName || zoneCode, zoneCode || null, countryHint || null],
-  );
-  return rows[0] || null;
-}
-
-/**
- * @typedef {object} ImportResult
- * @property {string} quoteId
- * @property {'proportional'|'non_proportional'} type
- * @property {Record<string, number>} fieldConfidence
- * @property {string[]} warnings
- * @property {string[]} unmatchedCresta
- */
+// ── POST /quotes/:quoteId/import-renewal-pack ─────────────────────────────
 
 router.post(
-  '/quotes/import-renewal-pack',
-  upload.single('file'),
+  '/quotes/:quoteId/import-renewal-pack',
   asyncHandler(async (req, res) => {
-    // Validation: multer hands us req.file. Fail clearly when the
-    // multipart envelope omits it or the client used the wrong field
-    // name — multer.single() returns undefined silently otherwise.
-    const file = req.file;
-    if (!file) {
-      return res.status(400).json({
-        error: 'Field "file" with a single .xlsx attachment is required',
-        code: 'MISSING_FILE',
-      });
+    const { quoteId } = req.params;
+    const { documentId } = req.body || {};
+
+    if (!UUID_RE.test(quoteId) || !documentId || !UUID_RE.test(documentId)) {
+      return res.status(404).json({ error: 'Quote or document not found', code: 'NOT_FOUND' });
     }
-    if (!file.originalname || !/\.xlsx$/i.test(file.originalname)) {
-      return res.status(400).json({
-        error: 'Only .xlsx files are supported',
-        code: 'BAD_EXTENSION',
-      });
+
+    // Existence checks — load quote + document in parallel.
+    const [quoteR, docR] = await Promise.all([
+      pool.query(
+        `SELECT q.quote_id, q.treaty_type_id, tt.category AS treaty_category
+           FROM public.quote q
+           LEFT JOIN public.treaty_type tt ON tt.treaty_type_id = q.treaty_type_id
+          WHERE q.quote_id = $1`,
+        [quoteId],
+      ),
+      pool.query(
+        `SELECT document_id, file_name, storage_path, doc_type, quote_id
+           FROM public.contract_document
+          WHERE document_id = $1`,
+        [documentId],
+      ),
+    ]);
+
+    if (!quoteR.rows.length) {
+      return res.status(404).json({ error: 'Quote not found', code: 'QUOTE_NOT_FOUND' });
     }
-    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
-      return res.status(415).json({
-        error: `Unsupported MIME type "${file.mimetype}"`,
-        code: 'BAD_MIME',
-      });
+    if (!docR.rows.length) {
+      return res.status(404).json({ error: 'Document not found', code: 'DOCUMENT_NOT_FOUND' });
     }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      // multer.limits should catch this first, but keep an explicit
-      // guard in case the limit is bypassed by a streamed body.
-      return res.status(413).json({
-        error: `File exceeds the ${MAX_UPLOAD_BYTES} byte limit`,
-        code: 'FILE_TOO_LARGE',
+    const quote = quoteR.rows[0];
+    const document = docR.rows[0];
+
+    // Document must be of type renewal_pack (the upload classifier
+    // sets doc_type — we only accept docs that were uploaded as
+    // renewal packs).
+    if (String(document.doc_type || '').toLowerCase() !== RENEWAL_PACK_DOC_TYPE) {
+      return res.status(409).json({
+        error: 'Document is not a renewal pack',
+        code: 'NOT_RENEWAL_PACK',
       });
     }
 
-    const userId = req.user?.userId || req.headers['x-user-id'] || null;
-    const actorName = req.user?.displayName || 'SYSTEM';
+    // Treaty detail must be saved so we know which extraction prompt
+    // to use. The category column on treaty_type drives proportional
+    // vs non-proportional.
+    if (!quote.treaty_type_id || !quote.treaty_category) {
+      return res.status(409).json({
+        error: 'Treaty detail must be saved before importing',
+        code: 'TREATY_DETAIL_REQUIRED',
+      });
+    }
+    const treatyCategory = String(quote.treaty_category).toUpperCase();
 
-    let parsed;
+    // Insert the job row with status='processing'. The unique
+    // partial index gives us free concurrency control — a second
+    // concurrent POST trips the index and we surface 409.
+    let jobId;
     try {
-      parsed = await parseRenewalPack(file.buffer);
+      const { rows } = await pool.query(
+        `INSERT INTO public.import_jobs (quote_id, document_id, filename, status)
+         VALUES ($1, $2, $3, 'processing')
+         RETURNING job_id`,
+        [quoteId, documentId, document.file_name || null],
+      );
+      jobId = rows[0].job_id;
     } catch (err) {
-      logger.error('[renewal-pack-import] parse failed', { error: err?.message, filename: file.originalname });
-      return res.status(400).json({
-        error: `Failed to parse workbook: ${err?.message || err}`,
-        code: 'PARSE_FAILED',
+      if (err?.code === '23505') {
+        return res.status(409).json({
+          error: 'An import is already in progress for this quote',
+          code: 'IMPORT_IN_PROGRESS',
+        });
+      }
+      throw err;
+    }
+
+    const actor = req.user?.displayName || req.user?.userId || req.headers['x-user-id'] || 'SYSTEM';
+
+    // Kick off the async work. setImmediate runs after the response
+    // is flushed, so the underwriter sees the 202 promptly even on a
+    // slow LLM.
+    setImmediate(() => {
+      runImportJob({
+        jobId,
+        quoteId,
+        document,
+        treatyCategory,
+        actor,
+      }).catch((err) => {
+        // runImportJob already records failure on the job row; this
+        // catch is purely to keep an unhandled rejection from
+        // bubbling to the process default handler.
+        logger.error('[renewalPackImport] background runImportJob threw', {
+          jobId, quoteId, error: err?.message,
+        });
+      });
+    });
+
+    return res.status(202).json({ jobId });
+  }),
+);
+
+// ── GET /quotes/:quoteId/import-renewal-pack/:jobId ───────────────────────
+
+router.get(
+  '/quotes/:quoteId/import-renewal-pack/:jobId',
+  asyncHandler(async (req, res) => {
+    const { quoteId, jobId } = req.params;
+    if (!UUID_RE.test(quoteId) || !UUID_RE.test(jobId)) {
+      return res.status(404).json({ error: 'Job not found', code: 'JOB_NOT_FOUND' });
+    }
+    const { rows } = await pool.query(
+      `SELECT job_id, status, result, error_message, started_at, finished_at
+         FROM public.import_jobs
+        WHERE job_id = $1 AND quote_id = $2`,
+      [jobId, quoteId],
+    );
+    if (!rows.length) {
+      return res.status(404).json({ error: 'Job not found', code: 'JOB_NOT_FOUND' });
+    }
+    const job = rows[0];
+    if (job.status === 'processing') {
+      return res.json({ status: 'processing', startedAt: job.started_at });
+    }
+    if (job.status === 'failed') {
+      return res.json({ status: 'failed', error: job.error_message, finishedAt: job.finished_at });
+    }
+    // Status is 'done' — surface the cached result payload as-is.
+    return res.json({ ...job.result, finishedAt: job.finished_at });
+  }),
+);
+
+// ── GET /quotes/:quoteId/import-snapshots ─────────────────────────────────
+
+router.get(
+  '/quotes/:quoteId/import-snapshots',
+  asyncHandler(async (req, res) => {
+    const { quoteId } = req.params;
+    if (!UUID_RE.test(quoteId)) {
+      return res.status(404).json({ error: 'Quote not found', code: 'QUOTE_NOT_FOUND' });
+    }
+    const { rows: qr } = await pool.query(
+      `SELECT 1 FROM public.quote WHERE quote_id=$1`,
+      [quoteId],
+    );
+    if (!qr.length) {
+      return res.status(404).json({ error: 'Quote not found', code: 'QUOTE_NOT_FOUND' });
+    }
+    const snapshots = await listSnapshotsForQuote(pool, quoteId);
+    return res.json(snapshots);
+  }),
+);
+
+// ── POST /quotes/:quoteId/import-snapshots/:snapshotId/restore ────────────
+
+router.post(
+  '/quotes/:quoteId/import-snapshots/:snapshotId/restore',
+  asyncHandler(async (req, res) => {
+    const { quoteId, snapshotId } = req.params;
+    if (!UUID_RE.test(quoteId) || !UUID_RE.test(snapshotId)) {
+      return res.status(404).json({ error: 'Snapshot not found', code: 'SNAPSHOT_NOT_FOUND' });
+    }
+
+    // Pre-check inside a short-lived read. A second client could
+    // race the restore between this read and the transaction below;
+    // if that happens, the transaction's lookup catches it and we
+    // either succeed (consumed flag still false) or 410 (consumed
+    // flag flipped). The pre-check is just to short-circuit the
+    // obvious cases without acquiring a write transaction.
+    const preview = await loadSnapshot(pool, snapshotId, quoteId);
+    if (preview.status === 'missing') {
+      return res.status(404).json({ error: 'Snapshot not found', code: 'SNAPSHOT_NOT_FOUND' });
+    }
+    if (preview.status === 'consumed') {
+      return res.status(410).json({
+        error: 'Snapshot has already been restored',
+        code: 'SNAPSHOT_ALREADY_RESTORED',
+      });
+    }
+    if (preview.status === 'expired') {
+      return res.status(410).json({
+        error: 'Snapshot is past the 30-day retention window',
+        code: 'SNAPSHOT_EXPIRED',
       });
     }
 
-    let extraction;
-    try {
-      extraction = await extractRenewalPack(parsed);
-    } catch (err) {
-      logger.error('[renewal-pack-import] extraction failed', { error: err?.message, filename: file.originalname });
-      return res.status(502).json({
-        error: `LLM extraction failed: ${err?.message || err}`,
-        code: 'EXTRACTION_FAILED',
-      });
-    }
-
-    // The extractor returns the partial extraction even on second-attempt
-    // failure; warnings[] carries the schema diagnostics. We persist
-    // anyway so the reviewer can resolve manually, but flag it in the
-    // response so the UI surfaces a banner.
-    if (!extraction.extraction) {
-      return res.status(502).json({
-        error: 'LLM extraction returned no usable output',
-        code: 'EXTRACTION_EMPTY',
-        warnings: extraction.warnings,
-      });
-    }
-
-    const { wizardState, fieldConfidence, warnings: mapperWarnings, unmatchedCresta } =
-      await mapExtractionToWizardState(extraction.extraction, { crestaLookup: defaultCrestaLookup });
-
-    const allWarnings = [...extraction.warnings, ...mapperWarnings];
-
-    // Renewal matching runs BEFORE persist (per prompt 4b). The result
-    // drives wizard routing client-side; we also stash it on
-    // import_metadata so a later page reload can rehydrate the decision
-    // without re-matching.
-    let match = { mode: 'new' };
-    try {
-      const uwRange = wizardState.header.uw_year_range
-        ?? (Array.isArray(extraction.extraction?.uwYearRange?.value)
-            ? extraction.extraction.uwYearRange.value
-            : null);
-      const uwYearEnd = Array.isArray(uwRange) && Number.isFinite(uwRange[1])
-        ? Math.trunc(uwRange[1])
-        : (wizardState.header.uw_year || null);
-      match = await findRenewalMatch({
-        cedantName: wizardState.header.cedant_name,
-        classes: wizardState.header.classes_text || [],
-        uwYearEnd,
-      });
-    } catch (err) {
-      // Matching is best-effort — never fail the import because of it.
-      logger.warn('[renewal-pack-import] renewal match failed', { error: err?.message });
-      allWarnings.push(`Renewal matching failed: ${err?.message || err}`);
-      match = { mode: 'new' };
-    }
-
+    const actor = req.user?.displayName || req.user?.userId || req.headers['x-user-id'] || 'SYSTEM';
     const client = await pool.connect();
-    let quoteId;
     try {
       await client.query('BEGIN');
 
-      const uwYear = wizardState.header.uw_year || new Date().getFullYear();
-      const { rows: insertRows } = await client.query(
-        `INSERT INTO public.quote
-           (uw_year, status, experience_source, renewal_date, inception_date,
-            contract_description, created_by_user_id, assigned_to_user_id,
-            import_metadata, parent_contract_id)
-         VALUES ($1, 'DRAFT', $2, $3, $4, $5, $6, $6, $7::jsonb, $8)
-         RETURNING quote_id`,
-        [
-          uwYear,
-          wizardState.header.experience_source || 'TRIANGLE',
-          wizardState.header.renewal_date || null,
-          wizardState.header.inception_date || null,
-          wizardState.header.contract_description || null,
-          userId,
-          JSON.stringify({
-            source: 'renewal_pack_import',
-            source_filename: file.originalname,
-            imported_by: userId,
-            imported_at: new Date().toISOString(),
-            type: extraction.type,
-            provider: extraction.provider,
-            field_confidence: fieldConfidence,
-            warnings: allWarnings,
-            unmatched_cresta: unmatchedCresta,
-            wizard_state: wizardState,
-            match,
-          }),
-          // Only link parent_contract_id on a confident "renewal" — the
-          // ambiguous case waits for the user to pick before linking.
-          match.mode === 'renewal' ? match.priorTreatyId : null,
-        ],
+      // Re-read inside the transaction so a concurrent restore (or
+      // cleanup) can't slip past the pre-check.
+      const fresh = await loadSnapshot(client, snapshotId, quoteId);
+      if (fresh.status === 'missing') {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Snapshot not found', code: 'SNAPSHOT_NOT_FOUND' });
+      }
+      if (fresh.status === 'consumed') {
+        await client.query('ROLLBACK');
+        return res.status(410).json({
+          error: 'Snapshot has already been restored',
+          code: 'SNAPSHOT_ALREADY_RESTORED',
+        });
+      }
+      if (fresh.status === 'expired') {
+        await client.query('ROLLBACK');
+        return res.status(410).json({
+          error: 'Snapshot is past the 30-day retention window',
+          code: 'SNAPSHOT_EXPIRED',
+        });
+      }
+
+      await restoreSnapshot(client, quoteId, fresh.row.payload);
+      await markSnapshotRestored(client, snapshotId);
+      await client.query(
+        `UPDATE public.quote SET updated_at = now() WHERE quote_id = $1`,
+        [quoteId],
       );
-      quoteId = insertRows[0].quote_id;
-
-      // Mirror POST /api/quotes: auto-assign quote_ref = QT-YYYY-NNNN.
-      const { rows: seqRows } = await client.query(`SELECT nextval('public.quote_ref_seq') AS n`);
-      const qRef = `QT-${uwYear}-${String(seqRows[0].n).padStart(4, '0')}`;
-      await client.query(`UPDATE public.quote SET quote_ref=$2 WHERE quote_id=$1`, [quoteId, qRef]);
-
       await logAudit(client, {
         entityType: 'QUOTE',
         entityId: quoteId,
-        eventType: 'renewal_pack_imported',
-        actor: actorName,
+        eventType: 'import_restored',
+        actor,
         payload: {
           quoteId,
-          filename: file.originalname,
-          type: extraction.type,
-          warningCount: allWarnings.length,
+          snapshotId,
+          restoredPages: Object.keys(fresh.row.payload?.pages || {}),
         },
       });
-
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});
-      logger.error('[renewal-pack-import] DB persist failed', { error: err?.message, filename: file.originalname });
-      return res.status(500).json({
-        error: `Failed to persist draft quote: ${err?.message || err}`,
-        code: 'PERSIST_FAILED',
-      });
+      throw err;
     } finally {
       client.release();
     }
 
-    logger.info('[renewal-pack-import] success', {
-      quoteId,
-      filename: file.originalname,
-      type: extraction.type,
-      warnings: allWarnings.length,
-      unmatchedCresta: unmatchedCresta.length,
-      matchMode: match.mode,
-    });
-
-    return res.status(201).json({
-      quoteId,
-      type: extraction.type,
-      fieldConfidence,
-      warnings: allWarnings,
-      unmatchedCresta,
-      match,
-    });
+    return res.json({ ok: true, snapshotId });
   }),
 );
 

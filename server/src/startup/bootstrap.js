@@ -68,5 +68,11 @@ export async function bootstrap() {
     startPoolWatchdog();
   }
 
+  // TODO(scheduling): import_snapshots have a 30-day retention. There
+  // is no scheduler in this codebase yet, so cleanup is manual via
+  // `npm run cleanup:snapshots` (see server/scripts/cleanup-snapshots.js).
+  // When a scheduling pattern lands (Render Cron, pg_cron, or a
+  // setInterval-on-boot), wire that script up here.
+
   return server;
 }
