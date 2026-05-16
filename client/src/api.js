@@ -695,6 +695,28 @@ export const api = {
       method: 'POST', body: form, ...opts,
     });
   },
+
+  /**
+   * POST a renewal-pack workbook to /api/quotes/import-renewal-pack.
+   * Returns { quoteId, type, fieldConfidence, warnings, unmatchedCresta,
+   *   match: { mode: 'new' | 'renewal' | 'ambiguous', ... } }.
+   *
+   * Server cap is 25 MB; clients should check before upload to avoid a
+   * round-trip on rejection. Long-running call (LLM extraction takes
+   * 10–20s) — the caller should show progress states.
+   */
+  importRenewalPack(file, opts = {}) {
+    const form = new FormData();
+    form.append('file', file);
+    return request('/api/quotes/import-renewal-pack', {
+      method: 'POST',
+      body: form,
+      // LLM extraction can take ~30s in the worst case; don't let the
+      // default request timeout abort a successful import.
+      timeoutMs: opts.timeoutMs ?? 90_000,
+      ...opts,
+    });
+  },
   facGetAnalyses(id, opts) {
     return request(`/api/fac/risks/${enc(id)}/analyses`, opts);
   },

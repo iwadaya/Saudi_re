@@ -546,6 +546,11 @@ router.get("/quotes/:id", asyncHandler(async (req, res) => {
     lossParticipation:{enabled:lp.enabled??false,min_loss_ratio_pct:lp.min_loss_ratio_pct,
       max_loss_ratio_pct:lp.max_loss_ratio_pct,reinsurer_share_pct:lp.reinsurer_share_pct},
     epi_split:epiR.rows, underwriting_limits:uwLimR.rows,
+    // Surface the renewal-pack import blob (added in migration 098) so
+    // the review-import screen + "pre-filled" banner can render
+    // confidence chips / warnings / unmatched CRESTA without a second
+    // round-trip. NULL on quotes that weren't created from an import.
+    import_metadata: q.import_metadata || null,
   });
 }));
 

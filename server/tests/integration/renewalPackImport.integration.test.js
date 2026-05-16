@@ -164,6 +164,8 @@ describe.skipIf(shouldSkipDb)('integration: POST /api/quotes/import-renewal-pack
     expect(typeof body.fieldConfidence).toBe('object');
     expect(Array.isArray(body.warnings)).toBe(true);
     expect(Array.isArray(body.unmatchedCresta)).toBe(true);
+    // Empty test DB → no candidates → mode is always "new" here.
+    expect(body.match?.mode).toBe('new');
     createdQuoteIds.push(body.quoteId);
 
     // Quote row exists with status DRAFT + populated import_metadata
@@ -181,6 +183,7 @@ describe.skipIf(shouldSkipDb)('integration: POST /api/quotes/import-renewal-pack
     expect(meta.type).toBe('proportional');
     expect(typeof meta.field_confidence).toBe('object');
     expect(meta.wizard_state.header.cedant_name).toBe('Acme Insurance Co');
+    expect(meta.match?.mode).toBe('new');
 
     // Audit row written.
     const { rows: auditRows } = await pool.query(

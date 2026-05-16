@@ -25,6 +25,7 @@ import { logAudit } from '../services/audit.js';
 import { parseRenewalPack } from '../services/renewalPack/parser.js';
 import { extractRenewalPack } from '../services/renewalPack/extractor.js';
 import { mapExtractionToWizardState } from '../services/renewalPack/wizardMapper.js';
+import { findRenewalMatch } from '../services/renewalPack/renewalMatcher.js';
 
 const router = Router();
 
@@ -150,6 +151,31 @@ router.post(
 
     const allWarnings = [...extraction.warnings, ...mapperWarnings];
 
+    // Renewal matching runs BEFORE persist (per prompt 4b). The result
+    // drives wizard routing client-side; we also stash it on
+    // import_metadata so a later page reload can rehydrate the decision
+    // without re-matching.
+    let match = { mode: 'new' };
+    try {
+      const uwRange = wizardState.header.uw_year_range
+        ?? (Array.isArray(extraction.extraction?.uwYearRange?.value)
+            ? extraction.extraction.uwYearRange.value
+            : null);
+      const uwYearEnd = Array.isArray(uwRange) && Number.isFinite(uwRange[1])
+        ? Math.trunc(uwRange[1])
+        : (wizardState.header.uw_year || null);
+      match = await findRenewalMatch({
+        cedantName: wizardState.header.cedant_name,
+        classes: wizardState.header.classes_text || [],
+        uwYearEnd,
+      });
+    } catch (err) {
+      // Matching is best-effort — never fail the import because of it.
+      logger.warn('[renewal-pack-import] renewal match failed', { error: err?.message });
+      allWarnings.push(`Renewal matching failed: ${err?.message || err}`);
+      match = { mode: 'new' };
+    }
+
     const client = await pool.connect();
     let quoteId;
     try {
@@ -160,8 +186,8 @@ router.post(
         `INSERT INTO public.quote
            (uw_year, status, experience_source, renewal_date, inception_date,
             contract_description, created_by_user_id, assigned_to_user_id,
-            import_metadata)
-         VALUES ($1, 'DRAFT', $2, $3, $4, $5, $6, $6, $7::jsonb)
+            import_metadata, parent_contract_id)
+         VALUES ($1, 'DRAFT', $2, $3, $4, $5, $6, $6, $7::jsonb, $8)
          RETURNING quote_id`,
         [
           uwYear,
@@ -181,7 +207,11 @@ router.post(
             warnings: allWarnings,
             unmatched_cresta: unmatchedCresta,
             wizard_state: wizardState,
+            match,
           }),
+          // Only link parent_contract_id on a confident "renewal" — the
+          // ambiguous case waits for the user to pick before linking.
+          match.mode === 'renewal' ? match.priorTreatyId : null,
         ],
       );
       quoteId = insertRows[0].quote_id;
@@ -222,6 +252,7 @@ router.post(
       type: extraction.type,
       warnings: allWarnings.length,
       unmatchedCresta: unmatchedCresta.length,
+      matchMode: match.mode,
     });
 
     return res.status(201).json({
@@ -230,6 +261,7 @@ router.post(
       fieldConfidence,
       warnings: allWarnings,
       unmatchedCresta,
+      match,
     });
   }),
 );

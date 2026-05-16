@@ -5,6 +5,7 @@ import { getUserDisplayName, getSession, canAccessApprovals } from '../../utils/
 import { formatDate, todayIso } from '../../utils/format';
 import { useAppState } from '../../context/AppContext';
 import Topbar, { useViewingUser, setViewingUser } from '../../components/Topbar';
+import ImportRenewalPackModal from '../../components/ImportRenewalPackModal';
 import {
   setActiveContractId,
   setActiveQuoteId,
@@ -430,6 +431,7 @@ export default function HomeScreen() {
   // a fresher one (e.g. user toggles viewingUser mid-flight).
   const loadToken = React.useRef(0);
   const [showRenewal, setShowRenewal] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   // Upcoming-renewals click → confirm-and-renew flow
   const [renewalCandidate, setRenewalCandidate] = useState(null);
   const [renewBusy, setRenewBusy] = useState(false);
@@ -586,7 +588,7 @@ export default function HomeScreen() {
       <Topbar title="MODELLING TOOL" subtitle="Reinsurance treaty pricing & modelling workspace" actions={<>
         <button className="topbar-pill" onClick={() => navigate('/dashboard')}>Dashboard</button>
         <button className="topbar-pill" onClick={() => navigate('/benchmark')}>⚡ Quick Benchmark</button>
-        <button className="topbar-pill" onClick={() => navigate('/import')}>⬆ Import</button>
+        <button className="topbar-pill" onClick={() => setShowImport(true)}>⬆ Import Renewal Pack</button>
         <button className="topbar-pill" onClick={() => navigate('/workbench')}>Workbench</button>
         <button className="topbar-pill" onClick={() => {
           exportPortfolioToExcel().catch(e => console.error('Portfolio export failed:', e));
@@ -620,6 +622,7 @@ export default function HomeScreen() {
             <button className="action-pill action-pill--primary" onClick={() => startNew('NP')}><span className="plus">+</span> Price Non-Proportional Treaty</button>
             <button className="action-pill action-pill--primary" onClick={() => setShowRenewal(true)}><span className="plus">+</span> Renew Treaty <span style={{ marginLeft: 8, fontSize: 9, background: 'rgba(255,255,255,0.2)', padding: '2px 6px', borderRadius: 4 }}>NEW</span></button>
             <button className="action-pill action-pill--primary" onClick={startQuote}><span className="plus">+</span> Quote Treaty</button>
+            <button className="action-pill action-pill--primary" onClick={() => setShowImport(true)}><span className="plus">⬆</span> Import Renewal Pack</button>
           </div>
         </section>
         <div className="dash-grid dash-grid--home">
@@ -658,6 +661,7 @@ export default function HomeScreen() {
         </div>
       </div></main>
       <RenewalModal open={showRenewal} onClose={() => setShowRenewal(false)} onRenew={handleRenewalDone} />
+      <ImportRenewalPackModal open={showImport} onClose={() => setShowImport(false)} />
       <RenewalConfirmModal
         candidate={renewalCandidate}
         busy={renewBusy}

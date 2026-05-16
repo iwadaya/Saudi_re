@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api } from '../../../api';
 import { useAppState } from '../../../context/AppContext';
 import { useContractId, setActiveContractId, setActiveQuoteId } from '../../../hooks/useContractId';
@@ -6,6 +7,7 @@ import { ACTIVE_QUOTE_ID } from '../../../constants/storageKeys';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import SlipIngestButton from '../../../components/SlipIngestButton';
+import ImportedFromPackBanner from '../../../components/ImportedFromPackBanner';
 import {
   addMonthsClamped,
   dateInputValue,
@@ -466,11 +468,20 @@ export default function NpTreatyDetail() {
     };
   }, []);
 
+  // Same import-flow nav state read as PropTreatyDetail.
+  const location = useLocation();
+  const importedFromState = location?.state?.importedFromPack ? {
+    sourceFilename: location.state.sourceFilename,
+    priorTreatyId: location.state.priorTreatyId,
+  } : null;
+
   /* ═══ RENDER ═══ */
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Treaty Detail" headerPill={`${quoteMode ? 'NP-QUOTE TREATY' : 'NON-PROPORTIONAL TREATY'}: TREATY DETAIL`}
       onBeforeNext={save} onBeforeBack={save}>
       {() => (<>
+
+        <ImportedFromPackBanner quoteId={contractId} importedFromState={importedFromState} />
 
         {/* ── Summary bar (matches proportional) ── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
