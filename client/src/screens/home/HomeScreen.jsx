@@ -615,8 +615,8 @@ export default function HomeScreen() {
           <div className="hero-top"><div className="welcome-row"><span className="welcome-pill">WELCOME</span><h1 className="welcome-title">{getUserDisplayName() || 'Underwriter'}</h1></div>
             <div className="welcome-sub">This is your modelling workspace hub. Model a new treaty, renew a treaty and quote treaties.</div></div>
           <div className="hero-actions">
-            <button className="action-pill action-pill--primary" onClick={() => startNew('PROP')}><span className="plus">+</span> Price Proportional Treaty</button>
-            <button className="action-pill action-pill--primary" onClick={() => startNew('NP')}><span className="plus">+</span> Price Non-Proportional Treaty</button>
+            <button className="action-pill action-pill--primary" onClick={() => startNew('PROP')}><span className="plus">+</span> Assess Proportional Treaty</button>
+            <button className="action-pill action-pill--primary" onClick={() => startNew('NP')}><span className="plus">+</span> Assess Non-Proportional Treaty</button>
             <button className="action-pill action-pill--primary" onClick={() => setShowRenewal(true)}><span className="plus">+</span> Renew Treaty <span style={{ marginLeft: 8, fontSize: 9, background: 'rgba(255,255,255,0.2)', padding: '2px 6px', borderRadius: 4 }}>NEW</span></button>
             <button className="action-pill action-pill--primary" onClick={startQuote}><span className="plus">+</span> Quote Treaty</button>
           </div>
