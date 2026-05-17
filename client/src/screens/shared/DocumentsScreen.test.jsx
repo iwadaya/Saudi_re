@@ -121,35 +121,133 @@ describe('DocumentsScreen — Fill from renewal pack visibility', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /fill from renewal pack/i })).toBeInTheDocument());
   });
 
-  it('does not show the Fill button in contract mode (only quoteMode)', async () => {
-    defaultMocks({ docs: [rpDoc()] });
+  // The four treaty workflows that surface the Documents tab: proportional
+  // pricing, non-proportional pricing, renewal (which creates a new contract,
+  // so quoteMode=false), and quote. The button is gated only on doc type and
+  // edit permission — the workflow itself never gates visibility.
+  const FLOWS = [
+    { name: 'proportional pricing',     routeKey: 'PROP_TREATY_DOCUMENTS', quoteMode: false },
+    { name: 'non-proportional pricing', routeKey: 'NP_TREATY_DOCUMENTS',   quoteMode: false },
+    { name: 'renewal',                  routeKey: 'NP_TREATY_DOCUMENTS',   quoteMode: false },
+    { name: 'quote',                    routeKey: 'NP_TREATY_DOCUMENTS',   quoteMode: true  },
+  ];
+
+  for (const flow of FLOWS) {
+    it(`shows the Fill button on a renewal_pack document in the ${flow.name} flow`, async () => {
+      defaultMocks({ docs: [rpDoc()] });
+      render(<DocumentsScreen routeKey={flow.routeKey} quoteMode={flow.quoteMode} />);
+      await waitFor(() => expect(screen.getByText('pack.xlsx')).toBeInTheDocument());
+      expect(screen.getByRole('button', { name: /fill from renewal pack/i })).toBeInTheDocument();
+    });
+
+    it(`does NOT show the Fill button on a non-renewal document in the ${flow.name} flow`, async () => {
+      defaultMocks({ docs: [slipDoc()] });
+      render(<DocumentsScreen routeKey={flow.routeKey} quoteMode={flow.quoteMode} />);
+      await waitFor(() => expect(screen.getByText('slip.pdf')).toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: /fill from renewal pack/i })).not.toBeInTheDocument();
+    });
+  }
+});
+
+describe('DocumentsScreen — doc-fetch endpoint scoping', () => {
+  // The endpoint choice has to follow the workflow, not a global flag.
+  // In quote mode the API client gets { quote: true }; in treaty mode it
+  // gets no opts so the request goes to /api/treaties/...
+  it('fetches from the treaty endpoint when quoteMode is false', async () => {
+    defaultMocks();
     render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode={false} />);
-    await waitFor(() => expect(screen.getByText('pack.xlsx')).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: /fill from renewal pack/i })).not.toBeInTheDocument();
+    await waitFor(() => expect(apiMock.getDocuments).toHaveBeenCalled());
+    expect(apiMock.getDocuments).toHaveBeenCalledWith(QUOTE_ID, undefined);
+  });
+
+  it('fetches from the quote endpoint when quoteMode is true', async () => {
+    defaultMocks();
+    render(<DocumentsScreen routeKey="NP_TREATY_DOCUMENTS" quoteMode />);
+    await waitFor(() => expect(apiMock.getDocuments).toHaveBeenCalled());
+    expect(apiMock.getDocuments).toHaveBeenCalledWith(QUOTE_ID, { quote: true });
   });
 });
 
 describe('DocumentsScreen — Fill button disabled states', () => {
-  it('disabled with "Save Treaty Detail first" tooltip when treaty_type_id is null', async () => {
-    defaultMocks({ treatyTypeId: null });
-    render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode />);
-    const btn = await screen.findByRole('button', { name: /fill from renewal pack/i });
-    expect(btn).toBeDisabled();
-    expect(btn).toHaveAttribute('title', 'Save Treaty Detail first');
-  });
+  // Same four-flow matrix as the visibility block — disabled states must
+  // surface identically whether the user came in through pricing, renewal
+  // or quote workflows.
+  const FLOWS = [
+    { name: 'proportional pricing',     routeKey: 'PROP_TREATY_DOCUMENTS', quoteMode: false },
+    { name: 'non-proportional pricing', routeKey: 'NP_TREATY_DOCUMENTS',   quoteMode: false },
+    { name: 'renewal',                  routeKey: 'NP_TREATY_DOCUMENTS',   quoteMode: false },
+    { name: 'quote',                    routeKey: 'NP_TREATY_DOCUMENTS',   quoteMode: true  },
+  ];
 
-  it('disabled with "Import in progress" tooltip when another job is running', async () => {
-    defaultMocks({
-      docs: [rpDoc({ id: 'doc-rp-1' }), rpDoc({ id: 'doc-rp-2', filename: 'other.xlsx' })],
-      activeJob: { jobId: 'j-1', documentId: 'doc-rp-other-running', startedAt: new Date().toISOString() },
+  for (const flow of FLOWS) {
+    it(`disabled with "Save Treaty Detail first" tooltip when treaty_type_id is null (${flow.name})`, async () => {
+      defaultMocks({ treatyTypeId: null });
+      render(<DocumentsScreen routeKey={flow.routeKey} quoteMode={flow.quoteMode} />);
+      const btn = await screen.findByRole('button', { name: /fill from renewal pack/i });
+      expect(btn).toBeDisabled();
+      expect(btn).toHaveAttribute('title', 'Save Treaty Detail first');
     });
-    render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode />);
-    const btns = await screen.findAllByRole('button', { name: /fill from renewal pack/i });
-    for (const b of btns) {
-      expect(b).toBeDisabled();
-      expect(b).toHaveAttribute('title', 'Import in progress');
-    }
-  });
+
+    it(`disabled with "Import in progress" tooltip when another job is running (${flow.name})`, async () => {
+      defaultMocks({
+        docs: [rpDoc({ id: 'doc-rp-1' }), rpDoc({ id: 'doc-rp-2', filename: 'other.xlsx' })],
+        activeJob: { jobId: 'j-1', documentId: 'doc-rp-other-running', startedAt: new Date().toISOString() },
+      });
+      render(<DocumentsScreen routeKey={flow.routeKey} quoteMode={flow.quoteMode} />);
+      const btns = await screen.findAllByRole('button', { name: /fill from renewal pack/i });
+      for (const b of btns) {
+        expect(b).toBeDisabled();
+        expect(b).toHaveAttribute('title', 'Import in progress');
+      }
+    });
+  }
+});
+
+describe('DocumentsScreen — uploaded renewal pack lands on the right entity', () => {
+  // contract_document has a CHECK constraint requiring exactly one of
+  // (contract_id, quote_id). The endpoint encodes that choice — POSTing to
+  // /api/treaties/:id/documents writes the contract_id column, POSTing to
+  // /api/quotes/:id/documents writes the quote_id column. From the client
+  // side that means the upload's apiOpts decides which relation the pack
+  // ends up queryable through.
+  const FLOWS = [
+    { name: 'proportional pricing',     routeKey: 'PROP_TREATY_DOCUMENTS', quoteMode: false, expected: undefined },
+    { name: 'non-proportional pricing', routeKey: 'NP_TREATY_DOCUMENTS',   quoteMode: false, expected: undefined },
+    { name: 'renewal',                  routeKey: 'NP_TREATY_DOCUMENTS',   quoteMode: false, expected: undefined },
+    { name: 'quote',                    routeKey: 'NP_TREATY_DOCUMENTS',   quoteMode: true,  expected: { quote: true } },
+  ];
+
+  for (const flow of FLOWS) {
+    it(`uploads to the ${flow.expected ? 'quote' : 'treaty'} endpoint in the ${flow.name} flow`, async () => {
+      defaultMocks({ docs: [] });
+      apiMock.uploadDocument.mockResolvedValue({ document_id: 'new-doc-1' });
+
+      const { container } = render(<DocumentsScreen routeKey={flow.routeKey} quoteMode={flow.quoteMode} />);
+      // Wait for initial load so the upload form is mounted.
+      await waitFor(() => expect(apiMock.getDocuments).toHaveBeenCalled());
+
+      // Pick "Renewal Pack" from the document-type select so the test
+      // mirrors how the underwriter would upload a renewal pack.
+      const docTypeSelect = container.querySelector('select');
+      fireEvent.change(docTypeSelect, { target: { value: 'Renewal Pack' } });
+
+      // The file input is hidden; drive it directly to simulate file pick.
+      const file = new File(['hello'], 'pack.xlsx', {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const fileInput = container.querySelector('input[type="file"]');
+      fireEvent.change(fileInput, { target: { files: [file] } });
+
+      fireEvent.click(screen.getByRole('button', { name: /Upload/i }));
+
+      await waitFor(() => expect(apiMock.uploadDocument).toHaveBeenCalled());
+      const [id, formData, opts] = apiMock.uploadDocument.mock.calls[0];
+      expect(id).toBe(QUOTE_ID);
+      expect(formData).toBeInstanceOf(FormData);
+      expect(formData.get('doc_type')).toBe('Renewal Pack');
+      expect(opts).toEqual(flow.expected);
+    });
+  }
 });
 
 describe('DocumentsScreen — import success flow', () => {
