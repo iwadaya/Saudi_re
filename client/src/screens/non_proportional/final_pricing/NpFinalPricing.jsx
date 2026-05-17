@@ -8,6 +8,7 @@ import PctInput from '../../../components/PctInput';
 import { formatWithCommas } from '../../../utils/format';
 import { getNpTreatyTypeMode, isNpCatFlowDisabled, isNpRiskFlowDisabled, isNpAggregateXlTreaty } from '../../../utils/npTreatyType';
 import NpAggregateXlStructure from '../structure/NpAggregateXlStructure';
+import NpAggregateXlHero from './components/NpAggregateXlHero';
 import { getRole, getUserDisplayName } from '../../../utils/auth';
 import { useGlobalToast } from '../../../hooks/useToast';
 import { handleStaleWrite } from '../../../utils/handleStaleWrite';
@@ -2397,14 +2398,20 @@ export default function NpFinalPricing() {
           {loading ? <div className="df-card df-card--notice"><div className="df-note">Loading...</div></div> : (
             <>
               {isNpAggregateXlTreaty(appState) && (
-                /* Aggregate XL treaties show their structure (layer
-                   grid + COB inner limits + policy-shape toggles) at
-                   the top of the Final Pricing screen, read-only —
-                   edits happen on the Structure page. */
-                <NpAggregateXlStructure
-                  currency={npDetail.currencyCode || npDetail.currency || 'SAR'}
-                  readOnly
-                />
+                /* Aggregate XL treaties get the Bloomberg-style hero
+                   at the top (populated from the structure slice)
+                   followed by the structure read-only — edits
+                   happen on the Structure page. */
+                <>
+                  <NpAggregateXlHero
+                    npDetail={npDetail}
+                    aggXlInputs={appState.npAggregateXlInputs}
+                    offerStatus={offerStatus}
+                    currency={currency}
+                    techRatio={techRatioAvg}
+                  />
+                  <NpAggregateXlStructure currency={currency} readOnly />
+                </>
               )}
               {isQuote ? (
                 /* ═══════ QUOTE PRICING — QuickBenchmark-style topbar ═══════
