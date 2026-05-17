@@ -198,3 +198,185 @@ export function deriveComponentTotal(pureBurn, pareto, exposure, weightBurn, wei
   const loadingN = clamp(toN(loading), 0, 99);
   return loadingN < 100 ? blended / (1 - loadingN / 100) : 0;
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Stop-Loss / Aggregate-XL primitives.
+//
+// Stop Loss and Aggregate XL are both layer covers attached to the
+// AGGREGATE annual loss S = X_1 + … + X_N, not to individual claims.
+// The difference is only the basis of the attachment point:
+//   - Stop Loss      → attaches at a loss ratio of premium (e.g. 80% LR)
+//   - Aggregate XL   → attaches at an absolute aggregate amount
+// Same math; one helper converts the loss-ratio form to absolute, and
+// from there every formula below is unit-agnostic.
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Convert a loss-ratio attachment ("attaches at 80% LR") into an
+ * absolute attachment amount given EPI. Used by Stop Loss covers,
+ * which quote their priority and width as percentages of premium.
+ *
+ * @param {number} lossRatioPct  Attachment loss ratio in % (e.g. 80 for 80%).
+ * @param {number} epi           Estimated Premium Income (subject premium).
+ * @returns {number} Absolute attachment in currency units; 0 for invalid input.
+ */
+export function attachmentFromLossRatio(lossRatioPct, epi) {
+  if (!Number.isFinite(lossRatioPct) || !Number.isFinite(epi) || epi <= 0) return 0;
+  return Math.max(0, lossRatioPct / 100) * epi;
+}
+
+/**
+ * Abramowitz & Stegun 7.1.26 approximation to the error function.
+ * Max error ~1.5e-7 — more than enough for pricing.
+ *
+ * @param {number} x
+ * @returns {number}
+ */
+export function erf(x) {
+  if (!Number.isFinite(x)) return 0;
+  const sign = x < 0 ? -1 : 1;
+  const ax = Math.abs(x);
+  const a1 =  0.254829592;
+  const a2 = -0.284496736;
+  const a3 =  1.421413741;
+  const a4 = -1.453152027;
+  const a5 =  1.061405429;
+  const p  =  0.3275911;
+  const t = 1 / (1 + p * ax);
+  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-ax * ax);
+  return sign * y;
+}
+
+/**
+ * Standard normal CDF (Φ) and PDF (φ) and the general-normal helpers
+ * built on them. Kept as named exports so callers can spot-check inputs
+ * without re-deriving the math.
+ *
+ * @param {number} x
+ * @returns {number}
+ */
+export function normalCdf(x, mean = 0, std = 1) {
+  if (!Number.isFinite(x) || !Number.isFinite(mean) || !Number.isFinite(std) || std <= 0) return 0;
+  return 0.5 * (1 + erf((x - mean) / (std * Math.SQRT2)));
+}
+
+export function normalPdf(x, mean = 0, std = 1) {
+  if (!Number.isFinite(x) || !Number.isFinite(mean) || !Number.isFinite(std) || std <= 0) return 0;
+  const z = (x - mean) / std;
+  return Math.exp(-0.5 * z * z) / (std * Math.sqrt(2 * Math.PI));
+}
+
+/**
+ * Closed-form expected stop-loss premium E[(X − K)+] for X ~ N(μ, σ²):
+ *   E[(X − K)+] = (μ − K)·Φ((μ − K)/σ) + σ·φ((μ − K)/σ)
+ *
+ * @param {number} mean
+ * @param {number} std
+ * @param {number} K     Retention (priority).
+ * @returns {number}
+ */
+export function normalStopLossPremium(mean, std, K) {
+  if (!Number.isFinite(mean) || !Number.isFinite(std) || !Number.isFinite(K)) return 0;
+  if (std <= 0) return Math.max(0, mean - K);
+  const z = (mean - K) / std;
+  return (mean - K) * normalCdf(z) + std * normalPdf(z);
+}
+
+/**
+ * Expected loss in an aggregate layer [D, D+L] under a normal
+ * approximation to the aggregate distribution:
+ *   E[min(max(S − D, 0), L)] = π(D) − π(D + L)
+ * where π(K) = E[(S − K)+] is the Normal stop-loss premium above.
+ *
+ * @param {number} mean   E[S]
+ * @param {number} std    √Var[S]
+ * @param {number} D      attachment / priority
+ * @param {number} L      layer width
+ * @returns {number} expected layer loss; 0 for invalid input or L ≤ 0.
+ */
+export function normalLayerMean(mean, std, D, L) {
+  if (!Number.isFinite(L) || L <= 0) return 0;
+  if (!Number.isFinite(mean) || !Number.isFinite(std) || !Number.isFinite(D)) return 0;
+  return normalStopLossPremium(mean, std, D) - normalStopLossPremium(mean, std, D + L);
+}
+
+/**
+ * Parameters of the underlying Normal for a Lognormal severity given
+ * its mean and coefficient of variation:
+ *   σ² = ln(1 + CV²),  μ = ln(mean) − σ²/2.
+ *
+ * @param {number} mean  E[X] > 0
+ * @param {number} cv    CV = σ_X / mean ≥ 0
+ * @returns {{mu: number, sigma: number}|null} null for invalid input.
+ */
+export function lognormalFromMeanCv(mean, cv) {
+  if (!Number.isFinite(mean) || mean <= 0) return null;
+  if (!Number.isFinite(cv) || cv < 0) return null;
+  const sigma2 = Math.log(1 + cv * cv);
+  return { mu: Math.log(mean) - sigma2 / 2, sigma: Math.sqrt(sigma2) };
+}
+
+/**
+ * First two raw moments of a Lognormal(μ, σ²) severity.
+ *   E[X]  = exp(μ + σ²/2)
+ *   E[X²] = exp(2μ + 2σ²)
+ *
+ * @param {number} mu
+ * @param {number} sigma
+ * @returns {{mean: number, secondMoment: number, variance: number}}
+ */
+export function lognormalMoments(mu, sigma) {
+  if (!Number.isFinite(mu) || !Number.isFinite(sigma) || sigma < 0) {
+    return { mean: 0, secondMoment: 0, variance: 0 };
+  }
+  const mean = Math.exp(mu + (sigma * sigma) / 2);
+  const secondMoment = Math.exp(2 * mu + 2 * sigma * sigma);
+  return { mean, secondMoment, variance: secondMoment - mean * mean };
+}
+
+/**
+ * First two raw moments of a single-parameter Pareto severity with
+ * shape α and scale (minimum) θ; P(X > x) = (θ/x)^α for x ≥ θ.
+ *   E[X]  = αθ/(α − 1)        for α > 1, else Infinity
+ *   E[X²] = αθ²/(α − 2)       for α > 2, else Infinity
+ *
+ * Heavy-tailed cases (α ≤ 2) return Infinity for the affected moment
+ * so the caller knows the Normal approximation will mis-price the tail.
+ *
+ * @param {number} alpha
+ * @param {number} theta
+ * @returns {{mean: number, secondMoment: number, variance: number}}
+ */
+export function paretoMoments(alpha, theta) {
+  if (!Number.isFinite(alpha) || !Number.isFinite(theta) || theta <= 0 || alpha <= 0) {
+    return { mean: 0, secondMoment: 0, variance: 0 };
+  }
+  const mean = alpha > 1 ? (alpha * theta) / (alpha - 1) : Infinity;
+  const secondMoment = alpha > 2 ? (alpha * theta * theta) / (alpha - 2) : Infinity;
+  const variance = Number.isFinite(secondMoment) && Number.isFinite(mean)
+    ? secondMoment - mean * mean
+    : Infinity;
+  return { mean, secondMoment, variance };
+}
+
+/**
+ * Mean and variance of an aggregate annual loss S under a Compound
+ * Poisson model (N ~ Poisson(λ); claim sizes iid with given moments).
+ *   E[S]   = λ · E[X]
+ *   Var[S] = λ · E[X²]            (NOT λ·Var[X] — Wald's variance)
+ *
+ * @param {number} lambda          Poisson rate (expected claim count).
+ * @param {number} severityMean    E[X]
+ * @param {number} severitySecondMoment  E[X²]
+ * @returns {{mean: number, variance: number, std: number}}
+ */
+export function compoundPoissonMoments(lambda, severityMean, severitySecondMoment) {
+  if (!Number.isFinite(lambda) || lambda < 0) return { mean: 0, variance: 0, std: 0 };
+  if (!Number.isFinite(severityMean)) return { mean: 0, variance: 0, std: 0 };
+  if (!Number.isFinite(severitySecondMoment)) {
+    return { mean: lambda * severityMean, variance: Infinity, std: Infinity };
+  }
+  const mean = lambda * severityMean;
+  const variance = lambda * severitySecondMoment;
+  return { mean, variance, std: Math.sqrt(variance) };
+}

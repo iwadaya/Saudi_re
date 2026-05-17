@@ -12,6 +12,16 @@ import {
   clamp,
   applyLoading,
   deriveComponentTotal,
+  attachmentFromLossRatio,
+  erf,
+  normalCdf,
+  normalPdf,
+  normalStopLossPremium,
+  normalLayerMean,
+  lognormalFromMeanCv,
+  lognormalMoments,
+  paretoMoments,
+  compoundPoissonMoments,
 } from './pricingMath.js';
 
 describe('layerHit', () => {
@@ -179,5 +189,172 @@ describe('deriveComponentTotal (3-way blend)', () => {
     // Same scenario as the integer test: 40·10 + 20·2 + 40·5 / 100 = 6.4
     // loaded = 6.4 / (1 - 0.20) = 8.0
     expect(deriveComponentTotal('10.00%', '2.00%', '5.00%', '40', '20', '40', '20')).toBeCloseTo(8.0, 6);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Stop-Loss / Aggregate-XL primitives
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('attachmentFromLossRatio', () => {
+  it('80% of 10M EPI → 8M attachment', () => {
+    expect(attachmentFromLossRatio(80, 10_000_000)).toBe(8_000_000);
+  });
+  it('0% → 0', () => {
+    expect(attachmentFromLossRatio(0, 10_000_000)).toBe(0);
+  });
+  it('negative LR clamped to 0', () => {
+    expect(attachmentFromLossRatio(-20, 10_000_000)).toBe(0);
+  });
+  it('invalid EPI → 0', () => {
+    expect(attachmentFromLossRatio(80, 0)).toBe(0);
+    expect(attachmentFromLossRatio(80, -1)).toBe(0);
+    expect(attachmentFromLossRatio(80, NaN)).toBe(0);
+  });
+});
+
+describe('erf / normal CDF + PDF', () => {
+  it('erf(0) = 0, erf(∞) ≈ 1', () => {
+    expect(erf(0)).toBeCloseTo(0, 6);
+    expect(erf(5)).toBeCloseTo(1, 6);
+    expect(erf(-5)).toBeCloseTo(-1, 6);
+  });
+  it('erf is odd: erf(-x) = -erf(x)', () => {
+    expect(erf(-1.2)).toBeCloseTo(-erf(1.2), 6);
+  });
+  it('Φ(0) = 0.5, Φ(±∞) = 0 / 1', () => {
+    expect(normalCdf(0)).toBeCloseTo(0.5, 6);
+    expect(normalCdf(5)).toBeCloseTo(1, 5);
+    expect(normalCdf(-5)).toBeCloseTo(0, 5);
+  });
+  it('Φ(1) ≈ 0.8413 (textbook value)', () => {
+    expect(normalCdf(1)).toBeCloseTo(0.8413, 3);
+  });
+  it('φ(0) = 1/√(2π) ≈ 0.3989', () => {
+    expect(normalPdf(0)).toBeCloseTo(1 / Math.sqrt(2 * Math.PI), 6);
+  });
+  it('general normal: Φ(μ, μ, σ) = 0.5', () => {
+    expect(normalCdf(100, 100, 25)).toBeCloseTo(0.5, 6);
+  });
+  it('std ≤ 0 → 0 (defensive)', () => {
+    expect(normalCdf(1, 0, 0)).toBe(0);
+    expect(normalPdf(1, 0, -1)).toBe(0);
+  });
+});
+
+describe('normalStopLossPremium / normalLayerMean', () => {
+  // π(K) = (μ-K)Φ((μ-K)/σ) + σφ((μ-K)/σ). At K = μ: (0)·0.5 + σ·φ(0) = σ/√(2π).
+  it('π(μ) = σ/√(2π)', () => {
+    expect(normalStopLossPremium(100, 20, 100)).toBeCloseTo(20 / Math.sqrt(2 * Math.PI), 6);
+  });
+  it('π(K) → max(0, μ-K) as K moves far from μ', () => {
+    // Far below mean → π ≈ μ-K (whole distribution above attachment)
+    expect(normalStopLossPremium(100, 5, 50)).toBeCloseTo(50, 3);
+    // Far above mean → π ≈ 0 (no chance of breaching)
+    expect(normalStopLossPremium(100, 5, 200)).toBeCloseTo(0, 6);
+  });
+  it('zero-σ collapses to deterministic stop-loss = max(0, μ-K)', () => {
+    expect(normalStopLossPremium(100, 0, 80)).toBe(20);
+    expect(normalStopLossPremium(100, 0, 120)).toBe(0);
+  });
+  it('layer mean = π(D) − π(D+L); positive and ≤ L', () => {
+    const out = normalLayerMean(100, 30, 80, 40);
+    expect(out).toBeGreaterThan(0);
+    expect(out).toBeLessThan(40);
+    expect(out).toBeCloseTo(
+      normalStopLossPremium(100, 30, 80) - normalStopLossPremium(100, 30, 120),
+      10,
+    );
+  });
+  it('layer width ≤ 0 → 0', () => {
+    expect(normalLayerMean(100, 30, 80, 0)).toBe(0);
+    expect(normalLayerMean(100, 30, 80, -10)).toBe(0);
+  });
+});
+
+describe('lognormalFromMeanCv / lognormalMoments round-trip', () => {
+  it('mean = 1M, CV = 0.5 → moments round-trip to the input mean', () => {
+    const { mu, sigma } = lognormalFromMeanCv(1_000_000, 0.5);
+    const moments = lognormalMoments(mu, sigma);
+    expect(moments.mean).toBeCloseTo(1_000_000, 4);
+    // Var/E² = CV²  →  Var = 0.25·1e12 = 2.5e11
+    expect(moments.variance).toBeCloseTo(0.25 * 1e12, -3);
+  });
+  it('zero CV → degenerate (σ=0, mean = exp(μ))', () => {
+    const { mu, sigma } = lognormalFromMeanCv(500_000, 0);
+    expect(sigma).toBe(0);
+    expect(Math.exp(mu)).toBeCloseTo(500_000, 4);
+  });
+  it('invalid inputs → null', () => {
+    expect(lognormalFromMeanCv(0, 0.5)).toBe(null);
+    expect(lognormalFromMeanCv(-1, 0.5)).toBe(null);
+    expect(lognormalFromMeanCv(100, -0.1)).toBe(null);
+  });
+});
+
+describe('paretoMoments', () => {
+  // α=3, θ=100k → E[X] = 3·100k/2 = 150k; E[X²] = 3·1e10/1 = 3e10
+  it('finite moments for α > 2', () => {
+    const m = paretoMoments(3, 100_000);
+    expect(m.mean).toBeCloseTo(150_000, 4);
+    expect(m.secondMoment).toBeCloseTo(3e10, -3);
+    expect(m.variance).toBeCloseTo(m.secondMoment - m.mean ** 2, -3);
+  });
+  it('α ∈ (1, 2] → finite mean, infinite second moment', () => {
+    const m = paretoMoments(1.5, 100_000);
+    expect(Number.isFinite(m.mean)).toBe(true);
+    expect(m.secondMoment).toBe(Infinity);
+    expect(m.variance).toBe(Infinity);
+  });
+  it('α ≤ 1 → both moments infinite', () => {
+    const m = paretoMoments(0.8, 100_000);
+    expect(m.mean).toBe(Infinity);
+    expect(m.secondMoment).toBe(Infinity);
+  });
+  it('invalid inputs → zeros', () => {
+    expect(paretoMoments(0, 100_000).mean).toBe(0);
+    expect(paretoMoments(2, 0).mean).toBe(0);
+    expect(paretoMoments(NaN, 100_000).mean).toBe(0);
+  });
+});
+
+describe('compoundPoissonMoments', () => {
+  it('E[S] = λ·E[X], Var[S] = λ·E[X²] — NOT λ·Var[X]', () => {
+    // λ=10, E[X]=100k, E[X²]=2e10 → E[S]=1M, Var[S]=2e11
+    const m = compoundPoissonMoments(10, 100_000, 2e10);
+    expect(m.mean).toBeCloseTo(1_000_000, 4);
+    expect(m.variance).toBeCloseTo(2e11, -3);
+    expect(m.std).toBeCloseTo(Math.sqrt(2e11), -3);
+  });
+  it('λ=0 → degenerate aggregate (mean 0, var 0)', () => {
+    const m = compoundPoissonMoments(0, 100_000, 2e10);
+    expect(m.mean).toBe(0);
+    expect(m.variance).toBe(0);
+    expect(m.std).toBe(0);
+  });
+  it('infinite severity second moment → infinite aggregate variance, finite mean', () => {
+    const m = compoundPoissonMoments(5, 150_000, Infinity);
+    expect(m.mean).toBeCloseTo(750_000, 4);
+    expect(m.variance).toBe(Infinity);
+  });
+  it('invalid λ → zeros', () => {
+    expect(compoundPoissonMoments(-1, 100, 1e6).mean).toBe(0);
+    expect(compoundPoissonMoments(NaN, 100, 1e6).mean).toBe(0);
+  });
+});
+
+describe('end-to-end: compound Poisson stop-loss premium', () => {
+  // Sanity check: a Poisson(10) of Lognormal(mean=100k, CV=0.5) severities.
+  // E[S] = 1M, Var[S] = λ·E[X²] = 10·100k²·(1+0.25) = 1.25e11; SD ≈ 353,553.
+  // Stop loss at retention = E[S] (50/50 chance of breaching).
+  // Normal approx: π(μ) = σ/√(2π) ≈ 141,047.
+  it('matches the textbook σ/√(2π) value when D = E[S]', () => {
+    const { mu, sigma } = lognormalFromMeanCv(100_000, 0.5);
+    const sev = lognormalMoments(mu, sigma);
+    const agg = compoundPoissonMoments(10, sev.mean, sev.secondMoment);
+    expect(agg.mean).toBeCloseTo(1_000_000, 4);
+    expect(agg.std).toBeCloseTo(Math.sqrt(1.25e11), -3);
+    const layer = normalLayerMean(agg.mean, agg.std, agg.mean, 10_000_000);
+    expect(layer).toBeCloseTo(agg.std / Math.sqrt(2 * Math.PI), -1);
   });
 });
