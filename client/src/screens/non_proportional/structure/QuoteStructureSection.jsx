@@ -200,7 +200,7 @@ export function QuoteStructureSection({
                   <th className="bm-np-th--limit">LIMIT</th>
                   <th className="bm-np-th--limit">DEDUCTIBLE / ATTACHMENT</th>
                   <th className="bm-np-th--limit">AGGREGATE LIMIT</th>
-                  <th className="bm-np-th--limit">PREMIUM</th>
+                  <th className="bm-np-th--limit">EGNPI</th>
                   <th style={{ minWidth: 120, textAlign: 'center' }}>NO. REINST.</th>
                   <th style={{ minWidth: 100, textAlign: 'center' }}>% REINST.</th>
                   <th style={{ minWidth: 60, textAlign: 'center' }}>AAD</th>

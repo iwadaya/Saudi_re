@@ -200,7 +200,7 @@ function PricingCurve({expCalc,structCalcs,a,b,r2}){
       {Array.from({length:YTICKS+1},(_,i)=>{const y=yMin+i*yStep;return(
         <text key={i} x={pL-5} y={sy(y)+4} fontSize={10} fontWeight="500" fill="rgba(148,163,184,0.85)" textAnchor="end">{(y*100).toFixed(1)}%</text>
       );})}
-      <text x={pL+10} y={H-6} fontSize={10} fontWeight="500" fill="rgba(148,163,184,0.70)">x = Geomean / Premium</text>
+      <text x={pL+10} y={H-6} fontSize={10} fontWeight="500" fill="rgba(148,163,184,0.70)">x = Geomean / EGNPI</text>
       {pathD&&<path d={pathD} fill="none" stroke="rgba(0,212,255,0.85)" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>}
       <text x={W-pR} y={pT+12} fontSize={10} fontWeight="600" fill="rgba(0,212,255,0.85)" textAnchor="end"
         fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace">
@@ -208,7 +208,7 @@ function PricingCurve({expCalc,structCalcs,a,b,r2}){
       </text>
       <text x={W-pR} y={pT+26} fontSize={9} fontWeight="500" fill="rgba(0,212,255,0.55)" textAnchor="end"
         fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace">
-        Power law · x = Geomean / Premium
+        Power law · x = Geomean / EGNPI
       </text>
       {expCalc.filter(l=>l._x>0&&l._rol>0).map((l,i)=>(
         <g key={`e${i}`}>
@@ -483,7 +483,7 @@ export default function QuickBenchmark(){
               </select>
             </div>
             <div className="bm-field">
-              <label className="bm-label">Premium (100%)</label>
+              <label className="bm-label">EGNPI (100%)</label>
               <div className="bm-input-row">
                 <NumCell className="bm-input" value={meta.egnpi}
                   onChange={v=>updateMeta('egnpi',v)} placeholder="e.g. 50,000,000"/>
@@ -530,8 +530,8 @@ export default function QuickBenchmark(){
             <table className="bm-table">
               <thead>
                 <tr>
-                  <th>#</th><th>Limit</th><th>Attachment</th><th>Premium</th>
-                  <th>Rate %</th><th>ROL %</th><th>Layer Premium</th>
+                  <th>#</th><th>Limit</th><th>Attachment</th><th>EGNPI</th>
+                  <th>Rate %</th><th>ROL %</th><th>Premium</th>
                   <th>MDP</th><th>Reinst.</th>
                   <th>Geomean</th><th>x=G/E</th><th></th>
                 </tr>

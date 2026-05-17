@@ -177,7 +177,7 @@ const STRUCTURE_ANALYSIS_METRICS = [
   },
   {
     key: 'deductibleEgnpi',
-    label: 'Deductible/Premium',
+    label: 'Deductible/EGNPI',
     format: 'pct',
     structure: (layer, fallbackEgnpi) => {
       const ded = fqToN(layer.attachment) || fqToN(layer.deductible);

@@ -36,7 +36,7 @@ async function exportPortfolioToExcel() {
   // ── Sheet 2: Non-Proportional (per layer) ───────────────────────────
   const npHeaders = [
     'Contract ID','Cedant','Country','Treaty Type','UW Year','Status','COB',
-    'Layer #','Attachment','Limit (Layer)','Premium 100%',
+    'Layer #','Attachment','Limit (Layer)','EGNPI 100%',
     'Premium (Layer)','ROL %','Rate %','Brokerage %',
     'Written Line %','Signed Line %',
   ];

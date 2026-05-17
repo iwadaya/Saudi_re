@@ -394,7 +394,7 @@ export default function NpPremiumsTable() {
                         type="button"
                         className="dock-btn dock-btn--ghost"
                         onClick={() => setShowRateModal(true)}
-                        title="Capture rate changes year-over-year and view on-level adjusted EGNPI"
+                        title="Capture rate changes year-over-year and view on-level adjusted premium"
                         style={{ fontSize: 11, fontWeight: 700, padding: '5px 12px', letterSpacing: '.05em' }}
                       >
                         ⚙ Rate Changes

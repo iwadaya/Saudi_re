@@ -46,7 +46,7 @@ const SHEET_MAP = {
   'Cresta'            : { type: 'cresta',        label: 'CRESTA Zones',        treaty: 'both' },
   // NP-only
   'Treaty Layers'     : { type: 'npLayers',      label: 'NP Treaty Layers',    treaty: 'np'   },
-  'EGNPI'             : { type: 'egnpi',         label: 'Premium History',     treaty: 'np'   },
+  'EGNPI'             : { type: 'egnpi',         label: 'EGNPI History',       treaty: 'np'   },
   'Claims Profile 2'  : { type: 'claimsProfile', label: 'Claims Profile 2',   treaty: 'both' },
 };
 
@@ -401,7 +401,7 @@ function NpLayersPreview({ data }) {
     <div className="ia-scroll-x">
       <table className="ia-table">
         <thead><tr>
-          <th>Layer</th><th>Limit</th><th>Deductible</th><th>Premium</th>
+          <th>Layer</th><th>Limit</th><th>Deductible</th><th>EGNPI</th>
           <th>Rate</th><th>Earned Prem</th><th>Reinst.</th>
         </tr></thead>
         <tbody>
@@ -423,11 +423,11 @@ function NpLayersPreview({ data }) {
 }
 
 function EgnpiPreview({ data }) {
-  if (!data?.length) return <div className="ia-empty">No premium data</div>;
+  if (!data?.length) return <div className="ia-empty">No EGNPI data</div>;
   return (
     <div className="ia-scroll-x">
       <table className="ia-table">
-        <thead><tr><th>Year</th><th>Premium</th></tr></thead>
+        <thead><tr><th>Year</th><th>EGNPI</th></tr></thead>
         <tbody>
           {data.map(r => (
             <tr key={r.year}><td className="ia-td-key">{r.year}</td><td className="ia-td-num">{fmt(r.egnpi)}</td></tr>
