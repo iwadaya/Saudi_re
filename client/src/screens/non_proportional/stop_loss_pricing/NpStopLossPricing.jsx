@@ -250,6 +250,12 @@ export default function NpStopLossPricing() {
     [appState],
   );
 
+  // markDirtyRef + inputsRef declared up here so setInput can close
+  // over them safely. inputsRef.current is kept in sync below.
+  const markDirtyRef = useRef(null);
+  const inputsRef = useRef(inputs);
+  inputsRef.current = inputs;
+
   // Seed the yearly-aggregates table from the underwriting year range
   // when the user first lands here. Empty aggregates are kept so the
   // burning-cost denominator includes zero-loss years (see annualiseLoss).
@@ -276,7 +282,22 @@ export default function NpStopLossPricing() {
 
   const setInput = useCallback(
     (patch) => {
-      setSlice(SLICE_KEY, patch);
+      // Mirror layer-0 fields into the `layers` array so the Structure
+      // screen sees the same edit. Other fields (freq/sev/MC/etc.)
+      // pass through unchanged.
+      let next = patch;
+      if (patch.attachmentLossRatio != null || patch.limitLossRatio != null || patch.epi != null) {
+        const current = inputsRef.current.layers || [];
+        const primary = current[0] || {};
+        const merged = {
+          attachmentLossRatio: patch.attachmentLossRatio ?? primary.attachmentLossRatio ?? inputsRef.current.attachmentLossRatio ?? '',
+          limitLossRatio: patch.limitLossRatio ?? primary.limitLossRatio ?? inputsRef.current.limitLossRatio ?? '',
+          epi: patch.epi ?? primary.epi ?? inputsRef.current.epi ?? '',
+        };
+        const layers = [merged, ...current.slice(1)];
+        next = { ...patch, layers };
+      }
+      setSlice(SLICE_KEY, next);
       markDirtyRef.current?.();
     },
     [setSlice],
@@ -313,9 +334,6 @@ export default function NpStopLossPricing() {
   }, [contractId, apiOpts]);
 
   // ── Server persistence via useScreenSave ──
-  const markDirtyRef = useRef(null);
-  const inputsRef = useRef(inputs);
-  inputsRef.current = inputs;
   const loadStopLoss = useCallback(
     (id) => api.getNpStopLossPricing(id, apiOpts),
     [apiOpts],

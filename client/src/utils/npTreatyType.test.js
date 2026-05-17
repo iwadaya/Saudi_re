@@ -75,28 +75,28 @@ describe('getWizardNav — NP_STOP_LOSS_PRICING visibility', () => {
     expect(order).not.toContain('NP_STOP_LOSS_PRICING');
   });
 
-  it('visible when npStopLoss is true (Stop Loss / Aggregate XL)', () => {
+  it('visible when npStopLoss is true; Final Pricing hidden alongside', () => {
     const { order } = getWizardNav('NP_TREATY_DETAIL', { npStopLoss: true });
     expect(order).toContain('NP_STOP_LOSS_PRICING');
-    // Inserted right before NP_FINAL_PRICING.
-    expect(order.indexOf('NP_STOP_LOSS_PRICING'))
-      .toBe(order.indexOf('NP_FINAL_PRICING') - 1);
+    expect(order).not.toContain('NP_FINAL_PRICING');
   });
 
-  it('Back/Next on Risk Profile skips the stop-loss step when hidden', () => {
+  it('Back/Next on Event Loss Tables skips stop-loss when hidden', () => {
     const { next } = getWizardNav('NP_EVENT_LOSS_TABLES', { npStopLoss: false });
     expect(next).toBe('NP_FINAL_PRICING');
   });
 
-  it('Back/Next on Risk Profile walks through the stop-loss step when visible', () => {
+  it('Back/Next on Event Loss Tables walks through stop-loss when visible', () => {
     const { next } = getWizardNav('NP_EVENT_LOSS_TABLES', { npStopLoss: true });
     expect(next).toBe('NP_STOP_LOSS_PRICING');
   });
 
-  it('NP_STOP_LOSS_PRICING itself returns nav neighbours when visible', () => {
+  it('NP_STOP_LOSS_PRICING is the terminal pricing step for Stop Loss treaties', () => {
+    // Final Pricing is filtered out for Stop Loss, so the Pricing
+    // step has no next page.
     const { prev, next } = getWizardNav('NP_STOP_LOSS_PRICING', { npStopLoss: true });
     expect(prev).toBe('NP_EVENT_LOSS_TABLES');
-    expect(next).toBe('NP_FINAL_PRICING');
+    expect(next).toBe(null);
   });
 
   it('order is unchanged for FAC / PROP modes', () => {

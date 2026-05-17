@@ -16,6 +16,7 @@ import {
 } from './NpStructureHelpers';
 import { QuoteStructureSection } from './QuoteStructureSection';
 import NpStopLossStructure from './NpStopLossStructure';
+import NpStopLossExpiring from '../expiring_structure/NpStopLossExpiring';
 
 const ROUTE_KEY = 'NP_STRUCTURE';
 
@@ -960,7 +961,10 @@ export default function NpStructure() {
       {() => (
         <div className="NP_STRUCTURE">
           {stopLossTreaty ? (
-            <NpStopLossStructure currency={currency} />
+            <>
+              <NpStopLossStructure currency={currency} />
+              <NpStopLossExpiring currency={currency} />
+            </>
           ) : loading ? <div className="df-card df-card--notice"><div className="df-note">Loading...</div></div> : (
             <>
               {/* ═══ QUOTE: Structures to Quote selector ═══ */}

@@ -49,6 +49,9 @@ export default function WizardTabs({ activeKey }) {
       if (npRiskDisabled && key.startsWith('NP_LARGE_LOSS_')) return false;
       // Stop Loss screen only shown for Stop Loss / Aggregate XL treaties.
       if (!npStopLoss && key === 'NP_STOP_LOSS_PRICING') return false;
+      // For Stop Loss treaties hide the Final Pricing tab — pricing
+      // is done on the dedicated Stop Loss Pricing screen instead.
+      if (npStopLoss && key === 'NP_FINAL_PRICING') return false;
     }
     return true;
   }

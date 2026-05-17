@@ -245,6 +245,11 @@ export function getWizardNav(routeKey, { quoteMode = false, triangulationsEnable
     // that price an aggregate-loss cover — hide the screen elsewhere.
     if (!npStopLoss) {
       order = order.filter(k => k !== 'NP_STOP_LOSS_PRICING');
+    } else {
+      // For Stop Loss treaties the Final Pricing screen (layer-grid
+      // pricing for Risk XL / Cat XL) doesn't apply — the dedicated
+      // Stop Loss Pricing step is the terminal pricing surface.
+      order = order.filter(k => k !== 'NP_FINAL_PRICING');
     }
   } else {
     order = [...PROP_WIZARD_ORDER];
