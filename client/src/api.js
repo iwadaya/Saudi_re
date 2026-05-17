@@ -697,38 +697,50 @@ export const api = {
   },
 
   /**
-   * Renewal-pack import endpoints.
+   * Renewal-pack import endpoints — entity-polymorphic via opts.quote.
    *
    * The flow is async: POST kicks off a background job and returns
    * 202 { jobId }; the caller polls GET .../import-renewal-pack/:jobId
    * until status is 'done' or 'failed'. Snapshots taken before each
    * import are restorable for 30 days via the snapshots endpoints.
    *
+   * Pass `opts.quote === true` to hit the quote-side endpoint family
+   * (/api/quotes/...); omit it (or pass false) for the treaty-side
+   * family (/api/treaties/...). The `id` argument is the quote_id or
+   * contract_id accordingly — DocumentsScreen wires its existing
+   * `apiOpts` here so the request lands on whichever entity the
+   * underwriter is currently editing.
+   *
    * Returns from each call:
-   *   importRenewalPack(quoteId, documentId)         → { jobId }
-   *   getRenewalPackImportJob(quoteId, jobId)        → { status, filledPages, warnings, unmatchedCresta, restorePointId } | { status: 'processing' } | { status: 'failed', error }
-   *   getActiveRenewalPackImport(quoteId)            → { activeJob: {jobId, documentId, startedAt} | null }
-   *   listImportSnapshots(quoteId)                   → Array<{ id, capturedAt, filename, filledPages, documentId, restorable, restoredAt }>
-   *   restoreImportSnapshot(quoteId, snapshotId)     → { ok: true, snapshotId } | 404/410
+   *   importRenewalPack(id, documentId, opts)        → { jobId }
+   *   getRenewalPackImportJob(id, jobId, opts)       → { status, filledPages, warnings, unmatchedCresta, restorePointId } | { status: 'processing' } | { status: 'failed', error }
+   *   getActiveRenewalPackImport(id, opts)           → { activeJob: {jobId, documentId, startedAt} | null }
+   *   listImportSnapshots(id, opts)                  → Array<{ id, capturedAt, filename, filledPages, documentId, restorable, restoredAt }>
+   *   restoreImportSnapshot(id, snapshotId, opts)    → { ok: true, snapshotId } | 404/410
    */
-  importRenewalPack(quoteId, documentId, opts = {}) {
-    return request(`/api/quotes/${enc(quoteId)}/import-renewal-pack`, {
+  importRenewalPack(id, documentId, opts = {}) {
+    const base = isQuoteMode(opts) ? `/api/quotes/${enc(id)}` : `/api/treaties/${enc(id)}`;
+    return request(`${base}/import-renewal-pack`, {
       method: 'POST',
       body: { documentId },
       ...opts,
     });
   },
-  getRenewalPackImportJob(quoteId, jobId, opts = {}) {
-    return request(`/api/quotes/${enc(quoteId)}/import-renewal-pack/${enc(jobId)}`, opts);
+  getRenewalPackImportJob(id, jobId, opts = {}) {
+    const base = isQuoteMode(opts) ? `/api/quotes/${enc(id)}` : `/api/treaties/${enc(id)}`;
+    return request(`${base}/import-renewal-pack/${enc(jobId)}`, opts);
   },
-  getActiveRenewalPackImport(quoteId, opts = {}) {
-    return request(`/api/quotes/${enc(quoteId)}/import-renewal-pack`, opts);
+  getActiveRenewalPackImport(id, opts = {}) {
+    const base = isQuoteMode(opts) ? `/api/quotes/${enc(id)}` : `/api/treaties/${enc(id)}`;
+    return request(`${base}/import-renewal-pack`, opts);
   },
-  listImportSnapshots(quoteId, opts = {}) {
-    return request(`/api/quotes/${enc(quoteId)}/import-snapshots`, opts);
+  listImportSnapshots(id, opts = {}) {
+    const base = isQuoteMode(opts) ? `/api/quotes/${enc(id)}` : `/api/treaties/${enc(id)}`;
+    return request(`${base}/import-snapshots`, opts);
   },
-  restoreImportSnapshot(quoteId, snapshotId, opts = {}) {
-    return request(`/api/quotes/${enc(quoteId)}/import-snapshots/${enc(snapshotId)}/restore`, {
+  restoreImportSnapshot(id, snapshotId, opts = {}) {
+    const base = isQuoteMode(opts) ? `/api/quotes/${enc(id)}` : `/api/treaties/${enc(id)}`;
+    return request(`${base}/import-snapshots/${enc(snapshotId)}/restore`, {
       method: 'POST',
       ...opts,
     });

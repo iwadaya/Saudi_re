@@ -621,3 +621,283 @@ describe.skipIf(shouldSkipDb)('integration: renewal-pack import (simplified)', (
     expect(pages.cresta).toBeUndefined();
   });
 });
+
+// ── treaty-side mirror ─────────────────────────────────────────────────────
+//
+// The /api/treaties/:contractId/import-renewal-pack family of routes
+// runs through the same handler factory + entity-aware page registry
+// as the quote-side family. These tests verify the parts that differ
+// — table writes land on contract_* rows, the import-jobs / snapshots
+// tables key on contract_id, audit goes to contract_audit_event — and
+// that the cross-route guard (DOCUMENT_OWNER_MISMATCH) keeps quote
+// docs from being imported into a contract and vice versa.
+
+async function createContract({ treatyCategory = 'PROPORTIONAL' } = {}) {
+  const treaty_type_id = await pickTreatyTypeId(treatyCategory);
+  const { rows } = await pool.query(
+    `INSERT INTO public.contract (uw_year, status, treaty_type_id, created_by_user_id, assigned_to_user_id)
+     VALUES ($1, 'DRAFT', $2, NULL, NULL)
+     RETURNING contract_id`,
+    [new Date().getFullYear(), treaty_type_id],
+  );
+  return rows[0].contract_id;
+}
+
+async function createContractWithoutTreatyDetail() {
+  const { rows } = await pool.query(
+    `INSERT INTO public.contract (uw_year, status, treaty_type_id, created_by_user_id, assigned_to_user_id)
+     VALUES ($1, 'DRAFT', NULL, NULL, NULL)
+     RETURNING contract_id`,
+    [new Date().getFullYear()],
+  );
+  return rows[0].contract_id;
+}
+
+async function seedContractDocument({ contractId, docType = 'renewal_pack', fixtureName = 'PROP_01.xlsx' }) {
+  const fixturePath = path.join(FIXTURES_DIR, fixtureName);
+  const buf = fs.readFileSync(fixturePath);
+  const subdir = `universe3/${contractId}`;
+  const filename = `${Date.now()}_${fixtureName}`;
+  const relPath = `${subdir}/${filename}`;
+  const absDir = path.resolve(env.uploadDir, subdir);
+  fs.mkdirSync(absDir, { recursive: true });
+  fs.writeFileSync(path.resolve(env.uploadDir, relPath), buf);
+  const { rows: dRows } = await pool.query(
+    `INSERT INTO public.contract_document
+       (contract_id, quote_id, file_name, mime_type, size_bytes, storage_path, doc_type, title)
+     VALUES ($1, NULL, $2, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', $3, $4, $5, $2)
+     RETURNING document_id`,
+    [contractId, fixtureName, buf.length, relPath, docType],
+  );
+  return { documentId: dRows[0].document_id };
+}
+
+async function waitForContractJob(harness, contractId, jobId, { timeoutMs = 5_000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const res = await harness.fetchApp('GET', `/api/treaties/${contractId}/import-renewal-pack/${jobId}`);
+    const body = await res.json();
+    if (body.status === 'done' || body.status === 'failed') return body;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error(`Job ${jobId} did not finish within ${timeoutMs}ms`);
+}
+
+describe.skipIf(shouldSkipDb)('integration: renewal-pack import (treaty side)', () => {
+  let harness;
+  let restoreFetch;
+  const cannedResponseRef = { current: cannedProp };
+  const pauseRef = { current: null };
+  const createdContractIds = new Set();
+  const createdQuoteIdsLocal = new Set();
+
+  beforeAll(async () => {
+    process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'test-gemini-key';
+    process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || 'sk-test';
+    harness = await bootApp();
+    restoreFetch = installLlmFetchInterceptor(
+      () => cannedResponseRef.current(),
+      () => pauseRef.current,
+    );
+    await ensureTreatyTypes();
+  });
+
+  beforeEach(() => {
+    pauseRef.current = null;
+    cannedResponseRef.current = cannedProp;
+  });
+
+  afterAll(async () => {
+    restoreFetch?.();
+    for (const id of createdContractIds) {
+      try { await pool.query(`DELETE FROM public.contract WHERE contract_id=$1`, [id]); } catch {}
+    }
+    for (const id of createdQuoteIdsLocal) {
+      try { await pool.query(`DELETE FROM public.quote WHERE quote_id=$1`, [id]); } catch {}
+    }
+    await harness.close();
+    await closePools();
+  });
+
+  it('happy path: empty contract + renewal pack doc → 202 → done, contract tables populated, audit event written', async () => {
+    cannedResponseRef.current = cannedProp;
+    const contractId = await createContract({ treatyCategory: 'PROPORTIONAL' });
+    createdContractIds.add(contractId);
+    const { documentId } = await seedContractDocument({ contractId });
+
+    const postRes = await harness.fetchApp(
+      'POST', `/api/treaties/${contractId}/import-renewal-pack`,
+      { body: { documentId } },
+    );
+    expect(postRes.status).toBe(202);
+    const { jobId } = await postRes.json();
+
+    const result = await waitForContractJob(harness, contractId, jobId);
+    expect(result.status).toBe('done');
+    expect(result.filledPages).toEqual(expect.arrayContaining(['premium_history', 'claims_history', 'large_losses']));
+
+    // Snapshot row carries contract_id (not quote_id).
+    const { rows: snapRows } = await pool.query(
+      `SELECT snapshot_id, contract_id, quote_id, filename, filled_pages
+         FROM public.import_snapshots WHERE snapshot_id=$1`,
+      [result.restorePointId],
+    );
+    expect(snapRows[0].contract_id).toBe(contractId);
+    expect(snapRows[0].quote_id).toBeNull();
+
+    // Audit went to contract_audit_event (CONTRACT entity_type maps there).
+    const { rows: auditRows } = await pool.query(
+      `SELECT event_type, payload FROM public.contract_audit_event
+        WHERE contract_id=$1 AND event_type='renewal_pack_imported'
+        ORDER BY created_at DESC LIMIT 1`,
+      [contractId],
+    );
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0].payload.snapshotId).toBe(result.restorePointId);
+
+    // Triangle cells landed on contract_triangle_cells.
+    const { rows: premRows } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM public.contract_triangle_cells WHERE contract_id=$1 AND type='PREMIUM'`,
+      [contractId],
+    );
+    expect(premRows[0].n).toBeGreaterThan(0);
+
+    // Large losses populated the relational tables (header + child rows),
+    // not the quote-style jsonb blob.
+    const { rows: lrgHdr } = await pool.query(
+      `SELECT report_id FROM public.contract_large_loss_report WHERE contract_id=$1`,
+      [contractId],
+    );
+    expect(lrgHdr).toHaveLength(1);
+    const { rows: lrgRows } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM public.contract_large_losses WHERE report_id=$1`,
+      [lrgHdr[0].report_id],
+    );
+    expect(lrgRows[0].n).toBeGreaterThan(0);
+
+    // import_metadata provenance on the contract row.
+    const { rows: contractRows } = await pool.query(
+      `SELECT import_metadata FROM public.contract WHERE contract_id=$1`,
+      [contractId],
+    );
+    expect(contractRows[0].import_metadata?.source).toBe('renewal_pack_import');
+    expect(contractRows[0].import_metadata?.snapshot_id).toBe(result.restorePointId);
+  });
+
+  it('treaty detail not saved → 409 TREATY_DETAIL_REQUIRED', async () => {
+    const contractId = await createContractWithoutTreatyDetail();
+    createdContractIds.add(contractId);
+    const { documentId } = await seedContractDocument({ contractId });
+
+    const res = await harness.fetchApp(
+      'POST', `/api/treaties/${contractId}/import-renewal-pack`,
+      { body: { documentId } },
+    );
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.code).toBe('TREATY_DETAIL_REQUIRED');
+  });
+
+  it('document attached to a quote rejected when posted to the contract endpoint (DOCUMENT_OWNER_MISMATCH)', async () => {
+    // Wrong-entity document — uploaded against a quote but POSTed to
+    // the contract import endpoint. Without the owner check the
+    // contract-side import would happily replay data the underwriter
+    // didn't pick.
+    const contractId = await createContract({ treatyCategory: 'PROPORTIONAL' });
+    createdContractIds.add(contractId);
+    const quoteId = await createQuote({ treatyCategory: 'PROPORTIONAL' });
+    createdQuoteIdsLocal.add(quoteId);
+    const { documentId } = await seedDocument({ quoteId });
+
+    const res = await harness.fetchApp(
+      'POST', `/api/treaties/${contractId}/import-renewal-pack`,
+      { body: { documentId } },
+    );
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.code).toBe('DOCUMENT_OWNER_MISMATCH');
+  });
+
+  it('two concurrent imports on the same contract → second returns 409 IMPORT_IN_PROGRESS', async () => {
+    const contractId = await createContract({ treatyCategory: 'PROPORTIONAL' });
+    createdContractIds.add(contractId);
+    const { documentId } = await seedContractDocument({ contractId });
+
+    // Hold the LLM call so the first job stays in 'processing' while
+    // we fire the second POST.
+    let release;
+    pauseRef.current = new Promise((r) => { release = r; });
+    try {
+      const firstP = harness.fetchApp(
+        'POST', `/api/treaties/${contractId}/import-renewal-pack`,
+        { body: { documentId } },
+      );
+      // Wait for the row to land — the route returns 202 only after
+      // INSERT-ing the job, so polling the active endpoint here is the
+      // simplest way to know we're past that.
+      const firstRes = await firstP;
+      expect(firstRes.status).toBe(202);
+
+      const secondRes = await harness.fetchApp(
+        'POST', `/api/treaties/${contractId}/import-renewal-pack`,
+        { body: { documentId } },
+      );
+      expect(secondRes.status).toBe(409);
+      const body = await secondRes.json();
+      expect(body.code).toBe('IMPORT_IN_PROGRESS');
+    } finally {
+      release();
+    }
+
+    // Drain the first job so the afterAll teardown doesn't trip on a
+    // background runner still touching the DB.
+    const { rows: jobs } = await pool.query(
+      `SELECT job_id FROM public.import_jobs WHERE contract_id=$1`,
+      [contractId],
+    );
+    if (jobs.length) {
+      await waitForContractJob(harness, contractId, jobs[0].job_id);
+    }
+  });
+
+  it('snapshot restore restores contract tables (round-trip)', async () => {
+    const contractId = await createContract({ treatyCategory: 'PROPORTIONAL' });
+    createdContractIds.add(contractId);
+    const { documentId } = await seedContractDocument({ contractId });
+
+    // First import populates the page.
+    const postRes = await harness.fetchApp(
+      'POST', `/api/treaties/${contractId}/import-renewal-pack`,
+      { body: { documentId } },
+    );
+    const { jobId } = await postRes.json();
+    const result = await waitForContractJob(harness, contractId, jobId);
+    expect(result.status).toBe('done');
+
+    // Confirm the contract has triangle cells before the restore.
+    const { rows: before } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM public.contract_triangle_cells WHERE contract_id=$1 AND type='PREMIUM'`,
+      [contractId],
+    );
+    expect(before[0].n).toBeGreaterThan(0);
+
+    const restoreRes = await harness.fetchApp(
+      'POST', `/api/treaties/${contractId}/import-snapshots/${result.restorePointId}/restore`,
+    );
+    expect(restoreRes.status).toBe(200);
+
+    // The snapshot was captured before the import, so the cells should
+    // now be empty again. (Same restore semantics as the quote side.)
+    const { rows: after } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM public.contract_triangle_cells WHERE contract_id=$1 AND type='PREMIUM'`,
+      [contractId],
+    );
+    expect(after[0].n).toBe(0);
+
+    // Second restore on the same snapshot is rejected — single-use.
+    const restore2 = await harness.fetchApp(
+      'POST', `/api/treaties/${contractId}/import-snapshots/${result.restorePointId}/restore`,
+    );
+    expect(restore2.status).toBe(410);
+  });
+});
