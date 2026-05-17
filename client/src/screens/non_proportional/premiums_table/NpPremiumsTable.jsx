@@ -388,7 +388,7 @@ export default function NpPremiumsTable() {
                 {/* ═══ LEFT: EGNPI BY UW YEAR ═══ */}
                 <section className="np-struct-card glass np-prem-card">
                   <div className="np-struct-card-header">
-                    <div className="np-struct-card-title">UNDERWRITING YEARS · EGNPI</div>
+                    <div className="np-struct-card-title">UNDERWRITING YEARS · PREMIUM</div>
                     <div className="np-struct-card-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <button
                         type="button"
@@ -404,7 +404,7 @@ export default function NpPremiumsTable() {
                   </div>
                   <div className="np-table-wrap np-table-wrap--scroll">
                     <table className="np-prem-table">
-                      <thead><tr><th className="np-table-sticky">UW</th><th>EGNPI</th><th className="cell-right">Δ vs prev</th></tr></thead>
+                      <thead><tr><th className="np-table-sticky">UW</th><th>Premium</th><th className="cell-right">Δ vs prev</th></tr></thead>
                       <tbody>
                         {uwRows.length === 0 ? (
                           <tr><td colSpan={3} className="np-muted">Set Start Year / Renewal Date on Treaty Detail.</td></tr>
@@ -599,10 +599,10 @@ function RateChangesModal({ years, uwRows, rateChangeRows, onChange, onClose }) 
               <thead>
                 <tr style={{ background: '#050810' }}>
                   <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>UW Year</th>
-                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)', textAlign: 'right' }}>EGNPI</th>
+                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)', textAlign: 'right' }}>Premium</th>
                   <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: '#00d4ff', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>Rate Change %</th>
                   <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)', textAlign: 'right' }}>On-Level Factor</th>
-                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: '#4ade80', borderBottom: '1px solid rgba(255,255,255,0.10)', textAlign: 'right' }}>Adjusted EGNPI</th>
+                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: '#4ade80', borderBottom: '1px solid rgba(255,255,255,0.10)', textAlign: 'right' }}>Adjusted Premium</th>
                 </tr>
               </thead>
               <tbody>
@@ -639,7 +639,7 @@ function RateChangesModal({ years, uwRows, rateChangeRows, onChange, onClose }) 
           </div>
           <div style={{ marginTop: 12, fontSize: 11, color: 'rgba(148,163,184,0.55)', lineHeight: 1.5 }}>
             Rate change <em>r</em> for year <em>y</em> means premium that year sits <em>r</em>% above the prior year's rate level.
-            The on-level factor compounds every change <em>since</em> year <em>y</em>, bringing the historical EGNPI to today's level.
+            The on-level factor compounds every change <em>since</em> year <em>y</em>, bringing the historical premium to today's level.
           </div>
         </div>
       </div>

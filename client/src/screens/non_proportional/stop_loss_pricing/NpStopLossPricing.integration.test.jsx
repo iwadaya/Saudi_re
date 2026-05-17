@@ -103,7 +103,7 @@ describe('NpStopLossPricing — render + interaction', () => {
     // → LR ≈ 104.0%).
     await waitFor(() => {
       const row = screen.getByText('2020').closest('tr');
-      expect(within(row).queryByText(/— \(set EGNPI\)/)).not.toBeInTheDocument();
+      expect(within(row).queryByText(/— \(set premium\)/)).not.toBeInTheDocument();
     });
     const row2020 = screen.getByText('2020').closest('tr');
     const input2020 = within(row2020).getByPlaceholderText('0');

@@ -172,7 +172,7 @@ describe('NpFinalPricing integration', () => {
     fireEvent.click(pricingGraphButton);
     expect(await screen.findByText(/AI Limit/i)).toBeInTheDocument();
     expect(await screen.findByText(/Within Country Average/i)).toBeInTheDocument();
-    expect(screen.getByText(/Deductible\/EGNPI/i)).toBeInTheDocument();
+    expect(screen.getByText(/Deductible\/Premium/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Close/i }));
 
     const pricingAnalysisButton = Array.from(structure.querySelectorAll('button')).find(button => /^Pricing Analysis$/i.test((button.textContent || '').trim()));

@@ -125,7 +125,7 @@ export async function exportNpPricingToExcel(data) {
     quoteStructures.forEach((st, sIdx) => {
       const stLayers = Array.isArray(st.layers) ? st.layers : [];
       if (!stLayers.length) return;
-      const headers = ['Layer','Type','Limit','Deductible','EGNPI','Rate/ROL %','Reinsurer %','Lead %','Expiring %'];
+      const headers = ['Layer','Type','Limit','Deductible','Premium','Rate/ROL %','Reinsurer %','Lead %','Expiring %'];
       const rows = stLayers.map(l => [
         l.layerNumber || l.layer_number,
         l.xlType || st.xlType || '–',

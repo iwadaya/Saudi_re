@@ -595,7 +595,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
                       {premiumLoading ? (
                         <div className="ls-modal-empty">Loading premiums…</div>
                       ) : premiumByYear.length === 0 ? (
-                        <div className="ls-modal-empty">No premium history found for this contract. Loss-loading needs premium per year (from the premium triangle, straight stats, or NP EGNPI).</div>
+                        <div className="ls-modal-empty">No premium history found for this contract. Loss-loading needs premium per year (from the premium triangle, straight stats, or NP Premium).</div>
                       ) : (
                         <>
                           <div className="ls-infl-table-wrap">

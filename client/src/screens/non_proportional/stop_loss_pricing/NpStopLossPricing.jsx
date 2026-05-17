@@ -637,7 +637,7 @@ export default function NpStopLossPricing() {
                             )}
                           </>
                         ) : (
-                          <span style={{ color: 'rgba(148,163,184,0.40)' }}>— (set EGNPI)</span>
+                          <span style={{ color: 'rgba(148,163,184,0.40)' }}>— (set premium)</span>
                         )}
                       </td>
                       <td style={styles.td}>

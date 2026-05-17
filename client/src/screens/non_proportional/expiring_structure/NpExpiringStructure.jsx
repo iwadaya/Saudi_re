@@ -656,7 +656,7 @@ export default function NpExpiringStructure() {
                         <th className="np-col">LIMIT</th>
                         <th className="np-col">DEDUCTIBLE / ATTACHMENT</th>
                         <th className="np-col">AGGREGATE LIMIT</th>
-                        <th className="np-col">EGNPI</th>
+                        <th className="np-col">PREMIUM</th>
                         <th className="np-col-rate cell-center">RATE %</th>
                         <th className="np-col">EARNED PREM</th>
                         <th className="np-col">MDP</th>
@@ -826,7 +826,7 @@ export default function NpExpiringStructure() {
                           <text x={+sx(p.x).toFixed(2) + 7} y={+sy(p.y).toFixed(2) + 4} fontSize={11} fill="rgba(255,255,255,0.85)" fontWeight="700">L{p.layer}</text>
                         </g>
                       ))}
-                      <text x={padL} y={H - 8} fontSize={11} fontWeight="500" fill="rgba(255,255,255,0.65)">x = √((Att+Lim)×Att) / EGNPI</text>
+                      <text x={padL} y={H - 8} fontSize={11} fontWeight="500" fill="rgba(255,255,255,0.65)">x = √((Att+Lim)×Att) / Premium</text>
                       <text x={10} y={padT + 4} fontSize={11} fontWeight="500" fill="rgba(255,255,255,0.65)">ROL</text>
                     </svg>
                   );
@@ -842,7 +842,7 @@ export default function NpExpiringStructure() {
                         <div>
                           <div style={{ fontWeight: 800, fontSize: 14, letterSpacing: '.06em', color: '#e2e8f0', textTransform: 'uppercase' }}>Implied Pricing Curve</div>
                           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 3 }}>
-                            Power-law fit: ROL = a × x^b &nbsp;|&nbsp; x = √((Att+Lim)×Att) / EGNPI. Requires ≥2 layers with Limit, Deductible, EGNPI and ROL.
+                            Power-law fit: ROL = a × x^b &nbsp;|&nbsp; x = √((Att+Lim)×Att) / Premium. Requires ≥2 layers with Limit, Deductible, Premium and ROL.
                           </div>
                         </div>
                         <button type="button" onClick={() => setShowCurveModal(false)} aria-label="Close"
@@ -853,7 +853,7 @@ export default function NpExpiringStructure() {
                       <div style={{ overflowY: 'auto', padding: '16px 20px', flex: 1 }}>
                         {pts.length < 2 ? (
                           <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 32 }}>
-                            Enter Limit, Deductible, EGNPI and ROL for at least two layers to display the curve.
+                            Enter Limit, Deductible, Premium and ROL for at least two layers to display the curve.
                           </p>
                         ) : !model ? (
                           <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 32 }}>
@@ -865,7 +865,7 @@ export default function NpExpiringStructure() {
                               {renderSVG()}
                             </div>
                             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.32)', borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 10 }}>
-                              Model: ROL = a × x^b &nbsp;|&nbsp; x = √((Attachment + Limit) × Attachment) / EGNPI &nbsp;|&nbsp; Fitted by least-squares search over b ∈ [−6, 6].
+                              Model: ROL = a × x^b &nbsp;|&nbsp; x = √((Attachment + Limit) × Attachment) / Premium &nbsp;|&nbsp; Fitted by least-squares search over b ∈ [−6, 6].
                               {Number.isFinite(r2) && <span style={{ marginLeft: 16, color: 'rgba(0,212,255,0.7)', fontWeight: 700 }}>R² = {r2.toFixed(3)}</span>}
                             </div>
                             <table className="np-struct-table" style={{ width: '100%', marginTop: 14 }}>

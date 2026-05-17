@@ -2559,7 +2559,7 @@ export default function NpFinalPricing() {
                             <th>Layer</th>
                             <th>Limit</th>
                             <th>Attachment</th>
-                            <th>EGNPI</th>
+                            <th>Premium</th>
                             <th>Rate %</th>
                             <th>Earned Premium</th>
                             <th>ROL</th>
@@ -3553,7 +3553,7 @@ export default function NpFinalPricing() {
                             { k: 'COB',         v: snap.cob        },
                             { k: 'XL Type',     v: snap.xlType     },
                             { k: 'Layers',      v: layers.length   },
-                            { k: 'EGNPI',       v: money(toN(npDetail.estGnpi)) },
+                            { k: 'Premium',     v: money(toN(npDetail.estGnpi)) },
                           ].map((item, idx, arr) => (
                             <div key={item.k} style={{
                               flex: 1, padding: '10px 16px',
