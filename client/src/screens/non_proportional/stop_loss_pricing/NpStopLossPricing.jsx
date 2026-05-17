@@ -287,22 +287,11 @@ export default function NpStopLossPricing() {
 
   const setInput = useCallback(
     (patch) => {
-      // Mirror layer-0 fields into the `layers` array so the Structure
-      // screen sees the same edit. Other fields (freq/sev/MC/etc.)
-      // pass through unchanged.
-      let next = patch;
-      if (patch.attachmentLossRatio != null || patch.limitLossRatio != null || patch.epi != null) {
-        const current = inputsRef.current.layers || [];
-        const primary = current[0] || {};
-        const merged = {
-          attachmentLossRatio: patch.attachmentLossRatio ?? primary.attachmentLossRatio ?? inputsRef.current.attachmentLossRatio ?? '',
-          limitLossRatio: patch.limitLossRatio ?? primary.limitLossRatio ?? inputsRef.current.limitLossRatio ?? '',
-          epi: patch.epi ?? primary.epi ?? inputsRef.current.epi ?? '',
-        };
-        const layers = [merged, ...current.slice(1)];
-        next = { ...patch, layers };
-      }
-      setSlice(SLICE_KEY, next);
+      // The Pricing screen only edits engine inputs (frequency,
+      // severity, MC, weights, loading, yearly aggregates). Layer
+      // cover fields (attachmentLossRatio / limitLossRatio / epi)
+      // are read-only here — those are owned by the Structure page.
+      setSlice(SLICE_KEY, patch);
       markDirtyRef.current?.();
     },
     [setSlice],
@@ -470,19 +459,9 @@ export default function NpStopLossPricing() {
     return out;
   }, [inputs.layers, inputs.attachmentLossRatio, inputs.limitLossRatio, inputs.epi, layerCount]);
 
-  // Edit a single layer; mirrors layer 0 into the legacy top-level
-  // fields so the rest of the slice (and other screens) stay synced.
-  const updateLayer = useCallback((i, patch) => {
-    const next = layers.map((l, idx) => (idx === i ? { ...l, ...patch } : { ...l }));
-    const primary = next[0] || {};
-    setSlice(SLICE_KEY, {
-      layers: next,
-      attachmentLossRatio: primary.attachmentLossRatio ?? '',
-      limitLossRatio: primary.limitLossRatio ?? '',
-      epi: primary.epi ?? '',
-    });
-    markDirtyRef.current?.();
-  }, [layers, setSlice]);
+  // (Layer cover is read-only on this screen; edits happen on the
+  // Structure page, which writes through to the same npStopLossInputs
+  // slice we read from below.)
 
   // ── Shared engine args (frequency / severity / MC / blend / loading).
   //    Per-layer args extend this with attach / limit / epi and a
@@ -614,31 +593,31 @@ export default function NpStopLossPricing() {
     >
       <div style={styles.shell}>
 
-        {/* ── 1. Layer cover ───────────────────────────────────────────── */}
+        {/* ── 1. Layer cover (read-only mirror of Structure) ──────────── */}
         <div style={styles.section}>
           <div style={styles.sectionTitle}>Layer Cover · Loss-Ratio Basis</div>
           <div style={styles.sectionSub}>
-            Stop Loss attaches at a loss ratio of subject premium —
-            e.g. "20% xs 80% LR" pays losses between 80% and 100% loss
-            ratio. {layerCount > 1 ? `${layerCount} layers` : 'One layer'} —
-            count comes from Treaty Detail. Edits here mirror back to
-            the Structure page.
+            Read-only — edit on the <strong>Structure</strong> page.
+            Stop Loss attaches at a loss ratio of subject premium
+            (e.g. "20% xs 80% LR" pays losses between 80% and 100% LR).
+            {layerCount > 1 ? ` ${layerCount} layers` : ' One layer'} from
+            Treaty Detail.
           </div>
 
           <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <colgroup>
                 <col style={{ width: '10%' }} />
-                <col style={{ width: '20%' }} />
-                <col style={{ width: '20%' }} />
-                <col style={{ width: '25%' }} />
-                <col style={{ width: '25%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '22%' }} />
+                <col style={{ width: '32%' }} />
               </colgroup>
               <thead>
                 <tr>
                   <th style={styles.th}>Layer</th>
-                  <th style={styles.th}>Attach LR (%)</th>
-                  <th style={styles.th}>Limit LR (%)</th>
+                  <th style={styles.th}>Attach LR %</th>
+                  <th style={styles.th}>Limit LR %</th>
                   <th style={styles.th}>EPI</th>
                   <th style={styles.th}>Resolved · Limit xs Attach</th>
                 </tr>
@@ -646,38 +625,23 @@ export default function NpStopLossPricing() {
               <tbody>
                 {layers.map((l, i) => {
                   const r = layerResults[i] || { attachment: 0, limit: 0 };
+                  const att = l.attachmentLossRatio === '' || l.attachmentLossRatio == null
+                    ? '—'
+                    : `${l.attachmentLossRatio}%`;
+                  const lim = l.limitLossRatio === '' || l.limitLossRatio == null
+                    ? '—'
+                    : `${l.limitLossRatio}%`;
+                  const epi = (l.epi === '' || l.epi == null || Number(l.epi) === 0)
+                    ? '—'
+                    : fmtMoneyFull(Number(l.epi));
                   return (
                     <tr key={i} style={{ background: i % 2 === 0 ? COLORS.rowEven : COLORS.rowOdd }}>
                       <td style={{ ...styles.td, fontWeight: 800, color: 'rgba(0,212,255,0.70)', fontSize: 13 }}>
                         L{i + 1}
                       </td>
-                      <td style={styles.td}>
-                        <input
-                          aria-label={i === 0 ? 'Attachment LR' : `Layer ${i + 1} Attachment LR`}
-                          style={{ ...styles.input, maxWidth: 140, margin: '0 auto', textAlign: 'center' }}
-                          value={l.attachmentLossRatio}
-                          onChange={(e) => updateLayer(i, { attachmentLossRatio: e.target.value })}
-                          placeholder="80"
-                        />
-                      </td>
-                      <td style={styles.td}>
-                        <input
-                          aria-label={i === 0 ? 'Limit LR' : `Layer ${i + 1} Limit LR`}
-                          style={{ ...styles.input, maxWidth: 140, margin: '0 auto', textAlign: 'center' }}
-                          value={l.limitLossRatio}
-                          onChange={(e) => updateLayer(i, { limitLossRatio: e.target.value })}
-                          placeholder="20"
-                        />
-                      </td>
-                      <td style={styles.td}>
-                        <input
-                          aria-label={i === 0 ? 'EPI' : `Layer ${i + 1} EPI`}
-                          style={{ ...styles.input, maxWidth: 220, margin: '0 auto', textAlign: 'right' }}
-                          value={l.epi}
-                          onChange={(e) => updateLayer(i, { epi: e.target.value })}
-                          placeholder="e.g. 10,000,000"
-                        />
-                      </td>
+                      <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700 }}>{att}</td>
+                      <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700 }}>{lim}</td>
+                      <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, textAlign: 'right' }}>{epi}</td>
                       <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, color: r.limit > 0 ? COLORS.cyan : 'rgba(148,163,184,0.40)' }}>
                         {r.limit > 0
                           ? <>{fmtMoneyFull(r.limit)} xs {fmtMoneyFull(r.attachment)}</>

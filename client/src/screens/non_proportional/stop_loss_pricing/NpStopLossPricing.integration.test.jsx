@@ -61,27 +61,42 @@ describe('NpStopLossPricing — render + interaction', () => {
     expect(screen.getByText(/Blended Result/i)).toBeInTheDocument();
   });
 
-  it('layer cover always shows LR fields (no basis toggle)', () => {
-    renderStopLoss();
-    expect(screen.getByText(/Attach LR \(%\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/Limit LR \(%\)/i)).toBeInTheDocument();
-    expect(screen.getByLabelText('Attachment LR')).toBeInTheDocument();
-    expect(screen.getByLabelText('Limit LR')).toBeInTheDocument();
-    expect(screen.getByLabelText('EPI')).toBeInTheDocument();
+  it('layer cover is a read-only display (edits happen on Structure)', () => {
+    renderStopLoss({
+      npStopLossInputs: {
+        layers: [{ attachmentLossRatio: '80', limitLossRatio: '20', epi: '10000000' }],
+        attachmentLossRatio: '80', limitLossRatio: '20', epi: '10000000',
+      },
+    });
+    expect(screen.getByText(/Read-only — edit on the/i)).toBeInTheDocument();
+    expect(screen.getByText('Attach LR %')).toBeInTheDocument();
+    expect(screen.getByText('Limit LR %')).toBeInTheDocument();
+    // Layer 1 row shows the values as plain text.
+    expect(screen.getByText('80%')).toBeInTheDocument();
+    expect(screen.getByText('20%')).toBeInTheDocument();
+    // No inputs in the Layer Cover section anymore.
+    expect(screen.queryByLabelText('Attachment LR')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Limit LR')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('EPI')).not.toBeInTheDocument();
     // Old absolute pill buttons should be gone.
     expect(screen.queryByRole('button', { name: /Absolute \(Agg XL\)/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Loss Ratio \(Stop Loss\)/i })).not.toBeInTheDocument();
   });
 
   it('renders one Layer Cover row per layer from Treaty Detail', () => {
-    renderStopLoss({ npTreatyDetail: { startYear: 2024, experienceStartYear: 2019, treatyTypeName: 'Stop Loss', numberOfLayers: 3 } });
-    // Layer 1 input gets the canonical aria-labels; layers 2..N use
-    // numbered labels.
-    expect(screen.getByLabelText('Attachment LR')).toBeInTheDocument();
-    expect(screen.getByLabelText('Layer 2 Attachment LR')).toBeInTheDocument();
-    expect(screen.getByLabelText('Layer 3 Attachment LR')).toBeInTheDocument();
-    expect(screen.getByLabelText('Layer 2 Limit LR')).toBeInTheDocument();
-    expect(screen.getByLabelText('Layer 3 EPI')).toBeInTheDocument();
+    renderStopLoss({
+      npTreatyDetail: { startYear: 2024, experienceStartYear: 2019, treatyTypeName: 'Stop Loss', numberOfLayers: 3 },
+      npStopLossInputs: {
+        layers: [
+          { attachmentLossRatio: '80', limitLossRatio: '20', epi: '10000000' },
+          { attachmentLossRatio: '100', limitLossRatio: '20', epi: '10000000' },
+          { attachmentLossRatio: '120', limitLossRatio: '30', epi: '10000000' },
+        ],
+      },
+    });
+    // L1, L2, L3 labels appear in the Layer Cover table.
+    expect(screen.getAllByText('L1').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('L2').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('L3').length).toBeGreaterThan(0);
   });
 
   it('per-layer calculations propagate to the Blended Result table', async () => {
@@ -119,13 +134,13 @@ describe('NpStopLossPricing — render + interaction', () => {
     expect(screen.getByText('Premium (Adjusted)')).toBeInTheDocument();
     expect(screen.getByText('Aggregate Loss')).toBeInTheDocument();
     expect(screen.getByText('Loss Ratio')).toBeInTheDocument();
+    // Single-layer default → "Layer Hit" (without the L-number prefix).
     expect(screen.getByText('Layer Hit')).toBeInTheDocument();
   });
 
   it('on-level adjusted premium drives the loss ratio cell', async () => {
     // Server returns egnpi rows. Year 2020: 8M premium with +5% applied in
     // 2021 and +3% in 2022 → on-level factor for 2020 = 1.05 × 1.03 ≈ 1.0815
-    // Year 2023 (last in window): factor = 1.0
     apiMock.getNpEgnpiYear.mockResolvedValue([
       { uw_year: 2019, egnpi: '7000000', rate_change_pct: null },
       { uw_year: 2020, egnpi: '8000000', rate_change_pct: null },
@@ -133,15 +148,14 @@ describe('NpStopLossPricing — render + interaction', () => {
       { uw_year: 2022, egnpi: '10000000', rate_change_pct: '3' },
       { uw_year: 2023, egnpi: '11000000', rate_change_pct: null },
     ]);
-    renderStopLoss();
+    // Layer cover comes from AppContext (Structure page is the source).
+    renderStopLoss({
+      npStopLossInputs: {
+        layers: [{ attachmentLossRatio: '80', limitLossRatio: '20', epi: '11000000' }],
+        attachmentLossRatio: '80', limitLossRatio: '20', epi: '11000000',
+      },
+    });
 
-    // Set LR layer + EPI for the engine to be runnable.
-    fireEvent.change(screen.getByLabelText('Attachment LR'), { target: { value: '80' } });
-    fireEvent.change(screen.getByLabelText('Limit LR'), { target: { value: '20' } });
-    fireEvent.change(screen.getByLabelText('EPI'), { target: { value: '11000000' } });
-
-    // Enter 9M aggregate loss against the 2020 row (adjusted prem ≈ 8.652M
-    // → LR ≈ 104.0%).
     await waitFor(() => {
       const row = screen.getByText('2020').closest('tr');
       expect(within(row).queryByText(/— \(set premium\)/)).not.toBeInTheDocument();
@@ -150,20 +164,19 @@ describe('NpStopLossPricing — render + interaction', () => {
     const input2020 = within(row2020).getByPlaceholderText('0');
     fireEvent.change(input2020, { target: { value: '9000000' } });
 
-    // Loss ratio cell should now show ~104%.
     await waitFor(() => {
       expect(within(row2020).getByText(/104\.\d%/)).toBeInTheDocument();
     });
   });
 
   it('Excel paste fills consecutive year rows from a single column', () => {
-    renderStopLoss();
-    // Set attachment + limit so the engine runs.
-    fireEvent.change(screen.getByLabelText('Attachment LR'), { target: { value: '80' } });
-    fireEvent.change(screen.getByLabelText('Limit LR'), { target: { value: '20' } });
-    fireEvent.change(screen.getByLabelText('EPI'), { target: { value: '10000000' } });
+    renderStopLoss({
+      npStopLossInputs: {
+        layers: [{ attachmentLossRatio: '80', limitLossRatio: '20', epi: '10000000' }],
+        attachmentLossRatio: '80', limitLossRatio: '20', epi: '10000000',
+      },
+    });
 
-    // Paste 3 values into the first year row.
     const firstYear = screen.getByText('2019');
     const firstRow = firstYear.closest('tr');
     const firstInput = within(firstRow).getByPlaceholderText('0');
@@ -180,12 +193,14 @@ describe('NpStopLossPricing — render + interaction', () => {
   });
 
   it('monte carlo toggle: off → no panel, on → percentile panel appears', () => {
-    renderStopLoss();
+    renderStopLoss({
+      npStopLossInputs: {
+        layers: [{ attachmentLossRatio: '80', limitLossRatio: '20', epi: '10000000' }],
+        attachmentLossRatio: '80', limitLossRatio: '20', epi: '10000000',
+      },
+    });
     expect(screen.queryByText(/Pr\(layer hit/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('checkbox', { name: /Run Monte Carlo/i }));
-    fireEvent.change(screen.getByLabelText('Attachment LR'), { target: { value: '80' } });
-    fireEvent.change(screen.getByLabelText('Limit LR'), { target: { value: '20' } });
-    fireEvent.change(screen.getByLabelText('EPI'), { target: { value: '10000000' } });
     fireEvent.change(screen.getByPlaceholderText('e.g. 20'), { target: { value: '20' } });
     fireEvent.change(screen.getByPlaceholderText('e.g. 200,000'), { target: { value: '200000' } });
     fireEvent.change(screen.getByPlaceholderText('0.6'), { target: { value: '0.6' } });
@@ -200,7 +215,7 @@ describe('NpStopLossPricing — render + interaction', () => {
     expect(screen.getByText(/No pricing method produced output/i)).toBeInTheDocument();
   });
 
-  it('hydrates inputs returned from the server on mount', async () => {
+  it('hydrates layer cover from the server snapshot', async () => {
     apiMock.getNpStopLossPricing.mockResolvedValue({
       inputs: {
         attachmentLossRatio: '85',
@@ -212,10 +227,11 @@ describe('NpStopLossPricing — render + interaction', () => {
     });
     renderStopLoss();
     await waitFor(() => {
-      expect(screen.getByLabelText('Attachment LR').value).toBe('85');
+      // Read-only display shows the loaded values as plain text.
+      expect(screen.getByText('85%')).toBeInTheDocument();
     });
-    expect(screen.getByLabelText('Limit LR').value).toBe('15');
-    expect(screen.getByLabelText('EPI').value).toBe('12000000');
+    expect(screen.getByText('15%')).toBeInTheDocument();
+    expect(screen.getByText('12,000,000')).toBeInTheDocument();
   });
 
   it('Structure-page values in AppContext beat a stale server snapshot', async () => {
@@ -239,12 +255,12 @@ describe('NpStopLossPricing — render + interaction', () => {
         layers: [{ attachmentLossRatio: '85', limitLossRatio: '15', epi: '12000000' }],
       },
     });
-    // After hydration: layer fields keep the Structure values…
+    // After hydration: read-only layer display shows Structure's values…
     await waitFor(() => {
-      expect(screen.getByLabelText('Attachment LR').value).toBe('85');
+      expect(screen.getByText('85%')).toBeInTheDocument();
     });
-    expect(screen.getByLabelText('Limit LR').value).toBe('15');
-    expect(screen.getByLabelText('EPI').value).toBe('12000000');
+    expect(screen.getByText('15%')).toBeInTheDocument();
+    expect(screen.getByText('12,000,000')).toBeInTheDocument();
     // …and the engine-only fields the Structure page doesn't own get
     // hydrated from the server snapshot.
     expect(screen.getByPlaceholderText('e.g. 20').value).toBe('12');     // freqLambda
