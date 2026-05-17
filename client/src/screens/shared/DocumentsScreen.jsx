@@ -97,20 +97,24 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
 
   useEffect(() => { load(); }, [load]);
 
-  // Load import-related state. Renewal-pack import endpoints currently
-  // live only on the quote side, so getActiveRenewalPackImport /
-  // listImportSnapshots will silently 404 when we're attached to a
-  // contract. The treaty-detail check (via getContract) works for
-  // either side, so the button still surfaces its "Save Treaty Detail
-  // first" tooltip correctly in every workflow.
+  // Load import-related state. getContract works for either entity (uses
+  // apiOpts), so the treaty-detail check that powers "Save Treaty Detail
+  // first" runs in every workflow. The active-job + snapshots endpoints
+  // live only on the quote side — calling them with a contract_id would
+  // 404 and clutter the console / Network tab. On contract-owned entities
+  // there is no import-job concept yet, so activeJob/snapshots are
+  // legitimately empty.
   const loadImportState = useCallback(async () => {
     if (!contractId) return;
     try {
-      const [q, active, snapshots] = await Promise.all([
-        api.getContract(contractId, apiOpts),
-        api.getActiveRenewalPackImport(contractId).catch(() => ({ activeJob: null })),
-        api.listImportSnapshots(contractId).catch(() => []),
-      ]);
+      const contractP = api.getContract(contractId, apiOpts);
+      const importP = quoteMode
+        ? Promise.all([
+            api.getActiveRenewalPackImport(contractId).catch(() => ({ activeJob: null })),
+            api.listImportSnapshots(contractId).catch(() => []),
+          ])
+        : Promise.resolve([{ activeJob: null }, []]);
+      const [q, [active, snapshots]] = await Promise.all([contractP, importP]);
       setTreatyDetailSaved(!!q?.header?.treaty_type_id);
       setActiveJob(active?.activeJob || null);
       const byDoc = {};
@@ -123,7 +127,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
     } catch (e) {
       console.warn('[DocumentsScreen] loadImportState failed:', e?.message);
     }
-  }, [apiOpts, contractId]);
+  }, [apiOpts, contractId, quoteMode]);
 
   useEffect(() => { loadImportState(); }, [loadImportState]);
 

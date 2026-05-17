@@ -168,10 +168,30 @@ describe('DocumentsScreen — doc-fetch endpoint scoping', () => {
   });
 });
 
+describe('DocumentsScreen — import-status endpoints are scoped to quotes', () => {
+  // Renewal-pack import-state endpoints (GET active job + list snapshots)
+  // only exist on the quote side. Calling them with a contract_id 404s
+  // and clutters the Network tab, so we should only fire them in quote
+  // mode. The treaty-detail check (getContract) still runs in both modes
+  // so the button's enabled state is correct.
+  it('skips active-job + snapshots polling when quoteMode is false', async () => {
+    defaultMocks();
+    render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode={false} />);
+    // Give loadImportState a chance to fire its promise chain.
+    await waitFor(() => expect(apiMock.getContract).toHaveBeenCalled());
+    expect(apiMock.getActiveRenewalPackImport).not.toHaveBeenCalled();
+    expect(apiMock.listImportSnapshots).not.toHaveBeenCalled();
+  });
+
+  it('fires both active-job + snapshots when quoteMode is true', async () => {
+    defaultMocks();
+    render(<DocumentsScreen routeKey="NP_TREATY_DOCUMENTS" quoteMode />);
+    await waitFor(() => expect(apiMock.getActiveRenewalPackImport).toHaveBeenCalledWith(QUOTE_ID));
+    expect(apiMock.listImportSnapshots).toHaveBeenCalledWith(QUOTE_ID);
+  });
+});
+
 describe('DocumentsScreen — Fill button disabled states', () => {
-  // Same four-flow matrix as the visibility block — disabled states must
-  // surface identically whether the user came in through pricing, renewal
-  // or quote workflows.
   const FLOWS = [
     { name: 'proportional pricing',     routeKey: 'PROP_TREATY_DOCUMENTS', quoteMode: false },
     { name: 'non-proportional pricing', routeKey: 'NP_TREATY_DOCUMENTS',   quoteMode: false },
@@ -179,6 +199,8 @@ describe('DocumentsScreen — Fill button disabled states', () => {
     { name: 'quote',                    routeKey: 'NP_TREATY_DOCUMENTS',   quoteMode: true  },
   ];
 
+  // "Save Treaty Detail first" must surface identically in every workflow —
+  // the treaty-detail check (getContract) runs in both modes.
   for (const flow of FLOWS) {
     it(`disabled with "Save Treaty Detail first" tooltip when treaty_type_id is null (${flow.name})`, async () => {
       defaultMocks({ treatyTypeId: null });
@@ -187,20 +209,23 @@ describe('DocumentsScreen — Fill button disabled states', () => {
       expect(btn).toBeDisabled();
       expect(btn).toHaveAttribute('title', 'Save Treaty Detail first');
     });
-
-    it(`disabled with "Import in progress" tooltip when another job is running (${flow.name})`, async () => {
-      defaultMocks({
-        docs: [rpDoc({ id: 'doc-rp-1' }), rpDoc({ id: 'doc-rp-2', filename: 'other.xlsx' })],
-        activeJob: { jobId: 'j-1', documentId: 'doc-rp-other-running', startedAt: new Date().toISOString() },
-      });
-      render(<DocumentsScreen routeKey={flow.routeKey} quoteMode={flow.quoteMode} />);
-      const btns = await screen.findAllByRole('button', { name: /fill from renewal pack/i });
-      for (const b of btns) {
-        expect(b).toBeDisabled();
-        expect(b).toHaveAttribute('title', 'Import in progress');
-      }
-    });
   }
+
+  // "Import in progress" can only fire in quote mode — import_jobs is
+  // keyed on quote_id and the active-job endpoint is only consulted in
+  // quote mode (see "import-status endpoints are scoped to quotes").
+  it('disabled with "Import in progress" tooltip when another quote-side job is running', async () => {
+    defaultMocks({
+      docs: [rpDoc({ id: 'doc-rp-1' }), rpDoc({ id: 'doc-rp-2', filename: 'other.xlsx' })],
+      activeJob: { jobId: 'j-1', documentId: 'doc-rp-other-running', startedAt: new Date().toISOString() },
+    });
+    render(<DocumentsScreen routeKey="NP_TREATY_DOCUMENTS" quoteMode />);
+    const btns = await screen.findAllByRole('button', { name: /fill from renewal pack/i });
+    for (const b of btns) {
+      expect(b).toBeDisabled();
+      expect(b).toHaveAttribute('title', 'Import in progress');
+    }
+  });
 });
 
 describe('DocumentsScreen — uploaded renewal pack lands on the right entity', () => {
