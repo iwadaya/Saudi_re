@@ -30,10 +30,11 @@ const BUDGETS_KB = {
   vendor: 300,             // React + router, plus non-lazy deps
   'app-core': 460,         // global components + utils + context + api surface
   'np-final-pricing': 250, // the big screen — still the biggest after the split
-  // Bump 220 → 245 for the Stop Loss workflow (NpStopLossStructure,
-  // NpStopLossExpiring, the rate-changes modal in NpPremiumsTable,
-  // and the burning-cost restructure in NpStopLossPricing).
-  'np-screens': 245,
+  // Bumped to 260 for the Aggregate XL structure (NpAggregateXlStructure
+  // + read-only mount on Final Pricing) and the Stop Loss workflow
+  // (NpStopLossStructure, NpStopLossExpiring, rate-changes modal, the
+  // burning-cost restructure).
+  'np-screens': 260,
   'prop-screens': 240,
   'shared-screens': 200,
   'fac-screens': 180,      // facultative AI doc-ingest + reference data + clauses

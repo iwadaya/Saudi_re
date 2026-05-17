@@ -12,13 +12,13 @@
 //     structuredDeal:      boolean,
 //     layers:              [{ aggregateLimit, aggregateDeductible,
 //                             deductible, aad, risk, cat }],
-//     classesOfBusiness:   [{ classOfBusiness, innerLimit,
-//                             innerDeductible }],
+//     classesOfBusiness:   { [cobName]: { innerLimit, innerDeductible } },
 //   }
 //
 // Layer count comes from npTreatyDetail.numberOfLayers (default 1).
-// COB rows are user-driven (add / remove) since the treaty's COB
-// list isn't necessarily the same set we want inner limits for.
+// COB rows are seeded from npTreatyDetail.lineOfBusinessLabels — the
+// Treaty Detail screen owns which classes are in scope; the user
+// edits inner limits per class here.
 
 import { useCallback, useMemo } from 'react';
 import { useAppState } from '../../../context/AppContext';
@@ -33,7 +33,6 @@ const DEFAULT_LAYER = {
   risk: false,
   cat: false,
 };
-const DEFAULT_COB = { classOfBusiness: '', innerLimit: '', innerDeductible: '' };
 
 function fmtMoney(v) {
   const n = Number(String(v ?? '').replace(/[^\d.-]/g, ''));
@@ -66,9 +65,34 @@ export default function NpAggregateXlStructure({ currency = 'SAR', readOnly = fa
     return out;
   }, [stored?.layers, layerCount]);
 
-  const cobs = useMemo(() => {
-    const saved = Array.isArray(stored?.classesOfBusiness) ? stored.classesOfBusiness : [];
-    return saved.length > 0 ? saved : [{ ...DEFAULT_COB }];
+  // COB names come from Treaty Detail. lineOfBusinessLabels is the
+  // canonical display list (kept in sync with classIds on Treaty Detail);
+  // the snake-case alias from the wire is tolerated too.
+  const cobNames = useMemo(() => {
+    const labels = npDetail.lineOfBusinessLabels
+      ?? npDetail.line_of_business_labels
+      ?? [];
+    return Array.isArray(labels) ? labels.filter(Boolean) : [];
+  }, [npDetail.lineOfBusinessLabels, npDetail.line_of_business_labels]);
+
+  // Inner limits keyed by COB name so adding / removing classes on
+  // Treaty Detail keeps existing limits aligned to the right class.
+  // Tolerates the legacy array-based shape from earlier builds.
+  const cobLimitsMap = useMemo(() => {
+    const m = stored?.classesOfBusiness;
+    if (Array.isArray(m)) {
+      const out = {};
+      for (const row of m) {
+        if (row?.classOfBusiness) {
+          out[row.classOfBusiness] = {
+            innerLimit: row.innerLimit ?? '',
+            innerDeductible: row.innerDeductible ?? '',
+          };
+        }
+      }
+      return out;
+    }
+    return (m && typeof m === 'object') ? m : {};
   }, [stored?.classesOfBusiness]);
 
   const setToggle = useCallback(
@@ -86,24 +110,15 @@ export default function NpAggregateXlStructure({ currency = 'SAR', readOnly = fa
     [layers, setSlice],
   );
 
-  const updateCob = useCallback(
-    (i, patch) => {
-      const next = cobs.map((c, idx) => (idx === i ? { ...c, ...patch } : { ...c }));
+  const updateCobLimit = useCallback(
+    (cobName, patch) => {
+      const next = {
+        ...cobLimitsMap,
+        [cobName]: { ...(cobLimitsMap[cobName] || {}), ...patch },
+      };
       setSlice(SLICE_KEY, { classesOfBusiness: next });
     },
-    [cobs, setSlice],
-  );
-
-  const addCob = useCallback(() => {
-    setSlice(SLICE_KEY, { classesOfBusiness: [...cobs, { ...DEFAULT_COB }] });
-  }, [cobs, setSlice]);
-
-  const removeCob = useCallback(
-    (i) => {
-      const next = cobs.filter((_, idx) => idx !== i);
-      setSlice(SLICE_KEY, { classesOfBusiness: next.length > 0 ? next : [{ ...DEFAULT_COB }] });
-    },
-    [cobs, setSlice],
+    [cobLimitsMap, setSlice],
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -144,7 +159,16 @@ export default function NpAggregateXlStructure({ currency = 'SAR', readOnly = fa
           </div>
         </div>
         <div className="np-table-wrap np-table-wrap--scroll">
-          <table className="np-struct-table">
+          <table className="np-struct-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+            <colgroup>
+              <col style={{ width: 60 }} />
+              <col />
+              <col />
+              <col />
+              <col />
+              <col style={{ width: 60 }} />
+              <col style={{ width: 60 }} />
+            </colgroup>
             <thead>
               <tr>
                 <th className="np-table-sticky cell-center">LAYER</th>
@@ -196,74 +220,58 @@ export default function NpAggregateXlStructure({ currency = 'SAR', readOnly = fa
           <div className="np-struct-card-title">CLASS OF BUSINESS · Inner Limits</div>
           <div className="np-struct-card-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {readOnly && <span className="np-tag">Read-Only</span>}
-            {!readOnly && (
-              <button type="button" className="dock-btn dock-btn--ghost" onClick={addCob}>
-                + Add Class
-              </button>
-            )}
+            <span className="np-tag">{cobNames.length} class{cobNames.length === 1 ? '' : 'es'}</span>
           </div>
         </div>
-        <div className="np-table-wrap np-table-wrap--scroll">
-          <table className="np-struct-table">
-            <thead>
-              <tr>
-                <th className="np-table-sticky">CLASS OF BUSINESS</th>
-                <th className="np-col">INNER LIMIT ({currency})</th>
-                <th className="np-col">INNER DEDUCTIBLE ({currency})</th>
-                {!readOnly && <th className="cell-center" style={{ width: 40 }} aria-label="row actions" />}
-              </tr>
-            </thead>
-            <tbody>
-              {cobs.map((c, i) => (
-                <tr key={i}>
-                  <td className="np-table-sticky">
-                    {readOnly ? (
-                      <span style={{ padding: '0 8px', color: 'rgba(226,232,240,0.85)', fontWeight: 600 }}>
-                        {c.classOfBusiness || <em style={{ color: 'rgba(148,163,184,0.40)' }}>—</em>}
-                      </span>
-                    ) : (
-                      <input
-                        className="np-mini-input"
-                        style={{ minWidth: 200 }}
-                        value={c.classOfBusiness}
-                        onChange={(e) => updateCob(i, { classOfBusiness: e.target.value })}
-                        placeholder="e.g. Property"
-                      />
-                    )}
-                  </td>
-                  <MoneyCell value={c.innerLimit} currency={currency} readOnly={readOnly}
-                    onChange={(v) => updateCob(i, { innerLimit: v })} />
-                  <MoneyCell value={c.innerDeductible} currency={currency} readOnly={readOnly}
-                    onChange={(v) => updateCob(i, { innerDeductible: v })} />
-                  {!readOnly && (
-                    <td className="cell-center" style={{ width: 40 }}>
-                      <button
-                        type="button"
-                        onClick={() => removeCob(i)}
-                        aria-label={`Remove class row ${i + 1}`}
-                        title="Remove"
-                        style={{
-                          appearance: 'none',
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'rgba(248,113,113,0.65)',
-                          cursor: 'pointer',
-                          fontSize: 14,
-                        }}
-                      >
-                        ✕
-                      </button>
-                    </td>
-                  )}
+        {cobNames.length === 0 ? (
+          <div style={{ padding: '18px 22px', fontSize: 12, color: 'rgba(148,163,184,0.65)' }}>
+            No classes of business selected on Treaty Detail — pick at
+            least one class there to set inner limits here.
+          </div>
+        ) : (
+          <div className="np-table-wrap np-table-wrap--scroll">
+            <table className="np-struct-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+              <colgroup>
+                <col style={{ width: '40%' }} />
+                <col style={{ width: '30%' }} />
+                <col style={{ width: '30%' }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th className="np-table-sticky">CLASS OF BUSINESS</th>
+                  <th className="np-col">INNER LIMIT ({currency})</th>
+                  <th className="np-col">INNER DEDUCTIBLE ({currency})</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {cobNames.map((name) => {
+                  const limit = cobLimitsMap[name] || {};
+                  return (
+                    <tr key={name}>
+                      <td
+                        className="np-table-sticky"
+                        style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={name}
+                      >
+                        <span style={{ padding: '0 10px', color: 'rgba(226,232,240,0.85)', fontWeight: 600, fontSize: 12 }}>
+                          {name}
+                        </span>
+                      </td>
+                      <MoneyCell value={limit.innerLimit} currency={currency} readOnly={readOnly}
+                        onChange={(v) => updateCobLimit(name, { innerLimit: v })} />
+                      <MoneyCell value={limit.innerDeductible} currency={currency} readOnly={readOnly}
+                        onChange={(v) => updateCobLimit(name, { innerDeductible: v })} />
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
         <div style={{ padding: '10px 16px 14px', fontSize: 11, color: 'rgba(148,163,184,0.55)', lineHeight: 1.5 }}>
-          Inner Limit / Inner Deductible cap or floor an individual
-          class of business inside the aggregate cover. Leave a row blank
-          if a class has no inner sublimit.
+          Classes come from Treaty Detail. Inner Limit / Inner Deductible
+          cap or floor an individual class inside the aggregate cover —
+          leave blank if a class has no inner sublimit.
         </div>
       </section>
     </>
