@@ -168,26 +168,25 @@ describe('DocumentsScreen — doc-fetch endpoint scoping', () => {
   });
 });
 
-describe('DocumentsScreen — import-status endpoints are scoped to quotes', () => {
-  // Renewal-pack import-state endpoints (GET active job + list snapshots)
-  // only exist on the quote side. Calling them with a contract_id 404s
-  // and clutters the Network tab, so we should only fire them in quote
-  // mode. The treaty-detail check (getContract) still runs in both modes
-  // so the button's enabled state is correct.
-  it('skips active-job + snapshots polling when quoteMode is false', async () => {
+describe('DocumentsScreen — import-status endpoints follow the workflow', () => {
+  // Renewal-pack import-state endpoints exist on both entity sides;
+  // the apiOpts the screen builds for documents flows straight through
+  // to the import calls so they target the right /api/treaties/... or
+  // /api/quotes/... family for the workflow the underwriter is in.
+  it('fires getActiveRenewalPackImport + listImportSnapshots with treaty opts when quoteMode is false', async () => {
     defaultMocks();
     render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode={false} />);
-    // Give loadImportState a chance to fire its promise chain.
-    await waitFor(() => expect(apiMock.getContract).toHaveBeenCalled());
-    expect(apiMock.getActiveRenewalPackImport).not.toHaveBeenCalled();
-    expect(apiMock.listImportSnapshots).not.toHaveBeenCalled();
+    await waitFor(() => expect(apiMock.getActiveRenewalPackImport).toHaveBeenCalled());
+    expect(apiMock.getActiveRenewalPackImport).toHaveBeenCalledWith(QUOTE_ID, undefined);
+    expect(apiMock.listImportSnapshots).toHaveBeenCalledWith(QUOTE_ID, undefined);
   });
 
-  it('fires both active-job + snapshots when quoteMode is true', async () => {
+  it('fires both endpoints with { quote: true } when quoteMode is true', async () => {
     defaultMocks();
     render(<DocumentsScreen routeKey="NP_TREATY_DOCUMENTS" quoteMode />);
-    await waitFor(() => expect(apiMock.getActiveRenewalPackImport).toHaveBeenCalledWith(QUOTE_ID));
-    expect(apiMock.listImportSnapshots).toHaveBeenCalledWith(QUOTE_ID);
+    await waitFor(() => expect(apiMock.getActiveRenewalPackImport).toHaveBeenCalled());
+    expect(apiMock.getActiveRenewalPackImport).toHaveBeenCalledWith(QUOTE_ID, { quote: true });
+    expect(apiMock.listImportSnapshots).toHaveBeenCalledWith(QUOTE_ID, { quote: true });
   });
 });
 
@@ -199,8 +198,6 @@ describe('DocumentsScreen — Fill button disabled states', () => {
     { name: 'quote',                    routeKey: 'NP_TREATY_DOCUMENTS',   quoteMode: true  },
   ];
 
-  // "Save Treaty Detail first" must surface identically in every workflow —
-  // the treaty-detail check (getContract) runs in both modes.
   for (const flow of FLOWS) {
     it(`disabled with "Save Treaty Detail first" tooltip when treaty_type_id is null (${flow.name})`, async () => {
       defaultMocks({ treatyTypeId: null });
@@ -209,23 +206,20 @@ describe('DocumentsScreen — Fill button disabled states', () => {
       expect(btn).toBeDisabled();
       expect(btn).toHaveAttribute('title', 'Save Treaty Detail first');
     });
-  }
 
-  // "Import in progress" can only fire in quote mode — import_jobs is
-  // keyed on quote_id and the active-job endpoint is only consulted in
-  // quote mode (see "import-status endpoints are scoped to quotes").
-  it('disabled with "Import in progress" tooltip when another quote-side job is running', async () => {
-    defaultMocks({
-      docs: [rpDoc({ id: 'doc-rp-1' }), rpDoc({ id: 'doc-rp-2', filename: 'other.xlsx' })],
-      activeJob: { jobId: 'j-1', documentId: 'doc-rp-other-running', startedAt: new Date().toISOString() },
+    it(`disabled with "Import in progress" tooltip when another job is running (${flow.name})`, async () => {
+      defaultMocks({
+        docs: [rpDoc({ id: 'doc-rp-1' }), rpDoc({ id: 'doc-rp-2', filename: 'other.xlsx' })],
+        activeJob: { jobId: 'j-1', documentId: 'doc-rp-other-running', startedAt: new Date().toISOString() },
+      });
+      render(<DocumentsScreen routeKey={flow.routeKey} quoteMode={flow.quoteMode} />);
+      const btns = await screen.findAllByRole('button', { name: /fill from renewal pack/i });
+      for (const b of btns) {
+        expect(b).toBeDisabled();
+        expect(b).toHaveAttribute('title', 'Import in progress');
+      }
     });
-    render(<DocumentsScreen routeKey="NP_TREATY_DOCUMENTS" quoteMode />);
-    const btns = await screen.findAllByRole('button', { name: /fill from renewal pack/i });
-    for (const b of btns) {
-      expect(b).toBeDisabled();
-      expect(b).toHaveAttribute('title', 'Import in progress');
-    }
-  });
+  }
 });
 
 describe('DocumentsScreen — uploaded renewal pack lands on the right entity', () => {
@@ -393,7 +387,7 @@ describe('DocumentsScreen — Undo affordance', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
 
     await waitFor(() => {
-      expect(apiMock.restoreImportSnapshot).toHaveBeenCalledWith(QUOTE_ID, 'snap-a');
+      expect(apiMock.restoreImportSnapshot).toHaveBeenCalledWith(QUOTE_ID, 'snap-a', { quote: true });
       const call = stableToast.mock.calls.find((c) => /Restored wizard/i.test(String(c[0])));
       expect(call).toBeTruthy();
     });

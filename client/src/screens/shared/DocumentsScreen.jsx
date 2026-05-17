@@ -97,24 +97,18 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
 
   useEffect(() => { load(); }, [load]);
 
-  // Load import-related state. getContract works for either entity (uses
-  // apiOpts), so the treaty-detail check that powers "Save Treaty Detail
-  // first" runs in every workflow. The active-job + snapshots endpoints
-  // live only on the quote side — calling them with a contract_id would
-  // 404 and clutter the console / Network tab. On contract-owned entities
-  // there is no import-job concept yet, so activeJob/snapshots are
-  // legitimately empty.
+  // Load import-related state. Renewal-pack import now exists on both
+  // entity sides — getContract, getActiveRenewalPackImport and
+  // listImportSnapshots all route through apiOpts to the right
+  // /api/treaties/... or /api/quotes/... endpoint family.
   const loadImportState = useCallback(async () => {
     if (!contractId) return;
     try {
-      const contractP = api.getContract(contractId, apiOpts);
-      const importP = quoteMode
-        ? Promise.all([
-            api.getActiveRenewalPackImport(contractId).catch(() => ({ activeJob: null })),
-            api.listImportSnapshots(contractId).catch(() => []),
-          ])
-        : Promise.resolve([{ activeJob: null }, []]);
-      const [q, [active, snapshots]] = await Promise.all([contractP, importP]);
+      const [q, active, snapshots] = await Promise.all([
+        api.getContract(contractId, apiOpts),
+        api.getActiveRenewalPackImport(contractId, apiOpts).catch(() => ({ activeJob: null })),
+        api.listImportSnapshots(contractId, apiOpts).catch(() => []),
+      ]);
       setTreatyDetailSaved(!!q?.header?.treaty_type_id);
       setActiveJob(active?.activeJob || null);
       const byDoc = {};
@@ -127,7 +121,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
     } catch (e) {
       console.warn('[DocumentsScreen] loadImportState failed:', e?.message);
     }
-  }, [apiOpts, contractId, quoteMode]);
+  }, [apiOpts, contractId]);
 
   useEffect(() => { loadImportState(); }, [loadImportState]);
 
@@ -140,7 +134,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
     let cancelled = false;
     const tick = async () => {
       try {
-        const res = await api.getRenewalPackImportJob(contractId, activeJob.jobId);
+        const res = await api.getRenewalPackImportJob(contractId, activeJob.jobId, apiOpts);
         if (cancelled) return;
         if (res.status === 'done') {
           finishImportSuccess(res);
@@ -155,7 +149,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
     const handle = setInterval(tick, IMPORT_POLL_MS);
     return () => { cancelled = true; clearInterval(handle); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [importingFor, activeJob?.jobId, contractId]);
+  }, [importingFor, activeJob?.jobId, contractId, apiOpts]);
 
   const finishImportSuccess = useCallback((res) => {
     const filename = importingFor?.filename || 'pack';
@@ -193,20 +187,21 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
     const docId = doc.document_id || doc.id;
     setImportingFor({ documentId: docId, filename: doc.file_name || doc.name || 'pack' });
     try {
-      const res = await api.importRenewalPack(contractId, docId);
+      const res = await api.importRenewalPack(contractId, docId, apiOpts);
       setActiveJob({ jobId: res.jobId, documentId: docId, startedAt: new Date().toISOString() });
     } catch (e) {
       const code = e?.body?.code || e?.code;
       const msg = code === 'NOT_RENEWAL_PACK' ? 'Document is not a renewal pack'
         : code === 'TREATY_DETAIL_REQUIRED' ? 'Save Treaty Detail first'
         : code === 'IMPORT_IN_PROGRESS' ? 'An import is already in progress'
+        : code === 'DOCUMENT_OWNER_MISMATCH' ? 'This document is attached to a different entity — reload the page'
         : (e?.message || 'Could not start import');
       setImportingFor(null);
       showToast(msg, 5000);
       // Refresh in-progress state so the UI catches up if there was a race.
       loadImportState();
     }
-  }, [contractId, loadImportState, showToast]);
+  }, [apiOpts, contractId, loadImportState, showToast]);
 
   const handleDocTypeChange = (t) => {
     setDocType(t);
@@ -273,7 +268,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
     if (!restoring) return;
     setRestoreBusy(true);
     try {
-      await api.restoreImportSnapshot(contractId, restoring.snapshotId);
+      await api.restoreImportSnapshot(contractId, restoring.snapshotId, apiOpts);
       showToast('Restored wizard to pre-import state.', 4000);
       setRestoring(null);
       await loadImportState();
@@ -290,7 +285,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
     } finally {
       setRestoreBusy(false);
     }
-  }, [contractId, restoring, loadImportState, showToast]);
+  }, [apiOpts, contractId, restoring, loadImportState, showToast]);
 
   const fmtSize = (b) => !b ? '–' : b < 1024 ? b+'B' : b < 1048576 ? Math.round(b/1024)+'KB' : (b/1048576).toFixed(1)+'MB';
   const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';

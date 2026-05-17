@@ -1,21 +1,31 @@
-// Renewal-pack import endpoints.
+// Renewal-pack import endpoints — symmetric across quotes and contracts.
 //
 // Documents are already classified on upload (doc_type='renewal_pack')
-// and the quote's treaty type is already known once treaty detail is
-// saved. This route is therefore one click for the underwriter:
+// and the entity's treaty type is already known once treaty detail is
+// saved, so this route is one click for the underwriter. The same
+// runner targets either entity; the route layer is responsible only
+// for resolving the entity from the URL, validating the document, and
+// kicking off the job.
 //
 //   POST /api/quotes/:quoteId/import-renewal-pack
-//        body: { documentId }
-//        → 202 { jobId }
+//   POST /api/treaties/:contractId/import-renewal-pack
+//        body: { documentId } → 202 { jobId }
+//
+//   GET  /api/quotes/:quoteId/import-renewal-pack
+//   GET  /api/treaties/:contractId/import-renewal-pack
+//        → { activeJob: { jobId, documentId, startedAt } | null }
 //
 //   GET  /api/quotes/:quoteId/import-renewal-pack/:jobId
+//   GET  /api/treaties/:contractId/import-renewal-pack/:jobId
 //        → { status: 'processing' | 'done' | 'failed', ... }
 //
-//   POST /api/quotes/:quoteId/import-snapshots/:snapshotId/restore
-//        → 200 { ok: true } | 410 (already restored / past retention)
-//
 //   GET  /api/quotes/:quoteId/import-snapshots
+//   GET  /api/treaties/:contractId/import-snapshots
 //        → [{ id, capturedAt, filename, filledPages, restorable }]
+//
+//   POST /api/quotes/:quoteId/import-snapshots/:snapshotId/restore
+//   POST /api/treaties/:contractId/import-snapshots/:snapshotId/restore
+//        → 200 { ok: true } | 410 (already restored / past retention)
 //
 // The actual extraction work runs asynchronously via setImmediate so
 // the LLM call doesn't keep the request handler tied up. No external
@@ -32,7 +42,7 @@ import {
   loadSnapshot,
   markSnapshotRestored,
   restoreSnapshot,
-  listSnapshotsForQuote,
+  listSnapshotsForEntity,
 } from '../services/renewalPack/snapshots.js';
 
 const router = Router();
@@ -47,47 +57,67 @@ function isRenewalPackDocType(value) {
   return String(value || '').toLowerCase().replace(/\s+/g, '_') === 'renewal_pack';
 }
 
-// ── POST /quotes/:quoteId/import-renewal-pack ─────────────────────────────
+// ── entity resolution ──────────────────────────────────────────────────────
+//
+// Each route picks the entity type from the URL prefix, then this
+// helper loads the row + treaty-type category for the import. Quotes
+// and contracts have isomorphic-enough shapes (treaty_type_id + a
+// join to treaty_type.category) that one resolver covers both.
 
-router.post(
-  '/quotes/:quoteId/import-renewal-pack',
-  asyncHandler(async (req, res) => {
-    const { quoteId } = req.params;
+async function resolveEntity({ type, id }) {
+  if (type === 'quote') {
+    const { rows } = await pool.query(
+      `SELECT q.quote_id AS id, q.treaty_type_id, tt.category AS treaty_category
+         FROM public.quote q
+         LEFT JOIN public.treaty_type tt ON tt.treaty_type_id = q.treaty_type_id
+        WHERE q.quote_id = $1`,
+      [id],
+    );
+    return rows[0] || null;
+  }
+  const { rows } = await pool.query(
+    `SELECT c.contract_id AS id, c.treaty_type_id, tt.category AS treaty_category
+       FROM public.contract c
+       LEFT JOIN public.treaty_type tt ON tt.treaty_type_id = c.treaty_type_id
+      WHERE c.contract_id = $1`,
+    [id],
+  );
+  return rows[0] || null;
+}
+
+// ── start import (POST) ────────────────────────────────────────────────────
+
+function makeStartImportHandler(entityType) {
+  return asyncHandler(async (req, res) => {
+    const paramKey = entityType === 'quote' ? 'quoteId' : 'contractId';
+    const entityId = req.params[paramKey];
     const { documentId } = req.body || {};
 
-    if (!UUID_RE.test(quoteId) || !documentId || !UUID_RE.test(documentId)) {
-      return res.status(404).json({ error: 'Quote or document not found', code: 'NOT_FOUND' });
+    if (!UUID_RE.test(entityId) || !documentId || !UUID_RE.test(documentId)) {
+      return res.status(404).json({ error: 'Entity or document not found', code: 'NOT_FOUND' });
     }
 
-    // Existence checks — load quote + document in parallel.
-    const [quoteR, docR] = await Promise.all([
+    const [resolved, docR] = await Promise.all([
+      resolveEntity({ type: entityType, id: entityId }),
       pool.query(
-        `SELECT q.quote_id, q.treaty_type_id, tt.category AS treaty_category
-           FROM public.quote q
-           LEFT JOIN public.treaty_type tt ON tt.treaty_type_id = q.treaty_type_id
-          WHERE q.quote_id = $1`,
-        [quoteId],
-      ),
-      pool.query(
-        `SELECT document_id, file_name, storage_path, doc_type, quote_id
+        `SELECT document_id, file_name, storage_path, doc_type, contract_id, quote_id
            FROM public.contract_document
           WHERE document_id = $1`,
         [documentId],
       ),
     ]);
 
-    if (!quoteR.rows.length) {
-      return res.status(404).json({ error: 'Quote not found', code: 'QUOTE_NOT_FOUND' });
+    if (!resolved) {
+      return res.status(404).json({
+        error: entityType === 'quote' ? 'Quote not found' : 'Treaty not found',
+        code: entityType === 'quote' ? 'QUOTE_NOT_FOUND' : 'TREATY_NOT_FOUND',
+      });
     }
     if (!docR.rows.length) {
       return res.status(404).json({ error: 'Document not found', code: 'DOCUMENT_NOT_FOUND' });
     }
-    const quote = quoteR.rows[0];
     const document = docR.rows[0];
 
-    // Document must be of type renewal_pack (the upload classifier
-    // sets doc_type — we only accept docs that were uploaded as
-    // renewal packs).
     if (!isRenewalPackDocType(document.doc_type)) {
       return res.status(409).json({
         error: 'Document is not a renewal pack',
@@ -95,33 +125,47 @@ router.post(
       });
     }
 
+    // The document must belong to the same entity we're importing into —
+    // otherwise we'd be silently moving data across the wall between a
+    // contract and an unrelated quote. The relocate script is the
+    // explicit path for cross-entity moves.
+    const ownerCol = entityType === 'quote' ? 'quote_id' : 'contract_id';
+    if (document[ownerCol] !== entityId) {
+      return res.status(409).json({
+        error: 'Document does not belong to this ' + (entityType === 'quote' ? 'quote' : 'treaty'),
+        code: 'DOCUMENT_OWNER_MISMATCH',
+      });
+    }
+
     // Treaty detail must be saved so we know which extraction prompt
     // to use. The category column on treaty_type drives proportional
     // vs non-proportional.
-    if (!quote.treaty_type_id || !quote.treaty_category) {
+    if (!resolved.treaty_type_id || !resolved.treaty_category) {
       return res.status(409).json({
         error: 'Treaty detail must be saved before importing',
         code: 'TREATY_DETAIL_REQUIRED',
       });
     }
-    const treatyCategory = String(quote.treaty_category).toUpperCase();
+    const treatyCategory = String(resolved.treaty_category).toUpperCase();
 
-    // Insert the job row with status='processing'. The unique
-    // partial index gives us free concurrency control — a second
-    // concurrent POST trips the index and we surface 409.
+    // Insert the job row with status='processing'. The unique partial
+    // indexes (per quote_id, per contract_id) give us free concurrency
+    // control — a second concurrent POST trips the index and we
+    // surface 409.
+    const fkCol = entityType === 'quote' ? 'quote_id' : 'contract_id';
     let jobId;
     try {
       const { rows } = await pool.query(
-        `INSERT INTO public.import_jobs (quote_id, document_id, filename, status)
+        `INSERT INTO public.import_jobs (${fkCol}, document_id, filename, status)
          VALUES ($1, $2, $3, 'processing')
          RETURNING job_id`,
-        [quoteId, documentId, document.file_name || null],
+        [entityId, documentId, document.file_name || null],
       );
       jobId = rows[0].job_id;
     } catch (err) {
       if (err?.code === '23505') {
         return res.status(409).json({
-          error: 'An import is already in progress for this quote',
+          error: 'An import is already in progress for this ' + (entityType === 'quote' ? 'quote' : 'treaty'),
           code: 'IMPORT_IN_PROGRESS',
         });
       }
@@ -136,7 +180,7 @@ router.post(
     setImmediate(() => {
       runImportJob({
         jobId,
-        quoteId,
+        entity: { type: entityType, id: entityId },
         document,
         treatyCategory,
         actor,
@@ -145,33 +189,35 @@ router.post(
         // catch is purely to keep an unhandled rejection from
         // bubbling to the process default handler.
         logger.error('[renewalPackImport] background runImportJob threw', {
-          jobId, quoteId, error: err?.message,
+          jobId, entityType, entityId, error: err?.message,
         });
       });
     });
 
     return res.status(202).json({ jobId });
-  }),
-);
+  });
+}
 
-// ── GET /quotes/:quoteId/import-renewal-pack ──────────────────────────────
-// Read the currently-active import job for a quote, if any. The
-// Documents tab calls this on mount so it can disable the "Fill from
-// renewal pack" button while another import is running.
-router.get(
-  '/quotes/:quoteId/import-renewal-pack',
-  asyncHandler(async (req, res) => {
-    const { quoteId } = req.params;
-    if (!UUID_RE.test(quoteId)) {
+router.post('/quotes/:quoteId/import-renewal-pack',     makeStartImportHandler('quote'));
+router.post('/treaties/:contractId/import-renewal-pack', makeStartImportHandler('contract'));
+
+// ── active-job lookup (GET, no jobId) ──────────────────────────────────────
+
+function makeActiveImportHandler(entityType) {
+  return asyncHandler(async (req, res) => {
+    const paramKey = entityType === 'quote' ? 'quoteId' : 'contractId';
+    const entityId = req.params[paramKey];
+    if (!UUID_RE.test(entityId)) {
       return res.json({ activeJob: null });
     }
+    const fkCol = entityType === 'quote' ? 'quote_id' : 'contract_id';
     const { rows } = await pool.query(
       `SELECT job_id, document_id, started_at
          FROM public.import_jobs
-        WHERE quote_id = $1 AND status = 'processing'
+        WHERE ${fkCol} = $1 AND status = 'processing'
         ORDER BY started_at DESC
         LIMIT 1`,
-      [quoteId],
+      [entityId],
     );
     if (!rows.length) return res.json({ activeJob: null });
     const job = rows[0];
@@ -182,23 +228,28 @@ router.get(
         startedAt: job.started_at,
       },
     });
-  }),
-);
+  });
+}
 
-// ── GET /quotes/:quoteId/import-renewal-pack/:jobId ───────────────────────
+router.get('/quotes/:quoteId/import-renewal-pack',     makeActiveImportHandler('quote'));
+router.get('/treaties/:contractId/import-renewal-pack', makeActiveImportHandler('contract'));
 
-router.get(
-  '/quotes/:quoteId/import-renewal-pack/:jobId',
-  asyncHandler(async (req, res) => {
-    const { quoteId, jobId } = req.params;
-    if (!UUID_RE.test(quoteId) || !UUID_RE.test(jobId)) {
+// ── job-state poll (GET with jobId) ────────────────────────────────────────
+
+function makeJobLookupHandler(entityType) {
+  return asyncHandler(async (req, res) => {
+    const paramKey = entityType === 'quote' ? 'quoteId' : 'contractId';
+    const entityId = req.params[paramKey];
+    const { jobId } = req.params;
+    if (!UUID_RE.test(entityId) || !UUID_RE.test(jobId)) {
       return res.status(404).json({ error: 'Job not found', code: 'JOB_NOT_FOUND' });
     }
+    const fkCol = entityType === 'quote' ? 'quote_id' : 'contract_id';
     const { rows } = await pool.query(
       `SELECT job_id, status, result, error_message, started_at, finished_at
          FROM public.import_jobs
-        WHERE job_id = $1 AND quote_id = $2`,
-      [jobId, quoteId],
+        WHERE job_id = $1 AND ${fkCol} = $2`,
+      [jobId, entityId],
     );
     if (!rows.length) {
       return res.status(404).json({ error: 'Job not found', code: 'JOB_NOT_FOUND' });
@@ -212,39 +263,56 @@ router.get(
     }
     // Status is 'done' — surface the cached result payload as-is.
     return res.json({ ...job.result, finishedAt: job.finished_at });
-  }),
-);
+  });
+}
 
-// ── GET /quotes/:quoteId/import-snapshots ─────────────────────────────────
+router.get('/quotes/:quoteId/import-renewal-pack/:jobId',     makeJobLookupHandler('quote'));
+router.get('/treaties/:contractId/import-renewal-pack/:jobId', makeJobLookupHandler('contract'));
 
-router.get(
-  '/quotes/:quoteId/import-snapshots',
-  asyncHandler(async (req, res) => {
-    const { quoteId } = req.params;
-    if (!UUID_RE.test(quoteId)) {
-      return res.status(404).json({ error: 'Quote not found', code: 'QUOTE_NOT_FOUND' });
+// ── snapshot listing (GET) ─────────────────────────────────────────────────
+
+function makeListSnapshotsHandler(entityType) {
+  return asyncHandler(async (req, res) => {
+    const paramKey = entityType === 'quote' ? 'quoteId' : 'contractId';
+    const entityId = req.params[paramKey];
+    if (!UUID_RE.test(entityId)) {
+      return res.status(404).json({
+        error: entityType === 'quote' ? 'Quote not found' : 'Treaty not found',
+        code: entityType === 'quote' ? 'QUOTE_NOT_FOUND' : 'TREATY_NOT_FOUND',
+      });
     }
+    const table = entityType === 'quote' ? 'public.quote' : 'public.contract';
+    const idCol = entityType === 'quote' ? 'quote_id' : 'contract_id';
     const { rows: qr } = await pool.query(
-      `SELECT 1 FROM public.quote WHERE quote_id=$1`,
-      [quoteId],
+      `SELECT 1 FROM ${table} WHERE ${idCol}=$1`,
+      [entityId],
     );
     if (!qr.length) {
-      return res.status(404).json({ error: 'Quote not found', code: 'QUOTE_NOT_FOUND' });
+      return res.status(404).json({
+        error: entityType === 'quote' ? 'Quote not found' : 'Treaty not found',
+        code: entityType === 'quote' ? 'QUOTE_NOT_FOUND' : 'TREATY_NOT_FOUND',
+      });
     }
-    const snapshots = await listSnapshotsForQuote(pool, quoteId);
+    const snapshots = await listSnapshotsForEntity(pool, { type: entityType, id: entityId });
     return res.json(snapshots);
-  }),
-);
+  });
+}
 
-// ── POST /quotes/:quoteId/import-snapshots/:snapshotId/restore ────────────
+router.get('/quotes/:quoteId/import-snapshots',     makeListSnapshotsHandler('quote'));
+router.get('/treaties/:contractId/import-snapshots', makeListSnapshotsHandler('contract'));
 
-router.post(
-  '/quotes/:quoteId/import-snapshots/:snapshotId/restore',
-  asyncHandler(async (req, res) => {
-    const { quoteId, snapshotId } = req.params;
-    if (!UUID_RE.test(quoteId) || !UUID_RE.test(snapshotId)) {
+// ── snapshot restore (POST) ────────────────────────────────────────────────
+
+function makeRestoreSnapshotHandler(entityType) {
+  return asyncHandler(async (req, res) => {
+    const paramKey = entityType === 'quote' ? 'quoteId' : 'contractId';
+    const entityId = req.params[paramKey];
+    const { snapshotId } = req.params;
+    if (!UUID_RE.test(entityId) || !UUID_RE.test(snapshotId)) {
       return res.status(404).json({ error: 'Snapshot not found', code: 'SNAPSHOT_NOT_FOUND' });
     }
+
+    const entity = { type: entityType, id: entityId };
 
     // Pre-check inside a short-lived read. A second client could
     // race the restore between this read and the transaction below;
@@ -252,7 +320,7 @@ router.post(
     // either succeed (consumed flag still false) or 410 (consumed
     // flag flipped). The pre-check is just to short-circuit the
     // obvious cases without acquiring a write transaction.
-    const preview = await loadSnapshot(pool, snapshotId, quoteId);
+    const preview = await loadSnapshot(pool, snapshotId, entity);
     if (preview.status === 'missing') {
       return res.status(404).json({ error: 'Snapshot not found', code: 'SNAPSHOT_NOT_FOUND' });
     }
@@ -276,7 +344,7 @@ router.post(
 
       // Re-read inside the transaction so a concurrent restore (or
       // cleanup) can't slip past the pre-check.
-      const fresh = await loadSnapshot(client, snapshotId, quoteId);
+      const fresh = await loadSnapshot(client, snapshotId, entity);
       if (fresh.status === 'missing') {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Snapshot not found', code: 'SNAPSHOT_NOT_FOUND' });
@@ -296,19 +364,27 @@ router.post(
         });
       }
 
-      await restoreSnapshot(client, quoteId, fresh.row.payload);
+      await restoreSnapshot(client, entity, fresh.row.payload);
       await markSnapshotRestored(client, snapshotId);
-      await client.query(
-        `UPDATE public.quote SET updated_at = now() WHERE quote_id = $1`,
-        [quoteId],
-      );
+      if (entityType === 'quote') {
+        await client.query(
+          `UPDATE public.quote SET updated_at = now() WHERE quote_id = $1`,
+          [entityId],
+        );
+      } else {
+        await client.query(
+          `UPDATE public.contract SET updated_at = now() WHERE contract_id = $1`,
+          [entityId],
+        );
+      }
       await logAudit(client, {
-        entityType: 'QUOTE',
-        entityId: quoteId,
+        entityType: entityType === 'quote' ? 'QUOTE' : 'CONTRACT',
+        entityId,
         eventType: 'import_restored',
         actor,
         payload: {
-          quoteId,
+          entityType,
+          entityId,
           snapshotId,
           restoredPages: Object.keys(fresh.row.payload?.pages || {}),
         },
@@ -322,7 +398,10 @@ router.post(
     }
 
     return res.json({ ok: true, snapshotId });
-  }),
-);
+  });
+}
+
+router.post('/quotes/:quoteId/import-snapshots/:snapshotId/restore',     makeRestoreSnapshotHandler('quote'));
+router.post('/treaties/:contractId/import-snapshots/:snapshotId/restore', makeRestoreSnapshotHandler('contract'));
 
 export default router;

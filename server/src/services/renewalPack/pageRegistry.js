@@ -1,33 +1,51 @@
 // Registry of wizard pages the renewal-pack import can populate.
 //
 // Each entry is a small triple:
-//   • snapshot(client, quoteId)  — read the current DB state for this page
-//   • write(client, quoteId, state) — overwrite the page with the given
-//                                     state (also used for restore — capture
-//                                     and restore are symmetric)
-//   • applies(treatyCategory)    — guards pages that only make sense for
-//                                   one treaty category. Pages that apply
-//                                   to both treaty types return true for
-//                                   either.
+//   • snapshot(client, entity)        — read the current DB state for this page
+//   • write(client, entity, state)    — overwrite the page with the given
+//                                       state (also used for restore — capture
+//                                       and restore are symmetric)
+//   • applies(treatyCategory)         — guards pages that only make sense for
+//                                       one treaty category. Pages that apply
+//                                       to both treaty types return true for
+//                                       either.
+//
+// Entity shape: { type: 'quote' | 'contract', id }. Each page knows
+// which of the parallel quote_* / contract_* tables to read or write
+// based on entity.type — most pages just swap a column name; the
+// large-losses page does a JSONB-blob ↔ relational-row translation
+// because quote_large_loss_report stores a single blob while
+// contract_large_loss_report + contract_large_losses are normalised.
 //
 // The mapper produces a `state` per page from the LLM extraction; the
-// orchestrator (importJob.js) drives snapshot → write per page that the
-// mapper actually populated. The orchestrator never touches a page the
-// mapper omitted, so an empty extraction never erases existing data.
+// orchestrator (importJob.js) drives snapshot → write per page that
+// the mapper actually populated. The orchestrator never touches a
+// page the mapper omitted, so an empty extraction never erases
+// existing data.
 
+import { randomUUID } from 'node:crypto';
 import { logger } from '../../lib/logger.js';
+
+function assertEntity(entity) {
+  if (!entity || (entity.type !== 'quote' && entity.type !== 'contract') || !entity.id) {
+    throw new Error(`pageRegistry: invalid entity ${JSON.stringify(entity)}`);
+  }
+}
 
 // ── triangle pages (PREMIUM, CLAIMS_PAID, CLAIMS_OS) ────────────────────────
 
 function makeTrianglePage(triangleType) {
   return {
-    async snapshot(client, quoteId) {
+    async snapshot(client, entity) {
+      assertEntity(entity);
+      const table = entity.type === 'quote' ? 'public.quote_triangle_cells' : 'public.contract_triangle_cells';
+      const fk = entity.type === 'quote' ? 'quote_id' : 'contract_id';
       const { rows } = await client.query(
         `SELECT origin_year, dev_months, cum_value
-           FROM public.quote_triangle_cells
-          WHERE quote_id=$1 AND type=$2::public.triangle_type
+           FROM ${table}
+          WHERE ${fk}=$1 AND type=$2::public.triangle_type
           ORDER BY origin_year, dev_months`,
-        [quoteId, triangleType],
+        [entity.id, triangleType],
       );
       return { cells: rows.map((r) => ({
         origin_year: r.origin_year,
@@ -35,19 +53,22 @@ function makeTrianglePage(triangleType) {
         cum_value: r.cum_value == null ? null : Number(r.cum_value),
       })) };
     },
-    async write(client, quoteId, state) {
+    async write(client, entity, state) {
+      assertEntity(entity);
+      const table = entity.type === 'quote' ? 'public.quote_triangle_cells' : 'public.contract_triangle_cells';
+      const fk = entity.type === 'quote' ? 'quote_id' : 'contract_id';
       await client.query(
-        `DELETE FROM public.quote_triangle_cells WHERE quote_id=$1 AND type=$2::public.triangle_type`,
-        [quoteId, triangleType],
+        `DELETE FROM ${table} WHERE ${fk}=$1 AND type=$2::public.triangle_type`,
+        [entity.id, triangleType],
       );
       const cells = state?.cells || [];
       if (!cells.length) return;
       await client.query(
-        `INSERT INTO public.quote_triangle_cells (quote_id, type, origin_year, dev_months, cum_value)
+        `INSERT INTO ${table} (${fk}, type, origin_year, dev_months, cum_value)
          SELECT $1, $2::public.triangle_type, oy, dm, cv
            FROM unnest($3::int[], $4::int[], $5::numeric[]) AS u(oy, dm, cv)`,
         [
-          quoteId, triangleType,
+          entity.id, triangleType,
           cells.map((c) => Number(c.origin_year)),
           cells.map((c) => Number(c.dev_months)),
           cells.map((c) => (c.cum_value == null ? null : Number(c.cum_value))),
@@ -61,33 +82,39 @@ function makeTrianglePage(triangleType) {
 // ── CRESTA ──────────────────────────────────────────────────────────────────
 
 const crestaPage = {
-  async snapshot(client, quoteId) {
+  async snapshot(client, entity) {
+    assertEntity(entity);
+    const table = entity.type === 'quote' ? 'public.quote_cresta_data' : 'public.contract_cresta_data';
+    const fk = entity.type === 'quote' ? 'quote_id' : 'contract_id';
     const { rows } = await client.query(
       `SELECT country_id, zone_id, zone_name, eq_agg, ws_agg, flood_agg, srcc_agg, others_agg,
               treaty_type, cob_id, cob_name,
               residential_bldg_pct, commercial_bldg_pct, commercial_cont_pct,
               industrial_bldg_pct, industrial_cont_pct
-         FROM public.quote_cresta_data
-        WHERE quote_id=$1
+         FROM ${table}
+        WHERE ${fk}=$1
         ORDER BY country_id, zone_id`,
-      [quoteId],
+      [entity.id],
     );
     return { rows: rows.map(normaliseCrestaRow) };
   },
-  async write(client, quoteId, state) {
-    await client.query(`DELETE FROM public.quote_cresta_data WHERE quote_id=$1`, [quoteId]);
+  async write(client, entity, state) {
+    assertEntity(entity);
+    const table = entity.type === 'quote' ? 'public.quote_cresta_data' : 'public.contract_cresta_data';
+    const fk = entity.type === 'quote' ? 'quote_id' : 'contract_id';
+    await client.query(`DELETE FROM ${table} WHERE ${fk}=$1`, [entity.id]);
     const rows = (state?.rows || []).filter((r) => r && r.zone_id);
     for (const r of rows) {
       await client.query(
-        `INSERT INTO public.quote_cresta_data
-           (quote_id, country_id, zone_id, zone_name,
+        `INSERT INTO ${table}
+           (${fk}, country_id, zone_id, zone_name,
             eq_agg, ws_agg, flood_agg, srcc_agg, others_agg,
             treaty_type, cob_id, cob_name,
             residential_bldg_pct, commercial_bldg_pct, commercial_cont_pct,
             industrial_bldg_pct, industrial_cont_pct)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
         [
-          quoteId, r.country_id || null, r.zone_id, r.zone_name || null,
+          entity.id, r.country_id || null, r.zone_id, r.zone_name || null,
           numOrZero(r.eq_agg), numOrZero(r.ws_agg), numOrZero(r.flood_agg),
           numOrZero(r.srcc_agg), numOrZero(r.others_agg),
           r.treaty_type || 'Both', r.cob_id || null, r.cob_name || null,
@@ -103,31 +130,97 @@ const crestaPage = {
   applies: () => true,
 };
 
-// ── large losses (jsonb blob — single row per quote) ────────────────────────
+// ── large losses ────────────────────────────────────────────────────────────
+//
+// Quote and contract sides store this very differently:
+//   • quote_large_loss_report.report_data is a single jsonb blob holding
+//     BOTH large and cat losses ({ large: [...], cat: [...] }). The
+//     mapper produces state in that exact shape.
+//   • contract_large_loss_report is a header row with normalised
+//     children in contract_large_losses; contract_cat_loss_report and
+//     contract_cat_losses mirror that for CAT.
+//
+// The page's contract-side write path translates the blob into per-row
+// inserts; the snapshot path rebuilds the blob from the relational
+// rows so the saved payload (and therefore the restore) has the same
+// shape on either side.
 
 const largeLossesPage = {
-  async snapshot(client, quoteId) {
-    const { rows } = await client.query(
-      `SELECT report_data FROM public.quote_large_loss_report WHERE quote_id=$1`,
-      [quoteId],
-    );
-    return { report_data: rows[0]?.report_data ?? null };
+  async snapshot(client, entity) {
+    assertEntity(entity);
+    if (entity.type === 'quote') {
+      const { rows } = await client.query(
+        `SELECT report_data FROM public.quote_large_loss_report WHERE quote_id=$1`,
+        [entity.id],
+      );
+      return { report_data: rows[0]?.report_data ?? null };
+    }
+    // contract side — reconstruct the { large, cat } blob from rows.
+    const [lrgHdr, catHdr] = await Promise.all([
+      client.query(
+        `SELECT report_id FROM public.contract_large_loss_report WHERE contract_id=$1`,
+        [entity.id],
+      ),
+      client.query(
+        `SELECT report_id FROM public.contract_cat_loss_report WHERE contract_id=$1`,
+        [entity.id],
+      ),
+    ]);
+    const [lrgRows, catRows] = await Promise.all([
+      lrgHdr.rows.length
+        ? client.query(
+            `SELECT uw_year, insured_name, loss_name, date_of_loss, class_of_business,
+                    paid, os, incurred
+               FROM public.contract_large_losses WHERE report_id=$1 ORDER BY uw_year, date_of_loss`,
+            [lrgHdr.rows[0].report_id],
+          )
+        : { rows: [] },
+      catHdr.rows.length
+        ? client.query(
+            `SELECT uw_year, insured_name, loss_name, date_of_loss, class_of_business,
+                    paid, os, incurred
+               FROM public.contract_cat_losses WHERE report_id=$1 ORDER BY uw_year, date_of_loss`,
+            [catHdr.rows[0].report_id],
+          )
+        : { rows: [] },
+    ]);
+    // No header AND no rows → the page is empty; preserve the null
+    // payload shape so the snapshot/restore round-trip matches the
+    // pre-import state on a quote with no large_loss_report row either.
+    if (!lrgHdr.rows.length && !catHdr.rows.length) {
+      return { report_data: null };
+    }
+    return {
+      report_data: {
+        large: lrgRows.rows.map(rowToLossRecord),
+        cat:   catRows.rows.map(rowToLossRecord),
+      },
+    };
   },
-  async write(client, quoteId, state) {
+  async write(client, entity, state) {
+    assertEntity(entity);
     const payload = state?.report_data ?? null;
-    if (payload === null) {
+    if (entity.type === 'quote') {
+      if (payload === null) {
+        await client.query(
+          `DELETE FROM public.quote_large_loss_report WHERE quote_id=$1`,
+          [entity.id],
+        );
+        return;
+      }
       await client.query(
-        `DELETE FROM public.quote_large_loss_report WHERE quote_id=$1`,
-        [quoteId],
+        `INSERT INTO public.quote_large_loss_report (quote_id, report_data, updated_at)
+         VALUES ($1, $2::jsonb, now())
+         ON CONFLICT (quote_id) DO UPDATE SET report_data=EXCLUDED.report_data, updated_at=now()`,
+        [entity.id, JSON.stringify(payload)],
       );
       return;
     }
-    await client.query(
-      `INSERT INTO public.quote_large_loss_report (quote_id, report_data, updated_at)
-       VALUES ($1, $2::jsonb, now())
-       ON CONFLICT (quote_id) DO UPDATE SET report_data=EXCLUDED.report_data, updated_at=now()`,
-      [quoteId, JSON.stringify(payload)],
-    );
+    // contract side: write the relational tables.
+    const large = Array.isArray(payload?.large) ? payload.large : [];
+    const cat   = Array.isArray(payload?.cat)   ? payload.cat   : [];
+    await writeContractLossReport(client, entity.id, 'large', large);
+    await writeContractLossReport(client, entity.id, 'cat',   cat);
   },
   applies: () => true,
 };
@@ -135,15 +228,18 @@ const largeLossesPage = {
 // ── NP expiring layers (the incumbent treaty's layer structure) ─────────────
 
 const npStructurePage = {
-  async snapshot(client, quoteId) {
+  async snapshot(client, entity) {
+    assertEntity(entity);
+    const table = entity.type === 'quote' ? 'public.quote_np_expiring_layers' : 'public.contract_np_expiring_layers';
+    const fk = entity.type === 'quote' ? 'quote_id' : 'contract_id';
     const { rows } = await client.query(
       `SELECT layer_number, attachment, layer_limit, aggregate_limit, egnpi,
               earned_premium, rate, rol, num_reinstatements, reinstatement_pct,
               annual_agg_deductible, peril_scope, mdp, mdp_pct
-         FROM public.quote_np_expiring_layers
-        WHERE quote_id=$1
+         FROM ${table}
+        WHERE ${fk}=$1
         ORDER BY layer_number`,
-      [quoteId],
+      [entity.id],
     );
     return { layers: rows.map((r) => ({
       layer_number: r.layer_number,
@@ -162,21 +258,21 @@ const npStructurePage = {
       mdp_pct: numOrNullCoerce(r.mdp_pct),
     })) };
   },
-  async write(client, quoteId, state) {
-    await client.query(
-      `DELETE FROM public.quote_np_expiring_layers WHERE quote_id=$1`,
-      [quoteId],
-    );
+  async write(client, entity, state) {
+    assertEntity(entity);
+    const table = entity.type === 'quote' ? 'public.quote_np_expiring_layers' : 'public.contract_np_expiring_layers';
+    const fk = entity.type === 'quote' ? 'quote_id' : 'contract_id';
+    await client.query(`DELETE FROM ${table} WHERE ${fk}=$1`, [entity.id]);
     const layers = state?.layers || [];
     for (const l of layers) {
       await client.query(
-        `INSERT INTO public.quote_np_expiring_layers
-           (quote_id, layer_number, attachment, layer_limit, aggregate_limit, egnpi,
+        `INSERT INTO ${table}
+           (${fk}, layer_number, attachment, layer_limit, aggregate_limit, egnpi,
             earned_premium, rate, rol, num_reinstatements, reinstatement_pct,
             annual_agg_deductible, peril_scope, mdp, mdp_pct)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
         [
-          quoteId, Number(l.layer_number) || 1,
+          entity.id, Number(l.layer_number) || 1,
           numOrNullCoerce(l.attachment),
           numOrNullCoerce(l.layer_limit),
           numOrNullCoerce(l.aggregate_limit),
@@ -200,13 +296,16 @@ const npStructurePage = {
 // ── EGNPI history (per UW year) ─────────────────────────────────────────────
 
 const egnpiHistoryPage = {
-  async snapshot(client, quoteId) {
+  async snapshot(client, entity) {
+    assertEntity(entity);
+    const table = entity.type === 'quote' ? 'public.quote_np_historical_performance' : 'public.contract_np_historical_performance';
+    const fk = entity.type === 'quote' ? 'quote_id' : 'contract_id';
     const { rows } = await client.query(
       `SELECT uw_year, premiums, claims, egnpi, result, loss_ratio, expense_ratio, combined_ratio
-         FROM public.quote_np_historical_performance
-        WHERE quote_id=$1
+         FROM ${table}
+        WHERE ${fk}=$1
         ORDER BY uw_year`,
-      [quoteId],
+      [entity.id],
     );
     return { rows: rows.map((r) => ({
       uw_year: Number(r.uw_year),
@@ -219,24 +318,24 @@ const egnpiHistoryPage = {
       combined_ratio: numOrNullCoerce(r.combined_ratio),
     })) };
   },
-  async write(client, quoteId, state) {
-    await client.query(
-      `DELETE FROM public.quote_np_historical_performance WHERE quote_id=$1`,
-      [quoteId],
-    );
+  async write(client, entity, state) {
+    assertEntity(entity);
+    const table = entity.type === 'quote' ? 'public.quote_np_historical_performance' : 'public.contract_np_historical_performance';
+    const fk = entity.type === 'quote' ? 'quote_id' : 'contract_id';
+    await client.query(`DELETE FROM ${table} WHERE ${fk}=$1`, [entity.id]);
     const rows = (state?.rows || []).filter((r) => Number.isFinite(Number(r.uw_year)));
     for (const r of rows) {
       await client.query(
-        `INSERT INTO public.quote_np_historical_performance
-           (quote_id, uw_year, premiums, claims, egnpi, result, loss_ratio, expense_ratio, combined_ratio)
+        `INSERT INTO ${table}
+           (${fk}, uw_year, premiums, claims, egnpi, result, loss_ratio, expense_ratio, combined_ratio)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT (quote_id, uw_year)
+         ON CONFLICT (${fk}, uw_year)
          DO UPDATE SET premiums=EXCLUDED.premiums, claims=EXCLUDED.claims, egnpi=EXCLUDED.egnpi,
                        result=EXCLUDED.result, loss_ratio=EXCLUDED.loss_ratio,
                        expense_ratio=EXCLUDED.expense_ratio, combined_ratio=EXCLUDED.combined_ratio,
                        updated_at=now()`,
         [
-          quoteId, Number(r.uw_year),
+          entity.id, Number(r.uw_year),
           numOrNullCoerce(r.premiums),
           numOrNullCoerce(r.claims),
           numOrNullCoerce(r.egnpi),
@@ -267,25 +366,25 @@ export function isKnownPage(name) {
   return Object.prototype.hasOwnProperty.call(PAGE_REGISTRY, name);
 }
 
-export async function snapshotPage(client, quoteId, name) {
+export async function snapshotPage(client, entity, name) {
   const page = PAGE_REGISTRY[name];
   if (!page) {
     logger.warn('[pageRegistry] snapshot called for unknown page', { name });
     return null;
   }
-  return await page.snapshot(client, quoteId);
+  return await page.snapshot(client, entity);
 }
 
-export async function writePage(client, quoteId, name, state) {
+export async function writePage(client, entity, name, state) {
   const page = PAGE_REGISTRY[name];
   if (!page) {
     logger.warn('[pageRegistry] write called for unknown page', { name });
     return;
   }
-  await page.write(client, quoteId, state);
+  await page.write(client, entity, state);
 }
 
-// ── small numeric helpers (kept local so the writers don't pull a util) ─────
+// ── helpers ─────────────────────────────────────────────────────────────────
 
 function numOrNullCoerce(v) {
   if (v == null) return null;
@@ -322,4 +421,80 @@ function normaliseCrestaRow(r) {
     industrial_bldg_pct: numOrNullCoerce(r.industrial_bldg_pct),
     industrial_cont_pct: numOrNullCoerce(r.industrial_cont_pct),
   };
+}
+
+// rowToLossRecord rebuilds the shape the mapper produces (and the
+// quote-side blob stores) from a relational large/cat loss row.
+function rowToLossRecord(r) {
+  return {
+    uwYear: r.uw_year == null ? null : Number(r.uw_year),
+    insuredName: r.insured_name || null,
+    description: r.loss_name || null,
+    date: r.date_of_loss ? new Date(r.date_of_loss).toISOString().slice(0, 10) : null,
+    classOfBusiness: r.class_of_business || null,
+    paid: numOrNullCoerce(r.paid),
+    os: numOrNullCoerce(r.os),
+    incurred: numOrNullCoerce(r.incurred),
+  };
+}
+
+async function writeContractLossReport(client, contractId, kind, records) {
+  const reportTable = kind === 'large' ? 'public.contract_large_loss_report' : 'public.contract_cat_loss_report';
+  const childTable  = kind === 'large' ? 'public.contract_large_losses'      : 'public.contract_cat_losses';
+
+  if (!records.length) {
+    // Mirror the quote-side semantics: an empty payload removes the
+    // page state. Drop the header row and its rows together via the
+    // FK cascade where it exists; where it doesn't, do an explicit
+    // child delete first.
+    const { rows: hdr } = await client.query(
+      `SELECT report_id FROM ${reportTable} WHERE contract_id=$1`,
+      [contractId],
+    );
+    if (hdr.length) {
+      await client.query(`DELETE FROM ${childTable} WHERE report_id=$1`, [hdr[0].report_id]);
+      await client.query(`DELETE FROM ${reportTable} WHERE contract_id=$1`, [contractId]);
+    }
+    return;
+  }
+
+  // Upsert the report header, then replace the child rows.
+  const { rows: hdr } = await client.query(
+    `SELECT report_id FROM ${reportTable} WHERE contract_id=$1`,
+    [contractId],
+  );
+  let reportId;
+  if (hdr.length) {
+    reportId = hdr[0].report_id;
+    await client.query(
+      `UPDATE ${reportTable} SET updated_at=now() WHERE report_id=$1`,
+      [reportId],
+    );
+  } else {
+    const { rows: ins } = await client.query(
+      `INSERT INTO ${reportTable} (contract_id, report_date) VALUES ($1, NULL) RETURNING report_id`,
+      [contractId],
+    );
+    reportId = ins[0].report_id;
+  }
+  await client.query(`DELETE FROM ${childTable} WHERE report_id=$1`, [reportId]);
+  for (const r of records) {
+    await client.query(
+      `INSERT INTO ${childTable}
+         (loss_id, report_id, uw_year, insured_name, loss_name, date_of_loss,
+          class_of_business, paid, os, incurred, is_selected)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)`,
+      [
+        randomUUID(), reportId,
+        r.uwYear == null ? null : Number(r.uwYear),
+        r.insuredName || null,
+        r.description || null,
+        r.date || null,
+        r.classOfBusiness || null,
+        numOrNullCoerce(r.paid),
+        numOrNullCoerce(r.os),
+        numOrNullCoerce(r.incurred),
+      ],
+    );
+  }
 }

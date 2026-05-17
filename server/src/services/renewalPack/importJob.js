@@ -2,10 +2,10 @@
 //
 // Lifecycle:
 //   1. The POST endpoint creates a row in import_jobs with
-//      status='processing'. The unique partial index on quote_id
-//      where status='processing' serialises concurrent POSTs on the
-//      same quote — second one gets a unique violation, route maps
-//      to 409 IMPORT_IN_PROGRESS.
+//      status='processing'. The unique partial indexes — one per
+//      quote_id, one per contract_id, both partial on status — gives
+//      us free concurrency control. A second concurrent POST trips
+//      the index and the route maps to 409 IMPORT_IN_PROGRESS.
 //   2. The endpoint returns 202 + jobId and kicks off this runner
 //      via setImmediate (in-process; no external job queue exists
 //      in this codebase yet).
@@ -17,10 +17,10 @@
 //   4. The polling GET reads the result column off the job row and
 //      surfaces filledPages / warnings / unmatchedCresta / restorePointId.
 //
-// Failure mode: the LLM call is the most likely failure. If
-// extraction returns null even after the retry, we still record the
-// job as failed (rather than persisting an empty import); the
-// underwriter can re-attempt or fill manually.
+// Entity-aware: the same runner targets quotes and contracts. Tables
+// + audit entity-types fork on entity.type — everything else is
+// shared. Failure mode is identical: if extraction returns null the
+// job is recorded failed, no partial state is written.
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -38,16 +38,19 @@ import { env } from '../../config/env.js';
 /**
  * @param {object} args
  * @param {string} args.jobId
- * @param {string} args.quoteId
+ * @param {{ type: 'quote'|'contract', id: string }} args.entity
  * @param {object} args.document - { document_id, file_name, storage_path }
  * @param {'PROPORTIONAL'|'NON_PROPORTIONAL'} args.treatyCategory
  * @param {string} args.actor - display name / user id for the audit row
  * @param {Function} [args.crestaLookup] - injected for tests; falls back to defaultCrestaLookup
  */
-export async function runImportJob({ jobId, quoteId, document, treatyCategory, actor, crestaLookup }) {
+export async function runImportJob({ jobId, entity, document, treatyCategory, actor, crestaLookup }) {
   const filename = document.file_name;
   const startedAt = Date.now();
-  logger.info('[importJob] starting', { jobId, quoteId, documentId: document.document_id, filename });
+  logger.info('[importJob] starting', {
+    jobId, entityType: entity.type, entityId: entity.id,
+    documentId: document.document_id, filename,
+  });
 
   try {
     const fileBuffer = await loadDocumentBuffer(document);
@@ -80,11 +83,11 @@ export async function runImportJob({ jobId, quoteId, document, treatyCategory, a
       await client.query('BEGIN');
 
       const snapshotPayload = writePageNames.length
-        ? await capturePages(client, quoteId, writePageNames)
+        ? await capturePages(client, entity, writePageNames)
         : { capturedAt: new Date().toISOString(), pages: {} };
 
       const snapRow = await persistSnapshot(client, {
-        quoteId,
+        entity,
         jobId,
         filename,
         payload: snapshotPayload,
@@ -93,39 +96,45 @@ export async function runImportJob({ jobId, quoteId, document, treatyCategory, a
       snapshotId = snapRow.snapshot_id;
 
       for (const [name, state] of Object.entries(mapped.pages)) {
-        await writePage(client, quoteId, name, state);
+        await writePage(client, entity, name, state);
       }
 
-      // Provenance on the quote row — the actual values are in the
-      // wizard tables now. We deliberately do NOT write wizard_state
-      // here (the legacy reviewer-screen blob is gone).
-      await client.query(
-        `UPDATE public.quote
-            SET import_metadata = $2::jsonb,
-                updated_at = now()
-          WHERE quote_id = $1`,
-        [quoteId, JSON.stringify({
-          source: 'renewal_pack_import',
-          source_filename: filename,
-          imported_by: actor,
-          imported_at: new Date().toISOString(),
-          type: treatyCategory === 'NON_PROPORTIONAL' ? 'non_proportional' : 'proportional',
-          provider: extractionResult.provider,
-          field_confidence: mapped.fieldConfidence,
-          warnings: allWarnings,
-          unmatched_cresta: mapped.unmatchedCresta,
-          filled_pages: visibleFilledPages,
-          snapshot_id: snapshotId,
-        })],
-      );
+      const provenance = {
+        source: 'renewal_pack_import',
+        source_filename: filename,
+        imported_by: actor,
+        imported_at: new Date().toISOString(),
+        type: treatyCategory === 'NON_PROPORTIONAL' ? 'non_proportional' : 'proportional',
+        provider: extractionResult.provider,
+        field_confidence: mapped.fieldConfidence,
+        warnings: allWarnings,
+        unmatched_cresta: mapped.unmatchedCresta,
+        filled_pages: visibleFilledPages,
+        snapshot_id: snapshotId,
+      };
+      // Provenance on the owning row — the actual values are in the
+      // wizard tables now. quote.import_metadata and contract.import_metadata
+      // share the same JSONB shape (see migration 098 / 100).
+      if (entity.type === 'quote') {
+        await client.query(
+          `UPDATE public.quote SET import_metadata=$2::jsonb, updated_at=now() WHERE quote_id=$1`,
+          [entity.id, JSON.stringify(provenance)],
+        );
+      } else {
+        await client.query(
+          `UPDATE public.contract SET import_metadata=$2::jsonb, updated_at=now() WHERE contract_id=$1`,
+          [entity.id, JSON.stringify(provenance)],
+        );
+      }
 
       await logAudit(client, {
-        entityType: 'QUOTE',
-        entityId: quoteId,
+        entityType: entity.type === 'quote' ? 'QUOTE' : 'CONTRACT',
+        entityId: entity.id,
         eventType: 'renewal_pack_imported',
         actor,
         payload: {
-          quoteId,
+          entityType: entity.type,
+          entityId: entity.id,
           documentId: document.document_id,
           filename,
           filledPages: visibleFilledPages,
@@ -152,7 +161,7 @@ export async function runImportJob({ jobId, quoteId, document, treatyCategory, a
 
       await client.query('COMMIT');
       logger.info('[importJob] done', {
-        jobId, quoteId, filename,
+        jobId, entityType: entity.type, entityId: entity.id, filename,
         filledPages: visibleFilledPages.length,
         warnings: allWarnings.length,
         durationMs: Date.now() - startedAt,
@@ -165,7 +174,8 @@ export async function runImportJob({ jobId, quoteId, document, treatyCategory, a
     }
   } catch (err) {
     logger.error('[importJob] failed', {
-      jobId, quoteId, filename, error: err?.message, stack: err?.stack?.split('\n').slice(0, 5).join(' | '),
+      jobId, entityType: entity.type, entityId: entity.id, filename,
+      error: err?.message, stack: err?.stack?.split('\n').slice(0, 5).join(' | '),
     });
     // Best-effort failure write — don't let an audit/log failure
     // mask the original error.
