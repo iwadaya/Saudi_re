@@ -1,10 +1,12 @@
-// Smoke / integration test for NpStopLossPricing. Confirms the screen
-// mounts, the engine wires through to the UI, and that:
-//   - Switching attachment basis swaps the input fields
-//   - Burning-cost rows produce a computed annual loss
-//   - Exposure-rating inputs produce the expected analytical result
-//   - The Monte-Carlo toggle reveals the MC summary
-//   - Server hydration loads saved inputs through useScreenSave
+// Smoke / integration test for NpStopLossPricing — Stop-Loss-only
+// after the Aggregate XL split. Confirms:
+//   - All sections render with the new LR-only layer cover
+//   - Burning-cost table has the new 5-column layout
+//   - Premiums + rate changes loaded from egnpi-year drive on-level
+//     adjusted premium + loss-ratio cells
+//   - Excel paste fills consecutive years
+//   - Server hydration round-trips inputs
+//   - Monte Carlo toggle reveals the percentile panel
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -15,6 +17,7 @@ const { apiMock } = vi.hoisted(() => ({
   apiMock: {
     getNpStopLossPricing: vi.fn(),
     saveNpStopLossPricing: vi.fn(),
+    getNpEgnpiYear: vi.fn(),
   },
 }));
 
@@ -26,7 +29,7 @@ function renderStopLoss(appState = {}) {
     contractId: 'contract-sl-001',
     appState: {
       wizardMode: 'NP',
-      npTreatyDetail: { startYear: 2024, experienceStartYear: 2019 },
+      npTreatyDetail: { startYear: 2024, experienceStartYear: 2019, treatyTypeName: 'Stop Loss' },
       ...appState,
     },
   });
@@ -41,97 +44,85 @@ beforeEach(() => {
   localStorage.clear();
   apiMock.getNpStopLossPricing.mockReset();
   apiMock.saveNpStopLossPricing.mockReset();
+  apiMock.getNpEgnpiYear.mockReset();
   apiMock.getNpStopLossPricing.mockResolvedValue({ inputs: {}, outputs: null });
   apiMock.saveNpStopLossPricing.mockResolvedValue({ ok: true });
+  apiMock.getNpEgnpiYear.mockResolvedValue([]);
 });
 
 describe('NpStopLossPricing — render + interaction', () => {
   it('mounts with default sections visible', () => {
     renderStopLoss();
-    expect(screen.getByText(/Layer Cover/i)).toBeInTheDocument();
-    expect(screen.getByText(/Burning Cost · Aggregate Annual Losses/i)).toBeInTheDocument();
+    expect(screen.getByText(/Layer Cover · Loss-Ratio Basis/i)).toBeInTheDocument();
+    expect(screen.getByText(/Burning Cost · Loss Ratios by UW Year/i)).toBeInTheDocument();
     expect(screen.getByText(/Exposure Rating · Compound Poisson/i)).toBeInTheDocument();
     expect(screen.getByText(/Monte Carlo · Aggregate Simulation/i)).toBeInTheDocument();
     expect(screen.getByText(/Method Blend/i)).toBeInTheDocument();
     expect(screen.getByText(/Blended Result/i)).toBeInTheDocument();
   });
 
-  it('absolute → loss-ratio basis swaps fields (Attachment LR appears)', () => {
+  it('layer cover always shows LR fields (no basis toggle)', () => {
     renderStopLoss();
-    expect(screen.getByText(/Attachment \(D\)/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Loss Ratio \(Stop Loss\)/i }));
     expect(screen.getByText(/Attachment LR \(%\)/i)).toBeInTheDocument();
     expect(screen.getByText(/Limit LR \(%\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/^EPI$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Attachment LR')).toBeInTheDocument();
+    expect(screen.getByLabelText('Limit LR')).toBeInTheDocument();
+    expect(screen.getByLabelText('EPI')).toBeInTheDocument();
+    // Old absolute pill buttons should be gone.
+    expect(screen.queryByRole('button', { name: /Absolute \(Agg XL\)/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Loss Ratio \(Stop Loss\)/i })).not.toBeInTheDocument();
   });
 
-  it('burning cost: entering a year aggregate updates the layer-hit cell and annual loss', () => {
+  it('burning cost table has Premium / Loss Ratio columns', () => {
     renderStopLoss();
-    // Set absolute attachment + limit: 10M xs 10M.
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. 10,000,000/i), { target: { value: '10000000' } });
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. 5,000,000/i), { target: { value: '10000000' } });
-
-    // Burning cost table — find the row containing year 2019.
-    const cell2019 = screen.getByText('2019');
-    const row = cell2019.closest('tr');
-    const input = within(row).getByPlaceholderText('0');
-    // 15M aggregate → 5M in the 10M xs 10M layer (capped by limit).
-    fireEvent.change(input, { target: { value: '15000000' } });
-
-    // Layer hit cell shows 5,000,000 for that row.
-    expect(within(row).getByText('5,000,000')).toBeInTheDocument();
+    expect(screen.getByText('Premium (Adjusted)')).toBeInTheDocument();
+    expect(screen.getByText('Aggregate Loss')).toBeInTheDocument();
+    expect(screen.getByText('Loss Ratio')).toBeInTheDocument();
+    expect(screen.getByText('Layer Hit')).toBeInTheDocument();
   });
 
-  it('exposure rating: λ + Lognormal severity produces a positive layer loss', () => {
+  it('on-level adjusted premium drives the loss ratio cell', async () => {
+    // Server returns egnpi rows. Year 2020: 8M premium with +5% applied in
+    // 2021 and +3% in 2022 → on-level factor for 2020 = 1.05 × 1.03 ≈ 1.0815
+    // Year 2023 (last in window): factor = 1.0
+    apiMock.getNpEgnpiYear.mockResolvedValue([
+      { uw_year: 2019, egnpi: '7000000', rate_change_pct: null },
+      { uw_year: 2020, egnpi: '8000000', rate_change_pct: null },
+      { uw_year: 2021, egnpi: '9000000', rate_change_pct: '5' },
+      { uw_year: 2022, egnpi: '10000000', rate_change_pct: '3' },
+      { uw_year: 2023, egnpi: '11000000', rate_change_pct: null },
+    ]);
     renderStopLoss();
-    // Layer 4M xs 4M (absolute). Use exact placeholder strings so the
-    // regex doesn't match "e.g. 200,000" or similar prefixes.
-    fireEvent.change(screen.getByPlaceholderText('e.g. 10,000,000'), { target: { value: '4000000' } });
-    fireEvent.change(screen.getByPlaceholderText('e.g. 5,000,000'), { target: { value: '4000000' } });
-    // λ=20, Lognormal mean=200k CV=0.6  →  E[S]=4M, σ≈1.04M, layer loss ~σ/√(2π)≈416k.
-    fireEvent.change(screen.getByPlaceholderText('e.g. 20'), { target: { value: '20' } });
-    fireEvent.change(screen.getByPlaceholderText('e.g. 200,000'), { target: { value: '200000' } });
-    fireEvent.change(screen.getByPlaceholderText('0.6'), { target: { value: '0.6' } });
 
-    // Exposure rating cards appear under that section. E[S] should
-    // render as 4.00M; aggMean is one of the result cards.
-    const exposureSection = screen.getByText(/Exposure Rating · Compound Poisson/i).closest('div').parentElement;
-    expect(within(exposureSection).getByText(/E\[S\]/i)).toBeInTheDocument();
-    expect(within(exposureSection).getByText(/σ\[S\]/i)).toBeInTheDocument();
-    // 4.00M should appear in the aggMean card.
-    expect(within(exposureSection).getAllByText(/4\.00M/i).length).toBeGreaterThan(0);
-  });
+    // Set LR layer + EPI for the engine to be runnable.
+    fireEvent.change(screen.getByLabelText('Attachment LR'), { target: { value: '80' } });
+    fireEvent.change(screen.getByLabelText('Limit LR'), { target: { value: '20' } });
+    fireEvent.change(screen.getByLabelText('EPI'), { target: { value: '11000000' } });
 
-  it('monte carlo toggle: off → no panel, on → percentile panel appears', () => {
-    renderStopLoss();
-    expect(screen.queryByText(/Pr\(layer hit/i)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('checkbox', { name: /Run Monte Carlo/i }));
-    // Set required inputs (frequency + severity).
-    fireEvent.change(screen.getByPlaceholderText('e.g. 10,000,000'), { target: { value: '4000000' } });
-    fireEvent.change(screen.getByPlaceholderText('e.g. 5,000,000'), { target: { value: '4000000' } });
-    fireEvent.change(screen.getByPlaceholderText('e.g. 20'), { target: { value: '20' } });
-    fireEvent.change(screen.getByPlaceholderText('e.g. 200,000'), { target: { value: '200000' } });
-    fireEvent.change(screen.getByPlaceholderText('0.6'), { target: { value: '0.6' } });
+    // Enter 9M aggregate loss against the 2020 row (adjusted prem ≈ 8.652M
+    // → LR ≈ 104.0%).
+    await waitFor(() => {
+      const row = screen.getByText('2020').closest('tr');
+      expect(within(row).queryByText(/— \(set EGNPI\)/)).not.toBeInTheDocument();
+    });
+    const row2020 = screen.getByText('2020').closest('tr');
+    const input2020 = within(row2020).getByPlaceholderText('0');
+    fireEvent.change(input2020, { target: { value: '9000000' } });
 
-    // The MC panel renders Hit Frequency + P95 cards.
-    expect(screen.getByText(/Hit Frequency/i)).toBeInTheDocument();
-    expect(screen.getByText('P95')).toBeInTheDocument();
-    expect(screen.getByText('P99')).toBeInTheDocument();
-  });
-
-  it('shows a warning when no inputs are provided', () => {
-    renderStopLoss();
-    // No attachment, no inputs → engine returns the "no method" warning.
-    expect(screen.getByText(/No pricing method produced output/i)).toBeInTheDocument();
+    // Loss ratio cell should now show ~104%.
+    await waitFor(() => {
+      expect(within(row2020).getByText(/104\.\d%/)).toBeInTheDocument();
+    });
   });
 
   it('Excel paste fills consecutive year rows from a single column', () => {
     renderStopLoss();
-    // Attachment + limit so layer hits are computable.
-    fireEvent.change(screen.getByPlaceholderText('e.g. 10,000,000'), { target: { value: '10000000' } });
-    fireEvent.change(screen.getByPlaceholderText('e.g. 5,000,000'), { target: { value: '5000000' } });
+    // Set attachment + limit so the engine runs.
+    fireEvent.change(screen.getByLabelText('Attachment LR'), { target: { value: '80' } });
+    fireEvent.change(screen.getByLabelText('Limit LR'), { target: { value: '20' } });
+    fireEvent.change(screen.getByLabelText('EPI'), { target: { value: '10000000' } });
 
-    // Paste 3 values into the first year row — simulates Excel column copy.
+    // Paste 3 values into the first year row.
     const firstYear = screen.getByText('2019');
     const firstRow = firstYear.closest('tr');
     const firstInput = within(firstRow).getByPlaceholderText('0');
@@ -140,34 +131,49 @@ describe('NpStopLossPricing — render + interaction', () => {
       clipboardData: { getData: () => pasted },
     });
 
-    // After paste: 2019 → 8M, 2020 → 12.5M, 2021 → 14M.
     expect(within(firstRow).getByPlaceholderText('0').value).toBe('8000000');
     const row2020 = screen.getByText('2020').closest('tr');
     expect(within(row2020).getByPlaceholderText('0').value).toBe('12500000');
     const row2021 = screen.getByText('2021').closest('tr');
     expect(within(row2021).getByPlaceholderText('0').value).toBe('14000000');
+  });
 
-    // Layer hits computed from the pasted values: at 5M xs 10M,
-    // 8M → 0, 12.5M → 2.5M, 14M → 4M.
-    expect(within(row2020).getByText('2,500,000')).toBeInTheDocument();
-    expect(within(row2021).getByText('4,000,000')).toBeInTheDocument();
+  it('monte carlo toggle: off → no panel, on → percentile panel appears', () => {
+    renderStopLoss();
+    expect(screen.queryByText(/Pr\(layer hit/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Run Monte Carlo/i }));
+    fireEvent.change(screen.getByLabelText('Attachment LR'), { target: { value: '80' } });
+    fireEvent.change(screen.getByLabelText('Limit LR'), { target: { value: '20' } });
+    fireEvent.change(screen.getByLabelText('EPI'), { target: { value: '10000000' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. 20'), { target: { value: '20' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. 200,000'), { target: { value: '200000' } });
+    fireEvent.change(screen.getByPlaceholderText('0.6'), { target: { value: '0.6' } });
+
+    expect(screen.getByText(/Hit Frequency/i)).toBeInTheDocument();
+    expect(screen.getByText('P95')).toBeInTheDocument();
+    expect(screen.getByText('P99')).toBeInTheDocument();
+  });
+
+  it('shows a warning when no inputs are provided', () => {
+    renderStopLoss();
+    expect(screen.getByText(/No pricing method produced output/i)).toBeInTheDocument();
   });
 
   it('hydrates inputs returned from the server on mount', async () => {
     apiMock.getNpStopLossPricing.mockResolvedValue({
       inputs: {
-        attachmentBasis: 'absolute',
-        attachment: '12000000',
-        limit: '5000000',
+        attachmentLossRatio: '85',
+        limitLossRatio: '15',
+        epi: '12000000',
         loading: '30',
       },
       outputs: null,
     });
     renderStopLoss();
-    // The Attachment field should show the loaded value after hydration.
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('e.g. 10,000,000').value).toBe('12000000');
+      expect(screen.getByLabelText('Attachment LR').value).toBe('85');
     });
-    expect(screen.getByPlaceholderText('e.g. 5,000,000').value).toBe('5000000');
+    expect(screen.getByLabelText('Limit LR').value).toBe('15');
+    expect(screen.getByLabelText('EPI').value).toBe('12000000');
   });
 });

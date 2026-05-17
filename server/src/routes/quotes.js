@@ -1173,12 +1173,12 @@ router.put("/quotes/:id/np/egnpi-year", asyncHandler(async (req, res) => {
   try{await cl.query("BEGIN");await cl.query(`DELETE FROM public.quote_np_egnpi_year WHERE quote_id=$1`,[id]);
   const egnpiInsert = buildBatchInsert({
     table: 'public.quote_np_egnpi_year',
-    columns: ['quote_id','uw_year','egnpi','inflation_pct'],
+    columns: ['quote_id','uw_year','egnpi','inflation_pct','rate_change_pct'],
     rows: inputRows
       .filter((r) => r && r.uw_year != null)
-      .map((r) => [r.uw_year, numOrNull(r.egnpi), numOrNull(r.inflation_pct)]),
+      .map((r) => [r.uw_year, numOrNull(r.egnpi), numOrNull(r.inflation_pct), numOrNull(r.rate_change_pct)]),
     leadingId: id,
-    conflict: 'ON CONFLICT (quote_id,uw_year) DO UPDATE SET egnpi=EXCLUDED.egnpi,inflation_pct=EXCLUDED.inflation_pct,updated_at=now()',
+    conflict: 'ON CONFLICT (quote_id,uw_year) DO UPDATE SET egnpi=EXCLUDED.egnpi,inflation_pct=EXCLUDED.inflation_pct,rate_change_pct=EXCLUDED.rate_change_pct,updated_at=now()',
   });
   if (egnpiInsert) await cl.query(egnpiInsert.sql, egnpiInsert.params);
   // Propagate latest year's EGNPI to est_gnpi on quote_np_details

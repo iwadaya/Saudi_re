@@ -64,6 +64,11 @@ export default function NpPremiumsTable() {
   const [inflationMode, setInflationMode] = useState('country');
   const [averageInflationPct, setAverageInflationPct] = useState('');
   const [loading, setLoading] = useState(false);
+  // Rate changes (one per UW year). On-level adjusted premium for year y
+  // = egnpi(y) × Π over i > y of (1 + r_i / 100). Modal-driven; persisted
+  // alongside EGNPI rows via the existing egnpi-year endpoint.
+  const [rateChangeRows, setRateChangeRows] = useState([]); // [{uwYear, rateChangePct}]
+  const [showRateModal, setShowRateModal] = useState(false);
 
   /* ── Build years from treaty detail ── */
   const years = useMemo(() => {
@@ -86,9 +91,10 @@ export default function NpPremiumsTable() {
   const countryId = npDetail.countryId || npDetail.country_id || null;
 
   /* ── Rebuild rows when years change ── */
-  const rebuildRows = useCallback((yrs, existingUw, existingInf) => {
+  const rebuildRows = useCallback((yrs, existingUw, existingInf, existingRate) => {
     const uwMap = new Map((existingUw || []).map(r => [String(r.uwYear), r]));
     const infMap = new Map((existingInf || []).map(r => [String(r.uwYear), r]));
+    const rateMap = new Map((existingRate || []).map(r => [String(r.uwYear), r]));
     const newUw = yrs.map(y => {
       const cur = uwMap.get(String(y));
       return cur ? { ...cur, uwYear: y } : { uwYear: y, egnpi: '' };
@@ -97,7 +103,11 @@ export default function NpPremiumsTable() {
       const cur = infMap.get(String(y));
       return cur ? { ...cur, uwYear: y } : { uwYear: y, inflationPct: '', cumulativeFactor: 1.0 };
     });
-    return { uwRows: newUw, inflationRows: computeCumulative(newInf) };
+    const newRate = yrs.map(y => {
+      const cur = rateMap.get(String(y));
+      return cur ? { ...cur, uwYear: y } : { uwYear: y, rateChangePct: '' };
+    });
+    return { uwRows: newUw, inflationRows: computeCumulative(newInf), rateChangeRows: newRate };
   }, []);
 
   /* ── Apply average inflation to all rows ── */
@@ -130,8 +140,8 @@ export default function NpPremiumsTable() {
   /* ── Load from server ── */
   useEffect(() => {
     if (!contractId || !years.length) {
-      const { uwRows: uw, inflationRows: inf } = rebuildRows(years, [], []);
-      setUwRows(uw); setInflationRows(inf);
+      const { uwRows: uw, inflationRows: inf, rateChangeRows: rate } = rebuildRows(years, [], [], []);
+      setUwRows(uw); setInflationRows(inf); setRateChangeRows(rate);
       return;
     }
     setLoading(true);
@@ -150,12 +160,21 @@ export default function NpPremiumsTable() {
 
         // EGNPI rows: prefer relational table
         let savedUw = [];
+        let savedRate = [];
         const egnpiRows = Array.isArray(egnpiData) ? egnpiData : (egnpiData?.rows || egnpiData?.years || []);
         if (egnpiRows.length) {
           savedUw = egnpiRows.map(r => ({
             uwYear: toInt(r.uwYear ?? r.uw_year) ?? null,
             egnpi: (() => { const raw = r.egnpi ?? ''; if (!String(raw).trim()) return ''; return fmtMoney(numOrZero(raw)); })(),
             inflationPct: r.inflation_pct != null ? String(r.inflation_pct) : '',
+          })).filter(r => r.uwYear);
+          savedRate = egnpiRows.map(r => ({
+            uwYear: toInt(r.uwYear ?? r.uw_year),
+            rateChangePct: (() => {
+              const raw = r.rate_change_pct ?? r.rateChangePct;
+              if (raw == null || String(raw).trim() === '') return '';
+              return fmtPct(numOrZero(raw));
+            })(),
           })).filter(r => r.uwYear);
         } else if (Array.isArray(premData.uwRows)) {
           savedUw = premData.uwRows.map(r => ({
@@ -187,8 +206,9 @@ export default function NpPremiumsTable() {
             .filter(r => r.uwYear);
         }
 
-        const { uwRows: uw, inflationRows: inf } = rebuildRows(years, savedUw, savedInf);
+        const { uwRows: uw, inflationRows: inf, rateChangeRows: rate } = rebuildRows(years, savedUw, savedInf, savedRate);
         setUwRows(uw);
+        setRateChangeRows(rate);
 
         if (savedMode === 'country') {
           const withCountry = await loadCountryInflation(years, true, inf);
@@ -199,8 +219,9 @@ export default function NpPremiumsTable() {
           setInflationRows(inf);
         }
       } catch {
-        const { uwRows: uw, inflationRows: inf } = rebuildRows(years, [], []);
+        const { uwRows: uw, inflationRows: inf, rateChangeRows: rate } = rebuildRows(years, [], [], []);
         setUwRows(uw);
+        setRateChangeRows(rate);
         if (inflationMode === 'country') {
           const withCountry = await loadCountryInflation(years, true, inf);
           setInflationRows(withCountry);
@@ -312,10 +333,15 @@ export default function NpPremiumsTable() {
       (Array.isArray(inflationRows) ? inflationRows : [])
         .map(r => [String(r.uwYear), r.inflationPct]),
     );
+    const rateMap = new Map(
+      (Array.isArray(rateChangeRows) ? rateChangeRows : [])
+        .map(r => [String(r.uwYear), r.rateChangePct]),
+    );
     const egnpiPayload = uwRows.map(r => ({
       uw_year: r.uwYear,
       egnpi: parseFlexNum(r.egnpi),
       inflation_pct: parseFlexNum(inflMap.get(String(r.uwYear)) ?? r.inflationPct),
+      rate_change_pct: parseFlexNum(rateMap.get(String(r.uwYear)) ?? ''),
     }));
     const payload = {
       terms: {
@@ -338,7 +364,7 @@ export default function NpPremiumsTable() {
       showToast('Premiums save failed: ' + (e?.message || 'Server error'));
       return false;
     }
-  }, [contractId, uwRows, inflationRows, inflationMode, averageInflationPct, quoteMode, showToast]);
+  }, [contractId, uwRows, inflationRows, rateChangeRows, inflationMode, averageInflationPct, quoteMode, showToast]);
 
   const startYear = years[0] ?? '';
   const endYear = years[years.length - 1] ?? '';
@@ -363,7 +389,18 @@ export default function NpPremiumsTable() {
                 <section className="np-struct-card glass np-prem-card">
                   <div className="np-struct-card-header">
                     <div className="np-struct-card-title">UNDERWRITING YEARS · EGNPI</div>
-                    <div className="np-struct-card-actions"><span className="np-tag">Portfolio movement</span></div>
+                    <div className="np-struct-card-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        className="dock-btn dock-btn--ghost"
+                        onClick={() => setShowRateModal(true)}
+                        title="Capture rate changes year-over-year and view on-level adjusted EGNPI"
+                        style={{ fontSize: 11, fontWeight: 700, padding: '5px 12px', letterSpacing: '.05em' }}
+                      >
+                        ⚙ Rate Changes
+                      </button>
+                      <span className="np-tag">Portfolio movement</span>
+                    </div>
                   </div>
                   <div className="np-table-wrap np-table-wrap--scroll">
                     <table className="np-prem-table">
@@ -456,10 +493,156 @@ export default function NpPremiumsTable() {
                   <div className="np-prem-foot"><div className="np-muted">Cumulative factor applies sequentially year-on-year (base = 1.00).</div></div>
                 </section>
               </div>
+              {showRateModal && (
+                <RateChangesModal
+                  years={years}
+                  uwRows={uwRows}
+                  rateChangeRows={rateChangeRows}
+                  onChange={setRateChangeRows}
+                  onClose={() => setShowRateModal(false)}
+                />
+              )}
             </>
           )}
         </div>
       )}
     </WizardLayout>
+  );
+}
+
+/**
+ * Modal for capturing per-UW-year rate changes and showing the
+ * resulting on-level adjusted EGNPI.
+ *
+ * On-level factor for year y = Π over i > y of (1 + r_i / 100).
+ * The most recent year's factor is 1.0 (no adjustment); earlier years
+ * scale up by the cumulative rate movement since then.
+ */
+function RateChangesModal({ years, uwRows, rateChangeRows, onChange, onClose }) {
+  const egnpiByYear = useMemo(
+    () => new Map(uwRows.map(r => [String(r.uwYear), parseFlexNum(r.egnpi)])),
+    [uwRows],
+  );
+  const rateByYear = useMemo(
+    () => new Map((rateChangeRows || []).map(r => [String(r.uwYear), parseFlexNum(r.rateChangePct)])),
+    [rateChangeRows],
+  );
+  // Walk year-list from latest backward so the factor compounds the
+  // rate changes that have happened SINCE year y. Most recent year's
+  // factor = 1.0.
+  const rows = useMemo(() => {
+    const sortedYears = [...years].sort((a, b) => a - b);
+    const result = [];
+    let factor = 1.0;
+    for (let i = sortedYears.length - 1; i >= 0; i--) {
+      const y = sortedYears[i];
+      const r = rateByYear.get(String(y));
+      const onLevel = factor;
+      const egnpi = egnpiByYear.get(String(y));
+      const adjusted = Number.isFinite(egnpi) ? egnpi * onLevel : null;
+      result.unshift({
+        uwYear: y,
+        egnpi,
+        rateChangePct: rateChangeRows.find(rc => rc.uwYear === y)?.rateChangePct ?? '',
+        onLevelFactor: onLevel,
+        adjustedEgnpi: adjusted,
+      });
+      // Apply year y's rate change to compound the factor for the year before y.
+      if (Number.isFinite(r)) factor *= 1 + r / 100;
+    }
+    return result;
+  }, [years, egnpiByYear, rateByYear, rateChangeRows]);
+
+  const updateRate = useCallback((year, value) => {
+    onChange(prev => {
+      const map = new Map((prev || []).map(r => [String(r.uwYear), { ...r }]));
+      const next = years.map(y => {
+        const cur = map.get(String(y)) || { uwYear: y, rateChangePct: '' };
+        if (y === year) return { uwYear: y, rateChangePct: value };
+        return { ...cur, uwYear: y };
+      });
+      return next;
+    });
+  }, [onChange, years]);
+
+  return (
+    <div
+      className="modal-backdrop"
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="glass"
+        role="dialog"
+        aria-modal="true"
+        style={{ background: '#0a1020', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 18, width: 820, maxWidth: '95vw', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+      >
+        <div style={{ padding: '18px 24px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: 'rgba(226,232,240,0.92)' }}>Rate Changes</div>
+            <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.55)', marginTop: 2 }}>
+              Compound on-level adjustment. Latest year's factor = 1.00.
+            </div>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close" style={{ appearance: 'none', border: 'none', background: 'transparent', color: 'rgba(148,163,184,0.60)', fontSize: 18, cursor: 'pointer' }}>✕</button>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
+          <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720, tableLayout: 'fixed', fontVariantNumeric: 'tabular-nums' }}>
+              <colgroup>
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '24%' }} />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '26%' }} />
+              </colgroup>
+              <thead>
+                <tr style={{ background: '#050810' }}>
+                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>UW Year</th>
+                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)', textAlign: 'right' }}>EGNPI</th>
+                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: '#00d4ff', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>Rate Change %</th>
+                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)', textAlign: 'right' }}>On-Level Factor</th>
+                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: '#4ade80', borderBottom: '1px solid rgba(255,255,255,0.10)', textAlign: 'right' }}>Adjusted EGNPI</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr><td colSpan={5} style={{ padding: 18, textAlign: 'center', color: 'rgba(148,163,184,0.55)' }}>Set Start Year / Renewal Date on Treaty Detail.</td></tr>
+                ) : rows.map((r, i) => (
+                  <tr key={r.uwYear} style={{ background: i % 2 === 0 ? '#080f23' : '#0a1125' }}>
+                    <td style={{ padding: '8px 8px', fontWeight: 700, color: 'rgba(0,212,255,0.70)', fontSize: 12 }}>{r.uwYear}</td>
+                    <td style={{ padding: '8px 8px', textAlign: 'right', color: 'rgba(226,232,240,0.80)' }}>
+                      {Number.isFinite(r.egnpi) ? fmtMoney(r.egnpi) : <span style={{ color: 'rgba(148,163,184,0.40)' }}>—</span>}
+                    </td>
+                    <td style={{ padding: '6px 8px' }}>
+                      <PctInput
+                        className="np-inp np-inp-pct"
+                        placeholder="0.00%"
+                        value={r.rateChangePct}
+                        onChange={(v) => updateRate(r.uwYear, v)}
+                        onBlur={() => {
+                          const n = parseFlexNum(r.rateChangePct);
+                          updateRate(r.uwYear, n === null ? '' : fmtPct(n));
+                        }}
+                      />
+                    </td>
+                    <td style={{ padding: '8px 8px', textAlign: 'right', color: 'rgba(226,232,240,0.70)' }}>
+                      {r.onLevelFactor.toFixed(4)}
+                    </td>
+                    <td style={{ padding: '8px 8px', textAlign: 'right', color: '#4ade80', fontWeight: 700 }}>
+                      {Number.isFinite(r.adjustedEgnpi) ? fmtMoney(r.adjustedEgnpi) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ marginTop: 12, fontSize: 11, color: 'rgba(148,163,184,0.55)', lineHeight: 1.5 }}>
+            Rate change <em>r</em> for year <em>y</em> means premium that year sits <em>r</em>% above the prior year's rate level.
+            The on-level factor compounds every change <em>since</em> year <em>y</em>, bringing the historical EGNPI to today's level.
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -44,11 +44,19 @@ export function isNpRiskFlowDisabled(appState) {
 }
 
 /**
- * True when the treaty type is "Stop Loss" or "Aggregate XL" — these
- * are aggregate-layer covers priced via the dedicated Stop Loss
- * Pricing screen. The screen is hidden for every other NP treaty type.
+ * True only when treaty type is exactly "Stop Loss" — the dedicated
+ * Stop Loss Pricing screen is shown for these treaties and hidden
+ * everywhere else. "Aggregate XL" used to match here too, but the two
+ * treaty types now have separate flows (Agg XL gets its own screen).
  */
 export function isNpStopLossTreaty(appState) {
-  const n = norm(getCurrentNpTreatyTypeName(appState));
-  return n === 'STOP LOSS' || n === 'AGGREGATE XL';
+  return norm(getCurrentNpTreatyTypeName(appState)) === 'STOP LOSS';
+}
+
+/**
+ * True only when treaty type is exactly "Aggregate XL". Reserved for
+ * the Aggregate XL workflow (separate pricing surface from Stop Loss).
+ */
+export function isNpAggregateXlTreaty(appState) {
+  return norm(getCurrentNpTreatyTypeName(appState)) === 'AGGREGATE XL';
 }

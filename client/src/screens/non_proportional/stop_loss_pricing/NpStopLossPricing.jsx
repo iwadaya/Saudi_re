@@ -1,30 +1,33 @@
 // src/screens/non_proportional/stop_loss_pricing/NpStopLossPricing.jsx
 //
-// Live pricing screen for Stop Loss and Aggregate XL covers. Inputs
-// edit in place; everything below them re-computes via priceStopLoss
-// from client/src/logic/stopLossPricing.js. State persists in two
-// layers:
-//   - AppContext slice `npStopLossInputs` — instant, session-local,
-//     survives wizard navigation
-//   - Server (PUT /api/{treaties|quotes}/:id/np/stop-loss-pricing) —
-//     persists across sessions; load happens on mount, save on
-//     wizard nav via useScreenSave
+// Live pricing screen for Stop Loss treaties — aggregate-loss covers
+// quoted as percentages of subject premium (e.g. "20% xs 80% LR").
+// Aggregate XL is a separate workflow.
 //
-// Layout (top to bottom):
-//   1. Layer cover               — LR% vs absolute attachment + EPI
-//   2. Burning Cost              — editable yearly aggregate table
-//   3. Exposure Rating           — frequency λ + severity (Lognormal/Pareto)
-//   4. Monte Carlo               — toggle + nTrials + seed
-//   5. Method blend + loading    — weights and % loading
-//   6. Result                    — pure ROL, total rate, annual premium
+// Burning cost works on annual loss ratios: for each historical UW
+// year we pull the relational EGNPI, apply the on-level rate-change
+// chain captured on the Premiums Table (Π over later years of
+// (1 + r_i/100)), divide losses by the adjusted premium to get a LR,
+// then apply the LR%-based stop-loss layer to derive the burning rate.
+//
+// The engine still works in absolute terms; we feed it a normalised
+// aggregate = LR × current_EPI per year so it can re-use the same
+// layerHit / annualiseLoss primitives.
+//
+// State persists in two layers:
+//   - AppContext slice `npStopLossInputs` — session-local, survives
+//     wizard navigation
+//   - Server (PUT /api/{treaties|quotes}/:id/np/stop-loss-pricing) —
+//     cross-session, via useScreenSave
 
-import { useMemo, useCallback, useRef } from 'react';
+import { useMemo, useCallback, useRef, useState, useEffect } from 'react';
 import api from '../../../api';
 import { useAppState } from '../../../context/AppContext';
 import { useContractId } from '../../../hooks/useContractId';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import WizardLayout from '../../../components/WizardLayout';
 import { priceStopLoss } from '../../../logic/stopLossPricing';
+import { computeOnLevelFactors } from '../../../../../shared/onLevel.js';
 
 const ROUTE_KEY = 'NP_STOP_LOSS_PRICING';
 const SLICE_KEY = 'npStopLossInputs';
@@ -34,13 +37,13 @@ const SLICE_KEY = 'npStopLossInputs';
 const DEFAULT_YEARS = 10;
 
 const DEFAULT_INPUTS = {
-  attachmentBasis: 'absolute', // 'absolute' | 'lossRatio'
-  attachment: '',
-  limit: '',
+  // Stop Loss is always quoted as percentages of EPI. The "absolute"
+  // attachment basis lived here while Aggregate XL was wedged into
+  // the same screen — that's now its own workflow.
   attachmentLossRatio: '',
   limitLossRatio: '',
   epi: '',
-  yearlyAggregates: [], // Hydrated lazily from the underlying treaty's history when empty.
+  yearlyAggregates: [], // [{year, aggregate}] — raw losses ($) per year
   freqLambda: '',
   severityType: 'lognormal',
   sevMean: '',
@@ -55,6 +58,9 @@ const DEFAULT_INPUTS = {
   mcTrials: '10000',
   mcSeed: '1',
 };
+
+// computeOnLevelFactors lives in shared/onLevel.js so the client and
+// any future server-side validation work off the same arithmetic.
 
 const toN = (v) => {
   if (v === '' || v == null) return null;
@@ -276,6 +282,36 @@ export default function NpStopLossPricing() {
     [setSlice],
   );
 
+  // ── Pull premiums + rate changes from the relational EGNPI table so
+  //    the burning cost can compute on-level adjusted premiums and LRs.
+  const [premiumData, setPremiumData] = useState({ premiums: new Map(), rateChanges: new Map() });
+  useEffect(() => {
+    if (!contractId || typeof api.getNpEgnpiYear !== 'function') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await api.getNpEgnpiYear(contractId, apiOpts);
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : (rows?.rows || rows?.years || []);
+        const premiums = new Map();
+        const rateChanges = new Map();
+        for (const r of list) {
+          const y = Number(r.uwYear ?? r.uw_year);
+          if (!Number.isFinite(y)) continue;
+          const egnpi = Number(String(r.egnpi ?? '').replace(/[^0-9.-]/g, ''));
+          if (Number.isFinite(egnpi)) premiums.set(y, egnpi);
+          const rc = Number(String(r.rate_change_pct ?? r.rateChangePct ?? '').replace(/[^0-9.-]/g, ''));
+          if (Number.isFinite(rc)) rateChanges.set(y, rc);
+        }
+        setPremiumData({ premiums, rateChanges });
+      } catch (err) {
+        // Premiums missing is fine — burning cost just won't compute LRs.
+        if (!cancelled) console.warn('[NpStopLossPricing] egnpi-year load failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [contractId, apiOpts]);
+
   // ── Server persistence via useScreenSave ──
   const markDirtyRef = useRef(null);
   const inputsRef = useRef(inputs);
@@ -340,6 +376,31 @@ export default function NpStopLossPricing() {
     [yearlyRows, setInput],
   );
 
+  // ── On-level burning cost rows ──
+  // Compose Premium (adjusted), Aggregate Loss, Loss Ratio, and the
+  // normalised aggregate (LR × current_EPI) we feed to the engine.
+  const burningCostRows = useMemo(() => {
+    const onLevel = computeOnLevelFactors(yearRange, premiumData.rateChanges);
+    return yearlyRows.map((r) => {
+      const rawPremium = premiumData.premiums.get(r.year);
+      const factor = onLevel.get(r.year) ?? 1;
+      const adjustedPremium = Number.isFinite(rawPremium) ? rawPremium * factor : null;
+      const aggregate = toN(r.aggregate);
+      const lossRatio = (aggregate != null && adjustedPremium && adjustedPremium > 0)
+        ? aggregate / adjustedPremium
+        : null;
+      return {
+        year: r.year,
+        rawPremium: Number.isFinite(rawPremium) ? rawPremium : null,
+        onLevelFactor: factor,
+        adjustedPremium,
+        aggregate,
+        aggregateRaw: r.aggregate,
+        lossRatio,
+      };
+    });
+  }, [yearRange, yearlyRows, premiumData]);
+
   // ── Build the engine args from current inputs ──
   const engineArgs = useMemo(() => {
     const args = {
@@ -352,23 +413,23 @@ export default function NpStopLossPricing() {
       useMonteCarlo: !!inputs.useMonteCarlo,
       monteCarlo: { nTrials: toN(inputs.mcTrials) ?? 10_000, seed: toN(inputs.mcSeed) ?? 1 },
     };
-    if (inputs.attachmentBasis === 'lossRatio') {
-      args.attachmentLossRatio = toN(inputs.attachmentLossRatio);
-      args.limitLossRatio = toN(inputs.limitLossRatio);
-      args.epi = toN(inputs.epi);
-    } else {
-      args.attachment = toN(inputs.attachment);
-      args.limit = toN(inputs.limit);
+    args.attachmentLossRatio = toN(inputs.attachmentLossRatio);
+    args.limitLossRatio = toN(inputs.limitLossRatio);
+    args.epi = toN(inputs.epi);
+
+    // Burning cost: feed normalised aggregates = LR × current_EPI so the
+    // engine's absolute layer math gives the right answer. Years without
+    // a usable LR (missing premium or aggregate) are dropped from the
+    // burning cost computation rather than treated as zero — the long-run
+    // denominator should only count years where we actually have data.
+    const epi = args.epi;
+    if (epi != null && epi > 0) {
+      const usable = burningCostRows.filter((r) => r.lossRatio != null);
+      if (usable.length > 0) {
+        args.yearlyAggregates = usable.map((r) => ({ year: r.year, aggregate: r.lossRatio * epi }));
+      }
     }
-    const numericRows = yearlyRows
-      .map((r) => ({ year: r.year, aggregate: toN(r.aggregate) }))
-      .filter((r) => r.aggregate !== null);
-    if (numericRows.length > 0) {
-      // Pad with zero-loss years for any year in range without an entry
-      // (the denominator must include the full window).
-      const filledMap = new Map(numericRows.map((r) => [r.year, r.aggregate]));
-      args.yearlyAggregates = yearRange.map((y) => ({ year: y, aggregate: filledMap.get(y) ?? 0 }));
-    }
+
     const lambda = toN(inputs.freqLambda);
     if (lambda !== null) {
       args.frequency = { lambda };
@@ -387,7 +448,7 @@ export default function NpStopLossPricing() {
       }
     }
     return args;
-  }, [inputs, yearlyRows, yearRange]);
+  }, [inputs, burningCostRows]);
 
   // Live-priced result. Memoised so heavy MC runs only re-execute
   // when an input that affects the result changes.
@@ -438,7 +499,7 @@ export default function NpStopLossPricing() {
     <WizardLayout
       routeKey={ROUTE_KEY}
       title="Stop Loss Pricing"
-      headerPill="NP TREATY: STOP LOSS / AGGREGATE XL"
+      headerPill="NP TREATY: STOP LOSS"
       onBeforeBack={save}
       onBeforeNext={save}
     >
@@ -446,77 +507,42 @@ export default function NpStopLossPricing() {
 
         {/* ── 1. Layer cover ───────────────────────────────────────────── */}
         <div style={styles.section}>
-          <div style={styles.sectionTitle}>Layer Cover</div>
+          <div style={styles.sectionTitle}>Layer Cover · Loss-Ratio Basis</div>
           <div style={styles.sectionSub}>
-            Stop Loss attaches at a loss ratio of subject premium;
-            Aggregate XL attaches at an absolute aggregate amount.
-            Both flow through the same engine.
+            Stop Loss attaches at a loss ratio of subject premium —
+            e.g. "20% xs 80% LR" pays losses between 80% and 100% loss
+            ratio. EPI is the current-year subject premium.
           </div>
 
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <button
-              type="button"
-              style={styles.pillBtn(inputs.attachmentBasis === 'absolute')}
-              onClick={() => setInput({ attachmentBasis: 'absolute' })}
-            >
-              Absolute (Agg XL)
-            </button>
-            <button
-              type="button"
-              style={styles.pillBtn(inputs.attachmentBasis === 'lossRatio')}
-              onClick={() => setInput({ attachmentBasis: 'lossRatio' })}
-            >
-              Loss Ratio (Stop Loss)
-            </button>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+            <Field label="Attachment LR (%)" hint="e.g. 80 for 80% LR">
+              <input
+                aria-label="Attachment LR"
+                style={styles.input}
+                value={inputs.attachmentLossRatio}
+                onChange={(e) => setInput({ attachmentLossRatio: e.target.value })}
+                placeholder="80"
+              />
+            </Field>
+            <Field label="Limit LR (%)" hint="Layer width as % of EPI">
+              <input
+                aria-label="Limit LR"
+                style={styles.input}
+                value={inputs.limitLossRatio}
+                onChange={(e) => setInput({ limitLossRatio: e.target.value })}
+                placeholder="20"
+              />
+            </Field>
+            <Field label="EPI" hint="Current-year subject premium">
+              <input
+                aria-label="EPI"
+                style={styles.input}
+                value={inputs.epi}
+                onChange={(e) => setInput({ epi: e.target.value })}
+                placeholder="e.g. 10,000,000"
+              />
+            </Field>
           </div>
-
-          {inputs.attachmentBasis === 'absolute' ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
-              <Field label="Attachment (D)" hint="Aggregate priority in currency">
-                <input
-                  style={styles.input}
-                  value={inputs.attachment}
-                  onChange={(e) => setInput({ attachment: e.target.value })}
-                  placeholder="e.g. 10,000,000"
-                />
-              </Field>
-              <Field label="Limit (L)" hint="Layer width in currency">
-                <input
-                  style={styles.input}
-                  value={inputs.limit}
-                  onChange={(e) => setInput({ limit: e.target.value })}
-                  placeholder="e.g. 5,000,000"
-                />
-              </Field>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-              <Field label="Attachment LR (%)" hint="e.g. 80 for 80% LR">
-                <input
-                  style={styles.input}
-                  value={inputs.attachmentLossRatio}
-                  onChange={(e) => setInput({ attachmentLossRatio: e.target.value })}
-                  placeholder="80"
-                />
-              </Field>
-              <Field label="Limit LR (%)" hint="Layer width as % of EPI">
-                <input
-                  style={styles.input}
-                  value={inputs.limitLossRatio}
-                  onChange={(e) => setInput({ limitLossRatio: e.target.value })}
-                  placeholder="20"
-                />
-              </Field>
-              <Field label="EPI" hint="Subject premium">
-                <input
-                  style={styles.input}
-                  value={inputs.epi}
-                  onChange={(e) => setInput({ epi: e.target.value })}
-                  placeholder="e.g. 10,000,000"
-                />
-              </Field>
-            </div>
-          )}
 
           {(result.attachment > 0 || result.limit > 0) && (
             <div
@@ -541,43 +567,72 @@ export default function NpStopLossPricing() {
 
         {/* ── 2. Burning Cost ───────────────────────────────────────────── */}
         <div style={styles.section}>
-          <div style={styles.sectionTitle}>Burning Cost · Aggregate Annual Losses</div>
+          <div style={styles.sectionTitle}>Burning Cost · Loss Ratios by UW Year</div>
           <div style={styles.sectionSub}>
-            One row per observation year — leave the cell blank for a
-            zero-loss year (it still counts toward the long-run
-            frequency denominator). Paste a column from Excel to fill
-            multiple years at once.
+            Premium comes from the Premiums Table and is on-levelled by
+            the rate changes captured there. Loss Ratio = Aggregate
+            Loss ÷ Premium (adjusted); Layer Hit applies the LR layer
+            to that ratio and converts back to currency at the current
+            EPI. Paste a column of losses from Excel.
           </div>
           <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <colgroup>
-                <col style={{ width: '20%' }} />
-                <col style={{ width: '45%' }} />
-                <col style={{ width: '35%' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '23%' }} />
+                <col style={{ width: '24%' }} />
+                <col style={{ width: '14%' }} />
+                <col style={{ width: '28%' }} />
               </colgroup>
               <thead>
                 <tr>
                   <th style={styles.th}>UW Year</th>
+                  <th style={styles.th}>Premium (Adjusted)</th>
                   <th style={styles.th}>Aggregate Loss</th>
+                  <th style={styles.th}>Loss Ratio</th>
                   <th style={styles.th}>Layer Hit</th>
                 </tr>
               </thead>
               <tbody>
-                {yearlyRows.map((r, i) => {
+                {burningCostRows.map((r, i) => {
                   const hit = result.burningCost?.byYear?.find((b) => b.year === r.year)?.inLayer ?? 0;
+                  const lrColor = r.lossRatio == null
+                    ? 'rgba(148,163,184,0.40)'
+                    : r.lossRatio > 1.0
+                      ? COLORS.red
+                      : r.lossRatio > 0.8
+                        ? COLORS.amber
+                        : COLORS.green;
                   return (
                     <tr key={r.year} style={{ background: i % 2 === 0 ? COLORS.rowEven : COLORS.rowOdd }}>
                       <td style={{ ...styles.td, fontWeight: 800, color: 'rgba(0,212,255,0.70)', fontSize: 13 }}>
                         {r.year}
                       </td>
+                      <td style={{ ...styles.td, ...styles.readonlyCell, textAlign: 'right' }}>
+                        {Number.isFinite(r.adjustedPremium) ? (
+                          <>
+                            {fmtMoneyFull(r.adjustedPremium)}
+                            {Math.abs(r.onLevelFactor - 1) > 1e-6 && (
+                              <span style={{ marginLeft: 6, fontSize: 10, color: 'rgba(148,163,184,0.45)' }}>
+                                ×{r.onLevelFactor.toFixed(3)}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span style={{ color: 'rgba(148,163,184,0.40)' }}>— (set EGNPI)</span>
+                        )}
+                      </td>
                       <td style={styles.td}>
                         <input
                           style={{ ...styles.input, maxWidth: 220, margin: '0 auto', textAlign: 'right' }}
-                          value={r.aggregate}
+                          value={r.aggregateRaw}
                           onChange={(e) => setYearAggregate(r.year, e.target.value)}
                           onPaste={(e) => handleAggregatePaste(e, i)}
                           placeholder="0"
                         />
+                      </td>
+                      <td style={{ ...styles.td, ...styles.readonlyCell, color: lrColor, fontWeight: 700 }}>
+                        {r.lossRatio == null ? '—' : `${(r.lossRatio * 100).toFixed(1)}%`}
                       </td>
                       <td
                         style={{
@@ -585,6 +640,7 @@ export default function NpStopLossPricing() {
                           ...styles.readonlyCell,
                           color: hit > 0 ? COLORS.amber : 'rgba(148,163,184,0.40)',
                           fontWeight: 700,
+                          textAlign: 'right',
                         }}
                       >
                         {hit > 0 ? fmtMoneyFull(hit) : '—'}

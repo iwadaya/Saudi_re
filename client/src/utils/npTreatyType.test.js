@@ -9,6 +9,7 @@ import {
   isNpCatFlowDisabled,
   isNpRiskFlowDisabled,
   isNpStopLossTreaty,
+  isNpAggregateXlTreaty,
 } from './npTreatyType.js';
 import { getWizardNav } from '../config/wizard.js';
 
@@ -34,10 +35,13 @@ describe('getNpTreatyTypeMode', () => {
 });
 
 describe('isNpStopLossTreaty', () => {
-  it('true for Stop Loss and Aggregate XL only', () => {
+  it('true only for Stop Loss (Aggregate XL is now a separate flow)', () => {
     expect(isNpStopLossTreaty(state('Stop Loss'))).toBe(true);
-    expect(isNpStopLossTreaty(state('Aggregate XL'))).toBe(true);
-    expect(isNpStopLossTreaty(state('aggregate xl'))).toBe(true);
+    expect(isNpStopLossTreaty(state('stop loss'))).toBe(true);
+  });
+  it('false for Aggregate XL (was true before separation)', () => {
+    expect(isNpStopLossTreaty(state('Aggregate XL'))).toBe(false);
+    expect(isNpStopLossTreaty(state('aggregate xl'))).toBe(false);
   });
   it('false for Risk XL / CAT XL / Risk & CAT XL', () => {
     expect(isNpStopLossTreaty(state('Risk XL'))).toBe(false);
@@ -53,6 +57,15 @@ describe('isNpStopLossTreaty', () => {
     expect(isNpCatFlowDisabled(s)).toBe(false);
     expect(isNpRiskFlowDisabled(s)).toBe(false);
     expect(isNpStopLossTreaty(s)).toBe(true);
+  });
+});
+
+describe('isNpAggregateXlTreaty', () => {
+  it('true only for Aggregate XL', () => {
+    expect(isNpAggregateXlTreaty(state('Aggregate XL'))).toBe(true);
+    expect(isNpAggregateXlTreaty(state('aggregate xl'))).toBe(true);
+    expect(isNpAggregateXlTreaty(state('Stop Loss'))).toBe(false);
+    expect(isNpAggregateXlTreaty(state('Risk XL'))).toBe(false);
   });
 });
 

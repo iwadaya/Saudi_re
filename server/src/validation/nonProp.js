@@ -85,9 +85,10 @@ export const npSaveSchema = z.object({
  */
 export const egnpiYearPutSchema = z.object({
   rows: z.array(z.object({
-    uw_year:       uwYear,
-    egnpi:         numish,
-    inflation_pct: numish,
+    uw_year:         uwYear,
+    egnpi:           numish,
+    inflation_pct:   numish,
+    rate_change_pct: numish, // per-year rate change for on-level adjustment
   }).passthrough()).default([]),
 }).passthrough();
 

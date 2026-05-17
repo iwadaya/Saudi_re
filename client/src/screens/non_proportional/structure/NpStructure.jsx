@@ -6,7 +6,7 @@ import { useAppState } from '../../../context/AppContext';
 import { ACTIVE_QUOTE_ID } from '../../../constants/storageKeys';
 import { handleStaleWrite } from '../../../utils/handleStaleWrite';
 import WizardLayout from '../../../components/WizardLayout';
-import { getNpTreatyTypeMode } from '../../../utils/npTreatyType';
+import { getNpTreatyTypeMode, isNpStopLossTreaty } from '../../../utils/npTreatyType';
 import {
   toNum, rateToFloat, appendPct, fmtPctMaybe,
   strOrEmpty, strRate, parseExcelInt, parseClipboard,
@@ -15,6 +15,7 @@ import {
   CommaInput, RateInput, PctInput,
 } from './NpStructureHelpers';
 import { QuoteStructureSection } from './QuoteStructureSection';
+import NpStopLossStructure from './NpStopLossStructure';
 
 const ROUTE_KEY = 'NP_STRUCTURE';
 
@@ -948,11 +949,19 @@ export default function NpStructure() {
     return opts;
   }, []);
 
+  // Stop Loss treaties have a fundamentally different structure
+  // (single LR-based layer, no layer table, no risk/cat checkboxes).
+  // Short-circuit the regular Risk/Cat XL layout so the screen renders
+  // a focused Stop Loss layer setup instead.
+  const stopLossTreaty = isNpStopLossTreaty(appState);
+
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Structure" headerPill={`${quoteMode ? 'NP-QUOTE TREATY' : 'NON-PROPORTIONAL TREATY'}: STRUCTURE`} onBeforeNext={save} onBeforeBack={save}>
       {() => (
         <div className="NP_STRUCTURE">
-          {loading ? <div className="df-card df-card--notice"><div className="df-note">Loading...</div></div> : (
+          {stopLossTreaty ? (
+            <NpStopLossStructure currency={currency} />
+          ) : loading ? <div className="df-card df-card--notice"><div className="df-note">Loading...</div></div> : (
             <>
               {/* ═══ QUOTE: Structures to Quote selector ═══ */}
               {quoteMode && (

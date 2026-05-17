@@ -224,8 +224,8 @@ router.put("/treaties/:id/np/egnpi-year", validateBody(egnpiYearPutSchema), asyn
   try{await cl.query("BEGIN");await cl.query(`DELETE FROM public.contract_np_egnpi_year WHERE contract_id=$1`,[id]);
   const egnpiInsert = buildBatchInsert({
     table: 'public.contract_np_egnpi_year',
-    columns: ['contract_id','uw_year','egnpi','inflation_pct'],
-    rows: inputRows.map((r) => [r.uw_year, numOrNull(r.egnpi), numOrNull(r.inflation_pct)]),
+    columns: ['contract_id','uw_year','egnpi','inflation_pct','rate_change_pct'],
+    rows: inputRows.map((r) => [r.uw_year, numOrNull(r.egnpi), numOrNull(r.inflation_pct), numOrNull(r.rate_change_pct)]),
     leadingId: id,
   });
   if (egnpiInsert) await cl.query(egnpiInsert.sql, egnpiInsert.params);

@@ -6,7 +6,8 @@ import { ACTIVE_QUOTE_ID } from '../../../constants/storageKeys';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import { formatWithCommas, sanitizeNumber, toN, toNullableN } from '../../../utils/format';
-import { getNpTreatyTypeMode } from '../../../utils/npTreatyType';
+import { getNpTreatyTypeMode, isNpStopLossTreaty } from '../../../utils/npTreatyType';
+import NpStopLossExpiring from './NpStopLossExpiring';
 
 const ROUTE_KEY = 'NP_EXPIRING_STRUCTURE';
 
@@ -581,11 +582,15 @@ export default function NpExpiringStructure() {
 
   // coveredPropsWithCalc computed inside CoveredProportionalSection
 
+  const stopLossTreaty = isNpStopLossTreaty(appState);
+
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Expiring Structure & Terms" headerPill="NP: EXPIRING STRUCTURE" onBeforeNext={save} onBeforeBack={save}>
       {() => (
         <div className="NP_EXPIRING_STRUCTURE">
-          {loading ? (
+          {stopLossTreaty ? (
+            <NpStopLossExpiring currency={currency} />
+          ) : loading ? (
             <div className="df-card df-card--notice"><div className="df-note">Loading…</div></div>
           ) : (
             <>
