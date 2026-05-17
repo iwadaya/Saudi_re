@@ -6,7 +6,8 @@ import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import { formatWithCommas } from '../../../utils/format';
-import { getNpTreatyTypeMode, isNpCatFlowDisabled, isNpRiskFlowDisabled } from '../../../utils/npTreatyType';
+import { getNpTreatyTypeMode, isNpCatFlowDisabled, isNpRiskFlowDisabled, isNpAggregateXlTreaty } from '../../../utils/npTreatyType';
+import NpAggregateXlStructure from '../structure/NpAggregateXlStructure';
 import { getRole, getUserDisplayName } from '../../../utils/auth';
 import { useGlobalToast } from '../../../hooks/useToast';
 import { handleStaleWrite } from '../../../utils/handleStaleWrite';
@@ -2395,6 +2396,16 @@ export default function NpFinalPricing() {
           <SaveStateIndicator saveState={saveState} onRetry={save} />
           {loading ? <div className="df-card df-card--notice"><div className="df-note">Loading...</div></div> : (
             <>
+              {isNpAggregateXlTreaty(appState) && (
+                /* Aggregate XL treaties show their structure (layer
+                   grid + COB inner limits + policy-shape toggles) at
+                   the top of the Final Pricing screen, read-only —
+                   edits happen on the Structure page. */
+                <NpAggregateXlStructure
+                  currency={npDetail.currencyCode || npDetail.currency || 'SAR'}
+                  readOnly
+                />
+              )}
               {isQuote ? (
                 /* ═══════ QUOTE PRICING — QuickBenchmark-style topbar ═══════
                    Mirrors /np/benchmark visually: sticky bm-topbar with
