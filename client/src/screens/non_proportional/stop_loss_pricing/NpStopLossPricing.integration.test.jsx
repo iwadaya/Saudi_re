@@ -176,4 +176,36 @@ describe('NpStopLossPricing — render + interaction', () => {
     expect(screen.getByLabelText('Limit LR').value).toBe('15');
     expect(screen.getByLabelText('EPI').value).toBe('12000000');
   });
+
+  it('Structure-page values in AppContext beat a stale server snapshot', async () => {
+    // The previous save on the server had different LR / EPI values.
+    apiMock.getNpStopLossPricing.mockResolvedValue({
+      inputs: {
+        attachmentLossRatio: '70',  // stale — server-saved
+        limitLossRatio: '30',
+        epi: '5000000',
+        loading: '25',              // unique to server — should survive
+        freqLambda: '12',           // unique to server — should survive
+      },
+      outputs: null,
+    });
+    // Structure page has just written newer values into the shared slice.
+    renderStopLoss({
+      npStopLossInputs: {
+        attachmentLossRatio: '85',
+        limitLossRatio: '15',
+        epi: '12000000',
+        layers: [{ attachmentLossRatio: '85', limitLossRatio: '15', epi: '12000000' }],
+      },
+    });
+    // After hydration: layer fields keep the Structure values…
+    await waitFor(() => {
+      expect(screen.getByLabelText('Attachment LR').value).toBe('85');
+    });
+    expect(screen.getByLabelText('Limit LR').value).toBe('15');
+    expect(screen.getByLabelText('EPI').value).toBe('12000000');
+    // …and the engine-only fields the Structure page doesn't own get
+    // hydrated from the server snapshot.
+    expect(screen.getByPlaceholderText('e.g. 20').value).toBe('12');     // freqLambda
+  });
 });

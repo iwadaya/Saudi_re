@@ -255,6 +255,11 @@ export default function NpStopLossPricing() {
   const markDirtyRef = useRef(null);
   const inputsRef = useRef(inputs);
   inputsRef.current = inputs;
+  // Live snapshot of the raw slice (without DEFAULT_INPUTS merged in)
+  // so the server-hydration callback can tell which fields were
+  // populated by the Structure page vs which are still defaults.
+  const sliceRef = useRef(appState[SLICE_KEY]);
+  sliceRef.current = appState[SLICE_KEY];
 
   // Seed the yearly-aggregates table from the underwriting year range
   // when the user first lands here. Empty aggregates are kept so the
@@ -344,12 +349,25 @@ export default function NpStopLossPricing() {
   );
   const onLoaded = useCallback(
     (data) => {
-      // Server returns { inputs, outputs, updated_at }. Replace the
-      // whole slice so deletions in the saved record actually clear
-      // (a merge would leak stale values from session edits).
-      if (data && data.inputs && Object.keys(data.inputs).length > 0) {
-        replaceSlice(SLICE_KEY, { ...DEFAULT_INPUTS, ...data.inputs });
+      // Server returns { inputs, outputs, updated_at }. The Structure
+      // page writes layer fields (attachmentLossRatio / limitLossRatio
+      // / epi / layers) into the same slice before the user gets here,
+      // so a blind replaceSlice would clobber those edits with the
+      // last-saved snapshot. Merge: the server fills in fields the
+      // AppContext slice doesn't already have a value for; existing
+      // non-empty AppContext fields win.
+      if (!data || !data.inputs || Object.keys(data.inputs).length === 0) return;
+      const current = sliceRef.current || {};
+      const merged = { ...DEFAULT_INPUTS, ...data.inputs };
+      for (const k of Object.keys(current)) {
+        const v = current[k];
+        const hasValue = v !== undefined
+          && v !== null
+          && v !== ''
+          && !(Array.isArray(v) && v.length === 0);
+        if (hasValue) merged[k] = v;
       }
+      replaceSlice(SLICE_KEY, merged);
     },
     [replaceSlice],
   );
