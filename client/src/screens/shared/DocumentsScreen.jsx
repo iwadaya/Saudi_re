@@ -67,9 +67,9 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
   // ── Renewal-pack import state ─────────────────────────────────────────────
   // The Fill button is gated on:
   //   • the row being a renewal_pack document (rendered conditionally),
-  //   • the quote's treaty detail being saved (treaty_type_id present),
-  //   • no other import currently in flight for this quote.
-  // We load the quote once for the treaty check and poll for the
+  //   • the entity's treaty detail being saved (treaty_type_id present),
+  //   • no other import currently in flight for this entity.
+  // We load the entity once for the treaty check and poll for the
   // active job + snapshots list on mount + after each import completes.
   const [treatyDetailSaved, setTreatyDetailSaved] = useState(false);
   const [activeJob, setActiveJob] = useState(null); // { jobId, documentId, startedAt } | null
@@ -97,13 +97,17 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
 
   useEffect(() => { load(); }, [load]);
 
-  // Load import-related state for quotes only (renewal-pack import
-  // doesn't apply to contracts — the endpoint is /api/quotes/...).
+  // Load import-related state. Renewal-pack import endpoints currently
+  // live only on the quote side, so getActiveRenewalPackImport /
+  // listImportSnapshots will silently 404 when we're attached to a
+  // contract. The treaty-detail check (via getContract) works for
+  // either side, so the button still surfaces its "Save Treaty Detail
+  // first" tooltip correctly in every workflow.
   const loadImportState = useCallback(async () => {
-    if (!contractId || !quoteMode) return;
+    if (!contractId) return;
     try {
       const [q, active, snapshots] = await Promise.all([
-        api.getContract(contractId, { quote: true }),
+        api.getContract(contractId, apiOpts),
         api.getActiveRenewalPackImport(contractId).catch(() => ({ activeJob: null })),
         api.listImportSnapshots(contractId).catch(() => []),
       ]);
@@ -119,7 +123,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
     } catch (e) {
       console.warn('[DocumentsScreen] loadImportState failed:', e?.message);
     }
-  }, [contractId, quoteMode]);
+  }, [apiOpts, contractId]);
 
   useEffect(() => { loadImportState(); }, [loadImportState]);
 
@@ -405,7 +409,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
                   {docs.map(d => {
                     const docId = d.document_id || d.id;
                     const isWording = WORDING_PRIORITY.includes(d.doc_type);
-                    const isRP = quoteMode && isRenewalPack(d);
+                    const isRP = isRenewalPack(d);
                     const snapshot = isRP ? snapshotsByDocId[docId] : null;
                     const otherImportRunning = !!(activeJob && activeJob.documentId !== docId);
                     const thisImportRunning = !!(activeJob && activeJob.documentId === docId);
