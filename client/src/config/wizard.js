@@ -47,6 +47,7 @@ export const NP_WIZARD_ORDER = [
   'NP_CLAIMS_PROFILE',
   'NP_CRESTA_AGGREGATES',
   'NP_EVENT_LOSS_TABLES',
+  'NP_STOP_LOSS_PRICING',
   'NP_FINAL_PRICING',
 ];
 
@@ -130,6 +131,7 @@ export const STEP_LABELS = {
   NP_CLAIMS_PROFILE: 'Claims Profile',
   NP_CRESTA_AGGREGATES: 'CRESTA Aggregates',
   NP_EVENT_LOSS_TABLES: 'Event Loss Tables',
+  NP_STOP_LOSS_PRICING: 'Stop Loss Pricing',
   NP_FINAL_PRICING: 'Final Pricing',
   NP_FINAL_QUOTE: 'Final Quote',
   // Facultative
@@ -199,6 +201,7 @@ export const ROUTE_PATHS = {
   NP_CLAIMS_PROFILE: '/np/claims-profile',
   NP_CRESTA_AGGREGATES: '/np/cresta-aggregates',
   NP_EVENT_LOSS_TABLES: '/np/event-loss-tables',
+  NP_STOP_LOSS_PRICING: '/np/stop-loss-pricing',
   NP_FINAL_PRICING: '/np/final-pricing',
   NP_FINAL_QUOTE: '/np/final-quote',
   // Facultative
@@ -281,7 +284,7 @@ export const NP_TAB_GROUPS = [
   { label: 'Experience', keys: ['NP_EXCESS_DEV_FACTORS', 'NP_HISTORICAL_PERFORMANCE'] },
   { label: 'Profiles', keys: ['NP_RISK_PROFILE', 'NP_CLAIMS_PROFILE'] },
   { label: 'Exposure', keys: ['NP_CRESTA_AGGREGATES', 'NP_EVENT_LOSS_TABLES'] },
-  { label: 'Pricing', keys: ['NP_FINAL_PRICING', 'NP_FINAL_QUOTE'] },
+  { label: 'Pricing', keys: ['NP_STOP_LOSS_PRICING', 'NP_FINAL_PRICING', 'NP_FINAL_QUOTE'] },
 ];
 
 // ── Facultative Wizard ────────────────────────────────────────────────────────
