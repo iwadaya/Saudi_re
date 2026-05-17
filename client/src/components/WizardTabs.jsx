@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../context/AppContext';
 import { PROP_TAB_GROUPS, NP_TAB_GROUPS, FAC_TAB_GROUPS, STEP_LABELS, ROUTE_PATHS } from '../config/wizard';
-import { isNpCatFlowDisabled, isNpRiskFlowDisabled } from '../utils/npTreatyType';
+import { isNpCatFlowDisabled, isNpRiskFlowDisabled, isNpStopLossTreaty } from '../utils/npTreatyType';
 
 export default function WizardTabs({ activeKey }) {
   const navigate = useNavigate();
@@ -12,6 +12,7 @@ export default function WizardTabs({ activeKey }) {
   const triEnabled = state.propTreatyDetail?.triangulationsAvailable !== false;
   const npCatDisabled  = mode === 'NP' && isNpCatFlowDisabled(state);   // RISK XL → hide CAT tabs
   const npRiskDisabled = mode === 'NP' && isNpRiskFlowDisabled(state);  // CAT XL  → hide risk/large-loss tabs
+  const npStopLoss     = mode === 'NP' && isNpStopLossTreaty(state);    // Stop Loss / Agg XL only
 
   function shouldShow(key) {
     if (mode === 'PROP') {
@@ -46,6 +47,8 @@ export default function WizardTabs({ activeKey }) {
       )) return false;
       // CAT XL: hide all risk/large-loss tabs
       if (npRiskDisabled && key.startsWith('NP_LARGE_LOSS_')) return false;
+      // Stop Loss screen only shown for Stop Loss / Aggregate XL treaties.
+      if (!npStopLoss && key === 'NP_STOP_LOSS_PRICING') return false;
     }
     return true;
   }

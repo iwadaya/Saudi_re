@@ -42,3 +42,13 @@ export function isNpCatFlowDisabled(appState) {
 export function isNpRiskFlowDisabled(appState) {
   return getNpTreatyTypeMode(appState) === 'CAT';
 }
+
+/**
+ * True when the treaty type is "Stop Loss" or "Aggregate XL" — these
+ * are aggregate-layer covers priced via the dedicated Stop Loss
+ * Pricing screen. The screen is hidden for every other NP treaty type.
+ */
+export function isNpStopLossTreaty(appState) {
+  const n = norm(getCurrentNpTreatyTypeName(appState));
+  return n === 'STOP LOSS' || n === 'AGGREGATE XL';
+}

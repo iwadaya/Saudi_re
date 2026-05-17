@@ -2,9 +2,13 @@
 //
 // Live pricing screen for Stop Loss and Aggregate XL covers. Inputs
 // edit in place; everything below them re-computes via priceStopLoss
-// from client/src/logic/stopLossPricing.js. State persists across
-// wizard navigation via AppContext (slice key `npStopLossInputs`);
-// there's no server save yet — that's a follow-up step.
+// from client/src/logic/stopLossPricing.js. State persists in two
+// layers:
+//   - AppContext slice `npStopLossInputs` — instant, session-local,
+//     survives wizard navigation
+//   - Server (PUT /api/{treaties|quotes}/:id/np/stop-loss-pricing) —
+//     persists across sessions; load happens on mount, save on
+//     wizard nav via useScreenSave
 //
 // Layout (top to bottom):
 //   1. Layer cover               — LR% vs absolute attachment + EPI
@@ -14,8 +18,11 @@
 //   5. Method blend + loading    — weights and % loading
 //   6. Result                    — pure ROL, total rate, annual premium
 
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useRef } from 'react';
+import api from '../../../api';
 import { useAppState } from '../../../context/AppContext';
+import { useContractId } from '../../../hooks/useContractId';
+import { useScreenSave } from '../../../hooks/useScreenSave';
 import WizardLayout from '../../../components/WizardLayout';
 import { priceStopLoss } from '../../../logic/stopLossPricing';
 
@@ -226,7 +233,12 @@ function Field({ label, hint, children, span = 1 }) {
 // ── Screen ──────────────────────────────────────────────────────────────────
 
 export default function NpStopLossPricing() {
-  const { state: appState, setSlice } = useAppState();
+  const { state: appState, setSlice, replaceSlice } = useAppState();
+  const contractId = useContractId();
+  const apiOpts = useMemo(
+    () => (appState.quoteMode ? { quote: true } : undefined),
+    [appState.quoteMode],
+  );
   const inputs = useMemo(
     () => ({ ...DEFAULT_INPUTS, ...(appState[SLICE_KEY] || {}) }),
     [appState],
@@ -257,8 +269,35 @@ export default function NpStopLossPricing() {
   }, [yearRange, inputs.yearlyAggregates]);
 
   const setInput = useCallback(
-    (patch) => setSlice(SLICE_KEY, patch),
+    (patch) => {
+      setSlice(SLICE_KEY, patch);
+      markDirtyRef.current?.();
+    },
     [setSlice],
+  );
+
+  // ── Server persistence via useScreenSave ──
+  const markDirtyRef = useRef(null);
+  const inputsRef = useRef(inputs);
+  inputsRef.current = inputs;
+  const loadStopLoss = useCallback(
+    (id) => api.getNpStopLossPricing(id, apiOpts),
+    [apiOpts],
+  );
+  const persist = useCallback(
+    (id, payload) => api.saveNpStopLossPricing(id, payload, apiOpts),
+    [apiOpts],
+  );
+  const onLoaded = useCallback(
+    (data) => {
+      // Server returns { inputs, outputs, updated_at }. Replace the
+      // whole slice so deletions in the saved record actually clear
+      // (a merge would leak stale values from session edits).
+      if (data && data.inputs && Object.keys(data.inputs).length > 0) {
+        replaceSlice(SLICE_KEY, { ...DEFAULT_INPUTS, ...data.inputs });
+      }
+    },
+    [replaceSlice],
   );
 
   const setYearAggregate = useCallback(
@@ -266,6 +305,36 @@ export default function NpStopLossPricing() {
       const next = yearlyRows.map((r) =>
         r.year === year ? { year, aggregate: raw } : { year: r.year, aggregate: r.aggregate },
       );
+      setInput({ yearlyAggregates: next });
+    },
+    [yearlyRows, setInput],
+  );
+
+  // Excel paste handler for the burning-cost table. Accepts a single
+  // column of values (newline-separated) and fills consecutive years
+  // downward starting from the pasted row. A pasted block with more
+  // values than remaining years is truncated; single-cell pastes still
+  // strip non-numeric characters (so "1,250,000" pastes as 1250000).
+  const handleAggregatePaste = useCallback(
+    (e, startIdx) => {
+      const text = e.clipboardData?.getData('text/plain');
+      if (!text) return;
+      // Excel column copy uses CRLF or LF between cells; we tolerate
+      // either. Tab-separated rows are flattened by taking only the
+      // first column — pricing data is one number per year, not a grid.
+      const values = text
+        .split(/[\r\n]+/)
+        .map((line) => String(line.split('\t')[0] || '').trim())
+        .filter((s) => s.length > 0);
+      if (values.length === 0) return;
+      e.preventDefault();
+      const next = yearlyRows.map((r) => ({ year: r.year, aggregate: r.aggregate }));
+      for (let i = 0; i < values.length && startIdx + i < next.length; i++) {
+        // Strip currency / comma formatting; leave a bare numeric string
+        // so the same code path as keyboard input cleans it via toN().
+        const cleaned = values[i].replace(/[^0-9.\-eE]/g, '');
+        next[startIdx + i] = { year: next[startIdx + i].year, aggregate: cleaned };
+      }
       setInput({ yearlyAggregates: next });
     },
     [yearlyRows, setInput],
@@ -324,6 +393,45 @@ export default function NpStopLossPricing() {
   // when an input that affects the result changes.
   const result = useMemo(() => priceStopLoss(engineArgs), [engineArgs]);
 
+  // Snapshot the result for the persist payload — drop the per-year
+  // burning-cost breakdown to keep the JSONB small; the engine can
+  // reproduce it from inputs on demand.
+  const outputsSnapshot = useMemo(() => ({
+    attachment: result.attachment,
+    limit: result.limit,
+    blended: result.blended,
+    burningCost: result.burningCost
+      ? { annualLoss: result.burningCost.annualLoss, rol: result.burningCost.rol, nYears: result.burningCost.nYears }
+      : null,
+    exposureRating: result.exposureRating,
+    monteCarlo: result.monteCarlo
+      ? {
+          annualLoss: result.monteCarlo.annualLoss,
+          rol: result.monteCarlo.rol,
+          cv: result.monteCarlo.cv,
+          hitFrequency: result.monteCarlo.hitFrequency,
+          percentiles: result.monteCarlo.percentiles,
+          nTrials: result.monteCarlo.nTrials,
+        }
+      : null,
+    warnings: result.warnings,
+  }), [result]);
+
+  const currentState = useCallback(
+    () => ({ inputs: inputsRef.current, outputs: outputsSnapshot }),
+    [outputsSnapshot],
+  );
+
+  const { save, markDirty } = useScreenSave({
+    entityId: contractId || '',
+    load: loadStopLoss,
+    save: persist,
+    currentState,
+    onLoaded,
+    errorLabel: 'Stop loss pricing',
+  });
+  markDirtyRef.current = markDirty;
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -331,6 +439,8 @@ export default function NpStopLossPricing() {
       routeKey={ROUTE_KEY}
       title="Stop Loss Pricing"
       headerPill="NP TREATY: STOP LOSS / AGGREGATE XL"
+      onBeforeBack={save}
+      onBeforeNext={save}
     >
       <div style={styles.shell}>
 
@@ -435,7 +545,8 @@ export default function NpStopLossPricing() {
           <div style={styles.sectionSub}>
             One row per observation year — leave the cell blank for a
             zero-loss year (it still counts toward the long-run
-            frequency denominator).
+            frequency denominator). Paste a column from Excel to fill
+            multiple years at once.
           </div>
           <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -464,6 +575,7 @@ export default function NpStopLossPricing() {
                           style={{ ...styles.input, maxWidth: 220, margin: '0 auto', textAlign: 'right' }}
                           value={r.aggregate}
                           onChange={(e) => setYearAggregate(r.year, e.target.value)}
+                          onPaste={(e) => handleAggregatePaste(e, i)}
                           placeholder="0"
                         />
                       </td>

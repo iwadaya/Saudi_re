@@ -222,7 +222,7 @@ export const PATH_TO_ROUTE = Object.fromEntries(
 );
 
 // Get wizard navigation for a given route key and mode
-export function getWizardNav(routeKey, { quoteMode = false, triangulationsEnabled = true, npCatDisabled = false, npRiskDisabled = false } = {}) {
+export function getWizardNav(routeKey, { quoteMode = false, triangulationsEnabled = true, npCatDisabled = false, npRiskDisabled = false, npStopLoss = false } = {}) {
   let order;
   if (routeKey.startsWith('FAC_')) {
     order = [...FAC_WIZARD_ORDER];
@@ -240,6 +240,11 @@ export function getWizardNav(routeKey, { quoteMode = false, triangulationsEnable
     if (npRiskDisabled) {
       // CAT XL: remove all large-loss/risk screens
       order = order.filter(k => !k.startsWith('NP_LARGE_LOSS_'));
+    }
+    // Stop Loss / Aggregate XL is only meaningful for treaty types
+    // that price an aggregate-loss cover — hide the screen elsewhere.
+    if (!npStopLoss) {
+      order = order.filter(k => k !== 'NP_STOP_LOSS_PRICING');
     }
   } else {
     order = [...PROP_WIZARD_ORDER];
