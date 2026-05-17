@@ -63,7 +63,7 @@ describe('NpStopLossPricing — render + interaction', () => {
 
   it('layer cover always shows LR fields (no basis toggle)', () => {
     renderStopLoss();
-    expect(screen.getByText(/Attachment LR \(%\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Attach LR \(%\)/i)).toBeInTheDocument();
     expect(screen.getByText(/Limit LR \(%\)/i)).toBeInTheDocument();
     expect(screen.getByLabelText('Attachment LR')).toBeInTheDocument();
     expect(screen.getByLabelText('Limit LR')).toBeInTheDocument();
@@ -71,6 +71,47 @@ describe('NpStopLossPricing — render + interaction', () => {
     // Old absolute pill buttons should be gone.
     expect(screen.queryByRole('button', { name: /Absolute \(Agg XL\)/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Loss Ratio \(Stop Loss\)/i })).not.toBeInTheDocument();
+  });
+
+  it('renders one Layer Cover row per layer from Treaty Detail', () => {
+    renderStopLoss({ npTreatyDetail: { startYear: 2024, experienceStartYear: 2019, treatyTypeName: 'Stop Loss', numberOfLayers: 3 } });
+    // Layer 1 input gets the canonical aria-labels; layers 2..N use
+    // numbered labels.
+    expect(screen.getByLabelText('Attachment LR')).toBeInTheDocument();
+    expect(screen.getByLabelText('Layer 2 Attachment LR')).toBeInTheDocument();
+    expect(screen.getByLabelText('Layer 3 Attachment LR')).toBeInTheDocument();
+    expect(screen.getByLabelText('Layer 2 Limit LR')).toBeInTheDocument();
+    expect(screen.getByLabelText('Layer 3 EPI')).toBeInTheDocument();
+  });
+
+  it('per-layer calculations propagate to the Blended Result table', async () => {
+    apiMock.getNpEgnpiYear.mockResolvedValue([
+      { uw_year: 2020, egnpi: '10000000' },
+      { uw_year: 2021, egnpi: '10000000' },
+      { uw_year: 2022, egnpi: '10000000' },
+      { uw_year: 2023, egnpi: '10000000' },
+    ]);
+    renderStopLoss({
+      npTreatyDetail: { startYear: 2024, experienceStartYear: 2019, treatyTypeName: 'Stop Loss', numberOfLayers: 2 },
+      npStopLossInputs: {
+        layers: [
+          { attachmentLossRatio: '80', limitLossRatio: '20', epi: '10000000' },
+          { attachmentLossRatio: '100', limitLossRatio: '20', epi: '10000000' },
+        ],
+        attachmentLossRatio: '80', limitLossRatio: '20', epi: '10000000',
+      },
+    });
+    // Both layers should appear in multiple places (Layer Cover,
+    // Burning Cost columns, Blended Result rows).
+    await waitFor(() => {
+      expect(screen.getAllByText('L1').length).toBeGreaterThan(0);
+    });
+    expect(screen.getAllByText('L2').length).toBeGreaterThan(0);
+    // TOTAL row is only rendered when there's more than one layer.
+    expect(screen.getByText('TOTAL')).toBeInTheDocument();
+    // Per-layer burning-cost column headers appear for >1 layer.
+    expect(screen.getByText('L1 Hit')).toBeInTheDocument();
+    expect(screen.getByText('L2 Hit')).toBeInTheDocument();
   });
 
   it('burning cost table has Premium / Loss Ratio columns', () => {

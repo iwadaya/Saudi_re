@@ -438,7 +438,56 @@ export default function NpStopLossPricing() {
   }, [yearRange, yearlyRows, premiumData]);
 
   // ── Build the engine args from current inputs ──
-  const engineArgs = useMemo(() => {
+  // ── Build the layers array. Sourced from the Structure page (which
+  //    writes to `inputs.layers`); falls back to the legacy top-level
+  //    attachment/limit/epi as layer 0 for records saved before the
+  //    layers refactor. Pad / truncate to the count on Treaty Detail so
+  //    both screens stay in lock-step.
+  const layerCount = useMemo(() => {
+    const npDetail = appState.npTreatyDetail || {};
+    const n = parseInt(npDetail.numberOfLayers || npDetail.number_of_layers || '1', 10);
+    return Number.isFinite(n) && n > 0 ? Math.min(n, 20) : 1;
+  }, [appState.npTreatyDetail]);
+
+  const layers = useMemo(() => {
+    const saved = Array.isArray(inputs.layers) ? inputs.layers : [];
+    const legacyPrimary = {
+      attachmentLossRatio: inputs.attachmentLossRatio ?? '',
+      limitLossRatio: inputs.limitLossRatio ?? '',
+      epi: inputs.epi ?? '',
+    };
+    const base = saved.length > 0
+      ? saved
+      : (legacyPrimary.attachmentLossRatio || legacyPrimary.limitLossRatio || legacyPrimary.epi
+          ? [legacyPrimary]
+          : []);
+    const out = [];
+    for (let i = 0; i < layerCount; i++) {
+      out.push(base[i]
+        ? { attachmentLossRatio: base[i].attachmentLossRatio ?? '', limitLossRatio: base[i].limitLossRatio ?? '', epi: base[i].epi ?? '' }
+        : { attachmentLossRatio: '', limitLossRatio: '', epi: '' });
+    }
+    return out;
+  }, [inputs.layers, inputs.attachmentLossRatio, inputs.limitLossRatio, inputs.epi, layerCount]);
+
+  // Edit a single layer; mirrors layer 0 into the legacy top-level
+  // fields so the rest of the slice (and other screens) stay synced.
+  const updateLayer = useCallback((i, patch) => {
+    const next = layers.map((l, idx) => (idx === i ? { ...l, ...patch } : { ...l }));
+    const primary = next[0] || {};
+    setSlice(SLICE_KEY, {
+      layers: next,
+      attachmentLossRatio: primary.attachmentLossRatio ?? '',
+      limitLossRatio: primary.limitLossRatio ?? '',
+      epi: primary.epi ?? '',
+    });
+    markDirtyRef.current?.();
+  }, [layers, setSlice]);
+
+  // ── Shared engine args (frequency / severity / MC / blend / loading).
+  //    Per-layer args extend this with attach / limit / epi and a
+  //    layer-specific normalised yearlyAggregates array.
+  const sharedEngineArgs = useMemo(() => {
     const args = {
       loading: toN(inputs.loading) ?? 0,
       weights: {
@@ -449,50 +498,65 @@ export default function NpStopLossPricing() {
       useMonteCarlo: !!inputs.useMonteCarlo,
       monteCarlo: { nTrials: toN(inputs.mcTrials) ?? 10_000, seed: toN(inputs.mcSeed) ?? 1 },
     };
-    args.attachmentLossRatio = toN(inputs.attachmentLossRatio);
-    args.limitLossRatio = toN(inputs.limitLossRatio);
-    args.epi = toN(inputs.epi);
-
-    // Burning cost: feed normalised aggregates = LR × current_EPI so the
-    // engine's absolute layer math gives the right answer. Years without
-    // a usable LR (missing premium or aggregate) are dropped from the
-    // burning cost computation rather than treated as zero — the long-run
-    // denominator should only count years where we actually have data.
-    const epi = args.epi;
-    if (epi != null && epi > 0) {
-      const usable = burningCostRows.filter((r) => r.lossRatio != null);
-      if (usable.length > 0) {
-        args.yearlyAggregates = usable.map((r) => ({ year: r.year, aggregate: r.lossRatio * epi }));
-      }
-    }
-
     const lambda = toN(inputs.freqLambda);
     if (lambda !== null) {
       args.frequency = { lambda };
       if (inputs.severityType === 'lognormal') {
         const mean = toN(inputs.sevMean);
         const cv = toN(inputs.sevCv);
-        if (mean !== null && cv !== null) {
-          args.severity = { type: 'lognormal', mean, cv };
-        }
+        if (mean !== null && cv !== null) args.severity = { type: 'lognormal', mean, cv };
       } else if (inputs.severityType === 'pareto') {
         const alpha = toN(inputs.paretoAlpha);
         const theta = toN(inputs.paretoTheta);
-        if (alpha !== null && theta !== null) {
-          args.severity = { type: 'pareto', alpha, theta };
-        }
+        if (alpha !== null && theta !== null) args.severity = { type: 'pareto', alpha, theta };
       }
     }
     return args;
-  }, [inputs, burningCostRows]);
+  }, [inputs]);
 
-  // Live-priced result. Memoised so heavy MC runs only re-execute
-  // when an input that affects the result changes.
-  const result = useMemo(() => priceStopLoss(engineArgs), [engineArgs]);
+  // Per-layer engine args. The burning cost denominator is the same set
+  // of yearly LRs for every layer, but the layer's own EPI is used to
+  // convert LR → absolute aggregate so the engine's layer math lands in
+  // the right currency space when EPI differs per layer.
+  const layerEngineArgs = useMemo(() => {
+    return layers.map((l) => {
+      const args = { ...sharedEngineArgs };
+      args.attachmentLossRatio = toN(l.attachmentLossRatio);
+      args.limitLossRatio = toN(l.limitLossRatio);
+      args.epi = toN(l.epi);
+      const epi = args.epi;
+      if (epi != null && epi > 0) {
+        const usable = burningCostRows.filter((r) => r.lossRatio != null);
+        if (usable.length > 0) {
+          args.yearlyAggregates = usable.map((r) => ({ year: r.year, aggregate: r.lossRatio * epi }));
+        }
+      }
+      return args;
+    });
+  }, [layers, sharedEngineArgs, burningCostRows]);
 
-  // Snapshot the result for the persist payload — drop the per-year
-  // burning-cost breakdown to keep the JSONB small; the engine can
-  // reproduce it from inputs on demand.
+  // Per-layer results. priceStopLoss runs once per layer; MC simulations
+  // therefore re-roll per layer with the same seed so layer-to-layer
+  // comparisons stay deterministic.
+  const layerResults = useMemo(
+    () => layerEngineArgs.map((args) => priceStopLoss(args)),
+    [layerEngineArgs],
+  );
+
+  // Layer 1 is the canonical "primary cover" used for the burning-cost
+  // table's per-year LR view and for the existing single-layer
+  // exposure-rating / MC summary cards. Per-layer headline numbers
+  // (annual loss, ROL, premium) are shown together in the Result table.
+  const result = useMemo(
+    () => layerResults[0] || { attachment: 0, limit: 0, blended: { annualLoss: 0, rol: 0, totalRate: 0 }, burningCost: null, exposureRating: null, monteCarlo: null, warnings: [] },
+    [layerResults],
+  );
+
+
+  // Snapshot the result for the persist payload. Top-level fields keep
+  // the layer-1 view (back-compat); `layers` carries the per-layer
+  // headline numbers so the saved record matches what the user sees on
+  // screen for multi-layer covers.
   const outputsSnapshot = useMemo(() => ({
     attachment: result.attachment,
     limit: result.limit,
@@ -512,7 +576,16 @@ export default function NpStopLossPricing() {
         }
       : null,
     warnings: result.warnings,
-  }), [result]);
+    layers: layerResults.map((r, i) => ({
+      layer: i + 1,
+      attachment: r.attachment,
+      limit: r.limit,
+      blended: r.blended,
+      burningCostRol: r.burningCost?.rol ?? null,
+      exposureRol: r.exposureRating?.rol ?? null,
+      monteCarloRol: r.monteCarlo?.rol ?? null,
+    })),
+  }), [result, layerResults]);
 
   const currentState = useCallback(
     () => ({ inputs: inputsRef.current, outputs: outputsSnapshot }),
@@ -547,58 +620,75 @@ export default function NpStopLossPricing() {
           <div style={styles.sectionSub}>
             Stop Loss attaches at a loss ratio of subject premium —
             e.g. "20% xs 80% LR" pays losses between 80% and 100% loss
-            ratio. EPI is the current-year subject premium.
+            ratio. {layerCount > 1 ? `${layerCount} layers` : 'One layer'} —
+            count comes from Treaty Detail. Edits here mirror back to
+            the Structure page.
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-            <Field label="Attachment LR (%)" hint="e.g. 80 for 80% LR">
-              <input
-                aria-label="Attachment LR"
-                style={styles.input}
-                value={inputs.attachmentLossRatio}
-                onChange={(e) => setInput({ attachmentLossRatio: e.target.value })}
-                placeholder="80"
-              />
-            </Field>
-            <Field label="Limit LR (%)" hint="Layer width as % of EPI">
-              <input
-                aria-label="Limit LR"
-                style={styles.input}
-                value={inputs.limitLossRatio}
-                onChange={(e) => setInput({ limitLossRatio: e.target.value })}
-                placeholder="20"
-              />
-            </Field>
-            <Field label="EPI" hint="Current-year subject premium">
-              <input
-                aria-label="EPI"
-                style={styles.input}
-                value={inputs.epi}
-                onChange={(e) => setInput({ epi: e.target.value })}
-                placeholder="e.g. 10,000,000"
-              />
-            </Field>
+          <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <colgroup>
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '25%' }} />
+                <col style={{ width: '25%' }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Layer</th>
+                  <th style={styles.th}>Attach LR (%)</th>
+                  <th style={styles.th}>Limit LR (%)</th>
+                  <th style={styles.th}>EPI</th>
+                  <th style={styles.th}>Resolved · Limit xs Attach</th>
+                </tr>
+              </thead>
+              <tbody>
+                {layers.map((l, i) => {
+                  const r = layerResults[i] || { attachment: 0, limit: 0 };
+                  return (
+                    <tr key={i} style={{ background: i % 2 === 0 ? COLORS.rowEven : COLORS.rowOdd }}>
+                      <td style={{ ...styles.td, fontWeight: 800, color: 'rgba(0,212,255,0.70)', fontSize: 13 }}>
+                        L{i + 1}
+                      </td>
+                      <td style={styles.td}>
+                        <input
+                          aria-label={i === 0 ? 'Attachment LR' : `Layer ${i + 1} Attachment LR`}
+                          style={{ ...styles.input, maxWidth: 140, margin: '0 auto', textAlign: 'center' }}
+                          value={l.attachmentLossRatio}
+                          onChange={(e) => updateLayer(i, { attachmentLossRatio: e.target.value })}
+                          placeholder="80"
+                        />
+                      </td>
+                      <td style={styles.td}>
+                        <input
+                          aria-label={i === 0 ? 'Limit LR' : `Layer ${i + 1} Limit LR`}
+                          style={{ ...styles.input, maxWidth: 140, margin: '0 auto', textAlign: 'center' }}
+                          value={l.limitLossRatio}
+                          onChange={(e) => updateLayer(i, { limitLossRatio: e.target.value })}
+                          placeholder="20"
+                        />
+                      </td>
+                      <td style={styles.td}>
+                        <input
+                          aria-label={i === 0 ? 'EPI' : `Layer ${i + 1} EPI`}
+                          style={{ ...styles.input, maxWidth: 220, margin: '0 auto', textAlign: 'right' }}
+                          value={l.epi}
+                          onChange={(e) => updateLayer(i, { epi: e.target.value })}
+                          placeholder="e.g. 10,000,000"
+                        />
+                      </td>
+                      <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, color: r.limit > 0 ? COLORS.cyan : 'rgba(148,163,184,0.40)' }}>
+                        {r.limit > 0
+                          ? <>{fmtMoneyFull(r.limit)} xs {fmtMoneyFull(r.attachment)}</>
+                          : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-
-          {(result.attachment > 0 || result.limit > 0) && (
-            <div
-              style={{
-                marginTop: 14,
-                padding: '10px 14px',
-                background: 'rgba(0,212,255,0.04)',
-                border: '1px solid rgba(0,212,255,0.20)',
-                borderRadius: 8,
-                fontSize: 12,
-                color: 'rgba(226,232,240,0.85)',
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              Resolved layer:&nbsp;
-              <strong style={{ color: COLORS.cyan }}>{fmtMoneyFull(result.limit)}</strong>
-              &nbsp;xs&nbsp;
-              <strong style={{ color: COLORS.cyan }}>{fmtMoneyFull(result.attachment)}</strong>
-            </div>
-          )}
         </div>
 
         {/* ── 2. Burning Cost ───────────────────────────────────────────── */}
@@ -613,25 +703,21 @@ export default function NpStopLossPricing() {
           </div>
           <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <colgroup>
-                <col style={{ width: '11%' }} />
-                <col style={{ width: '23%' }} />
-                <col style={{ width: '24%' }} />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '28%' }} />
-              </colgroup>
               <thead>
                 <tr>
                   <th style={styles.th}>UW Year</th>
                   <th style={styles.th}>Premium (Adjusted)</th>
                   <th style={styles.th}>Aggregate Loss</th>
                   <th style={styles.th}>Loss Ratio</th>
-                  <th style={styles.th}>Layer Hit</th>
+                  {layerResults.map((_, li) => (
+                    <th key={li} style={styles.th}>
+                      {layerResults.length === 1 ? 'Layer Hit' : `L${li + 1} Hit`}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {burningCostRows.map((r, i) => {
-                  const hit = result.burningCost?.byYear?.find((b) => b.year === r.year)?.inLayer ?? 0;
                   const lrColor = r.lossRatio == null
                     ? 'rgba(148,163,184,0.40)'
                     : r.lossRatio > 1.0
@@ -670,17 +756,23 @@ export default function NpStopLossPricing() {
                       <td style={{ ...styles.td, ...styles.readonlyCell, color: lrColor, fontWeight: 700 }}>
                         {r.lossRatio == null ? '—' : `${(r.lossRatio * 100).toFixed(1)}%`}
                       </td>
-                      <td
-                        style={{
-                          ...styles.td,
-                          ...styles.readonlyCell,
-                          color: hit > 0 ? COLORS.amber : 'rgba(148,163,184,0.40)',
-                          fontWeight: 700,
-                          textAlign: 'right',
-                        }}
-                      >
-                        {hit > 0 ? fmtMoneyFull(hit) : '—'}
-                      </td>
+                      {layerResults.map((lr, li) => {
+                        const hit = lr.burningCost?.byYear?.find((b) => b.year === r.year)?.inLayer ?? 0;
+                        return (
+                          <td
+                            key={li}
+                            style={{
+                              ...styles.td,
+                              ...styles.readonlyCell,
+                              color: hit > 0 ? COLORS.amber : 'rgba(148,163,184,0.40)',
+                              fontWeight: 700,
+                              textAlign: 'right',
+                            }}
+                          >
+                            {hit > 0 ? fmtMoneyFull(hit) : '—'}
+                          </td>
+                        );
+                      })}
                     </tr>
                   );
                 })}
@@ -699,6 +791,9 @@ export default function NpStopLossPricing() {
             the severity threshold. The Normal approximation prices the
             in-layer expected loss analytically; it breaks down for
             heavy-tailed severity (Pareto α ≤ 2) — use Monte Carlo instead.
+            {layerResults.length > 1 && (
+              <> The summary below shows Layer 1; per-layer ROL is in the Blended Result table.</>
+            )}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 12 }}>
             <Field label="Frequency λ" hint="Claims / year (Poisson rate)">
@@ -770,6 +865,9 @@ export default function NpStopLossPricing() {
             Simulates N years of compound Poisson aggregate losses and
             applies the layer. Uses the same frequency and severity as
             Exposure Rating. Deterministic — seed in for reproducibility.
+            {layerResults.length > 1 && (
+              <> Summary shows Layer 1 percentiles; per-layer MC ROL is in the Blended Result table.</>
+            )}
           </div>
           <label
             style={{
@@ -863,25 +961,70 @@ export default function NpStopLossPricing() {
 
         {/* ── 6. Result ────────────────────────────────────────────────── */}
         <div style={styles.section}>
-          <div style={styles.sectionTitle}>Blended Result</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-            <div style={styles.resultCard(COLORS.cyan)}>
-              <div style={styles.resultLabel}>Annual Layer Loss</div>
-              <div style={styles.resultValue(COLORS.cyan)}>{fmtMoney(result.blended.annualLoss)}</div>
-              <div style={styles.resultSub}>{fmtMoneyFull(result.blended.annualLoss)}</div>
-            </div>
-            <div style={styles.resultCard(COLORS.amber)}>
-              <div style={styles.resultLabel}>Pure ROL</div>
-              <div style={styles.resultValue(COLORS.amber)}>{fmtPct(result.blended.rol, 3)}</div>
-              <div style={styles.resultSub}>Loss / Limit</div>
-            </div>
-            <div style={styles.resultCard(COLORS.green)}>
-              <div style={styles.resultLabel}>Total Rate · After Loading</div>
-              <div style={styles.resultValue(COLORS.green)}>{fmtPct(result.blended.totalRate, 3)}</div>
-              <div style={styles.resultSub}>
-                Premium: {fmtMoneyFull(result.blended.totalRate * result.limit)}
-              </div>
-            </div>
+          <div style={styles.sectionTitle}>Blended Result · By Layer</div>
+          <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Layer</th>
+                  <th style={styles.th}>Limit xs Attach</th>
+                  <th style={styles.th}>Annual Layer Loss</th>
+                  <th style={styles.th}>Pure ROL</th>
+                  <th style={styles.th}>Total Rate</th>
+                  <th style={styles.th}>Premium</th>
+                </tr>
+              </thead>
+              <tbody>
+                {layerResults.map((lr, i) => (
+                  <tr key={i} style={{ background: i % 2 === 0 ? COLORS.rowEven : COLORS.rowOdd }}>
+                    <td style={{ ...styles.td, fontWeight: 800, color: 'rgba(0,212,255,0.70)', fontSize: 13 }}>
+                      L{i + 1}
+                    </td>
+                    <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 600, textAlign: 'right' }}>
+                      {lr.limit > 0 ? <>{fmtMoneyFull(lr.limit)} xs {fmtMoneyFull(lr.attachment)}</> : '—'}
+                    </td>
+                    <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, color: COLORS.cyan, textAlign: 'right' }}>
+                      {lr.blended.annualLoss > 0 ? fmtMoneyFull(lr.blended.annualLoss) : '—'}
+                    </td>
+                    <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, color: COLORS.amber }}>
+                      {fmtPct(lr.blended.rol, 3)}
+                    </td>
+                    <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, color: COLORS.green }}>
+                      {fmtPct(lr.blended.totalRate, 3)}
+                    </td>
+                    <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, color: COLORS.green, textAlign: 'right' }}>
+                      {lr.limit > 0 ? fmtMoneyFull(lr.blended.totalRate * lr.limit) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              {layerResults.length > 1 && (() => {
+                const totalLoss = layerResults.reduce((s, lr) => s + (lr.blended?.annualLoss || 0), 0);
+                const totalPremium = layerResults.reduce((s, lr) => s + (lr.blended?.totalRate || 0) * (lr.limit || 0), 0);
+                const totalLimit = layerResults.reduce((s, lr) => s + (lr.limit || 0), 0);
+                const programmeRol = totalLimit > 0 ? totalLoss / totalLimit : 0;
+                return (
+                  <tfoot>
+                    <tr style={{ background: 'rgba(0,212,255,0.06)', borderTop: '2px solid rgba(0,212,255,0.30)' }}>
+                      <td style={{ ...styles.td, fontWeight: 800, color: COLORS.cyan, letterSpacing: '.08em' }}>TOTAL</td>
+                      <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, textAlign: 'right' }}>
+                        {fmtMoneyFull(totalLimit)}
+                      </td>
+                      <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 800, color: COLORS.cyan, textAlign: 'right' }}>
+                        {fmtMoneyFull(totalLoss)}
+                      </td>
+                      <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 800, color: COLORS.amber }}>
+                        {fmtPct(programmeRol, 3)}
+                      </td>
+                      <td style={{ ...styles.td, ...styles.readonlyCell, color: 'rgba(148,163,184,0.55)' }}>—</td>
+                      <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 800, color: COLORS.green, textAlign: 'right' }}>
+                        {fmtMoneyFull(totalPremium)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                );
+              })()}
+            </table>
           </div>
 
           {result.warnings && result.warnings.length > 0 && (
