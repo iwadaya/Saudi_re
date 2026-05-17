@@ -641,7 +641,7 @@ export default function NpStopLossPricing() {
                       </td>
                       <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700 }}>{att}</td>
                       <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700 }}>{lim}</td>
-                      <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, textAlign: 'right' }}>{epi}</td>
+                      <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, textAlign: 'center' }}>{epi}</td>
                       <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, color: r.limit > 0 ? COLORS.cyan : 'rgba(148,163,184,0.40)' }}>
                         {r.limit > 0
                           ? <>{fmtMoneyFull(r.limit)} xs {fmtMoneyFull(r.attachment)}</>
@@ -694,7 +694,7 @@ export default function NpStopLossPricing() {
                       <td style={{ ...styles.td, fontWeight: 800, color: 'rgba(0,212,255,0.70)', fontSize: 13 }}>
                         {r.year}
                       </td>
-                      <td style={{ ...styles.td, ...styles.readonlyCell, textAlign: 'right' }}>
+                      <td style={{ ...styles.td, ...styles.readonlyCell, textAlign: 'center' }}>
                         {Number.isFinite(r.adjustedPremium) ? (
                           <>
                             {fmtMoneyFull(r.adjustedPremium)}
@@ -710,7 +710,7 @@ export default function NpStopLossPricing() {
                       </td>
                       <td style={styles.td}>
                         <input
-                          style={{ ...styles.input, maxWidth: 220, margin: '0 auto', textAlign: 'right' }}
+                          style={{ ...styles.input, maxWidth: 220, margin: '0 auto', textAlign: 'center' }}
                           value={r.aggregateRaw}
                           onChange={(e) => setYearAggregate(r.year, e.target.value)}
                           onPaste={(e) => handleAggregatePaste(e, i)}
@@ -730,7 +730,7 @@ export default function NpStopLossPricing() {
                               ...styles.readonlyCell,
                               color: hit > 0 ? COLORS.amber : 'rgba(148,163,184,0.40)',
                               fontWeight: 700,
-                              textAlign: 'right',
+                              textAlign: 'center',
                             }}
                           >
                             {hit > 0 ? fmtMoneyFull(hit) : '—'}
@@ -944,10 +944,10 @@ export default function NpStopLossPricing() {
                     <td style={{ ...styles.td, fontWeight: 800, color: 'rgba(0,212,255,0.70)', fontSize: 13 }}>
                       L{i + 1}
                     </td>
-                    <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 600, textAlign: 'right' }}>
+                    <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 600, textAlign: 'center' }}>
                       {lr.limit > 0 ? <>{fmtMoneyFull(lr.limit)} xs {fmtMoneyFull(lr.attachment)}</> : '—'}
                     </td>
-                    <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, color: COLORS.cyan, textAlign: 'right' }}>
+                    <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, color: COLORS.cyan, textAlign: 'center' }}>
                       {lr.blended.annualLoss > 0 ? fmtMoneyFull(lr.blended.annualLoss) : '—'}
                     </td>
                     <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, color: COLORS.amber }}>
@@ -956,7 +956,7 @@ export default function NpStopLossPricing() {
                     <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, color: COLORS.green }}>
                       {fmtPct(lr.blended.totalRate, 3)}
                     </td>
-                    <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, color: COLORS.green, textAlign: 'right' }}>
+                    <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, color: COLORS.green, textAlign: 'center' }}>
                       {lr.limit > 0 ? fmtMoneyFull(lr.blended.totalRate * lr.limit) : '—'}
                     </td>
                   </tr>
@@ -971,17 +971,17 @@ export default function NpStopLossPricing() {
                   <tfoot>
                     <tr style={{ background: 'rgba(0,212,255,0.06)', borderTop: '2px solid rgba(0,212,255,0.30)' }}>
                       <td style={{ ...styles.td, fontWeight: 800, color: COLORS.cyan, letterSpacing: '.08em' }}>TOTAL</td>
-                      <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, textAlign: 'right' }}>
+                      <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, textAlign: 'center' }}>
                         {fmtMoneyFull(totalLimit)}
                       </td>
-                      <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 800, color: COLORS.cyan, textAlign: 'right' }}>
+                      <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 800, color: COLORS.cyan, textAlign: 'center' }}>
                         {fmtMoneyFull(totalLoss)}
                       </td>
                       <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 800, color: COLORS.amber }}>
                         {fmtPct(programmeRol, 3)}
                       </td>
                       <td style={{ ...styles.td, ...styles.readonlyCell, color: 'rgba(148,163,184,0.55)' }}>—</td>
-                      <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 800, color: COLORS.green, textAlign: 'right' }}>
+                      <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 800, color: COLORS.green, textAlign: 'center' }}>
                         {fmtMoneyFull(totalPremium)}
                       </td>
                     </tr>

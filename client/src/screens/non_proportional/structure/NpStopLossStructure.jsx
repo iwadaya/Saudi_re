@@ -93,9 +93,9 @@ export default function NpStopLossStructure({ currency = 'SAR' }) {
               <th className="np-table-sticky cell-center">LAYER</th>
               <th className="np-col-rate cell-center">ATTACH LR %</th>
               <th className="np-col-rate cell-center">LIMIT LR %</th>
-              <th className="np-col">EPI ({currency})</th>
-              <th className="np-col">RESOLVED · LIMIT</th>
-              <th className="np-col">RESOLVED · ATTACH</th>
+              <th className="np-col cell-center">EPI ({currency})</th>
+              <th className="np-col cell-center">RESOLVED · LIMIT</th>
+              <th className="np-col cell-center">RESOLVED · ATTACH</th>
             </tr>
           </thead>
           <tbody>
@@ -128,7 +128,7 @@ export default function NpStopLossStructure({ currency = 'SAR' }) {
                       />
                     </div>
                   </td>
-                  <td className="np-col">
+                  <td className="np-col cell-center">
                     <div className="np-cell-input">
                       <input
                         className="np-mini-input np-mini-input--center"
@@ -139,7 +139,7 @@ export default function NpStopLossStructure({ currency = 'SAR' }) {
                       <span className="np-sfx">{currency}</span>
                     </div>
                   </td>
-                  <td className="np-col">
+                  <td className="np-col cell-center">
                     <div className="np-cell-input">
                       <input
                         className="np-mini-input np-mini-input--center np-mini-input--readonly"
@@ -150,7 +150,7 @@ export default function NpStopLossStructure({ currency = 'SAR' }) {
                       <span className="np-sfx">{currency}</span>
                     </div>
                   </td>
-                  <td className="np-col">
+                  <td className="np-col cell-center">
                     <div className="np-cell-input">
                       <input
                         className="np-mini-input np-mini-input--center np-mini-input--readonly"

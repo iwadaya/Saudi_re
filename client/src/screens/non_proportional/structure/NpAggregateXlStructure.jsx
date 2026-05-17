@@ -172,10 +172,10 @@ export default function NpAggregateXlStructure({ currency = 'SAR', readOnly = fa
             <thead>
               <tr>
                 <th className="np-table-sticky cell-center">LAYER</th>
-                <th className="np-col">AGGREGATE LIMIT ({currency})</th>
-                <th className="np-col">AGGREGATE DEDUCTIBLE ({currency})</th>
-                <th className="np-col">DEDUCTIBLE ({currency})</th>
-                <th className="np-col">AAD ({currency})</th>
+                <th className="np-col cell-center">AGGREGATE LIMIT ({currency})</th>
+                <th className="np-col cell-center">AGGREGATE DEDUCTIBLE ({currency})</th>
+                <th className="np-col cell-center">DEDUCTIBLE ({currency})</th>
+                <th className="np-col cell-center">AAD ({currency})</th>
                 <th className="np-col-chk cell-center">RISK</th>
                 <th className="np-col-chk cell-center">CAT</th>
               </tr>
@@ -238,9 +238,9 @@ export default function NpAggregateXlStructure({ currency = 'SAR', readOnly = fa
               </colgroup>
               <thead>
                 <tr>
-                  <th className="np-table-sticky">CLASS OF BUSINESS</th>
-                  <th className="np-col">INNER LIMIT ({currency})</th>
-                  <th className="np-col">INNER DEDUCTIBLE ({currency})</th>
+                  <th className="np-table-sticky cell-center">CLASS OF BUSINESS</th>
+                  <th className="np-col cell-center">INNER LIMIT ({currency})</th>
+                  <th className="np-col cell-center">INNER DEDUCTIBLE ({currency})</th>
                 </tr>
               </thead>
               <tbody>
@@ -249,7 +249,7 @@ export default function NpAggregateXlStructure({ currency = 'SAR', readOnly = fa
                   return (
                     <tr key={name}>
                       <td
-                        className="np-table-sticky"
+                        className="np-table-sticky cell-center"
                         style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                         title={name}
                       >
@@ -312,7 +312,7 @@ function Toggle({ label, hint, checked, disabled, onChange }) {
 function MoneyCell({ value, currency, readOnly, onChange }) {
   const display = fmtMoney(value);
   return (
-    <td className="np-col">
+    <td className="np-col cell-center">
       {readOnly ? (
         <div className="np-cell-input">
           <input

@@ -86,7 +86,7 @@ export default function NpStopLossExpiring({ currency = 'SAR' }) {
               <th className="np-table-sticky cell-center">LAYER</th>
               <th className="np-col-rate cell-center">ATTACH LR %</th>
               <th className="np-col-rate cell-center">LIMIT LR %</th>
-              <th className="np-col">EPI ({currency})</th>
+              <th className="np-col cell-center">EPI ({currency})</th>
               <th className="np-col-rate cell-center">RATE %</th>
               <th className="np-col-rol cell-center">ROL %</th>
             </tr>
@@ -125,7 +125,7 @@ export default function NpStopLossExpiring({ currency = 'SAR' }) {
                       />
                     </div>
                   </td>
-                  <td className="np-col">
+                  <td className="np-col cell-center">
                     <div className="np-cell-input">
                       <input
                         className="np-mini-input np-mini-input--center"
