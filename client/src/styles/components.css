@@ -1780,8 +1780,8 @@ select.fi{ cursor: pointer; appearance: auto; }
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #23d18b;
-  background: rgba(8,16,40,0.72);
+  color: var(--accent);
+  background: var(--surface-2);
   white-space: nowrap;
 }
 .tri-yr-hdr{ min-width: 56px; }
@@ -1789,11 +1789,11 @@ select.fi{ cursor: pointer; appearance: auto; }
   text-align: center;
   font-weight: 600;
   font-size: 13px;
-  color: #23d18b;
+  color: var(--accent);
   padding: 4px 12px;
   white-space: nowrap;
   min-width: 56px;
-  background: rgba(8,16,40,0.72);
+  background: var(--surface-2);
   position: sticky;
   left: 0;
   z-index: 5;
