@@ -1909,6 +1909,11 @@ export default function NpFinalPricing() {
         const x = parseFloat(String(v ?? '').replace(/%/g, '').trim());
         return Number.isFinite(x) ? x : null;
       };
+      // Send a row for every layer, including ones where the user has
+      // cleared every margin field — the server writes the values
+      // directly, so an all-null row clears the row's margin columns.
+      // Filtering all-null rows out meant deletion was silently lost
+      // (the column kept its prior value).
       const layer_margins = layers.map((l, i) => ({
         layer_number:    i + 1,
         hist_margin:     pctToNum(l.historicalMargin),
@@ -1917,7 +1922,7 @@ export default function NpFinalPricing() {
         uw_price:        pctToNum(l.reinsurerPricing) || pctToNum(l.uwPrice),
         expiring_price:  pctToNum(l.expiringPricing),
         lead_price:      pctToNum(l.leadPricing),
-      })).filter(m => m.hist_margin != null || m.modelled_margin != null || m.uw_price != null);
+      }));
 
       noteSaved(await api.saveNpPricing(contractId, { inputs, layer_inputs, outputs, layer_margins }, requestOptions()));
 
