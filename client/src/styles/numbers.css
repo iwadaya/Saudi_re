@@ -87,7 +87,7 @@ td[data-numeric],
 .tri-off{ border: none !important; }
 .tri-yr,
 .tri-hdr{
-  color: rgba(226,232,240,0.70) !important;
+  color: var(--accent) !important;
   font-family: inherit !important;
   font-weight: var(--num-cell-fw) !important;
 }

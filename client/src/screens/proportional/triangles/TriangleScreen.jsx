@@ -120,37 +120,70 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
     return true;
   }, [isDerived, contractId, dirty, grid, triType, apiOpts, inTriangle, years]);
 
-  const handlePaste = useCallback((e) => {
-    const text = e.clipboardData?.getData('text/plain'); if (!text) return; e.preventDefault();
+  const handlePaste = useCallback((e, showToast) => {
+    const text = e.clipboardData?.getData('text/plain');
+    if (!text) return;
+    e.preventDefault();
     const pastedRows = text.split('\n').filter(r => r.trim()).map(r => r.split('\t'));
-    const r = parseInt(e.target.dataset.row), c = parseInt(e.target.dataset.col); if (isNaN(r) || isNaN(c)) return;
-    setGrid(prev => {
-      const n = prev.map(row => [...row]);
-      pastedRows.forEach((pr, ri) => {
-        pr.forEach((val, ci) => {
-          const tr = r + ri, tc = c + ci;
-          if (tr >= n.length || tc >= n[0].length) return;
-          // Skip cells that fall outside the upper triangle so an
-          // accidental "paste 6×6 from Excel" doesn't seed the lower
-          // diagonal with placeholders that linger in the DB.
-          if (!inTriangle(tr, tc)) return;
-          const parsed = parseNum(val.trim());
-          n[tr][tc] = parsed !== null ? fmtCell(parsed) : '';
-        });
+    const r = parseInt(e.target.dataset.row);
+    const c = parseInt(e.target.dataset.col);
+    if (isNaN(r) || isNaN(c)) return;
+
+    // Resolve patches + drop counts up front so the toast fires
+    // deterministically. Doing this inside the setGrid updater is unsafe
+    // — React may defer or double-invoke the updater (strict mode), which
+    // would skew the counts that drive the toast message.
+    const patches = [];
+    let droppedOutOfGrid = 0;
+    let droppedOffTriangle = 0;
+    let droppedNonNumeric = 0;
+    pastedRows.forEach((pr, ri) => {
+      pr.forEach((val, ci) => {
+        const tr = r + ri;
+        const tc = c + ci;
+        if (tr >= numDevYears || tc >= numDevYears) { droppedOutOfGrid++; return; }
+        // Skip cells that fall outside the upper triangle so an
+        // accidental "paste 6×6 from Excel" doesn't seed the lower
+        // diagonal with placeholders that linger in the DB.
+        if (!inTriangle(tr, tc)) { droppedOffTriangle++; return; }
+        const parsed = parseNum(val.trim());
+        if (parsed === null) {
+          // Non-numeric token (e.g. an Excel header row dragged in by
+          // accident): leave the existing cell value alone instead of
+          // blanking it. Explicit deletion still works via keyboard.
+          if (String(val).trim() !== '') droppedNonNumeric++;
+          return;
+        }
+        patches.push({ tr, tc, val: fmtCell(parsed) });
       });
-      return n;
     });
-    setDirty(true);
-  }, [inTriangle]);
+
+    if (patches.length) {
+      setGrid(prev => {
+        const n = prev.map(row => [...row]);
+        patches.forEach(({ tr, tc, val }) => { n[tr][tc] = val; });
+        return n;
+      });
+      setDirty(true);
+    }
+
+    const parts = [];
+    if (droppedOutOfGrid)   parts.push(`${droppedOutOfGrid} cell${droppedOutOfGrid === 1 ? '' : 's'} past the grid edge`);
+    if (droppedOffTriangle) parts.push(`${droppedOffTriangle} cell${droppedOffTriangle === 1 ? '' : 's'} below the triangle diagonal`);
+    if (droppedNonNumeric)  parts.push(`${droppedNonNumeric} non-numeric value${droppedNonNumeric === 1 ? '' : 's'}`);
+    if (parts.length && showToast) {
+      showToast(`Skipped ${parts.join(', ')}.`, 5000);
+    }
+  }, [inTriangle, numDevYears]);
 
   return (
     <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill} onBeforeNext={save} onBeforeBack={save}>
       {({ showToast }) => (
         <div className="PROP_TRIANGLES">
           <div style={{ display: 'flex', gap: 24, padding: '10px 16px', marginBottom: 14, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', fontSize: 13, flexWrap: 'wrap' }}>
-            <div style={{ color: 'rgba(255,255,255,0.5)' }}>Start Year: <b style={{ color: '#e5e7eb' }}>{startYear}</b></div>
-            <div style={{ color: 'rgba(255,255,255,0.5)' }}>Inception Year: <b style={{ color: '#e5e7eb' }}>{inceptionYear}</b></div>
-            <div style={{ color: 'rgba(255,255,255,0.5)' }}>Development Years: <b style={{ color: '#23d18b' }}>{numDevYears}</b></div>
+            <div style={{ color: 'var(--text-subtle)' }}>Start Year: <b style={{ color: 'var(--text)' }}>{startYear}</b></div>
+            <div style={{ color: 'var(--text-subtle)' }}>Inception Year: <b style={{ color: 'var(--text)' }}>{inceptionYear}</b></div>
+            <div style={{ color: 'var(--text-subtle)' }}>Development Years: <b style={{ color: 'var(--accent)' }}>{numDevYears}</b></div>
           </div>
           {loading ? <div className="muted">Loading…</div> : (
             <div style={{ overflowX: 'auto' }}>
@@ -162,7 +195,7 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
                     {devYears.map((_, c) => { const maxCol = numDevYears - r - 1; const off = c > maxCol; return (
                       <td key={c} className={off ? 'tri-off' : 'tri-cell'}>{off ? '' : isDerived
                         ? <div className="tri-inp" style={{ color: 'rgba(226,232,240,0.88)' }}>{grid[r]?.[c] ?? ''}</div>
-                        : <input className="tri-inp" type="text" value={grid[r]?.[c] ?? ''} data-row={r} data-col={c} onChange={e => updateCell(r, c, e.target.value)} onBlur={() => handleBlur(r, c)} onPaste={handlePaste} />}</td>
+                        : <input className="tri-inp" type="text" value={grid[r]?.[c] ?? ''} data-row={r} data-col={c} onChange={e => updateCell(r, c, e.target.value)} onBlur={() => handleBlur(r, c)} onPaste={(e) => handlePaste(e, showToast)} />}</td>
                     ); })}
                   </tr>
                 ))}</tbody>
