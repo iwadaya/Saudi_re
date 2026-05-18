@@ -85,9 +85,10 @@ export const npSaveSchema = z.object({
  */
 export const egnpiYearPutSchema = z.object({
   rows: z.array(z.object({
-    uw_year:       uwYear,
-    egnpi:         numish,
-    inflation_pct: numish,
+    uw_year:         uwYear,
+    egnpi:           numish,
+    inflation_pct:   numish,
+    rate_change_pct: numish, // per-year rate change for on-level adjustment
   }).passthrough()).default([]),
 }).passthrough();
 
@@ -196,4 +197,18 @@ export const historicalPerfPutSchema = z.object({
     expense_ratio:  numish,
     combined_ratio: numish,
   }).passthrough()).default([]),
+}).passthrough();
+
+/**
+ * PUT /api/{treaties|quotes}/:id/np/stop-loss-pricing
+ *
+ * Persists the underwriter's Stop Loss / Aggregate XL pricing
+ * inputs (and a snapshot of the resolved outputs) for replay across
+ * sessions. We accept the full screen state as JSON rather than
+ * normalised rows — the input shape evolves with the engine and
+ * passthrough() keeps it forward-compatible with new fields.
+ */
+export const stopLossPricingPutSchema = z.object({
+  inputs:  z.record(z.unknown()).default({}),
+  outputs: z.record(z.unknown()).optional().nullable(),
 }).passthrough();

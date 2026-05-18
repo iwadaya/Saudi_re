@@ -5,6 +5,7 @@ import { useGlobalToast } from '../../hooks/useToast';
 import { useAppState } from '../../context/AppContext';
 import { api } from '../../api';
 import { toN as cn } from '../../utils/format';
+import { isNpStopLossTreaty } from '../../utils/npTreatyType';
 
 /* ── Helpers ── */
 function stableStringify(obj){
@@ -490,15 +491,46 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
     })();
   },[appState.npStructureLayers, appState.quoteMode, contractId, lossType, td.eventLimit, td.qsLimit, td.totalCapacity]);
 
-  useEffect(()=>{
-    if(!losses.length||xm<=0)return;
-    const fit=fitPareto(losses.map(l=>l.inflated),xm);
-    if(fit.alpha>0)setAlpha(fit.alpha);
-  },[losses,xm]);
+  // Stop Loss treaties fit the curves to YEARLY AGGREGATES of the
+  // selected losses rather than to per-claim severities. This matches
+  // the way an aggregate-attaching cover is priced: we're modelling
+  // the distribution of total annual loss, not the size of a single
+  // claim. For Risk XL / Cat XL the fit stays on per-claim losses
+  // (severity model, used for individual-layer pricing).
+  const stopLossTreaty = isNpStopLossTreaty(appState);
 
-  const inflated=useMemo(()=>losses.map(l=>l.inflated),[losses]);
+  const yearlyAggregates = useMemo(() => {
+    if (!stopLossTreaty) return [];
+    const byYear = new Map();
+    for (const l of losses) {
+      const y = Number(l.uw_year);
+      if (!Number.isFinite(y)) continue;
+      const v = cn(l.inflated);
+      if (!(v > 0)) continue;
+      byYear.set(y, (byYear.get(y) || 0) + v);
+    }
+    // Sort by year so the table reads chronologically.
+    return [...byYear.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([year, inflated]) => ({ uw_year: year, inflated }));
+  }, [stopLossTreaty, losses]);
+
+  // The array fed to fitPareto / fitAll. In stop-loss mode this is one
+  // entry per UW year; otherwise one entry per loss.
+  const fitInput = useMemo(
+    () => (stopLossTreaty ? yearlyAggregates : losses),
+    [stopLossTreaty, yearlyAggregates, losses],
+  );
+
+  useEffect(()=>{
+    if(!fitInput.length||xm<=0)return;
+    const fit=fitPareto(fitInput.map(l=>l.inflated),xm);
+    if(fit.alpha>0)setAlpha(fit.alpha);
+  },[fitInput,xm]);
+
+  const inflated=useMemo(()=>fitInput.map(l=>l.inflated),[fitInput]);
   const fits=useMemo(()=>fitAll(inflated,xm),[inflated,xm]);
-  const sorted=useMemo(()=>[...losses].sort((a,b)=>b.inflated-a.inflated),[losses]);
+  const sorted=useMemo(()=>[...fitInput].sort((a,b)=>b.inflated-a.inflated),[fitInput]);
   const total=useMemo(()=>sorted.reduce((s,l)=>s+l.inflated,0),[sorted]);
   const pareto=useMemo(()=>{let c=0;return sorted.map((l,i)=>{c+=l.inflated;return{...l,rank:i+1,cum:c,cumPct:total>0?c/total:0};});},[sorted,total]);
 
@@ -594,7 +626,7 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
   const avg=count>0?total/count:0;
   const mxL=count>0?pareto[0].inflated:0;
   const mnL=count>0?pareto[count-1].inflated:0;
-  const sd=Math.sqrt(count>0?losses.reduce((a,l)=>a+Math.pow(l.inflated-avg,2),0)/count:0);
+  const sd=Math.sqrt(count>0?fitInput.reduce((a,l)=>a+Math.pow(l.inflated-avg,2),0)/count:0);
   const t5=count>=5?pareto[4].cumPct:count>0?pareto[count-1].cumPct:0;
   const uwYrs=Number(yearsOvr)||10;
   const freq=inflated.filter(l=>l>=xm).length/uwYrs;
@@ -612,8 +644,14 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
             {/* HERO */}
             <div className="llp-hero">
               <div className="llp-hero-left">
-                <div className="llp-title">Severity Distribution Fit</div>
-                <div className="llp-subtitle">Fit parametric distributions to {lossType} losses. Adjust threshold and limit. Compare Pareto, Lognormal, Exponential, Weibull via KS goodness-of-fit.</div>
+                <div className="llp-title">
+                  {stopLossTreaty ? 'Aggregate Distribution Fit' : 'Severity Distribution Fit'}
+                </div>
+                <div className="llp-subtitle">
+                  {stopLossTreaty
+                    ? `Stop Loss treaty: fitting Pareto / Lognormal / Exponential / Weibull to YEARLY AGGREGATES of selected ${lossType} losses (${yearlyAggregates.length} year${yearlyAggregates.length === 1 ? '' : 's'}). Toggle individual losses on the previous step to change the input.`
+                    : `Fit parametric distributions to ${lossType} losses. Adjust threshold and limit. Compare Pareto, Lognormal, Exponential, Weibull via KS goodness-of-fit.`}
+                </div>
               </div>
               <div className="llp-hero-right" style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
                 {saving && <span style={{fontSize:11,color:'rgba(255,255,255,.4)'}}>Saving…</span>}
@@ -744,17 +782,31 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
 
             {/* PARETO RANKING TABLE */}
             <div className="llp-card glass" style={{marginTop:16}}>
-              <div className="llp-card-head"><div><div className="llp-card-title">Pareto Ranking</div></div></div>
+              <div className="llp-card-head"><div><div className="llp-card-title">{stopLossTreaty ? 'Yearly Aggregates · Ranking' : 'Pareto Ranking'}</div></div></div>
               <div style={{overflowX:'auto'}}>
-                <table className="llp-table" style={{width:'100%'}}>
-                  <thead><tr><th>#</th><th>UW Yr</th><th>Insured / Event</th><th>Loss</th><th className="num">Paid</th><th className="num">OS</th><th className="num">Incurred</th><th>Infl.</th><th className="num">Inflated</th><th className="num">Cum%</th></tr></thead>
-                  <tbody>{pareto.map(p=>(
-                    <tr key={p.rank}><td>{p.rank}</td><td>{p.uw_year||'—'}</td><td>{p.insured_name||p.event_name||'—'}</td><td>{p.loss_name||'—'}</td>
-                      <td className="num">{fmt(cn(p.paid))}</td><td className="num">{fmt(cn(p.os))}</td><td className="num">{fmt(p.incurred)}</td>
-                      <td>{cn(p.inflation_factor).toFixed(2)}</td><td className="num" style={{fontWeight:600}}>{fmt(p.inflated)}</td>
-                      <td className="num" style={{color:p.cumPct>.8?'#f97316':'#4ade80'}}>{fPct(p.cumPct)}</td></tr>
-                  ))}</tbody>
-                </table>
+                {stopLossTreaty ? (
+                  <table className="llp-table" style={{width:'100%'}}>
+                    <thead><tr><th>#</th><th>UW Yr</th><th className="num">Aggregate (Inflated)</th><th className="num">Cum%</th></tr></thead>
+                    <tbody>{pareto.map(p=>(
+                      <tr key={p.rank}>
+                        <td>{p.rank}</td>
+                        <td>{p.uw_year||'—'}</td>
+                        <td className="num" style={{fontWeight:600}}>{fmt(p.inflated)}</td>
+                        <td className="num" style={{color:p.cumPct>.8?'#f97316':'#4ade80'}}>{fPct(p.cumPct)}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                ) : (
+                  <table className="llp-table" style={{width:'100%'}}>
+                    <thead><tr><th>#</th><th>UW Yr</th><th>Insured / Event</th><th>Loss</th><th className="num">Paid</th><th className="num">OS</th><th className="num">Incurred</th><th>Infl.</th><th className="num">Inflated</th><th className="num">Cum%</th></tr></thead>
+                    <tbody>{pareto.map(p=>(
+                      <tr key={p.rank}><td>{p.rank}</td><td>{p.uw_year||'—'}</td><td>{p.insured_name||p.event_name||'—'}</td><td>{p.loss_name||'—'}</td>
+                        <td className="num">{fmt(cn(p.paid))}</td><td className="num">{fmt(cn(p.os))}</td><td className="num">{fmt(p.incurred)}</td>
+                        <td>{cn(p.inflation_factor).toFixed(2)}</td><td className="num" style={{fontWeight:600}}>{fmt(p.inflated)}</td>
+                        <td className="num" style={{color:p.cumPct>.8?'#f97316':'#4ade80'}}>{fPct(p.cumPct)}</td></tr>
+                    ))}</tbody>
+                  </table>
+                )}
               </div>
             </div>
           </>)}

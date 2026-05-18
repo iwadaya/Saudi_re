@@ -53,6 +53,7 @@ const NpClaimsProfile = lazy(() => import('../screens/non_proportional/claims_pr
 const NpCrestaAggregates = lazy(() => import('../screens/non_proportional/cresta_zones/NpCrestaAggregates'));
 const NpEventLossTables = lazy(() => import('../screens/non_proportional/event_loss_tables/NpEventLossTables'));
 const NpFinalPricing    = lazy(() => import('../screens/non_proportional/final_pricing/NpFinalPricing'));
+const NpStopLossPricing = lazy(() => import('../screens/non_proportional/stop_loss_pricing/NpStopLossPricing'));
 const ExcelImportAgent  = lazy(() => import('../screens/shared/ExcelImportAgent'));
 const QuickBenchmark    = lazy(() => import('../screens/benchmark/QuickBenchmark'));
 const UserManagementScreen = lazy(() => import('../screens/admin/UserManagementScreen'));
@@ -127,6 +128,7 @@ export const appRoutes = [
   { path: '/np/claims-profile', component: NpClaimsProfile },
   { path: '/np/cresta-aggregates', component: NpCrestaAggregates },
   { path: '/np/event-loss-tables', component: NpEventLossTables },
+  { path: '/np/stop-loss-pricing', component: NpStopLossPricing },
   { path: '/np/final-pricing', component: NpFinalPricing },
   { path: '/np/final-quote', component: NpFinalPricing },
   { path: '/benchmark', component: QuickBenchmark },

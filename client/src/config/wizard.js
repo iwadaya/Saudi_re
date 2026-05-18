@@ -47,6 +47,7 @@ export const NP_WIZARD_ORDER = [
   'NP_CLAIMS_PROFILE',
   'NP_CRESTA_AGGREGATES',
   'NP_EVENT_LOSS_TABLES',
+  'NP_STOP_LOSS_PRICING',
   'NP_FINAL_PRICING',
 ];
 
@@ -130,6 +131,7 @@ export const STEP_LABELS = {
   NP_CLAIMS_PROFILE: 'Claims Profile',
   NP_CRESTA_AGGREGATES: 'CRESTA Aggregates',
   NP_EVENT_LOSS_TABLES: 'Event Loss Tables',
+  NP_STOP_LOSS_PRICING: 'Stop Loss Pricing',
   NP_FINAL_PRICING: 'Final Pricing',
   NP_FINAL_QUOTE: 'Final Quote',
   // Facultative
@@ -199,6 +201,7 @@ export const ROUTE_PATHS = {
   NP_CLAIMS_PROFILE: '/np/claims-profile',
   NP_CRESTA_AGGREGATES: '/np/cresta-aggregates',
   NP_EVENT_LOSS_TABLES: '/np/event-loss-tables',
+  NP_STOP_LOSS_PRICING: '/np/stop-loss-pricing',
   NP_FINAL_PRICING: '/np/final-pricing',
   NP_FINAL_QUOTE: '/np/final-quote',
   // Facultative
@@ -219,7 +222,7 @@ export const PATH_TO_ROUTE = Object.fromEntries(
 );
 
 // Get wizard navigation for a given route key and mode
-export function getWizardNav(routeKey, { quoteMode = false, triangulationsEnabled = true, npCatDisabled = false, npRiskDisabled = false } = {}) {
+export function getWizardNav(routeKey, { quoteMode = false, triangulationsEnabled = true, npCatDisabled = false, npRiskDisabled = false, npStopLoss = false } = {}) {
   let order;
   if (routeKey.startsWith('FAC_')) {
     order = [...FAC_WIZARD_ORDER];
@@ -237,6 +240,16 @@ export function getWizardNav(routeKey, { quoteMode = false, triangulationsEnable
     if (npRiskDisabled) {
       // CAT XL: remove all large-loss/risk screens
       order = order.filter(k => !k.startsWith('NP_LARGE_LOSS_'));
+    }
+    // Stop Loss / Aggregate XL is only meaningful for treaty types
+    // that price an aggregate-loss cover — hide the screen elsewhere.
+    if (!npStopLoss) {
+      order = order.filter(k => k !== 'NP_STOP_LOSS_PRICING');
+    } else {
+      // For Stop Loss treaties the Final Pricing screen (layer-grid
+      // pricing for Risk XL / Cat XL) doesn't apply — the dedicated
+      // Stop Loss Pricing step is the terminal pricing surface.
+      order = order.filter(k => k !== 'NP_FINAL_PRICING');
     }
   } else {
     order = [...PROP_WIZARD_ORDER];
@@ -281,7 +294,7 @@ export const NP_TAB_GROUPS = [
   { label: 'Experience', keys: ['NP_EXCESS_DEV_FACTORS', 'NP_HISTORICAL_PERFORMANCE'] },
   { label: 'Profiles', keys: ['NP_RISK_PROFILE', 'NP_CLAIMS_PROFILE'] },
   { label: 'Exposure', keys: ['NP_CRESTA_AGGREGATES', 'NP_EVENT_LOSS_TABLES'] },
-  { label: 'Pricing', keys: ['NP_FINAL_PRICING', 'NP_FINAL_QUOTE'] },
+  { label: 'Pricing', keys: ['NP_STOP_LOSS_PRICING', 'NP_FINAL_PRICING', 'NP_FINAL_QUOTE'] },
 ];
 
 // ── Facultative Wizard ────────────────────────────────────────────────────────

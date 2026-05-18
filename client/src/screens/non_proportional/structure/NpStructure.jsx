@@ -6,7 +6,7 @@ import { useAppState } from '../../../context/AppContext';
 import { ACTIVE_QUOTE_ID } from '../../../constants/storageKeys';
 import { handleStaleWrite } from '../../../utils/handleStaleWrite';
 import WizardLayout from '../../../components/WizardLayout';
-import { getNpTreatyTypeMode } from '../../../utils/npTreatyType';
+import { getNpTreatyTypeMode, isNpStopLossTreaty, isNpAggregateXlTreaty } from '../../../utils/npTreatyType';
 import {
   toNum, rateToFloat, appendPct, fmtPctMaybe,
   strOrEmpty, strRate, parseExcelInt, parseClipboard,
@@ -15,6 +15,9 @@ import {
   CommaInput, RateInput, PctInput,
 } from './NpStructureHelpers';
 import { QuoteStructureSection } from './QuoteStructureSection';
+import NpStopLossStructure from './NpStopLossStructure';
+import NpStopLossExpiring from '../expiring_structure/NpStopLossExpiring';
+import NpAggregateXlStructure from './NpAggregateXlStructure';
 
 const ROUTE_KEY = 'NP_STRUCTURE';
 
@@ -948,11 +951,25 @@ export default function NpStructure() {
     return opts;
   }, []);
 
+  // Stop Loss + Aggregate XL each have their own structure surfaces
+  // (different shapes from the Risk XL / Cat XL layer grid). Short-
+  // circuit the regular layout so each treaty type renders its
+  // dedicated setup instead.
+  const stopLossTreaty = isNpStopLossTreaty(appState);
+  const aggregateXlTreaty = isNpAggregateXlTreaty(appState);
+
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Structure" headerPill={`${quoteMode ? 'NP-QUOTE TREATY' : 'NON-PROPORTIONAL TREATY'}: STRUCTURE`} onBeforeNext={save} onBeforeBack={save}>
       {() => (
         <div className="NP_STRUCTURE">
-          {loading ? <div className="df-card df-card--notice"><div className="df-note">Loading...</div></div> : (
+          {stopLossTreaty ? (
+            <>
+              <NpStopLossStructure currency={currency} />
+              <NpStopLossExpiring currency={currency} />
+            </>
+          ) : aggregateXlTreaty ? (
+            <NpAggregateXlStructure currency={currency} />
+          ) : loading ? <div className="df-card df-card--notice"><div className="df-note">Loading...</div></div> : (
             <>
               {/* ═══ QUOTE: Structures to Quote selector ═══ */}
               {quoteMode && (

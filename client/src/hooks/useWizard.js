@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCallback } from 'react';
 import { useAppState } from '../context/AppContext';
 import { getWizardNav, ROUTE_PATHS } from '../config/wizard';
-import { isNpCatFlowDisabled, isNpRiskFlowDisabled } from '../utils/npTreatyType';
+import { isNpCatFlowDisabled, isNpRiskFlowDisabled, isNpStopLossTreaty } from '../utils/npTreatyType';
 
 export function useWizard(routeKey) {
   const navigate = useNavigate();
@@ -14,8 +14,9 @@ export function useWizard(routeKey) {
   const wizardMode = routeKey?.startsWith('FAC_') ? 'FAC' : routeKey?.startsWith('NP_') ? 'NP' : 'PROP';
   const npCatDisabled  = isNpCatFlowDisabled(appState);
   const npRiskDisabled = isNpRiskFlowDisabled(appState);
+  const npStopLoss     = isNpStopLossTreaty(appState);
 
-  const nav = getWizardNav(routeKey, { wizardMode, quoteMode, triangulationsEnabled, npCatDisabled, npRiskDisabled });
+  const nav = getWizardNav(routeKey, { wizardMode, quoteMode, triangulationsEnabled, npCatDisabled, npRiskDisabled, npStopLoss });
 
   const goTo = useCallback((key) => {
     const path = ROUTE_PATHS[key];

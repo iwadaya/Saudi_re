@@ -12,6 +12,7 @@ import {
   npExpiringPutSchema,
   excessLdfsPutSchema,
   historicalPerfPutSchema,
+  stopLossPricingPutSchema,
 } from '../validation/nonProp.js';
 import { verifyNpPricingOutputs, summariseDrifts, isStrictMode, pricingDriftStats } from '../lib/pricingVerifier.js';
 import { logger } from '../lib/logger.js';
@@ -223,8 +224,8 @@ router.put("/treaties/:id/np/egnpi-year", validateBody(egnpiYearPutSchema), asyn
   try{await cl.query("BEGIN");await cl.query(`DELETE FROM public.contract_np_egnpi_year WHERE contract_id=$1`,[id]);
   const egnpiInsert = buildBatchInsert({
     table: 'public.contract_np_egnpi_year',
-    columns: ['contract_id','uw_year','egnpi','inflation_pct'],
-    rows: inputRows.map((r) => [r.uw_year, numOrNull(r.egnpi), numOrNull(r.inflation_pct)]),
+    columns: ['contract_id','uw_year','egnpi','inflation_pct','rate_change_pct'],
+    rows: inputRows.map((r) => [r.uw_year, numOrNull(r.egnpi), numOrNull(r.inflation_pct), numOrNull(r.rate_change_pct)]),
     leadingId: id,
   });
   if (egnpiInsert) await cl.query(egnpiInsert.sql, egnpiInsert.params);
@@ -833,5 +834,58 @@ router.get("/treaties/:id/np/historical-performance", asyncHandler(historicalPer
 router.get("/quotes/:id/np/historical-performance", asyncHandler(historicalPerformanceGet));
 router.put("/treaties/:id/np/historical-performance", validateBody(historicalPerfPutSchema), asyncHandler(historicalPerformancePut));
 router.put("/quotes/:id/np/historical-performance", validateBody(historicalPerfPutSchema), asyncHandler(historicalPerformancePut));
+
+// ── Stop Loss / Aggregate XL pricing ────────────────────────────────────────
+// One row per contract/quote in {contract|quote}_np_stop_loss_pricing —
+// inputs + outputs are JSONB. PUT is an upsert so the underwriter's
+// last save is always the row that comes back on GET.
+async function stopLossPricingGet(req, res) {
+  const ctx = entityContext(req);
+  const { rows } = await pool.query(
+    `SELECT inputs, outputs, updated_at
+     FROM public.${ctx.npTable('stop_loss_pricing')}
+     WHERE ${ctx.idColumn} = $1`,
+    [req.params.id]
+  );
+  if (!rows.length) {
+    res.json({ inputs: {}, outputs: null });
+    return;
+  }
+  res.json(rows[0]);
+}
+
+async function stopLossPricingPut(req, res) {
+  const ctx = entityContext(req);
+  const { id } = req.params;
+  const inputs  = req.body?.inputs  ?? {};
+  const outputs = req.body?.outputs ?? null;
+  const cl = await pool.connect();
+  try {
+    await cl.query("BEGIN");
+    await cl.query(
+      `INSERT INTO public.${ctx.npTable('stop_loss_pricing')}
+         (${ctx.idColumn}, inputs, outputs)
+       VALUES ($1, $2::jsonb, $3::jsonb)
+       ON CONFLICT (${ctx.idColumn}) DO UPDATE
+         SET inputs = EXCLUDED.inputs,
+             outputs = EXCLUDED.outputs,
+             updated_at = now()`,
+      [id, JSON.stringify(inputs), outputs == null ? null : JSON.stringify(outputs)]
+    );
+    const updatedAt = await touchParentEntity(cl, {
+      parentTable: ctx.parentTable,
+      idColumn: ctx.idColumn,
+      id,
+    });
+    await cl.query("COMMIT");
+    res.json({ ok: true, updated_at: updatedAt });
+  } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; }
+  finally { cl.release(); }
+}
+
+router.get("/treaties/:id/np/stop-loss-pricing", asyncHandler(stopLossPricingGet));
+router.get("/quotes/:id/np/stop-loss-pricing",  asyncHandler(stopLossPricingGet));
+router.put("/treaties/:id/np/stop-loss-pricing", validateBody(stopLossPricingPutSchema), asyncHandler(stopLossPricingPut));
+router.put("/quotes/:id/np/stop-loss-pricing",  validateBody(stopLossPricingPutSchema), asyncHandler(stopLossPricingPut));
 
 export default router;

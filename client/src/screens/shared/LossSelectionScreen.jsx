@@ -37,6 +37,9 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
   const [showLoadingModal, setShowLoadingModal] = useState(false);
   const [premiumLoading, setPremiumLoading] = useState(false);
 
+  // Yearly aggregates modal — feeds curve fitting on the Pareto screens.
+  const [showYearlyAggModal, setShowYearlyAggModal] = useState(false);
+
   // Additional loadings
   const [loadings, setLoadings] = useState([]);
 
@@ -428,6 +431,13 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
                   <button className="ls-btn ls-btn--green" onClick={() => { setShowInflModal(true); }}>Inflation{inflData.length > 0 ? ` (${countryName || 'loaded'})` : ''}</button>
                   {lossType === 'cat' && <button className="ls-btn ls-btn--blue" onClick={() => { loadPremiumGrowth(); setShowGrowthModal(true); }}>Growth</button>}
                   <button className="ls-btn ls-btn--amber" onClick={openLoadingModal} title="Per-year losses ÷ premium = loading estimate">📈 Loss Loading</button>
+                  <button
+                    className="ls-btn ls-btn--blue"
+                    onClick={() => setShowYearlyAggModal(true)}
+                    title="Yearly aggregates of selected losses — feeds curve fitting"
+                  >
+                    📊 Yearly Aggregates
+                  </button>
                 </div>
                 <div className="ls-toolbar-right">
                   {saveMsg && <span className={`ls-msg ls-msg--${saveMsg.type}`}>{saveMsg.text}</span>}
@@ -585,7 +595,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
                       {premiumLoading ? (
                         <div className="ls-modal-empty">Loading premiums…</div>
                       ) : premiumByYear.length === 0 ? (
-                        <div className="ls-modal-empty">No premium history found for this contract. Loss-loading needs premium per year (from the premium triangle, straight stats, or NP EGNPI).</div>
+                        <div className="ls-modal-empty">No premium history found for this contract. Loss-loading needs premium per year (from the premium triangle, straight stats, or NP Premium).</div>
                       ) : (
                         <>
                           <div className="ls-infl-table-wrap">
@@ -670,6 +680,15 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
                 </div>
               )}
 
+              {/* ── YEARLY AGGREGATES MODAL ── */}
+              {showYearlyAggModal && (
+                <YearlyAggregatesModal
+                  selected={selected}
+                  onClose={() => setShowYearlyAggModal(false)}
+                  lossType={lossType}
+                />
+              )}
+
               {/* ── GROWTH MODAL (Cat only) ── */}
               {showGrowthModal && lossType === 'cat' && (
                 <div className="ls-modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setShowGrowthModal(false); }}>
@@ -731,5 +750,90 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
     <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill} onBeforeNext={save} onBeforeBack={save}>
       {() => content}
     </WizardLayout>
+  );
+}
+
+/**
+ * Modal listing the inflated aggregate of selected losses grouped by
+ * UW year. These per-year totals are what the curve-fitting screens
+ * (Pareto, Loss Dev Factors) ultimately consume — surfacing them here
+ * lets the underwriter sanity-check the inputs before fitting.
+ */
+function YearlyAggregatesModal({ selected, onClose, lossType }) {
+  const grouped = useMemo(() => {
+    const map = new Map();
+    for (const l of selected) {
+      const y = Number(l.uw_year);
+      if (!Number.isFinite(y)) continue;
+      const inflated = cn(l.incurred) * (cn(l.inflation_factor) || 1);
+      const cur = map.get(y) || { year: y, count: 0, incurred: 0, inflated: 0 };
+      cur.count += 1;
+      cur.incurred += cn(l.incurred);
+      cur.inflated += inflated;
+      map.set(y, cur);
+    }
+    return [...map.values()].sort((a, b) => a.year - b.year);
+  }, [selected]);
+
+  const totals = useMemo(() => grouped.reduce(
+    (s, r) => ({ count: s.count + r.count, incurred: s.incurred + r.incurred, inflated: s.inflated + r.inflated }),
+    { count: 0, incurred: 0, inflated: 0 },
+  ), [grouped]);
+
+  const label = lossType === 'cat' ? 'Cat' : 'Large';
+
+  return (
+    <div className="ls-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="ls-modal">
+        <div className="ls-modal-head">
+          <div className="ls-modal-title">{label} Loss · Yearly Aggregates</div>
+          <button className="ls-modal-x" onClick={onClose}>✕</button>
+        </div>
+        <div className="ls-modal-body">
+          <div className="ls-modal-sub">
+            Aggregate of selected losses by UW year. Inflated values use the
+            inflation factor applied on this screen and feed the Pareto fit
+            on the next step.
+          </div>
+          <div className="ls-table-wrap" style={{ marginTop: 12 }}>
+            <table className="ls-table">
+              <thead>
+                <tr>
+                  <th className="ls-th">UW Year</th>
+                  <th className="ls-th ls-th--r">Count</th>
+                  <th className="ls-th ls-th--r">Incurred (Σ)</th>
+                  <th className="ls-th ls-th--r">Inflated (Σ)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {grouped.length === 0 ? (
+                  <tr><td colSpan={4} style={{ padding: 18, textAlign: 'center', color: 'rgba(148,163,184,0.55)' }}>No losses selected.</td></tr>
+                ) : grouped.map((r) => (
+                  <tr key={r.year}>
+                    <td>{r.year}</td>
+                    <td className="ls-td--r">{r.count}</td>
+                    <td className="ls-td--r">{fmt(r.incurred)}</td>
+                    <td className="ls-td--r" style={{ fontWeight: 700, color: '#4ade80' }}>{fmt(r.inflated)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {grouped.length > 0 && (
+                <tfoot>
+                  <tr style={{ background: 'rgba(0,212,255,0.06)', borderTop: '2px solid rgba(0,212,255,0.30)' }}>
+                    <td style={{ fontWeight: 800, color: '#00d4ff' }}>TOTAL</td>
+                    <td className="ls-td--r" style={{ fontWeight: 700 }}>{totals.count}</td>
+                    <td className="ls-td--r" style={{ fontWeight: 700 }}>{fmt(totals.incurred)}</td>
+                    <td className="ls-td--r" style={{ fontWeight: 800, color: '#4ade80' }}>{fmt(totals.inflated)}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+          <div className="ls-modal-actions">
+            <button className="ls-btn" onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

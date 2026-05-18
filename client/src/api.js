@@ -112,6 +112,7 @@ const PATHS = {
   nonPropTreatySave: (id) => `/api/treaties/${enc(id)}/non-prop/save`,
   npEgnpiYear: (id) => `/api/treaties/${enc(id)}/np/egnpi-year`,
   npHistoricalPerformance: (id) => `/api/treaties/${enc(id)}/np/historical-performance`,
+  npStopLossPricing: (id) => `/api/treaties/${enc(id)}/np/stop-loss-pricing`,
   npLargeLossLdfs: (id) => `/api/treaties/${enc(id)}/np/large-loss-ldfs`,
   npCatLossLdfs: (id) => `/api/treaties/${enc(id)}/np/cat-loss-ldfs`,
   triangle: (id, type) => `/api/treaties/${enc(id)}/triangles/${enc(type)}`,
@@ -169,6 +170,7 @@ const QUOTE_PATHS = {
   nonPropQuoteSave: (id) => `/api/quotes/${enc(id)}/non-prop/save`,
   npEgnpiYear: (id) => `/api/quotes/${enc(id)}/np/egnpi-year`,
   npHistoricalPerformance: (id) => `/api/quotes/${enc(id)}/np/historical-performance`,
+  npStopLossPricing: (id) => `/api/quotes/${enc(id)}/np/stop-loss-pricing`,
   npLargeLossLdfs: (id) => `/api/quotes/${enc(id)}/np/large-loss-ldfs`,
   npCatLossLdfs: (id) => `/api/quotes/${enc(id)}/np/cat-loss-ldfs`,
   triangle: (id, type) => `/api/quotes/${enc(id)}/triangles/${enc(type)}`,
@@ -531,6 +533,12 @@ export const api = {
   },
   saveNpHistoricalPerformance(id, rows, opts) {
     return request(isQuoteMode(opts) ? QUOTE_PATHS.npHistoricalPerformance(id) : PATHS.npHistoricalPerformance(id), { method: 'PUT', body: { rows }, ...opts });
+  },
+  getNpStopLossPricing(id, opts) {
+    return request(isQuoteMode(opts) ? QUOTE_PATHS.npStopLossPricing(id) : PATHS.npStopLossPricing(id), opts);
+  },
+  saveNpStopLossPricing(id, payload, opts) {
+    return request(isQuoteMode(opts) ? QUOTE_PATHS.npStopLossPricing(id) : PATHS.npStopLossPricing(id), { method: 'PUT', body: payload, ...opts });
   },
   getNpLargeLossLdfs(id, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.npLargeLossLdfs(id) : PATHS.npLargeLossLdfs(id), opts); },
   saveNpLargeLossLdfs(id, payload, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.npLargeLossLdfs(id) : PATHS.npLargeLossLdfs(id), { method: 'PUT', body: payload, ...opts }); },
