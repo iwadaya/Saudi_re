@@ -1266,15 +1266,19 @@ router.put("/quotes/:id/np-pricing", asyncHandler(async (req, res) => {
       leadingId: id,
     });
     if (pricingOutputsInsert) await cl.query(pricingOutputsInsert.sql, pricingOutputsInsert.params);
+    // Direct assignment, not COALESCE: NpFinalPricing sends every row
+    // with every field, so a NULL here means the user cleared the cell
+    // and the DB should clear it too. COALESCE used to silently drop
+    // deletions because NULL on the wire was treated as "preserve".
     for(const m of layer_margins) {
       await cl.query(
         `UPDATE public.quote_np_layers
-            SET hist_margin     = COALESCE($3, hist_margin),
-                modelled_margin = COALESCE($4, modelled_margin),
-                tech_ratio      = COALESCE($5, tech_ratio),
-                uw_price        = COALESCE($6, uw_price),
-                expiring_price  = COALESCE($7, expiring_price),
-                lead_price      = COALESCE($8, lead_price),
+            SET hist_margin     = $3,
+                modelled_margin = $4,
+                tech_ratio      = $5,
+                uw_price        = $6,
+                expiring_price  = $7,
+                lead_price      = $8,
                 updated_at      = now()
           WHERE quote_id = $1 AND layer_number = $2`,
         [id, m.layer_number,

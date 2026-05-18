@@ -356,7 +356,13 @@ export default function NpPremiumsTable() {
       },
     };
     try {
-      try { await api.saveNpEgnpiYear(contractId, { rows: egnpiPayload }, quoteMode ? { quote: true } : undefined); } catch {}
+      // Relational write first: it's the source of truth for downstream
+      // screens (loss tabs, NpStopLossPricing burning cost). If it fails
+      // we bail before the JSONB write so the two stores can't drift —
+      // an empty catch here used to swallow the relational failure and
+      // let the JSONB save report success even though the relational
+      // table was stale.
+      await api.saveNpEgnpiYear(contractId, { rows: egnpiPayload }, quoteMode ? { quote: true } : undefined);
       await api.saveNonPropTreaty(contractId, payload, quoteMode ? { quote: true } : undefined);
       return true;
     } catch (e) {

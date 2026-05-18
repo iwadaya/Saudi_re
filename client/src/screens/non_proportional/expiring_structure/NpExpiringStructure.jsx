@@ -7,6 +7,7 @@ import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import { formatWithCommas, sanitizeNumber, toN, toNullableN } from '../../../utils/format';
 import { getNpTreatyTypeMode, isNpStopLossTreaty } from '../../../utils/npTreatyType';
+import { handleStaleWrite } from '../../../utils/handleStaleWrite';
 import NpStopLossExpiring from './NpStopLossExpiring';
 
 const ROUTE_KEY = 'NP_EXPIRING_STRUCTURE';
@@ -378,6 +379,12 @@ export default function NpExpiringStructure() {
   const [autoPopMsg, setAutoPopMsg] = useState('');
   const [saveMsg, setSaveMsg] = useState('');
   const [showCurveModal, setShowCurveModal] = useState(false);
+  // Parent-entity timestamp for optimistic locking. Seeded from the load
+  // response and updated after each successful save, so a concurrent
+  // save by NpStructure (which writes the same expiring endpoint with
+  // its own If-Unmodified-Since) returns STALE_WRITE here instead of
+  // silently clobbering.
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const dirty = useRef(false);
   const loaded = useRef(false);
 
@@ -414,6 +421,11 @@ export default function NpExpiringStructure() {
     api.getNpExpiring(contractId, isQuote ? { quote: true } : undefined)
       .then(data => {
         if (cancelled) return;
+        // Seed the optimistic-lock baseline even if we're going to skip
+        // the rest of the load (dirty + already-loaded path) — the
+        // freshly-fetched parent timestamp is still the most recent
+        // value we've seen for the lock.
+        if (data?.updated_at) setLastUpdatedAt(data.updated_at);
         // Don't clobber unsaved edits with a fresh load. This matters when the
         // effect re-runs because of a non-contract dep change (quoteMode) and
         // the user already has dirty state on screen.
@@ -538,21 +550,38 @@ export default function NpExpiringStructure() {
       },
       coveredProps: coveredProps.filter(r => r.programme || r.qsLimit || r.retentionPct || r.surplusLines),
     };
+    const isQuoteSave = appState.quoteMode || (() => {
+      try { return localStorage.getItem(ACTIVE_QUOTE_ID) === contractId; } catch { return false; }
+    })();
+    // Optimistic-lock plumbing mirrors NpStructure: the special '*'
+    // override is what the stale-write modal's "overwrite" branch
+    // sends, bypassing the lock for that one retry.
+    const lockOverride = opts?.ifUnmodifiedSince;
+    const activeLock = lockOverride || lastUpdatedAt;
+    const requestOpts = isQuoteSave
+      ? { quote: true, ...(activeLock ? { ifUnmodifiedSince: activeLock } : {}) }
+      : (activeLock ? { ifUnmodifiedSince: activeLock } : undefined);
     try {
-      const isQuoteSave = appState.quoteMode || (() => {
-        try { return localStorage.getItem(ACTIVE_QUOTE_ID) === contractId; } catch { return false; }
-      })();
-      await api.saveNpExpiring(contractId, payload, isQuoteSave ? { quote: true } : undefined);
+      const response = await api.saveNpExpiring(contractId, payload, requestOpts);
+      if (response?.updated_at) setLastUpdatedAt(response.updated_at);
       dirty.current = false;
       setSaveMsg('Saved ✓');
       setTimeout(() => setSaveMsg(''), 2000);
       return true;
     } catch (e) {
       console.warn('NP Expiring Structure save failed:', e);
+      if (lockOverride !== '*') {
+        const stale = await handleStaleWrite(e, {
+          entityType: isQuoteSave ? 'quote expiring structure' : 'expiring structure',
+          onRefresh: () => window.location.reload(),
+          onOverwrite: () => save({ ...opts, ifUnmodifiedSince: '*' }),
+        });
+        if (stale.handled) return stale.action === 'overwrite' ? !!stale.result : false;
+      }
       setSaveMsg('Save failed');
       return opts.quiet ? true : false;
     }
-  }, [contractId, layers, terms, coveredProps, appState.quoteMode]);
+  }, [contractId, layers, terms, coveredProps, appState.quoteMode, lastUpdatedAt]);
 
   const handleManualSave = useCallback(async () => {
     dirty.current = true; // force save even if no changes detected

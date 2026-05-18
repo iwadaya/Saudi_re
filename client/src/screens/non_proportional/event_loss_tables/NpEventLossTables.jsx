@@ -9,7 +9,11 @@ const COLS = ['eventId','peril','region','returnPeriod','grossLoss','netQs','net
 const HEADERS = ['Event ID','Peril','Region / CRESTA','Return Period (yrs)','Gross Loss','Net of QS','Net of XL','Ultimate Net Loss','Comment'];
 
 function defaultRows() {
-  return [1,2,3,4].map(i=>({eventId:`EVT-${10000+i}`,peril:'EQ',region:`CRESTA 0${i} / Region`,returnPeriod:String([250,100,50,20][(i-1)%4]),grossLoss:'0',netQs:'0',netXl:'0',ultimateNetLoss:'0',comment:'Top driver...'}));
+  // Four visibly empty rows. Used both as the first-render placeholder
+  // when no saved data exists and as the target of "Clear Events" —
+  // the save filter already drops rows with no content, so empty rows
+  // never reach the server.
+  return [0,1,2,3].map(() => Object.fromEntries(COLS.map(c => [c, ''])));
 }
 
 export default function NpEventLossTables() {

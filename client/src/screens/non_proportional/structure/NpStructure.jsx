@@ -44,6 +44,19 @@ export default function NpStructure() {
   const [showExpCurveModal, setShowExpCurveModal] = useState(false);
   const dirty = useRef(false);
 
+  // Live mirrors of the Stop Loss / Aggregate XL slices. The load
+  // effect's deps deliberately don't include these (we don't want
+  // re-loads on every keystroke), so its closure can't see fresh
+  // slice values — refs let the merge step read the latest in-flight
+  // edits at the moment the server response arrives. Mirrors the
+  // sliceRef pattern in NpStopLossPricing.onLoaded.
+  const stopLossSliceRef = useRef(appState.npStopLossInputs);
+  stopLossSliceRef.current = appState.npStopLossInputs;
+  const aggregateXlSliceRef = useRef(appState.npAggregateXlInputs);
+  aggregateXlSliceRef.current = appState.npAggregateXlInputs;
+  const stopLossExpiringSliceRef = useRef(appState.npStopLossExpiring);
+  stopLossExpiringSliceRef.current = appState.npStopLossExpiring;
+
   /* Quote mode detection */
   const quoteMode = !!(appState.quoteMode) || (() => {
     try { return !!localStorage.getItem(ACTIVE_QUOTE_ID); } catch { return false; }
@@ -342,6 +355,40 @@ export default function NpStructure() {
         // Covered props
         const cp = saved.coveredProps || saved.covered_props || [];
         setCoveredProps(cp.length > 0 ? cp : [emptyCoveredProp()]);
+
+        // Round-trip Stop Loss / Aggregate XL slices from the JSONB
+        // backup written by save() below. The Structure screen renders
+        // NpStopLossStructure / NpStopLossExpiring / NpAggregateXlStructure
+        // but those components only write to AppContext slices — their
+        // canonical save endpoint (saveNpStopLossPricing) lives on the
+        // Pricing screen, and Aggregate XL has no rescue path at all.
+        // Without this hydrate, a refresh on Structure loses Aggregate
+        // XL entirely, and loses Stop Loss unless the user reached
+        // Pricing first. Merge under in-flight slice edits — non-empty
+        // existing fields win, server fills the rest — matching the
+        // pattern in NpStopLossPricing.onLoaded.
+        const mergeWithCurrent = (current, incoming) => {
+          const merged = { ...(incoming || {}) };
+          const cur = current || {};
+          for (const k of Object.keys(cur)) {
+            const v = cur[k];
+            const hasValue = v !== undefined
+              && v !== null
+              && v !== ''
+              && !(Array.isArray(v) && v.length === 0);
+            if (hasValue) merged[k] = v;
+          }
+          return merged;
+        };
+        if (saved.stop_loss && typeof saved.stop_loss === 'object') {
+          setSlice('npStopLossInputs', mergeWithCurrent(stopLossSliceRef.current, saved.stop_loss));
+        }
+        if (saved.aggregate_xl && typeof saved.aggregate_xl === 'object') {
+          setSlice('npAggregateXlInputs', mergeWithCurrent(aggregateXlSliceRef.current, saved.aggregate_xl));
+        }
+        if (saved.stop_loss_expiring && typeof saved.stop_loss_expiring === 'object') {
+          setSlice('npStopLossExpiring', mergeWithCurrent(stopLossExpiringSliceRef.current, saved.stop_loss_expiring));
+        }
       })
       .catch(() => {
         const count = getNumLayers();
@@ -717,6 +764,23 @@ export default function NpStructure() {
     };
     const pn = v => { const s = String(v ?? '').replace(/,/g, ''); const n = parseFloat(s); return Number.isFinite(n) ? n : null; };
 
+    // Backup the Stop Loss / Aggregate XL slices into terms.np_structure
+    // JSONB. These sub-component slices have no relational save path
+    // here (Stop Loss is canonically saved by NpStopLossPricing's own
+    // endpoint; Aggregate XL has none), so without this backup a
+    // refresh on the Structure tab loses the user's edits. Store the
+    // literal slice values — the consuming sub-components own the
+    // shape, this screen just round-trips it.
+    const stopLossInputs = appState.npStopLossInputs;
+    const aggregateXlInputs = appState.npAggregateXlInputs;
+    const stopLossExpiring = appState.npStopLossExpiring;
+    const hasKeys = (o) => o && typeof o === 'object' && Object.keys(o).length > 0;
+    const npStructureSliceBackup = {
+      ...(hasKeys(stopLossInputs)     ? { stop_loss:          stopLossInputs }     : {}),
+      ...(hasKeys(aggregateXlInputs)  ? { aggregate_xl:       aggregateXlInputs }  : {}),
+      ...(hasKeys(stopLossExpiring)   ? { stop_loss_expiring: stopLossExpiring }   : {}),
+    };
+
     let payload;
     if (quoteMode) {
       /* ── Quote mode: collect data from each QuoteStructureSection via context refs ── */
@@ -791,6 +855,7 @@ export default function NpStructure() {
             coveredProps: coveredProps.filter(r => r.cobId || r.qsLimit).map(r => ({
               cobId: r.cobId, qsLimit: r.qsLimit, retentionPct: r.retentionPct, surplusLines: r.surplusLines,
             })),
+            ...npStructureSliceBackup,
           },
         },
       };
@@ -857,6 +922,7 @@ export default function NpStructure() {
             coveredProps: coveredProps.filter(r => r.cobId || r.qsLimit).map(r => ({
               cobId: r.cobId, qsLimit: r.qsLimit, retentionPct: r.retentionPct, surplusLines: r.surplusLines,
             })),
+            ...npStructureSliceBackup,
           },
         },
       };
@@ -933,7 +999,7 @@ export default function NpStructure() {
       showToast('Structure save failed: ' + (e?.message || 'Server error'));
       return false;
     }
-  }, [contractId, quoteMode, lastUpdatedAt, coveredProps, structuresCount, structRefsMap, layers, cobRows, expiringLayers, expiringTerms.egnpi, expiringTerms.deductible, expiringTerms.risk_limit, expiringTerms.cat_limit, expiringTerms.brokerage_pct, expiringTerms.no_claims_bonus_pct, expiringTerms.profit_commission_pct, expiringTerms.notes, expiringCoveredProps, showToast]);
+  }, [contractId, quoteMode, lastUpdatedAt, coveredProps, structuresCount, structRefsMap, layers, cobRows, expiringLayers, expiringTerms.egnpi, expiringTerms.deductible, expiringTerms.risk_limit, expiringTerms.cat_limit, expiringTerms.brokerage_pct, expiringTerms.no_claims_bonus_pct, expiringTerms.profit_commission_pct, expiringTerms.notes, expiringCoveredProps, showToast, appState.npStopLossInputs, appState.npAggregateXlInputs, appState.npStopLossExpiring]);
 
   // RISK: risk forced on, cat forced off, both columns disabled
   // CAT:  cat forced on, risk forced off, both columns disabled

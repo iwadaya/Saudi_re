@@ -1909,6 +1909,11 @@ export default function NpFinalPricing() {
         const x = parseFloat(String(v ?? '').replace(/%/g, '').trim());
         return Number.isFinite(x) ? x : null;
       };
+      // Send a row for every layer, including ones where the user has
+      // cleared every margin field — the server writes the values
+      // directly, so an all-null row clears the row's margin columns.
+      // Filtering all-null rows out meant deletion was silently lost
+      // (the column kept its prior value).
       const layer_margins = layers.map((l, i) => ({
         layer_number:    i + 1,
         hist_margin:     pctToNum(l.historicalMargin),
@@ -1917,7 +1922,7 @@ export default function NpFinalPricing() {
         uw_price:        pctToNum(l.reinsurerPricing) || pctToNum(l.uwPrice),
         expiring_price:  pctToNum(l.expiringPricing),
         lead_price:      pctToNum(l.leadPricing),
-      })).filter(m => m.hist_margin != null || m.modelled_margin != null || m.uw_price != null);
+      }));
 
       noteSaved(await api.saveNpPricing(contractId, { inputs, layer_inputs, outputs, layer_margins }, requestOptions()));
 
@@ -1965,7 +1970,7 @@ export default function NpFinalPricing() {
             mdp_pct:               0,
           })),
           terms: { brokerage_pct: toN(npDetail.brokeragePct), no_claims_bonus_pct: 0, profit_commission_pct: 0 },
-          coveredProps: [],
+          // Covered props are owned by NpStructure; NpFinalPricing has no UI for them and must not overwrite.
         };
         noteSaved(await api.saveNpExpiring(contractId, expPayload, requestOptions()));
         // COB selection — keep the relational class_of_business
