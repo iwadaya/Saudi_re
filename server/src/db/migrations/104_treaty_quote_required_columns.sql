@@ -16,7 +16,65 @@
 -- there's no explicit BEGIN/COMMIT here (matches 100..103).
 
 -- ── Clean up rows that violate the new constraints ─────────────────
--- Child tables CASCADE via FK constraints from migration 057.
+-- The FK retrofit in migration 057 added CASCADE to most child tables,
+-- but a handful of newer tables (091 fac_treaty_link, 094
+-- market_intelligence_recommendation) and one column (053
+-- facultative_risk.linked_contract_id) reference contract WITHOUT
+-- CASCADE. Pre-delete / null-out those rows so the contract DELETE
+-- below doesn't trip RESTRICT/NO ACTION. Use DO blocks so missing
+-- tables in older schemas are tolerated.
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_class WHERE relname='market_intelligence_recommendation' AND relnamespace='public'::regnamespace) THEN
+    DELETE FROM public.market_intelligence_recommendation
+     WHERE contract_id IN (
+       SELECT contract_id FROM public.contract
+        WHERE cedant_id      IS NULL
+           OR broker_id      IS NULL
+           OR currency_id    IS NULL
+           OR country_id     IS NULL
+           OR treaty_type_id IS NULL
+           OR inception_date IS NULL
+     );
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_class WHERE relname='fac_treaty_link' AND relnamespace='public'::regnamespace) THEN
+    DELETE FROM public.fac_treaty_link
+     WHERE contract_id IN (
+       SELECT contract_id FROM public.contract
+        WHERE cedant_id      IS NULL
+           OR broker_id      IS NULL
+           OR currency_id    IS NULL
+           OR country_id     IS NULL
+           OR treaty_type_id IS NULL
+           OR inception_date IS NULL
+     );
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema='public' AND table_name='facultative_risk' AND column_name='linked_contract_id'
+  ) THEN
+    UPDATE public.facultative_risk
+       SET linked_contract_id = NULL
+     WHERE linked_contract_id IN (
+       SELECT contract_id FROM public.contract
+        WHERE cedant_id      IS NULL
+           OR broker_id      IS NULL
+           OR currency_id    IS NULL
+           OR country_id     IS NULL
+           OR treaty_type_id IS NULL
+           OR inception_date IS NULL
+     );
+  END IF;
+END $$;
+
+-- Now safe to delete the violating contracts. Child tables with
+-- CASCADE FKs (from migration 057) take care of themselves.
 DELETE FROM public.contract
  WHERE cedant_id        IS NULL
     OR broker_id        IS NULL
