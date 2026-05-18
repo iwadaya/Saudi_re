@@ -1965,7 +1965,7 @@ export default function NpFinalPricing() {
             mdp_pct:               0,
           })),
           terms: { brokerage_pct: toN(npDetail.brokeragePct), no_claims_bonus_pct: 0, profit_commission_pct: 0 },
-          coveredProps: [],
+          // Covered props are owned by NpStructure; NpFinalPricing has no UI for them and must not overwrite.
         };
         noteSaved(await api.saveNpExpiring(contractId, expPayload, requestOptions()));
         // COB selection — keep the relational class_of_business

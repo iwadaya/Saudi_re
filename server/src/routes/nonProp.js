@@ -486,7 +486,13 @@ async function npExpiringPut(req, res) {
          l.peril_scope || 'BOTH', numOrNull(l.mdp), numOrNull(l.mdp_pct)]
       );
     }
-    // Terms — upsert
+    // Terms — upsert.
+    // covered_props is owned by NpStructure / NpExpiringStructure; other
+    // savers (e.g. NpFinalPricing) omit it. Treat key absence as
+    // "preserve" — pass NULL and COALESCE with the existing row on
+    // conflict — so absence doesn't wipe the column. An explicit `[]`
+    // in the body still clears it (the JSON.stringify is non-null).
+    const coveredPropsParam = 'coveredProps' in req.body ? JSON.stringify(coveredProps) : null;
     await cl.query(
       `INSERT INTO public.${tbl}_terms
         (${col},egnpi,deductible,risk_limit,cat_limit,brokerage_pct,no_claims_bonus_pct,profit_commission_pct,notes,covered_props)
@@ -495,12 +501,14 @@ async function npExpiringPut(req, res) {
          egnpi=EXCLUDED.egnpi, deductible=EXCLUDED.deductible, risk_limit=EXCLUDED.risk_limit,
          cat_limit=EXCLUDED.cat_limit, brokerage_pct=EXCLUDED.brokerage_pct,
          no_claims_bonus_pct=EXCLUDED.no_claims_bonus_pct, profit_commission_pct=EXCLUDED.profit_commission_pct,
-         notes=EXCLUDED.notes, covered_props=EXCLUDED.covered_props, updated_at=now()`,
+         notes=EXCLUDED.notes,
+         covered_props=COALESCE(EXCLUDED.covered_props, ${tbl}_terms.covered_props),
+         updated_at=now()`,
       [id, numOrNull(terms.egnpi), numOrNull(terms.deductible),
        numOrNull(terms.risk_limit), numOrNull(terms.cat_limit),
        numOrNull(terms.brokerage_pct), numOrNull(terms.no_claims_bonus_pct),
        numOrNull(terms.profit_commission_pct), terms.notes || null,
-       coveredProps ? JSON.stringify(coveredProps) : '[]']
+       coveredPropsParam]
     );
     const updatedAt = await touchParentEntity(cl, {
       parentTable: ctx.parentTable,
