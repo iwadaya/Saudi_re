@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../api.js';
+import { useGlobalToast } from '../../hooks/useToast.js';
 
 function statusTone(status) {
   if (status === 'found') return { label: 'Present', bg: 'rgba(74,222,128,0.12)', border: 'rgba(74,222,128,0.35)', color: '#4ade80' };
@@ -72,6 +73,7 @@ function requestOptions(isQuote) {
 }
 
 export default function WordingChecklistPanel({ contractId, isQuote = false }) {
+  const showToast = useGlobalToast();
   const [items, setItems] = useState([]);
   const [latestRun, setLatestRun] = useState(null);
   const [sourceDoc, setSourceDoc] = useState(null);
@@ -121,6 +123,10 @@ export default function WordingChecklistPanel({ contractId, isQuote = false }) {
 
   const toggle = async (item) => {
     const nextStatus = item.status === 'found' ? 'missing' : 'found';
+    // Snapshot before the optimistic write so we can roll back if the
+    // save throws — otherwise the row stays in the new state on screen
+    // while the DB still holds the old one.
+    const snapshot = items;
     setSavingKey(item.item_key);
     setError('');
     setItems(prev => prev.map(row => (
@@ -131,7 +137,9 @@ export default function WordingChecklistPanel({ contractId, isQuote = false }) {
     try {
       await saveItems([{ item_key: item.item_key, status: nextStatus, source: 'manual' }]);
     } catch (err) {
+      setItems(snapshot);
       setError(err?.message || 'Could not save checklist item.');
+      showToast("Couldn't update checklist — please retry");
     } finally {
       setSavingKey('');
     }
@@ -139,6 +147,7 @@ export default function WordingChecklistPanel({ contractId, isQuote = false }) {
 
   const clearAll = async () => {
     if (!items.length) return;
+    const snapshot = items;
     setSavingKey('__all__');
     setError('');
     const rows = items.map(item => ({ item_key: item.item_key, status: 'missing', source: 'manual' }));
@@ -146,7 +155,9 @@ export default function WordingChecklistPanel({ contractId, isQuote = false }) {
     try {
       await saveItems(rows);
     } catch (err) {
+      setItems(snapshot);
       setError(err?.message || 'Could not clear checklist.');
+      showToast("Couldn't update checklist — please retry");
     } finally {
       setSavingKey('');
     }
@@ -237,9 +248,6 @@ export default function WordingChecklistPanel({ contractId, isQuote = false }) {
 
       <div className="chk-footer">
         <span style={{ opacity: .75, fontSize: 12 }}>Saved in database for this {isQuote ? 'quote' : 'treaty'}.</span>
-        <div className="chk-actions">
-          <button type="button" className="bbg-btn bbg-btn--offer" onClick={() => {}}>Done</button>
-        </div>
       </div>
     </div>
   );
