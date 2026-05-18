@@ -93,10 +93,13 @@ function parseLargeLosses(rows) {
 function parseCatLosses(rows) {
   const hIdx = rows.findIndex(r => String(r[0] ?? '').toUpperCase().includes('UW'));
   const start = hIdx >= 0 ? hIdx + 1 : 1;
+  // Use loss_name (not event_name) — the server's contract_cat_losses
+  // column is loss_name, and the loss-list screen renders that field.
+  // The old event_name key was silently dropped so imports showed '—'.
   return rows.slice(start).filter(r => r[0] && /^\d{4}/.test(String(r[0]))).map(r => ({
     uw_year    : parseInt(r[0]),
     insured_name : str(r[1]),
-    event_name : str(r[2]),
+    loss_name  : str(r[2]),
     date_of_event: str(r[3]),
     class      : str(r[4]),
     paid       : num(r[5]),
@@ -140,6 +143,11 @@ function parseRiskProfile(rows) {
       avg_sum_insured: num(row[5]),
       avg_premium: num(row[6]),
       rate_pct   : num(row[7]),
+      // Claims profile sheets carry a paid-amount column the screen
+      // displays per band; without this the paid column renders blank
+      // for imported profiles. Risk-profile sheets don't have col 8,
+      // num() yields 0 for them — harmless for that consumer.
+      claims_paid: num(row[8]),
     });
   }
   if (dataRows.length) profiles.push({ label: currentLabel, rows: [...dataRows] });
@@ -171,20 +179,41 @@ function parseCresta(rows) {
 
 function parseNpLayers(rows) {
   const hIdx = rows.findIndex(r => String(r[0] ?? '').toUpperCase() === 'LAYER');
+  const headerRow = hIdx >= 0 ? rows[hIdx] : [];
+  // Locate a peril/scope/cover column so risk-only or cat-only slips
+  // don't get marked as both. Excel layouts vary across cedants, so
+  // match a few common header labels. If the column is missing we
+  // fall back to both ON (the historical default) but warn — silently
+  // marking everything risk+cat was the original bug.
+  const perilColIdx = headerRow.findIndex(c => /^(peril|scope|cover|peril.?scope)$/i.test(String(c ?? '').trim()));
+  if (perilColIdx < 0) {
+    console.warn('[ExcelImportAgent] NP Treaty Layers sheet has no peril/scope column — defaulting every layer to risk+cat. Verify by hand or add a "Peril Scope" header.');
+  }
   const start = hIdx >= 0 ? hIdx + 1 : 1;
-  return rows.slice(start).filter(r => r[0] && /^\d/.test(String(r[0]))).map(r => ({
-    layer_number : parseInt(r[0]),
-    limit        : num(r[1]),
-    deductible   : num(r[2]),
-    aggregate_limit: num(r[3]),
-    egnpi        : num(r[4]),
-    rate         : num(r[5]),
-    earned_premium: num(r[6]),
-    mdp          : num(r[7]),
-    mdp_pct      : num(r[8]),
-    num_reinstatements: num(r[9]),
-    reinstatement_pct : num(r[10]),
-  }));
+  return rows.slice(start).filter(r => r[0] && /^\d/.test(String(r[0]))).map(r => {
+    const perilRaw = perilColIdx >= 0 ? String(r[perilColIdx] ?? '').toUpperCase().trim() : '';
+    // No column or empty cell → permissive default (both ON).
+    // BOTH explicitly → both ON. Otherwise honour the cell text.
+    const ambiguous = perilColIdx < 0 || !perilRaw;
+    const isBoth = perilRaw.includes('BOTH');
+    const risk_cover = ambiguous || isBoth || perilRaw.includes('RISK');
+    const cat_cover  = ambiguous || isBoth || perilRaw.includes('CAT');
+    return {
+      layer_number : parseInt(r[0]),
+      limit        : num(r[1]),
+      deductible   : num(r[2]),
+      aggregate_limit: num(r[3]),
+      egnpi        : num(r[4]),
+      rate         : num(r[5]),
+      earned_premium: num(r[6]),
+      mdp          : num(r[7]),
+      mdp_pct      : num(r[8]),
+      num_reinstatements: num(r[9]),
+      reinstatement_pct : num(r[10]),
+      risk_cover,
+      cat_cover,
+    };
+  });
 }
 
 function parseEgnpi(rows) {
@@ -228,29 +257,46 @@ function parseSheet(sheetName, rows) {
 // ── API push functions ────────────────────────────────────────────────────────
 async function pushSheet(contractId, sheet, opts = {}) {
   const { type, triType, data } = sheet;
+  // classIds rides along on opts as a sidecar for profile imports;
+  // strip it from the apiOpts spread so it doesn't leak into the
+  // underlying fetch options object the api helpers pass through.
+  const { classIds, ...apiOpts } = opts;
   switch (type) {
     case 'triangle':
-      return api.saveTriangle(contractId, triType, { triangle: data }, opts);
+      return api.saveTriangle(contractId, triType, { triangle: data }, apiOpts);
     case 'largeLosses':
-      return api.saveLargeLosses(contractId, { losses: data }, opts);
+      return api.saveLargeLosses(contractId, { losses: data }, apiOpts);
     case 'catLosses':
-      return api.saveCatLosses(contractId, { losses: data }, opts);
+      return api.saveCatLosses(contractId, { losses: data }, apiOpts);
     case 'riskProfile':
     case 'claimsProfile': {
-      // Save first profile under 'default', rest under index
+      // Real class_of_business_id from Treaty Detail's classIds —
+      // the server's risk-profiles PUT validates this as an FK, so the
+      // old 'default' / 'profile_N' string sentinels FK-violated and
+      // never persisted. Caller threads classIds through opts.
+      const resolvedCobIds = (classIds || []).filter(Boolean);
+      if (resolvedCobIds.length === 0) {
+        throw new Error('No class of business selected on Treaty Detail — pick at least one before importing profiles.');
+      }
       const results = [];
       for (let i = 0; i < data.length; i++) {
-        const cobId = i === 0 ? 'default' : `profile_${i + 1}`;
-        results.push(await api.saveRiskProfile(contractId, cobId, { rows: data[i].rows }, opts).catch(e => e));
+        // Map profile i to classIds[i] in order; if the sheet has
+        // more profiles than the contract has selected COBs, fall
+        // back to the first COB so the import still lands somewhere.
+        const cobId = resolvedCobIds[i] || resolvedCobIds[0];
+        results.push(await api.saveRiskProfile(contractId, cobId, { rows: data[i].rows }, apiOpts).catch(e => e));
       }
       return results;
     }
     case 'cresta':
-      return api.saveCrestaData(contractId, { zones: data }, opts);
+      return api.saveCrestaData(contractId, { zones: data }, apiOpts);
     case 'npLayers':
       return api.saveNonPropTreaty(contractId, {
         terms: {
           np_structure: {
+            // Use the per-layer peril scope parsed from the slip
+            // instead of forcing every layer to risk+cat. parseNpLayers
+            // falls back to both-on when the slip lacks a peril column.
             layers: data.map(l => ({
               layer: `L${l.layer_number}`,
               limit: String(l.limit),
@@ -261,16 +307,20 @@ async function pushSheet(contractId, sheet, opts = {}) {
               earnedPremium: String(l.earned_premium),
               noReinst: String(l.num_reinstatements),
               reinstPct: String(l.reinstatement_pct) + '%',
-              riskCover: true,
-              catCover: true,
+              riskCover: l.risk_cover !== undefined ? !!l.risk_cover : true,
+              catCover:  l.cat_cover  !== undefined ? !!l.cat_cover  : true,
             })),
           },
         },
-      }, opts);
+      }, apiOpts);
     case 'egnpi':
-      return api.saveNonPropTreaty(contractId, {
-        terms: { egnpi_history: data },
-      }, opts);
+      // Route through saveNpEgnpiYear — the same relational endpoint
+      // NpPremiumsTable writes. The old `terms.egnpi_history` key
+      // wasn't a recognised JSONB field and the validator silently
+      // dropped it, so imports never landed anywhere queryable.
+      return api.saveNpEgnpiYear(contractId, {
+        rows: data.map(r => ({ uw_year: r.year, egnpi: r.egnpi })),
+      }, apiOpts);
     default:
       throw new Error('Unknown sheet type: ' + type);
   }
@@ -536,20 +586,34 @@ export default function ExcelImportAgent() {
   const doImport = useCallback(async () => {
     if (!contractInput.trim()) { showToast('Please enter a Contract ID.'); return; }
     if (!selectedSheets.length) { showToast('No sheets selected.'); return; }
+    // Resolve real class-of-business ids so profile imports can hit a
+    // valid FK on the server. NP wizard owns npTreatyDetail.classIds,
+    // Prop owns propTreatyDetail.classIds — fall through to whichever
+    // is populated so the agent works under either entry point.
+    const classIds = (appState.npTreatyDetail?.classIds
+      ?? appState.npTreatyDetail?.class_ids
+      ?? appState.propTreatyDetail?.classIds
+      ?? appState.propTreatyDetail?.class_ids
+      ?? []).map(String).filter(Boolean);
+    const baseOpts = {
+      ...(appState.quoteMode ? { quote: true } : {}),
+      classIds,
+    };
     setImporting(true);
     setResults([]);
     const out = [];
     for (const sheet of selectedSheets) {
       try {
-        await pushSheet(contractInput.trim(), sheet, appState.quoteMode ? { quote: true } : undefined);
+        await pushSheet(contractInput.trim(), sheet, baseOpts);
         out.push({ name: sheet.label, ok: true });
       } catch (err) {
+        showToast(err?.message || `Failed to import ${sheet.label}`);
         out.push({ name: sheet.label, ok: false, error: err?.message || 'Failed' });
       }
       setResults([...out]);
     }
     setImporting(false);
-  }, [appState.quoteMode, contractInput, selectedSheets, showToast]);
+  }, [appState.quoteMode, appState.npTreatyDetail, appState.propTreatyDetail, contractInput, selectedSheets, showToast]);
 
   const hasFile  = sheets.length > 0;
   const allDone  = results.length > 0 && results.length === selectedSheets.length;
