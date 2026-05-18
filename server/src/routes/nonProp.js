@@ -373,12 +373,18 @@ async function npExpiringGet(req, res) {
   // fails the client must see a 5xx so it can refuse to clobber with an
   // empty save, otherwise transient errors would silently wipe the row.
   let parentContractId = null;
+  // Parent table's updated_at drives optimistic locking on the save
+  // endpoint (touchParentEntity returns it; NpExpiringStructure uses it
+  // as the If-Unmodified-Since baseline). Fetch it alongside the
+  // renewal seed so a single round-trip covers both.
+  let parentUpdatedAt = null;
   try {
     const contractRow = await pool.query(
-      `SELECT parent_contract_id FROM public.${ctx.parentTable} WHERE ${ctx.idColumn} = $1`,
+      `SELECT parent_contract_id, updated_at FROM public.${ctx.parentTable} WHERE ${ctx.idColumn} = $1`,
       [id],
     );
     parentContractId = contractRow.rows[0]?.parent_contract_id || null;
+    parentUpdatedAt = contractRow.rows[0]?.updated_at || null;
   } catch (err) {
     logger.warn('np expiring: parent lookup failed; continuing without renewal seed', {
       id, err: err.message,
@@ -449,7 +455,7 @@ async function npExpiringGet(req, res) {
     autoPopulated = true;
   }
 
-  res.json({ layers, terms, coveredProps: termsR.rows[0]?.covered_props || [], autoPopulated, isRenewal: !!parentContractId, parentContractId });
+  res.json({ layers, terms, coveredProps: termsR.rows[0]?.covered_props || [], autoPopulated, isRenewal: !!parentContractId, parentContractId, updated_at: parentUpdatedAt });
 }
 
 async function npExpiringPut(req, res) {
