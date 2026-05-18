@@ -1665,6 +1665,17 @@ select.form-input{ cursor:pointer; appearance:auto; }
 .fi::placeholder{ color: rgba(255,255,255,0.2); }
 select.fi{ cursor: pointer; appearance: auto; }
 
+/* Required-field highlight — applied by FR when a save() validator
+   reported the field as missing. Cleared on the next edit. */
+.required-missing input.fi,
+.required-missing select.fi,
+.required-missing button.fi,
+.required-missing .pct-input input,
+.required-missing .pct-input {
+  border-color: rgba(248, 113, 113, 0.6) !important;
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.25);
+}
+
 /* ── Modal overlay (fixed, centered) ── */
 .modal-backdrop{
   position: fixed;

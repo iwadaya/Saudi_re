@@ -23,7 +23,7 @@ describe.skipIf(shouldSkipDb)('integration: uw_status transition guard', () => {
 
   async function newDraft() {
     const res = await harness.fetchApp('POST', '/api/treaties', {
-      body: { uw_year: 2026, status: 'DRAFT' },
+      body: { uw_year: 2026, status: 'DRAFT', inception_date: '2026-01-01' },
     });
     const c = await res.json();
     created.push(c.contract_id);

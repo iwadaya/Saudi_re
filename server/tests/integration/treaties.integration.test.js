@@ -46,7 +46,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
   it('creates → partial-saves → reads back the same values', async () => {
     // CREATE
     const createRes = await harness.fetchApp('POST', '/api/treaties', {
-      body: { uw_year: 2026, status: 'DRAFT', experience_source: 'TRIANGLE' },
+      body: { uw_year: 2026, status: 'DRAFT', experience_source: 'TRIANGLE', inception_date: '2026-01-01' },
     });
     expect(createRes.status).toBe(201);
     const c = await createRes.json();
@@ -102,7 +102,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
   it('list honours the status filter', async () => {
     // Create a SIGNED treaty to ensure at least one row matches
     const signed = await harness.fetchApp('POST', '/api/treaties', {
-      body: { uw_year: 2025, uw_status: 'SIGNED' },
+      body: { uw_year: 2025, uw_status: 'SIGNED', inception_date: '2025-01-01' },
     }).then((r) => r.json());
     created.push(signed.contract_id);
 
@@ -119,7 +119,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
 
   it('honours If-Unmodified-Since — stale timestamp → 409 STALE_WRITE', async () => {
     const c = await harness.fetchApp('POST', '/api/treaties', {
-      body: { uw_year: 2026 },
+      body: { uw_year: 2026, inception_date: '2026-01-01' },
     }).then((r) => r.json());
     created.push(c.contract_id);
 
@@ -141,7 +141,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
 
   it('supports two-session stale override and records STALE_WRITE_OVERRIDE', async () => {
     const c = await harness.fetchApp('POST', '/api/treaties', {
-      body: { uw_year: 2026 },
+      body: { uw_year: 2026, inception_date: '2026-01-01' },
     }).then((r) => r.json());
     created.push(c.contract_id);
 
@@ -185,5 +185,80 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
       previousActor: 'Alice Underwriter',
       overrideHeader: 'If-Unmodified-Since: *',
     });
+  });
+
+  it('POST without inception_date → 400 VALIDATION_FAILED (migration 104 hard gate)', async () => {
+    const res = await harness.fetchApp('POST', '/api/treaties', {
+      body: { uw_year: 2026 },
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.error).toMatch(/inception_date/);
+  });
+
+  it('POST with inception_date populates contract.inception_date', async () => {
+    const res = await harness.fetchApp('POST', '/api/treaties', {
+      body: { uw_year: 2026, inception_date: '2026-06-01' },
+    });
+    expect(res.status).toBe(201);
+    const c = await res.json();
+    expect(c.contract_id).toBeTruthy();
+    created.push(c.contract_id);
+    const { rows } = await pool.query(
+      `SELECT inception_date FROM public.contract WHERE contract_id=$1`,
+      [c.contract_id],
+    );
+    expect(rows[0].inception_date).toBeTruthy();
+    expect(dateInRiyadh(rows[0].inception_date)).toBe('2026-06-01');
+  });
+
+  it('saving terms.detail dates updates contract header — NOT contract_prop_details (migration 104 source-of-truth)', async () => {
+    const c = await harness.fetchApp('POST', '/api/treaties', {
+      body: { uw_year: 2026, inception_date: '2026-01-01' },
+    }).then((r) => r.json());
+    created.push(c.contract_id);
+
+    await harness.fetchApp('PUT', `/api/treaties/${c.contract_id}`, {
+      body: {
+        terms: {
+          header: { uw_year: 2026 },
+          detail: { inception_date: '2025-06-01', renewal_date: '2026-06-01', qs_limit: 1_000_000 },
+        },
+      },
+    });
+
+    const { rows: contractRows } = await pool.query(
+      `SELECT inception_date, renewal_date FROM public.contract WHERE contract_id=$1`,
+      [c.contract_id],
+    );
+    expect(dateInRiyadh(contractRows[0].inception_date)).toBe('2025-06-01');
+    expect(dateInRiyadh(contractRows[0].renewal_date)).toBe('2026-06-01');
+
+    const { rows: detailRows } = await pool.query(
+      `SELECT inception_date, renewal_date FROM public.contract_prop_details WHERE contract_id=$1`,
+      [c.contract_id],
+    );
+    // Detail row exists (we wrote qs_limit) but the two date columns
+    // are no longer touched — they stay NULL.
+    expect(detailRows[0]).toBeTruthy();
+    expect(detailRows[0].inception_date).toBeNull();
+    expect(detailRows[0].renewal_date).toBeNull();
+
+    // GET surfaces the dates under detail (client compat), sourced
+    // from the contract header.
+    const get = await harness.fetchApp('GET', `/api/treaties/${c.contract_id}`);
+    const loaded = await get.json();
+    expect(dateInRiyadh(loaded.detail.inception_date)).toBe('2025-06-01');
+    expect(dateInRiyadh(loaded.detail.renewal_date)).toBe('2026-06-01');
+  });
+
+  it('direct INSERT with NULL inception_date → NOT NULL violation (migration 104 applied)', async () => {
+    await expect(
+      pool.query(
+        `INSERT INTO public.contract (uw_year, cedant_id, broker_id, currency_id, country_id, treaty_type_id)
+         VALUES (2026, NULL, NULL, NULL, NULL, NULL)`,
+      ),
+    ).rejects.toThrow(/null value in column/);
   });
 });

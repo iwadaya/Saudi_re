@@ -73,6 +73,26 @@ export const quoteCommissionsSchema = z.object({
   lcf_extinction:                boolish,
 }).passthrough();
 
+/**
+ * One loss-participation corridor row. Mirrors treaty schema so quote
+ * payloads validate identically. Quote PUT doesn't persist slides yet
+ * (separate tightening target) but the payload contract is symmetric.
+ */
+const lpSlideSchema = z.object({
+  min_lr:  pct100,
+  max_lr:  pct100,
+  share:   pct100,
+  minLr:   pct100,
+  maxLr:   pct100,
+}).passthrough().refine(
+  s => {
+    const min = s.min_lr ?? s.minLr;
+    const max = s.max_lr ?? s.maxLr;
+    return min == null || max == null || Number(max) > Number(min);
+  },
+  { message: 'max_lr must be greater than min_lr' }
+);
+
 /** Loss participation slice. */
 export const quoteLossParticipationSchema = z.object({
   enabled:               boolish,
@@ -83,6 +103,7 @@ export const quoteLossParticipationSchema = z.object({
   minLossRatioPct:       pct100,
   maxLossRatioPct:       pct100,
   reinsurerSharePct:     pct100,
+  slides:                z.array(lpSlideSchema).max(5).optional(),
 }).passthrough();
 
 /**

@@ -132,6 +132,7 @@ describe.skipIf(shouldSkipDb)('integration: contract save and rehydrate every ro
           uw_status: 'DRAFT',
           experience_source: 'TRIANGLE',
           primary_class_of_business_id: refs.cob1,
+          inception_date: '2026-01-01',
         },
       }),
       'create treaty',

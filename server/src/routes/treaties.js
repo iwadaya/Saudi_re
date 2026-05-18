@@ -14,17 +14,23 @@ const router = Router();
 
 // ── POST /api/treaties ──
 router.post("/treaties", asyncHandler(async (req, res) => {
-  const b=req.body||{};
-  const uw_year=numOrNull(b.uw_year??b.underwriting_year)||new Date().getFullYear();
+  const b = req.body || {};
+  const uw_year = numOrNull(b.uw_year ?? b.underwriting_year) || new Date().getFullYear();
+  const inception_date = dateOrNull(b.inception_date);
+  if (!inception_date) {
+    return res.status(400).json({ error: 'inception_date is required', code: 'VALIDATION_FAILED' });
+  }
   const creatorUserId = req.user?.userId || req.headers['x-user-id'] || null;
-  const {rows}=await pool.query(
-    `INSERT INTO public.contract (uw_year,cedant_id,broker_id,currency_id,country_id,treaty_type_id,status,uw_status,experience_source,primary_class_of_business_id,created_by_user_id,assigned_to_user_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7::public.contract_status,$8::public.uw_workflow_status,$9,$10,$11,$11) RETURNING contract_id,uw_year,status,uw_status,created_at`,
-    [uw_year,b.cedant_id||null,b.broker_id||null,b.currency_id||null,b.country_id||null,b.treaty_type_id||null,
-     b.status||'DRAFT',b.uw_status||'DRAFT',b.experience_source||'TRIANGLE',b.primary_class_of_business_id||null,creatorUserId]);
-  const c=rows[0];
-  await logAudit(pool,{entityType:"CONTRACT",entityId:c.contract_id,eventType:"CREATED",actor:b._actor||req.user?.displayName||"SYSTEM",payload:{uw_year,assignedTo:creatorUserId}});
-  res.status(201).json({id:c.contract_id,contract_id:c.contract_id,...c});
+  const { rows } = await pool.query(
+    `INSERT INTO public.contract (uw_year,cedant_id,broker_id,currency_id,country_id,treaty_type_id,status,uw_status,experience_source,primary_class_of_business_id,created_by_user_id,assigned_to_user_id,inception_date)
+     VALUES ($1,$2,$3,$4,$5,$6,$7::public.contract_status,$8::public.uw_workflow_status,$9,$10,$11,$11,$12) RETURNING contract_id,uw_year,status,uw_status,created_at`,
+    [uw_year, b.cedant_id || null, b.broker_id || null, b.currency_id || null, b.country_id || null, b.treaty_type_id || null,
+     b.status || 'DRAFT', b.uw_status || 'DRAFT', b.experience_source || 'TRIANGLE',
+     b.primary_class_of_business_id || null, creatorUserId, inception_date]
+  );
+  const c = rows[0];
+  await logAudit(pool, { entityType: "CONTRACT", entityId: c.contract_id, eventType: "CREATED", actor: b._actor || req.user?.displayName || "SYSTEM", payload: { uw_year, assignedTo: creatorUserId } });
+  res.status(201).json({ id: c.contract_id, contract_id: c.contract_id, ...c });
 }));
 
 // ── GET /api/treaties ── paginated list (X-Total-Count / X-Page / X-Page-Size headers)
@@ -115,8 +121,8 @@ router.get("/treaties/:id", asyncHandler(async (req, res) => {
       inception_date:contract.inception_date,contract_description:contract.contract_description,
       alt_contract_id:contract.alt_contract_id||null},
     detail:{triangulations_available:detail.triangulations_available??true,
-      inception_date:detail.inception_date||contract.inception_date,
-      renewal_date:detail.renewal_date||contract.renewal_date,
+      inception_date:contract.inception_date,
+      renewal_date:contract.renewal_date,
       experience_start_year:detail.experience_start_year||null,
       qs_limit:detail.qs_limit,retention_pct:detail.retention_pct,retention_amt:detail.retention_amt,
       cession_pct:detail.cession_pct,cession_amt:detail.cession_amt,
@@ -202,13 +208,15 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
     }
 
     // ── Prop details (only if detail section provided) ──
+    // inception_date and renewal_date live on contract (header) — the
+    // detail-table columns are deprecated, no longer written here.
     if(terms.detail && Object.keys(terms.detail).length) {
       const d=terms.detail;
       await client.query(
-        `INSERT INTO public.contract_prop_details (contract_id,triangulations_available,inception_date,renewal_date,qs_limit,retention_pct,retention_amt,cession_pct,cession_amt,surplus_max_retention,num_lines,total_capacity,event_limit,aal,quota_share_epi,surplus_epi,brokerage_pct,taxes_pct,loss_cap_pct,experience_start_year)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
-         ON CONFLICT (contract_id) DO UPDATE SET triangulations_available=EXCLUDED.triangulations_available,inception_date=EXCLUDED.inception_date,renewal_date=EXCLUDED.renewal_date,qs_limit=EXCLUDED.qs_limit,retention_pct=EXCLUDED.retention_pct,retention_amt=EXCLUDED.retention_amt,cession_pct=EXCLUDED.cession_pct,cession_amt=EXCLUDED.cession_amt,surplus_max_retention=EXCLUDED.surplus_max_retention,num_lines=EXCLUDED.num_lines,total_capacity=EXCLUDED.total_capacity,event_limit=EXCLUDED.event_limit,aal=EXCLUDED.aal,quota_share_epi=EXCLUDED.quota_share_epi,surplus_epi=EXCLUDED.surplus_epi,brokerage_pct=EXCLUDED.brokerage_pct,taxes_pct=EXCLUDED.taxes_pct,loss_cap_pct=EXCLUDED.loss_cap_pct,experience_start_year=EXCLUDED.experience_start_year,updated_at=now()`,
-        [id,boolOrDefault(d.triangulations_available??d.triangulationsAvailable,true),dateOrNull(d.inception_date??d.inceptionDate),dateOrNull(d.renewal_date??d.renewalDate),
+        `INSERT INTO public.contract_prop_details (contract_id,triangulations_available,qs_limit,retention_pct,retention_amt,cession_pct,cession_amt,surplus_max_retention,num_lines,total_capacity,event_limit,aal,quota_share_epi,surplus_epi,brokerage_pct,taxes_pct,loss_cap_pct,experience_start_year)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         ON CONFLICT (contract_id) DO UPDATE SET triangulations_available=EXCLUDED.triangulations_available,qs_limit=EXCLUDED.qs_limit,retention_pct=EXCLUDED.retention_pct,retention_amt=EXCLUDED.retention_amt,cession_pct=EXCLUDED.cession_pct,cession_amt=EXCLUDED.cession_amt,surplus_max_retention=EXCLUDED.surplus_max_retention,num_lines=EXCLUDED.num_lines,total_capacity=EXCLUDED.total_capacity,event_limit=EXCLUDED.event_limit,aal=EXCLUDED.aal,quota_share_epi=EXCLUDED.quota_share_epi,surplus_epi=EXCLUDED.surplus_epi,brokerage_pct=EXCLUDED.brokerage_pct,taxes_pct=EXCLUDED.taxes_pct,loss_cap_pct=EXCLUDED.loss_cap_pct,experience_start_year=EXCLUDED.experience_start_year,updated_at=now()`,
+        [id,boolOrDefault(d.triangulations_available??d.triangulationsAvailable,true),
          numOrNull(d.qs_limit??d.qsLimit),numOrNull(d.retention_pct??d.retentionPct),numOrNull(d.retention_amt??d.retentionAmt),
          numOrNull(d.cession_pct??d.cessionPct),numOrNull(d.cession_amt??d.cessionAmt),
          numOrNull(d.surplus_max_retention??d.surplusMaxRetention),numOrNull(d.num_lines??d.numLines),
@@ -426,15 +434,16 @@ router.post("/treaties/:id/renew", asyncHandler(async (req, res) => {
     );
     const newId = newRows[0].contract_id;
 
-    // ── 2. Prop detail — dates + structure skeleton only, no commissions/EPI/financial terms ──
+    // ── 2. Prop detail — structure skeleton only, no commissions/EPI/financial terms ──
+    // Dates live on the contract header (already set above); detail-
+    // table inception/renewal columns are deprecated, no longer written.
     if (!isNp && propD) {
       await cl.query(
         `INSERT INTO public.contract_prop_details
-           (contract_id, triangulations_available, inception_date, renewal_date,
-            experience_start_year)
-         VALUES ($1,$2,$3,$4,$5)
+           (contract_id, triangulations_available, experience_start_year)
+         VALUES ($1,$2,$3)
          ON CONFLICT (contract_id) DO NOTHING`,
-        [newId, propD.triangulations_available ?? true, newInception, newRenewal,
+        [newId, propD.triangulations_available ?? true,
          propD.experience_start_year || null]
       );
     }

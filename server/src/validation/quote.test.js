@@ -108,6 +108,38 @@ describe('quoteLossParticipationSchema', () => {
     expect(quoteLossParticipationSchema.parse({ enabled: true }).enabled).toBe(true);
     expect(quoteLossParticipationSchema.parse({ enabled: 'false' }).enabled).toBe(false);
   });
+
+  it('accepts an empty slides array', () => {
+    expect(() => quoteLossParticipationSchema.parse({ slides: [] })).not.toThrow();
+  });
+
+  it('accepts a valid corridor (max_lr > min_lr, all within 0..100)', () => {
+    expect(() => quoteLossParticipationSchema.parse({
+      slides: [{ min_lr: 70, max_lr: 100, share: 50 }],
+    })).not.toThrow();
+  });
+
+  it('rejects an inverted corridor', () => {
+    expect(() => quoteLossParticipationSchema.parse({
+      slides: [{ min_lr: 100, max_lr: 70, share: 50 }],
+    })).toThrow(/greater than/);
+  });
+
+  it('rejects pct values above 100', () => {
+    expect(() => quoteLossParticipationSchema.parse({
+      slides: [{ min_lr: 120, max_lr: 150, share: 50 }],
+    })).toThrow();
+  });
+
+  it('rejects more than 5 slides', () => {
+    expect(() => quoteLossParticipationSchema.parse({
+      slides: Array.from({ length: 6 }, (_, i) => ({
+        min_lr: i * 10,
+        max_lr: i * 10 + 5,
+        share: 50,
+      })),
+    })).toThrow();
+  });
 });
 
 describe('quotePutBodySchema', () => {
