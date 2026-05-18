@@ -37,12 +37,10 @@ const SLICE_KEY = 'npStopLossInputs';
 const DEFAULT_YEARS = 10;
 
 const DEFAULT_INPUTS = {
-  // Stop Loss is always quoted as percentages of EPI. The "absolute"
-  // attachment basis lived here while Aggregate XL was wedged into
-  // the same screen — that's now its own workflow.
-  attachmentLossRatio: '',
-  limitLossRatio: '',
-  epi: '',
+  // Layer cover (attach LR / limit LR / EPI per layer) lives in
+  // `layers` and is owned by the Structure page; this screen only
+  // edits the engine inputs below.
+  layers: [],
   yearlyAggregates: [], // [{year, aggregate}] — raw losses ($) per year
   freqLambda: '',
   severityType: 'lognormal',
@@ -149,18 +147,6 @@ const styles = {
     fontWeight: 600,
     cursor: 'pointer',
   },
-  pillBtn: (active) => ({
-    appearance: 'none',
-    border: `1px solid ${active ? 'rgba(0,212,255,0.55)' : 'rgba(255,255,255,0.12)'}`,
-    background: active ? 'rgba(0,212,255,0.10)' : 'rgba(255,255,255,0.02)',
-    color: active ? COLORS.cyan : 'rgba(226,232,240,0.75)',
-    borderRadius: 8,
-    padding: '7px 14px',
-    fontSize: 11,
-    fontWeight: 700,
-    letterSpacing: '.06em',
-    cursor: 'pointer',
-  }),
   th: {
     padding: '11px 10px',
     fontSize: 9,
@@ -338,16 +324,29 @@ export default function NpStopLossPricing() {
   );
   const onLoaded = useCallback(
     (data) => {
-      // Server returns { inputs, outputs, updated_at }. The Structure
-      // page writes layer fields (attachmentLossRatio / limitLossRatio
-      // / epi / layers) into the same slice before the user gets here,
-      // so a blind replaceSlice would clobber those edits with the
-      // last-saved snapshot. Merge: the server fills in fields the
-      // AppContext slice doesn't already have a value for; existing
-      // non-empty AppContext fields win.
+      // Server returns { inputs, outputs, updated_at }. Two concerns:
+      //
+      //   1. The Structure page writes layer fields into this same
+      //      slice before the user gets here, so a blind replaceSlice
+      //      would clobber those edits with the last-saved snapshot.
+      //      Merge under existing AppContext: non-empty AppContext
+      //      fields win, server fills in the rest.
+      //   2. Records saved during early iterations of this branch had
+      //      layer 0 as top-level attachmentLossRatio / limitLossRatio
+      //      / epi fields (no layers array). Migrate to the canonical
+      //      shape on the way in so the rest of the screen only sees
+      //      one shape.
       if (!data || !data.inputs || Object.keys(data.inputs).length === 0) return;
+      const incoming = { ...data.inputs };
+      if (!Array.isArray(incoming.layers) && (incoming.attachmentLossRatio || incoming.limitLossRatio || incoming.epi)) {
+        incoming.layers = [{
+          attachmentLossRatio: incoming.attachmentLossRatio ?? '',
+          limitLossRatio: incoming.limitLossRatio ?? '',
+          epi: incoming.epi ?? '',
+        }];
+      }
       const current = sliceRef.current || {};
-      const merged = { ...DEFAULT_INPUTS, ...data.inputs };
+      const merged = { ...DEFAULT_INPUTS, ...incoming };
       for (const k of Object.keys(current)) {
         const v = current[k];
         const hasValue = v !== undefined
@@ -440,24 +439,14 @@ export default function NpStopLossPricing() {
 
   const layers = useMemo(() => {
     const saved = Array.isArray(inputs.layers) ? inputs.layers : [];
-    const legacyPrimary = {
-      attachmentLossRatio: inputs.attachmentLossRatio ?? '',
-      limitLossRatio: inputs.limitLossRatio ?? '',
-      epi: inputs.epi ?? '',
-    };
-    const base = saved.length > 0
-      ? saved
-      : (legacyPrimary.attachmentLossRatio || legacyPrimary.limitLossRatio || legacyPrimary.epi
-          ? [legacyPrimary]
-          : []);
     const out = [];
     for (let i = 0; i < layerCount; i++) {
-      out.push(base[i]
-        ? { attachmentLossRatio: base[i].attachmentLossRatio ?? '', limitLossRatio: base[i].limitLossRatio ?? '', epi: base[i].epi ?? '' }
+      out.push(saved[i]
+        ? { attachmentLossRatio: saved[i].attachmentLossRatio ?? '', limitLossRatio: saved[i].limitLossRatio ?? '', epi: saved[i].epi ?? '' }
         : { attachmentLossRatio: '', limitLossRatio: '', epi: '' });
     }
     return out;
-  }, [inputs.layers, inputs.attachmentLossRatio, inputs.limitLossRatio, inputs.epi, layerCount]);
+  }, [inputs.layers, layerCount]);
 
   // (Layer cover is read-only on this screen; edits happen on the
   // Structure page, which writes through to the same npStopLossInputs
