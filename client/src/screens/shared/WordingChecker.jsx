@@ -1,5 +1,5 @@
 // WordingChecker.jsx — AI wording analysis: coverage, exclusions, grey areas, treaty check
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { api } from '../../api';
 
 const WORDING_CHECKLIST = [
@@ -34,13 +34,13 @@ const C = {
   info:    { bg: 'rgba(96,165,250,0.10)',  border: 'rgba(96,165,250,0.25)',  text: '#60a5fa' },
 };
 
-async function callClaude(system, user) {
-  const data = await api.aiComplete({
-    max_tokens: 2000,
-    system,
-    messages: [{ role: 'user', content: user }],
+async function callLlm(system, user) {
+  const data = await api.aiAnalyseJson({
+    systemPrompt: system,
+    userPrompt: user,
+    maxOutputTokens: 4096,
   });
-  return data.content?.[0]?.text || '';
+  return data?.text || '';
 }
 
 function Badge({ status, label }) {
@@ -94,7 +94,7 @@ function findBestSlip(docs) {
   return docs.find(d => /pdf/i.test(d.mime_type||'')) || docs[0] || null;
 }
 
-export default function WordingChecker({ contractId, parentContractId, docs: propDocs, onClauseResults, quoteMode = false }) {
+export default function WordingChecker({ contractId, parentContractId, docs: propDocs, onClauseResults, quoteMode = false, targetDoc = null, autoRun = false }) {
   // `contractId` is the active entity's id — under a quote it's a
   // quote_id, not a contract_id. The contract-scoped API helpers
   // (getDocuments / getContract) need { quote: true } to hit the
@@ -108,7 +108,10 @@ export default function WordingChecker({ contractId, parentContractId, docs: pro
   const [running,  setRunning]  = useState(false);
   const [step,     setStep]     = useState('');
   const [error,    setError]    = useState('');
-  const [expanded, setExpanded] = useState({ docTypes: true, coverage: true, clauses: true });
+  // Primary sections (Coverages, Exclusions, Watchpoints) open by default;
+  // secondary sections (Document Types, Clauses, Prior Year) collapsed so
+  // the three headline blocks dominate the view.
+  const [expanded, setExpanded] = useState({ coverage: true, exclusions: true, watchpoints: true, docTypes: false, clauses: false });
   const toggle = key => setExpanded(p => ({ ...p, [key]: !p[key] }));
 
   const run = useCallback(async () => {
@@ -154,8 +157,10 @@ export default function WordingChecker({ contractId, parentContractId, docs: pro
 
       // ── 4. Extract text from best wording doc ──
       setStep('Extracting wording text…');
-      // Priority: Final Slip > Draft Slip > Expiring Slip > any PDF
-      const wordingDoc = findBestSlip(currentDocs);
+      // When the caller pins a specific slip (e.g. row-level Analyze in
+      // DocumentsScreen) we use that doc. Otherwise fall back to the
+      // priority heuristic: Final Slip > Draft Slip > Expiring Slip > any PDF.
+      const wordingDoc = targetDoc || findBestSlip(currentDocs);
       const priorWordingDoc = findBestSlip(priorDocs);
 
       let wordingText = '';
@@ -229,7 +234,7 @@ export default function WordingChecker({ contractId, parentContractId, docs: pro
           `}`,
         ].filter(Boolean).join('\n');
 
-        const raw = await callClaude(
+        const raw = await callLlm(
           'You are a senior reinsurance treaty wording analyst with 20+ years experience in MENA/GCC markets. Analyse treaty wording and respond ONLY with valid JSON — no markdown, no explanation outside the JSON.',
           userPrompt
         );
@@ -270,7 +275,18 @@ export default function WordingChecker({ contractId, parentContractId, docs: pro
       setError(e.message || 'Analysis failed');
       setStep('');
     } finally { setRunning(false); }
-  }, [contractId, onClauseResults, parentContractId, propDocs, apiOpts]);
+  }, [contractId, onClauseResults, parentContractId, propDocs, apiOpts, targetDoc]);
+
+  // Fire the analysis automatically once on mount when autoRun is true.
+  // The modal wrapper uses this so the user doesn't have to click "Run"
+  // a second time after opening the panel via the row-level Analyze button.
+  const ranOnceRef = useRef(false);
+  useEffect(() => {
+    if (autoRun && !ranOnceRef.current && contractId) {
+      ranOnceRef.current = true;
+      run();
+    }
+  }, [autoRun, contractId, run]);
 
   const ratingColor = { Green: '#4ade80', Amber: '#fbbf24', Red: '#f87171' };
   const rating = analysis?.aiResult?.overall_rating;
@@ -324,38 +340,9 @@ export default function WordingChecker({ contractId, parentContractId, docs: pro
           )}
         </div>
 
-        {/* Document Types */}
-        <Section title="Document Types" badge={
-          EXPECTED_DOC_TYPES.every(dt => analysis.docTypeStatus[dt.key]==='found')
-            ? <Badge status="found" label="Complete" />
-            : <Badge status="missing" label="Incomplete" />
-        } expanded={expanded.docTypes} onToggle={() => toggle('docTypes')}>
-          <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
-            {EXPECTED_DOC_TYPES.map(dt => {
-              const st = analysis.docTypeStatus[dt.key];
-              const col = C[st] || C.unknown;
-              const docs = analysis.classified.filter(d => d._docClass===dt.key || dt.match.test(`${d.title||''} ${d.file_name||''}`));
-              return (
-                <div key={dt.key} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 8px', borderRadius:6, background:col.bg, border:`1px solid ${col.border}` }}>
-                  <span style={{ color:col.text, fontSize:13 }}>{st==='found' ? '✓' : '✗'}</span>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:11, color:'rgba(255,255,255,0.75)', fontWeight:600 }}>{dt.label}</div>
-                    {docs.length > 0 && <div style={{ fontSize:10, color:'rgba(255,255,255,0.35)', marginTop:1 }}>{docs.map(d=>d.title||d.file_name).join(', ')}</div>}
-                  </div>
-                </div>
-              );
-            })}
-            {!analysis.isRenewal && analysis.docTypeStatus.expiring === 'missing' && (
-              <div style={{ fontSize:11, color:'#fbbf24', padding:'6px 8px', background:'rgba(251,191,36,0.08)', borderRadius:6, border:'1px solid rgba(251,191,36,0.2)' }}>
-                ⚠ New business — recommend obtaining expiring slip or prior year terms for benchmarking.
-              </div>
-            )}
-          </div>
-        </Section>
-
-        {/* Coverage Summary */}
+        {/* Coverages */}
         {analysis.aiResult?.coverage_summary && (
-          <Section title="Coverage Summary" badge={<Badge status="info" label="AI" />}
+          <Section title="Coverages" badge={<Badge status="info" label="AI" />}
             expanded={expanded.coverage} onToggle={() => toggle('coverage')}>
             <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
               {analysis.aiResult.coverage_summary.treaty_type_confirmed && (
@@ -419,50 +406,85 @@ export default function WordingChecker({ contractId, parentContractId, docs: pro
           </Section>
         )}
 
-        {/* Grey Areas & Watchpoints */}
-        {(analysis.aiResult?.grey_areas?.length > 0 || analysis.aiResult?.watchpoints?.length > 0) && (
-          <Section title="Grey Areas & Watchpoints" badge={
-            (analysis.aiResult.grey_areas?.length||0) + (analysis.aiResult.watchpoints?.length||0) > 0
-              ? <Badge status="partial" label={`${(analysis.aiResult.grey_areas?.length||0)+(analysis.aiResult.watchpoints?.length||0)} item(s)`} />
-              : <Badge status="found" label="Clear" />
-          } expanded={expanded.grey} onToggle={() => toggle('grey')}>
-            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-              {analysis.aiResult.grey_areas?.length > 0 && (
-                <div>
-                  <div style={{ fontSize:10, fontWeight:700, color:'#fbbf24', textTransform:'uppercase', marginBottom:3 }}>Grey Areas</div>
-                  <InfoBox items={analysis.aiResult.grey_areas} color='#fbbf24' />
+        {/* Watchpoints (Concerns)
+            Consolidates grey areas + watchpoints + terms-match discrepancies
+            + required-but-missing clauses into a single list. Each item has
+            a severity dot — amber for soft concerns, red for hard misses.
+            One block, ordered red-first, keeps the underwriter's attention
+            on the things that should worry them. */}
+        {(() => {
+          const grey  = analysis.aiResult?.grey_areas || [];
+          const watch = analysis.aiResult?.watchpoints || [];
+          const disc  = analysis.aiResult?.terms_match?.discrepancies || [];
+          const missingRequired = WORDING_CHECKLIST.filter(
+            c => c.required && analysis.clauseResults[c.key] === 'missing'
+          );
+          const items = [
+            ...disc.map(text => ({ severity: 'red', text: `Terms discrepancy: ${text}` })),
+            ...missingRequired.map(c => ({ severity: 'red', text: `Required clause missing: ${c.label}` })),
+            ...watch.map(text => ({ severity: 'amber', text })),
+            ...grey.map(text  => ({ severity: 'amber', text })),
+          ];
+          const redCount = items.filter(i => i.severity === 'red').length;
+          const amberCount = items.length - redCount;
+          const badge = items.length === 0
+            ? <Badge status="found" label="Clear" />
+            : redCount > 0
+              ? <Badge status="missing" label={`${redCount} red · ${amberCount} amber`} />
+              : <Badge status="partial" label={`${amberCount} item(s)`} />;
+          return (
+            <Section title="Watchpoints (Concerns)" badge={badge}
+              expanded={expanded.watchpoints} onToggle={() => toggle('watchpoints')}>
+              {items.length === 0 ? (
+                <div style={{ fontSize:11, color:'#4ade80' }}>✓ No concerns identified.</div>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                  {items.map((it, i) => {
+                    const isRed = it.severity === 'red';
+                    const dot   = isRed ? '#f87171' : '#fbbf24';
+                    const bg    = isRed ? 'rgba(248,113,113,0.10)' : 'rgba(251,191,36,0.08)';
+                    const bd    = isRed ? 'rgba(248,113,113,0.28)' : 'rgba(251,191,36,0.25)';
+                    return (
+                      <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:8, padding:'6px 10px', borderRadius:6, background:bg, border:`1px solid ${bd}` }}>
+                        <span style={{ width:8, height:8, borderRadius:999, background:dot, marginTop:5, flexShrink:0 }} />
+                        <div style={{ fontSize:11, color: isRed ? '#f87171' : '#fbbf24', lineHeight:1.5 }}>{it.text}</div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
-              {analysis.aiResult.watchpoints?.length > 0 && (
-                <div>
-                  <div style={{ fontSize:10, fontWeight:700, color:'#f87171', textTransform:'uppercase', marginBottom:3 }}>Watchpoints</div>
-                  <InfoBox items={analysis.aiResult.watchpoints} color='#f87171' />
-                </div>
-              )}
-            </div>
-          </Section>
-        )}
+            </Section>
+          );
+        })()}
 
-        {/* Treaty Terms Cross-Check */}
-        {analysis.aiResult?.terms_match && (
-          <Section title="Treaty Terms Cross-Check" badge={
-            analysis.aiResult.terms_match.ok && !analysis.aiResult.terms_match.discrepancies?.length
-              ? <Badge status="found" label="Terms match" />
-              : <Badge status="missing" label="Discrepancies found" />
-          } expanded={expanded.termsMatch} onToggle={() => toggle('termsMatch')}>
-            {analysis.aiResult.terms_match.discrepancies?.length > 0 ? (
-              <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
-                {analysis.aiResult.terms_match.discrepancies.map((d,i) => (
-                  <div key={i} style={{ padding:'6px 10px', borderRadius:6, background:'rgba(248,113,113,0.10)', border:'1px solid rgba(248,113,113,0.25)', fontSize:11, color:'#f87171' }}>
-                    ✗ {d}
+        {/* Document Types — collapsed by default in the modal view */}
+        <Section title="Document Types" badge={
+          EXPECTED_DOC_TYPES.every(dt => analysis.docTypeStatus[dt.key]==='found')
+            ? <Badge status="found" label="Complete" />
+            : <Badge status="missing" label="Incomplete" />
+        } expanded={expanded.docTypes} onToggle={() => toggle('docTypes')}>
+          <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+            {EXPECTED_DOC_TYPES.map(dt => {
+              const st = analysis.docTypeStatus[dt.key];
+              const col = C[st] || C.unknown;
+              const docs = analysis.classified.filter(d => d._docClass===dt.key || dt.match.test(`${d.title||''} ${d.file_name||''}`));
+              return (
+                <div key={dt.key} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 8px', borderRadius:6, background:col.bg, border:`1px solid ${col.border}` }}>
+                  <span style={{ color:col.text, fontSize:13 }}>{st==='found' ? '✓' : '✗'}</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:11, color:'rgba(255,255,255,0.75)', fontWeight:600 }}>{dt.label}</div>
+                    {docs.length > 0 && <div style={{ fontSize:10, color:'rgba(255,255,255,0.35)', marginTop:1 }}>{docs.map(d=>d.title||d.file_name).join(', ')}</div>}
                   </div>
-                ))}
+                </div>
+              );
+            })}
+            {!analysis.isRenewal && analysis.docTypeStatus.expiring === 'missing' && (
+              <div style={{ fontSize:11, color:'#fbbf24', padding:'6px 8px', background:'rgba(251,191,36,0.08)', borderRadius:6, border:'1px solid rgba(251,191,36,0.2)' }}>
+                ⚠ New business — recommend obtaining expiring slip or prior year terms for benchmarking.
               </div>
-            ) : (
-              <div style={{ fontSize:11, color:'#4ade80' }}>✓ Slip terms are consistent with captured treaty details.</div>
             )}
-          </Section>
-        )}
+          </div>
+        </Section>
 
         {/* Clause Checklist */}
         <Section title="Clause Checklist" badge={

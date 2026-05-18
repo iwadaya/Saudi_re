@@ -8,7 +8,7 @@ import { env } from '../config/env.js';
 import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { validateBody } from '../lib/validate.js';
-import { slipIngestSchema, aiCompleteSchema, facAnalyseDocumentSchema } from '../validation/ai.js';
+import { slipIngestSchema, aiCompleteSchema, aiAnalyseJsonSchema, facAnalyseDocumentSchema } from '../validation/ai.js';
 import { pool } from '../db/pool.js';
 import { runFacDocumentAnalysis } from '../lib/facDocAi.js';
 import { callLlmJson } from '../lib/llmClient.js';
@@ -154,6 +154,26 @@ router.post('/ai/complete', validateBody(aiCompleteSchema), asyncHandler(async (
 
   const data = await anthropicRes.json();
   res.json(data);
+}));
+
+// POST /api/ai/analyse-json
+// JSON-mode completion via Gemini → OpenAI fallback (shared LLM client).
+// Used by wording analysis. Replaces /ai/complete for any caller that
+// wants structured JSON output and provider redundancy.
+router.post('/ai/analyse-json', validateBody(aiAnalyseJsonSchema), asyncHandler(async (req, res) => {
+  const { systemPrompt, userPrompt, maxOutputTokens = 4096, temperature = 0 } = req.body;
+  try {
+    const { text, provider } = await callLlmJson({
+      systemPrompt,
+      userPrompt,
+      maxOutputTokens,
+      temperature,
+    });
+    res.json({ text, provider });
+  } catch (e) {
+    logger.error('[ai/analyse-json] failed', { error: e?.message });
+    return res.status(502).json({ error: e?.message || 'AI analysis failed' });
+  }
 }));
 
 // ── POST /api/ai/fac/analyse-document ─────────────────────────────

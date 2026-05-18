@@ -603,6 +603,7 @@ export const api = {
 
   // AI / document text extraction
   aiComplete(payload, opts) { return request('/api/ai/complete', { method: 'POST', body: payload, ...opts }); },
+  aiAnalyseJson(payload, opts) { return request('/api/ai/analyse-json', { method: 'POST', body: payload, ...opts }); },
   aiSlipIngest(payload, opts) { return request('/api/ai/slip-ingest', { method: 'POST', body: payload, ...opts }); },
   getDocumentText(docId, opts) { return request(`/api/documents/${enc(docId)}/text`, opts); },
 

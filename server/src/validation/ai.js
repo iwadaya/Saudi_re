@@ -34,6 +34,18 @@ export const aiCompleteSchema = z.object({
   max_tokens: z.number().int().positive().max(4000).optional(),
 });
 
+// ── /ai/analyse-json ───────────────────────────────────────────────
+// JSON-mode completion routed through the shared Gemini → OpenAI client.
+// Caller supplies a system prompt and a user prompt; the route returns
+// `{ text, provider }` where `text` is the raw model output (expected
+// to be JSON the caller will parse).
+export const aiAnalyseJsonSchema = z.object({
+  systemPrompt:    z.string().min(1).max(20_000),
+  userPrompt:      z.string().min(1).max(50_000),
+  maxOutputTokens: z.number().int().positive().max(32_768).optional(),
+  temperature:     z.number().min(0).max(2).optional(),
+});
+
 // ── /ai/fac/analyse-document ──────────────────────────────────────
 // Triggers a fac_document_analysis run against a previously uploaded
 // document. The runner reads the file bytes from storage (Cloudinary
