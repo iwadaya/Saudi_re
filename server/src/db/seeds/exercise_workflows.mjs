@@ -228,14 +228,14 @@ async function main() {
   });
 
   await step('offer.approval-state', async () => {
-    const c = await pickContract({ category: 'PROPORTIONAL', status: 'WAITING_APPROVAL' });
+    const c = await pickContract({ category: 'PROPORTIONAL', status: 'AWAITING_APPROVAL' });
     const r = await http('GET', `/api/treaties/${c.contract_id}/offer/approval-state`);
     if (!r.ok && r.status !== 404) throw new Error(`status ${r.status}: ${r.text.slice(0, 120)}`);
     return `${c.contract_id.slice(0, 8)}: ${r.status}`;
   });
 
   await step('offer.mark-approved (CUO)', async () => {
-    const c = await pickContract({ category: 'PROPORTIONAL', status: 'WAITING_APPROVAL' });
+    const c = await pickContract({ category: 'PROPORTIONAL', status: 'AWAITING_APPROVAL' });
     const r = await http('POST', `/api/treaties/${c.contract_id}/offer/mark-approved`, {
       comment: 'Approved post-review',
     });

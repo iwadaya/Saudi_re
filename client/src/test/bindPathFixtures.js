@@ -219,7 +219,7 @@ export const approvalRows = {
       cedant_name: 'Audit Cedant',
       treaty_type_name: 'Quota Share',
       treaty_category: 'PROPORTIONAL',
-      status: 'WAITING_APPROVAL',
+      status: 'AWAITING_APPROVAL',
       updated_at: '2026-05-01T10:30:00.000Z',
     },
   ],
@@ -301,7 +301,7 @@ export function makeBindPathApiMock(fn, overrides = {}) {
     declineContract: fn().mockResolvedValue({ ok: true }),
     listContracts: fn((params = {}) => {
       const status = String(params.status || '');
-      if (status.includes('WAITING_APPROVAL')) return Promise.resolve(copy(approvalRows.pending));
+      if (status.includes('AWAITING_APPROVAL')) return Promise.resolve(copy(approvalRows.pending));
       return Promise.resolve(copy(approvalRows.decided));
     }),
     listQuotes: fn().mockResolvedValue(copy(approvalRows.quotes)),

@@ -18,7 +18,6 @@ const TERMINAL_STATES = new Set(['SIGNED', 'NTU', 'DECLINED']);
 function normalizeStatus(s) {
   if (!s) return 'DRAFT';
   const u = String(s).toUpperCase();
-  if (u === 'WAITING_APPROVAL') return 'AWAITING_APPROVAL';
   if (u === 'RETURNED' || u === 'OFFERED' || u === 'PENDING') return 'DRAFT';
   return u;
 }

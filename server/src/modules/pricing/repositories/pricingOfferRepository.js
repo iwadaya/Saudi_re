@@ -116,7 +116,7 @@ export async function recallOffer(contractId, actor) {
 }
 
 export async function markSigned(contractId, signedLinePct) {
-  // Must have been on offer — no signing a DRAFT or a WAITING_APPROVAL.
+  // Must have been on offer — no signing a DRAFT or an AWAITING_APPROVAL.
   const current = await loadCurrentStatus(contractId);
   assertLegalTransition(current, 'SIGNED');
   await pool.query(

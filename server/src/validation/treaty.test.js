@@ -29,18 +29,18 @@ describe('treatyHeaderSchema', () => {
   // (11 values) and uw_workflow_status (7) — were conflated in an
   // earlier draft. status='AWAITING_APPROVAL' then 400'd on live saves.
   it('accepts contract_status values that do NOT exist in uw_workflow_status', () => {
-    // AWAITING_APPROVAL, QUOTED, BOUND, RENEWED, CANCELLED, OFFERED
-    // are in contract_status only. uw_workflow_status has
-    // WAITING_APPROVAL (without the A).
+    // QUOTED, BOUND, RENEWED, CANCELLED, OFFERED are in contract_status
+    // only. AWAITING_APPROVAL is shared across both enums.
     for (const v of ['AWAITING_APPROVAL', 'QUOTED', 'BOUND', 'RENEWED', 'CANCELLED', 'OFFERED']) {
       expect(() => treatyHeaderSchema.parse({ status: v })).not.toThrow();
     }
   });
 
-  it('rejects WAITING_APPROVAL on status (it belongs on uw_status only)', () => {
-    // contract_status has AWAITING_APPROVAL — WAITING_APPROVAL would
-    // be a silent typo otherwise.
+  it('rejects the legacy WAITING_APPROVAL spelling on both columns', () => {
+    // Pre-migration 103 there were two spellings — WAITING_APPROVAL on
+    // uw_status, AWAITING_APPROVAL on status. Consolidated to the latter.
     expect(() => treatyHeaderSchema.parse({ status: 'WAITING_APPROVAL' })).toThrow();
+    expect(() => treatyHeaderSchema.parse({ uw_status: 'WAITING_APPROVAL' })).toThrow();
   });
 
   it('accepts experience_source = STRAIGHT (DB CHECK allows it)', () => {

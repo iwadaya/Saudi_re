@@ -31,7 +31,7 @@
  * @property {string} [country_id]
  * @property {string} [treaty_type_id]
  * @property {number} uw_year
- * @property {'DRAFT'|'WAITING_APPROVAL'|'APPROVED'|'AWAITING_SIGNED_LINE'|'SIGNED'|'NTU'|'DECLINED'} status
+ * @property {'DRAFT'|'AWAITING_APPROVAL'|'APPROVED'|'AWAITING_SIGNED_LINE'|'SIGNED'|'NTU'|'DECLINED'} status
  * @property {'TRIANGLE'|'HISTORICAL'|'BURN'} [experience_source]
  * @property {string} [cedant_name]
  * @property {string} [broker_name]

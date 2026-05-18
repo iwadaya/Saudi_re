@@ -23,7 +23,7 @@
 /** Canonical uw_status enum. Matches the Postgres uw_workflow_status type. */
 export const UW_STATUSES = Object.freeze([
   'DRAFT',
-  'WAITING_APPROVAL',
+  'AWAITING_APPROVAL',
   'APPROVED',
   'AWAITING_SIGNED_LINE',
   'SIGNED',
@@ -37,20 +37,20 @@ const TERMINAL = new Set(['SIGNED', 'NTU', 'DECLINED']);
  * Legal transitions. Read as: from → allowed next states.
  *
  * Deliberate choices:
- *   - DRAFT → WAITING_APPROVAL              : submitForApproval
+ *   - DRAFT → AWAITING_APPROVAL              : submitForApproval
  *   - DRAFT → DECLINED                       : operator can kill a draft outright
- *   - WAITING_APPROVAL → APPROVED            : multi-step approval engine only;
+ *   - AWAITING_APPROVAL → APPROVED            : multi-step approval engine only;
  *                                              markApproved skips this and goes
  *                                              straight to AWAITING_SIGNED_LINE
- *   - WAITING_APPROVAL → AWAITING_SIGNED_LINE: markApproved (the one-shot CU
+ *   - AWAITING_APPROVAL → AWAITING_SIGNED_LINE: markApproved (the one-shot CU
  *                                              approve-to-offer used by PropPricing
  *                                              + NpFinalPricing). Reality: there
  *                                              is usually no persisted APPROVED
  *                                              state — the UPDATE sets
  *                                              uw_status='AWAITING_SIGNED_LINE'
  *                                              directly.
- *   - WAITING_APPROVAL → DECLINED            : approver rejection
- *   - WAITING_APPROVAL → DRAFT               : returnToUnderwriter
+ *   - AWAITING_APPROVAL → DECLINED            : approver rejection
+ *   - AWAITING_APPROVAL → DRAFT               : returnToUnderwriter
  *   - APPROVED → AWAITING_SIGNED_LINE        : legacy path (kept for approval
  *                                              engines that do land on APPROVED)
  *   - APPROVED → DECLINED                    : late decline path
@@ -64,8 +64,8 @@ const TERMINAL = new Set(['SIGNED', 'NTU', 'DECLINED']);
  * is a no-op, not a contract violation).
  */
 export const LEGAL_TRANSITIONS = Object.freeze({
-  DRAFT:                new Set(['DRAFT', 'WAITING_APPROVAL', 'DECLINED']),
-  WAITING_APPROVAL:     new Set(['WAITING_APPROVAL', 'APPROVED', 'AWAITING_SIGNED_LINE', 'DRAFT', 'DECLINED']),
+  DRAFT:                new Set(['DRAFT', 'AWAITING_APPROVAL', 'DECLINED']),
+  AWAITING_APPROVAL:     new Set(['AWAITING_APPROVAL', 'APPROVED', 'AWAITING_SIGNED_LINE', 'DRAFT', 'DECLINED']),
   APPROVED:             new Set(['APPROVED', 'AWAITING_SIGNED_LINE', 'DECLINED']),
   AWAITING_SIGNED_LINE: new Set(['AWAITING_SIGNED_LINE', 'SIGNED', 'NTU', 'DRAFT', 'DECLINED']),
   SIGNED:               new Set(['SIGNED']),    // terminal

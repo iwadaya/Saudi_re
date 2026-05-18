@@ -70,15 +70,15 @@ function stylePortfolioSheet(ws, nCols) {
 
 /* ── workflow normalisation ── */
 const WF = {
-  AWAITING_APPROVAL: 'WAITING_APPROVAL', WAITING_APPROVAL: 'WAITING_APPROVAL',
-  PENDING_APPROVAL: 'WAITING_APPROVAL', OFFERED: 'WAITING_APPROVAL',
-  DISPUTE_PENDING: 'WAITING_APPROVAL', RETURNED: 'DRAFT',
-  AWAITING_SIGNED_LINE: 'WAITING_SIGNED_LINE', WAITING_SIGNED_LINE: 'WAITING_SIGNED_LINE',
-  APPROVED: 'WAITING_SIGNED_LINE',
+  AWAITING_APPROVAL: 'AWAITING_APPROVAL',
+  PENDING_APPROVAL: 'AWAITING_APPROVAL', OFFERED: 'AWAITING_APPROVAL',
+  DISPUTE_PENDING: 'AWAITING_APPROVAL', RETURNED: 'DRAFT',
+  AWAITING_SIGNED_LINE: 'AWAITING_SIGNED_LINE',
+  APPROVED: 'AWAITING_SIGNED_LINE',
   SIGNED: 'SIGNED', BOUND: 'SIGNED', NTU: 'NTU', DECLINED: 'DECLINED',
 };
 const WF_LABELS = {
-  WAITING_APPROVAL: 'Waiting for approval', WAITING_SIGNED_LINE: 'Awaiting signed line',
+  AWAITING_APPROVAL: 'Awaiting approval', AWAITING_SIGNED_LINE: 'Awaiting signed line',
   DISPUTE_PENDING: 'Dispute pending', RETURNED: 'Returned to UW',
   SIGNED: 'Signed', NTU: 'NTU', DECLINED: 'Declined', DRAFT: 'Draft',
 };
@@ -98,7 +98,7 @@ function statusClass(key) {
   if (key === 'SIGNED') return 'status-quoted';
   if (key === 'DECLINED') return 'status-declined';
   if (key === 'NTU') return 'status-offered';
-  if (key === 'WAITING_APPROVAL' || key === 'WAITING_SIGNED_LINE') return 'status-pending';
+  if (key === 'AWAITING_APPROVAL' || key === 'AWAITING_SIGNED_LINE') return 'status-pending';
   return '';
 }
 
@@ -527,7 +527,7 @@ export default function HomeScreen() {
     else              setActiveContractId(item.id);
     resetFlow({ quote: item.isQuote, mode: isNp ? 'NP' : 'PROP' });
     // Submitted/approved/signed quotes should open at final pricing, not treaty detail
-    const ADVANCED_STATUSES = ['AWAITING_APPROVAL','WAITING_APPROVAL','AWAITING_SIGNED_LINE','SIGNED','NTU','DECLINED','APPROVED'];
+    const ADVANCED_STATUSES = ['AWAITING_APPROVAL','AWAITING_SIGNED_LINE','SIGNED','NTU','DECLINED','APPROVED'];
     const itemStatus = String(item.status || '').toUpperCase();
     const goToFinal = item.isQuote && ADVANCED_STATUSES.includes(itemStatus);
     if (goToFinal) {

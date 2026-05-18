@@ -72,7 +72,7 @@ export default function NpBloombergHero({
   const showCat  = mode === 'CAT'  || mode === 'BOTH';
 
   const statusColor = {
-    DRAFT: 'rgba(148,163,184,0.5)', WAITING_APPROVAL: '#00d4ff',
+    DRAFT: 'rgba(148,163,184,0.5)', AWAITING_APPROVAL: '#00d4ff',
     SIGNED: '#4ade80', DECLINED: '#f87171', NTU: '#00d4ff',
   }[offerStatus] || 'rgba(148,163,184,0.5)';
 

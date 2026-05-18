@@ -18,7 +18,7 @@ import {
 
 /** Uw workflow status — separate from the generic contract status. */
 const uwWorkflowStatus = z.enum([
-  'DRAFT', 'WAITING_APPROVAL', 'APPROVED', 'AWAITING_SIGNED_LINE',
+  'DRAFT', 'AWAITING_APPROVAL', 'APPROVED', 'AWAITING_SIGNED_LINE',
   'SIGNED', 'NTU', 'DECLINED',
 ]).optional();
 
