@@ -55,6 +55,24 @@ vi.mock('./WordingChecker', () => ({
   default: () => null,
 }));
 
+// WordingAnalysisModal — render a minimal identifiable shell so tests
+// can assert when the modal opens and which slip it's scoped to. The
+// real component pulls in WordingChecker + auto-runs analysis; we don't
+// want to exercise that here, just the open/close + props plumbing.
+vi.mock('./WordingAnalysisModal', () => ({
+  __esModule: true,
+  default: function FakeModal({ doc, onClose }) {
+    if (!doc) return null;
+    return (
+      <div role="dialog" aria-label="wording-analysis-modal" data-doc-id={doc.document_id || doc.id}>
+        <div>Wording Analysis</div>
+        <div>{doc.doc_type} — {doc.title || doc.file_name}</div>
+        <button onClick={onClose}>close-modal</button>
+      </div>
+    );
+  },
+}));
+
 const { default: DocumentsScreen } = await import('./DocumentsScreen.jsx');
 
 // ── fixture builders ──────────────────────────────────────────────────────
@@ -70,15 +88,27 @@ function rpDoc({ id = 'doc-rp-1', filename = 'pack.xlsx', docType = 'Renewal Pac
     uploaded_at: '2026-05-01T12:00:00.000Z',
   };
 }
-function slipDoc({ id = 'doc-slip-1', filename = 'slip.pdf' } = {}) {
+function slipDoc({ id = 'doc-slip-1', filename = 'slip.pdf', docType = 'Final Slip', title = 'Slip title' } = {}) {
   return {
     document_id: id,
     file_name: filename,
-    doc_type: 'Final Slip',
-    title: 'Slip title',
+    doc_type: docType,
+    title,
     size_bytes: 9999,
     mime_type: 'application/pdf',
     uploaded_at: '2026-05-02T12:00:00.000Z',
+  };
+}
+
+function nonSlipDoc({ id = 'doc-risk-1', filename = 'risks.pdf' } = {}) {
+  return {
+    document_id: id,
+    file_name: filename,
+    doc_type: 'Risk Profiles',
+    title: 'Risk profiles',
+    size_bytes: 4321,
+    mime_type: 'application/pdf',
+    uploaded_at: '2026-05-03T12:00:00.000Z',
   };
 }
 
@@ -430,5 +460,130 @@ describe('DocumentsScreen — Undo affordance', () => {
     render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode />);
     await screen.findByText(/Imported Jan 1, 2025/);
     expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+  });
+});
+
+// ── Wording analysis — per-row Analyze button + modal ─────────────────────
+// The top-level "Wording Analysis" button is gone; analysis is per-row
+// and only on slip rows (Final / Draft / Expiring). Clicking opens a
+// modal scoped to that specific slip; Escape / backdrop close it.
+describe('DocumentsScreen — wording analysis trigger', () => {
+  it('renders no Analyze button when there are no documents', async () => {
+    defaultMocks({ docs: [] });
+    render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode />);
+    await waitFor(() => expect(apiMock.getDocuments).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /Analyze wording/i })).not.toBeInTheDocument();
+  });
+
+  it('renders no Analyze button on a non-slip row (Risk Profiles)', async () => {
+    defaultMocks({ docs: [nonSlipDoc()] });
+    render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode />);
+    await waitFor(() => expect(screen.getByText('risks.pdf')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /Analyze wording/i })).not.toBeInTheDocument();
+  });
+
+  it('renders exactly one Analyze button on a Final Slip row', async () => {
+    defaultMocks({ docs: [slipDoc()] });
+    render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode />);
+    await waitFor(() => expect(screen.getByText('slip.pdf')).toBeInTheDocument());
+    expect(screen.getAllByRole('button', { name: /Analyze wording/i })).toHaveLength(1);
+  });
+
+  it('renders one Analyze button per slip row (Final / Draft / Expiring) and none on the non-slip row', async () => {
+    defaultMocks({
+      docs: [
+        slipDoc({ id: 'slip-final',    filename: 'final.pdf',    docType: 'Final Slip' }),
+        slipDoc({ id: 'slip-draft',    filename: 'draft.pdf',    docType: 'Draft Slip' }),
+        slipDoc({ id: 'slip-expiring', filename: 'expiring.pdf', docType: 'Expiring Slip' }),
+        nonSlipDoc({ id: 'non-slip-1', filename: 'risks.pdf' }),
+      ],
+    });
+    render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode />);
+    await waitFor(() => expect(screen.getByText('final.pdf')).toBeInTheDocument());
+    expect(screen.getAllByRole('button', { name: /Analyze wording/i })).toHaveLength(3);
+  });
+
+  it('removes the top-level "Wording Analysis" toggle from the docs list header', async () => {
+    defaultMocks({ docs: [slipDoc()] });
+    render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode />);
+    await waitFor(() => expect(screen.getByText('slip.pdf')).toBeInTheDocument());
+    // The old top-level "🔍 Wording Analysis" button is gone — only the
+    // row-level "Analyze" button should be present.
+    expect(screen.queryByRole('button', { name: /Wording Analysis/i })).not.toBeInTheDocument();
+  });
+
+  it('clicking Analyze opens the modal scoped to that slip', async () => {
+    defaultMocks({ docs: [slipDoc({ id: 'slip-1', title: 'Final Signed Slip' })] });
+    render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode />);
+    fireEvent.click(await screen.findByRole('button', { name: /Analyze wording/i }));
+    const modal = await screen.findByRole('dialog', { name: 'wording-analysis-modal' });
+    expect(modal).toHaveAttribute('data-doc-id', 'slip-1');
+    expect(screen.getByText(/Final Slip — Final Signed Slip/)).toBeInTheDocument();
+  });
+
+  it('closes the modal via the onClose hook', async () => {
+    defaultMocks({ docs: [slipDoc()] });
+    render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode />);
+    fireEvent.click(await screen.findByRole('button', { name: /Analyze wording/i }));
+    await screen.findByRole('dialog', { name: 'wording-analysis-modal' });
+    fireEvent.click(screen.getByRole('button', { name: 'close-modal' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'wording-analysis-modal' })).not.toBeInTheDocument());
+  });
+});
+
+// ── Slip View opens in a new tab ──────────────────────────────────────────
+// Slip rows are the only place we redirect View to window.open. Non-slip
+// viewable docs keep the old inline preview modal.
+describe('DocumentsScreen — slip View opens in a new tab', () => {
+  let openSpy;
+  beforeEach(() => {
+    openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+  });
+  afterEach(() => {
+    openSpy.mockRestore();
+  });
+
+  it('opens the slip view URL in a new tab and does NOT open the inline preview', async () => {
+    defaultMocks({ docs: [slipDoc({ id: 'slip-1' })] });
+    render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode />);
+    await waitFor(() => expect(screen.getByText('slip.pdf')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'View' }));
+
+    expect(openSpy).toHaveBeenCalledWith('/view', '_blank', 'noopener,noreferrer');
+    // The inline preview modal would render a "✕ Close" button — its
+    // absence confirms we routed to a new tab instead.
+    expect(screen.queryByRole('button', { name: /Close/i })).not.toBeInTheDocument();
+  });
+
+  it('non-slip viewable docs (Risk Profiles PDF) open the inline modal instead', async () => {
+    defaultMocks({ docs: [nonSlipDoc()] });
+    render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode />);
+    await waitFor(() => expect(screen.getByText('risks.pdf')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'View' }));
+
+    expect(openSpy).not.toHaveBeenCalled();
+    // The inline preview chrome surfaces a "↓ Download" link + "✕ Close"
+    // button — proof the modal opened.
+    expect(screen.getByRole('button', { name: /Close/i })).toBeInTheDocument();
+  });
+});
+
+// ── Theme tokens — no hardcoded slate/green literals leak into the DOM ────
+describe('DocumentsScreen — theme tokens drive page chrome', () => {
+  it('no hardcoded slate/green rgba literals remain in the rendered DOM', async () => {
+    defaultMocks({ docs: [slipDoc(), nonSlipDoc()] });
+    const { container } = render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode />);
+    await waitFor(() => expect(screen.getByText('slip.pdf')).toBeInTheDocument());
+
+    // These literals were the hardcoded slate/green palette before the
+    // theme-token migration. If any leaked through they'd show up here
+    // as inline-style strings on rendered elements.
+    const html = container.innerHTML;
+    expect(html).not.toMatch(/rgba\(34,\s*197,\s*94/);  // hardcoded emerald-500
+    expect(html).not.toMatch(/rgba\(2,\s*6,\s*23/);     // hardcoded slate-950
+    expect(html).not.toMatch(/rgba\(148,\s*163,\s*184/); // hardcoded slate-400
+    expect(html).not.toMatch(/rgba\(226,\s*232,\s*240/); // hardcoded slate-200
   });
 });
