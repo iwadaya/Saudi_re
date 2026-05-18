@@ -1,5 +1,5 @@
 // WordingChecker.jsx — AI wording analysis: coverage, exclusions, grey areas, treaty check
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { api } from '../../api';
 
 const WORDING_CHECKLIST = [
@@ -94,7 +94,16 @@ function findBestSlip(docs) {
   return docs.find(d => /pdf/i.test(d.mime_type||'')) || docs[0] || null;
 }
 
-export default function WordingChecker({ contractId, parentContractId, docs: propDocs, onClauseResults }) {
+export default function WordingChecker({ contractId, parentContractId, docs: propDocs, onClauseResults, quoteMode = false }) {
+  // `contractId` is the active entity's id — under a quote it's a
+  // quote_id, not a contract_id. The contract-scoped API helpers
+  // (getDocuments / getContract) need { quote: true } to hit the
+  // quote routes; without it they 404 or read the wrong row. Document
+  // text lookups go via document_id and don't care which side owns
+  // the contract, so they stay unscoped. parentContractId comes from
+  // contract.parent_contract_id and always references the prior-year
+  // *treaty* — no quote opt needed there either.
+  const apiOpts = useMemo(() => (quoteMode ? { quote: true } : undefined), [quoteMode]);
   const [analysis, setAnalysis] = useState(null);
   const [running,  setRunning]  = useState(false);
   const [step,     setStep]     = useState('');
@@ -110,7 +119,7 @@ export default function WordingChecker({ contractId, parentContractId, docs: pro
       setStep('Loading documents…');
       const currentDocs = propDocs && propDocs.length
         ? propDocs
-        : await api.getDocuments(contractId).then(r => Array.isArray(r) ? r : []).catch(()=>[]);
+        : await api.getDocuments(contractId, apiOpts).then(r => Array.isArray(r) ? r : []).catch(()=>[]);
 
       let priorDocs = [];
       if (parentContractId) {
@@ -121,7 +130,7 @@ export default function WordingChecker({ contractId, parentContractId, docs: pro
       // ── 2. Load contract detail for cross-check ──
       setStep('Loading contract terms…');
       let contractDetail = null;
-      try { contractDetail = await api.getContract(contractId); } catch {}
+      try { contractDetail = await api.getContract(contractId, apiOpts); } catch {}
 
       // ── 3. Classify docs ──
       setStep('Classifying documents…');
@@ -261,7 +270,7 @@ export default function WordingChecker({ contractId, parentContractId, docs: pro
       setError(e.message || 'Analysis failed');
       setStep('');
     } finally { setRunning(false); }
-  }, [contractId, onClauseResults, parentContractId, propDocs]);
+  }, [contractId, onClauseResults, parentContractId, propDocs, apiOpts]);
 
   const ratingColor = { Green: '#4ade80', Amber: '#fbbf24', Red: '#f87171' };
   const rating = analysis?.aiResult?.overall_rating;

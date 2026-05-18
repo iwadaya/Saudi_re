@@ -485,7 +485,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
           {/* Wording Analysis */}
           {showWording && (
             <div style={{ marginTop:16, padding:16, borderRadius:12, background:'rgba(2,6,23,0.4)', border:'1px solid rgba(35,209,139,0.2)' }}>
-              <WordingChecker contractId={contractId} parentContractId={parentId} docs={docs} />
+              <WordingChecker contractId={contractId} parentContractId={parentId} docs={docs} quoteMode={quoteMode} />
             </div>
           )}
 
