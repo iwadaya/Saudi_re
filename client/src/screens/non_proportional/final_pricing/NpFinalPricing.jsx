@@ -1127,7 +1127,6 @@ export default function NpFinalPricing() {
       // contract_offer.status (offer_status) is authoritative; uw_status is secondary fallback.
       // JSONB savedPricing.offerStatus is only used if DB has NO offer row at all (very old contracts).
       const UW_STATUS_MAP = {
-        WAITING_APPROVAL: 'AWAITING_APPROVAL',
         OFFERED: 'DRAFT', PENDING: 'DRAFT', RETURNED: 'DRAFT', APPROVED: 'AWAITING_SIGNED_LINE',
       };
       const dbOfferStatus = npData?.offer_status || null;

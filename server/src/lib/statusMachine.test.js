@@ -15,7 +15,7 @@ import {
 describe('UW_STATUSES', () => {
   it('contains exactly the seven workflow states', () => {
     expect(UW_STATUSES).toEqual([
-      'DRAFT', 'WAITING_APPROVAL', 'APPROVED', 'AWAITING_SIGNED_LINE',
+      'DRAFT', 'AWAITING_APPROVAL', 'APPROVED', 'AWAITING_SIGNED_LINE',
       'SIGNED', 'NTU', 'DECLINED',
     ]);
   });
@@ -36,20 +36,20 @@ describe('LEGAL_TRANSITIONS', () => {
     expect([...LEGAL_TRANSITIONS.DECLINED]).toEqual(['DECLINED']);
   });
 
-  it('DRAFT can only flow to WAITING_APPROVAL or DECLINED (or stay)', () => {
-    expect([...LEGAL_TRANSITIONS.DRAFT].sort()).toEqual(['DECLINED', 'DRAFT', 'WAITING_APPROVAL']);
+  it('DRAFT can only flow to AWAITING_APPROVAL or DECLINED (or stay)', () => {
+    expect([...LEGAL_TRANSITIONS.DRAFT].sort()).toEqual(['AWAITING_APPROVAL', 'DECLINED', 'DRAFT']);
   });
 });
 
 describe('isLegalTransition', () => {
   it.each([
-    ['DRAFT',                'WAITING_APPROVAL',     true,  'submit for approval'],
-    ['WAITING_APPROVAL',     'APPROVED',             true,  'peer/arbiter approval (engine)'],
-    ['WAITING_APPROVAL',     'AWAITING_SIGNED_LINE', true,  'mark-approved skips APPROVED'],
+    ['DRAFT',                'AWAITING_APPROVAL',     true,  'submit for approval'],
+    ['AWAITING_APPROVAL',     'APPROVED',             true,  'peer/arbiter approval (engine)'],
+    ['AWAITING_APPROVAL',     'AWAITING_SIGNED_LINE', true,  'mark-approved skips APPROVED'],
     ['APPROVED',             'AWAITING_SIGNED_LINE', true,  'legacy mark approved → offer'],
     ['AWAITING_SIGNED_LINE', 'SIGNED',               true,  'mark signed'],
     ['AWAITING_SIGNED_LINE', 'NTU',                  true,  'mark NTU'],
-    ['WAITING_APPROVAL',     'DRAFT',                true,  'return to underwriter'],
+    ['AWAITING_APPROVAL',     'DRAFT',                true,  'return to underwriter'],
     ['AWAITING_SIGNED_LINE', 'DRAFT',                true,  'recall offer'],
     ['DRAFT',                'DECLINED',             true,  'kill draft outright'],
   ])('legal: %s → %s (%s)', (from, to, expected) => {
@@ -80,7 +80,7 @@ describe('isLegalTransition', () => {
   });
 
   it('accepts lowercase input (coerces to upper)', () => {
-    expect(isLegalTransition('draft', 'waiting_approval')).toBe(true);
+    expect(isLegalTransition('draft', 'awaiting_approval')).toBe(true);
   });
 });
 
@@ -91,7 +91,7 @@ describe('isTerminal', () => {
     expect(isTerminal('DECLINED')).toBe(true);
   });
   it('all others are not', () => {
-    for (const s of ['DRAFT', 'WAITING_APPROVAL', 'APPROVED', 'AWAITING_SIGNED_LINE']) {
+    for (const s of ['DRAFT', 'AWAITING_APPROVAL', 'APPROVED', 'AWAITING_SIGNED_LINE']) {
       expect(isTerminal(s)).toBe(false);
     }
   });
@@ -99,7 +99,7 @@ describe('isTerminal', () => {
 
 describe('assertLegalTransition', () => {
   it('returns quietly on a legal edge', () => {
-    expect(() => assertLegalTransition('DRAFT', 'WAITING_APPROVAL')).not.toThrow();
+    expect(() => assertLegalTransition('DRAFT', 'AWAITING_APPROVAL')).not.toThrow();
   });
 
   it('throws InvalidTransitionError on an illegal edge', () => {

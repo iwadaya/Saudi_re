@@ -195,7 +195,7 @@ export async function submitForApproval({ contractId, quoteId, submittedByUserId
      epiUsd||null,peer1UserId||null,requiredRole,peer1UserId||null]
   );
 
-  if (contractId) await pool.query(`UPDATE public.contract SET uw_status='WAITING_APPROVAL',status='AWAITING_APPROVAL',updated_at=now() WHERE contract_id=$1`,[contractId]);
+  if (contractId) await pool.query(`UPDATE public.contract SET uw_status='AWAITING_APPROVAL',status='AWAITING_APPROVAL',updated_at=now() WHERE contract_id=$1`,[contractId]);
 
   await logOfferEvent({contractId,quoteId,eventType:'SUBMITTED',actorUserId:submittedByUserId,actorName:submittedByName,actorRole:submittedByRole,payload:{breachType:resolvedBreachType,requiredRole,epiUsd,peer1UserId},comment});
   return { offerId:res.rows[0]?.offer_id, breachType:resolvedBreachType, requiredRole, requiredRoleName:ROLE_NAME[requiredRole]||requiredRole };
@@ -268,18 +268,7 @@ export async function recordPeerDecision({ contractId, quoteId, decidedByUserId,
 
   await pool.query(`UPDATE public.contract_offer SET status=$2,updated_at=now() WHERE offer_id=$1`,[offer.offer_id,nextStatus]);
   if (contractId) {
-    // Map offer nextStatus to contract uw_status (must match uw_workflow_status enum)
-    const uwStatusMap = {
-      'AWAITING_SIGNED_LINE': 'AWAITING_SIGNED_LINE',
-      'DECLINED':             'DECLINED',
-      'DISPUTE_PENDING':      'DISPUTE_PENDING',
-      'AWAITING_APPROVAL':    'AWAITING_APPROVAL',
-    };
-    const uwStatus = uwStatusMap[nextStatus] || 'WAITING_APPROVAL';
-    await pool.query(`UPDATE public.contract SET uw_status=$2::public.uw_workflow_status,updated_at=now() WHERE contract_id=$1`,[contractId,uwStatus]).catch(async ()=>{
-      // Fallback if enum value not yet in DB
-      await pool.query(`UPDATE public.contract SET uw_status='WAITING_APPROVAL',updated_at=now() WHERE contract_id=$1`,[contractId]);
-    });
+    await pool.query(`UPDATE public.contract SET uw_status=$2::public.uw_workflow_status,updated_at=now() WHERE contract_id=$1`,[contractId,nextStatus]);
   }
   await logOfferEvent({contractId,quoteId,eventType,actorUserId:decidedByUserId,actorName:decidedByName,actorRole:decidedByRole,payload:{decision,isPeer1Slot,finalDecision,arbiterRequired},comment});
   return { nextStatus, finalDecision, arbiterRequired, eventType, complete:!!finalDecision };

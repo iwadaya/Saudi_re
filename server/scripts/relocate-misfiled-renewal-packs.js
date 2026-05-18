@@ -39,7 +39,7 @@ const APPLY = process.argv.includes('--apply');
 // to it." Anything terminal (SIGNED / NTU / DECLINED) is treated as
 // not-active — we don't want to silently relocate a pack to a quote
 // the underwriter has already moved past.
-const ACTIVE_QUOTE_STATUSES = ['DRAFT', 'AWAITING_APPROVAL', 'WAITING_APPROVAL', 'AWAITING_SIGNED_LINE', 'APPROVED'];
+const ACTIVE_QUOTE_STATUSES = ['DRAFT', 'AWAITING_APPROVAL', 'AWAITING_SIGNED_LINE', 'APPROVED'];
 
 async function findCandidates(client) {
   // Pull every renewal-pack document attached to a contract along with

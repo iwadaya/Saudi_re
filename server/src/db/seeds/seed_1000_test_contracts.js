@@ -60,7 +60,7 @@ const COMMISSION_VARIANTS = [
 const STATUS_DISTRIBUTION = [
   // uw_status, contract_status, weight
   ['DRAFT',                 'DRAFT',              25],
-  ['WAITING_APPROVAL',      'AWAITING_APPROVAL',  15],
+  ['AWAITING_APPROVAL',     'AWAITING_APPROVAL',  15],
   ['APPROVED',              'QUOTED',              5],
   ['AWAITING_SIGNED_LINE',  'OFFERED',            10],
   ['SIGNED',                'BOUND',              30],
@@ -751,7 +751,7 @@ async function insertOffer(contractId, uwStatus) {
     case 'AWAITING_SIGNED_LINE':
       status = 'OFFERED';
       break;
-    case 'WAITING_APPROVAL':
+    case 'AWAITING_APPROVAL':
       status = 'PENDING_APPROVAL';
       break;
   }
@@ -889,7 +889,7 @@ async function main() {
       const cob = pick(ref.cob);
       const user = pick(ref.users);
       const uwYear = 2026 - intBetween(0, 1);
-      const statuses = ['DRAFT', 'DRAFT', 'WAITING_APPROVAL', 'AWAITING_SIGNED_LINE'];
+      const statuses = ['DRAFT', 'DRAFT', 'AWAITING_APPROVAL', 'AWAITING_SIGNED_LINE'];
       const qStatus = pick(statuses);
       const altQ = `${SEED_TAG}-DQ-${String(i).padStart(5, '0')}`;
       const quoteRef = `QT-${uwYear}-D${String(i).padStart(4, '0')}`;

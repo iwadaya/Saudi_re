@@ -71,10 +71,8 @@ export const boolish = z.preprocess((v) => {
 
 /**
  * `contract_status` Postgres enum (the 11-value one on contract.status
- * and quote.status). Note: this is DIFFERENT from uwWorkflowStatus —
- * `contract_status` has AWAITING_APPROVAL (with the A) plus QUOTED,
- * BOUND, RENEWED, CANCELLED, OFFERED; `uw_workflow_status` has
- * WAITING_APPROVAL (no A) and APPROVED.
+ * and quote.status). Shares AWAITING_APPROVAL with uwWorkflowStatus
+ * but carries QUOTED, BOUND, RENEWED, CANCELLED, OFFERED on top.
  *
  * Schemas should pick the right one for whichever column the field
  * maps to — an earlier revision aliased both to the 7-value list and
@@ -90,6 +88,6 @@ export const contractStatus = z.enum([
  * lifecycle on contract.uw_status. Separate from contractStatus.
  */
 export const uwWorkflowStatus = z.enum([
-  'DRAFT', 'WAITING_APPROVAL', 'APPROVED', 'AWAITING_SIGNED_LINE',
+  'DRAFT', 'AWAITING_APPROVAL', 'APPROVED', 'AWAITING_SIGNED_LINE',
   'SIGNED', 'NTU', 'DECLINED',
 ]);

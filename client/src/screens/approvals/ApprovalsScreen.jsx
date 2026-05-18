@@ -22,7 +22,7 @@ export default function ApprovalsScreen() {
     setLoadingServer(true);
     try {
       const [pendingContracts, decidedContracts, allQuotes] = await Promise.all([
-        api.listContracts({ status: 'WAITING_APPROVAL' }).catch(() => []),
+        api.listContracts({ status: 'AWAITING_APPROVAL' }).catch(() => []),
         api.listContracts({ status: 'APPROVED,DECLINED,SIGNED,NTU,BOUND,AWAITING_SIGNED_LINE' }).catch(() => []),
         api.listQuotes({}).catch(() => []),
       ]);
@@ -33,7 +33,7 @@ export default function ApprovalsScreen() {
 
       // Quotes awaiting approval
       const pendingQuotes = quotes.filter(q =>
-        ['AWAITING_APPROVAL','WAITING_APPROVAL','DISPUTE_PENDING'].includes(String(q.status || '').toUpperCase())
+        ['AWAITING_APPROVAL','DISPUTE_PENDING'].includes(String(q.status || '').toUpperCase())
       ).map(q => ({ ...q, _isQuote: true }));
 
       // Quotes in terminal/decided states
@@ -156,7 +156,7 @@ export default function ApprovalsScreen() {
 
   const statusColor = (s) => ({
     DISPUTE_PENDING: '#a78bfa',
-    WAITING_APPROVAL: '#fbbf24', AWAITING_APPROVAL: '#fbbf24',
+    AWAITING_APPROVAL: '#fbbf24',
     AWAITING_SIGNED_LINE: '#60a5fa',
     APPROVED: '#4ade80', BOUND: '#4ade80',
     DECLINED: '#f87171', SIGNED: '#4ade80', NTU: '#fb923c',
@@ -164,7 +164,7 @@ export default function ApprovalsScreen() {
 
   const statusLabel = (s) => ({
     DISPUTE_PENDING: '⚖ Dispute Pending',
-    WAITING_APPROVAL: 'Awaiting Approval', AWAITING_APPROVAL: 'Awaiting Approval',
+    AWAITING_APPROVAL: 'Awaiting Approval',
     AWAITING_SIGNED_LINE: 'Awaiting Signed Line',
     APPROVED: 'Approved', BOUND: 'Approved',
     DECLINED: 'Declined', SIGNED: 'Signed', NTU: 'NTU',

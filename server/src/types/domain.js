@@ -13,7 +13,7 @@
  * @property {string} quote_id
  * @property {string|null} quote_ref
  * @property {number} quote_version
- * @property {'DRAFT'|'WAITING_APPROVAL'|'APPROVED'|'AWAITING_SIGNED_LINE'|'SIGNED'|'NTU'|'DECLINED'} status
+ * @property {'DRAFT'|'AWAITING_APPROVAL'|'APPROVED'|'AWAITING_SIGNED_LINE'|'SIGNED'|'NTU'|'DECLINED'} status
  * @property {number} uw_year
  * @property {string|null} cedant_id
  * @property {string|null} broker_id

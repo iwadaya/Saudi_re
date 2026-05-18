@@ -197,7 +197,6 @@ export default function PropPricing() {
       const normalizeStatus = (s) => {
         if (!s) return 'DRAFT';
         const u = String(s).toUpperCase();
-        if (u === 'WAITING_APPROVAL') return 'AWAITING_APPROVAL';
         if (u === 'RETURNED') return 'DRAFT';
         if (u === 'OFFERED' || u === 'PENDING') return 'DRAFT';
         return u;
@@ -673,7 +672,7 @@ export default function PropPricing() {
     // Only advance UI state if the server actually accepted the
     // approval. The previous behaviour caught any error here and then
     // unconditionally advanced — leaving the local UI in APPROVED while
-    // the contract on the server stayed in WAITING_APPROVAL (or whatever
+    // the contract on the server stayed in AWAITING_APPROVAL (or whatever
     // pre-approval state). The next save would then 422 because the
     // status machine on the server is the source of truth.
     try {

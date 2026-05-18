@@ -211,7 +211,7 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
       // `total` is what the client renders under the "TREATIES MODELLED" card —
       // treat it as the canonical name and drop the legacy `treaties_modelled`
       // alias which was always APPROVED-only and never read by the UI.
-      waiting_approval:    byStatus.WAITING_APPROVAL    || 0,
+      waiting_approval:    byStatus.AWAITING_APPROVAL   || 0,
       waiting_signed_line: (byStatus.AWAITING_SIGNED_LINE || 0) + (byStatus.APPROVED || 0),
       signed:              byStatus.SIGNED              || 0,
       ntu:                 byStatus.NTU                 || 0,
