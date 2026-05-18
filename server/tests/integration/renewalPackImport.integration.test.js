@@ -152,11 +152,14 @@ function installLlmFetchInterceptor(getCannedJson, getPause) {
 async function ensureTreatyTypes() {
   // The treaty_type seed runs as part of seeds/run.js, but the
   // integration test env may not have applied it. Insert two
-  // well-known rows that the tests pick by category.
+  // well-known rows that the tests pick by category, plus a
+  // category-less placeholder used by the "treaty detail not saved"
+  // tests now that treaty_type_id is NOT NULL on contract/quote.
   await pool.query(
     `INSERT INTO public.treaty_type (treaty_type, category) VALUES
        ('Quota Share', 'PROPORTIONAL'),
-       ('Excess of Loss', 'NON_PROPORTIONAL')
+       ('Excess of Loss', 'NON_PROPORTIONAL'),
+       ('Renewal Pack Test Placeholder', NULL)
      ON CONFLICT DO NOTHING`,
   );
 }
@@ -169,23 +172,54 @@ async function pickTreatyTypeId(category) {
   return rows[0]?.treaty_type_id || null;
 }
 
+async function pickNoCategoryTreatyTypeId() {
+  const { rows } = await pool.query(
+    `SELECT treaty_type_id FROM public.treaty_type WHERE category IS NULL LIMIT 1`,
+  );
+  return rows[0]?.treaty_type_id || null;
+}
+
+// All the contract/quote NOT NULL identifying columns need real FK
+// targets. Pick any seeded reference row — we don't care which, the
+// renewal-pack import flow doesn't read them.
+async function pickRequiredRefIds() {
+  const [cedant, broker, currency, country] = await Promise.all([
+    pool.query(`SELECT company_id FROM public.companies LIMIT 1`),
+    pool.query(`SELECT broker_id FROM public.brokers LIMIT 1`),
+    pool.query(`SELECT currency_id FROM public.currency LIMIT 1`),
+    pool.query(`SELECT country_id FROM public.country LIMIT 1`),
+  ]);
+  return {
+    cedant_id: cedant.rows[0]?.company_id || null,
+    broker_id: broker.rows[0]?.broker_id || null,
+    currency_id: currency.rows[0]?.currency_id || null,
+    country_id: country.rows[0]?.country_id || null,
+  };
+}
+
 async function createQuote({ treatyCategory = 'PROPORTIONAL' } = {}) {
   const treaty_type_id = await pickTreatyTypeId(treatyCategory);
+  const refs = await pickRequiredRefIds();
   const { rows } = await pool.query(
-    `INSERT INTO public.quote (uw_year, status, treaty_type_id, created_by_user_id, assigned_to_user_id)
-     VALUES ($1, 'DRAFT', $2, NULL, NULL)
+    `INSERT INTO public.quote (uw_year, status, treaty_type_id, cedant_id, broker_id, currency_id, country_id, inception_date, created_by_user_id, assigned_to_user_id)
+     VALUES ($1, 'DRAFT', $2, $3, $4, $5, $6, $7, NULL, NULL)
      RETURNING quote_id`,
-    [new Date().getFullYear(), treaty_type_id],
+    [new Date().getFullYear(), treaty_type_id, refs.cedant_id, refs.broker_id, refs.currency_id, refs.country_id, '2026-01-01'],
   );
   return rows[0].quote_id;
 }
 
 async function createQuoteWithoutTreatyDetail() {
+  // Post-migration 104 treaty_type_id is NOT NULL, so we use a
+  // category-less treaty_type to still trip the TREATY_DETAIL_REQUIRED
+  // check (which requires both treaty_type_id AND treaty_category).
+  const treaty_type_id = await pickNoCategoryTreatyTypeId();
+  const refs = await pickRequiredRefIds();
   const { rows } = await pool.query(
-    `INSERT INTO public.quote (uw_year, status, treaty_type_id, created_by_user_id, assigned_to_user_id)
-     VALUES ($1, 'DRAFT', NULL, NULL, NULL)
+    `INSERT INTO public.quote (uw_year, status, treaty_type_id, cedant_id, broker_id, currency_id, country_id, inception_date, created_by_user_id, assigned_to_user_id)
+     VALUES ($1, 'DRAFT', $2, $3, $4, $5, $6, $7, NULL, NULL)
      RETURNING quote_id`,
-    [new Date().getFullYear()],
+    [new Date().getFullYear(), treaty_type_id, refs.cedant_id, refs.broker_id, refs.currency_id, refs.country_id, '2026-01-01'],
   );
   return rows[0].quote_id;
 }
@@ -634,21 +668,27 @@ describe.skipIf(shouldSkipDb)('integration: renewal-pack import (simplified)', (
 
 async function createContract({ treatyCategory = 'PROPORTIONAL' } = {}) {
   const treaty_type_id = await pickTreatyTypeId(treatyCategory);
+  const refs = await pickRequiredRefIds();
   const { rows } = await pool.query(
-    `INSERT INTO public.contract (uw_year, status, treaty_type_id, created_by_user_id, assigned_to_user_id)
-     VALUES ($1, 'DRAFT', $2, NULL, NULL)
+    `INSERT INTO public.contract (uw_year, status, treaty_type_id, cedant_id, broker_id, currency_id, country_id, inception_date, created_by_user_id, assigned_to_user_id)
+     VALUES ($1, 'DRAFT', $2, $3, $4, $5, $6, $7, NULL, NULL)
      RETURNING contract_id`,
-    [new Date().getFullYear(), treaty_type_id],
+    [new Date().getFullYear(), treaty_type_id, refs.cedant_id, refs.broker_id, refs.currency_id, refs.country_id, '2026-01-01'],
   );
   return rows[0].contract_id;
 }
 
 async function createContractWithoutTreatyDetail() {
+  // Post-migration 104 treaty_type_id is NOT NULL, so we use a
+  // category-less treaty_type to still trip the TREATY_DETAIL_REQUIRED
+  // check (which requires both treaty_type_id AND treaty_category).
+  const treaty_type_id = await pickNoCategoryTreatyTypeId();
+  const refs = await pickRequiredRefIds();
   const { rows } = await pool.query(
-    `INSERT INTO public.contract (uw_year, status, treaty_type_id, created_by_user_id, assigned_to_user_id)
-     VALUES ($1, 'DRAFT', NULL, NULL, NULL)
+    `INSERT INTO public.contract (uw_year, status, treaty_type_id, cedant_id, broker_id, currency_id, country_id, inception_date, created_by_user_id, assigned_to_user_id)
+     VALUES ($1, 'DRAFT', $2, $3, $4, $5, $6, $7, NULL, NULL)
      RETURNING contract_id`,
-    [new Date().getFullYear()],
+    [new Date().getFullYear(), treaty_type_id, refs.cedant_id, refs.broker_id, refs.currency_id, refs.country_id, '2026-01-01'],
   );
   return rows[0].contract_id;
 }

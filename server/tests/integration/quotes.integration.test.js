@@ -107,7 +107,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/quotes end-to-end', () => {
 
   it('honours If-Unmodified-Since with a stale timestamp (409 STALE_WRITE)', async () => {
     const created = await harness.fetchApp('POST', '/api/quotes', {
-      body: { uw_year: 2026 },
+      body: { uw_year: 2026, inception_date: '2026-01-01' },
     }).then((r) => r.json());
     createdQuoteIds.push(created.quote_id);
 
@@ -138,6 +138,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/quotes end-to-end', () => {
         status: 'DRAFT',
         experience_source: 'TRIANGLE',
         contract_description: 'np final quote persistence',
+        inception_date: '2026-01-01',
       },
     }).then((r) => r.json());
     createdQuoteIds.push(created.quote_id);
@@ -217,6 +218,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/quotes end-to-end', () => {
         uw_year: 2026,
         status: 'DRAFT',
         contract_description: 'np quote historical performance',
+        inception_date: '2026-01-01',
       },
     }).then((r) => r.json());
     createdQuoteIds.push(created.quote_id);
@@ -246,5 +248,59 @@ describe.skipIf(shouldSkipDb)('integration: /api/quotes end-to-end', () => {
     expect(rows[0].uw_year).toBe(2024);
     expect(Number(rows[0].premiums)).toBe(1000000);
     expect(Number(rows[0].combined_ratio)).toBe(52);
+  });
+
+  it('POST without inception_date → 400 VALIDATION_FAILED (migration 104 hard gate)', async () => {
+    const res = await harness.fetchApp('POST', '/api/quotes', {
+      body: { uw_year: 2026 },
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.error).toMatch(/inception_date/);
+  });
+
+  it('saving terms.detail.renewal_date updates quote header — NOT quote_prop_details (migration 104 source-of-truth)', async () => {
+    const created = await harness.fetchApp('POST', '/api/quotes', {
+      body: { uw_year: 2026, inception_date: '2026-01-01', renewal_date: '2026-12-31' },
+    }).then((r) => r.json());
+    createdQuoteIds.push(created.quote_id);
+
+    await harness.fetchApp('PUT', `/api/quotes/${created.quote_id}`, {
+      body: {
+        terms: {
+          header: { uw_year: 2026 },
+          detail: { renewal_date: '2027-06-01', qs_limit: 1_000_000 },
+        },
+      },
+    });
+
+    const { rows: quoteRows } = await pool.query(
+      `SELECT renewal_date FROM public.quote WHERE quote_id=$1`,
+      [created.quote_id],
+    );
+    expect(ymd(quoteRows[0].renewal_date)).toBe('2027-06-01');
+
+    const { rows: detailRows } = await pool.query(
+      `SELECT renewal_date FROM public.quote_prop_details WHERE quote_id=$1`,
+      [created.quote_id],
+    );
+    // Detail row exists (we wrote qs_limit) but renewal_date isn't
+    // touched on the detail table anymore.
+    expect(detailRows[0]).toBeTruthy();
+    expect(detailRows[0].renewal_date).toBeNull();
+
+    const get = await harness.fetchApp('GET', `/api/quotes/${created.quote_id}`);
+    const loaded = await get.json();
+    expect(ymd(loaded.detail.renewal_date)).toBe('2027-06-01');
+  });
+
+  it('direct INSERT with NULL cedant_id → NOT NULL violation (migration 104 applied)', async () => {
+    await expect(
+      pool.query(
+        `INSERT INTO public.quote (uw_year, status, cedant_id, broker_id, currency_id, country_id, treaty_type_id, inception_date)
+         VALUES (2026, 'DRAFT', NULL, NULL, NULL, NULL, NULL, '2026-01-01')`,
+      ),
+    ).rejects.toThrow(/null value in column/);
   });
 });

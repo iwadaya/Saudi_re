@@ -3,6 +3,7 @@ import {
   treatyHeaderSchema,
   treatyDetailSchema,
   treatyCommissionsSchema,
+  treatyLossParticipationSchema,
   treatyPutBodySchema,
 } from './treaty.js';
 
@@ -101,6 +102,50 @@ describe('treatyCommissionsSchema', () => {
   it('coerces truthy strings for lcf_extinction (boolish)', () => {
     expect(treatyCommissionsSchema.parse({ lcf_extinction: 'true' }).lcf_extinction).toBe(true);
     expect(treatyCommissionsSchema.parse({ lcf_extinction: 'false' }).lcf_extinction).toBe(false);
+  });
+});
+
+describe('treatyLossParticipationSchema — slides', () => {
+  it('accepts an empty slides array', () => {
+    expect(() => treatyLossParticipationSchema.parse({ slides: [] })).not.toThrow();
+  });
+
+  it('accepts a valid corridor (max_lr > min_lr, all within 0..100)', () => {
+    expect(() => treatyLossParticipationSchema.parse({
+      slides: [{ min_lr: 70, max_lr: 100, share: 50 }],
+    })).not.toThrow();
+  });
+
+  it('rejects an inverted corridor (max_lr <= min_lr)', () => {
+    expect(() => treatyLossParticipationSchema.parse({
+      slides: [{ min_lr: 100, max_lr: 70, share: 50 }],
+    })).toThrow(/greater than/);
+  });
+
+  it('rejects pct values above 100', () => {
+    expect(() => treatyLossParticipationSchema.parse({
+      slides: [{ min_lr: 120, max_lr: 150, share: 50 }],
+    })).toThrow();
+  });
+
+  it('rejects more than 5 slides', () => {
+    expect(() => treatyLossParticipationSchema.parse({
+      slides: Array.from({ length: 6 }, (_, i) => ({
+        min_lr: i * 10,
+        max_lr: i * 10 + 5,
+        share: 50,
+      })),
+    })).toThrow();
+  });
+
+  it('accepts the camelCase aliases (minLr/maxLr) for legacy clients', () => {
+    expect(() => treatyLossParticipationSchema.parse({
+      slides: [{ minLr: 70, maxLr: 100, share: 50 }],
+    })).not.toThrow();
+    // Inverted via camelCase aliases also rejected
+    expect(() => treatyLossParticipationSchema.parse({
+      slides: [{ minLr: 100, maxLr: 70, share: 50 }],
+    })).toThrow(/greater than/);
   });
 });
 

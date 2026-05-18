@@ -53,6 +53,74 @@ export function extractLpSlides(lpSlides) {
     .map(r => ({ min_lr: numOrNull(r.minLr), max_lr: numOrNull(r.maxLr), share: numOrNull(r.share) }));
 }
 
+/**
+ * Returns the list of human-readable field labels that are required
+ * for the current treaty mode + commission mode but missing from the
+ * slice. Empty array means OK to proceed.
+ *
+ * "Active" fields only — disabled fields are skipped. Mirrors the
+ * disabled={!isQS}/{!isSurplus} gates in the JSX so the rule is
+ * "if you can see it active, you must fill it".
+ *
+ * Nullable (NEVER added to the missing list): Event Limit, AAL,
+ * Brokerage %, Taxes %, Loss Cap %, Mgmt Expenses %, Profit
+ * Commission %, LCF, Alt Contract ID. Loss Participation scalars
+ * become required when the toggle is YES.
+ */
+export function getMissingRequiredFields(s, { tMode, commMode }) {
+  const has = v => v != null && String(v).trim() !== '';
+  const missing = [];
+
+  // Always required
+  if (!has(s.countryId))           missing.push('Country');
+  if (!has(s.cedantId))            missing.push('Cedant Name');
+  if (!has(s.treatyTypeId))        missing.push('Treaty Type');
+  if (!(s.classIds || []).length)  missing.push('Line of Business');
+  if (!has(s.brokerId))            missing.push('Broker');
+  if (!has(s.currencyId))          missing.push('Currency');
+  if (!has(s.inceptionDate))       missing.push('Treaty Inception Date');
+  if (!has(s.experienceStartYear)) missing.push('Experience Start Year');
+
+  const isQS = tMode === 'quota' || tMode === 'both';
+  const isSurplus = tMode === 'surplus' || tMode === 'both';
+
+  // QS side (required when QS active — both sides required in 'both' mode)
+  if (isQS) {
+    if (!has(s.qsLimit))       missing.push('QS 100% Limit');
+    if (!has(s.retentionPct))  missing.push('Retention %');
+    if (!has(s.quotaShareEpi)) missing.push('Quota Share EPI');
+  }
+  // Surplus side
+  if (isSurplus) {
+    if (!has(s.surplusMaxRetention)) missing.push('Surplus Max Retention');
+    if (!has(s.numLines))            missing.push('Number of Lines');
+    if (!has(s.surplusEpi))          missing.push('Surplus EPI');
+  }
+
+  // Commissions
+  if (commMode === 'fixed') {
+    if (isQS && !has(s.fixedCommissionQSPct))           missing.push('Fixed QS Commission %');
+    if (isSurplus && !has(s.fixedCommissionSurplusPct)) missing.push('Fixed Surplus Commission %');
+  } else if (commMode === 'sliding') {
+    if (!has(s.slidingMinLossRatio))      missing.push('Sliding Min Loss Ratio %');
+    if (!has(s.slidingMaxLossRatio))      missing.push('Sliding Max Loss Ratio %');
+    if (!has(s.slidingMinCommission))     missing.push('Sliding Min Commission %');
+    if (!has(s.slidingMaxCommission))     missing.push('Sliding Max Commission %');
+    if (!has(s.provisionalCommissionPct)) missing.push('Provisional Commission %');
+    const validRows = (s.slidingTable || []).filter(r => has(r.lossRatioPct) && has(r.commissionPct));
+    if (validRows.length < 2) missing.push('Sliding Scale table (need ≥2 complete rows)');
+  }
+
+  // Loss participation — only when toggle is YES, scalar trio is required
+  if (s.lossPartEnabled !== false) {
+    if (!has(s.minLossRatioPct))   missing.push('LP Min Loss Ratio %');
+    if (!has(s.maxLossRatioPct))   missing.push('LP Max Loss Ratio %');
+    if (!has(s.reinsurerSharePct)) missing.push('LP Reinsurer Share %');
+  }
+
+  return missing;
+}
+
 function treatyModeFromType(name) {
   const n = String(name ?? '').toLowerCase();
   if (n.includes('quota') && n.includes('surplus')) return 'both';
@@ -84,10 +152,15 @@ function useEscapeKey(enabled, onEscape) {
 }
 
 /* ─── Form Row: label left, input right ─── */
-function FR({ label, children }) {
+function FR({ label, missing, children }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 10, alignItems: 'center', minHeight: 36 }}>
-      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>{label}</div>
+    <div
+      className={missing ? 'fr-row required-missing' : 'fr-row'}
+      style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 10, alignItems: 'center', minHeight: 36 }}
+    >
+      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
+        {label}{missing && <span style={{ color: '#f87171', marginLeft: 4 }}>*</span>}
+      </div>
       <div>{children}</div>
     </div>
   );
@@ -179,7 +252,12 @@ function SlidingScaleModal({ table, provisional, onSave, onClose }) {
         </div>
         <div className="modal-actions">
           <button className="btn ghost" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={() => { onSave(rows.filter(r => String(r.lossRatioPct||'').trim() || String(r.commissionPct||'').trim()), provPct); }}>Save Table</button>
+          <button className="btn primary" onClick={() => {
+            onSave(
+              rows.filter(r => String(r.lossRatioPct||'').trim() && String(r.commissionPct||'').trim()),
+              provPct
+            );
+          }}>Save Table</button>
         </div>
       </div>
     </div>
@@ -190,8 +268,10 @@ function SlidingScaleModal({ table, provisional, onSave, onClose }) {
 function EpiSplitModal({ split, classIds, classList, qsEpi, surplusEpi, onSave, onClose }) {
   const initial = useMemo(() => classIds.map(id => {
     const existing = (split || []).find(r => r.classId === id);
-    return { classId: id, premium: existing?.premium || '' };
-  }), [classIds, split]);
+    const totalRef = (numOrNull(qsEpi) || 0) + (numOrNull(surplusEpi) || 0);
+    const equalShare = (totalRef && classIds.length) ? String(Math.round(totalRef / classIds.length)) : '';
+    return { classId: id, premium: existing?.premium || equalShare };
+  }), [classIds, split, qsEpi, surplusEpi]);
   const [rows, setRows] = useState(initial);
   const classMap = useMemo(() => new Map((classList || []).map(c => [c.id, c.name])), [classList]);
   const totalRef = (numOrNull(qsEpi) || 0) + (numOrNull(surplusEpi) || 0);
@@ -262,13 +342,20 @@ export default function PropTreatyDetail() {
   const [showLpSlides, setShowLpSlides] = useState(false);
   const [, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  /* Labels of required fields the most recent save() blocked on.
+     Renders red * + red border via FR's missing prop. Cleared on any
+     edit through the wrapped update() below. */
+  const [missingFields, setMissingFields] = useState(new Set());
 
   /* For a NEW treaty (no contractId), mark as loaded once lookups are ready
      so that auto-calc effects can fire. */
   const [lookupsReady, setLookupsReady] = useState(false);
 
   const s = appState.propTreatyDetail || {};
-  const update = useCallback(patch => setSlice('propTreatyDetail', patch), [setSlice]);
+  const update = useCallback(patch => {
+    setMissingFields(prev => prev.size ? new Set() : prev);
+    setSlice('propTreatyDetail', patch);
+  }, [setSlice]);
 
   /* ── Clean slate: when the route's contractId clears, reset the slice so
      old data doesn't bleed through. Reads s.contractId / s._loadedFromServer
@@ -499,6 +586,15 @@ export default function PropTreatyDetail() {
         _updatedAt: data.updated_at || data.updatedAt || null,
         _loadedFromServer: true,
       });
+      // Detect manual renewal override: if the saved renewal date is not
+      // exactly inception + 12 months, the user must have overridden it.
+      // Set _renewalManual so the auto-recalc effect doesn't clobber the
+      // saved value the next time the user edits inception.
+      const inceptionISO = dateInputValue(d.inception_date || '');
+      const renewalISO   = dateInputValue(d.renewal_date || '');
+      if (inceptionISO && renewalISO && addMonths(inceptionISO, 12) !== renewalISO) {
+        update({ _renewalManual: true });
+      }
       setActiveContractId(data.contract_id || contractId);
       setLoaded(true);
     }).catch(() => setLoaded(true));
@@ -522,12 +618,15 @@ export default function PropTreatyDetail() {
     // actually started the form — typed-Error message is rendered by
     // WizardLayout's runTrackedSave catch block.
     if (hasContent) {
-      const missing = [];
-      if (!cur.cedantId)      missing.push('Cedant');
-      if (!cur.treatyTypeId)  missing.push('Treaty Type');
-      if (!cur.countryId)     missing.push('Country');
-      if (!cur.inceptionDate) missing.push('Inception Date');
-      if (missing.length) throw new Error(`Required: ${missing.join(', ')}`);
+      const selectedTypeName = treatyTypes.find(x => String(x.id) === String(cur.treatyTypeId))?.name || '';
+      const missing = getMissingRequiredFields(cur, {
+        tMode:    treatyModeFromType(selectedTypeName),
+        commMode: normalizeCommMode(cur.commissionMode),
+      });
+      if (missing.length) {
+        setMissingFields(new Set(missing));
+        throw new Error(`Required fields missing: ${missing.join(', ')}`);
+      }
     }
     setSaving(true);
     let attemptedPayload = null;
@@ -564,6 +663,14 @@ export default function PropTreatyDetail() {
         },
         epi_split: (cur.epiSplit || []).map(r => ({ class_id: r.classId, premium: numOrNull(r.premium) })),
       };
+      // EPI Split defaults to equal split across COBs when the user
+      // never opened the modal. Saves a round-trip and matches what the
+      // pre-fill in EpiSplitModal would have produced.
+      const totalEpi = (numOrNull(cur.quotaShareEpi) || 0) + (numOrNull(cur.surplusEpi) || 0);
+      if ((!payload.epi_split || !payload.epi_split.length) && effectiveClassIds.length && totalEpi > 0) {
+        const share = totalEpi / effectiveClassIds.length;
+        payload.epi_split = effectiveClassIds.map(cid => ({ class_id: cid, premium: share }));
+      }
       const qm = stateRef.current?.quoteMode ? { quote: true } : undefined;
       attemptedPayload = payload;
       attemptedQm = qm;
@@ -573,7 +680,15 @@ export default function PropTreatyDetail() {
         if (res?.updated_at) update({ _updatedAt: res.updated_at });
       }
       else {
-        const res = await api.createContract({ cedant_id: cur.cedantId, broker_id: cur.brokerId, currency_id: cur.currencyId, treaty_type_id: cur.treatyTypeId, country_id: cur.countryId, underwriting_year: Number(cur.startYear) || new Date().getFullYear() }, qm);
+        const res = await api.createContract({
+          cedant_id:        cur.cedantId,
+          broker_id:        cur.brokerId,
+          currency_id:      cur.currencyId,
+          treaty_type_id:   cur.treatyTypeId,
+          country_id:       cur.countryId,
+          underwriting_year: Number(cur.startYear) || new Date().getFullYear(),
+          inception_date:   cur.inceptionDate,
+        }, qm);
         const newId = res?.contract_id || res?.id;
         if (newId) {
           attemptedId = newId;
@@ -601,7 +716,7 @@ export default function PropTreatyDetail() {
       console.error('Save failed:', e); return false;
     }
     finally { setSaving(false); }
-  }, [contractId, update, contractDescription]);
+  }, [contractId, update, contractDescription, treatyTypes]);
 
   /* Keep saveRef current so the unmount effect can call the latest save */
   useEffect(() => { saveRef.current = save; }, [save]);
@@ -728,28 +843,33 @@ export default function PropTreatyDetail() {
               />
             </div>
             <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-              <FR label="Country"><select className={fi} value={s.countryId || ''} onChange={e => update({ countryId: e.target.value, cedantId: '' })}>
+              <FR label="Country" missing={missingFields.has('Country')}><select className={fi} value={s.countryId || ''} onChange={e => update({ countryId: e.target.value, cedantId: '' })}>
                 <option value="">Select country…</option>{countries.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></FR>
-              <FR label="Cedant Name"><select className={fi} value={s.cedantId || ''} onChange={e => update({ cedantId: e.target.value })} disabled={!s.countryId}>
+              <FR label="Cedant Name" missing={missingFields.has('Cedant Name')}><select className={fi} value={s.cedantId || ''} onChange={e => update({ cedantId: e.target.value })} disabled={!s.countryId}>
                 <option value="">{s.countryId ? 'Select cedant…' : 'Select country first…'}</option>{cedants.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></FR>
-              <FR label="Treaty Type"><select className={fi} value={s.treatyTypeId || ''} onChange={e => update({ treatyTypeId: e.target.value })}>
+              <FR label="Treaty Type" missing={missingFields.has('Treaty Type')}><select className={fi} value={s.treatyTypeId || ''} onChange={e => update({ treatyTypeId: e.target.value })}>
                 <option value="">Select treaty type…</option>{treatyTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></FR>
-              <FR label="Line of Business">
+              <FR label="Line of Business" missing={missingFields.has('Line of Business')}>
                 <button className={fi} type="button" onClick={() => setShowCobModal(true)}
                   style={{ textAlign: 'left', cursor: 'pointer', color: (s.classIds || []).length ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)' }}>
                   {cobText} <span style={{ float: 'right', opacity: 0.3 }}>▾</span>
                 </button>
               </FR>
-              <FR label="Broker"><select className={fi} value={s.brokerId || ''} onChange={e => update({ brokerId: e.target.value })}>
+              <FR label="Broker" missing={missingFields.has('Broker')}><select className={fi} value={s.brokerId || ''} onChange={e => update({ brokerId: e.target.value })}>
                 <option value="">Select broker…</option>{brokers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></FR>
               <FR label="Contract ID"><input className={fi} value={s.contractId || ''} readOnly style={{ opacity: 0.5 }} /></FR>
               <FR label="Alt. Contract ID"><input className={fi} value={s.altContractId || ''} onChange={e => update({ altContractId: e.target.value })} placeholder="External system reference…" /></FR>
-              <FR label="Currency"><select className={fi} value={s.currencyId || ''} onChange={e => update({ currencyId: e.target.value })}>
+              <FR label="Currency" missing={missingFields.has('Currency')}><select className={fi} value={s.currencyId || ''} onChange={e => update({ currencyId: e.target.value })}>
                 <option value="">Select currency…</option>{currencies.map(c => <option key={c.id} value={c.id}>{c.code || c.name}</option>)}</select></FR>
-              <FR label="Treaty Inception Date"><input className={fi} type="date" value={s.inceptionDate || ''} onChange={e => update({ inceptionDate: e.target.value, _renewalManual: false })} /></FR>
+              {/* Don't clear _renewalManual on inception edit: a user who
+                 saved a manual renewal then comes back and tweaks
+                 inception expects the renewal they explicitly set to
+                 stay put (the load-time detection in the hydration
+                 effect restores _renewalManual from the saved data). */}
+              <FR label="Treaty Inception Date" missing={missingFields.has('Treaty Inception Date')}><input className={fi} type="date" value={s.inceptionDate || ''} onChange={e => update({ inceptionDate: e.target.value })} /></FR>
               <FR label="Treaty Renewal Date"><input className={fi} type="date" value={s.renewalDate || ''} onChange={e => update({ renewalDate: e.target.value, _renewalManual: true })} /></FR>
               <FR label="UW Year"><input className={fi} value={s.startYear || (yearFromDateStr(s.inceptionDate) ? String(yearFromDateStr(s.inceptionDate)) : '')} readOnly title="Auto-derived from Treaty Inception Date" style={{ opacity: 0.7 }} /></FR>
-              <FR label="Experience Start Year">
+              <FR label="Experience Start Year" missing={missingFields.has('Experience Start Year')}>
                 <select className={fi} value={s.experienceStartYear || ''} onChange={e => update({ experienceStartYear: e.target.value })}>
                   <option value="">Select start year…</option>
                   {Array.from({ length: 41 }, (_, i) => new Date().getFullYear() - 40 + i).map(y => <option key={y} value={y}>{y}</option>)}
@@ -763,13 +883,13 @@ export default function PropTreatyDetail() {
           <div className="card glass" style={{ display: 'flex', flexDirection: 'column' }}>
             <div className="card-head"><span className="card-header-label">LIMIT DETAILS</span><span className="card-header-tag">CAPACITY</span></div>
             <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-              <FR label="QS 100% Limit"><CommaInput value={s.qsLimit} onChange={v => update({ qsLimit: v })} placeholder="e.g. 1,000,000" disabled={!isQS} title={!isQS ? NA_TYPE : undefined} /></FR>
-              <FR label="Retention %"><PctInput className={fi} placeholder="e.g. 50%" value={s.retentionPct || ''} onChange={v => handleRetPctChange(v)} disabled={!isQS} title={!isQS ? NA_TYPE : undefined} /></FR>
+              <FR label="QS 100% Limit" missing={missingFields.has('QS 100% Limit')}><CommaInput value={s.qsLimit} onChange={v => update({ qsLimit: v })} placeholder="e.g. 1,000,000" disabled={!isQS} title={!isQS ? NA_TYPE : undefined} /></FR>
+              <FR label="Retention %" missing={missingFields.has('Retention %')}><PctInput className={fi} placeholder="e.g. 50%" value={s.retentionPct || ''} onChange={v => handleRetPctChange(v)} disabled={!isQS} title={!isQS ? NA_TYPE : undefined} /></FR>
               <FR label="Retention Amount"><CommaInput value={s.retentionAmt} placeholder="auto" readOnly /></FR>
               <FR label="Cession %"><PctInput className={fi} placeholder="e.g. 50%" value={s.cessionPct || ''} onChange={v => handleCesPctChange(v)} disabled={!isQS} title={!isQS ? NA_TYPE : undefined} /></FR>
               <FR label="Cession Amount"><CommaInput value={s.cessionAmt} placeholder="auto" readOnly /></FR>
-              <FR label="Surplus Max Retention"><CommaInput value={s.surplusMaxRetention} onChange={v => update({ surplusMaxRetention: v })} placeholder="e.g. 1,000,000" disabled={!isSurplus} title={!isSurplus ? NA_TYPE : undefined} /></FR>
-              <FR label="Number of Lines"><input className={fi} type="number" min="0" placeholder="e.g. 5" value={s.numLines || ''} onChange={e => update({ numLines: e.target.value })} disabled={!isSurplus} title={!isSurplus ? NA_TYPE : undefined} /></FR>
+              <FR label="Surplus Max Retention" missing={missingFields.has('Surplus Max Retention')}><CommaInput value={s.surplusMaxRetention} onChange={v => update({ surplusMaxRetention: v })} placeholder="e.g. 1,000,000" disabled={!isSurplus} title={!isSurplus ? NA_TYPE : undefined} /></FR>
+              <FR label="Number of Lines" missing={missingFields.has('Number of Lines')}><input className={fi} type="number" min="0" placeholder="e.g. 5" value={s.numLines || ''} onChange={e => update({ numLines: e.target.value })} disabled={!isSurplus} title={!isSurplus ? NA_TYPE : undefined} /></FR>
               <FR label="Total Treaty Capacity"><CommaInput value={s.totalCapacity} placeholder="" readOnly /></FR>
               <FR label="Event Limit"><CommaInput value={s.eventLimit} onChange={v => update({ eventLimit: v })} placeholder="e.g. 3,000,000" /></FR>
               <FR label="AAL"><CommaInput value={s.aal} onChange={v => update({ aal: v })} placeholder="e.g. 10,000,000" /></FR>
@@ -788,17 +908,17 @@ export default function PropTreatyDetail() {
               <div style={{ opacity: isFixed ? 1 : 0.35, pointerEvents: isFixed ? 'auto' : 'none' }}>
                 <div className="mini-title">FIXED COMMISSION</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <FR label="QS Commission %"><PctInput className={fi} placeholder="e.g. 30%" value={s.fixedCommissionQSPct || ''} onChange={v => update({ fixedCommissionQSPct: v })} disabled={!isQS} title={!isQS ? NA_TYPE : undefined} /></FR>
-                  <FR label="Surplus Commission %"><PctInput className={fi} placeholder="e.g. 30%" value={s.fixedCommissionSurplusPct || ''} onChange={v => update({ fixedCommissionSurplusPct: v })} disabled={!isSurplus} title={!isSurplus ? NA_TYPE : undefined} /></FR>
+                  <FR label="QS Commission %" missing={missingFields.has('Fixed QS Commission %')}><PctInput className={fi} placeholder="e.g. 30%" value={s.fixedCommissionQSPct || ''} onChange={v => update({ fixedCommissionQSPct: v })} disabled={!isQS} title={!isQS ? NA_TYPE : undefined} /></FR>
+                  <FR label="Surplus Commission %" missing={missingFields.has('Fixed Surplus Commission %')}><PctInput className={fi} placeholder="e.g. 30%" value={s.fixedCommissionSurplusPct || ''} onChange={v => update({ fixedCommissionSurplusPct: v })} disabled={!isSurplus} title={!isSurplus ? NA_TYPE : undefined} /></FR>
                 </div>
               </div>
               <div style={{ opacity: isSliding ? 1 : 0.35, pointerEvents: isSliding ? 'auto' : 'none', marginTop: 14 }}>
                 <div className="mini-title">SLIDING SCALE</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <FR label="Min Loss Ratio %"><PctInput className={fi} placeholder="e.g. 40%" value={s.slidingMinLossRatio || ''} onChange={v => update({ slidingMinLossRatio: v })} /></FR>
-                  <FR label="Max Loss Ratio %"><PctInput className={fi} placeholder="e.g. 80%" value={s.slidingMaxLossRatio || ''} onChange={v => update({ slidingMaxLossRatio: v })} /></FR>
-                  <FR label="Min Commission %"><PctInput className={fi} placeholder="e.g. 20%" value={s.slidingMinCommission || ''} onChange={v => update({ slidingMinCommission: v })} /></FR>
-                  <FR label="Max Commission %"><PctInput className={fi} placeholder="e.g. 35%" value={s.slidingMaxCommission || ''} onChange={v => update({ slidingMaxCommission: v })} /></FR>
+                  <FR label="Min Loss Ratio %" missing={missingFields.has('Sliding Min Loss Ratio %')}><PctInput className={fi} placeholder="e.g. 40%" value={s.slidingMinLossRatio || ''} onChange={v => update({ slidingMinLossRatio: v })} /></FR>
+                  <FR label="Max Loss Ratio %" missing={missingFields.has('Sliding Max Loss Ratio %')}><PctInput className={fi} placeholder="e.g. 80%" value={s.slidingMaxLossRatio || ''} onChange={v => update({ slidingMaxLossRatio: v })} /></FR>
+                  <FR label="Min Commission %" missing={missingFields.has('Sliding Min Commission %')}><PctInput className={fi} placeholder="e.g. 20%" value={s.slidingMinCommission || ''} onChange={v => update({ slidingMinCommission: v })} /></FR>
+                  <FR label="Max Commission %" missing={missingFields.has('Sliding Max Commission %')}><PctInput className={fi} placeholder="e.g. 35%" value={s.slidingMaxCommission || ''} onChange={v => update({ slidingMaxCommission: v })} /></FR>
                 </div>
                 <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
                   <button className="orange-gloss-btn" onClick={() => setShowSliding(true)}>Enter slide manually</button>
@@ -833,9 +953,9 @@ export default function PropTreatyDetail() {
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>Capture loss participation corridors where the reinsurer share changes above a given loss ratio.</div>
               <div style={{ opacity: s.lossPartEnabled !== false ? 1 : 0.35, pointerEvents: s.lossPartEnabled !== false ? 'auto' : 'none' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <FR label="Min Loss Ratio %"><PctInput className={fi} placeholder="e.g. 70%" value={s.minLossRatioPct || ''} onChange={v => update({ minLossRatioPct: v })} /></FR>
-                  <FR label="Max Loss Ratio %"><PctInput className={fi} placeholder="e.g. 100%" value={s.maxLossRatioPct || ''} onChange={v => update({ maxLossRatioPct: v })} /></FR>
-                  <FR label="Reinsurer Share %"><PctInput className={fi} placeholder="e.g. 50%" value={s.reinsurerSharePct || ''} onChange={v => update({ reinsurerSharePct: v })} /></FR>
+                  <FR label="Min Loss Ratio %" missing={missingFields.has('LP Min Loss Ratio %')}><PctInput className={fi} placeholder="e.g. 70%" value={s.minLossRatioPct || ''} onChange={v => update({ minLossRatioPct: v })} /></FR>
+                  <FR label="Max Loss Ratio %" missing={missingFields.has('LP Max Loss Ratio %')}><PctInput className={fi} placeholder="e.g. 100%" value={s.maxLossRatioPct || ''} onChange={v => update({ maxLossRatioPct: v })} /></FR>
+                  <FR label="Reinsurer Share %" missing={missingFields.has('LP Reinsurer Share %')}><PctInput className={fi} placeholder="e.g. 50%" value={s.reinsurerSharePct || ''} onChange={v => update({ reinsurerSharePct: v })} /></FR>
                 </div>
                 <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <button className="orange-gloss-btn" type="button" onClick={() => setShowLpSlides(true)}>Enter Slides Manually</button>
@@ -848,8 +968,8 @@ export default function PropTreatyDetail() {
               </div>
               <div className="mini-title" style={{ marginTop: 16 }}>EPI</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <FR label="Quota Share EPI"><CommaInput value={s.quotaShareEpi} onChange={v => update({ quotaShareEpi: v })} placeholder="e.g. 10,000,000" disabled={!isQS} title={!isQS ? NA_TYPE : undefined} /></FR>
-                <FR label="Surplus EPI"><CommaInput value={s.surplusEpi} onChange={v => update({ surplusEpi: v })} placeholder="e.g. 5,000,000" disabled={!isSurplus} title={!isSurplus ? NA_TYPE : undefined} /></FR>
+                <FR label="Quota Share EPI" missing={missingFields.has('Quota Share EPI')}><CommaInput value={s.quotaShareEpi} onChange={v => update({ quotaShareEpi: v })} placeholder="e.g. 10,000,000" disabled={!isQS} title={!isQS ? NA_TYPE : undefined} /></FR>
+                <FR label="Surplus EPI" missing={missingFields.has('Surplus EPI')}><CommaInput value={s.surplusEpi} onChange={v => update({ surplusEpi: v })} placeholder="e.g. 5,000,000" disabled={!isSurplus} title={!isSurplus ? NA_TYPE : undefined} /></FR>
               </div>
               <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
                 <button className="orange-gloss-btn" onClick={() => { if (!(s.classIds || []).length) { showToast?.('Select Lines of Business first'); return; } setShowEpiSplit(true); }}>EPI Split</button>

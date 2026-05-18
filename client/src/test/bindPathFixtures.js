@@ -41,6 +41,11 @@ export const propContractSnapshot = {
     primary_class_of_business_id: bindIds.cobMotor,
     status: 'DRAFT',
     signed_line_pct: null,
+    // Always-required identifiers now gated by PropTreatyDetail's
+    // getMissingRequiredFields() — the inception_date is sourced from
+    // the contract header per migration 104's source-of-truth shift.
+    inception_date: '2026-01-01',
+    renewal_date: '2026-12-31',
   },
   class_ids: [bindIds.cobMotor],
   updated_at: '2026-05-01T10:00:00.000Z',
@@ -61,6 +66,14 @@ export const propContractSnapshot = {
   commissions: {
     fixed_commission_pct: 0.24,
     fixed_commission_qs_pct: 0.24,
+  },
+  // LP toggle defaults YES; the scalar trio below means the new
+  // required-field gate doesn't block save() in existing test paths.
+  lossParticipation: {
+    enabled: true,
+    min_loss_ratio_pct: 70,
+    max_loss_ratio_pct: 100,
+    reinsurer_share_pct: 50,
   },
 };
 

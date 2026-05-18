@@ -49,7 +49,7 @@ describe.skipIf(shouldSkipDb)('integration: CRESTA aggregates round-trip + slice
 
   async function newQuote() {
     const res = await harness.fetchApp('POST', '/api/quotes', {
-      body: { uw_year: 2026, status: 'DRAFT', experience_source: 'TRIANGLE' },
+      body: { uw_year: 2026, status: 'DRAFT', experience_source: 'TRIANGLE', inception_date: '2026-01-01' },
     });
     expect(res.status).toBe(201);
     const body = await res.json();
@@ -180,7 +180,7 @@ describe.skipIf(shouldSkipDb)('integration: CRESTA aggregates round-trip + slice
 
   it('treaty endpoint round-trips through the same save helper', async () => {
     const create = await harness.fetchApp('POST', '/api/treaties', {
-      body: { uw_year: 2026, status: 'DRAFT', experience_source: 'TRIANGLE' },
+      body: { uw_year: 2026, status: 'DRAFT', experience_source: 'TRIANGLE', inception_date: '2026-01-01' },
     });
     expect(create.status).toBe(201);
     const { contract_id } = await create.json();

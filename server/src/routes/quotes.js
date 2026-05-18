@@ -468,11 +468,15 @@ router.get("/quotes", asyncHandler(async (req, res) => {
 router.post("/quotes", asyncHandler(async (req, res) => {
   const b = req.body || {};
   const uw_year = numOrNull(b.uw_year) || new Date().getFullYear();
+  const inception_date = dateOrNull(b.inception_date);
+  if (!inception_date) {
+    return res.status(400).json({ error: 'inception_date is required', code: 'VALIDATION_FAILED' });
+  }
   const creatorUserId = req.user?.userId || req.headers['x-user-id'] || null;
   const { rows } = await pool.query(
     `INSERT INTO public.quote (uw_year,cedant_id,broker_id,currency_id,country_id,treaty_type_id,status,experience_source,renewal_date,inception_date,contract_description,created_by_user_id,assigned_to_user_id)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12) RETURNING *`,
-    [uw_year, b.cedant_id || null, b.broker_id || null, b.currency_id || null, b.country_id || null, b.treaty_type_id || null, b.status || 'DRAFT', b.experience_source || 'TRIANGLE', dateOrNull(b.renewal_date), dateOrNull(b.inception_date), b.contract_description || null, creatorUserId]
+    [uw_year, b.cedant_id || null, b.broker_id || null, b.currency_id || null, b.country_id || null, b.treaty_type_id || null, b.status || 'DRAFT', b.experience_source || 'TRIANGLE', dateOrNull(b.renewal_date), inception_date, b.contract_description || null, creatorUserId]
   );
 
   // Auto-assign human-readable quote reference: QT-YYYY-NNNN.
@@ -529,8 +533,8 @@ router.get("/quotes/:id", asyncHandler(async (req, res) => {
       renewal_date:q.renewal_date,inception_date:q.inception_date,contract_description:q.contract_description,
       quote_ref:q.quote_ref||null, quote_version:q.quote_version||1},
     detail:{triangulations_available:detail.triangulations_available??true,
-      inception_date:detail.inception_date||q.inception_date||null,
-      renewal_date:detail.renewal_date,
+      inception_date:q.inception_date,
+      renewal_date:q.renewal_date,
       experience_start_year:detail.experience_start_year||null,
       qs_limit:detail.qs_limit,retention_pct:detail.retention_pct,retention_amt:detail.retention_amt,
       cession_pct:detail.cession_pct,cession_amt:detail.cession_amt,surplus_max_retention:detail.surplus_max_retention,
@@ -589,13 +593,18 @@ router.put("/quotes/:id", validateBody(quotePutBodySchema), asyncHandler(async (
   await assertEntityUnchanged(cl, { table: 'public.quote', idColumn: 'quote_id', id, ifUnmodifiedSince });
   await cl.query("BEGIN");
   const h=terms.header||{};
-  if(Object.keys(h).length) await cl.query(`UPDATE public.quote SET cedant_id=COALESCE($2,cedant_id),broker_id=COALESCE($3,broker_id),currency_id=COALESCE($4,currency_id),country_id=COALESCE($5,country_id),treaty_type_id=COALESCE($6,treaty_type_id),uw_year=COALESCE($7,uw_year),experience_source=COALESCE($8,experience_source),renewal_date=$9,contract_description=$10,inception_date=$11,updated_at=now() WHERE quote_id=$1`,
-    [id,h.cedant_id||null,h.broker_id||null,h.currency_id||null,h.country_id||null,h.treaty_type_id||null,numOrNull(h.uw_year),h.experience_source||null,dateOrNull(h.renewal_date),h.contract_description??null,dateOrNull(h.inception_date)]);
+  const d0=terms.detail||{};
+  // Inception/renewal can arrive in either slice; header is source of
+  // truth, detail-table date columns are deprecated. Mirror treaty PUT.
+  if(Object.keys(h).length) await cl.query(`UPDATE public.quote SET cedant_id=COALESCE($2,cedant_id),broker_id=COALESCE($3,broker_id),currency_id=COALESCE($4,currency_id),country_id=COALESCE($5,country_id),treaty_type_id=COALESCE($6,treaty_type_id),uw_year=COALESCE($7,uw_year),experience_source=COALESCE($8,experience_source),renewal_date=COALESCE($9,renewal_date),contract_description=$10,inception_date=COALESCE($11,inception_date),updated_at=now() WHERE quote_id=$1`,
+    [id,h.cedant_id||null,h.broker_id||null,h.currency_id||null,h.country_id||null,h.treaty_type_id||null,numOrNull(h.uw_year),h.experience_source||null,dateOrNull(d0.renewal_date??h.renewal_date),h.contract_description??null,dateOrNull(d0.inception_date??h.inception_date)]);
   // PARTIAL-SAVE SAFE: only update detail/commissions/classIds when explicitly provided
   if(terms.detail && Object.keys(terms.detail).length) {
     const d=terms.detail;
-    await cl.query(`INSERT INTO public.quote_prop_details (quote_id,triangulations_available,renewal_date,qs_limit,retention_pct,retention_amt,cession_pct,cession_amt,surplus_max_retention,num_lines,total_capacity,event_limit,aal,quota_share_epi,surplus_epi,brokerage_pct,taxes_pct,loss_cap_pct,experience_start_year) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) ON CONFLICT (quote_id) DO UPDATE SET triangulations_available=EXCLUDED.triangulations_available,renewal_date=EXCLUDED.renewal_date,qs_limit=EXCLUDED.qs_limit,retention_pct=EXCLUDED.retention_pct,retention_amt=EXCLUDED.retention_amt,cession_pct=EXCLUDED.cession_pct,cession_amt=EXCLUDED.cession_amt,surplus_max_retention=EXCLUDED.surplus_max_retention,num_lines=EXCLUDED.num_lines,total_capacity=EXCLUDED.total_capacity,event_limit=EXCLUDED.event_limit,aal=EXCLUDED.aal,quota_share_epi=EXCLUDED.quota_share_epi,surplus_epi=EXCLUDED.surplus_epi,brokerage_pct=EXCLUDED.brokerage_pct,taxes_pct=EXCLUDED.taxes_pct,loss_cap_pct=EXCLUDED.loss_cap_pct,experience_start_year=EXCLUDED.experience_start_year,updated_at=now()`,
-      [id,boolOrDefault(d.triangulations_available,true),dateOrNull(d.renewal_date),numOrNull(d.qs_limit),numOrNull(d.retention_pct),numOrNull(d.retention_amt),numOrNull(d.cession_pct),numOrNull(d.cession_amt),numOrNull(d.surplus_max_retention),numOrNull(d.num_lines),numOrNull(d.total_capacity),numOrNull(d.event_limit),numOrNull(d.aal),numOrNull(d.quota_share_epi),numOrNull(d.surplus_epi),numOrNull(d.brokerage_pct),numOrNull(d.taxes_pct),numOrNull(d.loss_cap_pct),numOrNull(d.experience_start_year??d.experienceStartYear)]);
+    // renewal_date lives on the quote (header) — the detail-table
+    // renewal_date column is deprecated, no longer written here.
+    await cl.query(`INSERT INTO public.quote_prop_details (quote_id,triangulations_available,qs_limit,retention_pct,retention_amt,cession_pct,cession_amt,surplus_max_retention,num_lines,total_capacity,event_limit,aal,quota_share_epi,surplus_epi,brokerage_pct,taxes_pct,loss_cap_pct,experience_start_year) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) ON CONFLICT (quote_id) DO UPDATE SET triangulations_available=EXCLUDED.triangulations_available,qs_limit=EXCLUDED.qs_limit,retention_pct=EXCLUDED.retention_pct,retention_amt=EXCLUDED.retention_amt,cession_pct=EXCLUDED.cession_pct,cession_amt=EXCLUDED.cession_amt,surplus_max_retention=EXCLUDED.surplus_max_retention,num_lines=EXCLUDED.num_lines,total_capacity=EXCLUDED.total_capacity,event_limit=EXCLUDED.event_limit,aal=EXCLUDED.aal,quota_share_epi=EXCLUDED.quota_share_epi,surplus_epi=EXCLUDED.surplus_epi,brokerage_pct=EXCLUDED.brokerage_pct,taxes_pct=EXCLUDED.taxes_pct,loss_cap_pct=EXCLUDED.loss_cap_pct,experience_start_year=EXCLUDED.experience_start_year,updated_at=now()`,
+      [id,boolOrDefault(d.triangulations_available,true),numOrNull(d.qs_limit),numOrNull(d.retention_pct),numOrNull(d.retention_amt),numOrNull(d.cession_pct),numOrNull(d.cession_amt),numOrNull(d.surplus_max_retention),numOrNull(d.num_lines),numOrNull(d.total_capacity),numOrNull(d.event_limit),numOrNull(d.aal),numOrNull(d.quota_share_epi),numOrNull(d.surplus_epi),numOrNull(d.brokerage_pct),numOrNull(d.taxes_pct),numOrNull(d.loss_cap_pct),numOrNull(d.experience_start_year??d.experienceStartYear)]);
   }
   if(terms.commissions) {
     const cm=terms.commissions;
