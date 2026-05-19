@@ -24,7 +24,7 @@ function fp(n) { return n == null ? '—' : `${n.toFixed(1)}%`; }
    Result = Premium - Claims(capped) - Commission - Brokerage
             - Taxes - ProfitComm + LPC
    ═══════════════════════════════════════════════════════════════ */
-function runFinancialEngine(standardRows, terms) {
+export function runFinancialEngine(standardRows, terms) {
   let cumResult = 0, actCumResult = 0, cumPremProj = 0, cumPremAct = 0;
   const pcProj = makePCCalc(terms);
   const pcAct = makePCCalc(terms);
