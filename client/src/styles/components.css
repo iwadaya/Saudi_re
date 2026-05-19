@@ -1770,8 +1770,24 @@ select.fi{ cursor: pointer; appearance: auto; }
   border-spacing: 3px;
   width: max-content;
   min-width: 100%;
+  margin-left: auto;
+  margin-right: auto;        /* centres when narrower than container */
+  table-layout: fixed;       /* columns stop floating with content */
   font-size: 12px;
   font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+}
+
+/* Year column slimmer than dev columns */
+.tri-table th.tri-yr-hdr,
+.tri-table td.tri-yr {
+  width: 64px;
+}
+
+/* Every dev column fixed-width — uniform grid regardless of cell value length */
+.tri-table th.tri-hdr:not(.tri-yr-hdr),
+.tri-table td.tri-cell,
+.tri-table td.tri-off {
+  width: 110px;
 }
 .tri-hdr{
   text-align: center;
@@ -1814,9 +1830,9 @@ input.tri-inp,
 input.tri-inp[type="text"]{
   display: block !important;
   width: 100% !important;
-  min-width: 120px !important;
+  min-width: 0 !important;          /* honour the fixed column width */
   height: 21px !important;
-  padding: 0 10px !important;
+  padding: 0 8px !important;
   margin: 0 !important;
   font-size: 12px !important;
   font-family: inherit !important;
