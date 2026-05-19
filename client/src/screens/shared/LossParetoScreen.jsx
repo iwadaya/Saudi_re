@@ -50,14 +50,14 @@ function fDec(n, d = 4) { return n == null || !Number.isFinite(n) ? '—' : Numb
 /* ══════════════════════════════════════════
    DISTRIBUTIONS
    ══════════════════════════════════════════ */
-function fitPareto(losses, xm) {
+export function fitPareto(losses, xm) {
   const v = losses.filter(l => l >= xm); const n = v.length;
   if (n === 0) return { alpha: 0, n: 0 };
   let s = 0; for (const x of v) s += Math.log(x / xm);
   return { alpha: s > 0 ? n / s : 0, n };
 }
-function paretoCDF(x, a, xm) { return x < xm ? 0 : 1 - Math.pow(xm / x, a); }
-function paretoQ(p, a, xm) { return xm * Math.pow(1 - p, -1 / a); }
+export function paretoCDF(x, a, xm) { return x < xm ? 0 : 1 - Math.pow(xm / x, a); }
+export function paretoQ(p, a, xm) { return xm * Math.pow(1 - p, -1 / a); }
 
 function erf(x) {
   const a1=.254829592,a2=-.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=.3275911;
@@ -107,7 +107,7 @@ function fitWeibull(losses,xm){
 function weibullCDF(x,k,lam,xm){const z=x-xm;return z<=0?0:1-Math.exp(-Math.pow(z/lam,k));}
 function weibullQ(p,k,lam,xm){return xm+lam*Math.pow(-Math.log(1-p),1/k);}
 
-function calcKS(losses,cdfFn,xm){
+export function calcKS(losses,cdfFn,xm){
   const v=losses.filter(x=>x>=xm).sort((a,b)=>a-b);const n=v.length;
   if(n===0)return{ks:1,pValue:0};let mx=0;
   for(let i=0;i<n;i++){const c=cdfFn(v[i]);mx=Math.max(mx,Math.abs((i+1)/n-c),Math.abs(i/n-c));}
@@ -115,9 +115,17 @@ function calcKS(losses,cdfFn,xm){
   return{ks:mx,pValue:Math.max(0,Math.min(1,2*Math.exp(-2*z*z)))};
 }
 
-function calcLayerPrice(alpha,xm,freq,ret,lim){
+export function calcLayerPrice(alpha,xm,freq,ret,lim){
   if(alpha<=1)return{severity:0,rpp:0,error:'α ≤ 1'};
-  const LEV=L=>{const m=(alpha*xm)/(alpha-1);return m*(1-Math.pow(xm/L,alpha-1));};
+  // Full LEV: E[min(X, L)] = ∫_xm^L x f(x) dx + L · P(X > L).
+  // The tail term L·(xm/L)^α captures losses that pierce the layer
+  // ceiling — omitting it (the truncated form) overstates per-loss
+  // severity by the value of the cap-survival contribution.
+  const LEV=L=>{
+    if(L<=xm)return L;
+    const m=(alpha*xm)/(alpha-1);
+    return m*(1-Math.pow(xm/L,alpha-1))+L*Math.pow(xm/L,alpha);
+  };
   const att=Math.max(xm,ret),sev=LEV(att+lim)-LEV(att);return{severity:sev,rpp:freq*sev};
 }
 
