@@ -6,6 +6,7 @@ import { useAppState } from '../../context/AppContext';
 import { api } from '../../api';
 import { toN as cn } from '../../utils/format';
 import { isNpStopLossTreaty } from '../../utils/npTreatyType';
+import { layerHit } from '../../../../shared/pricingMath.js';
 
 /* ── Helpers ── */
 function stableStringify(obj){
@@ -719,6 +720,96 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
       return isNpCat ? !!l.catCover : !!l.riskCover;
     });
   }, [appState.npStructureLayers, isNpCat]);
+
+  // Blend weights: wEmp (empirical) + wModel (distribution model), 0-100 each.
+  // Presets: Empirical (100/0), Model (0/100), Blend (50/50 default).
+  const [wEmp,   setWEmp]   = useState(50);
+  const [wModel, setWModel] = useState(50);
+
+  const empiricalLayerRols = useMemo(() => {
+    if (!structureLayers.length || !losses.length || !(uwYrs > 0)) return [];
+
+    // Group inflated losses by UW year
+    const byYear = new Map();
+    for (const l of losses) {
+      const yr = String(l.uw_year ?? '');
+      if (!yr) continue;
+      if (!byYear.has(yr)) byYear.set(yr, []);
+      byYear.get(yr).push(l.inflated);
+    }
+
+    return structureLayers.map((sl, i) => {
+      const D = parseFloat(String(sl.deductible ?? sl.attachment ?? sl.layer_deductible ?? '').replace(/,/g, '')) || 0;
+      const L = parseFloat(String(sl.limit ?? sl.layer_limit ?? '').replace(/,/g, '')) || 0;
+      if (!(L > 0)) return { idx: i, layer: sl.layer || `L${i+1}`, D, L, rol: 0, annualLoss: 0 };
+
+      // Sum in-layer loss per year; divide by full observation window (zero years included)
+      let totalInLayer = 0;
+      for (const yearLosses of byYear.values()) {
+        for (const inc of yearLosses) {
+          totalInLayer += layerHit(inc, D, L);
+        }
+      }
+      const annualLoss = totalInLayer / uwYrs;
+      return { idx: i, layer: sl.layer || `L${i+1}`, D, L, annualLoss, rol: L > 0 ? annualLoss / L : 0 };
+    });
+  }, [structureLayers, losses, uwYrs]);
+
+  const modelLayerRols = useMemo(() => {
+    if (!structureLayers.length || !(freq > 0) || !survivalFn) return [];
+
+    return structureLayers.map((sl, i) => {
+      const D = parseFloat(String(sl.deductible ?? sl.attachment ?? sl.layer_deductible ?? '').replace(/,/g, '')) || 0;
+      const L = parseFloat(String(sl.limit ?? sl.layer_limit ?? '').replace(/,/g, '')) || 0;
+      if (!(L > 0)) return { idx: i, layer: sl.layer || `L${i+1}`, D, L, rp: null, annualLoss: 0, rol: 0, error: null };
+
+      const rp = rpAtAttachment(freq, D, survivalFn);
+      let annualLoss, error;
+
+      if (activeDist === 'pareto') {
+        const result = calcLayerPrice(alpha, xm, freq, D, L);
+        annualLoss = result.rpp;
+        error = result.error || null;
+      } else {
+        annualLoss = calcLayerPriceNumerical(freq, D, L, survivalFn).rpp;
+        error = null;
+      }
+
+      return { idx: i, layer: sl.layer || `L${i+1}`, D, L, rp, annualLoss, rol: L > 0 ? annualLoss / L : 0, error };
+    });
+  }, [structureLayers, freq, alpha, xm, activeDist, survivalFn]);
+
+  const blendedLayerRols = useMemo(() => {
+    const wE = Math.max(0, wEmp);
+    const wM = Math.max(0, wModel);
+    const wTot = wE + wM;
+
+    return structureLayers.map((sl, i) => {
+      const emp   = empiricalLayerRols[i];
+      const model = modelLayerRols[i];
+      if (!emp || !model) return null;
+      const L = emp.L;
+
+      let annualLoss;
+      if (wTot <= 0) {
+        annualLoss = 0;
+      } else {
+        annualLoss = (wE * emp.annualLoss + wM * model.annualLoss) / wTot;
+      }
+
+      return {
+        idx: i,
+        layer: emp.layer,
+        D: emp.D, L,
+        empiricalRol:  emp.rol,
+        modelRol:      model.rol,
+        blendedRol:    L > 0 ? annualLoss / L : 0,
+        blendedAnnual: annualLoss,
+        rp:            model.rp,
+        error:         model.error,
+      };
+    }).filter(Boolean);
+  }, [structureLayers, empiricalLayerRols, modelLayerRols, wEmp, wModel]);
 
   const bestFit=useMemo(()=>[...fits].sort((a,b)=>a.ks.ks-b.ks.ks)[0]?.key||'pareto',[fits]);
 
