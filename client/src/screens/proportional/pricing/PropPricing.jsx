@@ -5,7 +5,8 @@ import { useContractId } from '../../../hooks/useContractId';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import { buildMatrixFromCells, calculateAgeToAgeFactors, calculatePattern, projectToUltimate } from '../../../logic/chainLadder';
-import { projectStraightStats } from '../../../logic/straightProjections';
+import { projectStraightStats, DEFAULT_LDF_KEY } from '../../../logic/straightProjections';
+import { projectFromSavedBlend } from '../../../logic/projectWithSavedFactors';
 import { loadProjectedRows } from '../../../logic/projectWithSavedFactors';
 import { buildTreatyTerms } from '../../../logic/propTreatyEngine';
 import LossSelectionScreen from '../../shared/LossSelectionScreen';
@@ -294,7 +295,11 @@ export default function PropPricing() {
             const stats = ssData?.stats || [];
             if (stats.length > 0) {
               const parsed = stats.map(s => ({ year: Number(s.underwriting_year || s.year), premium: cn(s.premium), paid: cn(s.paid_claims || s.paid), os: cn(s.os_claims || s.os) }));
-              projectStraightStats(parsed, ssData?.tail_type || 'SHORT_TAIL').forEach(r => {
+              // Prefer the underwriter's saved LDF blend; fall back to a
+              // benchmark curve only when no blend exists for this contract.
+              const blendRows = await projectFromSavedBlend(cid, parsed);
+              const rows = blendRows || projectStraightStats(parsed, ssData?.primary_class_key || DEFAULT_LDF_KEY);
+              rows.forEach(r => {
                 if (r.ultPrem > 0) projectedLRs.push(r.ultLoss / r.ultPrem);
                 if (r.actPrem > 0) actualLRs.push(r.actLoss / r.actPrem);
               });

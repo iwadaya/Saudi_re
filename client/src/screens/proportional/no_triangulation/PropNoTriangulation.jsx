@@ -4,41 +4,11 @@ import { useContractId } from '../../../hooks/useContractId';
 import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
 import { formatWithCommas, sanitizeNumber, parseFlexibleNumber } from '../../../utils/format';
+import LdfAnalysisModal from '../../shared/LdfAnalysisModal';
+import LdfCurveTable from '../../shared/LdfCurveTable';
 
 const ROUTE_KEY = 'PROP_NO_TRIANGULATION';
 
-// ── Dummy development factors (industry benchmarks — replace with actuarial factors once available) ──
-// SHORT TAIL: Property, Motor (losses mostly settled within 3 years)
-const SHORT_TAIL_FACTORS = [
-  { devYear: '12→24', ldf: 1.250, desc: 'Initial to 24 months' },
-  { devYear: '24→36', ldf: 1.080, desc: '24 to 36 months' },
-  { devYear: '36→48', ldf: 1.025, desc: '36 to 48 months' },
-  { devYear: '48→60', ldf: 1.010, desc: '48 to 60 months' },
-  { devYear: '60→Ult', ldf: 1.005, desc: '60 months to ultimate' },
-];
-// LONG TAIL: Liability, Medical, Engineering (claims can develop over 10+ years)
-const LONG_TAIL_FACTORS = [
-  { devYear: '12→24', ldf: 2.100, desc: 'Initial to 24 months' },
-  { devYear: '24→36', ldf: 1.450, desc: '24 to 36 months' },
-  { devYear: '36→48', ldf: 1.220, desc: '36 to 48 months' },
-  { devYear: '48→60', ldf: 1.130, desc: '48 to 60 months' },
-  { devYear: '60→72', ldf: 1.075, desc: '60 to 72 months' },
-  { devYear: '72→84', ldf: 1.045, desc: '72 to 84 months' },
-  { devYear: '84→96', ldf: 1.025, desc: '84 to 96 months' },
-  { devYear: '96→Ult', ldf: 1.010, desc: '96 months to ultimate' },
-];
-
-// CDFs (cumulative from current to ultimate) — derived from above LDFs
-function computeCDF(factors) {
-  let cdf = 1.0; const cdfs = [1.0];
-  for (let i = factors.length - 1; i >= 0; i--) {
-    cdf *= factors[i].ldf;
-    cdfs.unshift(Math.round(cdf * 10000) / 10000);
-  }
-  return cdfs;
-}
-const SHORT_TAIL_CDF_DISPLAY = computeCDF(SHORT_TAIL_FACTORS);
-const LONG_TAIL_CDF_DISPLAY  = computeCDF(LONG_TAIL_FACTORS);
 const COLS = ['premium', 'paid', 'os'];
 
 function cleanNum(v) {
@@ -68,11 +38,30 @@ export default function PropNoTriangulation() {
   const startYear = tdExperienceStartYear || tdStartYear || new Date().getFullYear() - 5;
   const renewalYear = tdInceptionYear || new Date().getFullYear();
 
-  const [tailType, setTailType] = useState('SHORT_TAIL');
   const [rows, setRows] = useState({});
   const [loading, setLoading] = useState(false);
   const dirty = useRef(false);
   const isPasting = useRef(false);
+
+  // LDF Analysis modal + the currently-saved blend curves displayed in
+  // the summary card under the stats table.
+  const [ldfModalOpen, setLdfModalOpen] = useState(false);
+  const [premiumBlend, setPremiumBlend] = useState(null);
+  const [claimsBlend,  setClaimsBlend]  = useState(null);
+
+  const refreshBlends = useCallback(async (id) => {
+    if (!id) return;
+    try {
+      const [prem, claims] = await Promise.all([
+        api.getLdfBlend(id, 'PREMIUM').catch(() => null),
+        api.getLdfBlend(id, 'CLAIMS_PAID').catch(() => null),
+      ]);
+      setPremiumBlend(prem);
+      setClaimsBlend(claims);
+    } catch {
+      /* swallow — summary card just stays empty if blend fetch fails */
+    }
+  }, []);
 
   // Derive year range
   const lo = Math.min(startYear, renewalYear);
@@ -89,9 +78,6 @@ export default function PropNoTriangulation() {
       try {
         const data = await api.getStraightStats(contractId);
 
-        if (data?.tail_type) setTailType(data.tail_type);
-        else if (data?.config?.tailType) setTailType(data.config.tailType);
-
         const newRows = {};
         if (Array.isArray(data?.stats) && data.stats.length > 0) {
           data.stats.forEach(r => {
@@ -102,7 +88,6 @@ export default function PropNoTriangulation() {
               os: String(r.os_claims || r.os || ''),
             };
           });
-          // Only fallback to data years if treaty detail didn't provide them — not needed, years are read-only from treaty detail
         }
         setRows(newRows);
       } catch (e) {
@@ -110,7 +95,8 @@ export default function PropNoTriangulation() {
       }
       setLoading(false);
     })();
-  }, [contractId]);
+    refreshBlends(contractId);
+  }, [contractId, refreshBlends]);
 
   const updateCell = useCallback((year, col, value) => {
     setRows(prev => ({
@@ -175,14 +161,17 @@ export default function PropNoTriangulation() {
           os: parseFloat(cleanNum(row.os)) || 0,
         };
       });
-      await api.saveStraightStats(contractId, tailType, statsPayload);
+      // Per the LDF Analysis workflow, tail_type is always 'CUSTOM' now —
+      // the chosen curve lives in contract_ldf_blend_curve and downstream
+      // readers (projectWithSavedFactors, PropPricing) source from there.
+      await api.saveStraightStats(contractId, 'CUSTOM', statsPayload);
       dirty.current = false;
       return true;
     } catch (e) {
       console.error('Save failed:', e);
       return false;
     }
-  }, [contractId, years, rows, tailType]);
+  }, [contractId, years, rows]);
 
   // Totals
   const totals = years.reduce((acc, y) => {
@@ -232,13 +221,16 @@ export default function PropNoTriangulation() {
                       </div>
                     </div>
                   </div>
-                  <div className="toggle-group">
-                    <span className={`toggle-option ${tailType === 'SHORT_TAIL' ? 'active' : ''}`}
-                      onClick={() => { setTailType('SHORT_TAIL'); dirty.current = true; }}>Short Tail</span>
-                    <span className={`toggle-option ${tailType === 'LONG_TAIL' ? 'active' : ''}`}
-                      onClick={() => { setTailType('LONG_TAIL'); dirty.current = true; }}>Long Tail</span>
-                  </div>
-
+                  <button
+                    type="button"
+                    onClick={() => setLdfModalOpen(true)}
+                    style={{
+                      background: 'var(--accent)', color: 'var(--accent-contrast)',
+                      border: 'none', padding: '9px 16px', borderRadius: 8,
+                      fontWeight: 800, fontSize: 12, letterSpacing: '.06em', textTransform: 'uppercase',
+                      cursor: 'pointer',
+                    }}
+                  >🔍 LDF Analysis</button>
                 </div>
               </div>
 
@@ -321,50 +313,52 @@ export default function PropNoTriangulation() {
                 </table>
               </div>
 
-              {/* Dev Factors Panel */}
+              {/* Saved blend summary — read-only mirror of what's in
+                  contract_ldf_blend_curve. The LDF Analysis modal is
+                  the editing surface; this card just shows what's in
+                  force for downstream pricing. */}
               <div className="nt-controls-card glass" style={{ padding: 16, marginTop: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: 'rgba(255,255,255,0.85)' }}>
-                      Development Factors Applied — {tailType === 'SHORT_TAIL' ? 'Short Tail' : 'Long Tail'}
+                    <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
+                      Saved LDF Blend
                     </div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
-                      Industry benchmark LDFs used to project incurred claims to ultimate.
-                      <span style={{ color: '#fbbf24', marginLeft: 6 }}>⚠ Dummy factors — replace with actuarial assumptions when available.</span>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                      Per-class benchmark curves blended by EPI share — used by the projected summary and pricing engine.
                     </div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {(tailType === 'SHORT_TAIL' ? SHORT_TAIL_FACTORS : LONG_TAIL_FACTORS).map((f, i) => (
-                    <div key={i} style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', textAlign: 'center', minWidth: 90 }}>
-                      <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{f.devYear}</div>
-                      <div style={{ fontSize: 16, fontWeight: 800, color: f.ldf > 1.5 ? '#f87171' : f.ldf > 1.1 ? '#fbbf24' : '#4ade80' }}>{f.ldf.toFixed(3)}</div>
-                      <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>LDF</div>
-                    </div>
-                  ))}
-                </div>
-                {/* CDF summary for each year */}
-                {years.length > 0 && (
-                  <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', marginBottom: 8 }}>CDF Applied Per Underwriting Year (newest year gets highest factor)</div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {years.map((yr, i) => {
-                        const devIdx = years.length - 1 - i;
-                        const cdfs = tailType === 'SHORT_TAIL' ? SHORT_TAIL_CDF_DISPLAY : LONG_TAIL_CDF_DISPLAY;
-                        const cdf = devIdx < cdfs.length ? cdfs[devIdx] : cdfs[cdfs.length - 1];
-                        return (
-                          <div key={yr} style={{ padding: '5px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', textAlign: 'center' }}>
-                            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)' }}>{yr}</div>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: cdf > 1.5 ? '#f87171' : cdf > 1.1 ? '#fbbf24' : '#4ade80' }}>{cdf.toFixed(3)}×</div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                {(premiumBlend?.blended?.length || claimsBlend?.blended?.length) ? (
+                  <div style={{ display: 'grid', gap: 14 }}>
+                    {premiumBlend?.blended?.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Premium</div>
+                        <LdfCurveTable classes={premiumBlend.classes} blended={premiumBlend.blended} compact />
+                      </div>
+                    )}
+                    {claimsBlend?.blended?.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Claims</div>
+                        <LdfCurveTable classes={claimsBlend.classes} blended={claimsBlend.blended} compact />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: 'var(--muted)', padding: '12px 0' }}>
+                    No blend saved yet. Click <strong>LDF Analysis</strong> above to configure per-class weights.
                   </div>
                 )}
               </div>
 
               {dirty.current && <div className="muted" style={{ marginTop: 8 }}>Unsaved changes</div>}
+
+              <LdfAnalysisModal
+                contractId={contractId}
+                contractName={td.contractName || ''}
+                isOpen={ldfModalOpen}
+                onClose={() => setLdfModalOpen(false)}
+                onApply={() => refreshBlends(contractId)}
+              />
             </>
           )}
         </div>
