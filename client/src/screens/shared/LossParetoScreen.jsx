@@ -682,6 +682,44 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
   const freq=inflated.filter(l=>l>=xm).length/uwYrs;
   const avgYr=uwYrs>0?total/uwYrs:0;
   const lp=useMemo(()=>calcLayerPrice(alpha,xm,freq,xm,limit||xm*10),[alpha,xm,freq,limit]);
+
+  // Survival function P(X > x) for the currently selected distribution.
+  // Used by both the per-loss RP column and the layer burning cost table.
+  const survivalFn = useMemo(() => {
+    const f = fits.find(f => f.key === activeDist);
+    if (!f) return null;
+    if (activeDist === 'pareto') {
+      return x => x < xm ? 1 : Math.pow(xm / x, alpha);
+    }
+    if (activeDist === 'lognormal' && f.params) {
+      const { mu, sigma } = f.params;
+      return x => x <= 0 ? 1 : 1 - lognormalCDF(x, mu, sigma);
+    }
+    if (activeDist === 'exponential' && f.params) {
+      return x => x < xm ? 1 : Math.exp(-f.params.lambda * (x - xm));
+    }
+    if (activeDist === 'weibull' && f.params) {
+      const { k, lam } = f.params;
+      return x => x < xm ? 1 : Math.exp(-Math.pow((x - xm) / lam, k));
+    }
+    return null;
+  }, [activeDist, fits, xm, alpha]);
+
+  // Structure layers scoped to this loss type (RISK for large, CAT for cat).
+  // Source: appState.npStructureLayers (set by NpStructure screen on load).
+  const isNpCat = lossType === 'cat';
+  const structureLayers = useMemo(() => {
+    const raw = appState.npStructureLayers || [];
+    return raw.filter(l => {
+      if (l.peril_scope !== undefined) {
+        return isNpCat
+          ? (l.peril_scope === 'CAT' || l.peril_scope === 'BOTH')
+          : (l.peril_scope === 'RISK' || l.peril_scope === 'BOTH');
+      }
+      return isNpCat ? !!l.catCover : !!l.riskCover;
+    });
+  }, [appState.npStructureLayers, isNpCat]);
+
   const bestFit=useMemo(()=>[...fits].sort((a,b)=>a.ks.ks-b.ks.ks)[0]?.key||'pareto',[fits]);
 
   return(
