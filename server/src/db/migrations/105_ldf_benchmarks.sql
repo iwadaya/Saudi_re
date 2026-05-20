@@ -5,14 +5,18 @@
 --
 -- Weight = the contract's gross premium on that class (from contract_epi_split).
 -- A contract contributes to a class's benchmark only if:
---   - the contract is bound (status = 'BOUND')
+--   - the contract has reached a terminal underwriting state
+--     (status IN ('SIGNED','DECLINED','NTU')); drafts and in-flight
+--     workflows are excluded so the curves only reflect decisions
 --   - the dev factor was actually selected (selected_ldf IS NOT NULL)
 --   - the class appears on the contract's COB list
 --   - the LDF is within sanity bounds (0.5 ≤ LDF ≤ 10) — outliers are
 --     suppressed at the source to keep weighted averages stable
 --
 -- Refresh: REFRESH MATERIALIZED VIEW CONCURRENTLY on a nightly cron, plus
--- after each contract is bound (handled in routes/contracts.js).
+-- after each terminal transition (handled in
+-- modules/pricing/repositories/pricingOfferRepository.js via the
+-- ldf/benchmark service).
 
 -- ── per-contract per-class contribution rows (the building block) ─────────
 CREATE MATERIALIZED VIEW public.mv_ldf_contributions AS
@@ -26,16 +30,24 @@ SELECT
     cdf.dev_month,
     cdf.selected_ldf                         AS ldf
 FROM public.contract_dev_factor cdf
-JOIN public.contracts          c    ON c.contract_id = cdf.contract_id
+JOIN public.contract            c    ON c.contract_id = cdf.contract_id
 JOIN public.contract_class_of_business ccob ON ccob.contract_id = cdf.contract_id
 LEFT JOIN public.contract_epi_split ces
        ON ces.contract_id = cdf.contract_id
       AND ces.class_of_business_id = ccob.class_of_business_id
 LEFT JOIN public.country co ON co.country_id = c.country_id
-WHERE c.status = 'BOUND'
+WHERE c.status IN ('SIGNED','DECLINED','NTU')
   AND cdf.selected_ldf IS NOT NULL
   AND cdf.selected_ldf BETWEEN 0.5 AND 10.0
   AND cdf.triangle_type IN ('PREMIUM','CLAIMS_PAID','CLAIMS_OS','INCURRED');
+
+-- Natural key — required by REFRESH MATERIALIZED VIEW CONCURRENTLY.
+-- Unique because (contract_id, triangle_type, dev_month) is the PK on
+-- contract_dev_factor and (contract_id, class_of_business_id) is the PK
+-- on contract_class_of_business, so the join produces one row per tuple.
+CREATE UNIQUE INDEX mv_ldf_contrib_pk
+    ON public.mv_ldf_contributions
+       (contract_id, class_of_business_id, triangle_type, dev_month);
 
 CREATE INDEX mv_ldf_contrib_lookup
     ON public.mv_ldf_contributions
