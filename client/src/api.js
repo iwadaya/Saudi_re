@@ -160,8 +160,6 @@ const PATHS = {
   dashboardPage: (tab, qs = '') => `/api/dashboard/page/${enc(tab || 'portfolio-overview')}${qs ? `?${qs}` : ''}`,
   lossSelectionLatest: (id, lossType) => `/api/treaties/${enc(id)}/loss-selection/${enc(lossType)}/latest`,
   saveLossSelectionSnapshot: (id, lossType) => `/api/treaties/${enc(id)}/loss-selection/${enc(lossType)}/snapshot`,
-  ldfBlend: (contractId, triangleType) =>
-    `/api/contracts/${enc(contractId)}/ldf-blend/${enc(triangleType)}`,
 };
 
 const QUOTE_PATHS = {
@@ -797,23 +795,14 @@ export const api = {
   },
 
   // LDF blend modal — fetch saved/fresh blend, preview overrides, persist.
-  getLdfBlend(contractId, triangleType, opts) {
-    return request(PATHS.ldfBlend(contractId, triangleType), opts);
-  },
-  previewLdfBlend(contractId, triangleType, overrideWeights, opts) {
-    return request(PATHS.ldfBlend(contractId, triangleType), {
-      method: 'POST',
-      body: { overrideWeights: overrideWeights || null },
-      ...opts,
-    });
-  },
-  saveLdfBlend(contractId, triangleType, payload, opts) {
-    return request(PATHS.ldfBlend(contractId, triangleType), {
-      method: 'PUT',
-      body: payload,
-      ...opts,
-    });
-  },
+  getLdfBlend:     (contractId, triangleType, opts) =>
+    request(`/api/contracts/${enc(contractId)}/ldf-blend/${enc(triangleType)}`, opts),
+  previewLdfBlend: (contractId, triangleType, overrideWeights, opts) =>
+    request(`/api/contracts/${enc(contractId)}/ldf-blend/${enc(triangleType)}`,
+      { method: 'POST', body: { overrideWeights }, ...opts }),
+  saveLdfBlend:    (contractId, triangleType, payload, opts) =>
+    request(`/api/contracts/${enc(contractId)}/ldf-blend/${enc(triangleType)}`,
+      { method: 'PUT', body: payload, ...opts }),
 };
 
 export default api;
