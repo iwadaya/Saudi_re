@@ -17,6 +17,7 @@ import clientEventsRouter from './clientEvents.js';
 import workbenchRouter from './workbench.js';
 import peerStructuresRouter from './peerStructures.js';
 import renewalPackImportRouter from './renewalPackImport.js';
+import ldfBlendingRouter from './ldfBlending.js';
 
 const routers = [
   lookupsRouter,
@@ -38,6 +39,7 @@ const routers = [
   workbenchRouter,
   peerStructuresRouter,
   renewalPackImportRouter,
+  ldfBlendingRouter,
 ];
 
 export function registerApiRoutes(app) {
