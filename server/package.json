@@ -11,7 +11,8 @@
     "migrate:status": "node src/db/migrateStatus.js",
     "seed": "node src/db/seeds/run.js",
     "cleanup:snapshots": "node scripts/cleanup-snapshots.js",
-    "relocate:misfiled-renewal-packs": "node scripts/relocate-misfiled-renewal-packs.js"
+    "relocate:misfiled-renewal-packs": "node scripts/relocate-misfiled-renewal-packs.js",
+    "refresh:ldf-benchmarks": "node src/jobs/refreshLdfBenchmarks.js"
   },
   "dependencies": {
     "cloudinary": "^2.5.1",

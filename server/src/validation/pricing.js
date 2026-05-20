@@ -105,15 +105,17 @@ export const compositePricingSaveSchema = z.object({
  * POST /api/straight-stats/save
  *
  * Saves the "straight" (vs triangle) experience rows keyed by tail type.
- * tailType is an enum of SHORT_TAIL | LONG_TAIL — anything else would
- * violate the DB check constraint, so we fail early with a clear error
- * instead of letting the INSERT throw.
+ * tailType is an enum of SHORT_TAIL | LONG_TAIL | CUSTOM — anything else
+ * would violate the DB check constraint, so we fail early with a clear
+ * error instead of letting the INSERT throw. CUSTOM is set by the LDF
+ * Analysis modal to signal "read the saved per-class blend from
+ * contract_ldf_blend_curve rather than a hard-coded curve".
  */
 export const straightStatsSaveSchema = z.object({
   contractId:  uuid.optional(),
   contract_id: uuid.optional(),
-  tailType:    z.enum(['SHORT_TAIL', 'LONG_TAIL']).optional(),
-  tail_type:   z.enum(['SHORT_TAIL', 'LONG_TAIL']).optional(),
+  tailType:    z.enum(['SHORT_TAIL', 'LONG_TAIL', 'CUSTOM']).optional(),
+  tail_type:   z.enum(['SHORT_TAIL', 'LONG_TAIL', 'CUSTOM']).optional(),
   stats:       z.array(z.object({}).passthrough()).default([]),
 }).passthrough().refine(
   (b) => !!(b.contractId || b.contract_id),

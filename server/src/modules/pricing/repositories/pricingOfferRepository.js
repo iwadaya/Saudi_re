@@ -1,6 +1,14 @@
 import { pool } from '../../../db/pool.js';
 import { numOrNull } from './repositoryUtils.js';
 import { assertLegalTransition } from '../../../lib/statusMachine.js';
+import { refreshBenchmarks } from '../../../services/ldf/benchmark.js';
+
+// Fire-and-forget — benchmark refresh can take seconds on a big dataset
+// and the terminal-state transition shouldn't block on it. Failures are
+// logged by refreshBenchmarks itself.
+function scheduleBenchmarkRefresh() {
+  refreshBenchmarks(pool).catch(() => {});
+}
 
 /**
  * Load the current uw_status for a contract. Throws a 404-style
@@ -59,6 +67,7 @@ export async function markDeclined(contractId, reason) {
     `UPDATE public.contract_offer SET status='DECLINED',decline_reason=$2,declined_at=now(),updated_at=now() WHERE contract_id=$1`,
     [contractId, reason || null]
   ).catch(() => {});
+  scheduleBenchmarkRefresh();
 }
 
 export async function markApproved(contractId, linePct) {
@@ -127,6 +136,7 @@ export async function markSigned(contractId, signedLinePct) {
     `UPDATE public.contract_offer SET status='SIGNED',signed_at=now(),written_line_pct=COALESCE(written_line_pct,$2) WHERE contract_id=$1`,
     [contractId, signedLinePct]
   );
+  scheduleBenchmarkRefresh();
 }
 
 export async function markNtu(contractId, reason) {
@@ -142,6 +152,7 @@ export async function markNtu(contractId, reason) {
     `UPDATE public.contract_offer SET status='NTU',ntu_at=now(),ntu_reason=$2 WHERE contract_id=$1`,
     [contractId, reason]
   );
+  scheduleBenchmarkRefresh();
 }
 
 export async function insertApprovalEvent(contractId, eventType, actor, comment = null) {

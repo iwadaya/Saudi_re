@@ -62,3 +62,9 @@ The compose file starts the application and a PostgreSQL database.
 - Legacy snapshot directories were removed from the deployment package.
 - Request user context is now normalized on the server from request headers to support cleaner auditing and role-aware endpoints.
 - Routes are lazy-loaded on the client to reduce the initial bundle size.
+
+## Scheduled jobs
+There is no in-process scheduler. The following scripts are designed to be invoked nightly by the platform's cron facility (Render Cron, Kubernetes CronJob, GitHub Actions, etc.) from the `server/` directory:
+
+- `npm run cleanup:snapshots` — purges `import_snapshots` rows past the 30-day retention window.
+- `npm run refresh:ldf-benchmarks` — rebuilds the `mv_ldf_benchmark_*` materialized views. Also fires opportunistically after each contract reaches a terminal state (SIGNED / DECLINED / NTU); the nightly run is the safety net.

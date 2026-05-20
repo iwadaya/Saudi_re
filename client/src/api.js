@@ -793,6 +793,16 @@ export const api = {
   workbenchPostComment(payload, opts) {
     return request('/api/workbench/comments', { method: 'POST', body: payload, ...opts });
   },
+
+  // LDF blend modal — fetch saved/fresh blend, preview overrides, persist.
+  getLdfBlend:     (contractId, triangleType, opts) =>
+    request(`/api/contracts/${enc(contractId)}/ldf-blend/${enc(triangleType)}`, opts),
+  previewLdfBlend: (contractId, triangleType, overrideWeights, opts) =>
+    request(`/api/contracts/${enc(contractId)}/ldf-blend/${enc(triangleType)}`,
+      { method: 'POST', body: { overrideWeights }, ...opts }),
+  saveLdfBlend:    (contractId, triangleType, payload, opts) =>
+    request(`/api/contracts/${enc(contractId)}/ldf-blend/${enc(triangleType)}`,
+      { method: 'PUT', body: payload, ...opts }),
 };
 
 export default api;

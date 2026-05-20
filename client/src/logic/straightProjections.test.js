@@ -2,22 +2,22 @@ import { describe, it, expect } from 'vitest';
 import {
   projectStraightStats,
   LDF_CONFIG,
+  DEFAULT_LDF_KEY,
   DEV_FACTORS,
   IS_BENCHMARK_LDF,
 } from './straightProjections.js';
 
 describe('LDF_CONFIG', () => {
-  it('exposes the legacy SHORT_TAIL / LONG_TAIL fallback keys with the original values', () => {
-    expect(LDF_CONFIG.SHORT_TAIL.ldfs).toEqual([1.250, 1.080, 1.025, 1.010, 1.005]);
-    expect(LDF_CONFIG.LONG_TAIL.ldfs).toEqual([2.100, 1.450, 1.220, 1.130, 1.075, 1.045, 1.025, 1.010]);
-  });
-
-  it('exposes the new class-keyed entries', () => {
+  it('exposes the class-keyed entries', () => {
     expect(LDF_CONFIG.PROPERTY_CAT.ldfs.length).toBeGreaterThan(0);
     expect(LDF_CONFIG.PROPERTY_NONCAT.ldfs.length).toBeGreaterThan(0);
     expect(LDF_CONFIG.ENGINEERING.ldfs.length).toBeGreaterThan(0);
     expect(LDF_CONFIG.LIABILITY.ldfs.length).toBeGreaterThan(0);
     expect(LDF_CONFIG.MARINE.ldfs.length).toBeGreaterThan(0);
+  });
+
+  it('DEFAULT_LDF_KEY points to an entry that exists', () => {
+    expect(LDF_CONFIG[DEFAULT_LDF_KEY]).toBeDefined();
   });
 
   it('every entry carries provenance fields (source + reviewed + label)', () => {
@@ -97,24 +97,21 @@ describe('projectStraightStats', () => {
     expect(r[r.length - 1].devFactor).toBeGreaterThan(r[0].devFactor);
   });
 
-  it('falls back to SHORT_TAIL when classKey is unknown', () => {
-    const known   = projectStraightStats(stats, 'SHORT_TAIL');
+  it('falls back to DEFAULT_LDF_KEY when classKey is unknown', () => {
+    const known   = projectStraightStats(stats, DEFAULT_LDF_KEY);
     const fallback = projectStraightStats(stats, 'NOT_A_REAL_KEY');
     expect(fallback).toEqual(known);
   });
 
-  it('legacy SHORT_TAIL key still works (backwards compatibility)', () => {
-    const out = projectStraightStats(stats, 'SHORT_TAIL');
-    expect(out).toHaveLength(3);
-    expect(out[2].devFactor).toBeGreaterThanOrEqual(1);
+  it('uses DEFAULT_LDF_KEY when no classKey is passed', () => {
+    const omitted = projectStraightStats(stats);
+    const explicit = projectStraightStats(stats, DEFAULT_LDF_KEY);
+    expect(omitted).toEqual(explicit);
   });
 
-  it('legacy LONG_TAIL key still works', () => {
-    const out = projectStraightStats(stats, 'LONG_TAIL');
-    expect(out).toHaveLength(3);
-    // Long tail's per-period LDFs are larger so a 3-year-old year is still
-    // far less developed than under SHORT_TAIL.
-    const short = projectStraightStats(stats, 'SHORT_TAIL');
-    expect(out[2].devFactor).toBeGreaterThan(short[2].devFactor);
+  it('a long-tail-ish class projects to a higher ultimate than a short-tail-ish one', () => {
+    const property = projectStraightStats(stats, 'PROPERTY_NONCAT');
+    const liability = projectStraightStats(stats, 'LIABILITY');
+    expect(liability[2].devFactor).toBeGreaterThan(property[2].devFactor);
   });
 });

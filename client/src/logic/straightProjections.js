@@ -31,8 +31,11 @@ export const IS_BENCHMARK_LDF = true;
  *   reviewed — null when not reviewed; ISO date when an actuary signed off
  *   label    — UI display name
  *
- * SHORT_TAIL and LONG_TAIL are kept as legacy fallback keys so existing
- * call sites (projectStraightStats) keep working unchanged.
+ * The Straight Stats screen drives projections from the saved LDF blend
+ * (contract_ldf_blend_curve) rather than these per-class defaults — the
+ * curves below remain as a final fallback when neither saved blend nor
+ * raw triangle is available, and as the source of the per-class formula
+ * cards in formulaCatalog.js.
  */
 export const LDF_CONFIG = {
   PROPERTY_CAT: {
@@ -65,20 +68,13 @@ export const LDF_CONFIG = {
     source:   'Internal benchmark — placeholder',
     reviewed: null,
   },
-  // Legacy fallback keys — preserved for backwards compatibility.
-  SHORT_TAIL: {
-    label:    'Short tail (legacy)',
-    ldfs:     [1.250, 1.080, 1.025, 1.010, 1.005],
-    source:   'Internal benchmark — placeholder',
-    reviewed: null,
-  },
-  LONG_TAIL: {
-    label:    'Long tail (legacy)',
-    ldfs:     [2.100, 1.450, 1.220, 1.130, 1.075, 1.045, 1.025, 1.010],
-    source:   'Internal benchmark — placeholder',
-    reviewed: null,
-  },
 };
+
+// Picked as the default fallback when projectStraightStats is called
+// without a recognised class key — Property non-CAT is the most generic
+// short-development curve and matches the legacy behaviour for treaties
+// that haven't yet been migrated to the saved-blend flow.
+export const DEFAULT_LDF_KEY = 'PROPERTY_NONCAT';
 
 // Premium develops slightly — mostly earned within 12 months for proportional
 const PREM_LDFS = [1.050, 1.015, 1.005, 1.000, 1.000, 1.000, 1.000, 1.000];
@@ -110,11 +106,11 @@ function getCDF(cdfs, devIdx) {
 
 /**
  * Resolve a class-of-business key to the LDF_CONFIG entry to use.
- * Falls back to SHORT_TAIL when the key isn't recognised.
+ * Falls back to DEFAULT_LDF_KEY when the key isn't recognised.
  */
 function resolveCdfs(classKey) {
   if (LDF_CDFS[classKey]) return LDF_CDFS[classKey];
-  return LDF_CDFS.SHORT_TAIL;
+  return LDF_CDFS[DEFAULT_LDF_KEY];
 }
 
 /**
@@ -123,10 +119,10 @@ function resolveCdfs(classKey) {
  * @param {Array}  stats    — [{year, premium, paid, os}]
  * @param {string} classKey — any LDF_CONFIG key (PROPERTY_CAT,
  *                             PROPERTY_NONCAT, ENGINEERING, LIABILITY,
- *                             MARINE, or legacy SHORT_TAIL/LONG_TAIL)
+ *                             or MARINE)
  * @returns {Array}         — [{year, ultPrem, ultLoss, actPrem, actLoss, devFactor, premDevFactor}]
  */
-export function projectStraightStats(stats, classKey = 'SHORT_TAIL') {
+export function projectStraightStats(stats, classKey = DEFAULT_LDF_KEY) {
   if (!stats || !stats.length) return [];
 
   const lossCDFs = resolveCdfs(classKey);

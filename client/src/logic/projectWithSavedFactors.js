@@ -207,21 +207,88 @@ export async function loadProjectedRows(contractId, opts) {
   }
 
   // 3) Fallback: straight stats (no-triangulation)
-  const { projectStraightStats } = await import('./straightProjections');
   const ssData = await api.getStraightStats(contractId, opts).catch(() => null);
   const stats = ssData?.stats || [];
-  const tailType = ssData?.tail_type || 'SHORT_TAIL';
+  if (stats.length === 0) return { rows: [], source: null };
 
-  if (stats.length > 0) {
-    const parsed = stats.map(s => ({
-      year: Number(s.underwriting_year || s.year),
-      premium: cn(s.premium),
-      paid: cn(s.paid_claims || s.paid),
-      os: cn(s.os_claims || s.os),
-    }));
-    const rows = projectStraightStats(parsed, tailType);
-    return { rows, source: tailType === 'LONG_TAIL' ? 'straight-long' : 'straight-short' };
-  }
+  const parsed = stats.map(s => ({
+    year: Number(s.underwriting_year || s.year),
+    premium: cn(s.premium),
+    paid: cn(s.paid_claims || s.paid),
+    os: cn(s.os_claims || s.os),
+  }));
 
-  return { rows: [], source: null };
+  // 3a) Preferred: project against the underwriter's saved per-class
+  // blend (the LDF Analysis modal writes here). Tail type is just a
+  // marker — the curve itself lives in contract_ldf_blend_curve.
+  const blendRows = await projectFromSavedBlend(contractId, parsed, opts);
+  if (blendRows) return { rows: blendRows, source: 'straight-blend' };
+
+  // 3b) Last resort: hard-coded benchmark curve, picked by the contract's
+  // primary class of business (falls through to DEFAULT_LDF_KEY when the
+  // class can't be resolved). Used only for treaties that haven't yet
+  // saved an LDF blend.
+  const { projectStraightStats, DEFAULT_LDF_KEY } = await import('./straightProjections');
+  const classKey = ssData?.primary_class_key || DEFAULT_LDF_KEY;
+  const rows = projectStraightStats(parsed, classKey);
+  return { rows, source: 'straight-benchmark' };
+}
+
+// ── Saved-blend projection ───────────────────────────────────────────────
+//
+// Pulls the underwriter-chosen LDF blend for PREMIUM and CLAIMS_PAID
+// and projects each row by the latest-CDF-applies-to-newest-year
+// convention. Returns null when no blend has been saved for either
+// triangle type (caller falls back to the hard-coded curves).
+
+function blendCurveToCdfArray(blended) {
+  if (!Array.isArray(blended) || blended.length === 0) return null;
+  // contract_ldf_blend_curve stores CDFs per dev_month — sorted by dev_month.
+  // Index 0 = newest dev period (highest CDF), incrementing dev_month moves
+  // toward fully-developed. We feed our projection convention which expects
+  // [oldest...newest] but the screen renders [newest first], so reverse.
+  const sorted = [...blended].sort((a, b) => Number(a.devMonth) - Number(b.devMonth));
+  return sorted.map(p => Number(p.cdf));
+}
+
+export async function projectFromSavedBlend(contractId, parsed, opts) {
+  const [prem, claims] = await Promise.all([
+    api.getLdfBlend(contractId, 'PREMIUM', opts).catch(() => null),
+    api.getLdfBlend(contractId, 'CLAIMS_PAID', opts).catch(() => null),
+  ]);
+  const premCdfs   = blendCurveToCdfArray(prem?.blended);
+  const claimsCdfs = blendCurveToCdfArray(claims?.blended);
+  if (!premCdfs && !claimsCdfs) return null;
+
+  const n = parsed.length;
+  const sorted = [...parsed].sort((a, b) => a.year - b.year);
+  const pickCdf = (cdfs, devIdx) => {
+    if (!cdfs || cdfs.length === 0) return 1.0;
+    // devIdx grows newest→oldest; CDFs are sorted oldest→newest, so
+    // index from the end. Saturate at the largest CDF for any year
+    // less developed than our table.
+    const idx = cdfs.length - 1 - devIdx;
+    if (idx < 0) return cdfs[0];
+    if (idx >= cdfs.length) return cdfs[cdfs.length - 1];
+    return cdfs[idx];
+  };
+
+  return sorted.map((row, i) => {
+    const devIdx  = n - 1 - i;
+    const lossCDF = pickCdf(claimsCdfs, devIdx);
+    const premCDF = pickCdf(premCdfs, devIdx);
+    const prem = parseFloat(row.premium) || 0;
+    const paid = parseFloat(row.paid)    || 0;
+    const os   = parseFloat(row.os)      || 0;
+    const incurred = paid + os;
+    return {
+      year:          Number(row.year),
+      actPrem:       prem,
+      actLoss:       incurred,
+      ultPrem:       prem * premCDF,
+      ultLoss:       incurred * lossCDF,
+      devFactor:     lossCDF,
+      premDevFactor: premCDF,
+    };
+  });
 }
