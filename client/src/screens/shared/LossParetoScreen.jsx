@@ -129,6 +129,48 @@ export function calcLayerPrice(alpha,xm,freq,ret,lim){
   const att=Math.max(xm,ret),sev=LEV(att+lim)-LEV(att);return{severity:sev,rpp:freq*sev};
 }
 
+/**
+ * Return period of a single loss of size x under the fitted distribution.
+ *   RP(x) = 1 / (freq × P(X > x))
+ * freq  = annual frequency of losses ≥ xm (already computed by the screen).
+ * survivalFn = P(X > x) from the active fitted distribution.
+ * Returns null when freq or survivalFn is missing / zero.
+ */
+export function lossReturnPeriod(x, freq, survivalFn) {
+  if (!(freq > 0) || !survivalFn) return null;
+  const s = survivalFn(x);
+  if (!(s > 0)) return null;
+  return 1 / (freq * s);
+}
+
+/**
+ * Return period of the layer attachment point D.
+ *   RP_attach = 1 / (freq × P(X > D))
+ * Same formula as lossReturnPeriod; named separately for clarity at call sites.
+ */
+export function rpAtAttachment(freq, D, survivalFn) {
+  return lossReturnPeriod(D, freq, survivalFn);
+}
+
+/**
+ * Numerical integration of the survival function over [D, D+L].
+ * E[loss in layer] = ∫[D to D+L] P(X > x) dx  (trapezoidal, 400 steps).
+ * Used for non-Pareto distributions where calcLayerPrice (analytical) doesn't apply.
+ * Returns { severity, rpp } matching calcLayerPrice's output shape.
+ */
+export function calcLayerPriceNumerical(freq, D, L, survivalFn, steps = 400) {
+  if (!(L > 0) || !survivalFn) return { severity: 0, rpp: 0 };
+  const h = L / steps;
+  let sum = 0;
+  for (let i = 0; i <= steps; i++) {
+    const x = D + i * h;
+    const w = (i === 0 || i === steps) ? 0.5 : 1;
+    sum += w * Math.max(0, survivalFn(x));
+  }
+  const severity = sum * h;
+  return { severity, rpp: freq * severity };
+}
+
 /* ── PDFs (conditional on x ≥ xm, normalised so ∫ f = 1 over [xm,∞)) ── */
 function paretoPDF(x,a,xm){return x<xm?0:(a*Math.pow(xm,a))/Math.pow(x,a+1);}
 function lognormalPDF(x,mu,sigma){
