@@ -537,12 +537,15 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
           if (snap.observation_years) setYearsOvr(String(snap.observation_years));
           if (snap.active_distribution) setActiveDist(snap.active_distribution);
           if (snap.pareto_alpha > 0) setAlpha(snap.pareto_alpha);
-          if (snap.layer_burning_cost) {
-            if (typeof snap.layer_burning_cost.wEmp   === 'number') setWEmp(snap.layer_burning_cost.wEmp);
-            if (typeof snap.layer_burning_cost.wModel === 'number') setWModel(snap.layer_burning_cost.wModel);
+          // layer_burning_cost and oep_input are nested inside return_period_curve
+          // because the server only persists a whitelist of top-level keys.
+          const rpc = snap.return_period_curve || {};
+          if (rpc.layer_burning_cost) {
+            if (typeof rpc.layer_burning_cost.wEmp   === 'number') setWEmp(rpc.layer_burning_cost.wEmp);
+            if (typeof rpc.layer_burning_cost.wModel === 'number') setWModel(rpc.layer_burning_cost.wModel);
           }
-          if (snap.oep_input && lossType === 'cat' && Array.isArray(snap.oep_input)) {
-            setOepRows(snap.oep_input);
+          if (rpc.oep_input && lossType === 'cat' && Array.isArray(rpc.oep_input)) {
+            setOepRows(rpc.oep_input);
           }
           setSavedSnapshotId(snap.snapshot_id || null);
         } else {
@@ -645,35 +648,39 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
       pareto_alpha: alpha,
       pareto_limit: limit,
       observation_years: Number(yearsOvr) || 10,
-      return_period_curve: { activeDist, xm, limit, yearsOvr: yearsOvr || null, points: pts },
-      return_period_key_points: { rp10, rp50, rp100, rp250 },
-      // Layer burning cost — blend inputs and all three method outputs
-      layer_burning_cost: {
-        wEmp,
-        wModel,
-        rows: blendedLayerRols.map(r => ({
-          layer:        r.layer,
-          deductible:   r.D,
-          limit:        r.L,
-          return_period: r.rp,
-          empirical_rol: r.empiricalRol,
-          model_rol:     r.modelRol,
-          blended_rol:   r.blendedRol,
-          blended_annual_loss: r.blendedAnnual,
-        })),
+      // return_period_curve carries the layer burning cost + OEP payload too,
+      // since the server only persists a whitelist of top-level keys but stores
+      // this one as JSONB. Nesting keeps everything within a column the handler
+      // already round-trips.
+      return_period_curve: {
+        activeDist, xm, limit, yearsOvr: yearsOvr || null, points: pts,
+        layer_burning_cost: {
+          wEmp,
+          wModel,
+          rows: blendedLayerRols.map(r => ({
+            layer:        r.layer,
+            deductible:   r.D,
+            limit:        r.L,
+            return_period: r.rp,
+            empirical_rol: r.empiricalRol,
+            model_rol:     r.modelRol,
+            blended_rol:   r.blendedRol,
+            blended_annual_loss: r.blendedAnnual,
+          })),
+        },
+        ...(lossType === 'cat' ? {
+          oep_input: oepRows,
+          oep_layer_burning_cost: oepLayerRols.map(r => ({
+            layer:       r.layer,
+            deductible:  r.D,
+            limit:       r.L,
+            return_period: r.rp,
+            annual_loss: r.annualLoss,
+            rol:         r.rol,
+          })),
+        } : {}),
       },
-      // OEP (cat only)
-      ...(lossType === 'cat' ? {
-        oep_input: oepRows,
-        oep_layer_burning_cost: oepLayerRols.map(r => ({
-          layer:       r.layer,
-          deductible:  r.D,
-          limit:       r.L,
-          return_period: r.rp,
-          annual_loss: r.annualLoss,
-          rol:         r.rol,
-        })),
-      } : {}),
+      return_period_key_points: { rp10, rp50, rp100, rp250 },
       assumptions_hash,
     };
   }, [lossType, activeDist, xm, limit, yearsOvr, alpha, losses, fits, returnPeriods, wEmp, wModel, blendedLayerRols, oepRows, oepLayerRols]);
