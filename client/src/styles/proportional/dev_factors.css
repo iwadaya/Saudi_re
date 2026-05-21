@@ -1035,6 +1035,7 @@
 
 .DEV_FACTORS_PAGE .df-val,
 .DEV_FACTORS_PAGE .df-input{
+  width: 100% !important;
   min-width: 120px !important;
   height: 21px !important;
   margin: 0 !important;
@@ -1044,6 +1045,7 @@
   background: transparent !important;
   box-shadow: none !important;
   display: block !important;
+  box-sizing: border-box !important;
   text-align: center !important;
   font-size: 12px !important;
   font-weight: 500 !important;
@@ -1053,6 +1055,13 @@
   outline: none !important;
   -webkit-appearance: none !important;
   appearance: none !important;
+}
+
+/* Centre cell contents so a narrower input or value still sits in the
+   middle of its column. */
+.DEV_FACTORS_PAGE .df-c{
+  text-align: center !important;
+  vertical-align: middle !important;
 }
 
 .DEV_FACTORS_PAGE .df-input:focus{
