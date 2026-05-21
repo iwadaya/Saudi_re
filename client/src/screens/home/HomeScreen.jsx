@@ -24,12 +24,17 @@ async function exportPortfolioToExcel() {
   const propHeaders = [
     'Contract ID','Cedant','Country','Treaty Type','UW Year','Status','COB',
     'Limit 100%','Premium 100%','Commission %','Written Line %','Signed Line %',
+    'Attritional Loss Ratio','Large Loss Loading','Cat Loss Loading','Combined Ratio',
+    'Underwriter','Approver',
   ];
   const propRows = (prop || []).map(r => [
     r.contract_id, r.cedant, r.country, r.treaty_type,
     fmtN(r.uw_year), r.status, r.cob,
     fmtN(r.limit_100), fmtN(r.premium_100), fmtPct(r.commission_pct),
     fmtPct(r.written_line_pct), fmtPct(r.signed_line_pct),
+    fmtPct(r.attritional_ratio), fmtPct(r.large_loss_load),
+    fmtPct(r.cat_loss_load), fmtPct(r.combined_ratio),
+    r.underwriter_name || '', r.approver_name || '',
   ]);
   stylePortfolioSheet(wb.appendSheet('Proportional', [propHeaders, ...propRows]), propHeaders.length);
 
@@ -39,6 +44,8 @@ async function exportPortfolioToExcel() {
     'Layer #','Attachment','Limit (Layer)','EGNPI 100%',
     'Premium (Layer)','ROL %','Rate %','Brokerage %',
     'Written Line %','Signed Line %',
+    'Attritional Loss Ratio','Large Loss Loading','Cat Loss Loading','Combined Ratio',
+    'Underwriter','Approver',
   ];
   const npRows = (np || []).map(r => [
     r.contract_id, r.cedant, r.country, r.treaty_type,
@@ -47,6 +54,9 @@ async function exportPortfolioToExcel() {
     fmtN(r.egnpi_100), fmtN(r.premium_100),
     fmtPct(r.rol_pct), fmtPct(r.rate_pct), fmtPct(r.commission_pct),
     fmtPct(r.written_line_pct), fmtPct(r.signed_line_pct),
+    fmtPct(r.attritional_ratio), fmtPct(r.large_loss_load),
+    fmtPct(r.cat_loss_load), fmtPct(r.combined_ratio),
+    r.underwriter_name || '', r.approver_name || '',
   ]);
   stylePortfolioSheet(wb.appendSheet('Non-Proportional', [npHeaders, ...npRows]), npHeaders.length);
 
