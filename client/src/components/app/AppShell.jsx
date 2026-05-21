@@ -48,7 +48,7 @@ class ChunkErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError && !this.state.isChunkError) {
       return (
-        <div style={{ padding: '2rem', color: '#f87171', fontFamily: 'monospace' }}>
+        <div style={{ padding: '2rem', color: '#f87171', fontFamily: 'var(--font-mono)' }}>
           Something went wrong. Please refresh the page.
         </div>
       );

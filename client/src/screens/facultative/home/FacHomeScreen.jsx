@@ -101,7 +101,7 @@ export default function FacHomeScreen() {
       minHeight: '100vh',
       background: 'linear-gradient(180deg, #070d1c 0%, #050a14 100%)',
       color: 'rgba(226,232,240,0.92)',
-      fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
+      fontFamily: 'var(--font-sans)',
     }}>
 
       {/* Topbar */}
@@ -238,7 +238,7 @@ export default function FacHomeScreen() {
                       onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                       onClick={() => handleOpenRisk(r.fac_risk_id)}>
-                      <td style={{ padding: '12px 16px', fontWeight: 700, color: '#00d4ff', fontSize: 12, fontFamily: 'monospace' }}>{r.fac_ref || '—'}</td>
+                      <td style={{ padding: '12px 16px', fontWeight: 700, color: '#00d4ff', fontSize: 12, fontFamily: 'var(--font-mono)' }}>{r.fac_ref || '—'}</td>
                       <td style={{ padding: '12px 16px', fontWeight: 600, color: 'rgba(226,232,240,0.90)' }}>{r.insured_name}</td>
                       <td style={{ padding: '12px 16px' }}>
                         <span style={{
@@ -307,7 +307,7 @@ export default function FacHomeScreen() {
                   }}
                   onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(168,85,247,0.40)'}
                   onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#00d4ff', fontFamily: 'monospace' }}>{r.fac_ref}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#00d4ff', fontFamily: 'var(--font-mono)' }}>{r.fac_ref}</div>
                   <div style={{ fontSize: 13, color: 'rgba(226,232,240,0.85)', marginTop: 2 }}>{r.insured_name}</div>
                   <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.50)', marginTop: 2 }}>{r.cob_name || '—'} · {r.country_name || '—'} · SI: {fmt(r.total_sum_insured)}</div>
                 </div>

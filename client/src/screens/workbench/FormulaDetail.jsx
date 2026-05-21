@@ -223,7 +223,7 @@ export default function FormulaDetail() {
             }}>FORMULA</div>
             <pre style={{
               margin: 0,
-              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+              fontFamily: 'var(--font-mono)',
               fontSize: 12.5, lineHeight: 1.7,
               color: '#dbeafe',
               whiteSpace: 'pre-wrap', wordBreak: 'break-word',

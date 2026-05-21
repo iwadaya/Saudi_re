@@ -12,7 +12,7 @@ export default function SelectScreen() {
       background: 'linear-gradient(180deg, #070d1c 0%, #050a14 100%)',
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
-      fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
+      fontFamily: 'var(--font-sans)',
       padding: '24px',
     }}>
 

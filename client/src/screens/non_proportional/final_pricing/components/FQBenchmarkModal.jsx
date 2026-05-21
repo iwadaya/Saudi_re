@@ -502,7 +502,7 @@ export default function FQBenchmarkModal({
                     {fits.map((f) => (
                       <div key={f.key} style={{ background: 'rgba(8,14,30,0.70)', border: `1px solid ${f.color}33`, borderRadius: 10, padding: '10px 12px' }}>
                         <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.14em', color: f.color, textTransform: 'uppercase', marginBottom: 4 }}>{f.label}</div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(226,232,240,0.92)', fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>{eqStr(f.fit.a, f.fit.b)}</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(226,232,240,0.92)', fontFamily: 'var(--font-mono)' }}>{eqStr(f.fit.a, f.fit.b)}</div>
                         <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.65)', marginTop: 4 }}>
                           R² <b style={{ color: 'rgba(226,232,240,0.85)' }}>{fmtR2(f.fit.r2)}</b>
                           {!f.fit.calibrated && <span style={{ marginLeft: 8, color: '#f87171' }}>· market default</span>}
@@ -540,7 +540,7 @@ export default function FQBenchmarkModal({
                             <tr key={row.k} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                               <td style={{ padding: '6px 12px', color: 'rgba(226,232,240,0.85)' }}>{row.label}</td>
                               {fits.map((f) => (
-                                <td key={f.key} style={{ padding: '6px 12px', textAlign: 'right', fontFamily: 'ui-monospace, SFMono-Regular, monospace', color: f.key === 'source' ? f.color : 'rgba(226,232,240,0.85)' }}>{row.cell(f)}</td>
+                                <td key={f.key} style={{ padding: '6px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: f.key === 'source' ? f.color : 'rgba(226,232,240,0.85)' }}>{row.cell(f)}</td>
                               ))}
                             </tr>
                           ))}

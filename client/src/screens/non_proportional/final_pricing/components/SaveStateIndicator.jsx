@@ -63,7 +63,7 @@ export default function SaveStateIndicator({ saveState, onRetry }) {
   const base = {
     display: 'flex', alignItems: 'center', gap: 12,
     padding: '8px 14px', margin: '0 0 12px',
-    borderRadius: 6, fontSize: 13, fontFamily: 'Inter, system-ui, sans-serif',
+    borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-sans)',
     border: '1px solid transparent',
   };
 

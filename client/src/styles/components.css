@@ -323,7 +323,7 @@ html,body{ height:100%; }
 
 body{
   margin:0;
-  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-family: var(--font-sans);
   font-size: 14px;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
@@ -1645,7 +1645,7 @@ select.fi{ cursor: pointer; appearance: auto; }
   margin-right: auto;        /* centres when narrower than container */
   table-layout: fixed;       /* columns stop floating with content */
   font-size: 12px;
-  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+  font-family: var(--font-mono);
 }
 
 /* Year column slimmer than dev columns */
@@ -1768,7 +1768,7 @@ input,
 select,
 textarea,
 optgroup {
-  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-family: var(--font-sans);
 }
 
 *,

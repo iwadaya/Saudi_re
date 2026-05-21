@@ -100,7 +100,7 @@
   padding: 10px 12px;
   color: #fff;
   font-size: 13px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
   transition: border-color 0.2s, background 0.2s;
 }
 

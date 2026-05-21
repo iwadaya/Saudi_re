@@ -549,7 +549,7 @@
   border-radius: 0 !important; margin: 0 !important;
   position: fixed !important; top: 0 !important; left: 0 !important;
 }
-.off-modal { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; color: #edf2f8; }
+.off-modal { font-family: var(--font-sans); color: #edf2f8; }
 
 .off-body  { display: grid; grid-template-columns: 300px 1fr 280px; gap: 16px; align-items: start; }
 .off-col   { display: flex; flex-direction: column; gap: 10px; }

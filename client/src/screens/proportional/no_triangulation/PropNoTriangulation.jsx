@@ -217,7 +217,7 @@ export default function PropNoTriangulation() {
                       <div style={{
                         background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
                         color: 'rgba(255,255,255,0.5)', padding: '8px 14px', borderRadius: 4, width: 100,
-                        fontFamily: 'monospace', fontSize: 13, userSelect: 'none',
+                        fontFamily: 'var(--font-mono)', fontSize: 13, userSelect: 'none',
                         display: 'flex', alignItems: 'center', gap: 6,
                       }}>
                         {startYear}
@@ -229,7 +229,7 @@ export default function PropNoTriangulation() {
                       <div style={{
                         background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
                         color: 'rgba(255,255,255,0.5)', padding: '8px 14px', borderRadius: 4, width: 100,
-                        fontFamily: 'monospace', fontSize: 13, userSelect: 'none',
+                        fontFamily: 'var(--font-mono)', fontSize: 13, userSelect: 'none',
                         display: 'flex', alignItems: 'center', gap: 6,
                       }}>
                         {renewalYear}

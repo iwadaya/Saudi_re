@@ -1394,8 +1394,8 @@ function ParameterExplanations({activeDist,fits,xm,limit,freq,uwYrs,tailN}){
   if(limit>0)sevRows.push({sym:'Limit',val:fmt(limit),desc:'Treaty / structure limit. Used to flag return-period losses that would breach cover.'});
 
   const cell={padding:'8px 10px',fontSize:12,verticalAlign:'top',borderBottom:'1px solid rgba(255,255,255,.05)'};
-  const symStyle={fontFamily:'ui-monospace,monospace',fontWeight:700,color:'#fff',width:64,whiteSpace:'nowrap'};
-  const valStyle={fontFamily:'ui-monospace,monospace',color:'rgba(226,232,240,.95)',width:140,whiteSpace:'nowrap'};
+  const symStyle={fontFamily:'var(--font-mono)',fontWeight:700,color:'#fff',width:64,whiteSpace:'nowrap'};
+  const valStyle={fontFamily:'var(--font-mono)',color:'rgba(226,232,240,.95)',width:140,whiteSpace:'nowrap'};
   const descStyle={color:'rgba(226,232,240,.78)',lineHeight:1.4};
   const noteStyle={color:'rgba(148,163,184,.85)',fontStyle:'italic',fontSize:11,marginTop:2};
 

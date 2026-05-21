@@ -4,8 +4,8 @@
 html,body{ height:100%; }
 
 body{
+  /* font-family is set canonically in components.css (uses --font-sans). */
   margin:0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
   font-size: 14px;
   color: var(--text);
   background:

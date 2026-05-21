@@ -633,7 +633,7 @@ export default function ExcelImportAgent() {
         .ia-root {
           min-height: 100vh;
           background: #080c14;
-          font-family: 'IBM Plex Mono', 'Fira Code', monospace;
+          font-family: var(--font-mono);
           color: #e2e8f0;
           padding: 32px 28px;
         }

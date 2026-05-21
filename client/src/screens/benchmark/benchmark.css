@@ -4,7 +4,7 @@
   min-height: 100vh;
   background: linear-gradient(180deg, #070d1c 0%, #050a14 100%);
   color: rgba(226,232,240,0.92);
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: var(--font-sans);
 }
 
 /* Topbar */
@@ -186,7 +186,7 @@
   color: rgba(0,212,255,0.80);
 }
 .bm-curve-badge span {
-  font-family: 'Courier New', monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   opacity: 0.85;
 }

@@ -109,7 +109,7 @@ export default function FQPricingCurve({ curve }) {
           vectorEffect="non-scaling-stroke"
         />
       )}
-      <text x={W - pR} y={pT + 12} fontSize={10} fontWeight="600" fill="rgba(0,212,255,0.85)" textAnchor="end" fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <text x={W - pR} y={pT + 12} fontSize={10} fontWeight="600" fill="rgba(0,212,255,0.85)" textAnchor="end" style={{ fontFamily: 'var(--font-mono)' }}>
         ROL = {fit.a.toFixed(5)} * x^{fit.b.toFixed(3)}{fit.r2 != null ? `   R2 = ${fit.r2.toFixed(4)}` : ''}
       </text>
       <text x={pL + 10} y={H - 8} fontSize={10} fontWeight="500" fill="rgba(148,163,184,0.70)">
