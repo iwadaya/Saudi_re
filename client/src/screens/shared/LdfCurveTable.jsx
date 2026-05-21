@@ -53,7 +53,7 @@ export default function LdfCurveTable({
   const numCell = {
     padding: compact ? '5px 8px' : '8px 10px',
     textAlign: 'right',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontFamily: 'var(--font-mono)',
     fontSize: 12, color: 'var(--text)',
   };
 

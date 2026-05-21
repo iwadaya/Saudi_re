@@ -33,7 +33,7 @@ export default class ScreenErrorBoundary extends React.Component {
     return (
       <div style={{
         padding: '2rem', color: '#f87171',
-        fontFamily: 'Inter, system-ui, sans-serif',
+        fontFamily: 'var(--font-sans)',
         maxWidth: 720, margin: '3rem auto',
       }}>
         <h2 style={{ color: '#f87171', marginTop: 0 }}>This screen failed to render</h2>

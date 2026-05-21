@@ -404,7 +404,7 @@ export default function LdfAnalysisModal({
                               border: '1px solid var(--hairline)',
                               color: 'var(--text)',
                               padding: '4px 8px', borderRadius: 6,
-                              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                              fontFamily: 'var(--font-mono)',
                               fontSize: 12,
                             }}
                           />
@@ -514,7 +514,7 @@ const th = (align) => ({
 const td = (align, mono) => ({
   padding: '8px 12px', textAlign: align,
   fontSize: 12, color: 'var(--text)',
-  fontFamily: mono === 'mono' ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : undefined,
+  fontFamily: mono === 'mono' ? 'var(--font-mono)' : undefined,
 });
 const miniBtn = {
   background: 'transparent',

@@ -158,7 +158,7 @@ function RecommendationCard({ rec, factorOptions, onAccept, onReject, busy, just
             {rec.target_screen}
           </span>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(226,232,240,0.85)',
-                          fontFamily: 'monospace' }}>{rec.target_field}</span>
+                          fontFamily: 'var(--font-mono)' }}>{rec.target_field}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div style={{ width: 64, height: 6, borderRadius: 3,
@@ -176,7 +176,7 @@ function RecommendationCard({ rec, factorOptions, onAccept, onReject, busy, just
                        background: 'rgba(148,163,184,0.05)',
                        border: '1px solid rgba(148,163,184,0.15)',
                        color: 'rgba(226,232,240,0.65)',
-                       fontFamily: 'monospace', wordBreak: 'break-word' }}>
+                       fontFamily: 'var(--font-mono)', wordBreak: 'break-word' }}>
           {rec.current_value === null || rec.current_value === undefined
             ? <span style={{ color: 'rgba(148,163,184,0.40)' }}>—</span>
             : jsonPreview(rec.current_value)}
@@ -186,7 +186,7 @@ function RecommendationCard({ rec, factorOptions, onAccept, onReject, busy, just
                        background: 'rgba(35,209,139,0.05)',
                        border: '1px solid rgba(35,209,139,0.20)',
                        color: '#e2e8f0',
-                       fontFamily: 'monospace', wordBreak: 'break-word' }}>
+                       fontFamily: 'var(--font-mono)', wordBreak: 'break-word' }}>
           {jsonPreview(rec.suggested_value)}
         </div>
       </div>
@@ -227,7 +227,7 @@ function RecommendationCard({ rec, factorOptions, onAccept, onReject, busy, just
           {(inputKind === 'LOCATION_ARRAY' || inputKind === 'LOSS_APPEND') && (
             <textarea className="fi" rows={5} value={editedValue}
                       onChange={(e) => setEditedValue(e.target.value)}
-                      style={{ width: '100%', fontFamily: 'monospace', fontSize: 11 }} />
+                      style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: 11 }} />
           )}
           {inputKind === 'CLAUSE_TOGGLE' && (
             <select className="fi" value={editedValue === 'false' ? 'false' : 'true'}

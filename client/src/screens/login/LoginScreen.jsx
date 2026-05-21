@@ -193,7 +193,7 @@ export default function LoginScreen() {
                 </button>
               </div>
               <div id="login-hint" style={{ fontSize: 10, color: 'rgba(255,255,255,.22)', marginTop: 5 }}>
-                Demo: <span style={{ fontFamily: 'monospace', color: 'rgba(255,255,255,.38)' }}>demo2026</span>
+                Demo: <span style={{ fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,.38)' }}>demo2026</span>
               </div>
             </div>
 

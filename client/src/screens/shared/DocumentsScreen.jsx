@@ -323,7 +323,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
             <span style={{ fontSize:11, fontWeight:800, letterSpacing:'.10em', textTransform:'uppercase', color:'var(--text)' }}>Files for Treaty</span>
           </div>
           <div style={{ fontSize:12, color:'var(--muted)', marginBottom:16, marginTop:4 }}>
-            <span style={{ fontWeight:700 }}>CONTRACT ID:</span>{' '}<span style={{ fontFamily:'monospace', opacity:0.8 }}>{contractId||'—'}</span>
+            <span style={{ fontWeight:700 }}>CONTRACT ID:</span>{' '}<span style={{ fontFamily:'var(--font-mono)', opacity:0.8 }}>{contractId||'—'}</span>
           </div>
 
           {/* Dropzone */}

@@ -605,7 +605,7 @@ export default function FacRiskDetail() {
     <WizardLayout routeKey={ROUTE_KEY} title="Risk Detail" headerPill={f.fac_ref || 'FACULTATIVE'} onBeforeNext={save} onBeforeBack={save}>
       <div className="wizard-form" style={{ maxWidth: 740, margin: '0 auto', padding: '8px 0 40px' }}>
 
-        {f.fac_ref && <div style={{ fontSize: 12, color: '#00d4ff', fontFamily: 'monospace', fontWeight: 700, marginBottom: 20 }}>{f.fac_ref}</div>}
+        {f.fac_ref && <div style={{ fontSize: 12, color: '#00d4ff', fontFamily: 'var(--font-mono)', fontWeight: 700, marginBottom: 20 }}>{f.fac_ref}</div>}
 
         {/* ── Parties ── */}
         <SectionTitle>Parties</SectionTitle>

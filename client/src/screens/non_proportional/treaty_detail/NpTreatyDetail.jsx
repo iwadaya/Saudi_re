@@ -494,7 +494,7 @@ export default function NpTreatyDetail() {
               {s.quoteVersion > 1 && (
                 <span style={{ fontSize: 10, color: 'rgba(251,191,36,0.65)', fontWeight: 600 }}>v{s.quoteVersion}</span>
               )}
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontFamily: 'monospace' }}>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontFamily: 'var(--font-mono)' }}>
                 {s.contractId?.slice(0,8)}…
               </span>
             </div>
