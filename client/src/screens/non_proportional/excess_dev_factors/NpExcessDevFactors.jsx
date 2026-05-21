@@ -361,7 +361,8 @@ export default function NpExcessDevFactors() {
         if (xd.avgMethod)                    setAvgMethod(xd.avgMethod);
         if (xd.tailFactor != null)           setTailFactor(String(xd.tailFactor));
         if (xd.ielr != null)                 setIelr(String(xd.ielr));
-        if (xd.chosenBase)                   setChosenBase(xd.chosenBase);
+        // Intentionally do not restore xd.chosenBase — the toggle always
+        // re-defaults to ACTUAL on page land. Saved chosenLdfs still load.
         if (Array.isArray(xd.excluded)) {
           // Position-keyed ("r:c") exclusions are only valid for the year
           // window they were saved under — drop them if the window has
