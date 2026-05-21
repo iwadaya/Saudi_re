@@ -98,8 +98,8 @@ export default function LdfAnalysisModal({
 
         const labels = Object.fromEntries(
           (Array.isArray(cobs) ? cobs : []).map(c => [
-            c.class_of_business_id || c.classOfBusinessId,
-            c.class_of_business || c.class_name || c.name || '',
+            c.id || c.class_of_business_id || c.classOfBusinessId,
+            c.name || c.class_of_business || c.class_name || '',
           ])
         );
         setClassLabelById(labels);
