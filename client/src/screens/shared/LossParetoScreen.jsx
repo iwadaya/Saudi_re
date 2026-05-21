@@ -7,6 +7,7 @@ import { api } from '../../api';
 import { toN as cn } from '../../utils/format';
 import { isNpStopLossTreaty } from '../../utils/npTreatyType';
 import { layerHit } from '../../../../shared/pricingMath.js';
+import RpComparisonModal, { interpolateTpAtRp } from './RpComparisonModal';
 
 /* ── Helpers ── */
 function stableStringify(obj){
@@ -480,6 +481,19 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
 
   const DEFAULT_OEP_ROWS = [2, 5, 10, 25, 50, 100, 200, 250, 500]
     .map(rp => ({ rp: String(rp), loss: '' }));
+
+  // Third-party RP comparison (CAT only). The underwriter can enter a
+  // vendor RP curve (Aon Catalyst, Karen Clark, Verisk, …) in a modal,
+  // see it side-by-side with the fitted-distribution curve, and choose
+  // FITTED / TP / BLEND with a weight. The selection swaps the
+  // displayed "Estimated Loss" column on the Return Periods card; the
+  // per-loss RP and layer-pricing math continue to use the fitted
+  // distribution for now.
+  const [tpRows, setTpRows] = useState([]);
+  const [tpSource, setTpSource] = useState('');
+  const [rpSource, setRpSource] = useState('FITTED'); // 'FITTED' | 'TP' | 'BLEND'
+  const [rpBlend, setRpBlend]   = useState(50);       // % fitted in the blend
+  const [rpCompareOpen, setRpCompareOpen] = useState(false);
   const [oepRows,  setOepRows]  = useState(DEFAULT_OEP_ROWS);
   const [showOep,  setShowOep]  = useState(false);
 
@@ -546,6 +560,16 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
           }
           if (rpc.oep_input && lossType === 'cat' && Array.isArray(rpc.oep_input)) {
             setOepRows(rpc.oep_input);
+          }
+          // Third-party RP comparison state (CAT only).
+          if (lossType === 'cat' && rpc.third_party_rp) {
+            const tp = rpc.third_party_rp;
+            if (Array.isArray(tp.rows)) setTpRows(tp.rows);
+            if (typeof tp.source === 'string') setTpSource(tp.source);
+            if (tp.selection === 'FITTED' || tp.selection === 'TP' || tp.selection === 'BLEND') {
+              setRpSource(tp.selection);
+            }
+            if (typeof tp.blend === 'number') setRpBlend(tp.blend);
           }
           setSavedSnapshotId(snap.snapshot_id || null);
         } else {
@@ -614,6 +638,35 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
       return{rp,loss:Number.isFinite(loss)&&loss>0?loss:0};
     });
   },[alpha,xm,activeDist,fits]);
+
+  // Third-party RP curve interpolated at every fitted RP. Empty array
+  // when no valid TP points have been entered.
+  const tpReturnPeriods = useMemo(() => {
+    const valid = (tpRows || [])
+      .map(r => ({ rp: parseFloat(r.rp), loss: parseFloat(String(r.loss).replace(/,/g, '')) }))
+      .filter(r => r.rp > 0 && r.loss > 0)
+      .sort((a, b) => a.rp - b.rp);
+    if (valid.length < 2) return [];
+    return returnPeriods.map(p => {
+      const loss = interpolateTpAtRp(valid, p.rp);
+      return { rp: p.rp, loss: loss == null ? 0 : loss };
+    });
+  }, [tpRows, returnPeriods]);
+
+  // The curve actually displayed on the Return Periods card.
+  // FITTED → fitted distribution. TP → third-party (interpolated).
+  // BLEND → weighted average (rpBlend % from fitted).
+  const effectiveReturnPeriods = useMemo(() => {
+    if (rpSource === 'TP' && tpReturnPeriods.length) return tpReturnPeriods;
+    if (rpSource === 'BLEND' && tpReturnPeriods.length) {
+      const w = Math.max(0, Math.min(100, rpBlend)) / 100;
+      return returnPeriods.map((p, i) => {
+        const tp = tpReturnPeriods[i];
+        return { rp: p.rp, loss: tp ? (w * p.loss + (1 - w) * tp.loss) : p.loss };
+      });
+    }
+    return returnPeriods;
+  }, [returnPeriods, tpReturnPeriods, rpSource, rpBlend]);
 
   const count=pareto.length;
   const avg=count>0?total/count:0;
@@ -861,12 +914,19 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
             annual_loss: r.annualLoss,
             rol:         r.rol,
           })),
+          third_party_rp: {
+            rows: tpRows,
+            source: tpSource,
+            selection: rpSource,
+            blend: rpBlend,
+            effective_points: effectiveReturnPeriods,
+          },
         } : {}),
       },
       return_period_key_points: { rp10, rp50, rp100, rp250 },
       assumptions_hash,
     };
-  }, [lossType, activeDist, xm, limit, yearsOvr, alpha, losses, fits, returnPeriods, wEmp, wModel, blendedLayerRols, oepRows, oepLayerRols]);
+  }, [lossType, activeDist, xm, limit, yearsOvr, alpha, losses, fits, returnPeriods, wEmp, wModel, blendedLayerRols, oepRows, oepLayerRols, tpRows, tpSource, rpSource, rpBlend, effectiveReturnPeriods]);
 
   // Explicit save function
   const saveSnapshot = useCallback(async () => {
@@ -1038,9 +1098,49 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
                 </tbody></table>
               </div>
               <div className="llp-card glass">
-                <div className="llp-card-head"><div><div className="llp-card-title">Return Periods ({DISTS.find(d=>d.key===activeDist)?.label})</div><div className="llp-card-sub">Implied severity from fitted tail</div></div></div>
+                <div className="llp-card-head" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <div className="llp-card-title">
+                      Return Periods ({DISTS.find(d=>d.key===activeDist)?.label})
+                      {lossType === 'cat' && rpSource !== 'FITTED' && (
+                        <span style={{
+                          marginLeft: 8, fontSize: 10, fontWeight: 700, letterSpacing: '.06em',
+                          padding: '2px 8px', borderRadius: 999,
+                          background: 'rgba(var(--accent-rgb),0.14)', color: 'var(--accent)',
+                          textTransform: 'uppercase',
+                        }}>
+                          {rpSource === 'TP'
+                            ? `Third-party${tpSource ? ` · ${tpSource}` : ''}`
+                            : `Blend ${rpBlend}% fitted / ${100 - rpBlend}% ${tpSource || 'TP'}`}
+                        </span>
+                      )}
+                    </div>
+                    <div className="llp-card-sub">
+                      {rpSource === 'FITTED' ? 'Implied severity from fitted tail'
+                       : rpSource === 'TP'   ? 'From third-party CAT model'
+                                             : 'Weighted blend of fitted + third-party'}
+                    </div>
+                  </div>
+                  {lossType === 'cat' && (
+                    <button
+                      type="button"
+                      onClick={() => setRpCompareOpen(true)}
+                      style={{
+                        padding: '6px 12px', borderRadius: 7,
+                        border: '1px solid var(--hairline)',
+                        background: 'rgba(var(--accent-rgb),0.08)',
+                        color: 'var(--accent)', cursor: 'pointer',
+                        fontSize: 11, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title="Compare against a third-party CAT model"
+                    >
+                      Compare with TP →
+                    </button>
+                  )}
+                </div>
                 <table className="llp-table"><thead><tr><th>Return Period</th><th className="num">Estimated Loss</th></tr></thead><tbody>
-                  {returnPeriods.map(rp=>(
+                  {effectiveReturnPeriods.map(rp=>(
                     <tr key={rp.rp} className={limit>0&&rp.loss>limit?'llp-over-limit':''}>
                       <th>1 in {rp.rp} yr</th>
                       <td className="num">{fmt(rp.loss)}{limit>0&&rp.loss>limit&&<span className="llp-exceed"> ▲</span>}</td>
@@ -1049,6 +1149,28 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
                 </tbody></table>
               </div>
             </div>
+
+            {lossType === 'cat' && (
+              <RpComparisonModal
+                isOpen={rpCompareOpen}
+                onClose={() => setRpCompareOpen(false)}
+                fittedRows={returnPeriods}
+                tpRows={tpRows}
+                tpSource={tpSource}
+                rpSource={rpSource}
+                rpBlend={rpBlend}
+                distLabel={DISTS.find(d => d.key === activeDist)?.label || ''}
+                fmt={fmt}
+                onApply={({ tpRows: rows, tpSource: src, rpSource: sel, rpBlend: blend }) => {
+                  setTpRows(rows);
+                  setTpSource(src);
+                  setRpSource(sel);
+                  setRpBlend(blend);
+                  // Auto-save effect re-runs because saveSnapshot's deps
+                  // (via buildSnapshotPayload) include these state values.
+                }}
+              />
+            )}
 
             {/* PARETO RANKING TABLE */}
             <div className="llp-card glass" style={{marginTop:16}}>
