@@ -282,6 +282,23 @@ export default function LdfAnalysisModal({
               Per-class benchmark curves blended by EPI share (or your override).
               {region && <span> Country/region context: {region}.</span>}
             </div>
+            <div style={{
+              marginTop: 8,
+              fontSize: 11,
+              color: 'var(--muted)',
+              background: 'rgba(var(--accent-rgb), 0.08)',
+              border: '1px solid rgba(var(--accent-rgb), 0.25)',
+              padding: '6px 10px',
+              borderRadius: 6,
+              display: 'inline-block',
+              lineHeight: 1.5,
+            }}>
+              Benchmarks draw from <strong>matching-category</strong> treaties only
+              (proportional ↔ proportional, non-proportional ↔ non-proportional).
+              A country or region benchmark requires <strong>≥ {MIN_CONTRACTS} terminal
+              treaties</strong> (SIGNED / DECLINED / NTU); below that, the scope
+              falls back automatically — country → region → global.
+            </div>
           </div>
           <button
             type="button" aria-label="Close" onClick={onClose}

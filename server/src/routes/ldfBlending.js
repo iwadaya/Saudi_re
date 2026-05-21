@@ -23,9 +23,10 @@ const router = Router();
 // and EPI split so handlers don't repeat the same three queries.
 async function loadContractContext(contractId) {
   const { rows } = await pool.query(
-    `SELECT c.contract_id, c.country_id, co.region
+    `SELECT c.contract_id, c.country_id, co.region, tt.category AS treaty_category
        FROM public.contract c
-       LEFT JOIN public.country co ON co.country_id = c.country_id
+       LEFT JOIN public.country     co ON co.country_id     = c.country_id
+       LEFT JOIN public.treaty_type tt ON tt.treaty_type_id = c.treaty_type_id
       WHERE c.contract_id = $1`,
     [contractId],
   );
@@ -39,6 +40,7 @@ async function loadContractContext(contractId) {
   return {
     countryId: rows[0].country_id,
     region: rows[0].region,
+    treatyCategory: rows[0].treaty_category,
     epiSplit: epi.map((r) => ({
       classOfBusinessId: r.class_of_business_id,
       premium: r.premium,
@@ -76,6 +78,7 @@ router.get('/contracts/:contractId/ldf-blend/:triangleType', asyncHandler(async 
     countryId: ctx.countryId,
     region: ctx.region,
     triangleType,
+    treatyCategory: ctx.treatyCategory,
   });
   return res.json({ saved: false, overridden: false, ...fresh });
 }));
@@ -97,6 +100,7 @@ router.post(
       countryId: ctx.countryId,
       region: ctx.region,
       triangleType,
+      treatyCategory: ctx.treatyCategory,
       overrideWeights: req.body.overrideWeights || null,
     });
     return res.json(result);
