@@ -1,15 +1,4 @@
-.EVENT_LOSS_TABLES_PAGE .elt-main { margin-top: 10px; }
 .EVENT_LOSS_TABLES_PAGE .elt-shell { padding: 16px; }
-
-.EVENT_LOSS_TABLES_PAGE .elt-pill{
-  display:inline-flex; align-items:center; gap:10px;
-  padding: 8px 12px; border-radius: 999px;
-  border: 1px solid rgba(148,163,184,.20);
-  background: rgba(8,16,40,.18);
-  color: rgba(226,232,240,.82);
-  letter-spacing: .10em; font-size: 12px;
-}
-.EVENT_LOSS_TABLES_PAGE .elt-pill-dot{ width:10px; height:10px; border-radius:999px; background: rgba(var(--accent-rgb),.9); }
 
 .EVENT_LOSS_TABLES_PAGE .elt-title{ margin: 12px 0 6px; font-size: 28px; font-weight: 800; color: rgba(241,245,249,.95); }
 .EVENT_LOSS_TABLES_PAGE .elt-sub{ margin: 0 0 14px; max-width: 980px; color: rgba(148,163,184,.85); line-height: 1.35; }

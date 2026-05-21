@@ -63,8 +63,6 @@
   transition: all .12s ease; white-space: nowrap;
 }
 .PROFILE_SCREEN .pf-btn:hover{ border-color: rgba(148,163,184,.40); background: rgba(148,163,184,.08); }
-.PROFILE_SCREEN .pf-btn--green{ border-color: rgba(var(--accent-rgb),.30); color: rgba(var(--accent-rgb),.90); }
-.PROFILE_SCREEN .pf-btn--green:hover{ border-color: rgba(var(--accent-rgb),.55); background: rgba(var(--accent-rgb),.06); }
 .PROFILE_SCREEN .pf-btn--save{ border-color: rgba(var(--accent-rgb),.30); color: rgba(var(--accent-rgb),.90); }
 .PROFILE_SCREEN .pf-btn--dirty{ border-color: rgba(251,146,60,.50); color: rgba(251,146,60,.95); animation: pf-pulse 1.5s infinite; }
 @keyframes pf-pulse{ 0%,100%{ box-shadow:none; } 50%{ box-shadow: 0 0 0 3px rgba(251,146,60,.10); } }

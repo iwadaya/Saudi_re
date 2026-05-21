@@ -202,7 +202,6 @@
   font-size: 12px; box-shadow: none !important;
 }
 .CRESTA_AGGREGATES_PAGE .ca-dist-inp:focus{ border-color: rgba(var(--accent-rgb),.50) !important; outline: none; }
-.CRESTA_AGGREGATES_PAGE .ca-dist-pct{ font-size: 11px; color: rgba(148,163,184,.60); }
 .CRESTA_AGGREGATES_PAGE .ca-dist-bar{
   height: 8px; border-radius: 4px; background: rgba(148,163,184,.10); overflow: hidden;
 }

@@ -340,8 +340,6 @@ body{
 
 button{ font-family:inherit; }
 
-.app-shell{ min-height: 100vh; }
-
 /* IMPORTANT: pages that use bottom fixed UI should opt-in with this class */
 .workspace{
   padding: 14px 0 24px;

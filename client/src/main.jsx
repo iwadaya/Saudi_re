@@ -28,7 +28,6 @@ import './styles/layout.css';
 import './styles/components.css';
 import './styles/home/screen.css';
 import './styles/dashboard/dashboard.css';
-import './styles/proportional/documents.css';
 import './styles/proportional/triangles.css';
 import './styles/proportional/dev_factors.css';
 import './styles/proportional/no_triangulation.css';

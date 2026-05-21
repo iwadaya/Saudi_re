@@ -154,6 +154,8 @@ button{ font-family:inherit; }
 
 /* Common layout shells used in screens */
 .app-shell{
+  position: relative;
+  z-index: 1;
   height: 100vh;
   width: 100%;
   max-width: none;

@@ -137,7 +137,6 @@ body::after{
 /* Small micro-glow on key headers */
 .card-header-label,
 .panel-title,
-.treaty-title,
 .welcome-title{
   text-shadow: 0 0 18px rgba(56,189,248,.10);
 }
@@ -174,8 +173,7 @@ body::after{
 }
 
 #root,
-#app,
-.app-shell{
+#app{
   position: relative;
   z-index: 1;
 }
