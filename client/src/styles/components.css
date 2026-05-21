@@ -107,6 +107,21 @@ h1,h2,h3{ margin: 0; }
 
 :is(input,textarea,select)::placeholder{ color: rgba(155,176,207,.55); }
 
+/* Native <select> dropdowns: the closed control is styled by the rule
+   above, but the popup options are OS-painted. Without explicit styling
+   they fall back to system white — visible as a flash of white background
+   over the highlighted option until the cursor moves off and back. Setting
+   background + color on option/optgroup forces a dark palette across
+   Chromium and Firefox. */
+select option,
+select optgroup {
+  background-color: #0b1224;
+  color: var(--text);
+}
+select option:checked {
+  background-color: rgba(var(--accent-rgb), 0.22);
+}
+
 :is(input[type="text"],input[type="number"],input[type="search"],input[type="email"],textarea,select):focus{
   border-color: rgba(var(--accent-rgb),.32);
   box-shadow:
