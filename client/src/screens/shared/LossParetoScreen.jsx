@@ -6,6 +6,7 @@ import { useAppState } from '../../context/AppContext';
 import { api } from '../../api';
 import { toN as cn } from '../../utils/format';
 import { isNpStopLossTreaty } from '../../utils/npTreatyType';
+import { layerHit } from '../../../../shared/pricingMath.js';
 
 /* ── Helpers ── */
 function stableStringify(obj){
@@ -127,6 +128,48 @@ export function calcLayerPrice(alpha,xm,freq,ret,lim){
     return m*(1-Math.pow(xm/L,alpha-1))+L*Math.pow(xm/L,alpha);
   };
   const att=Math.max(xm,ret),sev=LEV(att+lim)-LEV(att);return{severity:sev,rpp:freq*sev};
+}
+
+/**
+ * Return period of a single loss of size x under the fitted distribution.
+ *   RP(x) = 1 / (freq × P(X > x))
+ * freq  = annual frequency of losses ≥ xm (already computed by the screen).
+ * survivalFn = P(X > x) from the active fitted distribution.
+ * Returns null when freq or survivalFn is missing / zero.
+ */
+export function lossReturnPeriod(x, freq, survivalFn) {
+  if (!(freq > 0) || !survivalFn) return null;
+  const s = survivalFn(x);
+  if (!(s > 0)) return null;
+  return 1 / (freq * s);
+}
+
+/**
+ * Return period of the layer attachment point D.
+ *   RP_attach = 1 / (freq × P(X > D))
+ * Same formula as lossReturnPeriod; named separately for clarity at call sites.
+ */
+export function rpAtAttachment(freq, D, survivalFn) {
+  return lossReturnPeriod(D, freq, survivalFn);
+}
+
+/**
+ * Numerical integration of the survival function over [D, D+L].
+ * E[loss in layer] = ∫[D to D+L] P(X > x) dx  (trapezoidal, 400 steps).
+ * Used for non-Pareto distributions where calcLayerPrice (analytical) doesn't apply.
+ * Returns { severity, rpp } matching calcLayerPrice's output shape.
+ */
+export function calcLayerPriceNumerical(freq, D, L, survivalFn, steps = 400) {
+  if (!(L > 0) || !survivalFn) return { severity: 0, rpp: 0 };
+  const h = L / steps;
+  let sum = 0;
+  for (let i = 0; i <= steps; i++) {
+    const x = D + i * h;
+    const w = (i === 0 || i === steps) ? 0.5 : 1;
+    sum += w * Math.max(0, survivalFn(x));
+  }
+  const severity = sum * h;
+  return { severity, rpp: freq * severity };
 }
 
 /* ── PDFs (conditional on x ≥ xm, normalised so ∫ f = 1 over [xm,∞)) ── */
@@ -435,6 +478,11 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
   const [,setSavedSnapshotId]=useState(null);
   const [lastSaveTime,setLastSaveTime]=useState(null);
 
+  const DEFAULT_OEP_ROWS = [2, 5, 10, 25, 50, 100, 200, 250, 500]
+    .map(rp => ({ rp: String(rp), loss: '' }));
+  const [oepRows,  setOepRows]  = useState(DEFAULT_OEP_ROWS);
+  const [showOep,  setShowOep]  = useState(false);
+
   useEffect(()=>{
     if(!contractId){setLoading(false);return;}
     (async()=>{
@@ -489,6 +537,16 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
           if (snap.observation_years) setYearsOvr(String(snap.observation_years));
           if (snap.active_distribution) setActiveDist(snap.active_distribution);
           if (snap.pareto_alpha > 0) setAlpha(snap.pareto_alpha);
+          // layer_burning_cost and oep_input are nested inside return_period_curve
+          // because the server only persists a whitelist of top-level keys.
+          const rpc = snap.return_period_curve || {};
+          if (rpc.layer_burning_cost) {
+            if (typeof rpc.layer_burning_cost.wEmp   === 'number') setWEmp(rpc.layer_burning_cost.wEmp);
+            if (typeof rpc.layer_burning_cost.wModel === 'number') setWModel(rpc.layer_burning_cost.wModel);
+          }
+          if (rpc.oep_input && lossType === 'cat' && Array.isArray(rpc.oep_input)) {
+            setOepRows(rpc.oep_input);
+          }
           setSavedSnapshotId(snap.snapshot_id || null);
         } else {
           if (vals.length) setXm(prev => prev || vals[0]);
@@ -590,11 +648,42 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
       pareto_alpha: alpha,
       pareto_limit: limit,
       observation_years: Number(yearsOvr) || 10,
-      return_period_curve: { activeDist, xm, limit, yearsOvr: yearsOvr || null, points: pts },
+      // return_period_curve carries the layer burning cost + OEP payload too,
+      // since the server only persists a whitelist of top-level keys but stores
+      // this one as JSONB. Nesting keeps everything within a column the handler
+      // already round-trips.
+      return_period_curve: {
+        activeDist, xm, limit, yearsOvr: yearsOvr || null, points: pts,
+        layer_burning_cost: {
+          wEmp,
+          wModel,
+          rows: blendedLayerRols.map(r => ({
+            layer:        r.layer,
+            deductible:   r.D,
+            limit:        r.L,
+            return_period: r.rp,
+            empirical_rol: r.empiricalRol,
+            model_rol:     r.modelRol,
+            blended_rol:   r.blendedRol,
+            blended_annual_loss: r.blendedAnnual,
+          })),
+        },
+        ...(lossType === 'cat' ? {
+          oep_input: oepRows,
+          oep_layer_burning_cost: oepLayerRols.map(r => ({
+            layer:       r.layer,
+            deductible:  r.D,
+            limit:       r.L,
+            return_period: r.rp,
+            annual_loss: r.annualLoss,
+            rol:         r.rol,
+          })),
+        } : {}),
+      },
       return_period_key_points: { rp10, rp50, rp100, rp250 },
       assumptions_hash,
     };
-  }, [lossType, activeDist, xm, limit, yearsOvr, alpha, losses, fits, returnPeriods]);
+  }, [lossType, activeDist, xm, limit, yearsOvr, alpha, losses, fits, returnPeriods, wEmp, wModel, blendedLayerRols, oepRows, oepLayerRols]);
 
   // Explicit save function
   const saveSnapshot = useCallback(async () => {
@@ -640,6 +729,176 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
   const freq=inflated.filter(l=>l>=xm).length/uwYrs;
   const avgYr=uwYrs>0?total/uwYrs:0;
   const lp=useMemo(()=>calcLayerPrice(alpha,xm,freq,xm,limit||xm*10),[alpha,xm,freq,limit]);
+
+  // Survival function P(X > x) for the currently selected distribution.
+  // Used by both the per-loss RP column and the layer burning cost table.
+  const survivalFn = useMemo(() => {
+    const f = fits.find(f => f.key === activeDist);
+    if (!f) return null;
+    if (activeDist === 'pareto') {
+      return x => x < xm ? 1 : Math.pow(xm / x, alpha);
+    }
+    if (activeDist === 'lognormal' && f.params) {
+      const { mu, sigma } = f.params;
+      return x => x <= 0 ? 1 : 1 - lognormalCDF(x, mu, sigma);
+    }
+    if (activeDist === 'exponential' && f.params) {
+      return x => x < xm ? 1 : Math.exp(-f.params.lambda * (x - xm));
+    }
+    if (activeDist === 'weibull' && f.params) {
+      const { k, lam } = f.params;
+      return x => x < xm ? 1 : Math.exp(-Math.pow((x - xm) / lam, k));
+    }
+    return null;
+  }, [activeDist, fits, xm, alpha]);
+
+  // Structure layers scoped to this loss type (RISK for large, CAT for cat).
+  // Source: appState.npStructureLayers (set by NpStructure screen on load).
+  const isNpCat = lossType === 'cat';
+  const structureLayers = useMemo(() => {
+    const raw = appState.npStructureLayers || [];
+    return raw.filter(l => {
+      if (l.peril_scope !== undefined) {
+        return isNpCat
+          ? (l.peril_scope === 'CAT' || l.peril_scope === 'BOTH')
+          : (l.peril_scope === 'RISK' || l.peril_scope === 'BOTH');
+      }
+      return isNpCat ? !!l.catCover : !!l.riskCover;
+    });
+  }, [appState.npStructureLayers, isNpCat]);
+
+  // Blend weights: wEmp (empirical) + wModel (distribution model), 0-100 each.
+  // Presets: Empirical (100/0), Model (0/100), Blend (50/50 default).
+  const [wEmp,   setWEmp]   = useState(50);
+  const [wModel, setWModel] = useState(50);
+
+  const empiricalLayerRols = useMemo(() => {
+    if (!structureLayers.length || !losses.length || !(uwYrs > 0)) return [];
+
+    // Group inflated losses by UW year
+    const byYear = new Map();
+    for (const l of losses) {
+      const yr = String(l.uw_year ?? '');
+      if (!yr) continue;
+      if (!byYear.has(yr)) byYear.set(yr, []);
+      byYear.get(yr).push(l.inflated);
+    }
+
+    return structureLayers.map((sl, i) => {
+      const D = parseFloat(String(sl.deductible ?? sl.attachment ?? sl.layer_deductible ?? '').replace(/,/g, '')) || 0;
+      const L = parseFloat(String(sl.limit ?? sl.layer_limit ?? '').replace(/,/g, '')) || 0;
+      if (!(L > 0)) return { idx: i, layer: sl.layer || `L${i+1}`, D, L, rol: 0, annualLoss: 0 };
+
+      // Sum in-layer loss per year; divide by full observation window (zero years included)
+      let totalInLayer = 0;
+      for (const yearLosses of byYear.values()) {
+        for (const inc of yearLosses) {
+          totalInLayer += layerHit(inc, D, L);
+        }
+      }
+      const annualLoss = totalInLayer / uwYrs;
+      return { idx: i, layer: sl.layer || `L${i+1}`, D, L, annualLoss, rol: L > 0 ? annualLoss / L : 0 };
+    });
+  }, [structureLayers, losses, uwYrs]);
+
+  const modelLayerRols = useMemo(() => {
+    if (!structureLayers.length || !(freq > 0) || !survivalFn) return [];
+
+    return structureLayers.map((sl, i) => {
+      const D = parseFloat(String(sl.deductible ?? sl.attachment ?? sl.layer_deductible ?? '').replace(/,/g, '')) || 0;
+      const L = parseFloat(String(sl.limit ?? sl.layer_limit ?? '').replace(/,/g, '')) || 0;
+      if (!(L > 0)) return { idx: i, layer: sl.layer || `L${i+1}`, D, L, rp: null, annualLoss: 0, rol: 0, error: null };
+
+      const rp = rpAtAttachment(freq, D, survivalFn);
+      let annualLoss, error;
+
+      if (activeDist === 'pareto') {
+        const result = calcLayerPrice(alpha, xm, freq, D, L);
+        annualLoss = result.rpp;
+        error = result.error || null;
+      } else {
+        annualLoss = calcLayerPriceNumerical(freq, D, L, survivalFn).rpp;
+        error = null;
+      }
+
+      return { idx: i, layer: sl.layer || `L${i+1}`, D, L, rp, annualLoss, rol: L > 0 ? annualLoss / L : 0, error };
+    });
+  }, [structureLayers, freq, alpha, xm, activeDist, survivalFn]);
+
+  const blendedLayerRols = useMemo(() => {
+    const wE = Math.max(0, wEmp);
+    const wM = Math.max(0, wModel);
+    const wTot = wE + wM;
+
+    return structureLayers.map((sl, i) => {
+      const emp   = empiricalLayerRols[i];
+      const model = modelLayerRols[i];
+      if (!emp || !model) return null;
+      const L = emp.L;
+
+      let annualLoss;
+      if (wTot <= 0) {
+        annualLoss = 0;
+      } else {
+        annualLoss = (wE * emp.annualLoss + wM * model.annualLoss) / wTot;
+      }
+
+      return {
+        idx: i,
+        layer: emp.layer,
+        D: emp.D, L,
+        empiricalRol:  emp.rol,
+        modelRol:      model.rol,
+        blendedRol:    L > 0 ? annualLoss / L : 0,
+        blendedAnnual: annualLoss,
+        rp:            model.rp,
+        error:         model.error,
+      };
+    }).filter(Boolean);
+  }, [structureLayers, empiricalLayerRols, modelLayerRols, wEmp, wModel]);
+
+  // Parse OEP input into a sorted (rp, loss) curve with at least 2 valid points.
+  const oepPts = useMemo(() => {
+    return oepRows
+      .map(r => ({
+        rp:   parseFloat(r.rp),
+        loss: parseFloat(String(r.loss).replace(/,/g, '')),
+      }))
+      .filter(p => p.rp > 0 && p.loss > 0)
+      .sort((a, b) => a.rp - b.rp);  // ascending RP = descending exceedance probability
+  }, [oepRows]);
+
+  // Piecewise-linear OEP survival: P(occurrence loss > x).
+  // Below min OEP loss → use EP at minimum RP. Above max → 0.
+  const oepSurvivalFn = useMemo(() => {
+    if (oepPts.length < 2) return null;
+    return (x) => {
+      if (x <= 0) return 1 / oepPts[0].rp;
+      if (x >= oepPts[oepPts.length - 1].loss) return 0;
+      for (let i = 0; i < oepPts.length - 1; i++) {
+        const lo = oepPts[i], hi = oepPts[i + 1];
+        if (x >= lo.loss && x <= hi.loss) {
+          const t = (x - lo.loss) / (hi.loss - lo.loss);
+          return (1 / lo.rp) + t * ((1 / hi.rp) - (1 / lo.rp));
+        }
+      }
+      return 0;
+    };
+  }, [oepPts]);
+
+  const oepLayerRols = useMemo(() => {
+    if (lossType !== 'cat' || !oepSurvivalFn || !structureLayers.length) return [];
+    return structureLayers.map((sl, i) => {
+      const D = parseFloat(String(sl.deductible ?? sl.attachment ?? sl.layer_deductible ?? '').replace(/,/g, '')) || 0;
+      const L = parseFloat(String(sl.limit ?? sl.layer_limit ?? '').replace(/,/g, '')) || 0;
+      if (!(L > 0)) return { idx: i, layer: sl.layer || `L${i+1}`, D, L, rol: 0, annualLoss: 0, rp: null };
+
+      const rp = rpAtAttachment(1, D, oepSurvivalFn);  // freq=1 because OEP already encodes annual probability
+      const annualLoss = calcLayerPriceNumerical(1, D, L, oepSurvivalFn, 500).rpp;
+      return { idx: i, layer: sl.layer || `L${i+1}`, D, L, rp, annualLoss, rol: L > 0 ? annualLoss / L : 0 };
+    });
+  }, [lossType, oepSurvivalFn, structureLayers]);
+
   const bestFit=useMemo(()=>[...fits].sort((a,b)=>a.ks.ks-b.ks.ks)[0]?.key||'pareto',[fits]);
 
   return(
@@ -806,17 +1065,289 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
                   </table>
                 ) : (
                   <table className="llp-table" style={{width:'100%'}}>
-                    <thead><tr><th>#</th><th>UW Yr</th><th>Insured / Event</th><th>Loss</th><th className="num">Paid</th><th className="num">OS</th><th className="num">Incurred</th><th>Infl.</th><th className="num">Inflated</th><th className="num">Cum%</th></tr></thead>
+                    <thead><tr><th>#</th><th>UW Yr</th><th>Insured / Event</th><th>Loss</th><th className="num">Paid</th><th className="num">OS</th><th className="num">Incurred</th><th>Infl.</th><th className="num">Inflated</th><th className="num">Cum%</th><th className="num">Return Period</th></tr></thead>
                     <tbody>{pareto.map(p=>(
                       <tr key={p.rank}><td>{p.rank}</td><td>{p.uw_year||'—'}</td><td>{p.insured_name||p.event_name||'—'}</td><td>{p.loss_name||'—'}</td>
                         <td className="num">{fmt(cn(p.paid))}</td><td className="num">{fmt(cn(p.os))}</td><td className="num">{fmt(p.incurred)}</td>
                         <td>{cn(p.inflation_factor).toFixed(2)}</td><td className="num" style={{fontWeight:600}}>{fmt(p.inflated)}</td>
-                        <td className="num" style={{color:p.cumPct>.8?'#f97316':'#4ade80'}}>{fPct(p.cumPct)}</td></tr>
+                        <td className="num" style={{color:p.cumPct>.8?'#f97316':'#4ade80'}}>{fPct(p.cumPct)}</td>
+                        {(() => {
+                          const rp = lossReturnPeriod(p.inflated, freq, survivalFn);
+                          if (rp == null) return <td className="num">—</td>;
+                          const label = rp >= 10000 ? '>10,000y'
+                            : rp >= 1000 ? `${Math.round(rp / 100) * 100}y`
+                            : rp >= 100  ? `${Math.round(rp / 10) * 10}y`
+                            : rp >= 10   ? `${Math.round(rp)}y`
+                            :              `${rp.toFixed(1)}y`;
+                          const color = rp >= 50 ? '#f87171' : rp >= 10 ? '#f59e0b' : '#4ade80';
+                          return (
+                            <td className="num" style={{ color, fontWeight: 600 }}>
+                              {label}
+                            </td>
+                          );
+                        })()}
+                      </tr>
                     ))}</tbody>
                   </table>
                 )}
               </div>
             </div>
+
+            {/* ── Layer Burning Cost ────────────────────────────────────── */}
+            {blendedLayerRols.length > 0 && (
+              <div className="llp-card glass" style={{ marginTop: 14 }}>
+                <div className="llp-card-head">
+                  <div>
+                    <div className="llp-card-title">Layer Burning Cost</div>
+                    <div className="llp-card-sub">
+                      Empirical = layerHit per loss ÷ {uwYrs} years &nbsp;·&nbsp;
+                      Model = {DISTS.find(d => d.key === activeDist)?.label} freq × E[loss in layer] &nbsp;·&nbsp;
+                      Blend = weighted average
+                    </div>
+                  </div>
+                </div>
+
+                {/* Weight controls */}
+                <div style={{ padding: '10px 14px 4px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 11, color: 'rgba(148,163,184,0.7)', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}>Method</span>
+
+                  {/* Presets */}
+                  {[
+                    { label: 'Empirical',  wE: 100, wM: 0   },
+                    { label: '50 / 50',   wE: 50,  wM: 50  },
+                    { label: 'Model',     wE: 0,   wM: 100 },
+                  ].map(p => {
+                    const active = wEmp === p.wE && wModel === p.wM;
+                    return (
+                      <button
+                        key={p.label}
+                        onClick={() => { setWEmp(p.wE); setWModel(p.wM); }}
+                        style={{
+                          fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
+                          border: `1px solid ${active ? 'rgba(0,212,255,0.6)' : 'rgba(255,255,255,0.12)'}`,
+                          background: active ? 'rgba(0,212,255,0.12)' : 'transparent',
+                          color: active ? '#00d4ff' : 'rgba(148,163,184,0.7)',
+                        }}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+
+                  {/* Custom weight inputs */}
+                  <span style={{ fontSize: 11, color: 'rgba(148,163,184,0.5)', marginLeft: 8 }}>Custom:</span>
+                  {[
+                    { label: 'Empirical %', val: wEmp,   set: v => setWEmp(Math.max(0, Math.min(100, Number(v) || 0)))  },
+                    { label: 'Model %',     val: wModel, set: v => setWModel(Math.max(0, Math.min(100, Number(v) || 0))) },
+                  ].map(({ label, val, set }) => (
+                    <label key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'rgba(148,163,184,0.65)' }}>
+                      {label}
+                      <input
+                        type="number" min="0" max="100" value={val}
+                        onChange={e => set(e.target.value)}
+                        style={{
+                          width: 54, textAlign: 'center', fontSize: 12, fontWeight: 700,
+                          background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)',
+                          borderRadius: 6, color: '#00d4ff', padding: '3px 6px', outline: 'none',
+                        }}
+                      />
+                    </label>
+                  ))}
+
+                  {/* Weight total indicator */}
+                  {(wEmp + wModel) > 0 && (wEmp + wModel) !== 100 && (
+                    <span style={{ fontSize: 10, color: '#f59e0b', marginLeft: 4 }}>
+                      ⚠ Weights sum to {wEmp + wModel}% — blended ROL uses proportional share, not 100% total.
+                    </span>
+                  )}
+                </div>
+
+                {/* Table */}
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="llp-table" style={{ width: '100%' }}>
+                    <thead>
+                      <tr>
+                        <th>Layer</th>
+                        <th className="num">Deductible</th>
+                        <th className="num">Limit</th>
+                        <th className="num">RP at Attach.</th>
+                        <th className="num">Empirical ROL</th>
+                        <th className="num">Model ROL</th>
+                        <th className="num" style={{ color: '#00d4ff' }}>Blended ROL</th>
+                        <th className="num" style={{ color: '#00d4ff' }}>Annual Loss</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {blendedLayerRols.map(row => {
+                        const rpLabel = row.rp == null ? '—'
+                          : row.rp >= 10000 ? '>10,000y'
+                          : row.rp >= 100   ? `1-in-${Math.round(row.rp)}y`
+                          :                   `1-in-${row.rp.toFixed(1)}y`;
+                        const rpColor = row.rp == null ? 'rgba(148,163,184,0.4)'
+                          : row.rp >= 50 ? '#f87171' : row.rp >= 10 ? '#f59e0b' : '#4ade80';
+                        return (
+                          <tr key={row.idx}>
+                            <td style={{ color: '#00d4ff', fontWeight: 700 }}>{row.layer}</td>
+                            <td className="num">{fmt(row.D)}</td>
+                            <td className="num">{fmt(row.L)}</td>
+                            <td className="num" style={{ color: rpColor, fontWeight: 600 }}>{rpLabel}</td>
+                            <td className="num" style={{ color: 'rgba(226,232,240,0.7)' }}>
+                              {row.empiricalRol > 0 ? (row.empiricalRol * 100).toFixed(3) + '%' : '—'}
+                            </td>
+                            <td className="num" style={{ color: '#a78bfa' }}>
+                              {row.modelRol > 0 ? (row.modelRol * 100).toFixed(3) + '%' : '—'}
+                              {row.error && <span style={{ fontSize: 10, color: '#f59e0b', marginLeft: 4 }}>⚠</span>}
+                            </td>
+                            <td className="num" style={{ color: '#00d4ff', fontWeight: 700 }}>
+                              {row.blendedRol > 0 ? (row.blendedRol * 100).toFixed(3) + '%' : '—'}
+                            </td>
+                            <td className="num" style={{ color: '#4ade80' }}>
+                              {fmt(Math.round(row.blendedAnnual))}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {structureLayers.length === 0 && (
+                  <div style={{ padding: '10px 14px', fontSize: 11, color: 'rgba(251,191,36,0.7)' }}>
+                    No structure layers found for this peril type. Define layers in the Structure screen first.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Cat OEP Burning Cost (cat screen only) ───────────────── */}
+            {lossType === 'cat' && (
+              <div className="llp-card glass" style={{ marginTop: 14 }}>
+                <div
+                  className="llp-card-head"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setShowOep(s => !s)}
+                >
+                  <div>
+                    <div className="llp-card-title">
+                      Cat Model OEP Burning Cost {showOep ? '▲' : '▼'}
+                    </div>
+                    <div className="llp-card-sub">
+                      Enter OEP curve from cat model (RMS / AIR / Verisk). Layer burning cost = ∫[D, D+L] P(occ loss > x) dx.
+                    </div>
+                  </div>
+                </div>
+
+                {showOep && (
+                  <div style={{ padding: '0 14px 14px', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+
+                    {/* OEP input grid */}
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(148,163,184,0.5)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+                        OEP Curve Input
+                      </div>
+                      <table className="llp-table" style={{ width: 300 }}>
+                        <thead>
+                          <tr>
+                            <th>Return Period (yrs)</th>
+                            <th className="num">Ground-Up Loss</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {oepRows.map((row, i) => (
+                            <tr key={i}>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={row.rp}
+                                  onChange={e => setOepRows(prev => {
+                                    const next = [...prev];
+                                    next[i] = { ...next[i], rp: e.target.value };
+                                    return next;
+                                  })}
+                                  style={{
+                                    width: '100%', textAlign: 'center', fontSize: 12,
+                                    background: 'rgba(255,255,255,0.05)',
+                                    border: '1px solid rgba(255,255,255,0.10)',
+                                    borderRadius: 4, color: '#00d4ff', padding: '4px 6px', outline: 'none',
+                                  }}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={row.loss}
+                                  placeholder="0"
+                                  onChange={e => setOepRows(prev => {
+                                    const next = [...prev];
+                                    next[i] = { ...next[i], loss: e.target.value };
+                                    return next;
+                                  })}
+                                  style={{
+                                    width: '100%', textAlign: 'right', fontSize: 12,
+                                    background: 'rgba(255,255,255,0.05)',
+                                    border: '1px solid rgba(255,255,255,0.10)',
+                                    borderRadius: 4, color: 'rgba(226,232,240,0.9)', padding: '4px 6px', outline: 'none',
+                                  }}
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.4)', marginTop: 6 }}>
+                        Minimum 2 rows with values. Piecewise linear interpolation between points.
+                      </div>
+                    </div>
+
+                    {/* OEP layer results */}
+                    {oepLayerRols.length > 0 && oepLayerRols.some(l => l.rol > 0) && (
+                      <div style={{ flex: 1, minWidth: 300 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(148,163,184,0.5)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+                          OEP Layer Burning Cost
+                        </div>
+                        <table className="llp-table" style={{ width: '100%' }}>
+                          <thead>
+                            <tr>
+                              <th>Layer</th>
+                              <th className="num">RP at Attach.</th>
+                              <th className="num">Annual Loss</th>
+                              <th className="num" style={{ color: '#f59e0b' }}>OEP ROL</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {oepLayerRols.map(row => {
+                              const rpLabel = row.rp == null ? '—'
+                                : row.rp >= 10000 ? '>10,000y'
+                                : row.rp >= 100   ? `1-in-${Math.round(row.rp)}y`
+                                :                   `1-in-${row.rp.toFixed(1)}y`;
+                              return (
+                                <tr key={row.idx}>
+                                  <td style={{ color: '#00d4ff', fontWeight: 700 }}>{row.layer}</td>
+                                  <td className="num" style={{ color: 'rgba(226,232,240,0.7)' }}>{rpLabel}</td>
+                                  <td className="num" style={{ color: '#4ade80' }}>{fmt(Math.round(row.annualLoss))}</td>
+                                  <td className="num" style={{ fontWeight: 700, color: '#f59e0b' }}>
+                                    {row.rol > 0 ? (row.rol * 100).toFixed(3) + '%' : '—'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                        <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.4)', marginTop: 6 }}>
+                          Integration: 500-step trapezoidal rule. OEP ROL is independent of the Pareto/distribution fit above.
+                        </div>
+                      </div>
+                    )}
+
+                    {oepPts.length < 2 && (
+                      <div style={{ fontSize: 11, color: 'rgba(251,191,36,0.65)', alignSelf: 'center' }}>
+                        Enter at least 2 loss values to compute layer costs.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </>)}
         </div>
       )}

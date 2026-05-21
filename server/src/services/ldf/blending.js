@@ -7,6 +7,9 @@ import { getBenchmarkLdfForClass } from './benchmark.js';
  *   - epiSplit: [{ classOfBusinessId, premium }]
  *   - countryId, region: from contracts row
  *   - triangleType: 'PREMIUM' | 'CLAIMS_PAID' | 'CLAIMS_OS' | 'INCURRED'
+ *   - treatyCategory: 'PROPORTIONAL' | 'NON_PROPORTIONAL' — segregates the
+ *       benchmark pool. Proportional treaties only see proportional benchmarks
+ *       and vice versa.
  *   - overrideWeights: optional map { [classOfBusinessId]: weightFloat }
  *
  * Returns:
@@ -17,7 +20,7 @@ import { getBenchmarkLdfForClass } from './benchmark.js';
  *   }
  */
 export async function computeBlendedLdfCurve(client, {
-  epiSplit, countryId, region, triangleType, overrideWeights = null,
+  epiSplit, countryId, region, triangleType, treatyCategory, overrideWeights = null,
 }) {
   if (!Array.isArray(epiSplit) || epiSplit.length === 0) {
     return { classes: [], blended: [], allDevMonths: [] };
@@ -43,7 +46,7 @@ export async function computeBlendedLdfCurve(client, {
   const perClass = await Promise.all(epiSplit.map(async (e) => {
     const bench = await getBenchmarkLdfForClass(client, {
       classOfBusinessId: e.classOfBusinessId,
-      countryId, region, triangleType,
+      countryId, region, triangleType, treatyCategory,
     });
     return {
       classOfBusinessId: e.classOfBusinessId,

@@ -6,10 +6,15 @@ import { logger } from '../../lib/logger.js';
 const MIN_CONTRACTS_FOR_SCOPE = 5;
 
 export async function getBenchmarkLdfForClass(client, {
-  classOfBusinessId, countryId, region, triangleType,
+  classOfBusinessId, countryId, region, triangleType, treatyCategory,
 }) {
   if (!classOfBusinessId || !triangleType) {
     throw new Error('getBenchmarkLdfForClass: classOfBusinessId and triangleType are required');
+  }
+  if (treatyCategory !== 'PROPORTIONAL' && treatyCategory !== 'NON_PROPORTIONAL') {
+    // No category = no benchmark. Proportional and non-proportional triangles
+    // develop differently, so we never blend across the boundary.
+    return { scope: 'NONE', countryId: null, region: null, rows: [] };
   }
 
   // Try country first
@@ -18,8 +23,9 @@ export async function getBenchmarkLdfForClass(client, {
       `SELECT dev_month, weighted_ldf, simple_ldf, n_contracts, total_premium, stddev_ldf
          FROM public.mv_ldf_benchmark_country
         WHERE class_of_business_id = $1 AND country_id = $2 AND triangle_type = $3
+          AND treaty_category = $4
         ORDER BY dev_month`,
-      [classOfBusinessId, countryId, triangleType],
+      [classOfBusinessId, countryId, triangleType, treatyCategory],
     );
     if (country.rows.length > 0 &&
         country.rows[0].n_contracts >= MIN_CONTRACTS_FOR_SCOPE) {
@@ -33,8 +39,9 @@ export async function getBenchmarkLdfForClass(client, {
       `SELECT dev_month, weighted_ldf, simple_ldf, n_contracts, total_premium, stddev_ldf
          FROM public.mv_ldf_benchmark_region
         WHERE class_of_business_id = $1 AND region = $2 AND triangle_type = $3
+          AND treaty_category = $4
         ORDER BY dev_month`,
-      [classOfBusinessId, region, triangleType],
+      [classOfBusinessId, region, triangleType, treatyCategory],
     );
     if (reg.rows.length > 0 &&
         reg.rows[0].n_contracts >= MIN_CONTRACTS_FOR_SCOPE) {
@@ -46,9 +53,9 @@ export async function getBenchmarkLdfForClass(client, {
   const global = await client.query(
     `SELECT dev_month, weighted_ldf, simple_ldf, n_contracts, total_premium, stddev_ldf
        FROM public.mv_ldf_benchmark_global
-      WHERE class_of_business_id = $1 AND triangle_type = $2
+      WHERE class_of_business_id = $1 AND triangle_type = $2 AND treaty_category = $3
       ORDER BY dev_month`,
-    [classOfBusinessId, triangleType],
+    [classOfBusinessId, triangleType, treatyCategory],
   );
   if (global.rows.length > 0) {
     return { scope: 'GLOBAL', countryId: null, region: null, rows: global.rows };
