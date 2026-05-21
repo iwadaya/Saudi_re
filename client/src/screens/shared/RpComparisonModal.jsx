@@ -185,19 +185,19 @@ export default function RpComparisonModal({
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead style={{ background: 'var(--surface-2)' }}>
               <tr>
-                <th style={th('left')}>Return Period</th>
-                <th style={th('right')}>Fitted{distLabel ? ` — ${distLabel}` : ''}</th>
-                <th style={th('right')}>Third-Party (editable)</th>
-                <th style={th('right')}>Δ vs Fitted</th>
+                <th style={th('left', true)}>Return Period</th>
+                <th style={th('right', true)}>Fitted{distLabel ? ` — ${distLabel}` : ''}</th>
+                <th style={th('center', true)}>Third-Party (editable)</th>
+                <th style={th('right', true)}>Δ vs Fitted</th>
                 <th style={th('right')}>Blend</th>
               </tr>
             </thead>
             <tbody>
               {compareRows.map((r, i) => (
                 <tr key={r.rp} style={{ borderTop: '1px solid var(--hairline)' }}>
-                  <td style={td('left')}>1 in {r.rp} yr</td>
-                  <td style={td('right', 'mono')}>{fmt(r.fitted)}</td>
-                  <td style={td('right')}>
+                  <td style={td('left', null, true)}>1 in {r.rp} yr</td>
+                  <td style={td('right', 'mono', true)}>{fmt(r.fitted)}</td>
+                  <td style={td('center', null, true)}>
                     <input
                       type="text"
                       value={tpRows[i]?.loss ?? ''}
@@ -210,7 +210,7 @@ export default function RpComparisonModal({
                       })}
                       placeholder="—"
                       style={{
-                        width: 110, textAlign: 'right',
+                        width: 140, textAlign: 'center', display: 'inline-block',
                         background: 'rgba(0,0,0,0.25)',
                         border: '1px solid var(--hairline)', color: 'var(--text)',
                         padding: '4px 8px', borderRadius: 6,
@@ -219,7 +219,7 @@ export default function RpComparisonModal({
                     />
                   </td>
                   <td style={{
-                    ...td('right', 'mono'),
+                    ...td('right', 'mono', true),
                     color: r.diffPct == null ? 'var(--muted)'
                       : Math.abs(r.diffPct) < 0.05 ? 'var(--muted)'
                       : r.diffPct > 0 ? 'var(--accent-amber)' : 'var(--accent-rose)',
@@ -323,16 +323,18 @@ export default function RpComparisonModal({
   );
 }
 
-const th = (align) => ({
+const th = (align, divider) => ({
   padding: '10px 12px', textAlign: align,
   fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase',
   color: 'var(--muted)',
   borderBottom: '1px solid var(--hairline)',
+  borderRight: divider ? '1px solid var(--hairline)' : undefined,
 });
-const td = (align, mono) => ({
+const td = (align, mono, divider) => ({
   padding: '8px 12px', textAlign: align,
   fontSize: 12, color: 'var(--text)',
   fontFamily: mono === 'mono' ? 'var(--font-mono)' : undefined,
+  borderRight: divider ? '1px solid var(--hairline)' : undefined,
 });
 const primaryBtn = {
   background: 'var(--accent)', color: 'var(--accent-contrast)',
