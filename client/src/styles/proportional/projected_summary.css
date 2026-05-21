@@ -15,13 +15,6 @@
   letter-spacing: 0.2px;
 }
 
-.PROJECTED_SUMMARY_PAGE .ps-sub {
-  margin-top: 6px;
-  font-size: 13px;
-  opacity: 0.85;
-  line-height: 1.35;
-}
-
 /* 2-column layout */
 .PROJECTED_SUMMARY_PAGE .ps-grid {
   margin-top: 14px;
@@ -265,10 +258,6 @@
   background: rgba(255, 255, 255, 0.03);
 }
 
-/* reuse your df placeholder look */
-.PROJECTED_SUMMARY_PAGE .df-cell-placeholder {
-  opacity: 0.7;
-}
 /* =========================================================
    styles/pages/projectedSummary.css
    Changes:
@@ -331,12 +320,6 @@
   color: rgba(226,232,240,.88);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-}
-
-/* numbers right-ish but still centered by default */
-.PROJECTED_SUMMARY_PAGE .ps-cell--num{
-  justify-content: flex-end;
-  text-align: center;
 }
 
 /* total row: slightly stronger border only */
@@ -455,12 +438,6 @@
   color: rgba(226,232,240,.88);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-}
-
-/* If you still have ps-cell--num, make it centered too */
-.PROJECTED_SUMMARY_PAGE .ps-cell--num{
-  justify-content: center;
-  text-align: center;
 }
 
 /* Total row: slightly stronger, still subtle */
