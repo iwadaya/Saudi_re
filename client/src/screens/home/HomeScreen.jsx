@@ -23,6 +23,7 @@ async function exportPortfolioToExcel() {
   // ── Sheet 1: Proportional ────────────────────────────────────────────
   const propHeaders = [
     'Contract ID','Cedant','Country','Treaty Type','UW Year','Status','COB',
+    'Currency','FX → SAR',
     'Limit 100%','Premium 100%','Commission %','Written Line %','Signed Line %',
     'Attritional Loss Ratio','Large Loss Loading','Cat Loss Loading','Combined Ratio',
     'Underwriter','Approver',
@@ -30,6 +31,7 @@ async function exportPortfolioToExcel() {
   const propRows = (prop || []).map(r => [
     r.contract_id, r.cedant, r.country, r.treaty_type,
     fmtN(r.uw_year), r.status, r.cob,
+    r.currency_code || '', fmtN(r.fx_to_sar),
     fmtN(r.limit_100), fmtN(r.premium_100), fmtPct(r.commission_pct),
     fmtPct(r.written_line_pct), fmtPct(r.signed_line_pct),
     fmtPct(r.attritional_ratio), fmtPct(r.large_loss_load),
@@ -41,6 +43,7 @@ async function exportPortfolioToExcel() {
   // ── Sheet 2: Non-Proportional (per layer) ───────────────────────────
   const npHeaders = [
     'Contract ID','Cedant','Country','Treaty Type','UW Year','Status','COB',
+    'Currency','FX → SAR',
     'Layer #','Attachment','Limit (Layer)','EGNPI 100%',
     'Premium (Layer)','ROL %','Rate %','Brokerage %',
     'Written Line %','Signed Line %',
@@ -50,6 +53,7 @@ async function exportPortfolioToExcel() {
   const npRows = (np || []).map(r => [
     r.contract_id, r.cedant, r.country, r.treaty_type,
     fmtN(r.uw_year), r.status, r.cob,
+    r.currency_code || '', fmtN(r.fx_to_sar),
     fmtN(r.layer_number), fmtN(r.attachment), fmtN(r.limit_layer),
     fmtN(r.egnpi_100), fmtN(r.premium_100),
     fmtPct(r.rol_pct), fmtPct(r.rate_pct), fmtPct(r.commission_pct),
