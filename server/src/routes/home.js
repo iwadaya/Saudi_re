@@ -240,6 +240,20 @@ router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
       tt.treaty_type                                AS treaty_type,
       c.uw_year,
       c.uw_status                                   AS status,
+      cur.currency_code                             AS currency_code,
+      -- Exchange rate to SAR. Stored rates are quoted vs USD, so
+      -- ccy → SAR = (ccy → USD) / (SAR → USD). NULL if either rate
+      -- is missing. SAR itself returns 1.
+      CASE WHEN cur.currency_code = 'SAR' THEN 1
+           ELSE (
+             (SELECT ccy.rate_to_usd FROM public.ref_exchange_rate ccy
+               WHERE ccy.currency_code = cur.currency_code
+               ORDER BY ccy.effective_date DESC LIMIT 1)
+             / NULLIF((SELECT sar.rate_to_usd FROM public.ref_exchange_rate sar
+                        WHERE sar.currency_code = 'SAR'
+                        ORDER BY sar.effective_date DESC LIMIT 1), 0)
+           )
+      END                                           AS fx_to_sar,
       -- 100% premium: prefer detail EPI, fall back to pricing outputs
       COALESCE(
         NULLIF(COALESCE(pd.quota_share_epi,0)+COALESCE(pd.surplus_epi,0), 0),
@@ -290,6 +304,7 @@ router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
     LEFT JOIN public.companies ced            ON ced.company_id=c.cedant_id
     LEFT JOIN public.country cnt              ON cnt.country_id=c.country_id
     LEFT JOIN public.treaty_type tt           ON tt.treaty_type_id=c.treaty_type_id
+    LEFT JOIN public.currency cur             ON cur.currency_id=c.currency_id
     LEFT JOIN public.contract_prop_details pd ON pd.contract_id=c.contract_id
     LEFT JOIN public.contract_commissions cm  ON cm.contract_id=c.contract_id
     LEFT JOIN public.contract_pricing_outputs po ON po.contract_id=c.contract_id
@@ -331,6 +346,20 @@ router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
       tt.treaty_type                                AS treaty_type,
       c.uw_year,
       c.uw_status                                   AS status,
+      cur.currency_code                             AS currency_code,
+      -- Exchange rate to SAR. Stored rates are quoted vs USD, so
+      -- ccy → SAR = (ccy → USD) / (SAR → USD). NULL if either rate
+      -- is missing. SAR itself returns 1.
+      CASE WHEN cur.currency_code = 'SAR' THEN 1
+           ELSE (
+             (SELECT ccy.rate_to_usd FROM public.ref_exchange_rate ccy
+               WHERE ccy.currency_code = cur.currency_code
+               ORDER BY ccy.effective_date DESC LIMIT 1)
+             / NULLIF((SELECT sar.rate_to_usd FROM public.ref_exchange_rate sar
+                        WHERE sar.currency_code = 'SAR'
+                        ORDER BY sar.effective_date DESC LIMIT 1), 0)
+           )
+      END                                           AS fx_to_sar,
       nl.layer_number,
       nl.attachment,
       nl.layer_limit                                AS limit_layer,
@@ -371,6 +400,7 @@ router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
     LEFT JOIN public.companies ced            ON ced.company_id=c.cedant_id
     LEFT JOIN public.country cnt              ON cnt.country_id=c.country_id
     LEFT JOIN public.treaty_type tt           ON tt.treaty_type_id=c.treaty_type_id
+    LEFT JOIN public.currency cur             ON cur.currency_id=c.currency_id
     LEFT JOIN public.contract_np_details nd   ON nd.contract_id=c.contract_id
     LEFT JOIN public.contract_np_layers nl    ON nl.contract_id=c.contract_id
     LEFT JOIN public.uw_user uw_a             ON uw_a.user_id = c.assigned_to_user_id
