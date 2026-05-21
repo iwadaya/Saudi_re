@@ -171,8 +171,9 @@ export default function RpComparisonModal({
             placeholder="e.g. Aon Catalyst 2026, Karen Clark RDS, Verisk Touchstone…"
             style={{
               flex: 1, maxWidth: 420, padding: '6px 10px', fontSize: 12,
-              background: 'rgba(0,0,0,0.25)', border: '1px solid var(--hairline)',
+              background: 'rgba(0,0,0,0.25)', border: '1px solid var(--hairline-strong)',
               color: 'var(--text)', borderRadius: 6, outline: 'none',
+              fontFamily: 'var(--font-sans)',
             }}
           />
         </div>
@@ -212,7 +213,7 @@ export default function RpComparisonModal({
                       style={{
                         width: 140, textAlign: 'center', display: 'inline-block',
                         background: 'rgba(0,0,0,0.25)',
-                        border: '1px solid var(--hairline)', color: 'var(--text)',
+                        border: '1px solid var(--hairline-strong)', color: 'var(--text)',
                         padding: '4px 8px', borderRadius: 6,
                         fontFamily: 'var(--font-mono)', fontSize: 12,
                       }}
@@ -327,14 +328,15 @@ const th = (align, divider) => ({
   padding: '10px 12px', textAlign: align,
   fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase',
   color: 'var(--muted)',
-  borderBottom: '1px solid var(--hairline)',
-  borderRight: divider ? '1px solid var(--hairline)' : undefined,
+  fontFamily: 'var(--font-sans)',
+  borderBottom: '1px solid var(--hairline-strong)',
+  borderRight: divider ? '1px solid var(--hairline-strong)' : undefined,
 });
 const td = (align, mono, divider) => ({
   padding: '8px 12px', textAlign: align,
   fontSize: 12, color: 'var(--text)',
-  fontFamily: mono === 'mono' ? 'var(--font-mono)' : undefined,
-  borderRight: divider ? '1px solid var(--hairline)' : undefined,
+  fontFamily: mono === 'mono' ? 'var(--font-mono)' : 'var(--font-sans)',
+  borderRight: divider ? '1px solid var(--hairline-strong)' : undefined,
 });
 const primaryBtn = {
   background: 'var(--accent)', color: 'var(--accent-contrast)',
