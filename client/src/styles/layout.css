@@ -114,9 +114,9 @@ button{ font-family:inherit; }
   display: inline-block;
   padding: 10px 22px;
   border-radius: 999px;
-  background: rgba(35,209,139,0.10);
-  border: 1px solid rgba(35,209,139,0.25);
-  color: #23d18b;
+  background: rgba(var(--accent-rgb), 0.10);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
+  color: var(--accent);
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.5px;
