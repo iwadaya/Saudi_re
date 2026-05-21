@@ -51,6 +51,22 @@ function parseRows(rows) {
     .sort((a, b) => a.rp - b.rp);
 }
 
+// Display formatter for the editable loss input — keeps the raw string
+// (digits + optional decimal + optional minus) in state but renders with
+// thousand separators so big numbers are legible. Trailing decimals like
+// "1234." remain editable.
+function formatLossInput(raw) {
+  if (raw == null || raw === '') return '';
+  const s = String(raw);
+  // Allow keystrokes that aren't yet a parseable number (e.g. "-", ".",
+  // "1.")  to pass through unmodified — formatting them would jump the
+  // cursor or strip in-progress typing.
+  if (!/^-?\d+(\.\d*)?$/.test(s)) return s;
+  const [intPart, decPart] = s.split('.');
+  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return decPart != null ? `${grouped}.${decPart}` : grouped;
+}
+
 export default function RpComparisonModal({
   isOpen, onClose,
   fittedRows = [],
@@ -202,18 +218,20 @@ export default function RpComparisonModal({
                   <td style={td('center', 'mono', true)}>{fmt(r.fitted)}</td>
                   <td style={td('center', null, true)}>
                     <input
-                      type="text"
-                      value={tpRows[i]?.loss ?? ''}
+                      type="text" inputMode="numeric"
+                      value={formatLossInput(tpRows[i]?.loss ?? '')}
                       onChange={(e) => setTpRows(prev => {
+                        // Strip commas and other non-numeric chars before
+                        // storing so parseFloat / parseRows still work.
+                        const cleaned = String(e.target.value).replace(/[^0-9.\-]/g, '');
                         const next = [...prev];
-                        // Pad with empty rows if needed to align with fittedRows
                         while (next.length <= i) next.push({ rp: String(fittedRows[next.length]?.rp ?? ''), loss: '' });
-                        next[i] = { rp: String(r.rp), loss: e.target.value };
+                        next[i] = { rp: String(r.rp), loss: cleaned };
                         return next;
                       })}
                       placeholder="—"
                       style={{
-                        width: 140, textAlign: 'center', display: 'inline-block',
+                        width: 160, textAlign: 'center', display: 'inline-block',
                         background: 'rgba(0,0,0,0.25)',
                         border: '1px solid var(--hairline-strong)', color: 'var(--text)',
                         padding: '4px 8px', borderRadius: 6,
