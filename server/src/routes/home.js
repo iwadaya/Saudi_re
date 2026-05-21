@@ -262,6 +262,26 @@ router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
       COALESCE(c.signed_line_pct, 0)                AS signed_line_pct,
       -- 100% limit: total programme capacity
       COALESCE(pd.total_capacity, 0)                AS limit_100,
+      -- Pricing ratios (loss components + combined)
+      COALESCE(po.attritional_ratio, 0)             AS attritional_ratio,
+      COALESCE(po.large_loss_load,   0)             AS large_loss_load,
+      COALESCE(po.cat_loss_load,     0)             AS cat_loss_load,
+      (
+        COALESCE(po.attritional_ratio, 0) +
+        COALESCE(po.large_loss_load,   0) +
+        COALESCE(po.cat_loss_load,     0) +
+        COALESCE(po.commission_ratio,  0) +
+        COALESCE(po.brokerage_ratio,   0) +
+        COALESCE(po.tax_ratio,         0)
+      )                                             AS combined_ratio,
+      -- Underwriter (prefer the assignee, fall back to the creator)
+      COALESCE(uw_a.display_name, uw_c.display_name) AS underwriter_name,
+      -- Latest approver
+      (SELECT ca.decided_by FROM public.contract_approval ca
+        WHERE ca.contract_id = c.contract_id
+          AND ca.decision = 'APPROVED'
+        ORDER BY ca.decided_at DESC NULLS LAST
+        LIMIT 1)                                    AS approver_name,
       -- COB
       (SELECT string_agg(cob.class_of_business, ', ' ORDER BY cob.class_of_business)
        FROM public.contract_class_of_business ccb
@@ -274,6 +294,8 @@ router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
     LEFT JOIN public.contract_prop_details pd ON pd.contract_id=c.contract_id
     LEFT JOIN public.contract_commissions cm  ON cm.contract_id=c.contract_id
     LEFT JOIN public.contract_pricing_outputs po ON po.contract_id=c.contract_id
+    LEFT JOIN public.uw_user uw_a             ON uw_a.user_id = c.assigned_to_user_id
+    LEFT JOIN public.uw_user uw_c             ON uw_c.user_id = c.created_by_user_id
     WHERE COALESCE(tt.category,'') NOT ILIKE '%NP%'
       AND COALESCE(tt.category,'') NOT ILIKE '%NON%'
     ORDER BY c.uw_year DESC, ced.company_name, c.contract_id
@@ -305,6 +327,24 @@ router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
         0
       )                                             AS written_line_pct,
       COALESCE(c.signed_line_pct, 0)                AS signed_line_pct,
+      -- Pricing ratios (contract-level — repeats across layers of the same contract)
+      COALESCE(po.attritional_ratio, 0)             AS attritional_ratio,
+      COALESCE(po.large_loss_load,   0)             AS large_loss_load,
+      COALESCE(po.cat_loss_load,     0)             AS cat_loss_load,
+      (
+        COALESCE(po.attritional_ratio, 0) +
+        COALESCE(po.large_loss_load,   0) +
+        COALESCE(po.cat_loss_load,     0) +
+        COALESCE(po.commission_ratio,  0) +
+        COALESCE(po.brokerage_ratio,   0) +
+        COALESCE(po.tax_ratio,         0)
+      )                                             AS combined_ratio,
+      COALESCE(uw_a.display_name, uw_c.display_name) AS underwriter_name,
+      (SELECT ca.decided_by FROM public.contract_approval ca
+        WHERE ca.contract_id = c.contract_id
+          AND ca.decision = 'APPROVED'
+        ORDER BY ca.decided_at DESC NULLS LAST
+        LIMIT 1)                                    AS approver_name,
       (SELECT string_agg(cob.class_of_business, ', ' ORDER BY cob.class_of_business)
        FROM public.contract_class_of_business ccb
        JOIN public.class_of_business cob ON cob.class_of_business_id=ccb.class_of_business_id
@@ -315,6 +355,9 @@ router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
     LEFT JOIN public.treaty_type tt           ON tt.treaty_type_id=c.treaty_type_id
     LEFT JOIN public.contract_np_details nd   ON nd.contract_id=c.contract_id
     LEFT JOIN public.contract_np_layers nl    ON nl.contract_id=c.contract_id
+    LEFT JOIN public.contract_pricing_outputs po ON po.contract_id=c.contract_id
+    LEFT JOIN public.uw_user uw_a             ON uw_a.user_id = c.assigned_to_user_id
+    LEFT JOIN public.uw_user uw_c             ON uw_c.user_id = c.created_by_user_id
     WHERE (COALESCE(tt.category,'') ILIKE '%NP%' OR COALESCE(tt.category,'') ILIKE '%NON%')
     ORDER BY c.uw_year DESC, ced.company_name, c.contract_id, nl.layer_number
   `);
