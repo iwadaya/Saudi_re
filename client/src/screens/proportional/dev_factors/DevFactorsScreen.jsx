@@ -557,7 +557,9 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
     if (!contractId) return;
     api.getDevFactors(contractId, devType, apiOpts).then(data => {
       const factors = data?.factors || (Array.isArray(data) ? data : []);
-      if (factors.length > 0) { setChosenLdfs(factors.map(f => f.chosen_ldf ?? f.selected_ldf ?? null)); setChosenCdfs(factors.map(f => f.chosen_cdf ?? f.selected_cdf ?? null)); if (factors[0]?.chosen_source) setChosenBase(factors[0].chosen_source); }
+      if (factors.length > 0) { setChosenLdfs(factors.map(f => f.chosen_ldf ?? f.selected_ldf ?? null)); setChosenCdfs(factors.map(f => f.chosen_cdf ?? f.selected_cdf ?? null)); }
+      // chosenBase stays at its initial 'ACTUAL' — the toggle is reset on every
+      // page-land so the underwriter always starts from a known baseline.
     }).catch(() => {});
     /* Also load pricing pattern to restore excluded ratios + settings */
     api.getPricingPattern(contractId, devType).then(data => {
@@ -574,7 +576,8 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
         }
       }
       if (sf.proj_method) setProjMethod(sf.proj_method);
-      if (sf.chosen_base) setChosenBase(sf.chosen_base);
+      // Intentionally do not restore sf.chosen_base — the toggle always
+      // re-defaults to ACTUAL on page land. Saved chosenLdfs still load above.
       if (typeof sf.use_munich === 'boolean') setUseMunich(sf.use_munich);
       if (data.selection_method) setAvgMethod(data.selection_method.toLowerCase());
       if (data.bf_ielr != null && Number(data.bf_ielr) > 0) setIelr(String(data.bf_ielr));
