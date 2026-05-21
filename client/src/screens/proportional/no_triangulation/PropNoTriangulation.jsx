@@ -48,6 +48,9 @@ export default function PropNoTriangulation() {
   const [ldfModalOpen, setLdfModalOpen] = useState(false);
   const [premiumBlend, setPremiumBlend] = useState(null);
   const [claimsBlend,  setClaimsBlend]  = useState(null);
+  // uuid → human class name, used to label the per-class rows in the
+  // saved-blend summary card.
+  const [classLabelById, setClassLabelById] = useState({});
 
   const refreshBlends = useCallback(async (id) => {
     if (!id) return;
@@ -61,6 +64,19 @@ export default function PropNoTriangulation() {
     } catch {
       /* swallow — summary card just stays empty if blend fetch fails */
     }
+  }, []);
+
+  // Class-of-business labels (one fetch on mount). LdfCurveTable falls
+  // back to the UUID prefix when this map is empty, so a failed fetch
+  // is non-fatal — it just shows IDs.
+  useEffect(() => {
+    let cancelled = false;
+    api.listClassOfBusiness().then((rows) => {
+      if (cancelled) return;
+      const list = Array.isArray(rows) ? rows : [];
+      setClassLabelById(Object.fromEntries(list.map((c) => [c.id, c.name])));
+    }).catch(() => { /* leave map empty; table will show UUID prefix */ });
+    return () => { cancelled = true; };
   }, []);
 
   // Derive year range
@@ -333,13 +349,13 @@ export default function PropNoTriangulation() {
                     {premiumBlend?.blended?.length > 0 && (
                       <div>
                         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Premium</div>
-                        <LdfCurveTable classes={premiumBlend.classes} blended={premiumBlend.blended} compact />
+                        <LdfCurveTable classes={premiumBlend.classes} blended={premiumBlend.blended} classLabelById={classLabelById} compact />
                       </div>
                     )}
                     {claimsBlend?.blended?.length > 0 && (
                       <div>
                         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Claims</div>
-                        <LdfCurveTable classes={claimsBlend.classes} blended={claimsBlend.blended} compact />
+                        <LdfCurveTable classes={claimsBlend.classes} blended={claimsBlend.blended} classLabelById={classLabelById} compact />
                       </div>
                     )}
                   </div>
