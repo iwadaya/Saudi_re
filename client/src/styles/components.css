@@ -75,15 +75,6 @@ img{
 ================================ */
 h1,h2,h3{ margin: 0; }
 
-.page-title,
-.screen-title,
-.title-xl{
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.014em;
-  color: var(--text-strong);
-}
-
 .subtitle,
 .helptext,
 .muted-2{
@@ -147,8 +138,7 @@ label{ color: rgba(226,232,240,.82); font-weight: 600; }
 .btn,
 .chip-btn,
 .topbar-btn,
-.btn-green-outline,
-.ms-btn{
+.btn-green-outline{
   appearance: none;
   border: 1px solid rgba(148,163,184,.18);
   background: rgba(8,16,40,.45);
@@ -166,8 +156,7 @@ label{ color: rgba(226,232,240,.82); font-weight: 600; }
 .btn:hover,
 .chip-btn:hover,
 .topbar-btn:hover,
-.btn-green-outline:hover,
-.ms-btn:hover{
+.btn-green-outline:hover{
   background: rgba(255,255,255,.06);
   border-color: rgba(148,163,184,.24);
   transform: translateY(-1px);
@@ -176,8 +165,7 @@ label{ color: rgba(226,232,240,.82); font-weight: 600; }
 .btn:active,
 .chip-btn:active,
 .topbar-btn:active,
-.btn-green-outline:active,
-.ms-btn:active{
+.btn-green-outline:active{
   transform: translateY(0px);
   filter: brightness(.98);
 }
@@ -185,8 +173,7 @@ label{ color: rgba(226,232,240,.82); font-weight: 600; }
 .btn:focus-visible,
 .chip-btn:focus-visible,
 .topbar-btn:focus-visible,
-.btn-green-outline:focus-visible,
-.ms-btn:focus-visible{
+.btn-green-outline:focus-visible{
   outline: none;
   box-shadow:
     0 10px 22px rgba(0,0,0,.32),
@@ -197,8 +184,7 @@ label{ color: rgba(226,232,240,.82); font-weight: 600; }
 .btn[disabled],
 .chip-btn[disabled],
 .topbar-btn[disabled],
-.btn-green-outline[disabled],
-.ms-btn[disabled]{
+.btn-green-outline[disabled]{
   opacity: .50;
   cursor: not-allowed;
   transform: none;
@@ -924,134 +910,6 @@ select.form-input{ cursor:pointer; appearance:auto; }
 
 .tab--active:hover{ transform: translateY(-1px); }
 .tab:active{ transform: translateY(0); }
-
-/* ================================
-   MULTI-SELECT MODAL (shared)
-================================ */
-.ms-backdrop{
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  background: rgba(0,0,0,.55);
-  display: grid;
-  place-items: center;
-  padding: 18px;
-}
-
-.ms-modal{
-  width: min(720px, 95vw);
-  max-height: min(78vh, 760px);
-  overflow: hidden;
-
-  border-radius: 18px;
-  border: 1px solid rgba(148,163,184,.18);
-  background: rgba(8,16,40,.70);
-  backdrop-filter: blur(var(--glass-blur));
-  box-shadow: 0 24px 80px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.05);
-
-  display: grid;
-  grid-template-rows: auto auto 1fr auto;
-}
-
-.ms-head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap: 10px;
-  padding: 14px 14px 10px;
-  border-bottom: 1px solid rgba(148,163,184,.12);
-}
-
-.ms-title{
-  font-size: 13px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: rgba(226,232,240,.9);
-}
-
-.ms-x{
-  border-radius: 10px;
-  border: 1px solid rgba(148,163,184,.18);
-  background: rgba(8,16,40,.35);
-  color: rgba(226,232,240,.85);
-  padding: 6px 10px;
-  cursor: pointer;
-}
-
-.ms-search{
-  position: relative;
-  padding: 12px 14px;
-  border-bottom: 1px solid rgba(148,163,184,.12);
-}
-
-.ms-search-input{
-  width: 100%;
-  border-radius: var(--radius-pill);
-  border: 1px solid rgba(148,163,184,.20);
-  background: rgba(8,16,40,.35);
-  color: rgba(226,232,240,.9);
-  padding: 10px 38px 10px 14px;
-  outline: none;
-}
-
-.ms-search-icon{
-  position:absolute;
-  right: 26px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: rgba(148,163,184,.8);
-  font-size: 12px;
-}
-
-.ms-list{ padding: 12px 14px; overflow: auto; }
-
-.ms-item{
-  display:flex;
-  align-items:center;
-  gap: 10px;
-  padding: 10px 10px;
-  border-radius: 14px;
-  border: 1px solid rgba(148,163,184,.10);
-  background: rgba(8,16,40,.25);
-  margin-bottom: 10px;
-  cursor: pointer;
-}
-
-.ms-item:hover{
-  border-color: rgba(var(--accent-rgb),.25);
-  box-shadow: 0 0 0 6px rgba(var(--accent-rgb),.06);
-}
-
-.ms-check{ width: 18px; height: 18px; accent-color: #22c55e; }
-
-.ms-item-main{
-  display:flex;
-  align-items:baseline;
-  justify-content:space-between;
-  gap: 10px;
-  width: 100%;
-}
-
-.ms-item-name{ color: rgba(226,232,240,.92); font-weight: 600; font-size: 13px; }
-.ms-item-code{ color: rgba(148,163,184,.85); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
-
-.ms-actions{
-  display:flex;
-  justify-content:flex-end;
-  gap: 10px;
-  padding: 12px 14px;
-  border-top: 1px solid rgba(148,163,184,.12);
-}
-
-.ms-btn{
-  border-radius: var(--radius-pill);
-  border: 1px solid rgba(148,163,184,.20);
-  background: rgba(8,16,40,.35);
-  color: rgba(226,232,240,.85);
-  padding: 10px 14px;
-  font-size: 12px;
-  cursor: pointer;
-}
 
 /*
   Class-of-business (Line of Business) picker

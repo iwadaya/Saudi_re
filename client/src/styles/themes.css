@@ -10,13 +10,11 @@
 html[data-theme="midnight"]{
   --bg0:#08111f;
   --bg1:#111b2d;
-  --bg-plane:#070d18;
   --body-spot-1: rgba(31,224,141,.16);
   --body-spot-2: rgba(56,189,248,.10);
   --bg-wash-1: rgba(31,224,141,.12);
   --bg-wash-2: rgba(56,189,248,.10);
   --bg-depth-line: rgba(148,163,184,.075);
-  --surface: rgba(18,31,55,.84);
   --surface-2: rgba(18,31,55,.56);
   --surface-solid: #111c30;
   --surface-elevated: rgba(19,32,56,.94);
@@ -61,13 +59,11 @@ html[data-theme="midnight"]{
 html[data-theme="ocean"]{
   --bg0:#051722;
   --bg1:#0a2737;
-  --bg-plane:#041019;
   --body-spot-1: rgba(34,211,238,.17);
   --body-spot-2: rgba(94,234,212,.10);
   --bg-wash-1: rgba(34,211,238,.13);
   --bg-wash-2: rgba(94,234,212,.09);
   --bg-depth-line: rgba(125,211,252,.08);
-  --surface: rgba(9,37,54,.85);
   --surface-2: rgba(9,37,54,.56);
   --surface-solid: #0d2b3d;
   --surface-elevated: rgba(10,40,58,.94);
@@ -112,13 +108,11 @@ html[data-theme="ocean"]{
 html[data-theme="graphite"]{
   --bg0:#0a0b10;
   --bg1:#161820;
-  --bg-plane:#08090d;
   --body-spot-1: rgba(167,139,250,.15);
   --body-spot-2: rgba(45,212,191,.08);
   --bg-wash-1: rgba(167,139,250,.12);
   --bg-wash-2: rgba(45,212,191,.08);
   --bg-depth-line: rgba(196,181,253,.07);
-  --surface: rgba(27,29,38,.84);
   --surface-2: rgba(27,29,38,.56);
   --surface-solid: #1b1d26;
   --surface-elevated: rgba(28,31,41,.94);
@@ -163,13 +157,11 @@ html[data-theme="graphite"]{
 html[data-theme="sunset"]{
   --bg0:#170d16;
   --bg1:#241725;
-  --bg-plane:#100910;
   --body-spot-1: rgba(251,191,36,.15);
   --body-spot-2: rgba(96,165,250,.08);
   --bg-wash-1: rgba(251,191,36,.12);
   --bg-wash-2: rgba(96,165,250,.08);
   --bg-depth-line: rgba(253,186,116,.07);
-  --surface: rgba(45,29,43,.84);
   --surface-2: rgba(45,29,43,.56);
   --surface-solid: #2a1b29;
   --surface-elevated: rgba(49,32,47,.94);
@@ -214,13 +206,11 @@ html[data-theme="sunset"]{
 html[data-theme="daylight"]{
   --bg0:#f8fafc;
   --bg1:#e6edf5;
-  --bg-plane:#f1f5f9;
   --body-spot-1: rgba(5,150,105,.11);
   --body-spot-2: rgba(37,99,235,.07);
   --bg-wash-1: rgba(5,150,105,.08);
   --bg-wash-2: rgba(37,99,235,.06);
   --bg-depth-line: rgba(15,23,42,.07);
-  --surface: rgba(255,255,255,.88);
   --surface-2: rgba(255,255,255,.68);
   --surface-solid: #ffffff;
   --surface-elevated: rgba(255,255,255,.96);
@@ -260,7 +250,6 @@ html[data-theme="daylight"]{
   --hairline-strong: rgba(15,23,42,.14);
   --focus: rgba(5,150,105,.28);
   --shadow2: 0 10px 30px rgba(15,23,42,.08);
-  --shadow-soft: 0 12px 28px rgba(15,23,42,.06);
   --shadow-high: 0 24px 70px rgba(15,23,42,.12);
   --shadow-control: 0 10px 24px rgba(15,23,42,.08), inset 0 1px 0 rgba(255,255,255,.78);
 }

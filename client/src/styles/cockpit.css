@@ -57,25 +57,6 @@ body::after{
   box-shadow: 0 14px 40px rgba(0,0,0,.55);
 }
 
-/* Buttons: make primary actions feel "armed" */
-.btn--primary,
-.dock-btn--primary,
-.ms-btn-primary,
-.primary-pill,
-.action-pill--primary{
-  border-color: rgba(var(--accent-rgb),.40) !important;
-  background:
-    radial-gradient(120% 180% at 20% 0%, rgba(255,255,255,.55), rgba(255,255,255,0) 55%),
-    linear-gradient(180deg, rgba(var(--accent-rgb),.95), rgba(var(--accent2-rgb),.92)) !important;
-  box-shadow:
-    0 14px 34px rgba(0,0,0,.55),
-    0 0 0 1px rgba(255,255,255,.12) inset,
-    0 1px 0 rgba(255,255,255,.22) inset,
-    0 0 28px rgba(var(--accent-rgb),.30) !important;
-  color: var(--accent-contrast) !important;
-  font-weight: 800;
-}
-
 .btn--primary:hover,
 .dock-btn--primary:hover,
 .ms-btn-primary:hover,

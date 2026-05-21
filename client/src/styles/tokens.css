@@ -2,7 +2,6 @@
   /* Page background — two ends of a vertical gradient */
   --bg0:#0d1525;
   --bg1:#111e35;
-  --bg-plane:#0a1220;
   /* Directional washes overlaid on the page background */
   --body-spot-1: rgba(31,224,141,.22);
   --body-spot-2: rgba(0,170,255,.14);
@@ -11,7 +10,6 @@
   --bg-depth-line: rgba(148,163,184,.08);
 
   /* Surfaces */
-  --surface: rgba(20,38,70,.82);
   --surface-2: rgba(20,38,70,.55);
   --surface-solid: #131f38;
   --surface-elevated: rgba(18,31,55,.92);
@@ -62,7 +60,6 @@
   --hairline: rgba(255,255,255,.075);
   --hairline-strong: rgba(255,255,255,.14);
   --shadow2: 0 10px 30px rgba(0,0,0,.45);
-  --shadow-soft: 0 12px 28px rgba(0,0,0,.38);
   --shadow-high: 0 22px 70px rgba(0,0,0,.48);
   --shadow-control: 0 10px 24px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.06);
 
@@ -76,12 +73,7 @@
   /* Radii */
   --radius: 14px;
   --radius-lg: 16px;
-  --radius-sm: 8px;
   --radius-pill: 999px;
-
-  /* Spacing */
-  --pad: 14px;
-  --gap: 14px;
 
   /* Focus ring */
   --focus: rgba(31,224,141,.28);
@@ -100,13 +92,11 @@
   --hud-glow-g: rgba(var(--accent-rgb),.22);
   --hud-glow-b: rgba(56,189,248,.12);
   --hud-shadow: 0 18px 50px rgba(0,0,0,.55);
-  --hud-inner: inset 0 0 0 1px rgba(255,255,255,.06);
 
   /* Sliding-scale modal button gloss — only consumed inside
      .slide-modal in layout.css. Tracks the active theme via --accent. */
   --g1: var(--accent);
   --g2: var(--accent2);
-  --g3: var(--accent2);
   --gGlow: rgba(var(--accent-rgb),.35);
   --gRing: rgba(var(--accent-rgb),.28);
   /* Canonical numeric typography — consumed by numbers.css.
