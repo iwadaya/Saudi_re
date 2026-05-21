@@ -86,7 +86,7 @@ function CobSelectModal({ selected, classList, onSave, onClose }) {
         <div style={{ padding: '12px 24px', maxHeight: '50vh', overflowY: 'auto' }}>
           {(classList || []).map(c => (
             <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer', fontSize: 13 }}>
-              <input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} style={{ width: 16, height: 16, accentColor: '#23d18b' }} />
+              <input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
               {c.name}
             </label>
           ))}

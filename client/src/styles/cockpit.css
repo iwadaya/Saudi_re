@@ -66,13 +66,13 @@ body::after{
   border-color: rgba(var(--accent-rgb),.40) !important;
   background:
     radial-gradient(120% 180% at 20% 0%, rgba(255,255,255,.55), rgba(255,255,255,0) 55%),
-    linear-gradient(180deg, rgba(35,209,139,.95), rgba(10,163,106,.92)) !important;
+    linear-gradient(180deg, rgba(var(--accent-rgb),.95), rgba(var(--accent2-rgb),.92)) !important;
   box-shadow:
     0 14px 34px rgba(0,0,0,.55),
     0 0 0 1px rgba(255,255,255,.12) inset,
     0 1px 0 rgba(255,255,255,.22) inset,
-    0 0 28px rgba(35,209,139,.30) !important;
-  color: #07140f !important;
+    0 0 28px rgba(var(--accent-rgb),.30) !important;
+  color: var(--accent-contrast) !important;
   font-weight: 800;
 }
 

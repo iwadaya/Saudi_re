@@ -184,9 +184,9 @@ function LinkRatioView({ matrix, years, numDevYears, excluded, setExcluded, onPa
                 })}
               </tr>
             ))}
-            <tr style={{ borderTop: '2px solid rgba(34,197,94,0.3)' }}>
-              <td className="tri-yr" style={{ color: '#23d18b' }}>Weighted</td>
-              {filteredPattern.map((v, c) => <td key={c} className="tri-cell"><div className="tri-inp" style={{ fontWeight: 700, color: '#23d18b' }}>{fmt4(v)}</div></td>)}
+            <tr style={{ borderTop: '2px solid rgba(var(--accent-rgb),0.3)' }}>
+              <td className="tri-yr" style={{ color: 'var(--accent)' }}>Weighted</td>
+              {filteredPattern.map((v, c) => <td key={c} className="tri-cell"><div className="tri-inp" style={{ fontWeight: 700, color: 'var(--accent)' }}>{fmt4(v)}</div></td>)}
             </tr>
             <tr>
               <td className="tri-yr" style={{ color: 'rgba(255,255,255,0.5)' }}>CDF</td>

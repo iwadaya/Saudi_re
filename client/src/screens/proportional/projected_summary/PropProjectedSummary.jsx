@@ -147,7 +147,7 @@ export default function PropProjectedSummary() {
           ) : (
             <div className="ps-page">
               <h2 className="ps-h2">Ultimate – Projected vs Actual
-                {sourceLabel && <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 12, color: source === 'saved-factors' ? '#23d18b' : 'rgba(255,255,255,.45)' }}>
+                {sourceLabel && <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 12, color: source === 'saved-factors' ? 'var(--accent)' : 'rgba(255,255,255,.45)' }}>
                   ({sourceLabel})
                 </span>}
               </h2>

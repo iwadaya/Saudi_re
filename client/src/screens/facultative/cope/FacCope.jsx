@@ -20,7 +20,7 @@ function FR({ label, children }) {
 function Toggle({ value, onChange, label }) {
   return (
     <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
-      <input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#23d18b' }} />
+      <input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
       {label}
     </label>
   );

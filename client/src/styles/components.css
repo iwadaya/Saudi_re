@@ -657,8 +657,8 @@ button{ font-family:inherit; }
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .form-input:focus{
-  border-color: rgba(35,209,139,0.5);
-  box-shadow: 0 0 0 3px rgba(35,209,139,0.1);
+  border-color: rgba(var(--accent-rgb),0.5);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb),0.1);
 }
 .form-input::placeholder{ color: rgba(255,255,255,0.3); }
 select.form-input{ cursor:pointer; appearance:auto; }
@@ -682,7 +682,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
 .form-check input[type="checkbox"]{
   width: 16px;
   height: 16px;
-  accent-color: #23d18b;
+  accent-color: var(--accent);
 }
 
 /* ===== Wizard Dock Buttons (Back/Next) ===== */
@@ -709,10 +709,10 @@ select.form-input{ cursor:pointer; appearance:auto; }
   border-color: rgba(255,255,255,0.22);
 }
 .wizard-dock-btn--next{
-  background: linear-gradient(180deg, #23d18b, #0aa36a);
-  color: #08140e;
+  background: linear-gradient(180deg, var(--accent), var(--accent2));
+  color: var(--accent-contrast);
   border-color: transparent;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.3), 0 0 16px rgba(35,209,139,0.2);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.3), 0 0 16px rgba(var(--accent-rgb),0.2);
 }
 .wizard-dock-btn--next:hover:not(:disabled){
   filter: brightness(1.06);
@@ -1567,7 +1567,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
   background:rgba(255,255,255,0.04); color:rgba(255,255,255,0.45); transition:all 0.15s;
 }
 .toggle-btn:hover{ background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.7); }
-.toggle-btn--active{ background:rgba(35,209,139,0.15); color:#23d18b; border-color:rgba(35,209,139,0.3); }
+.toggle-btn--active{ background:rgba(var(--accent-rgb),0.15); color:var(--accent); border-color:rgba(var(--accent-rgb),0.3); }
 
 /* Card inner padding for form content */
 .card.glass .form-grid{ padding:14px 18px; }
@@ -1605,7 +1605,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
   letter-spacing:0.5px; cursor:pointer; border:none;
   background:transparent; color:rgba(255,255,255,0.45); transition:all 0.15s;
 }
-.toggle-opt.active{ background:rgba(35,209,139,0.15); color:#23d18b; }
+.toggle-opt.active{ background:rgba(var(--accent-rgb),0.15); color:var(--accent); }
 .toggle-opt:hover:not(.active){ background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.7); }
 
 /* Mini section title */
@@ -1615,7 +1615,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
 /* Small buttons */
 .btn-sm{ padding:6px 14px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;
   border:none; transition:all 0.12s; }
-.btn-accent{ background:linear-gradient(180deg,#23d18b,#0aa36a); color:#08140e; }
+.btn-accent{ background:linear-gradient(180deg,var(--accent),var(--accent2)); color:var(--accent-contrast); }
 .btn-accent:hover{ filter:brightness(1.08); transform:translateY(-1px); }
 .btn-danger-sm{ background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.2);
   border-radius:6px; padding:4px 8px; cursor:pointer; font-size:12px; }
@@ -1631,7 +1631,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
 .cob-option{ display:flex; align-items:center; gap:8px; padding:6px 8px; font-size:13px;
   color:rgba(255,255,255,0.8); cursor:pointer; border-radius:6px; }
 .cob-option:hover{ background:rgba(255,255,255,0.06); }
-.cob-option input{ accent-color:#23d18b; }
+.cob-option input{ accent-color:var(--accent); }
 
 /* Action pill buttons */
 .action-pill{
@@ -1889,7 +1889,7 @@ input.tri-inp:focus{
   align-items: center;
   justify-content: center;
   padding: 24px 16px;
-  background: radial-gradient(ellipse at 30% 20%, rgba(35,209,139,0.08) 0%, transparent 60%),
+  background: radial-gradient(ellipse at 30% 20%, rgba(var(--accent-rgb),0.08) 0%, transparent 60%),
               radial-gradient(ellipse at 80% 80%, rgba(96,165,250,0.06) 0%, transparent 50%);
 }
 

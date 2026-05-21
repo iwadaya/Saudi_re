@@ -204,7 +204,7 @@ function CobSelectModal({ selected, classList, onSave, onClose }) {
         <div style={{ padding: '12px 24px', maxHeight: '50vh', overflowY: 'auto' }}>
           {(classList || []).map(c => (
             <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer', fontSize: 13 }}>
-              <input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} style={{ width: 16, height: 16, accentColor: '#23d18b' }} />
+              <input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
               {c.name}
             </label>
           ))}
@@ -960,7 +960,7 @@ export default function PropTreatyDetail() {
                 <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <button className="orange-gloss-btn" type="button" onClick={() => setShowLpSlides(true)}>Enter Slides Manually</button>
                   {(s.lpSlides || []).some(r => r.minLr || r.maxLr || r.share) && (
-                    <span style={{ fontSize: 10, color: '#23d18b', fontWeight: 700 }}>
+                    <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700 }}>
                       ✓ {(s.lpSlides||[]).filter(r => r.minLr||r.maxLr||r.share).length} corridor(s)
                     </span>
                   )}
