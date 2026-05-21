@@ -615,110 +615,6 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
     });
   },[alpha,xm,activeDist,fits]);
 
-  // Build the full snapshot payload
-  const buildSnapshotPayload = useCallback(async () => {
-    const pts = returnPeriods.map(p => ({ rp: p.rp, loss: p.loss }));
-    const rp10 = pts.find(p => p.rp === 10)?.loss ?? null;
-    const rp50 = pts.find(p => p.rp === 50)?.loss ?? null;
-    const rp100 = pts.find(p => p.rp === 100)?.loss ?? null;
-    const rp250 = pts.find(p => p.rp === 250)?.loss ?? null;
-
-    // Serialize all 4 distribution fits for audit
-    const distFits = fits.map(f => ({
-      key: f.key, params: f.params, ks: { ks: f.ks.ks, pValue: f.ks.pValue },
-      paramStr: f.paramStr, n: f.n,
-    }));
-
-    const assumptions = {
-      lossType, activeDist, xm, limit, yearsOvr: String(yearsOvr || ''),
-      selected: losses.map(l => ({ id: l.loss_id, infl: cn(l.inflation_factor || 1) })).sort((a, b) => String(a.id).localeCompare(String(b.id))),
-    };
-    const assumptions_hash = await sha256Hex(stableStringify(assumptions));
-
-    return {
-      selected_count: losses.length,
-      selected_losses: losses.map(l => ({
-        loss_id: l.loss_id, uw_year: l.uw_year, insured_name: l.insured_name, loss_name: l.loss_name,
-        date_of_loss: l.date_of_loss, class_of_business: l.class_of_business,
-        paid: l.paid, os: l.os, incurred: l.incurred, inflation_factor: l.inflation_factor, inflated: l.inflated,
-      })),
-      distribution_fits: distFits,
-      active_distribution: activeDist,
-      pareto_xm: xm,
-      pareto_alpha: alpha,
-      pareto_limit: limit,
-      observation_years: Number(yearsOvr) || 10,
-      // return_period_curve carries the layer burning cost + OEP payload too,
-      // since the server only persists a whitelist of top-level keys but stores
-      // this one as JSONB. Nesting keeps everything within a column the handler
-      // already round-trips.
-      return_period_curve: {
-        activeDist, xm, limit, yearsOvr: yearsOvr || null, points: pts,
-        layer_burning_cost: {
-          wEmp,
-          wModel,
-          rows: blendedLayerRols.map(r => ({
-            layer:        r.layer,
-            deductible:   r.D,
-            limit:        r.L,
-            return_period: r.rp,
-            empirical_rol: r.empiricalRol,
-            model_rol:     r.modelRol,
-            blended_rol:   r.blendedRol,
-            blended_annual_loss: r.blendedAnnual,
-          })),
-        },
-        ...(lossType === 'cat' ? {
-          oep_input: oepRows,
-          oep_layer_burning_cost: oepLayerRols.map(r => ({
-            layer:       r.layer,
-            deductible:  r.D,
-            limit:       r.L,
-            return_period: r.rp,
-            annual_loss: r.annualLoss,
-            rol:         r.rol,
-          })),
-        } : {}),
-      },
-      return_period_key_points: { rp10, rp50, rp100, rp250 },
-      assumptions_hash,
-    };
-  }, [lossType, activeDist, xm, limit, yearsOvr, alpha, losses, fits, returnPeriods, wEmp, wModel, blendedLayerRols, oepRows, oepLayerRols]);
-
-  // Explicit save function
-  const saveSnapshot = useCallback(async () => {
-    if (!contractId || !losses.length || xm <= 0) return false;
-    try {
-      setSaving(true); setSaveError(null);
-      const payload = await buildSnapshotPayload();
-      await api.saveLossSelectionSnapshot(contractId, lossType, payload, appState.quoteMode ? { quote: true } : undefined);
-      setLastSaveTime(new Date());
-      setSaving(false);
-      return true;
-    } catch (e) {
-      console.error('Save return period snapshot failed', e);
-      setSaveError(e?.message || String(e));
-      setSaving(false);
-      return false;
-    }
-  }, [contractId, lossType, losses, xm, buildSnapshotPayload, appState.quoteMode]);
-
-  // Auto-save on debounce when key parameters change. Toast only on the
-  // OK→failed transition so a flaky network doesn't spam the user every
-  // 800ms; the inline ⚠ banner already shows the persistent error.
-  const lastAutoSaveOkRef = useRef(true);
-  useEffect(() => {
-    if (loading || !contractId || !losses.length || xm <= 0 || !returnPeriods.length) return;
-    const t = setTimeout(async () => {
-      const ok = await saveSnapshot();
-      if (!ok && lastAutoSaveOkRef.current) {
-        showToast('Pareto auto-save failed — click Save Curve to retry');
-      }
-      lastAutoSaveOkRef.current = ok;
-    }, 800);
-    return () => { clearTimeout(t); };
-  }, [loading, contractId, lossType, losses, xm, limit, activeDist, yearsOvr, returnPeriods, saveSnapshot, showToast]);
-
   const count=pareto.length;
   const avg=count>0?total/count:0;
   const mxL=count>0?pareto[0].inflated:0;
@@ -898,6 +794,113 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
       return { idx: i, layer: sl.layer || `L${i+1}`, D, L, rp, annualLoss, rol: L > 0 ? annualLoss / L : 0 };
     });
   }, [lossType, oepSurvivalFn, structureLayers]);
+
+  // Build the full snapshot payload.
+  // Declared after wEmp / wModel / blendedLayerRols / oepLayerRols because
+  // its dependency array reads them — those bindings would otherwise be in
+  // the TDZ on first render.
+  const buildSnapshotPayload = useCallback(async () => {
+    const pts = returnPeriods.map(p => ({ rp: p.rp, loss: p.loss }));
+    const rp10 = pts.find(p => p.rp === 10)?.loss ?? null;
+    const rp50 = pts.find(p => p.rp === 50)?.loss ?? null;
+    const rp100 = pts.find(p => p.rp === 100)?.loss ?? null;
+    const rp250 = pts.find(p => p.rp === 250)?.loss ?? null;
+
+    // Serialize all 4 distribution fits for audit
+    const distFits = fits.map(f => ({
+      key: f.key, params: f.params, ks: { ks: f.ks.ks, pValue: f.ks.pValue },
+      paramStr: f.paramStr, n: f.n,
+    }));
+
+    const assumptions = {
+      lossType, activeDist, xm, limit, yearsOvr: String(yearsOvr || ''),
+      selected: losses.map(l => ({ id: l.loss_id, infl: cn(l.inflation_factor || 1) })).sort((a, b) => String(a.id).localeCompare(String(b.id))),
+    };
+    const assumptions_hash = await sha256Hex(stableStringify(assumptions));
+
+    return {
+      selected_count: losses.length,
+      selected_losses: losses.map(l => ({
+        loss_id: l.loss_id, uw_year: l.uw_year, insured_name: l.insured_name, loss_name: l.loss_name,
+        date_of_loss: l.date_of_loss, class_of_business: l.class_of_business,
+        paid: l.paid, os: l.os, incurred: l.incurred, inflation_factor: l.inflation_factor, inflated: l.inflated,
+      })),
+      distribution_fits: distFits,
+      active_distribution: activeDist,
+      pareto_xm: xm,
+      pareto_alpha: alpha,
+      pareto_limit: limit,
+      observation_years: Number(yearsOvr) || 10,
+      // return_period_curve carries the layer burning cost + OEP payload too,
+      // since the server only persists a whitelist of top-level keys but stores
+      // this one as JSONB. Nesting keeps everything within a column the handler
+      // already round-trips.
+      return_period_curve: {
+        activeDist, xm, limit, yearsOvr: yearsOvr || null, points: pts,
+        layer_burning_cost: {
+          wEmp,
+          wModel,
+          rows: blendedLayerRols.map(r => ({
+            layer:        r.layer,
+            deductible:   r.D,
+            limit:        r.L,
+            return_period: r.rp,
+            empirical_rol: r.empiricalRol,
+            model_rol:     r.modelRol,
+            blended_rol:   r.blendedRol,
+            blended_annual_loss: r.blendedAnnual,
+          })),
+        },
+        ...(lossType === 'cat' ? {
+          oep_input: oepRows,
+          oep_layer_burning_cost: oepLayerRols.map(r => ({
+            layer:       r.layer,
+            deductible:  r.D,
+            limit:       r.L,
+            return_period: r.rp,
+            annual_loss: r.annualLoss,
+            rol:         r.rol,
+          })),
+        } : {}),
+      },
+      return_period_key_points: { rp10, rp50, rp100, rp250 },
+      assumptions_hash,
+    };
+  }, [lossType, activeDist, xm, limit, yearsOvr, alpha, losses, fits, returnPeriods, wEmp, wModel, blendedLayerRols, oepRows, oepLayerRols]);
+
+  // Explicit save function
+  const saveSnapshot = useCallback(async () => {
+    if (!contractId || !losses.length || xm <= 0) return false;
+    try {
+      setSaving(true); setSaveError(null);
+      const payload = await buildSnapshotPayload();
+      await api.saveLossSelectionSnapshot(contractId, lossType, payload, appState.quoteMode ? { quote: true } : undefined);
+      setLastSaveTime(new Date());
+      setSaving(false);
+      return true;
+    } catch (e) {
+      console.error('Save return period snapshot failed', e);
+      setSaveError(e?.message || String(e));
+      setSaving(false);
+      return false;
+    }
+  }, [contractId, lossType, losses, xm, buildSnapshotPayload, appState.quoteMode]);
+
+  // Auto-save on debounce when key parameters change. Toast only on the
+  // OK→failed transition so a flaky network doesn't spam the user every
+  // 800ms; the inline ⚠ banner already shows the persistent error.
+  const lastAutoSaveOkRef = useRef(true);
+  useEffect(() => {
+    if (loading || !contractId || !losses.length || xm <= 0 || !returnPeriods.length) return;
+    const t = setTimeout(async () => {
+      const ok = await saveSnapshot();
+      if (!ok && lastAutoSaveOkRef.current) {
+        showToast('Pareto auto-save failed — click Save Curve to retry');
+      }
+      lastAutoSaveOkRef.current = ok;
+    }, 800);
+    return () => { clearTimeout(t); };
+  }, [loading, contractId, lossType, losses, xm, limit, activeDist, yearsOvr, returnPeriods, saveSnapshot, showToast]);
 
   const bestFit=useMemo(()=>[...fits].sort((a,b)=>a.ks.ks-b.ks.ks)[0]?.key||'pareto',[fits]);
 
