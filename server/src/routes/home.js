@@ -262,18 +262,17 @@ router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
       COALESCE(c.signed_line_pct, 0)                AS signed_line_pct,
       -- 100% limit: total programme capacity
       COALESCE(pd.total_capacity, 0)                AS limit_100,
-      -- Pricing ratios (loss components + combined)
-      COALESCE(po.attritional_ratio, 0)             AS attritional_ratio,
-      COALESCE(po.large_loss_load,   0)             AS large_loss_load,
-      COALESCE(po.cat_loss_load,     0)             AS cat_loss_load,
-      (
-        COALESCE(po.attritional_ratio, 0) +
-        COALESCE(po.large_loss_load,   0) +
-        COALESCE(po.cat_loss_load,     0) +
-        COALESCE(po.commission_ratio,  0) +
-        COALESCE(po.brokerage_ratio,   0) +
-        COALESCE(po.tax_ratio,         0)
-      )                                             AS combined_ratio,
+      -- Pricing ratios — UW-chosen value from pricing_components (the
+      -- row × column matrix on the PROP pricing screen). Multiplied by
+      -- 100 to match the whole-percent convention used by the other
+      -- ratio columns in this export (commission_pct, signed_line_pct).
+      ROUND(COALESCE(pcv.attr,       0) * 100, 4)   AS attritional_ratio,
+      ROUND(COALESCE(pcv.large_load, 0) * 100, 4)   AS large_loss_load,
+      ROUND(COALESCE(pcv.cat_load,   0) * 100, 4)   AS cat_loss_load,
+      ROUND((
+        COALESCE(pcv.attr, 0) + COALESCE(pcv.large_load, 0) + COALESCE(pcv.cat_load, 0) +
+        COALESCE(pcv.comm, 0) + COALESCE(pcv.brok,       0) + COALESCE(pcv.tax,      0)
+      ) * 100, 4)                                   AS combined_ratio,
       -- Underwriter (prefer the assignee, fall back to the creator)
       COALESCE(uw_a.display_name, uw_c.display_name) AS underwriter_name,
       -- Latest approver
@@ -296,6 +295,26 @@ router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
     LEFT JOIN public.contract_pricing_outputs po ON po.contract_id=c.contract_id
     LEFT JOIN public.uw_user uw_a             ON uw_a.user_id = c.assigned_to_user_id
     LEFT JOIN public.uw_user uw_c             ON uw_c.user_id = c.created_by_user_id
+    -- Pivot the per-contract pricing_components into one row (six columns).
+    LEFT JOIN LATERAL (
+      SELECT
+        MAX(CASE WHEN pc.component_name = 'Attritional Loss Ratio'
+              THEN public.parse_pct_text(COALESCE(NULLIF(pc.uw_value,''), pc.actuarial_value)) END) AS attr,
+        MAX(CASE WHEN pc.component_name = 'Large Loss Loading'
+              THEN public.parse_pct_text(COALESCE(NULLIF(pc.uw_value,''), pc.actuarial_value)) END) AS large_load,
+        MAX(CASE WHEN pc.component_name = 'Cat Loss Loading'
+              THEN public.parse_pct_text(COALESCE(NULLIF(pc.uw_value,''), pc.actuarial_value)) END) AS cat_load,
+        MAX(CASE WHEN pc.component_name = 'Commissions'
+              THEN public.parse_pct_text(COALESCE(NULLIF(pc.uw_value,''), pc.actuarial_value)) END) AS comm,
+        MAX(CASE WHEN pc.component_name = 'Brokerage'
+              THEN public.parse_pct_text(COALESCE(NULLIF(pc.uw_value,''), pc.actuarial_value)) END) AS brok,
+        MAX(CASE WHEN pc.component_name = 'Taxes'
+              THEN public.parse_pct_text(COALESCE(NULLIF(pc.uw_value,''), pc.actuarial_value)) END) AS tax
+      FROM public.pricing_components pc
+      WHERE pc.contract_id = c.contract_id
+        AND pc.component_name IN
+          ('Attritional Loss Ratio','Large Loss Loading','Cat Loss Loading','Commissions','Brokerage','Taxes')
+    ) pcv ON true
     WHERE COALESCE(tt.category,'') NOT ILIKE '%NP%'
       AND COALESCE(tt.category,'') NOT ILIKE '%NON%'
     ORDER BY c.uw_year DESC, ced.company_name, c.contract_id
@@ -327,18 +346,17 @@ router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
         0
       )                                             AS written_line_pct,
       COALESCE(c.signed_line_pct, 0)                AS signed_line_pct,
-      -- Pricing ratios (contract-level — repeats across layers of the same contract)
-      COALESCE(po.attritional_ratio, 0)             AS attritional_ratio,
-      COALESCE(po.large_loss_load,   0)             AS large_loss_load,
-      COALESCE(po.cat_loss_load,     0)             AS cat_loss_load,
-      (
-        COALESCE(po.attritional_ratio, 0) +
-        COALESCE(po.large_loss_load,   0) +
-        COALESCE(po.cat_loss_load,     0) +
-        COALESCE(po.commission_ratio,  0) +
-        COALESCE(po.brokerage_ratio,   0) +
-        COALESCE(po.tax_ratio,         0)
-      )                                             AS combined_ratio,
+      -- Pricing ratios — same pricing_components convention as PROP.
+      -- NP screens don't currently populate these but the contract may
+      -- still have rows if a UW used the PROP breakdown for comparison.
+      -- Values repeat across layers of the same contract.
+      ROUND(COALESCE(pcv.attr,       0) * 100, 4)   AS attritional_ratio,
+      ROUND(COALESCE(pcv.large_load, 0) * 100, 4)   AS large_loss_load,
+      ROUND(COALESCE(pcv.cat_load,   0) * 100, 4)   AS cat_loss_load,
+      ROUND((
+        COALESCE(pcv.attr, 0) + COALESCE(pcv.large_load, 0) + COALESCE(pcv.cat_load, 0) +
+        COALESCE(pcv.comm, 0) + COALESCE(pcv.brok,       0) + COALESCE(pcv.tax,      0)
+      ) * 100, 4)                                   AS combined_ratio,
       COALESCE(uw_a.display_name, uw_c.display_name) AS underwriter_name,
       (SELECT ca.decided_by FROM public.contract_approval ca
         WHERE ca.contract_id = c.contract_id
@@ -355,9 +373,27 @@ router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
     LEFT JOIN public.treaty_type tt           ON tt.treaty_type_id=c.treaty_type_id
     LEFT JOIN public.contract_np_details nd   ON nd.contract_id=c.contract_id
     LEFT JOIN public.contract_np_layers nl    ON nl.contract_id=c.contract_id
-    LEFT JOIN public.contract_pricing_outputs po ON po.contract_id=c.contract_id
     LEFT JOIN public.uw_user uw_a             ON uw_a.user_id = c.assigned_to_user_id
     LEFT JOIN public.uw_user uw_c             ON uw_c.user_id = c.created_by_user_id
+    LEFT JOIN LATERAL (
+      SELECT
+        MAX(CASE WHEN pc.component_name = 'Attritional Loss Ratio'
+              THEN public.parse_pct_text(COALESCE(NULLIF(pc.uw_value,''), pc.actuarial_value)) END) AS attr,
+        MAX(CASE WHEN pc.component_name = 'Large Loss Loading'
+              THEN public.parse_pct_text(COALESCE(NULLIF(pc.uw_value,''), pc.actuarial_value)) END) AS large_load,
+        MAX(CASE WHEN pc.component_name = 'Cat Loss Loading'
+              THEN public.parse_pct_text(COALESCE(NULLIF(pc.uw_value,''), pc.actuarial_value)) END) AS cat_load,
+        MAX(CASE WHEN pc.component_name = 'Commissions'
+              THEN public.parse_pct_text(COALESCE(NULLIF(pc.uw_value,''), pc.actuarial_value)) END) AS comm,
+        MAX(CASE WHEN pc.component_name = 'Brokerage'
+              THEN public.parse_pct_text(COALESCE(NULLIF(pc.uw_value,''), pc.actuarial_value)) END) AS brok,
+        MAX(CASE WHEN pc.component_name = 'Taxes'
+              THEN public.parse_pct_text(COALESCE(NULLIF(pc.uw_value,''), pc.actuarial_value)) END) AS tax
+      FROM public.pricing_components pc
+      WHERE pc.contract_id = c.contract_id
+        AND pc.component_name IN
+          ('Attritional Loss Ratio','Large Loss Loading','Cat Loss Loading','Commissions','Brokerage','Taxes')
+    ) pcv ON true
     WHERE (COALESCE(tt.category,'') ILIKE '%NP%' OR COALESCE(tt.category,'') ILIKE '%NON%')
     ORDER BY c.uw_year DESC, ced.company_name, c.contract_id, nl.layer_number
   `);
