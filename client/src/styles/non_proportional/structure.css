@@ -205,7 +205,7 @@
   transition: border-color .13s, background .13s;
 }
 .np-mini-input::placeholder { color: rgba(255,255,255,0.28); }
-.np-mini-input:focus { border-color: rgba(35,209,139,0.45); background: rgba(35,209,139,0.04); box-shadow: none; }
+.np-mini-input:focus { border-color: rgba(var(--accent-rgb),0.45); background: rgba(var(--accent-rgb),0.04); box-shadow: none; }
 .np-mini-input--readonly { opacity: 1; border-color: transparent; background: transparent; cursor: default; }
 .np-mini-input--center { text-align: center; }
 
@@ -720,8 +720,8 @@ body.np-modal-open { overflow: hidden; }
   transition:    border-color .14s, background .14s;
 }
 .qss-section .np-mini-input:not(.np-mini-select):focus {
-  border-color: rgba(35, 209, 139, 0.45);
-  background:   rgba(35, 209, 139, 0.04);
+  border-color: rgba(var(--accent-rgb), 0.45);
+  background:   rgba(var(--accent-rgb), 0.04);
 }
 
 /* COB section header */

@@ -169,15 +169,15 @@ export default function Topbar({ title, subtitle, actions }) {
                       <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
                         View Portfolio
                       </div>
-                      <button onClick={selectSelf} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 14px', border: 'none', background: !isViewing ? 'rgba(35,209,139,0.10)' : 'transparent', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: !isViewing ? 'rgba(35,209,139,0.3)' : 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: !isViewing ? '#23d18b' : 'rgba(255,255,255,0.5)', flexShrink: 0 }}>
+                      <button onClick={selectSelf} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 14px', border: 'none', background: !isViewing ? 'rgba(var(--accent-rgb),0.10)' : 'transparent', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: !isViewing ? 'rgba(var(--accent-rgb),0.3)' : 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: !isViewing ? 'var(--accent)' : 'rgba(255,255,255,0.5)', flexShrink: 0 }}>
                           {session.roleCode || '—'}
                         </div>
                         <div style={{ flex: 1, textAlign: 'left' }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: !isViewing ? '#23d18b' : 'rgba(255,255,255,0.80)' }}>{ROLE_LABELS[rc] || rc} <span style={{ fontSize: 9, opacity: 0.6 }}>(me)</span></div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: !isViewing ? 'var(--accent)' : 'rgba(255,255,255,0.80)' }}>{ROLE_LABELS[rc] || rc} <span style={{ fontSize: 9, opacity: 0.6 }}>(me)</span></div>
                           <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>{limit ? limit : '—'}</div>
                         </div>
-                        {!isViewing && <span style={{ fontSize: 10, color: '#23d18b' }}>✓</span>}
+                        {!isViewing && <span style={{ fontSize: 10, color: 'var(--accent)' }}>✓</span>}
                       </button>
                       {teamUsers.length > 0 && (
                         <div style={{ padding: '6px 14px 4px', fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Team</div>

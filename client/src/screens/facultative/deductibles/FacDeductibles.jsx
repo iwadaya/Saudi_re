@@ -184,7 +184,7 @@ export default function FacDeductibles() {
                     <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                       <input type="checkbox" checked={Boolean(row.is_checked)}
                              onChange={(e) => setChecklistRow(row.clause_code, { is_checked: e.target.checked })}
-                             style={{ width: 16, height: 16, accentColor: '#23d18b', cursor: 'pointer' }} />
+                             style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }} />
                     </td>
                     <td style={{ padding: '4px 10px' }}>
                       <input className="fi" value={row.comments || ''}

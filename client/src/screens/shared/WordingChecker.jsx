@@ -305,8 +305,8 @@ export default function WordingChecker({ contractId, parentContractId, docs: pro
         </div>
         <button onClick={run} disabled={running} style={{
           padding:'6px 14px', borderRadius:8, border:'none', cursor: running ? 'wait' : 'pointer',
-          background: running ? 'rgba(35,209,139,0.2)' : 'rgba(35,209,139,0.85)',
-          color: running ? 'rgba(255,255,255,0.5)' : '#04120b', fontSize:11, fontWeight:700,
+          background: running ? 'rgba(var(--accent-rgb),0.2)' : 'rgba(var(--accent-rgb),0.85)',
+          color: running ? 'rgba(255,255,255,0.5)' : 'var(--accent-contrast)', fontSize:11, fontWeight:700,
         }}>
           {running ? `⟳ ${step}` : analysis ? '↺ Re-analyse' : '▶ Run Analysis'}
         </button>

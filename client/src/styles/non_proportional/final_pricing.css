@@ -132,7 +132,7 @@
 /* Table inputs */
 .np-final-wide-table td input,.np-final-wide-table td select,.np-final-table td input,.np-final-table td select { border-radius:6px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); color:rgba(226,232,240,.90); padding:6px 10px; height:30px; min-width:90px; outline:none; text-align:center; margin:0 auto; display:block; transition:border-color 140ms ease; }
 .np-final-wide-table td input:hover,.np-final-table td input:hover { border-color:rgba(255,255,255,0.15); }
-.np-final-wide-table td input:focus,.np-final-table td input:focus { border-color:rgba(35,209,139,0.45); background:rgba(35,209,139,0.04); box-shadow:none; }
+.np-final-wide-table td input:focus,.np-final-table td input:focus { border-color:rgba(var(--accent-rgb),0.45); background:rgba(var(--accent-rgb),0.04); box-shadow:none; }
 .np-final-wide-table td input[readonly],.np-final-table td input[readonly] { border-color:transparent; background:transparent; opacity:1; }
 
 /* ═══════════════════════════════════════════════════════
@@ -628,8 +628,8 @@
   background: rgba(255,255,255,0.03);
 }
 .np-mini-input--uw:focus {
-  border-color: rgba(35,209,139,0.45);
-  background: rgba(35,209,139,0.04);
+  border-color: rgba(var(--accent-rgb),0.45);
+  background: rgba(var(--accent-rgb),0.04);
 }
 
 /* ── Pricing table: Reinsurer / Lead / Expiring column colours ── */
@@ -640,8 +640,8 @@
   background: rgba(255,255,255,0.03);
 }
 .np-mini-input--reinsurer:focus {
-  border-color: rgba(35,209,139,0.45);
-  background: rgba(35,209,139,0.04);
+  border-color: rgba(var(--accent-rgb),0.45);
+  background: rgba(var(--accent-rgb),0.04);
 }
 th.col-reinsurer { color: #22d3ee !important; border-bottom: 2px solid rgba(34,211,238,0.30) !important; }
 td.col-reinsurer { background: rgba(34,211,238,0.03) !important; }

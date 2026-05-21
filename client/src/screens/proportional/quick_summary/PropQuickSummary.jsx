@@ -231,7 +231,7 @@ export default function PropQuickSummary() {
       <div className="qs-card qs-card--green">
         <div className="qs-card-head"><div><div className="qs-card-title">Projected by Underwriting Year (Ultimate)</div><div className="qs-card-sub">
           Based on Ultimate Loss Projections + Treaty Terms
-          {projSource === 'saved-factors' && <span style={{ marginLeft: 8, color: '#23d18b', fontSize: 11 }}>● Using saved dev factors</span>}
+          {projSource === 'saved-factors' && <span style={{ marginLeft: 8, color: 'var(--accent)', fontSize: 11 }}>● Using saved dev factors</span>}
           {projSource === 'triangle-recalc' && <span style={{ marginLeft: 8, color: '#f59e0b', fontSize: 11 }}>● Recalculated (no saved factors)</span>}
         </div></div>
           <div className="qs-card-chip qs-card-chip--green">PROJECTED</div></div>

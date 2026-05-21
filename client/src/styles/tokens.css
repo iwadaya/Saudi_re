@@ -103,12 +103,12 @@
   --hud-inner: inset 0 0 0 1px rgba(255,255,255,.06);
 
   /* Sliding-scale modal button gloss — only consumed inside
-     .slide-modal in layout.css. Moved here from layout.css. */
-  --g1: #23d18b;
-  --g2: #0aa36a;
-  --g3: #087a52;
-  --gGlow: rgba(35,209,139,.35);
-  --gRing: rgba(35,209,139,.28);
+     .slide-modal in layout.css. Tracks the active theme via --accent. */
+  --g1: var(--accent);
+  --g2: var(--accent2);
+  --g3: var(--accent2);
+  --gGlow: rgba(var(--accent-rgb),.35);
+  --gRing: rgba(var(--accent-rgb),.28);
   /* Canonical numeric typography — consumed by numbers.css.
      Reference: the dev-factors screen ("professional, calm").
      Change a value here to update every harmonized screen at once. */
