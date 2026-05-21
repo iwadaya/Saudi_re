@@ -25,7 +25,9 @@ import { useEffect, useMemo, useState } from 'react';
 // Exceedance probabilities are spaced log-linearly, so interpolate on
 // log(rp) rather than rp itself.
 export function interpolateTpAtRp(validTpRows, rp) {
-  if (!validTpRows.length) return null;
+  // Need at least 2 points to interpolate. With only one, every other
+  // RP would clamp to that single value and produce misleading Δs.
+  if (validTpRows.length < 2) return null;
   if (rp <= validTpRows[0].rp) return validTpRows[0].loss;
   if (rp >= validTpRows[validTpRows.length - 1].rp) return validTpRows[validTpRows.length - 1].loss;
   for (let i = 0; i < validTpRows.length - 1; i++) {
@@ -186,18 +188,18 @@ export default function RpComparisonModal({
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead style={{ background: 'var(--surface-2)' }}>
               <tr>
-                <th style={th('left', true)}>Return Period</th>
-                <th style={th('right', true)}>Fitted{distLabel ? ` — ${distLabel}` : ''}</th>
+                <th style={th('center', true)}>Return Period</th>
+                <th style={th('center', true)}>Fitted{distLabel ? ` — ${distLabel}` : ''}</th>
                 <th style={th('center', true)}>Third-Party (editable)</th>
-                <th style={th('right', true)}>Δ vs Fitted</th>
-                <th style={th('right')}>Blend</th>
+                <th style={th('center', true)}>Δ vs Fitted</th>
+                <th style={th('center')}>Blend</th>
               </tr>
             </thead>
             <tbody>
               {compareRows.map((r, i) => (
                 <tr key={r.rp} style={{ borderTop: '1px solid var(--hairline)' }}>
-                  <td style={td('left', null, true)}>1 in {r.rp} yr</td>
-                  <td style={td('right', 'mono', true)}>{fmt(r.fitted)}</td>
+                  <td style={td('center', null, true)}>1 in {r.rp} yr</td>
+                  <td style={td('center', 'mono', true)}>{fmt(r.fitted)}</td>
                   <td style={td('center', null, true)}>
                     <input
                       type="text"
@@ -220,7 +222,7 @@ export default function RpComparisonModal({
                     />
                   </td>
                   <td style={{
-                    ...td('right', 'mono', true),
+                    ...td('center', 'mono', true),
                     color: r.diffPct == null ? 'var(--muted)'
                       : Math.abs(r.diffPct) < 0.05 ? 'var(--muted)'
                       : r.diffPct > 0 ? 'var(--accent-amber)' : 'var(--accent-rose)',
@@ -228,7 +230,7 @@ export default function RpComparisonModal({
                     {r.diffPct == null ? '—' : `${(r.diffPct * 100).toFixed(1)}%`}
                   </td>
                   <td style={{
-                    ...td('right', 'mono'),
+                    ...td('center', 'mono'),
                     fontWeight: rpSource === 'BLEND' ? 800 : 500,
                     color: rpSource === 'BLEND' ? 'var(--accent)' : 'var(--text)',
                   }}>
