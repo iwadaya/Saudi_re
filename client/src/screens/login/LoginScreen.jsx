@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   getSession, setSession, ROLE_LABELS, canAccessApprovals,
-  createTestSession, isTestSession, getTestName,
+  createTestSession,
 } from '../../utils/auth';
 import { api } from '../../api';
 import ThemeSwitcher from '../../components/ThemeSwitcher';
