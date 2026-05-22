@@ -1,4 +1,9 @@
 const SESSION_KEY = 'UNIVERSE3_SESSION_V2';
+const TEST_NAME_KEY = 'UNIVERSE_TEST_NAME';
+
+// UUID of the seeded TUW demo user — all test sessions share this so FK
+// constraints (created_by_user_id, assigned_to_user_id) are satisfied.
+export const TEST_USER_UUID = '00000000-0000-0000-0000-000000000002';
 
 export const ROLE_LABELS = {
   CE:'Chief Executive', CU:'Chief Underwriter',
@@ -27,22 +32,58 @@ export function setSession(sessionData) {
 export function clearSession() {
   safeStorage(s => s.removeItem(SESSION_KEY));
   safeStorage(s => s.removeItem('UNIVERSE_APP_SESSION_V1'));
+  safeStorage(s => s.removeItem(TEST_NAME_KEY));
 }
 
-export function getRole() { return getSession()?.roleCode || ''; }
+// ── Test-mode helpers ────────────────────────────────────────────────────────
+
+export function getTestName() {
+  return safeStorage(s => s.getItem(TEST_NAME_KEY)) || '';
+}
+
+export function setTestName(name) {
+  safeStorage(s => s.setItem(TEST_NAME_KEY, name));
+}
+
+export function isTestSession() {
+  return getSession()?.isTestUser === true;
+}
+
 /**
- * Display name used throughout the UI (topbar, approval trail,
- * `_actor` on every workflow action). Deliberately derived from
- * roleCode, NOT from the stored `displayName` — demo seeds have
- * populated session.displayName with placeholder names in the past
- * ("Ahmed Al Rashidi" etc.). We show the role title instead so the
- * UI never leaks dummy personas.
+ * Creates and stores a test session for a named tester.
+ * Reuses the seeded TUW UUID so no DB migration is needed.
+ */
+export function createTestSession(displayName) {
+  const name = displayName.trim();
+  setTestName(name);
+  setSession({
+    userId: TEST_USER_UUID,
+    roleCode: 'TUW',
+    displayName: name,
+    hierarchyLevel: 2,
+    effectiveLimitUsd: 10000000,
+    treatyTypeScope: 'BOTH',
+    canOverrideBelow: false,
+    isTestUser: true,
+  });
+}
+
+// ── Standard session helpers ─────────────────────────────────────────────────
+
+export function getRole() { return getSession()?.roleCode || ''; }
+
+/**
+ * Returns the display name to show in the UI.
+ * Test sessions: show the tester's real name.
+ * Regular sessions: show the role title (keeps demo free of placeholder names).
  */
 export function getUserDisplayName() {
   const s = getSession();
   if (!s) return 'User';
+  if (s.isTestUser) return getTestName() || s.displayName || 'Tester';
   return ROLE_LABELS[s.roleCode] || s.displayName || 'User';
 }
+
 export function getUserId() { return getSession()?.userId || ''; }
 export function getHierarchyLevel() { return getSession()?.hierarchyLevel ?? 99; }
 export function getEffectiveLimitUsd() { return getSession()?.effectiveLimitUsd ?? null; }
@@ -57,12 +98,17 @@ export function canOverrideBelow() { return getSession()?.canOverrideBelow === t
 export function getAuthHeaders() {
   const s = getSession();
   if (!s) return { 'x-user-role': 'TUW', 'x-user-name': 'User', 'x-user-id': '' };
+
+  // Test sessions: send the tester's real name so server logs are meaningful.
+  // Regular sessions: send the role title to keep audit logs persona-free.
+  const userName = s.isTestUser
+    ? (getTestName() || s.displayName || 'Tester')
+    : (ROLE_LABELS[s.roleCode] || s.displayName || 'User');
+
   return {
     'x-user-id':    s.userId,
     'x-user-role':  s.roleCode,
-    // Always send the role title, not any stored personal name — keeps
-    // server audit logs free of dummy personas too.
-    'x-user-name':  ROLE_LABELS[s.roleCode] || s.displayName || 'User',
+    'x-user-name':  userName,
     'x-user-level': String(s.hierarchyLevel || 99),
   };
 }

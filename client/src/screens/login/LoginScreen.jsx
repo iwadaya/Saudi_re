@@ -1,7 +1,10 @@
 // src/screens/login/LoginScreen.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getSession, setSession, ROLE_LABELS, canAccessApprovals } from '../../utils/auth';
+import {
+  getSession, setSession, ROLE_LABELS, canAccessApprovals,
+  createTestSession,
+} from '../../utils/auth';
 import { api } from '../../api';
 import ThemeSwitcher from '../../components/ThemeSwitcher';
 
@@ -39,36 +42,91 @@ const DEMO_FALLBACK = [
   { user_id:'00000000-0000-0000-0000-000000000002', username:'underwriter', email:'uw@universe3.app',  role_code:'TUW', office:'Riyadh', treaty_limit_usd:10000000, approvals_required:2 },
 ];
 
-// On the login screen we display role titles only — personal display names are
-// hidden so demos don't leak test-user identities. The username is still shown
-// below as the login key.
 function titleFor(u) {
   return ROLE_LABELS[u?.role_code] || 'User';
 }
 
+// ── Test Access Panel ─────────────────────────────────────────────────────────
+function TestAccessPanel({ onLogin }) {
+  const [name, setName] = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    // Small delay so the panel animation completes before focusing
+    const t = setTimeout(() => inputRef.current?.focus(), 80);
+    return () => clearTimeout(t);
+  }, []);
+
+  const handleSubmit = () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    onLogin(trimmed);
+  };
+
+  const handleKey = (e) => {
+    if (e.key === 'Enter') handleSubmit();
+  };
+
+  return (
+    <div style={{
+      marginTop: 12,
+      padding: '16px',
+      borderRadius: 12,
+      background: 'rgba(35,209,139,0.07)',
+      border: '1px solid rgba(35,209,139,0.25)',
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(35,209,139,0.8)', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 10 }}>
+        Test Access — Underwriter
+      </div>
+      <div style={{ fontSize: 12, color: 'rgba(255,255,255,.45)', marginBottom: 12, lineHeight: 1.5 }}>
+        Enter your name. You'll be remembered on this device — no password needed.
+      </div>
+      <input
+        ref={inputRef}
+        type="text"
+        className="form-input"
+        placeholder="Your full name"
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onKeyDown={handleKey}
+        maxLength={60}
+        style={{ width: '100%', marginBottom: 10 }}
+        aria-label="Your name for test access"
+      />
+      <button
+        type="button"
+        className="action-pill action-pill--primary"
+        onClick={handleSubmit}
+        disabled={!name.trim()}
+        style={{ width: '100%', minHeight: 38, fontSize: 13, fontWeight: 700, opacity: name.trim() ? 1 : 0.45 }}
+      >
+        Enter as Underwriter →
+      </button>
+    </div>
+  );
+}
+
+// ── Main Login Screen ─────────────────────────────────────────────────────────
 export default function LoginScreen() {
   const navigate = useNavigate();
-  const [users, setUsers]         = useState([]);
+  const [users, setUsers]               = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [password, setPassword]   = useState('');
-  const [loading, setLoading]     = useState(false);
-  const [error, setError]         = useState('');
-  const [showPw, setShowPw]       = useState(false);
+  const [password, setPassword]         = useState('');
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState('');
+  const [showPw, setShowPw]             = useState(false);
+  const [showTestPanel, setShowTestPanel] = useState(false);
 
-  // Already authenticated — skip login, go straight to product select
+  // Already authenticated — skip login
   useEffect(() => {
     if (getSession()) navigate(canAccessApprovals() ? '/approvals' : '/select', { replace: true });
   }, [navigate]);
 
   useEffect(() => {
-    // Pre-login fetch: there's no session yet, so override the auth headers
-    // so the server treats this as a CU read of the user list.
     api.getUsers({ headers: { 'x-user-role': 'CU', 'x-user-id': 'system', 'x-user-name': 'System' } })
       .then(data => {
         const rawList = Array.isArray(data) ? data.filter(u => LOGIN_ROLE_CODES.has(u?.role_code)) : [];
-        // Deduplicate by role_code so the demo shows one row per role title,
-        // regardless of how many seeded users exist per role in the DB.
         const seen = new Map();
         for (const u of rawList) {
           if (!seen.has(u.role_code)) seen.set(u.role_code, u);
@@ -97,13 +155,17 @@ export default function LoginScreen() {
         username: selectedUser.username || selectedUser.email,
         password,
       });
-      // Show the role title instead of the personal display name throughout the app
       const roleTitle = ROLE_LABELS[session.roleCode] || session.displayName || 'User';
       setSession({ ...session, displayName: roleTitle });
       navigate(canAccessApprovals() ? '/approvals' : '/select');
     } catch (err) {
       setError(err.message || 'Login failed.');
     } finally { setLoading(false); }
+  };
+
+  const handleTestLogin = (name) => {
+    createTestSession(name);
+    navigate('/select');
   };
 
   const sel = selectedUser;
@@ -210,6 +272,23 @@ export default function LoginScreen() {
               {loading ? 'Signing in…' : <>Sign In <span aria-hidden="true">→</span></>}
             </button>
           </form>
+
+          {/* ── Test Access ─────────────────────────────────────────────── */}
+          <div style={{ marginTop: 16, borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 14 }}>
+            {!showTestPanel ? (
+              <button
+                type="button"
+                onClick={() => setShowTestPanel(true)}
+                style={{ width: '100%', background: 'none', border: '1px dashed rgba(35,209,139,0.30)', borderRadius: 8, padding: '9px 12px', color: 'rgba(35,209,139,0.65)', fontSize: 12, fontWeight: 600, cursor: 'pointer', letterSpacing: '.03em', transition: 'all .15s' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(35,209,139,0.55)'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(35,209,139,0.30)'}
+              >
+                Testing? Enter without password →
+              </button>
+            ) : (
+              <TestAccessPanel onLogin={handleTestLogin} />
+            )}
+          </div>
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 16, fontSize: 10, color: 'rgba(255,255,255,.18)', letterSpacing: '.04em' }}>
