@@ -28,9 +28,9 @@ describe('lossEntryDevMonths', () => {
     expect(lossEntryDevMonths(2021, 'not-a-date')).toBe(0);
   });
 
-  it('uses the reported date when present, plausible, and within range', () => {
-    // Loss Mar 2021, reported Sep 2022 → age 20m, within a 60m row.
-    expect(lossEntryDevMonths(2021, '2021-03-10', '2022-09-01', 60)).toBe(20);
+  it('uses the reported date plus a quarter when present, plausible, and within range', () => {
+    // Loss Mar 2021, reported Sep 2022 → age 20m, +1 quarter = 23m, within a 60m row.
+    expect(lossEntryDevMonths(2021, '2021-03-10', '2022-09-01', 60)).toBe(23);
   });
   it('ignores a reported date earlier than the loss date', () => {
     // Reported before loss is implausible → fall back to loss date + a quarter.

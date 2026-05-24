@@ -40,29 +40,26 @@ function ageMonths(uwYear, dateLike) {
 
 // Development age (in months) at which a loss first appears in its row.
 //
-// When a reliable reported date is available, the loss enters the triangle
-// the month it was reported/booked — so we use the reported date's age
-// directly. Otherwise we fall back to the loss date plus a quarter ("a loss
-// appears the quarter after the loss date"), the proxy used before per-loss
-// reported dates existed.
+// A loss surfaces in the triangle the quarter *after* it is reported, so
+// when a reliable actuarial reported date is available we use its age plus a
+// quarter. Otherwise we fall back to the loss date plus a quarter — the proxy
+// used before per-loss reported dates existed.
 //
 // The reported date is only trusted when it (a) is on or after the loss date
-// — a loss can't be reported before it happens — and (b) lands within the
-// row's observed development range. Both guards matter because the stored
-// reported_date doubles as the "entered into the tool" timestamp (migration
-// 067) and is auto-set to today for freshly imported losses; without the
-// range guard, every imported loss would compute an entry period years past
-// the triangle and never strip.
+// — a loss can't be reported before it happens — and (b) its resulting entry
+// period lands within the row's observed development range. Both guards
+// matter because a stale/auto-set reported date (e.g. defaulted far in the
+// future) would otherwise compute an entry period past the triangle and never
+// strip; in that case we fall back to the loss-date proxy.
 export function lossEntryDevMonths(uwYear, dateOfLoss, reportedDate, rowMaxDev) {
   const lossAge = ageMonths(uwYear, dateOfLoss);
   const proxyEntry = lossAge == null ? 0 : lossAge + 3;
   const repAge = ageMonths(uwYear, reportedDate);
-  if (
-    repAge != null &&
-    repAge >= (lossAge ?? 0) &&
-    (rowMaxDev == null || repAge <= rowMaxDev)
-  ) {
-    return repAge;
+  if (repAge != null && repAge >= (lossAge ?? 0)) {
+    const repEntry = repAge + 3; // surfaces the quarter after reporting
+    if (rowMaxDev == null || repEntry <= rowMaxDev) {
+      return repEntry;
+    }
   }
   return proxyEntry;
 }
