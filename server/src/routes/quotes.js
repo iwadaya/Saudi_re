@@ -858,9 +858,11 @@ router.put("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
   const savedLosses = [];
   for(const l of losses) {
     const existedReported=l.loss_id?prevReported.get(String(l.loss_id)):null;
-    // "Saved in Universe" mirrors the report date; actuarial date is the
-    // user-entered booking date that drives stripping (nullable).
-    const reported=reportSaved||existedReported;
+    // "Saved in Universe": report date of the cycle the loss first entered,
+    // preserved across saves for year-over-year comparison (new rows take the
+    // current report date). Actuarial date is the user-entered booking date
+    // that drives stripping (nullable).
+    const reported=existedReported||reportSaved;
     const actuarial=dateOrNull(l.actuarial_reported_date);
     const {rows:ins}=await cl.query(`INSERT INTO public.contract_large_losses (report_id,loss_id,uw_year,insured_name,loss_name,date_of_loss,class_of_business,paid,os,incurred,is_selected,inflation_factor,reported_date,actuarial_reported_date) VALUES ($1,COALESCE($2,gen_random_uuid()),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING loss_id`,
     [rid,l.loss_id||null,numOrNull(l.uw_year),l.insured_name,l.loss_name,dateOrNull(l.date_of_loss),l.class_of_business,numOrNull(l.paid),numOrNull(l.os),numOrNull(l.incurred),l.is_selected??true,numOrNull(l.inflation_factor)??1,reported,actuarial]);
@@ -1576,8 +1578,10 @@ router.put("/quotes/:id/cat-losses", asyncHandler(async (req, res) => {
     return {
       ...l,
       _loss_id: l.loss_id || randomUUID(),
-      // "Saved in Universe" mirrors the report date.
-      _reported: reportSaved || existedReported,
+      // "Saved in Universe": report date of the cycle the loss first entered,
+      // preserved across saves for year-over-year comparison. New rows take
+      // the current report date.
+      _reported: existedReported || reportSaved,
       // Actuarial reporting date — user-entered, nullable, drives stripping.
       _actuarial: l.actuarial_reported_date ? new Date(l.actuarial_reported_date).toISOString().slice(0,10) : null,
       _dol: l.date_of_loss ? new Date(l.date_of_loss).toISOString().slice(0,10) : null,

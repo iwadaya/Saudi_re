@@ -199,8 +199,11 @@ router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
     return {
       ...l,
       _loss_id: l.loss_id || randomUUID(),
-      // "Saved in Universe" mirrors the loss-list report date.
-      _reported: reportSaved || existedReported,
+      // "Saved in Universe": the report date of the cycle in which this loss
+      // first entered, preserved across later saves so year-over-year report
+      // comparison can tell which losses are new. New rows take the current
+      // report date.
+      _reported: existedReported || reportSaved,
       // Actuarial reporting date (when the loss was booked into the triangle)
       // — user-entered, nullable, drives stripping.
       _actuarial: parseDateFlex(l.actuarial_reported_date),
@@ -244,8 +247,10 @@ router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
     return {
       ...l,
       _loss_id: l.loss_id || randomUUID(),
-      // "Saved in Universe" mirrors the loss-list report date.
-      _reported: reportSaved || existedReported,
+      // "Saved in Universe": report date of the cycle the loss first entered,
+      // preserved across saves for year-over-year comparison. New rows take
+      // the current report date.
+      _reported: existedReported || reportSaved,
       // Actuarial reporting date — user-entered, nullable, drives stripping.
       _actuarial: parseDateFlex(l.actuarial_reported_date),
       _dol: parseDateFlex(l.date_of_loss),
