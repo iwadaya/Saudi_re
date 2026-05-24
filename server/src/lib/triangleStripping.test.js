@@ -27,6 +27,23 @@ describe('lossEntryDevMonths', () => {
     expect(lossEntryDevMonths(2021, null)).toBe(0);
     expect(lossEntryDevMonths(2021, 'not-a-date')).toBe(0);
   });
+
+  it('uses the reported date when present, plausible, and within range', () => {
+    // Loss Mar 2021, reported Sep 2022 → age 20m, within a 60m row.
+    expect(lossEntryDevMonths(2021, '2021-03-10', '2022-09-01', 60)).toBe(20);
+  });
+  it('ignores a reported date earlier than the loss date', () => {
+    // Reported before loss is implausible → fall back to loss date + a quarter.
+    expect(lossEntryDevMonths(2021, '2021-06-10', '2021-01-01', 60)).toBe(8);
+  });
+  it('ignores a reported date past the observed development range (data-entry artifact)', () => {
+    // reported_date auto-set to "today" (2026) on a 2021 loss → beyond the
+    // 60m row → fall back to the loss-date proxy rather than never stripping.
+    expect(lossEntryDevMonths(2021, '2021-03-10', '2026-05-01', 60)).toBe(5);
+  });
+  it('falls back to the loss-date proxy when no reported date is given', () => {
+    expect(lossEntryDevMonths(2021, '2021-03-10', null, 60)).toBe(5);
+  });
 });
 
 describe('stripTriangleCells', () => {
@@ -102,6 +119,29 @@ describe('stripTriangleCells', () => {
     const y2022 = out.filter(c => c.origin_year === 2022).map(c => c.cum_value);
     expect(y2021).toEqual([50, 150]);
     expect(y2022).toEqual([100, 200]); // untouched
+  });
+
+  it('enters the loss at its reported development period when reported_date is reliable', () => {
+    // Reported Sep 2022 (age 20m) → only the 24m+ columns are stripped.
+    const cells = annualRow(2021, [100, 300, 320]);
+    const out = stripTriangleCells(
+      cells,
+      [{ uw_year: 2021, incurred: 150, date_of_loss: '2021-03-10', reported_date: '2022-09-01' }],
+      'incurred',
+    );
+    expect(out.map(c => c.cum_value)).toEqual([100, 150, 170]);
+  });
+
+  it('falls back to the loss-date proxy when reported_date is an out-of-range artifact', () => {
+    // reported_date = today on an old loss → beyond the row → strip from the
+    // loss-date proxy (dev 5 → all annual columns) instead of not at all.
+    const cells = annualRow(2021, [100, 300, 320]);
+    const out = stripTriangleCells(
+      cells,
+      [{ uw_year: 2021, incurred: 150, date_of_loss: '2021-03-10', reported_date: '2026-05-01' }],
+      'incurred',
+    );
+    expect(out.map(c => c.cum_value)).toEqual([0, 150, 170]);
   });
 
   it('sums multiple losses that enter at different periods', () => {

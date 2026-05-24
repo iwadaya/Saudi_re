@@ -45,13 +45,13 @@ router.get("/treaties/:id/triangles/:type/with-exclusions", asyncHandler(async (
     [id, t]
   );
   const { rows: largeLosses } = await pool.query(
-    `SELECT ll.uw_year, ll.date_of_loss, ll.paid, ll.os, ll.incurred
+    `SELECT ll.uw_year, ll.date_of_loss, ll.reported_date, ll.paid, ll.os, ll.incurred
        FROM public.contract_large_losses ll
        JOIN public.contract_large_loss_report r ON r.report_id = ll.report_id
       WHERE r.contract_id = $1`, [id]
   );
   const { rows: catLosses } = await pool.query(
-    `SELECT cl.uw_year, cl.date_of_loss, cl.paid, cl.os, cl.incurred
+    `SELECT cl.uw_year, cl.date_of_loss, cl.reported_date, cl.paid, cl.os, cl.incurred
        FROM public.contract_cat_losses cl
        JOIN public.contract_cat_loss_report r ON r.report_id = cl.report_id
       WHERE r.contract_id = $1`, [id]

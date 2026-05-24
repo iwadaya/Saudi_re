@@ -332,7 +332,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
   // Auto-add row when typing in last row
   const handleChange = (idx, field, val) => {
     // Normalize date values when typing/changing
-    const v = field === 'dateOfLoss' ? dateInputValue(val) || val : val;
+    const v = (field === 'dateOfLoss' || field === 'reportedDate') ? dateInputValue(val) || val : val;
     updateRow(idx, field, v);
     if (idx >= rows.length - 2 && val) {
       setRows(prev => {
@@ -402,7 +402,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                     <th className="ll-th ll-th--num">#</th>
                     {COLS.map(c => <th key={c.key} className="ll-th" style={{ minWidth: c.w }}>{c.label}</th>)}
                     <th className="ll-th ll-th--calc">Incurred</th>
-                    <th className="ll-th" style={{ minWidth: 100 }} title="Date this loss was first put into the contract — set on save and preserved across edits.">Reported</th>
+                    <th className="ll-th" style={{ minWidth: 120 }} title="Date the loss was reported / booked into the triangle. Drives which development period it is stripped from. Leave blank to default to the entry date.">Reported</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -439,8 +439,14 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                           </td>
                         ))}
                         <td className="ll-td ll-td--calc">{inc > 0 ? fmtN(inc) : '–'}</td>
-                        <td className="ll-td" style={{ fontSize: 11, color: empty ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)' }}>
-                          {empty ? '' : (r.reportedDate || (r.lossId ? '—' : <span style={{ color: '#00e8b8' }}>on save</span>))}
+                        <td className="ll-td">
+                          <input
+                            className="ll-inp"
+                            type="date"
+                            value={r.reportedDate || ''}
+                            onChange={e => handleChange(i, 'reportedDate', e.target.value)}
+                            title={r.reportedDate ? '' : 'Defaults to today on save; set this to the actual reporting date to control where the loss is stripped from.'}
+                          />
                         </td>
                       </tr>
                     );

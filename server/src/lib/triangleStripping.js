@@ -27,17 +27,44 @@ export function stripFieldForType(type) {
   return STRIP_FIELD_BY_TYPE[String(type || '').toUpperCase()] || null;
 }
 
-// Development age (in months) at which a loss first appears in its row.
-// "Appears the quarter after the loss date" → +3 months from the loss's
-// age within its underwriting year.
-export function lossEntryDevMonths(uwYear, dateOfLoss) {
-  if (dateOfLoss == null) return 0;
-  const d = dateOfLoss instanceof Date ? dateOfLoss : new Date(dateOfLoss);
-  if (Number.isNaN(d.getTime())) return 0;
+// Age in months of `dateLike` relative to the start of its underwriting
+// year. Returns null when the date (or year) is missing/unparseable.
+function ageMonths(uwYear, dateLike) {
+  if (dateLike == null) return null;
+  const d = dateLike instanceof Date ? dateLike : new Date(dateLike);
+  if (Number.isNaN(d.getTime())) return null;
   const year = Number(uwYear);
-  if (!Number.isFinite(year)) return 0;
-  const ageMonths = (d.getUTCFullYear() - year) * 12 + d.getUTCMonth();
-  return Math.max(0, ageMonths) + 3;
+  if (!Number.isFinite(year)) return null;
+  return Math.max(0, (d.getUTCFullYear() - year) * 12 + d.getUTCMonth());
+}
+
+// Development age (in months) at which a loss first appears in its row.
+//
+// When a reliable reported date is available, the loss enters the triangle
+// the month it was reported/booked — so we use the reported date's age
+// directly. Otherwise we fall back to the loss date plus a quarter ("a loss
+// appears the quarter after the loss date"), the proxy used before per-loss
+// reported dates existed.
+//
+// The reported date is only trusted when it (a) is on or after the loss date
+// — a loss can't be reported before it happens — and (b) lands within the
+// row's observed development range. Both guards matter because the stored
+// reported_date doubles as the "entered into the tool" timestamp (migration
+// 067) and is auto-set to today for freshly imported losses; without the
+// range guard, every imported loss would compute an entry period years past
+// the triangle and never strip.
+export function lossEntryDevMonths(uwYear, dateOfLoss, reportedDate, rowMaxDev) {
+  const lossAge = ageMonths(uwYear, dateOfLoss);
+  const proxyEntry = lossAge == null ? 0 : lossAge + 3;
+  const repAge = ageMonths(uwYear, reportedDate);
+  if (
+    repAge != null &&
+    repAge >= (lossAge ?? 0) &&
+    (rowMaxDev == null || repAge <= rowMaxDev)
+  ) {
+    return repAge;
+  }
+  return proxyEntry;
 }
 
 function num(v) {
@@ -61,16 +88,16 @@ export function stripTriangleCells(cells, losses, amountField) {
     return src.map((c) => ({ ...c }));
   }
 
-  // Pre-compute each loss's entry period + amount, grouped by origin year.
+  // Group losses by origin year, keeping the raw dates — the entry period is
+  // resolved per row below, where the row's observed dev range is known.
   const byYear = new Map();
   for (const l of losses) {
     const amt = num(l[amountField]);
     if (amt <= 0) continue;
     const yr = Number(l.uw_year);
     if (!Number.isFinite(yr)) continue;
-    const entry = lossEntryDevMonths(yr, l.date_of_loss);
     if (!byYear.has(yr)) byYear.set(yr, []);
-    byYear.get(yr).push({ entry, amt });
+    byYear.get(yr).push({ amt, dateOfLoss: l.date_of_loss, reportedDate: l.reported_date });
   }
 
   // Work row by row (origin_year), walking dev columns ascending so the
@@ -85,7 +112,11 @@ export function stripTriangleCells(cells, losses, amountField) {
   const out = [];
   for (const [yr, rowCells] of rows) {
     const sorted = [...rowCells].sort((a, b) => Number(a.dev_months) - Number(b.dev_months));
-    const lossesForYear = byYear.get(yr) || [];
+    const rowMaxDev = sorted.length ? Number(sorted[sorted.length - 1].dev_months) : null;
+    const lossesForYear = (byYear.get(yr) || []).map((l) => ({
+      amt: l.amt,
+      entry: lossEntryDevMonths(yr, l.dateOfLoss, l.reportedDate, rowMaxDev),
+    }));
     let prevStripped = 0;
     for (const c of sorted) {
       const dev = Number(c.dev_months);
