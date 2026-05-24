@@ -5,6 +5,7 @@ import { useAppState } from '../../context/AppContext';
 import WizardLayout from '../../components/WizardLayout';
 import { parseFlexibleNumber, dateInputValue } from '../../utils/format';
 import LossAnalysisModal from './LossAnalysisModal';
+import LossQuarterSuggestModal from './LossQuarterSuggestModal';
 
 const COLS = [
   { key: 'insuredName', label: 'Insured Name', type: 'text', w: 180 },
@@ -153,6 +154,8 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
   // kept separately for the analysis modal so we don't tangle it with the
   // editable grid state.
   const [serverLosses, setServerLosses] = useState([]);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestState, setSuggestState] = useState(null); // { suggestions, provider }
   const tableRef = useRef(null);
 
   const loadFn = lossType === 'cat' ? api.getCatLosses : api.getLargeLosses;
@@ -289,6 +292,39 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
     setDirty(true);
   };
 
+  // AI: ask the server to map each loss to the development quarter it most
+  // likely entered the triangle. Advisory — results open in a review modal.
+  const runSuggestQuarters = useCallback(async () => {
+    if (!contractId) return;
+    setSuggesting(true);
+    try {
+      const out = await api.suggestLossQuarters(contractId, quoteMode ? { quote: true } : undefined);
+      setSuggestState({ suggestions: out?.suggestions || [], provider: out?.provider || null });
+    } catch (e) {
+      const msg = e?.status === 503
+        ? 'AI is not configured on the server (set an LLM API key).'
+        : (e?.message || 'AI mapping failed');
+      setSaveMsg({ type: 'err', text: msg });
+      setTimeout(() => setSaveMsg(null), 4000);
+    } finally {
+      setSuggesting(false);
+    }
+  }, [contractId, quoteMode]);
+
+  // Apply chosen suggestions: fill the actuarial reported date on matching
+  // rows (by loss_id). The user still reviews and saves.
+  const applyQuarterSuggestions = useCallback((chosen) => {
+    const byId = new Map(chosen.map((s) => [String(s.loss_id), s.suggested_reported_date]));
+    setRows((prev) => prev.map((r) => {
+      const d = r.lossId ? byId.get(String(r.lossId)) : null;
+      return d ? { ...r, actuarialReportedDate: d } : r;
+    }));
+    setDirty(true);
+    setSuggestState(null);
+    setSaveMsg({ type: 'ok', text: `Applied ${chosen.length} suggestion${chosen.length === 1 ? '' : 's'} — review and save` });
+    setTimeout(() => setSaveMsg(null), 3000);
+  }, []);
+
   // Paste handler — auto-expands rows
   const handlePaste = useCallback((e) => {
     const text = e.clipboardData?.getData('text/plain');
@@ -386,6 +422,13 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                 style={{ opacity: serverLosses.length === 0 ? 0.5 : 1 }}>
                 📊 Loss Analysis
               </button>
+              <button className="ll-btn ll-btn--analysis"
+                onClick={runSuggestQuarters}
+                disabled={serverLosses.length === 0 || suggesting}
+                title={serverLosses.length === 0 ? 'Save losses first to map them to the triangle' : 'Use AI to suggest the development quarter each loss entered the triangle'}
+                style={{ opacity: serverLosses.length === 0 ? 0.5 : 1 }}>
+                {suggesting ? '… Mapping' : '✨ Map to quarters (AI)'}
+              </button>
               <button className="ll-btn ll-btn--load" onClick={loadData} title="Reload from server">⟳ Load</button>
               <button className="ll-btn ll-btn--clear" onClick={clear} title="Clear all rows">✕ Clear</button>
               <button className={`ll-btn ll-btn--save ${dirty ? 'll-btn--dirty' : ''}`} onClick={save} title="Save to server">💾 Save</button>
@@ -470,6 +513,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                     <td className="ll-td ll-td--calc">{fmtN(totalOS)}</td>
                     <td className="ll-td ll-td--calc ll-td--total">{fmtN(totalInc)}</td>
                     <td className="ll-td"></td>
+                    <td className="ll-td"></td>
                   </tr>
                 </tbody>
               </table>
@@ -480,6 +524,15 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
               losses={serverLosses}
               lossType={lossType}
               onClose={() => setShowAnalysis(false)}
+            />
+          )}
+          {suggestState && (
+            <LossQuarterSuggestModal
+              suggestions={suggestState.suggestions}
+              serverLosses={serverLosses}
+              provider={suggestState.provider}
+              onApply={applyQuarterSuggestions}
+              onClose={() => setSuggestState(null)}
             />
           )}
         </div>

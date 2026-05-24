@@ -5,6 +5,7 @@ import { asyncHandler, numOrNull, dateOrNull } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from '../lib/triangleBounds.js';
 import { stripTriangleCells, stripFieldForType, summarizeLossPlacement } from '../lib/triangleStripping.js';
+import { suggestLossQuarters } from '../lib/lossQuarterMapper.js';
 import { logAudit } from '../services/audit.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
@@ -215,13 +216,17 @@ router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
       // — user-entered, nullable, drives stripping.
       _actuarial: parseDateFlex(l.actuarial_reported_date),
       _dol: parseDateFlex(l.date_of_loss),
+      // The loss list doesn't capture an underwriting year, but stripping
+      // joins losses to the triangle on it. Fall back to the loss (accident)
+      // year — the losses-occurring convention — when not supplied.
+      _uwy: numOrNull(l.uw_year) ?? (l.date_of_loss ? new Date(l.date_of_loss).getUTCFullYear() : null),
     };
   });
   const largeLossesInsert = buildBatchInsert({
     table: 'public.contract_large_losses',
     columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date','actuarial_reported_date'],
     rows: largeLossesWithIds.map((l) => [
-      l._loss_id, numOrNull(l.uw_year), l.insured_name, l.loss_name, l._dol,
+      l._loss_id, l._uwy, l.insured_name, l.loss_name, l._dol,
       l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
       l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported, l._actuarial,
     ]),
@@ -261,13 +266,15 @@ router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
       // Actuarial reporting date — user-entered, nullable, drives stripping.
       _actuarial: parseDateFlex(l.actuarial_reported_date),
       _dol: parseDateFlex(l.date_of_loss),
+      // Fall back to the loss (accident) year so stripping can join on it.
+      _uwy: numOrNull(l.uw_year) ?? (l.date_of_loss ? new Date(l.date_of_loss).getUTCFullYear() : null),
     };
   });
   const catLossesInsert = buildBatchInsert({
     table: 'public.contract_cat_losses',
     columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date','actuarial_reported_date'],
     rows: catLossesWithIds.map((l) => [
-      l._loss_id, numOrNull(l.uw_year), l.insured_name, l.loss_name, l._dol,
+      l._loss_id, l._uwy, l.insured_name, l.loss_name, l._dol,
       l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
       l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported, l._actuarial,
     ]),
@@ -278,6 +285,45 @@ router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
+
+// ── AI: MAP LOSSES TO DEVELOPMENT QUARTERS ──
+// Advisory: suggests the development period each large/cat loss most likely
+// entered the triangle (matching loss amounts to row jumps + reporting lag).
+// Returns suggestions only — the actuary applies them by setting the
+// actuarial reported date and saving.
+router.post("/treaties/:id/losses/suggest-quarters", asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { rows: incurredCells } = await pool.query(
+    `SELECT origin_year, dev_months, SUM(cum_value) AS cum_value
+       FROM public.contract_triangle_cells
+      WHERE contract_id=$1 AND type IN ('CLAIMS_PAID','CLAIMS_OS')
+      GROUP BY origin_year, dev_months
+      ORDER BY origin_year, dev_months`, [id]
+  );
+  const { rows: largeLosses } = await pool.query(
+    `SELECT ll.loss_id, ll.uw_year, ll.date_of_loss, ll.actuarial_reported_date, ll.paid, ll.os, ll.incurred
+       FROM public.contract_large_losses ll
+       JOIN public.contract_large_loss_report r ON r.report_id = ll.report_id
+      WHERE r.contract_id = $1`, [id]
+  );
+  const { rows: catLosses } = await pool.query(
+    `SELECT cl.loss_id, cl.uw_year, cl.date_of_loss, cl.actuarial_reported_date, cl.paid, cl.os, cl.incurred
+       FROM public.contract_cat_losses cl
+       JOIN public.contract_cat_loss_report r ON r.report_id = cl.report_id
+      WHERE r.contract_id = $1`, [id]
+  );
+  const losses = [...largeLosses, ...catLosses];
+  if (!losses.length) return res.json({ suggestions: [], provider: null });
+  try {
+    const out = await suggestLossQuarters({ losses, triangleCells: incurredCells, triangleType: 'INCURRED' });
+    res.json(out);
+  } catch (e) {
+    const msg = e?.message || 'AI mapping failed';
+    const noProvider = /No LLM provider configured/i.test(msg);
+    logger.error('[losses/suggest-quarters] failed', { error: msg });
+    return res.status(noProvider ? 503 : 502).json({ error: msg });
+  }
+}));
 
 // ── LOSS SELECTION SNAPSHOTS (Return Period Curves) ──
 // Stores derived return period curves/key points from Pareto screens so downstream pricing can consume

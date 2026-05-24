@@ -125,6 +125,7 @@ const PATHS = {
   deleteDocument: (docId) => `/api/documents/${enc(docId)}`,
   largeLosses: (id) => `/api/treaties/${enc(id)}/large-losses`,
   catLosses: (id) => `/api/treaties/${enc(id)}/cat-losses`,
+  suggestLossQuarters: (id) => `/api/treaties/${enc(id)}/losses/suggest-quarters`,
   treatyCobs: (id) => `/api/treaties/${enc(id)}/cobs`,
   riskProfile: (id, cobId) => `/api/treaties/${enc(id)}/risk-profiles/${enc(cobId)}`,
   claimsProfile: (id, cobId) => `/api/treaties/${enc(id)}/claims-profiles/${enc(cobId)}`,
@@ -181,6 +182,7 @@ const QUOTE_PATHS = {
   quoteWordingChecklistAi: (id) => `/api/quotes/${enc(id)}/wording-checklist/ai-check`,
   largeLosses: (id) => `/api/quotes/${enc(id)}/large-losses`,
   catLosses: (id) => `/api/quotes/${enc(id)}/cat-losses`,
+  suggestLossQuarters: (id) => `/api/quotes/${enc(id)}/losses/suggest-quarters`,
   quoteCobs: (id) => `/api/quotes/${enc(id)}/cobs`,
   riskProfile: (id, cobId) => `/api/quotes/${enc(id)}/risk-profiles/${enc(cobId)}`,
   claimsProfile: (id, cobId) => `/api/quotes/${enc(id)}/claims-profiles/${enc(cobId)}`,
@@ -426,6 +428,7 @@ export const api = {
   saveLargeLosses(id, payload, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.largeLosses(id) : PATHS.largeLosses(id), { method: 'PUT', body: payload, ...opts }); },
   getCatLosses(id, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.catLosses(id) : PATHS.catLosses(id), opts); },
   saveCatLosses(id, payload, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.catLosses(id) : PATHS.catLosses(id), { method: 'PUT', body: payload, ...opts }); },
+  suggestLossQuarters(id, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.suggestLossQuarters(id) : PATHS.suggestLossQuarters(id), { method: 'POST', body: {}, ...opts }); },
   getLossSelectionLatest(id, lossType, opts) {
     return request(isQuoteMode(opts) ? QUOTE_PATHS.lossSelectionLatest(id, lossType) : PATHS.lossSelectionLatest(id, lossType), opts);
   },

@@ -5,6 +5,7 @@ import { asyncHandler, numOrNull, dateOrNull, boolOrDefault } from '../helpers.j
 import { logger } from '../lib/logger.js';
 import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from '../lib/triangleBounds.js';
 import { stripTriangleCells, stripFieldForType, summarizeLossPlacement } from '../lib/triangleStripping.js';
+import { suggestLossQuarters } from '../lib/lossQuarterMapper.js';
 import { logAudit } from '../services/audit.js';
 import { contractContextJoins } from '../db/contractJoins.js';
 import { assertEntityUnchanged, optimisticLockOverrideRequested } from '../db/optimisticLock.js';
@@ -869,8 +870,10 @@ router.put("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
     // that drives stripping (nullable).
     const reported=existedReported||reportSaved;
     const actuarial=dateOrNull(l.actuarial_reported_date);
+    // Fall back to the loss (accident) year so stripping can join on uw_year.
+    const uwy=numOrNull(l.uw_year)??(l.date_of_loss?new Date(l.date_of_loss).getUTCFullYear():null);
     const {rows:ins}=await cl.query(`INSERT INTO public.contract_large_losses (report_id,loss_id,uw_year,insured_name,loss_name,date_of_loss,class_of_business,paid,os,incurred,is_selected,inflation_factor,reported_date,actuarial_reported_date) VALUES ($1,COALESCE($2,gen_random_uuid()),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING loss_id`,
-    [rid,l.loss_id||null,numOrNull(l.uw_year),l.insured_name,l.loss_name,dateOrNull(l.date_of_loss),l.class_of_business,numOrNull(l.paid),numOrNull(l.os),numOrNull(l.incurred),l.is_selected??true,numOrNull(l.inflation_factor)??1,reported,actuarial]);
+    [rid,l.loss_id||null,uwy,l.insured_name,l.loss_name,dateOrNull(l.date_of_loss),l.class_of_business,numOrNull(l.paid),numOrNull(l.os),numOrNull(l.incurred),l.is_selected??true,numOrNull(l.inflation_factor)??1,reported,actuarial]);
     savedLosses.push(ins[0]?.loss_id);
   }
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
@@ -1590,13 +1593,15 @@ router.put("/quotes/:id/cat-losses", asyncHandler(async (req, res) => {
       // Actuarial reporting date — user-entered, nullable, drives stripping.
       _actuarial: l.actuarial_reported_date ? new Date(l.actuarial_reported_date).toISOString().slice(0,10) : null,
       _dol: l.date_of_loss ? new Date(l.date_of_loss).toISOString().slice(0,10) : null,
+      // Fall back to the loss (accident) year so stripping can join on it.
+      _uwy: numOrNull(l.uw_year) ?? (l.date_of_loss ? new Date(l.date_of_loss).getUTCFullYear() : null),
     };
   });
   const lossesInsert = buildBatchInsert({
     table: 'public.contract_cat_losses',
     columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date','actuarial_reported_date'],
     rows: lossesWithIds.map((l) => [
-      l._loss_id, numOrNull(l.uw_year), l.insured_name, l.loss_name, l._dol,
+      l._loss_id, l._uwy, l.insured_name, l.loss_name, l._dol,
       l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
       l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported, l._actuarial,
     ]),
@@ -1605,6 +1610,42 @@ router.put("/quotes/:id/cat-losses", asyncHandler(async (req, res) => {
   if (lossesInsert) await cl.query(lossesInsert.sql, lossesInsert.params);
   const savedLosses = lossesWithIds.map((l) => l._loss_id);
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
+}));
+
+// POST /quotes/:id/losses/suggest-quarters — AI loss-to-quarter mapping
+// (quote mirror of the treaty route). Advisory: returns suggestions only.
+router.post("/quotes/:id/losses/suggest-quarters", asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { rows: incurredCells } = await pool.query(
+    `SELECT origin_year, dev_months, SUM(cum_value) AS cum_value
+       FROM public.quote_triangle_cells
+      WHERE quote_id=$1 AND type IN ('CLAIMS_PAID','CLAIMS_OS')
+      GROUP BY origin_year, dev_months
+      ORDER BY origin_year, dev_months`, [id]
+  );
+  const { rows: largeLosses } = await pool.query(
+    `SELECT ll.loss_id, ll.uw_year, ll.date_of_loss, ll.actuarial_reported_date, ll.paid, ll.os, ll.incurred
+       FROM public.contract_large_losses ll
+       JOIN public.contract_large_loss_report r ON r.report_id = ll.report_id
+      WHERE r.quote_id = $1`, [id]
+  );
+  const { rows: catLosses } = await pool.query(
+    `SELECT cl.loss_id, cl.uw_year, cl.date_of_loss, cl.actuarial_reported_date, cl.paid, cl.os, cl.incurred
+       FROM public.contract_cat_losses cl
+       JOIN public.contract_cat_loss_report r ON r.report_id = cl.report_id
+      WHERE r.quote_id = $1`, [id]
+  );
+  const losses = [...largeLosses, ...catLosses];
+  if (!losses.length) return res.json({ suggestions: [], provider: null });
+  try {
+    const out = await suggestLossQuarters({ losses, triangleCells: incurredCells, triangleType: 'INCURRED' });
+    res.json(out);
+  } catch (e) {
+    const msg = e?.message || 'AI mapping failed';
+    const noProvider = /No LLM provider configured/i.test(msg);
+    logger.error('[quotes losses/suggest-quarters] failed', { error: msg });
+    return res.status(noProvider ? 503 : 502).json({ error: msg });
+  }
 }));
 
 // PUT /quotes/:id/cobs
