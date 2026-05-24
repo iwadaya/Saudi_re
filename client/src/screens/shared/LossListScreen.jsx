@@ -11,12 +11,16 @@ const COLS = [
   { key: 'insuredName', label: 'Insured Name', type: 'text', w: 180 },
   { key: 'lossName',    label: 'Loss / Event',  type: 'text', w: 160 },
   { key: 'dateOfLoss',  label: 'Date of Loss',  type: 'date', w: 120 },
+  // Underwriting (origin) year the loss attaches to. For risks-attaching
+  // treaties this is the policy inception year, not the loss year, so it
+  // must be captured explicitly — it's the key stripping joins the triangle on.
+  { key: 'uwYear',      label: 'UW Year',        type: 'year', w: 90 },
   { key: 'classOfBusiness', label: 'Class',      type: 'cob',  w: 140 },
   { key: 'paid',        label: 'Paid',           type: 'num',  w: 110 },
   { key: 'os',          label: 'O/S',            type: 'num',  w: 110 },
 ];
 
-function emptyRow() { return { lossId: '', reportedDate: '', actuarialReportedDate: '', insuredName: '', lossName: '', dateOfLoss: '', classOfBusiness: '', paid: '', os: '' }; }
+function emptyRow() { return { lossId: '', reportedDate: '', actuarialReportedDate: '', insuredName: '', lossName: '', dateOfLoss: '', uwYear: '', classOfBusiness: '', paid: '', os: '' }; }
 
 // COB dropdown cell — shows treaty classes, flags unknowns, supports paste
 function CobCell({ value, cobOptions, onChange, onPaste, dataRow, dataCol }) {
@@ -222,6 +226,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
           insuredName: l.insured_name || l.insuredName || '',
           lossName: l.loss_name || l.lossName || '',
           dateOfLoss: dateInputValue(l.date_of_loss || l.dateOfLoss || ''),
+          uwYear: (l.uw_year ?? l.uwYear) != null ? String(l.uw_year ?? l.uwYear) : '',
           classOfBusiness: l.class_of_business || l.classOfBusiness || '',
           paid: l.paid != null && l.paid !== 0 ? String(l.paid) : '',
           os: l.os != null && l.os !== 0 ? String(l.os) : '',
@@ -267,6 +272,8 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
       // report date, so it isn't sent from here.
       actuarial_reported_date: r.actuarialReportedDate || null,
       insured_name: r.insuredName, loss_name: r.lossName,
+      // Underwriting year drives which triangle row the loss strips from.
+      uw_year: r.uwYear ? Number(String(r.uwYear).replace(/[^0-9]/g, '')) || null : null,
       date_of_loss: dateInputValue(r.dateOfLoss) || null, class_of_business: r.classOfBusiness,
       paid: parseNum(r.paid), os: parseNum(r.os), incurred: incurred(r),
     }));
@@ -472,7 +479,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                             ) : (
                               <input
                                 className="ll-inp"
-                                type={c.type === 'date' ? 'date' : 'text'}
+                                type={c.type === 'date' ? 'date' : c.type === 'year' ? 'number' : 'text'}
                                 value={r[c.key] || ''}
                                 data-row={i} data-col={ci}
                                 onChange={e => handleChange(i, c.key, e.target.value)}
@@ -507,7 +514,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                   {/* Totals */}
                   <tr className="ll-total">
                     <td className="ll-td ll-td--num"></td>
-                    <td className="ll-td" colSpan={3}><span className="ll-total-label">Total</span></td>
+                    <td className="ll-td" colSpan={4}><span className="ll-total-label">Total</span></td>
                     <td className="ll-td"></td>
                     <td className="ll-td ll-td--calc">{fmtN(totalPaid)}</td>
                     <td className="ll-td ll-td--calc">{fmtN(totalOS)}</td>

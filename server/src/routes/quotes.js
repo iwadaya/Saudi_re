@@ -870,7 +870,8 @@ router.put("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
     // that drives stripping (nullable).
     const reported=existedReported||reportSaved;
     const actuarial=dateOrNull(l.actuarial_reported_date);
-    // Fall back to the loss (accident) year so stripping can join on uw_year.
+    // From the loss list; fall back to accident year only if absent (wrong
+    // for risks-attaching treaties, so populate UW Year for those).
     const uwy=numOrNull(l.uw_year)??(l.date_of_loss?new Date(l.date_of_loss).getUTCFullYear():null);
     const {rows:ins}=await cl.query(`INSERT INTO public.contract_large_losses (report_id,loss_id,uw_year,insured_name,loss_name,date_of_loss,class_of_business,paid,os,incurred,is_selected,inflation_factor,reported_date,actuarial_reported_date) VALUES ($1,COALESCE($2,gen_random_uuid()),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING loss_id`,
     [rid,l.loss_id||null,uwy,l.insured_name,l.loss_name,dateOrNull(l.date_of_loss),l.class_of_business,numOrNull(l.paid),numOrNull(l.os),numOrNull(l.incurred),l.is_selected??true,numOrNull(l.inflation_factor)??1,reported,actuarial]);
@@ -1593,7 +1594,8 @@ router.put("/quotes/:id/cat-losses", asyncHandler(async (req, res) => {
       // Actuarial reporting date — user-entered, nullable, drives stripping.
       _actuarial: l.actuarial_reported_date ? new Date(l.actuarial_reported_date).toISOString().slice(0,10) : null,
       _dol: l.date_of_loss ? new Date(l.date_of_loss).toISOString().slice(0,10) : null,
-      // Fall back to the loss (accident) year so stripping can join on it.
+      // From the loss list; fall back to accident year only if absent (wrong
+      // for risks-attaching treaties, so populate UW Year for those).
       _uwy: numOrNull(l.uw_year) ?? (l.date_of_loss ? new Date(l.date_of_loss).getUTCFullYear() : null),
     };
   });

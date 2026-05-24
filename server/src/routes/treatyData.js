@@ -216,9 +216,10 @@ router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
       // — user-entered, nullable, drives stripping.
       _actuarial: parseDateFlex(l.actuarial_reported_date),
       _dol: parseDateFlex(l.date_of_loss),
-      // The loss list doesn't capture an underwriting year, but stripping
-      // joins losses to the triangle on it. Fall back to the loss (accident)
-      // year — the losses-occurring convention — when not supplied.
+      // Underwriting year drives the triangle row this loss strips from and
+      // is captured on the loss list. Fall back to the loss (accident) year
+      // only when absent — note that's wrong for risks-attaching treaties, so
+      // the UW Year column should be populated for those.
       _uwy: numOrNull(l.uw_year) ?? (l.date_of_loss ? new Date(l.date_of_loss).getUTCFullYear() : null),
     };
   });
@@ -266,7 +267,8 @@ router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
       // Actuarial reporting date — user-entered, nullable, drives stripping.
       _actuarial: parseDateFlex(l.actuarial_reported_date),
       _dol: parseDateFlex(l.date_of_loss),
-      // Fall back to the loss (accident) year so stripping can join on it.
+      // From the loss list; fall back to accident year only if absent (wrong
+      // for risks-attaching treaties, so populate UW Year for those).
       _uwy: numOrNull(l.uw_year) ?? (l.date_of_loss ? new Date(l.date_of_loss).getUTCFullYear() : null),
     };
   });
