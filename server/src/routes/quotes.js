@@ -4,6 +4,7 @@ import { pool } from "../db/pool.js";
 import { asyncHandler, numOrNull, dateOrNull, boolOrDefault } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from '../lib/triangleBounds.js';
+import { stripTriangleCells, stripFieldForType } from '../lib/triangleStripping.js';
 import { logAudit } from '../services/audit.js';
 import { contractContextJoins } from '../db/contractJoins.js';
 import { assertEntityUnchanged, optimisticLockOverrideRequested } from '../db/optimisticLock.js';
@@ -691,6 +692,38 @@ router.get("/quotes/:id/triangles/:type", asyncHandler(async (req, res) => {
   );
   res.json({ cells: rows });
 }));
+// Two-variant triangle (full + stripped of large/cat losses) — quote mirror
+// of the treaty route. Losses live in the shared contract_* tables linked to
+// the quote via quote_id on the report.
+router.get("/quotes/:id/triangles/:type/with-exclusions", asyncHandler(async (req, res) => {
+  const { id, type } = req.params;
+  const typeParse = triangleTypeSchema.safeParse(type.toUpperCase());
+  if (!typeParse.success) return res.status(400).json({ error: 'Invalid triangle type', code: 'VALIDATION_FAILED' });
+  const t = typeParse.data;
+  const { rows: cells } = await pool.query(
+    `SELECT cell_id,origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type=$2::public.triangle_type ORDER BY origin_year,dev_months`,
+    [id, t]
+  );
+  const { rows: largeLosses } = await pool.query(
+    `SELECT ll.uw_year, ll.date_of_loss, ll.paid, ll.os, ll.incurred
+       FROM public.contract_large_losses ll
+       JOIN public.contract_large_loss_report r ON r.report_id = ll.report_id
+      WHERE r.quote_id = $1`, [id]
+  );
+  const { rows: catLosses } = await pool.query(
+    `SELECT cl.uw_year, cl.date_of_loss, cl.paid, cl.os, cl.incurred
+       FROM public.contract_cat_losses cl
+       JOIN public.contract_cat_loss_report r ON r.report_id = cl.report_id
+      WHERE r.quote_id = $1`, [id]
+  );
+  const field = stripFieldForType(t);
+  const stripped = stripTriangleCells(cells, field ? [...largeLosses, ...catLosses] : [], field);
+  res.json({
+    full: { cells },
+    stripped: { cells: stripped },
+    exclusions: { largeLossCount: largeLosses.length, catLossCount: catLosses.length, applies: !!field },
+  });
+}));
 router.post("/quotes/:id/triangles/:type", asyncHandler(async (req, res) => {
   const { id, type } = req.params;
   const typeParse = triangleTypeSchema.safeParse(type.toUpperCase());
@@ -796,7 +829,7 @@ router.put("/quotes/:id/dev-factors/:type", validateBody(devFactorPutSchema), as
     await logAudit(pool, {
       entityType: 'QUOTE', entityId: id, eventType: 'DEV_FACTORS_SAVED',
       actor: req.body?._actor || req.user?.displayName || 'SYSTEM',
-      payload: { triangle_type: t, count: factors.length, method: req.body?.method || null },
+      payload: { triangle_type: t, count: factors.length, method: req.body?.method || null, basis: req.body?.basis || null },
     });
     res.json({ ok: true });
   } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }

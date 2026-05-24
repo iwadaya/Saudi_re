@@ -116,6 +116,7 @@ const PATHS = {
   npLargeLossLdfs: (id) => `/api/treaties/${enc(id)}/np/large-loss-ldfs`,
   npCatLossLdfs: (id) => `/api/treaties/${enc(id)}/np/cat-loss-ldfs`,
   triangle: (id, type) => `/api/treaties/${enc(id)}/triangles/${enc(type)}`,
+  triangleWithExclusions: (id, type) => `/api/treaties/${enc(id)}/triangles/${enc(type)}/with-exclusions`,
   treatyDocuments: (id) => `/api/treaties/${enc(id)}/documents`,
   wordingChecklist: (id) => `/api/treaties/${enc(id)}/wording-checklist`,
   wordingChecklistAi: (id) => `/api/treaties/${enc(id)}/wording-checklist/ai-check`,
@@ -174,6 +175,7 @@ const QUOTE_PATHS = {
   npLargeLossLdfs: (id) => `/api/quotes/${enc(id)}/np/large-loss-ldfs`,
   npCatLossLdfs: (id) => `/api/quotes/${enc(id)}/np/cat-loss-ldfs`,
   triangle: (id, type) => `/api/quotes/${enc(id)}/triangles/${enc(type)}`,
+  triangleWithExclusions: (id, type) => `/api/quotes/${enc(id)}/triangles/${enc(type)}/with-exclusions`,
   quoteDocuments: (id) => `/api/quotes/${enc(id)}/documents`,
   quoteWordingChecklist: (id) => `/api/quotes/${enc(id)}/wording-checklist`,
   quoteWordingChecklistAi: (id) => `/api/quotes/${enc(id)}/wording-checklist/ai-check`,
@@ -409,6 +411,7 @@ export const api = {
 
   // Triangles
   getTriangle(id, type, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.triangle(id, type) : PATHS.triangle(id, type), opts); },
+  getTriangleWithExclusions(id, type, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.triangleWithExclusions(id, type) : PATHS.triangleWithExclusions(id, type), opts); },
   saveTriangle(id, type, payload, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.triangle(id, type) : PATHS.triangle(id, type), { method: 'POST', body: payload, ...opts }); },
 
   // Dev factors

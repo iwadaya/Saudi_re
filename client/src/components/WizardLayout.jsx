@@ -153,6 +153,8 @@ export default function WizardLayout({
             onNext={handleNext}
             hasPrev={!!wizard.prev}
             hasNext={!!wizard.next}
+            backLabel={wizard.prevLabel}
+            nextLabel={wizard.nextLabel}
           />
           {/* Toasts announced to screen readers via aria-live on the Toast host */}
           <Toast toasts={toasts} />

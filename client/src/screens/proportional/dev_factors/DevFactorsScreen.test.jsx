@@ -5,6 +5,7 @@ import DevFactorsScreen from './DevFactorsScreen.jsx';
 const { apiMock, appStateMock, contractIdRef } = vi.hoisted(() => ({
   apiMock: {
     getTriangle: vi.fn(),
+    getTriangleWithExclusions: vi.fn(),
     getDevFactors: vi.fn(),
     getPricingPattern: vi.fn(),
     saveDevFactors: vi.fn(),
@@ -40,6 +41,10 @@ beforeEach(() => {
   appStateMock.propTreatyDetail = {};
   appStateMock.triangleMeta = { startYear: 2021, renewalYear: 2026 };
   apiMock.getTriangle.mockResolvedValue({ cells: [] });
+  apiMock.getTriangleWithExclusions.mockResolvedValue({
+    full: { cells: [] }, stripped: { cells: [] },
+    exclusions: { largeLossCount: 0, catLossCount: 0, applies: false },
+  });
   apiMock.getDevFactors.mockResolvedValue([]);
   apiMock.getPricingPattern.mockResolvedValue(null);
   apiMock.saveDevFactors.mockResolvedValue({ ok: true });
@@ -61,24 +66,27 @@ describe('DevFactorsScreen', () => {
 
   it('applies link-ratio factors without repeatedly updating parent state', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    apiMock.getTriangle.mockResolvedValue({
-      cells: [
-        { origin_year: 2021, dev_months: 12, cum_value: 100 },
-        { origin_year: 2021, dev_months: 24, cum_value: 120 },
-        { origin_year: 2021, dev_months: 36, cum_value: 144 },
-        { origin_year: 2021, dev_months: 48, cum_value: 160 },
-        { origin_year: 2021, dev_months: 60, cum_value: 176 },
-        { origin_year: 2022, dev_months: 12, cum_value: 110 },
-        { origin_year: 2022, dev_months: 24, cum_value: 132 },
-        { origin_year: 2022, dev_months: 36, cum_value: 150 },
-        { origin_year: 2022, dev_months: 48, cum_value: 170 },
-        { origin_year: 2023, dev_months: 12, cum_value: 90 },
-        { origin_year: 2023, dev_months: 24, cum_value: 108 },
-        { origin_year: 2023, dev_months: 36, cum_value: 126 },
-        { origin_year: 2024, dev_months: 12, cum_value: 80 },
-        { origin_year: 2024, dev_months: 24, cum_value: 96 },
-        { origin_year: 2025, dev_months: 12, cum_value: 70 },
-      ],
+    const triCells = [
+      { origin_year: 2021, dev_months: 12, cum_value: 100 },
+      { origin_year: 2021, dev_months: 24, cum_value: 120 },
+      { origin_year: 2021, dev_months: 36, cum_value: 144 },
+      { origin_year: 2021, dev_months: 48, cum_value: 160 },
+      { origin_year: 2021, dev_months: 60, cum_value: 176 },
+      { origin_year: 2022, dev_months: 12, cum_value: 110 },
+      { origin_year: 2022, dev_months: 24, cum_value: 132 },
+      { origin_year: 2022, dev_months: 36, cum_value: 150 },
+      { origin_year: 2022, dev_months: 48, cum_value: 170 },
+      { origin_year: 2023, dev_months: 12, cum_value: 90 },
+      { origin_year: 2023, dev_months: 24, cum_value: 108 },
+      { origin_year: 2023, dev_months: 36, cum_value: 126 },
+      { origin_year: 2024, dev_months: 12, cum_value: 80 },
+      { origin_year: 2024, dev_months: 24, cum_value: 96 },
+      { origin_year: 2025, dev_months: 12, cum_value: 70 },
+    ];
+    apiMock.getTriangle.mockResolvedValue({ cells: triCells });
+    apiMock.getTriangleWithExclusions.mockResolvedValue({
+      full: { cells: triCells }, stripped: { cells: triCells },
+      exclusions: { largeLossCount: 0, catLossCount: 0, applies: false },
     });
 
     try {
@@ -107,24 +115,27 @@ describe('DevFactorsScreen', () => {
   });
 
   it('saves link-ratio factors with a backward-compatible chosen source', async () => {
-    apiMock.getTriangle.mockResolvedValue({
-      cells: [
-        { origin_year: 2021, dev_months: 12, cum_value: 100 },
-        { origin_year: 2021, dev_months: 24, cum_value: 120 },
-        { origin_year: 2021, dev_months: 36, cum_value: 144 },
-        { origin_year: 2021, dev_months: 48, cum_value: 160 },
-        { origin_year: 2021, dev_months: 60, cum_value: 176 },
-        { origin_year: 2022, dev_months: 12, cum_value: 110 },
-        { origin_year: 2022, dev_months: 24, cum_value: 132 },
-        { origin_year: 2022, dev_months: 36, cum_value: 150 },
-        { origin_year: 2022, dev_months: 48, cum_value: 170 },
-        { origin_year: 2023, dev_months: 12, cum_value: 90 },
-        { origin_year: 2023, dev_months: 24, cum_value: 108 },
-        { origin_year: 2023, dev_months: 36, cum_value: 126 },
-        { origin_year: 2024, dev_months: 12, cum_value: 80 },
-        { origin_year: 2024, dev_months: 24, cum_value: 96 },
-        { origin_year: 2025, dev_months: 12, cum_value: 70 },
-      ],
+    const triCells = [
+      { origin_year: 2021, dev_months: 12, cum_value: 100 },
+      { origin_year: 2021, dev_months: 24, cum_value: 120 },
+      { origin_year: 2021, dev_months: 36, cum_value: 144 },
+      { origin_year: 2021, dev_months: 48, cum_value: 160 },
+      { origin_year: 2021, dev_months: 60, cum_value: 176 },
+      { origin_year: 2022, dev_months: 12, cum_value: 110 },
+      { origin_year: 2022, dev_months: 24, cum_value: 132 },
+      { origin_year: 2022, dev_months: 36, cum_value: 150 },
+      { origin_year: 2022, dev_months: 48, cum_value: 170 },
+      { origin_year: 2023, dev_months: 12, cum_value: 90 },
+      { origin_year: 2023, dev_months: 24, cum_value: 108 },
+      { origin_year: 2023, dev_months: 36, cum_value: 126 },
+      { origin_year: 2024, dev_months: 12, cum_value: 80 },
+      { origin_year: 2024, dev_months: 24, cum_value: 96 },
+      { origin_year: 2025, dev_months: 12, cum_value: 70 },
+    ];
+    apiMock.getTriangle.mockResolvedValue({ cells: triCells });
+    apiMock.getTriangleWithExclusions.mockResolvedValue({
+      full: { cells: triCells }, stripped: { cells: triCells },
+      exclusions: { largeLossCount: 0, catLossCount: 0, applies: false },
     });
 
     render(
