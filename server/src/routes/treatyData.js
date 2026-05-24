@@ -45,13 +45,13 @@ router.get("/treaties/:id/triangles/:type/with-exclusions", asyncHandler(async (
     [id, t]
   );
   const { rows: largeLosses } = await pool.query(
-    `SELECT ll.uw_year, ll.date_of_loss, ll.reported_date, ll.paid, ll.os, ll.incurred
+    `SELECT ll.uw_year, ll.date_of_loss, ll.actuarial_reported_date, ll.paid, ll.os, ll.incurred
        FROM public.contract_large_losses ll
        JOIN public.contract_large_loss_report r ON r.report_id = ll.report_id
       WHERE r.contract_id = $1`, [id]
   );
   const { rows: catLosses } = await pool.query(
-    `SELECT cl.uw_year, cl.date_of_loss, cl.reported_date, cl.paid, cl.os, cl.incurred
+    `SELECT cl.uw_year, cl.date_of_loss, cl.actuarial_reported_date, cl.paid, cl.os, cl.incurred
        FROM public.contract_cat_losses cl
        JOIN public.contract_cat_loss_report r ON r.report_id = cl.report_id
       WHERE r.contract_id = $1`, [id]
@@ -186,11 +186,12 @@ router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
   const {rows:rr}=await cl.query(`INSERT INTO public.contract_large_loss_report (contract_id,report_date) VALUES ($1,$2) ON CONFLICT (contract_id) DO UPDATE SET report_date=EXCLUDED.report_date,updated_at=now() RETURNING report_id`,[id,dateOrNull(report_date)]);
   const rid=rr[0].report_id;
   // Snapshot existing reported_date per loss_id so a delete+reinsert doesn't
-  // erase when each loss first entered this contract.
+  // erase it when the report has no date of its own.
   const {rows:prev}=await cl.query(`SELECT loss_id,reported_date FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
   const prevReported=new Map(prev.map(r=>[String(r.loss_id),r.reported_date]));
   await cl.query(`DELETE FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
   const today=new Date().toISOString().slice(0,10);
+  const reportSaved=dateOrNull(report_date)||today;
   // Generate loss_ids up front so we can batch the insert and still
   // return the same array of ids one-row-at-a-time used to surface.
   const largeLossesWithIds = losses.map((l) => {
@@ -198,17 +199,21 @@ router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
     return {
       ...l,
       _loss_id: l.loss_id || randomUUID(),
-      _reported: parseDateFlex(l.reported_date) || existedReported || today,
+      // "Saved in Universe" mirrors the loss-list report date.
+      _reported: reportSaved || existedReported,
+      // Actuarial reporting date (when the loss was booked into the triangle)
+      // — user-entered, nullable, drives stripping.
+      _actuarial: parseDateFlex(l.actuarial_reported_date),
       _dol: parseDateFlex(l.date_of_loss),
     };
   });
   const largeLossesInsert = buildBatchInsert({
     table: 'public.contract_large_losses',
-    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date'],
+    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date','actuarial_reported_date'],
     rows: largeLossesWithIds.map((l) => [
       l._loss_id, numOrNull(l.uw_year), l.insured_name, l.loss_name, l._dol,
       l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
-      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported,
+      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported, l._actuarial,
     ]),
     leadingId: rid,
   });
@@ -233,22 +238,26 @@ router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
   const prevReported=new Map(prev.map(r=>[String(r.loss_id),r.reported_date]));
   await cl.query(`DELETE FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
   const today=new Date().toISOString().slice(0,10);
+  const reportSaved=dateOrNull(report_date)||today;
   const catLossesWithIds = losses.map((l) => {
     const existedReported = l.loss_id ? prevReported.get(String(l.loss_id)) : null;
     return {
       ...l,
       _loss_id: l.loss_id || randomUUID(),
-      _reported: parseDateFlex(l.reported_date) || existedReported || today,
+      // "Saved in Universe" mirrors the loss-list report date.
+      _reported: reportSaved || existedReported,
+      // Actuarial reporting date — user-entered, nullable, drives stripping.
+      _actuarial: parseDateFlex(l.actuarial_reported_date),
       _dol: parseDateFlex(l.date_of_loss),
     };
   });
   const catLossesInsert = buildBatchInsert({
     table: 'public.contract_cat_losses',
-    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date'],
+    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date','actuarial_reported_date'],
     rows: catLossesWithIds.map((l) => [
       l._loss_id, numOrNull(l.uw_year), l.insured_name, l.loss_name, l._dol,
       l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
-      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported,
+      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported, l._actuarial,
     ]),
     leadingId: rid,
   });

@@ -121,24 +121,24 @@ describe('stripTriangleCells', () => {
     expect(y2022).toEqual([100, 200]); // untouched
   });
 
-  it('enters the loss at its reported development period when reported_date is reliable', () => {
+  it('enters the loss at its actuarial reported development period when reliable', () => {
     // Reported Sep 2022 (age 20m) → only the 24m+ columns are stripped.
     const cells = annualRow(2021, [100, 300, 320]);
     const out = stripTriangleCells(
       cells,
-      [{ uw_year: 2021, incurred: 150, date_of_loss: '2021-03-10', reported_date: '2022-09-01' }],
+      [{ uw_year: 2021, incurred: 150, date_of_loss: '2021-03-10', actuarial_reported_date: '2022-09-01' }],
       'incurred',
     );
     expect(out.map(c => c.cum_value)).toEqual([100, 150, 170]);
   });
 
-  it('falls back to the loss-date proxy when reported_date is an out-of-range artifact', () => {
-    // reported_date = today on an old loss → beyond the row → strip from the
-    // loss-date proxy (dev 5 → all annual columns) instead of not at all.
+  it('falls back to the loss-date proxy when the actuarial reported date is an out-of-range artifact', () => {
+    // actuarial date set far past the row → strip from the loss-date proxy
+    // (dev 5 → all annual columns) instead of not at all.
     const cells = annualRow(2021, [100, 300, 320]);
     const out = stripTriangleCells(
       cells,
-      [{ uw_year: 2021, incurred: 150, date_of_loss: '2021-03-10', reported_date: '2026-05-01' }],
+      [{ uw_year: 2021, incurred: 150, date_of_loss: '2021-03-10', actuarial_reported_date: '2026-05-01' }],
       'incurred',
     );
     expect(out.map(c => c.cum_value)).toEqual([0, 150, 170]);

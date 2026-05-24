@@ -3,7 +3,7 @@ import { api } from '../../api';
 import { useContractId } from '../../hooks/useContractId';
 import { useAppState } from '../../context/AppContext';
 import WizardLayout from '../../components/WizardLayout';
-import { parseFlexibleNumber, dateInputValue, todayIso } from '../../utils/format';
+import { parseFlexibleNumber, dateInputValue } from '../../utils/format';
 import LossAnalysisModal from './LossAnalysisModal';
 
 const COLS = [
@@ -15,7 +15,7 @@ const COLS = [
   { key: 'os',          label: 'O/S',            type: 'num',  w: 110 },
 ];
 
-function emptyRow() { return { lossId: '', reportedDate: '', insuredName: '', lossName: '', dateOfLoss: '', classOfBusiness: '', paid: '', os: '' }; }
+function emptyRow() { return { lossId: '', reportedDate: '', actuarialReportedDate: '', insuredName: '', lossName: '', dateOfLoss: '', classOfBusiness: '', paid: '', os: '' }; }
 
 // COB dropdown cell — shows treaty classes, flags unknowns, supports paste
 function CobCell({ value, cobOptions, onChange, onPaste, dataRow, dataCol }) {
@@ -215,6 +215,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
         const loaded = losses.map(l => ({
           lossId: l.loss_id || l.lossId || '',
           reportedDate: dateInputValue(l.reported_date || l.reportedDate || ''),
+          actuarialReportedDate: dateInputValue(l.actuarial_reported_date || l.actuarialReportedDate || ''),
           insuredName: l.insured_name || l.insuredName || '',
           lossName: l.loss_name || l.lossName || '',
           dateOfLoss: dateInputValue(l.date_of_loss || l.dateOfLoss || ''),
@@ -255,14 +256,13 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
   // Save
   const save = useCallback(async () => {
     if (!contractId) return true;
-    const today = todayIso();
     const payload = rows.filter(r => !isRowEmpty(r)).map(r => ({
-      // loss_id lets the server preserve the original reported_date for rows
-      // already in the table — without it the delete+reinsert would reset it.
       loss_id: r.lossId || null,
-      // For brand-new rows pin reported_date to today; existing rows keep
-      // whatever the server already has.
-      reported_date: r.reportedDate || (r.lossId ? null : today),
+      // Actuarial reporting date drives where the loss is stripped from
+      // (nullable → server falls back to date_of_loss + a quarter). The
+      // "saved in Universe" date (reported_date) is set server-side from the
+      // report date, so it isn't sent from here.
+      actuarial_reported_date: r.actuarialReportedDate || null,
       insured_name: r.insuredName, loss_name: r.lossName,
       date_of_loss: dateInputValue(r.dateOfLoss) || null, class_of_business: r.classOfBusiness,
       paid: parseNum(r.paid), os: parseNum(r.os), incurred: incurred(r),
@@ -332,7 +332,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
   // Auto-add row when typing in last row
   const handleChange = (idx, field, val) => {
     // Normalize date values when typing/changing
-    const v = (field === 'dateOfLoss' || field === 'reportedDate') ? dateInputValue(val) || val : val;
+    const v = (field === 'dateOfLoss' || field === 'actuarialReportedDate') ? dateInputValue(val) || val : val;
     updateRow(idx, field, v);
     if (idx >= rows.length - 2 && val) {
       setRows(prev => {
@@ -402,7 +402,8 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                     <th className="ll-th ll-th--num">#</th>
                     {COLS.map(c => <th key={c.key} className="ll-th" style={{ minWidth: c.w }}>{c.label}</th>)}
                     <th className="ll-th ll-th--calc">Incurred</th>
-                    <th className="ll-th" style={{ minWidth: 120 }} title="Date the loss was reported / booked into the triangle. Drives which development period it is stripped from. Leave blank to default to the entry date.">Reported</th>
+                    <th className="ll-th" style={{ minWidth: 130 }} title="Actuarial reported date — when the loss was reported / booked into the cedant's triangle. Drives which development period it is stripped from. Leave blank to default to date of loss + a quarter.">Reported (Actuarial)</th>
+                    <th className="ll-th" style={{ minWidth: 100 }} title="Saved in Universe — mirrors the loss-list report date. Set automatically on save.">Saved</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -443,10 +444,13 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                           <input
                             className="ll-inp"
                             type="date"
-                            value={r.reportedDate || ''}
-                            onChange={e => handleChange(i, 'reportedDate', e.target.value)}
-                            title={r.reportedDate ? '' : 'Defaults to today on save; set this to the actual reporting date to control where the loss is stripped from.'}
+                            value={r.actuarialReportedDate || ''}
+                            onChange={e => handleChange(i, 'actuarialReportedDate', e.target.value)}
+                            title="Actuarial reported date — drives where this loss is stripped from. Leave blank to default to date of loss + a quarter."
                           />
+                        </td>
+                        <td className="ll-td" style={{ fontSize: 11, color: empty ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)' }}>
+                          {empty ? '' : (r.reportedDate || (r.lossId ? '—' : <span style={{ color: '#00e8b8' }}>on save</span>))}
                         </td>
                       </tr>
                     );

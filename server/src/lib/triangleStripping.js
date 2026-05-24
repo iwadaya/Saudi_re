@@ -97,7 +97,10 @@ export function stripTriangleCells(cells, losses, amountField) {
     const yr = Number(l.uw_year);
     if (!Number.isFinite(yr)) continue;
     if (!byYear.has(yr)) byYear.set(yr, []);
-    byYear.get(yr).push({ amt, dateOfLoss: l.date_of_loss, reportedDate: l.reported_date });
+    // The actuarial reported date (when the loss was booked into the
+    // triangle) drives the entry period — not reported_date, which is the
+    // "saved into Universe" timestamp.
+    byYear.get(yr).push({ amt, dateOfLoss: l.date_of_loss, reportedDate: l.actuarial_reported_date });
   }
 
   // Work row by row (origin_year), walking dev columns ascending so the
