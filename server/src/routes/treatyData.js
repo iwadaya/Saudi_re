@@ -216,20 +216,22 @@ router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
       // — user-entered, nullable, drives stripping.
       _actuarial: parseDateFlex(l.actuarial_reported_date),
       _dol: parseDateFlex(l.date_of_loss),
-      // Underwriting year drives the triangle row this loss strips from and
-      // is captured on the loss list. Fall back to the loss (accident) year
-      // only when absent — note that's wrong for risks-attaching treaties, so
-      // the UW Year column should be populated for those.
-      _uwy: numOrNull(l.uw_year) ?? (l.date_of_loss ? new Date(l.date_of_loss).getUTCFullYear() : null),
+      _pinc: parseDateFlex(l.policy_inception_date),
+      // Underwriting year is captured on the loss list (auto-derived from
+      // policy inception, else loss date). Fall back here to inception year,
+      // then loss year, only when the client didn't supply it.
+      _uwy: numOrNull(l.uw_year)
+        ?? (l.policy_inception_date ? new Date(l.policy_inception_date).getUTCFullYear() : null)
+        ?? (l.date_of_loss ? new Date(l.date_of_loss).getUTCFullYear() : null),
     };
   });
   const largeLossesInsert = buildBatchInsert({
     table: 'public.contract_large_losses',
-    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date','actuarial_reported_date'],
+    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date','actuarial_reported_date','policy_inception_date'],
     rows: largeLossesWithIds.map((l) => [
       l._loss_id, l._uwy, l.insured_name, l.loss_name, l._dol,
       l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
-      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported, l._actuarial,
+      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported, l._actuarial, l._pinc,
     ]),
     leadingId: rid,
   });
@@ -267,18 +269,20 @@ router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
       // Actuarial reporting date — user-entered, nullable, drives stripping.
       _actuarial: parseDateFlex(l.actuarial_reported_date),
       _dol: parseDateFlex(l.date_of_loss),
-      // From the loss list; fall back to accident year only if absent (wrong
-      // for risks-attaching treaties, so populate UW Year for those).
-      _uwy: numOrNull(l.uw_year) ?? (l.date_of_loss ? new Date(l.date_of_loss).getUTCFullYear() : null),
+      _pinc: parseDateFlex(l.policy_inception_date),
+      // From the loss list; fall back to inception year then loss year if absent.
+      _uwy: numOrNull(l.uw_year)
+        ?? (l.policy_inception_date ? new Date(l.policy_inception_date).getUTCFullYear() : null)
+        ?? (l.date_of_loss ? new Date(l.date_of_loss).getUTCFullYear() : null),
     };
   });
   const catLossesInsert = buildBatchInsert({
     table: 'public.contract_cat_losses',
-    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date','actuarial_reported_date'],
+    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date','actuarial_reported_date','policy_inception_date'],
     rows: catLossesWithIds.map((l) => [
       l._loss_id, l._uwy, l.insured_name, l.loss_name, l._dol,
       l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
-      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported, l._actuarial,
+      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported, l._actuarial, l._pinc,
     ]),
     leadingId: rid,
   });

@@ -8,19 +8,29 @@ import LossAnalysisModal from './LossAnalysisModal';
 import LossQuarterSuggestModal from './LossQuarterSuggestModal';
 
 const COLS = [
+  // UW Year leads — it's the origin-year key stripping joins the triangle on.
+  // It auto-derives from Policy Inception (or Date of Loss when inception is
+  // absent), but a typed/pasted value overrides the auto-calc.
+  { key: 'uwYear',      label: 'UW Year',        type: 'year', w: 90 },
+  { key: 'policyInception', label: 'Policy Inception', type: 'date', w: 130 },
   { key: 'insuredName', label: 'Insured Name', type: 'text', w: 180 },
   { key: 'lossName',    label: 'Loss / Event',  type: 'text', w: 160 },
   { key: 'dateOfLoss',  label: 'Date of Loss',  type: 'date', w: 120 },
-  // Underwriting (origin) year the loss attaches to. For risks-attaching
-  // treaties this is the policy inception year, not the loss year, so it
-  // must be captured explicitly — it's the key stripping joins the triangle on.
-  { key: 'uwYear',      label: 'UW Year',        type: 'year', w: 90 },
   { key: 'classOfBusiness', label: 'Class',      type: 'cob',  w: 140 },
   { key: 'paid',        label: 'Paid',           type: 'num',  w: 110 },
   { key: 'os',          label: 'O/S',            type: 'num',  w: 110 },
 ];
 
-function emptyRow() { return { lossId: '', reportedDate: '', actuarialReportedDate: '', insuredName: '', lossName: '', dateOfLoss: '', uwYear: '', classOfBusiness: '', paid: '', os: '' }; }
+// UW Year auto-derivation: policy inception year, else loss year.
+function yearOf(dateStr) {
+  const m = /^(\d{4})/.exec(String(dateStr || '').trim());
+  return m ? m[1] : '';
+}
+function deriveUwYear(row) {
+  return yearOf(row.policyInception) || yearOf(row.dateOfLoss) || '';
+}
+
+function emptyRow() { return { lossId: '', reportedDate: '', actuarialReportedDate: '', uwYear: '', uwYearManual: false, policyInception: '', insuredName: '', lossName: '', dateOfLoss: '', classOfBusiness: '', paid: '', os: '' }; }
 
 // COB dropdown cell — shows treaty classes, flags unknowns, supports paste
 function CobCell({ value, cobOptions, onChange, onPaste, dataRow, dataCol }) {
@@ -219,18 +229,28 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
       const losses = data?.losses || data?.rows || [];
       setServerLosses(losses);
       if (losses.length > 0) {
-        const loaded = losses.map(l => ({
-          lossId: l.loss_id || l.lossId || '',
-          reportedDate: dateInputValue(l.reported_date || l.reportedDate || ''),
-          actuarialReportedDate: dateInputValue(l.actuarial_reported_date || l.actuarialReportedDate || ''),
-          insuredName: l.insured_name || l.insuredName || '',
-          lossName: l.loss_name || l.lossName || '',
-          dateOfLoss: dateInputValue(l.date_of_loss || l.dateOfLoss || ''),
-          uwYear: (l.uw_year ?? l.uwYear) != null ? String(l.uw_year ?? l.uwYear) : '',
-          classOfBusiness: l.class_of_business || l.classOfBusiness || '',
-          paid: l.paid != null && l.paid !== 0 ? String(l.paid) : '',
-          os: l.os != null && l.os !== 0 ? String(l.os) : '',
-        }));
+        const loaded = losses.map(l => {
+          const policyInception = dateInputValue(l.policy_inception_date || l.policyInception || '');
+          const dateOfLoss = dateInputValue(l.date_of_loss || l.dateOfLoss || '');
+          const uwYear = (l.uw_year ?? l.uwYear) != null ? String(l.uw_year ?? l.uwYear) : '';
+          const derived = yearOf(policyInception) || yearOf(dateOfLoss) || '';
+          return {
+            lossId: l.loss_id || l.lossId || '',
+            reportedDate: dateInputValue(l.reported_date || l.reportedDate || ''),
+            actuarialReportedDate: dateInputValue(l.actuarial_reported_date || l.actuarialReportedDate || ''),
+            uwYear,
+            // Treat a stored UW year that differs from the derived value as a
+            // manual override so editing inception/DOL won't clobber it.
+            uwYearManual: !!uwYear && uwYear !== derived,
+            policyInception,
+            insuredName: l.insured_name || l.insuredName || '',
+            lossName: l.loss_name || l.lossName || '',
+            dateOfLoss,
+            classOfBusiness: l.class_of_business || l.classOfBusiness || '',
+            paid: l.paid != null && l.paid !== 0 ? String(l.paid) : '',
+            os: l.os != null && l.os !== 0 ? String(l.os) : '',
+          };
+        });
         // Pad to MIN_ROWS
         while (loaded.length < MIN_ROWS) loaded.push(emptyRow());
         setRows(loaded);
@@ -251,16 +271,6 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Cell update
-  const updateRow = (idx, field, val) => {
-    setRows(prev => {
-      const n = [...prev];
-      n[idx] = { ...n[idx], [field]: val };
-      return n;
-    });
-    setDirty(true);
-  };
-
   // Save
   const save = useCallback(async () => {
     if (!contractId) return true;
@@ -274,6 +284,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
       insured_name: r.insuredName, loss_name: r.lossName,
       // Underwriting year drives which triangle row the loss strips from.
       uw_year: r.uwYear ? Number(String(r.uwYear).replace(/[^0-9]/g, '')) || null : null,
+      policy_inception_date: r.policyInception || null,
       date_of_loss: dateInputValue(r.dateOfLoss) || null, class_of_business: r.classOfBusiness,
       paid: parseNum(r.paid), os: parseNum(r.os), incurred: incurred(r),
     }));
@@ -356,11 +367,19 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
           const colIdx = ci + pc;
           if (colIdx < COLS.length) {
             let v = val.trim();
+            const key = COLS[colIdx].key;
             // Normalize date values on paste
-            if (COLS[colIdx].key === 'dateOfLoss' && v) v = dateInputValue(v);
-            n[rowIdx] = { ...n[rowIdx], [COLS[colIdx].key]: v };
+            if ((key === 'dateOfLoss' || key === 'policyInception') && v) v = dateInputValue(v);
+            n[rowIdx] = { ...n[rowIdx], [key]: v };
+            // A pasted UW year is a manual override.
+            if (key === 'uwYear') n[rowIdx].uwYearManual = String(v).trim() !== '';
           }
         });
+        // Auto-derive UW year for rows where it wasn't pasted manually.
+        if (!n[rowIdx].uwYearManual) {
+          const d = deriveUwYear(n[rowIdx]);
+          if (d) n[rowIdx] = { ...n[rowIdx], uwYear: d };
+        }
       });
       // Ensure minimum trailing empty rows
       let lastFilled = n.length - 1;
@@ -374,16 +393,24 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
 
   // Auto-add row when typing in last row
   const handleChange = (idx, field, val) => {
-    // Normalize date values when typing/changing
-    const v = (field === 'dateOfLoss' || field === 'actuarialReportedDate') ? dateInputValue(val) || val : val;
-    updateRow(idx, field, v);
-    if (idx >= rows.length - 2 && val) {
-      setRows(prev => {
-        const n = [...prev];
-        while (n.length < idx + 3) n.push(emptyRow());
-        return n;
-      });
-    }
+    const v = (field === 'dateOfLoss' || field === 'actuarialReportedDate' || field === 'policyInception')
+      ? dateInputValue(val) || val
+      : val;
+    setRows(prev => {
+      const n = [...prev];
+      const row = { ...n[idx], [field]: v };
+      if (field === 'uwYear') {
+        // A typed UW year is a manual override; clearing it re-enables auto.
+        row.uwYearManual = String(v).trim() !== '';
+        if (!row.uwYearManual) row.uwYear = deriveUwYear(row);
+      } else if ((field === 'policyInception' || field === 'dateOfLoss') && !row.uwYearManual) {
+        row.uwYear = deriveUwYear(row) || row.uwYear;
+      }
+      n[idx] = row;
+      if (idx >= n.length - 2 && val) { while (n.length < idx + 3) n.push(emptyRow()); }
+      return n;
+    });
+    setDirty(true);
   };
 
   // Total
@@ -514,8 +541,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                   {/* Totals */}
                   <tr className="ll-total">
                     <td className="ll-td ll-td--num"></td>
-                    <td className="ll-td" colSpan={4}><span className="ll-total-label">Total</span></td>
-                    <td className="ll-td"></td>
+                    <td className="ll-td" colSpan={6}><span className="ll-total-label">Total</span></td>
                     <td className="ll-td ll-td--calc">{fmtN(totalPaid)}</td>
                     <td className="ll-td ll-td--calc">{fmtN(totalOS)}</td>
                     <td className="ll-td ll-td--calc ll-td--total">{fmtN(totalInc)}</td>

@@ -870,11 +870,13 @@ router.put("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
     // that drives stripping (nullable).
     const reported=existedReported||reportSaved;
     const actuarial=dateOrNull(l.actuarial_reported_date);
-    // From the loss list; fall back to accident year only if absent (wrong
-    // for risks-attaching treaties, so populate UW Year for those).
-    const uwy=numOrNull(l.uw_year)??(l.date_of_loss?new Date(l.date_of_loss).getUTCFullYear():null);
-    const {rows:ins}=await cl.query(`INSERT INTO public.contract_large_losses (report_id,loss_id,uw_year,insured_name,loss_name,date_of_loss,class_of_business,paid,os,incurred,is_selected,inflation_factor,reported_date,actuarial_reported_date) VALUES ($1,COALESCE($2,gen_random_uuid()),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING loss_id`,
-    [rid,l.loss_id||null,uwy,l.insured_name,l.loss_name,dateOrNull(l.date_of_loss),l.class_of_business,numOrNull(l.paid),numOrNull(l.os),numOrNull(l.incurred),l.is_selected??true,numOrNull(l.inflation_factor)??1,reported,actuarial]);
+    const pinc=dateOrNull(l.policy_inception_date);
+    // From the loss list; fall back to inception year then loss year if absent.
+    const uwy=numOrNull(l.uw_year)
+      ??(l.policy_inception_date?new Date(l.policy_inception_date).getUTCFullYear():null)
+      ??(l.date_of_loss?new Date(l.date_of_loss).getUTCFullYear():null);
+    const {rows:ins}=await cl.query(`INSERT INTO public.contract_large_losses (report_id,loss_id,uw_year,insured_name,loss_name,date_of_loss,class_of_business,paid,os,incurred,is_selected,inflation_factor,reported_date,actuarial_reported_date,policy_inception_date) VALUES ($1,COALESCE($2,gen_random_uuid()),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING loss_id`,
+    [rid,l.loss_id||null,uwy,l.insured_name,l.loss_name,dateOrNull(l.date_of_loss),l.class_of_business,numOrNull(l.paid),numOrNull(l.os),numOrNull(l.incurred),l.is_selected??true,numOrNull(l.inflation_factor)??1,reported,actuarial,pinc]);
     savedLosses.push(ins[0]?.loss_id);
   }
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
@@ -1594,18 +1596,20 @@ router.put("/quotes/:id/cat-losses", asyncHandler(async (req, res) => {
       // Actuarial reporting date — user-entered, nullable, drives stripping.
       _actuarial: l.actuarial_reported_date ? new Date(l.actuarial_reported_date).toISOString().slice(0,10) : null,
       _dol: l.date_of_loss ? new Date(l.date_of_loss).toISOString().slice(0,10) : null,
-      // From the loss list; fall back to accident year only if absent (wrong
-      // for risks-attaching treaties, so populate UW Year for those).
-      _uwy: numOrNull(l.uw_year) ?? (l.date_of_loss ? new Date(l.date_of_loss).getUTCFullYear() : null),
+      _pinc: l.policy_inception_date ? new Date(l.policy_inception_date).toISOString().slice(0,10) : null,
+      // From the loss list; fall back to inception year then loss year if absent.
+      _uwy: numOrNull(l.uw_year)
+        ?? (l.policy_inception_date ? new Date(l.policy_inception_date).getUTCFullYear() : null)
+        ?? (l.date_of_loss ? new Date(l.date_of_loss).getUTCFullYear() : null),
     };
   });
   const lossesInsert = buildBatchInsert({
     table: 'public.contract_cat_losses',
-    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date','actuarial_reported_date'],
+    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date','actuarial_reported_date','policy_inception_date'],
     rows: lossesWithIds.map((l) => [
       l._loss_id, l._uwy, l.insured_name, l.loss_name, l._dol,
       l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
-      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported, l._actuarial,
+      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported, l._actuarial, l._pinc,
     ]),
     leadingId: rid,
   });
