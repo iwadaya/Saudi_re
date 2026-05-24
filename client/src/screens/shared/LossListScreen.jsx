@@ -446,8 +446,14 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                             type="date"
                             value={r.actuarialReportedDate || ''}
                             onChange={e => handleChange(i, 'actuarialReportedDate', e.target.value)}
-                            title="Actuarial reported date — drives where this loss is stripped from. Leave blank to default to date of loss + a quarter."
+                            title={(!empty && !r.actuarialReportedDate)
+                              ? 'No actuarial reported date — this loss is placed by the loss-date proxy (estimated quarter). Set a date to place it precisely.'
+                              : 'Actuarial reported date — drives where this loss is stripped from.'}
+                            style={(!empty && !r.actuarialReportedDate) ? { borderColor: 'rgba(251,146,60,0.6)' } : undefined}
                           />
+                          {(!empty && !r.actuarialReportedDate) && (
+                            <span title="Placed by loss-date proxy" style={{ marginLeft: 4, color: '#fbbf24', fontSize: 11 }}>⚠ proxy</span>
+                          )}
                         </td>
                         <td className="ll-td" style={{ fontSize: 11, color: empty ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)' }}>
                           {empty ? '' : (r.reportedDate || (r.lossId ? '—' : <span style={{ color: '#00e8b8' }}>on save</span>))}

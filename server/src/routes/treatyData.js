@@ -4,7 +4,7 @@ import { pool } from "../db/pool.js";
 import { asyncHandler, numOrNull, dateOrNull } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from '../lib/triangleBounds.js';
-import { stripTriangleCells, stripFieldForType } from '../lib/triangleStripping.js';
+import { stripTriangleCells, stripFieldForType, summarizeLossPlacement } from '../lib/triangleStripping.js';
 import { logAudit } from '../services/audit.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
@@ -57,11 +57,18 @@ router.get("/treaties/:id/triangles/:type/with-exclusions", asyncHandler(async (
       WHERE r.contract_id = $1`, [id]
   );
   const field = stripFieldForType(t);
-  const stripped = stripTriangleCells(cells, field ? [...largeLosses, ...catLosses] : [], field);
+  const allLosses = field ? [...largeLosses, ...catLosses] : [];
+  const stripped = stripTriangleCells(cells, allLosses, field);
+  const placement = summarizeLossPlacement(cells, allLosses, field);
   res.json({
     full: { cells },
     stripped: { cells: stripped },
-    exclusions: { largeLossCount: largeLosses.length, catLossCount: catLosses.length, applies: !!field },
+    exclusions: {
+      largeLossCount: largeLosses.length, catLossCount: catLosses.length, applies: !!field,
+      // Losses placed by the loss-date proxy (no reliable reported date) —
+      // the actuary should verify these placements.
+      proxyPlaced: placement.proxy, reportedPlaced: placement.reported,
+    },
   });
 }));
 router.post("/treaties/:id/triangles/:type", asyncHandler(async (req, res) => {

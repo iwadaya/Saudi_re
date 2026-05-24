@@ -451,7 +451,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   // endpoint. Both variants are always fetched so the conservative
   // (full-basis) reference column is available regardless of the basis shown.
   const [triData, setTriData] = useState({});
-  const [exclusions, setExclusions] = useState({ largeLossCount: 0, catLossCount: 0, applies: false });
+  const [exclusions, setExclusions] = useState({ largeLossCount: 0, catLossCount: 0, applies: false, proxyPlaced: 0 });
   const [lossWarningDismissed, setLossWarningDismissed] = useState(false);
   const [projMethod, setProjMethod] = useState('CHAIN');
   const [avgMethod, setAvgMethod] = useState('weighted');
@@ -508,7 +508,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
         .catch(() => [t, { full: [], stripped: [], excl: null }])
     )).then(results => {
       const map = {};
-      let excl = { largeLossCount: 0, catLossCount: 0, applies: false };
+      let excl = { largeLossCount: 0, catLossCount: 0, applies: false, proxyPlaced: 0 };
       results.forEach(([t, data]) => {
         map[t] = { full: data.full, stripped: data.stripped };
         // Loss counts are contract-wide (identical across types); fold to be safe.
@@ -517,6 +517,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
             largeLossCount: Math.max(excl.largeLossCount, data.excl.largeLossCount || 0),
             catLossCount: Math.max(excl.catLossCount, data.excl.catLossCount || 0),
             applies: excl.applies || !!data.excl.applies,
+            proxyPlaced: Math.max(excl.proxyPlaced, data.excl.proxyPlaced || 0),
           };
         }
       });
@@ -797,6 +798,11 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
           {showStrippedBanner && (
             <div role="status" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.25)', color: '#86efac', fontSize: 12, lineHeight: 1.5 }}>
               {exclusions.largeLossCount} large loss{exclusions.largeLossCount === 1 ? '' : 'es'} and {exclusions.catLossCount} cat loss{exclusions.catLossCount === 1 ? '' : 'es'} have been excluded from this triangle. Selected factors reflect the underlying attritional experience.
+              {exclusions.proxyPlaced > 0 && (
+                <div style={{ marginTop: 6, color: '#fbbf24' }}>
+                  ⚠ {exclusions.proxyPlaced} loss{exclusions.proxyPlaced === 1 ? '' : 'es'} placed by loss date (actuarial reported date not set) — their development period is an estimate. Set a reported date on the loss screens to place them precisely.
+                </div>
+              )}
             </div>
           )}
 

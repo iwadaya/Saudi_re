@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stripTriangleCells, lossEntryDevMonths, stripFieldForType } from './triangleStripping.js';
+import { stripTriangleCells, lossEntryDevMonths, stripFieldForType, summarizeLossPlacement } from './triangleStripping.js';
 
 describe('stripFieldForType', () => {
   it('maps claims types to their loss amount column', () => {
@@ -11,6 +11,33 @@ describe('stripFieldForType', () => {
     expect(stripFieldForType('PREMIUM')).toBeNull();
     expect(stripFieldForType('NP_EXCESS')).toBeNull();
     expect(stripFieldForType(undefined)).toBeNull();
+  });
+});
+
+describe('summarizeLossPlacement', () => {
+  const annualRow = (year, vals) =>
+    vals.map((v, i) => ({ origin_year: year, dev_months: (i + 1) * 12, cum_value: v }));
+
+  it('counts losses placed by reported date vs the loss-date proxy', () => {
+    const cells = annualRow(2021, [100, 200, 300]);
+    const losses = [
+      // Reliable reported date within range → 'reported'.
+      { uw_year: 2021, incurred: 50, date_of_loss: '2021-03-10', actuarial_reported_date: '2022-01-01' },
+      // No reported date → 'proxy'.
+      { uw_year: 2021, incurred: 50, date_of_loss: '2021-03-10' },
+      // Reported date far in the future (artifact) → falls back to 'proxy'.
+      { uw_year: 2021, incurred: 50, date_of_loss: '2021-03-10', actuarial_reported_date: '2030-01-01' },
+    ];
+    expect(summarizeLossPlacement(cells, losses, 'incurred')).toEqual({ reported: 1, proxy: 2, total: 3 });
+  });
+
+  it('ignores zero-amount losses and losses with no matching row', () => {
+    const cells = annualRow(2021, [100, 200]);
+    const losses = [
+      { uw_year: 2021, incurred: 0, date_of_loss: '2021-03-10' },         // zero → skipped
+      { uw_year: 2099, incurred: 50, date_of_loss: '2099-03-10' },        // no row → skipped
+    ];
+    expect(summarizeLossPlacement(cells, losses, 'incurred')).toEqual({ reported: 0, proxy: 0, total: 0 });
   });
 });
 

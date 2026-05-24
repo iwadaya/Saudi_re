@@ -51,17 +51,53 @@ function ageMonths(uwYear, dateLike) {
 // matter because a stale/auto-set reported date (e.g. defaulted far in the
 // future) would otherwise compute an entry period past the triangle and never
 // strip; in that case we fall back to the loss-date proxy.
-export function lossEntryDevMonths(uwYear, dateOfLoss, reportedDate, rowMaxDev) {
+export function resolveLossEntry(uwYear, dateOfLoss, reportedDate, rowMaxDev) {
   const lossAge = ageMonths(uwYear, dateOfLoss);
   const proxyEntry = lossAge == null ? 0 : lossAge + 3;
   const repAge = ageMonths(uwYear, reportedDate);
   if (repAge != null && repAge >= (lossAge ?? 0)) {
     const repEntry = repAge + 3; // surfaces the quarter after reporting
     if (rowMaxDev == null || repEntry <= rowMaxDev) {
-      return repEntry;
+      // 'reported' = placed precisely from the actuarial reported date.
+      return { entry: repEntry, basis: 'reported' };
     }
   }
-  return proxyEntry;
+  // 'proxy' = placed approximately from the loss date (reporting date absent
+  // or implausible) — the actuary should verify these.
+  return { entry: proxyEntry, basis: 'proxy' };
+}
+
+export function lossEntryDevMonths(uwYear, dateOfLoss, reportedDate, rowMaxDev) {
+  return resolveLossEntry(uwYear, dateOfLoss, reportedDate, rowMaxDev).entry;
+}
+
+// Max observed dev_months per origin year, used to resolve each loss's entry.
+function maxDevByOriginYear(cells) {
+  const m = new Map();
+  for (const c of Array.isArray(cells) ? cells : []) {
+    const yr = Number(c.origin_year);
+    const dev = Number(c.dev_months);
+    if (!m.has(yr) || dev > m.get(yr)) m.set(yr, dev);
+  }
+  return m;
+}
+
+// Counts how many strippable losses were placed precisely (from a reliable
+// reported date) versus approximately (loss-date proxy). Lets the UI flag the
+// guessed placements.
+export function summarizeLossPlacement(cells, losses, amountField) {
+  const out = { reported: 0, proxy: 0, total: 0 };
+  if (!amountField || !Array.isArray(losses)) return out;
+  const maxDev = maxDevByOriginYear(cells);
+  for (const l of losses) {
+    if (num(l[amountField]) <= 0) continue;
+    const yr = Number(l.uw_year);
+    if (!Number.isFinite(yr) || !maxDev.has(yr)) continue; // no matching row → not placed
+    const { basis } = resolveLossEntry(yr, l.date_of_loss, l.actuarial_reported_date, maxDev.get(yr));
+    out[basis] += 1;
+    out.total += 1;
+  }
+  return out;
 }
 
 function num(v) {

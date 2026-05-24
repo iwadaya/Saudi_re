@@ -4,7 +4,7 @@ import { pool } from "../db/pool.js";
 import { asyncHandler, numOrNull, dateOrNull, boolOrDefault } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from '../lib/triangleBounds.js';
-import { stripTriangleCells, stripFieldForType } from '../lib/triangleStripping.js';
+import { stripTriangleCells, stripFieldForType, summarizeLossPlacement } from '../lib/triangleStripping.js';
 import { logAudit } from '../services/audit.js';
 import { contractContextJoins } from '../db/contractJoins.js';
 import { assertEntityUnchanged, optimisticLockOverrideRequested } from '../db/optimisticLock.js';
@@ -717,11 +717,16 @@ router.get("/quotes/:id/triangles/:type/with-exclusions", asyncHandler(async (re
       WHERE r.quote_id = $1`, [id]
   );
   const field = stripFieldForType(t);
-  const stripped = stripTriangleCells(cells, field ? [...largeLosses, ...catLosses] : [], field);
+  const allLosses = field ? [...largeLosses, ...catLosses] : [];
+  const stripped = stripTriangleCells(cells, allLosses, field);
+  const placement = summarizeLossPlacement(cells, allLosses, field);
   res.json({
     full: { cells },
     stripped: { cells: stripped },
-    exclusions: { largeLossCount: largeLosses.length, catLossCount: catLosses.length, applies: !!field },
+    exclusions: {
+      largeLossCount: largeLosses.length, catLossCount: catLosses.length, applies: !!field,
+      proxyPlaced: placement.proxy, reportedPlaced: placement.reported,
+    },
   });
 }));
 router.post("/quotes/:id/triangles/:type", asyncHandler(async (req, res) => {
