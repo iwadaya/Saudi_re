@@ -1,7 +1,7 @@
 // server/src/routes/quotes.js — Quote CRUD + sub-entities, using quote_* tables
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { asyncHandler, numOrNull, dateOrNull, boolOrDefault } from '../helpers.js';
+import { asyncHandler, numOrNull, dateOrNull, boolOrDefault, safeUwYear, preserveBool, preserveNum, assertExists } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from '../lib/triangleBounds.js';
 import { stripTriangleCells, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from '../lib/triangleStripping.js';
@@ -900,19 +900,23 @@ router.get("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
 router.put("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
   const {id}=req.params;const {report_date,losses=[]}=req.body;const cl=await pool.connect();
   try{await cl.query("BEGIN");
+  await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
   // No UNIQUE(quote_id) on contract_large_loss_report, so check existence first
   const {rows:existing}=await cl.query(`SELECT report_id FROM public.contract_large_loss_report WHERE quote_id=$1`,[id]);
   let rid;
   if(existing.length){rid=existing[0].report_id;await cl.query(`UPDATE public.contract_large_loss_report SET report_date=$2,updated_at=now() WHERE report_id=$1`,[rid,dateOrNull(report_date)]);
   }else{const {rows:rr}=await cl.query(`INSERT INTO public.contract_large_loss_report (quote_id,report_date) VALUES ($1,$2) RETURNING report_id`,[id,dateOrNull(report_date)]);rid=rr[0].report_id;}
-  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
+  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
   const prevReported=new Map(prev.map(r=>[String(r.loss_id),r.reported_date]));
+  const prevSelected=new Map(prev.map(r=>[String(r.loss_id),r.is_selected]));
+  const prevInfl=new Map(prev.map(r=>[String(r.loss_id),r.inflation_factor]));
   await cl.query(`DELETE FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
   const today=new Date().toISOString().slice(0,10);
   const reportSaved=dateOrNull(report_date)||today;
   const savedLosses = [];
   for(const l of losses) {
-    const existedReported=l.loss_id?prevReported.get(String(l.loss_id)):null;
+    const key=l.loss_id?String(l.loss_id):null;
+    const existedReported=key?prevReported.get(key):null;
     // "Saved in Universe": report date of the cycle the loss first entered,
     // preserved across saves for year-over-year comparison (new rows take the
     // current report date). Actuarial date is the user-entered booking date
@@ -920,12 +924,13 @@ router.put("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
     const reported=existedReported||reportSaved;
     const actuarial=dateOrNull(l.actuarial_reported_date);
     const pinc=dateOrNull(l.policy_inception_date);
-    // From the loss list; fall back to inception year then loss year if absent.
-    const uwy=numOrNull(l.uw_year)
-      ??(l.policy_inception_date?new Date(l.policy_inception_date).getUTCFullYear():null)
-      ??(l.date_of_loss?new Date(l.date_of_loss).getUTCFullYear():null);
+    // NaN-guarded underwriting year (see treaty handler).
+    const uwy=safeUwYear(l);
+    // Preserve selection + inflation when the save omits them.
+    const selected=preserveBool(l.is_selected, key?prevSelected.get(key):undefined);
+    const infl=preserveNum(l.inflation_factor, key?prevInfl.get(key):undefined, 1);
     const {rows:ins}=await cl.query(`INSERT INTO public.contract_large_losses (report_id,loss_id,uw_year,insured_name,loss_name,date_of_loss,class_of_business,paid,os,incurred,is_selected,inflation_factor,reported_date,actuarial_reported_date,policy_inception_date) VALUES ($1,COALESCE($2,gen_random_uuid()),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING loss_id`,
-    [rid,l.loss_id||null,uwy,l.insured_name,l.loss_name,dateOrNull(l.date_of_loss),l.class_of_business,numOrNull(l.paid),numOrNull(l.os),numOrNull(l.incurred),l.is_selected??true,numOrNull(l.inflation_factor)??1,reported,actuarial,pinc]);
+    [rid,l.loss_id||null,uwy,l.insured_name,l.loss_name,dateOrNull(l.date_of_loss),l.class_of_business,numOrNull(l.paid),numOrNull(l.os),numOrNull(l.incurred),selected,infl,reported,actuarial,pinc]);
     savedLosses.push(ins[0]?.loss_id);
   }
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
@@ -1622,19 +1627,23 @@ router.put("/quotes/:id/cat-losses", asyncHandler(async (req, res) => {
   const {id}=req.params;const {report_date,losses=[]}=req.body;const cl=await pool.connect();
   const reportDateNorm=report_date?new Date(report_date).toISOString().slice(0,10):null;
   try{await cl.query("BEGIN");
+  await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
   const {rows:existing}=await cl.query(`SELECT report_id FROM public.contract_cat_loss_report WHERE quote_id=$1`,[id]);
   let rid;
   if(existing.length){rid=existing[0].report_id;await cl.query(`UPDATE public.contract_cat_loss_report SET report_date=$2,updated_at=now() WHERE report_id=$1`,[rid,reportDateNorm]);
   }else{const {rows:rr}=await cl.query(`INSERT INTO public.contract_cat_loss_report (quote_id,report_date) VALUES ($1,$2) RETURNING report_id`,[id,reportDateNorm]);rid=rr[0].report_id;}
-  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
+  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
   const prevReported=new Map(prev.map(r=>[String(r.loss_id),r.reported_date]));
+  const prevSelected=new Map(prev.map(r=>[String(r.loss_id),r.is_selected]));
+  const prevInfl=new Map(prev.map(r=>[String(r.loss_id),r.inflation_factor]));
   await cl.query(`DELETE FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
   const today=new Date().toISOString().slice(0,10);
   const reportSaved=reportDateNorm||today;
   // Assign loss IDs up-front so we can batch the INSERT and still
   // return the same loss_ids array we used to one-row-at-a-time.
   const lossesWithIds = losses.map((l) => {
-    const existedReported = l.loss_id ? prevReported.get(String(l.loss_id)) : null;
+    const key = l.loss_id ? String(l.loss_id) : null;
+    const existedReported = key ? prevReported.get(key) : null;
     return {
       ...l,
       _loss_id: l.loss_id || randomUUID(),
@@ -1646,10 +1655,11 @@ router.put("/quotes/:id/cat-losses", asyncHandler(async (req, res) => {
       _actuarial: l.actuarial_reported_date ? new Date(l.actuarial_reported_date).toISOString().slice(0,10) : null,
       _dol: l.date_of_loss ? new Date(l.date_of_loss).toISOString().slice(0,10) : null,
       _pinc: l.policy_inception_date ? new Date(l.policy_inception_date).toISOString().slice(0,10) : null,
-      // From the loss list; fall back to inception year then loss year if absent.
-      _uwy: numOrNull(l.uw_year)
-        ?? (l.policy_inception_date ? new Date(l.policy_inception_date).getUTCFullYear() : null)
-        ?? (l.date_of_loss ? new Date(l.date_of_loss).getUTCFullYear() : null),
+      // NaN-guarded underwriting year (see treaty handler).
+      _uwy: safeUwYear(l),
+      // Preserve selection + inflation when the save omits them.
+      _selected: preserveBool(l.is_selected, key ? prevSelected.get(key) : undefined),
+      _infl: preserveNum(l.inflation_factor, key ? prevInfl.get(key) : undefined, 1),
     };
   });
   const lossesInsert = buildBatchInsert({
@@ -1658,7 +1668,7 @@ router.put("/quotes/:id/cat-losses", asyncHandler(async (req, res) => {
     rows: lossesWithIds.map((l) => [
       l._loss_id, l._uwy, l.insured_name, l.loss_name, l._dol,
       l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
-      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported, l._actuarial, l._pinc,
+      l._selected, l._infl, l._reported, l._actuarial, l._pinc,
     ]),
     leadingId: rid,
   });

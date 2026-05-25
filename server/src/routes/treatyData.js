@@ -1,7 +1,7 @@
 // server/src/routes/treatyData.js — Sub-entity endpoints (triangles, losses, profiles, cresta, docs, etc.)
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { asyncHandler, numOrNull, dateOrNull } from '../helpers.js';
+import { asyncHandler, numOrNull, dateOrNull, safeUwYear, preserveBool, preserveNum, assertExists } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from '../lib/triangleBounds.js';
 import { stripTriangleCells, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from '../lib/triangleStripping.js';
@@ -235,19 +235,24 @@ router.get("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
 router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
   const {id}=req.params;const {report_date,losses=[]}=req.body;const cl=await pool.connect();
   try{await cl.query("BEGIN");
+  await assertExists(cl, 'public.contract', 'contract_id', id, 'Treaty');
   const {rows:rr}=await cl.query(`INSERT INTO public.contract_large_loss_report (contract_id,report_date) VALUES ($1,$2) ON CONFLICT (contract_id) DO UPDATE SET report_date=EXCLUDED.report_date,updated_at=now() RETURNING report_id`,[id,dateOrNull(report_date)]);
   const rid=rr[0].report_id;
-  // Snapshot existing reported_date per loss_id so a delete+reinsert doesn't
-  // erase it when the report has no date of its own.
-  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
+  // Snapshot existing reported_date / is_selected / inflation_factor per loss_id
+  // so a delete+reinsert doesn't erase them when this save omits them (the
+  // loss-list grid sends neither selection nor inflation).
+  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
   const prevReported=new Map(prev.map(r=>[String(r.loss_id),r.reported_date]));
+  const prevSelected=new Map(prev.map(r=>[String(r.loss_id),r.is_selected]));
+  const prevInfl=new Map(prev.map(r=>[String(r.loss_id),r.inflation_factor]));
   await cl.query(`DELETE FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
   const today=new Date().toISOString().slice(0,10);
   const reportSaved=dateOrNull(report_date)||today;
   // Generate loss_ids up front so we can batch the insert and still
   // return the same array of ids one-row-at-a-time used to surface.
   const largeLossesWithIds = losses.map((l) => {
-    const existedReported = l.loss_id ? prevReported.get(String(l.loss_id)) : null;
+    const key = l.loss_id ? String(l.loss_id) : null;
+    const existedReported = key ? prevReported.get(key) : null;
     return {
       ...l,
       _loss_id: l.loss_id || randomUUID(),
@@ -261,12 +266,12 @@ router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
       _actuarial: parseDateFlex(l.actuarial_reported_date),
       _dol: parseDateFlex(l.date_of_loss),
       _pinc: parseDateFlex(l.policy_inception_date),
-      // Underwriting year is captured on the loss list (auto-derived from
-      // policy inception, else loss date). Fall back here to inception year,
-      // then loss year, only when the client didn't supply it.
-      _uwy: numOrNull(l.uw_year)
-        ?? (l.policy_inception_date ? new Date(l.policy_inception_date).getUTCFullYear() : null)
-        ?? (l.date_of_loss ? new Date(l.date_of_loss).getUTCFullYear() : null),
+      // Underwriting year — NaN-guarded so an invalid inception/loss date
+      // can't push NaN into the integer column and abort the save.
+      _uwy: safeUwYear(l),
+      // Preserve selection + inflation when the save omits them.
+      _selected: preserveBool(l.is_selected, key ? prevSelected.get(key) : undefined),
+      _infl: preserveNum(l.inflation_factor, key ? prevInfl.get(key) : undefined, 1),
     };
   });
   const largeLossesInsert = buildBatchInsert({
@@ -275,7 +280,7 @@ router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
     rows: largeLossesWithIds.map((l) => [
       l._loss_id, l._uwy, l.insured_name, l.loss_name, l._dol,
       l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
-      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported, l._actuarial, l._pinc,
+      l._selected, l._infl, l._reported, l._actuarial, l._pinc,
     ]),
     leadingId: rid,
   });
@@ -294,15 +299,19 @@ router.get("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
 router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
   const {id}=req.params;const {report_date,losses=[]}=req.body;const cl=await pool.connect();
   try{await cl.query("BEGIN");
+  await assertExists(cl, 'public.contract', 'contract_id', id, 'Treaty');
   const {rows:rr}=await cl.query(`INSERT INTO public.contract_cat_loss_report (contract_id,report_date) VALUES ($1,$2) ON CONFLICT (contract_id) DO UPDATE SET report_date=EXCLUDED.report_date,updated_at=now() RETURNING report_id`,[id,dateOrNull(report_date)]);
   const rid=rr[0].report_id;
-  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
+  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
   const prevReported=new Map(prev.map(r=>[String(r.loss_id),r.reported_date]));
+  const prevSelected=new Map(prev.map(r=>[String(r.loss_id),r.is_selected]));
+  const prevInfl=new Map(prev.map(r=>[String(r.loss_id),r.inflation_factor]));
   await cl.query(`DELETE FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
   const today=new Date().toISOString().slice(0,10);
   const reportSaved=dateOrNull(report_date)||today;
   const catLossesWithIds = losses.map((l) => {
-    const existedReported = l.loss_id ? prevReported.get(String(l.loss_id)) : null;
+    const key = l.loss_id ? String(l.loss_id) : null;
+    const existedReported = key ? prevReported.get(key) : null;
     return {
       ...l,
       _loss_id: l.loss_id || randomUUID(),
@@ -314,10 +323,11 @@ router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
       _actuarial: parseDateFlex(l.actuarial_reported_date),
       _dol: parseDateFlex(l.date_of_loss),
       _pinc: parseDateFlex(l.policy_inception_date),
-      // From the loss list; fall back to inception year then loss year if absent.
-      _uwy: numOrNull(l.uw_year)
-        ?? (l.policy_inception_date ? new Date(l.policy_inception_date).getUTCFullYear() : null)
-        ?? (l.date_of_loss ? new Date(l.date_of_loss).getUTCFullYear() : null),
+      // NaN-guarded underwriting year (see large-loss handler).
+      _uwy: safeUwYear(l),
+      // Preserve selection + inflation when the save omits them.
+      _selected: preserveBool(l.is_selected, key ? prevSelected.get(key) : undefined),
+      _infl: preserveNum(l.inflation_factor, key ? prevInfl.get(key) : undefined, 1),
     };
   });
   const catLossesInsert = buildBatchInsert({
@@ -326,7 +336,7 @@ router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
     rows: catLossesWithIds.map((l) => [
       l._loss_id, l._uwy, l.insured_name, l.loss_name, l._dol,
       l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
-      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported, l._actuarial, l._pinc,
+      l._selected, l._infl, l._reported, l._actuarial, l._pinc,
     ]),
     leadingId: rid,
   });
