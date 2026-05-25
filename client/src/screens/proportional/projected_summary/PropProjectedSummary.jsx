@@ -78,23 +78,59 @@ export default function PropProjectedSummary() {
     ? 'NONE'
     : reservingDelta > 0 ? 'UNDER' : reservingDelta < 0 ? 'OVER' : 'BALANCED';
 
-  /* ── Loss-breakdown modal data ──
+  /* ── Loss-breakdown modal data (per underwriting year) ──
      Large/CAT amounts come from the saved loss grids (raw incurred) and are the
-     same for the actual and projected bases; attritional = total − large − cat. */
-  const totalLarge = results.reduce((a, r) => a + (lossCat.large.get(Number(r.year)) || 0), 0);
-  const totalCat = results.reduce((a, r) => a + (lossCat.cat.get(Number(r.year)) || 0), 0);
-  const lossModalRows = [
-    { key: 'ACTUAL', label: 'Actual', premium: tPrem, total: tAL },
-    { key: 'PROJECTED', label: 'Projected', premium: tUP, total: tUL },
-  ].map(r => {
-    const attritional = r.total - totalLarge - totalCat;
+     same for the actual and projected bases; attritional = total − large − cat.
+     NOTE: these calc definitions are placeholders to be refined later. */
+  const buildYearRows = (premKey, lossKey) => results.map(r => {
+    const large = lossCat.large.get(Number(r.year)) || 0;
+    const cat = lossCat.cat.get(Number(r.year)) || 0;
+    const premium = r[premKey] || 0;
+    const attritional = (r[lossKey] || 0) - large - cat;
     return {
-      ...r, attritional, large: totalLarge, cat: totalCat,
-      attrLR: r.premium > 0 ? attritional / r.premium : 0,
-      largeLR: r.premium > 0 ? totalLarge / r.premium : 0,
-      catLR: r.premium > 0 ? totalCat / r.premium : 0,
+      year: r.year, premium, attritional, large, cat,
+      attrLR: premium > 0 ? attritional / premium : 0,
+      largeLR: premium > 0 ? large / premium : 0,
+      catLR: premium > 0 ? cat / premium : 0,
     };
   });
+  const sumYearRows = rows => {
+    const premium = rows.reduce((a, r) => a + r.premium, 0);
+    const attritional = rows.reduce((a, r) => a + r.attritional, 0);
+    const large = rows.reduce((a, r) => a + r.large, 0);
+    const cat = rows.reduce((a, r) => a + r.cat, 0);
+    return {
+      year: 'Total', premium, attritional, large, cat,
+      attrLR: premium > 0 ? attritional / premium : 0,
+      largeLR: premium > 0 ? large / premium : 0,
+      catLR: premium > 0 ? cat / premium : 0,
+    };
+  };
+  const lossModalBases = [
+    { key: 'ACTUAL', label: 'Actual (Incurred)', rows: buildYearRows('premium', 'actualLosses') },
+    { key: 'PROJECTED', label: 'Projected (Ultimate)', rows: buildYearRows('projectedPremium', 'projectedLosses') },
+  ];
+  const renderLossCells = r => modalTab === 'abs' ? (
+    <>
+      <td className="ps-dash"><div className="ps-cell">{fmt0(r.premium)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fmt0(r.attritional)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fmt0(r.large)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fmt0(r.cat)}</div></td>
+      <td className={`ps-dash ${lrCls(r.attrLR)}`}><div className="ps-cell">{r.attrLR.toFixed(3)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{r.largeLR.toFixed(3)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{r.catLR.toFixed(3)}</div></td>
+    </>
+  ) : (
+    <>
+      <td className="ps-dash"><div className="ps-cell">{r.premium > 0 ? '100.0%' : '—'}</div></td>
+      <td className={`ps-dash ${lrCls(r.attrLR)}`}><div className="ps-cell">{fPct(r.attrLR)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fPct(r.largeLR)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fPct(r.catLR)}</div></td>
+      <td className={`ps-dash ${lrCls(r.attrLR)}`}><div className="ps-cell">{fPct(r.attrLR)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fPct(r.largeLR)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fPct(r.catLR)}</div></td>
+    </>
+  );
 
   /* ── Bar Chart ── */
   const BarChart = ({ title, subtitle, showToggle }) => {
@@ -385,41 +421,30 @@ export default function PropProjectedSummary() {
                   ))}
                 </div>
                 <div style={{ padding: 20 }}>
-                  <div className="ps-table-wrap">
-                    <table className="ps-table">
-                      <thead><tr>
-                        <th>Basis</th><th>Premium</th><th>Attritional</th><th>Large Loss</th><th>CAT Loss</th><th>Attr. LR</th><th>Large LR</th><th>CAT LR</th>
-                      </tr></thead>
-                      <tbody>
-                        {lossModalRows.map(r => (
-                          <tr key={r.key}>
-                            <td className="ps-year"><div className="ps-cell">{r.label}</div></td>
-                            {modalTab === 'abs' ? (
-                              <>
-                                <td className="ps-dash"><div className="ps-cell">{fmt0(r.premium)}</div></td>
-                                <td className="ps-dash"><div className="ps-cell">{fmt0(r.attritional)}</div></td>
-                                <td className="ps-dash"><div className="ps-cell">{fmt0(r.large)}</div></td>
-                                <td className="ps-dash"><div className="ps-cell">{fmt0(r.cat)}</div></td>
-                                <td className={`ps-dash ${lrCls(r.attrLR)}`}><div className="ps-cell">{r.attrLR.toFixed(3)}</div></td>
-                                <td className="ps-dash"><div className="ps-cell">{r.largeLR.toFixed(3)}</div></td>
-                                <td className="ps-dash"><div className="ps-cell">{r.catLR.toFixed(3)}</div></td>
-                              </>
-                            ) : (
-                              <>
-                                <td className="ps-dash"><div className="ps-cell">100.0%</div></td>
-                                <td className={`ps-dash ${lrCls(r.attrLR)}`}><div className="ps-cell">{fPct(r.attrLR)}</div></td>
-                                <td className="ps-dash"><div className="ps-cell">{fPct(r.largeLR)}</div></td>
-                                <td className="ps-dash"><div className="ps-cell">{fPct(r.catLR)}</div></td>
-                                <td className={`ps-dash ${lrCls(r.attrLR)}`}><div className="ps-cell">{fPct(r.attrLR)}</div></td>
-                                <td className="ps-dash"><div className="ps-cell">{fPct(r.largeLR)}</div></td>
-                                <td className="ps-dash"><div className="ps-cell">{fPct(r.catLR)}</div></td>
-                              </>
-                            )}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  {lossModalBases.map(base => (
+                    <div key={base.key} style={{ marginBottom: 18 }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: '#c7d2fe', marginBottom: 8 }}>{base.label}</div>
+                      <div className="ps-table-wrap">
+                        <table className="ps-table">
+                          <thead><tr>
+                            <th>UW Year</th><th>Premium</th><th>Attritional</th><th>Large Loss</th><th>CAT Loss</th><th>Attr. LR</th><th>Large LR</th><th>CAT LR</th>
+                          </tr></thead>
+                          <tbody>
+                            {base.rows.map(r => (
+                              <tr key={r.year}>
+                                <td className="ps-year"><div className="ps-cell">{r.year}</div></td>
+                                {renderLossCells(r)}
+                              </tr>
+                            ))}
+                            <tr className="ps-total">
+                              <td className="ps-year"><div className="ps-cell">Total</div></td>
+                              {renderLossCells(sumYearRows(base.rows))}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
