@@ -267,27 +267,28 @@ export default function PropPricing() {
             if (p > 0 && rt === 'ACTUAL') { actualLRs.push(l / p); totActLoss += l; totActPrem += p; }
           });
         }
-        let placeholder = false;
+        // Projection philosophy: dev factors are calibrated on the attritional (stripped)
+        // triangle. They must be applied to the stripped triangle only. Large loss and CAT
+        // amounts are added back explicitly after projection — never projected via the
+        // attritional CDF, since those factors carry no information about large/CAT development.
+        //
+        // loadProjectedRows encapsulates exactly this: it projects the stripped incurred
+        // triangle with the saved INCURRED factors and adds the raw large/CAT loadings back
+        // on top (falling back to straight stats when there is no triangle). It is the same
+        // path the Projected Summary uses, so both screens report consistent ultimates.
+        //
+        // Run it unconditionally: the placeholder flag must reflect the CURRENT projection
+        // regardless of whether saved yearly pricing rows exist — otherwise a treaty whose
+        // dev factors were deleted/reset after a prior save would keep hiding the warning.
+        // Its rows only feed the LRs when there are no saved yearly rows to drive them.
+        const proj = await loadProjectedRows(cid, appState.quoteMode ? { quote: true } : undefined);
+        setUsedPlaceholderLdfs(!!proj.usedPlaceholderLdfs);
         if (!projectedLRs.length) {
-          // Projection philosophy: dev factors are calibrated on the attritional (stripped)
-          // triangle. They must be applied to the stripped triangle only. Large loss and CAT
-          // amounts are added back explicitly after projection — never projected via the
-          // attritional CDF, since those factors carry no information about large/CAT development.
-          //
-          // loadProjectedRows encapsulates exactly this: it projects the stripped incurred
-          // triangle with the saved INCURRED factors and adds the raw large/CAT loadings back
-          // on top (falling back to straight stats when there is no triangle). It is the same
-          // path the Projected Summary uses, so both screens report consistent ultimates for
-          // identical inputs. The large/CAT folded into ultLoss here are subtracted back out
-          // by deriveLossComponents below to recover the attritional loading.
-          const proj = await loadProjectedRows(cid, appState.quoteMode ? { quote: true } : undefined);
-          placeholder = !!proj.usedPlaceholderLdfs;
           (proj.rows || []).forEach(r => {
             if (r.ultPrem > 0) { projectedLRs.push(r.ultLoss / r.ultPrem); totProjLoss += r.ultLoss; totProjPrem += r.ultPrem; }
             if (r.actPrem > 0) { actualLRs.push(r.actLoss / r.actPrem); totActLoss += r.actLoss; totActPrem += r.actPrem; }
           });
         }
-        setUsedPlaceholderLdfs(placeholder);
         const avgActualLR = actualLRs.length ? actualLRs.reduce((a, b) => a + b, 0) / actualLRs.length : 0;
         const avgProjectedLR = projectedLRs.length ? projectedLRs.reduce((a, b) => a + b, 0) / projectedLRs.length : avgActualLR;
 
