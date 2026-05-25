@@ -14,6 +14,13 @@ const { apiMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('../api', () => ({ api: apiMock }));
+// The benchmark fallback dynamically imports this; stub it to a trivial curve.
+vi.mock('./straightProjections', () => ({
+  DEFAULT_LDF_KEY: 'DEFAULT',
+  projectStraightStats: (parsed) => parsed.map(p => ({
+    year: p.year, ultPrem: p.premium, ultLoss: p.paid + p.os, actPrem: p.premium, actLoss: p.paid + p.os,
+  })),
+}));
 
 import { loadProjectedRows } from './projectWithSavedFactors';
 import { deriveLossComponents } from './lossCategoryAmounts';
@@ -48,8 +55,9 @@ afterEach(() => vi.clearAllMocks());
 describe('loadProjectedRows — attritional projection', () => {
   it('projects the stripped triangle and adds large/CAT back unprojected', async () => {
     primeApi({ strip: true });
-    const { rows, source } = await loadProjectedRows('c1');
+    const { rows, source, usedPlaceholderLdfs } = await loadProjectedRows('c1');
     expect(source).toBe('saved-factors');
+    expect(usedPlaceholderLdfs).toBe(false);
     const r = rows.find(x => x.year === 2021);
     // attritional ultimate = 600 * 1.5 = 900; + large 400 (+ cat 0) = 1300.
     // NOT the full-triangle projection of 1000 * 1.5 = 1500.
@@ -91,5 +99,24 @@ describe('loadProjectedRows — attritional projection', () => {
     // 1000 * 1.5 = 1500, no large/CAT added back.
     expect(r.ultLoss).toBe(1500);
     expect(r.actLoss).toBe(1000);
+  });
+
+  it('flags usedPlaceholderLdfs when it falls back to benchmark curves', async () => {
+    // No triangle, no saved factors, no saved LDF blend → straight-benchmark.
+    apiMock.getTriangle.mockResolvedValue({ cells: [] });
+    apiMock.getTriangleWithExclusions.mockResolvedValue({ full: { cells: [] }, stripped: { cells: [] }, exclusions: {} });
+    apiMock.getDevFactors.mockResolvedValue([]);
+    apiMock.getContract.mockResolvedValue({ detail: { strip_large_cat_losses: true } });
+    apiMock.getLargeLosses.mockResolvedValue({ losses: [] });
+    apiMock.getCatLosses.mockResolvedValue({ losses: [] });
+    apiMock.getLdfBlend.mockResolvedValue(null); // no saved blend → benchmark curves
+    apiMock.getStraightStats.mockResolvedValue({
+      stats: [{ underwriting_year: 2021, premium: 1000, paid_claims: 500, os_claims: 0 }],
+      primary_class_key: 'X',
+    });
+
+    const { source, usedPlaceholderLdfs } = await loadProjectedRows('c1');
+    expect(source).toBe('straight-benchmark');
+    expect(usedPlaceholderLdfs).toBe(true);
   });
 });

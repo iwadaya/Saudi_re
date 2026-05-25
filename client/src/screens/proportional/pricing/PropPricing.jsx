@@ -85,6 +85,9 @@ export default function PropPricing() {
   const [fxRates, setFxRates] = useState({});
   const [showUSD, setShowUSD] = useState(false);
   const [worstLR, setWorstLR] = useState({ lr: null, year: '' });
+  // True when pricing fell back to placeholder benchmark curves (no saved
+  // pricing rows, no saved factors, no triangle, no saved blend).
+  const [usedPlaceholderLdfs, setUsedPlaceholderLdfs] = useState(false);
   const [showQuickSummary, setShowQuickSummary] = useState(false);
   const [showMarketIntelligence, setShowMarketIntelligence] = useState(false);
   const [showAggBreakdown, setShowAggBreakdown] = useState(false);
@@ -264,6 +267,7 @@ export default function PropPricing() {
             if (p > 0 && rt === 'ACTUAL') { actualLRs.push(l / p); totActLoss += l; totActPrem += p; }
           });
         }
+        let placeholder = false;
         if (!projectedLRs.length) {
           // Projection philosophy: dev factors are calibrated on the attritional (stripped)
           // triangle. They must be applied to the stripped triangle only. Large loss and CAT
@@ -276,12 +280,14 @@ export default function PropPricing() {
           // path the Projected Summary uses, so both screens report consistent ultimates for
           // identical inputs. The large/CAT folded into ultLoss here are subtracted back out
           // by deriveLossComponents below to recover the attritional loading.
-          const projRows = (await loadProjectedRows(cid, appState.quoteMode ? { quote: true } : undefined)).rows || [];
-          projRows.forEach(r => {
+          const proj = await loadProjectedRows(cid, appState.quoteMode ? { quote: true } : undefined);
+          placeholder = !!proj.usedPlaceholderLdfs;
+          (proj.rows || []).forEach(r => {
             if (r.ultPrem > 0) { projectedLRs.push(r.ultLoss / r.ultPrem); totProjLoss += r.ultLoss; totProjPrem += r.ultPrem; }
             if (r.actPrem > 0) { actualLRs.push(r.actLoss / r.actPrem); totActLoss += r.actLoss; totActPrem += r.actPrem; }
           });
         }
+        setUsedPlaceholderLdfs(placeholder);
         const avgActualLR = actualLRs.length ? actualLRs.reduce((a, b) => a + b, 0) / actualLRs.length : 0;
         const avgProjectedLR = projectedLRs.length ? projectedLRs.reduce((a, b) => a + b, 0) / projectedLRs.length : avgActualLR;
 
@@ -752,6 +758,12 @@ export default function PropPricing() {
     <WizardLayout routeKey={ROUTE_KEY} title="Pricing" headerPill="PROPORTIONAL TREATY: FINAL PRICING" onBeforeNext={save} onBeforeBack={save}>
       {() => (
         <div className="PRICING_PAGE">
+
+          {usedPlaceholderLdfs && (
+            <div role="alert" style={{ margin: '0 0 12px', padding: '12px 16px', borderRadius: 10, background: 'rgba(249,115,22,0.14)', border: '2px solid #f97316', color: '#fdba74', fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>
+              No saved development factors found — projection is using placeholder benchmark curves. Go to the Development Factors screen to select and save factors before relying on these figures.
+            </div>
+          )}
 
           {/* ═══ BLOOMBERG HERO ═══ */}
           <PropBloombergHero

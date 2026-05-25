@@ -504,6 +504,9 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   // mount and whenever `savedTick` bumps (after a successful save), so the
   // banner reflects server ground truth rather than an optimistic local clear.
   const [stale, setStale] = useState(false);
+  // True when no factors have ever been saved for this type — the projected
+  // summary / pricing then rest on placeholder curves until a selection is saved.
+  const [factorsNeverSaved, setFactorsNeverSaved] = useState(false);
   const [savedTick, setSavedTick] = useState(0);
   // Both paid + OS triangles are required for Munich Chain Ladder, so on
   // screens that already source both (Incurred Dev Factors) the toggle
@@ -613,12 +616,17 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
     api.getBenchmarks(countryId, devType).then(setBenchmarks).catch(() => {});
   }, [appState.propTreatyDetail?.countryId, devType]);
 
-  /* Staleness: were the source triangles saved after these factors? */
+  /* Staleness + never-saved: were the source triangles saved after these
+     factors, and have any factors been saved for this type at all? */
   useEffect(() => {
     if (!contractId) return;
     let cancelled = false;
     api.getDevFactorStaleness(contractId, devType, apiOpts)
-      .then(d => { if (!cancelled) setStale(!!d?.stale); })
+      .then(d => {
+        if (cancelled) return;
+        setStale(!!d?.stale);
+        setFactorsNeverSaved(!d?.factorsSavedAt);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [contractId, devType, apiOpts, savedTick]);
@@ -828,6 +836,12 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
     <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill} onBeforeNext={save} onBeforeBack={save}>
       {({ showToast, wizard }) => (
         <div className="DEV_FACTORS_PAGE">
+          {/* Never-saved — projections rest on placeholder curves until saved */}
+          {factorsNeverSaved && (
+            <div role="alert" style={{ margin: '0 0 12px', padding: '12px 16px', borderRadius: 10, background: 'rgba(249,115,22,0.14)', border: '2px solid #f97316', color: '#fdba74', fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>
+              Factors not yet saved for this treaty. Projected summary figures are based on placeholder curves until you save your selection.
+            </div>
+          )}
           {/* Staleness — triangle saved more recently than these factors */}
           {stale && (
             <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5 }}>

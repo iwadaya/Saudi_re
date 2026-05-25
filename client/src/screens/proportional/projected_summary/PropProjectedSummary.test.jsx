@@ -72,4 +72,15 @@ describe('PropProjectedSummary staleness banner', () => {
     expect(await screen.findByText(/UNCAPPED ULTIMATES/i)).toBeInTheDocument();
     expect(screen.queryByRole('alert')).toBeNull();
   });
+
+  it('shows the prominent placeholder-curve banner when projection used benchmark curves', async () => {
+    apiMock.getDevFactorStaleness.mockImplementation(staleness(false, false));
+    loadProjectedRowsMock.mockResolvedValue({
+      rows: [{ year: 2021, ultPrem: 1000, ultLoss: 500, actPrem: 1000, actLoss: 500, ultPaid: 400 }],
+      source: 'straight-benchmark',
+      usedPlaceholderLdfs: true,
+    });
+    render(<PropProjectedSummary />);
+    expect(await screen.findByText(/projection is using placeholder benchmark curves/i)).toBeInTheDocument();
+  });
 });

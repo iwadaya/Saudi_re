@@ -28,6 +28,9 @@ export default function PropProjectedSummary() {
   // (incurred) and premium triangles, each compared against their saved
   // factors. Either being stale prompts a re-review.
   const [stale, setStale] = useState({ incurred: false, premium: false });
+  // True when the projection fell back to hard-coded placeholder benchmark
+  // curves (no saved factors, no triangle, no saved blend).
+  const [usedPlaceholderLdfs, setUsedPlaceholderLdfs] = useState(false);
 
   useEffect(() => {
     if (!contractId) return;
@@ -44,8 +47,9 @@ export default function PropProjectedSummary() {
         // deriveLossComponents below subtracts large/CAT back out to recover
         // the attritional component.
         const qm = appState.quoteMode ? { quote: true } : undefined;
-        const { rows: standardRows, source: src } = await loadProjectedRows(contractId, qm);
+        const { rows: standardRows, source: src, usedPlaceholderLdfs: placeholder } = await loadProjectedRows(contractId, qm);
         setSource(src || '');
+        setUsedPlaceholderLdfs(!!placeholder);
         setLossCat(await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() })));
 
         if (standardRows && standardRows.length > 0) {
@@ -253,6 +257,11 @@ export default function PropProjectedSummary() {
                   ({sourceLabel})
                 </span>}
               </h2>
+              {usedPlaceholderLdfs && (
+                <div role="alert" style={{ margin: '0 0 12px', padding: '12px 16px', borderRadius: 10, background: 'rgba(249,115,22,0.14)', border: '2px solid #f97316', color: '#fdba74', fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>
+                  No saved development factors found — projection is using placeholder benchmark curves. Go to the Development Factors screen to select and save factors before relying on these figures.
+                </div>
+              )}
               {staleMessage && (
                 <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5 }}>
                   {staleMessage}

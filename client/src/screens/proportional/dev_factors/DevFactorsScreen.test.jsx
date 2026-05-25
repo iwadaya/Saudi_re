@@ -47,7 +47,7 @@ beforeEach(() => {
     exclusions: { largeLossCount: 0, catLossCount: 0, applies: false },
   });
   apiMock.getDevFactors.mockResolvedValue([]);
-  apiMock.getDevFactorStaleness.mockResolvedValue({ triangleUpdatedAt: null, factorsSavedAt: null, stale: false });
+  apiMock.getDevFactorStaleness.mockResolvedValue({ triangleUpdatedAt: '2026-01-01T00:00:00Z', factorsSavedAt: '2026-01-02T00:00:00Z', stale: false });
   apiMock.getPricingPattern.mockResolvedValue(null);
   apiMock.saveDevFactors.mockResolvedValue({ ok: true });
   apiMock.savePricingPattern.mockResolvedValue({ ok: true });
@@ -79,6 +79,19 @@ describe('DevFactorsScreen', () => {
     );
 
     expect(await screen.findByText(/Triangle updated since factors were last saved/i)).toBeInTheDocument();
+  });
+
+  it('shows the never-saved warning when no factors have been saved', async () => {
+    apiMock.getDevFactorStaleness.mockResolvedValue({ triangleUpdatedAt: null, factorsSavedAt: null, stale: false });
+    render(
+      <DevFactorsScreen
+        routeKey="PROP_PREMIUM_DEV_FACTORS"
+        title="Premium Development Factors"
+        headerPill="PROPORTIONAL TREATY: PREMIUM DEVELOPMENT FACTORS"
+      />,
+    );
+
+    expect(await screen.findByText(/Factors not yet saved for this treaty/i)).toBeInTheDocument();
   });
 
   it('applies link-ratio factors without repeatedly updating parent state', async () => {

@@ -93,10 +93,14 @@ function recalcCdfs(matrix) {
  *   triangles + dev factors instead of the live contract tables).
  * @returns {Promise<{rows: Array, source: string}>}
  *   rows: [{year, ultPrem, ultLoss, actPrem, actLoss}]
- *   source: 'saved-factors' | 'triangle-recalc' | 'straight-short' | 'straight-long' | null
+ *   source: 'saved-factors' | 'triangle-recalc' | 'straight-blend' | 'straight-benchmark' | null
+ *   usedPlaceholderLdfs: true when the projection fell back to the hard-coded
+ *     benchmark curves (straightProjections.js) — i.e. no saved factors, no
+ *     triangle, and no saved LDF blend. Lets the UI warn that figures rest on
+ *     placeholder data.
  */
 export async function loadProjectedRows(contractId, opts) {
-  if (!contractId) return { rows: [], source: null };
+  if (!contractId) return { rows: [], source: null, usedPlaceholderLdfs: false };
 
   // Projection philosophy: dev factors are calibrated on the attritional (stripped)
   // triangle. They must be applied to the stripped triangle only. Large loss and CAT
@@ -258,13 +262,13 @@ export async function loadProjectedRows(contractId, opts) {
       };
     });
 
-    if (rows.length > 0) return { rows, source };
+    if (rows.length > 0) return { rows, source, usedPlaceholderLdfs: false };
   }
 
   // 3) Fallback: straight stats (no-triangulation)
   const ssData = await api.getStraightStats(contractId, opts).catch(() => null);
   const stats = ssData?.stats || [];
-  if (stats.length === 0) return { rows: [], source: null };
+  if (stats.length === 0) return { rows: [], source: null, usedPlaceholderLdfs: false };
 
   const parsed = stats.map(s => ({
     year: Number(s.underwriting_year || s.year),
@@ -302,7 +306,7 @@ export async function loadProjectedRows(contractId, opts) {
   // blend (the LDF Analysis modal writes here). Tail type is just a
   // marker — the curve itself lives in contract_ldf_blend_curve.
   const blendRows = await projectFromSavedBlend(contractId, parsed, opts);
-  if (blendRows) return { rows: applyStrip(blendRows), source: 'straight-blend' };
+  if (blendRows) return { rows: applyStrip(blendRows), source: 'straight-blend', usedPlaceholderLdfs: false };
 
   // 3b) Last resort: hard-coded benchmark curve, picked by the contract's
   // primary class of business (falls through to DEFAULT_LDF_KEY when the
@@ -311,7 +315,8 @@ export async function loadProjectedRows(contractId, opts) {
   const { projectStraightStats, DEFAULT_LDF_KEY } = await import('./straightProjections');
   const classKey = ssData?.primary_class_key || DEFAULT_LDF_KEY;
   const rows = projectStraightStats(parsed, classKey);
-  return { rows: applyStrip(rows), source: 'straight-benchmark' };
+  // Hard-coded benchmark/placeholder curves — flag so the UI can warn.
+  return { rows: applyStrip(rows), source: 'straight-benchmark', usedPlaceholderLdfs: true };
 }
 
 // ── Saved-blend projection ───────────────────────────────────────────────
