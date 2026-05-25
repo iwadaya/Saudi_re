@@ -116,9 +116,9 @@ export default function PropProjectedSummary() {
       <td className="ps-dash"><div className="ps-cell">{fmt0(r.attritional)}</div></td>
       <td className="ps-dash"><div className="ps-cell">{fmt0(r.large)}</div></td>
       <td className="ps-dash"><div className="ps-cell">{fmt0(r.cat)}</div></td>
-      <td className={`ps-dash ${lrCls(r.attrLR)}`}><div className="ps-cell">{r.attrLR.toFixed(3)}</div></td>
-      <td className="ps-dash"><div className="ps-cell">{r.largeLR.toFixed(3)}</div></td>
-      <td className="ps-dash"><div className="ps-cell">{r.catLR.toFixed(3)}</div></td>
+      <td className={`ps-dash ${lrCls(r.attrLR)}`}><div className="ps-cell">{fPct(r.attrLR)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fPct(r.largeLR)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fPct(r.catLR)}</div></td>
     </>
   ) : (
     <>
