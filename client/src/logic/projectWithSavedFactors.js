@@ -63,6 +63,17 @@ function projectWithCdfs(matrix, years, cdfs) {
   });
 }
 
+/** Latest non-null cumulative value per origin year (the actual diagonal). */
+function latestPerYear(matrix, years) {
+  return years.map((yr, r) => {
+    let latest = 0;
+    for (let c = (matrix[r]?.length || 0) - 1; c >= 0; c--) {
+      if (matrix[r][c] != null) { latest = matrix[r][c]; break; }
+    }
+    return { year: yr, latest };
+  });
+}
+
 /**
  * Fallback: recalculate CDFs from raw triangle matrix using weighted average.
  */
@@ -86,6 +97,11 @@ function recalcCdfs(matrix) {
  */
 export async function loadProjectedRows(contractId, opts) {
   if (!contractId) return { rows: [], source: null };
+
+  // Projection philosophy: dev factors are calibrated on the attritional (stripped)
+  // triangle. They must be applied to the stripped triangle only. Large loss and CAT
+  // amounts are added back explicitly after projection — never projected via the
+  // attritional CDF, since those factors carry no information about large/CAT development.
 
   // 1) Load all triangles in parallel
   const [premRes, paidRes, osRes] = await Promise.all([
@@ -129,11 +145,15 @@ export async function loadProjectedRows(contractId, opts) {
       return r;
     });
 
-    // 2) Try to load saved dev factors for INCURRED, PAID, and PREMIUM
-    const [incFactorsRes, paidFactorsRes, premFactorsRes] = await Promise.all([
+    // 2) Load saved dev factors (INCURRED, PAID, PREMIUM), the stripped
+    //    (attritional) incurred triangle and the per-treaty strip flag — all
+    //    keyed on contractId, fetched together.
+    const [incFactorsRes, paidFactorsRes, premFactorsRes, incExclRes, contract] = await Promise.all([
       api.getDevFactors(contractId, 'INCURRED', opts).catch(() => []),
       api.getDevFactors(contractId, 'CLAIMS_PAID', opts).catch(() => []),
       api.getDevFactors(contractId, 'PREMIUM', opts).catch(() => []),
+      api.getTriangleWithExclusions(contractId, 'INCURRED', opts).catch(() => null),
+      api.getContract(contractId, opts).catch(() => ({})),
     ]);
     const incFactors = incFactorsRes?.factors || (Array.isArray(incFactorsRes) ? incFactorsRes : []);
     const paidFactors = paidFactorsRes?.factors || (Array.isArray(paidFactorsRes) ? paidFactorsRes : []);
@@ -146,6 +166,26 @@ export async function loadProjectedRows(contractId, opts) {
     const savedPaidCdfs = buildCdfsFromSaved(paidFactors);
     const savedPremCdfs = buildCdfsFromSaved(premFactors);
 
+    // Large/CAT loadings, added back unprojected after the attritional projection.
+    // When stripping is off the server returns the full triangle as `stripped`
+    // and the loadings are nil, so the result collapses to the plain full
+    // projection (back-compatible).
+    const stripLC = (contract?.detail?.strip_large_cat_losses ?? true) !== false;
+    const lossCat = stripLC
+      ? await loadLossCategoryByYear(contractId, opts).catch(() => ({ large: new Map(), cat: new Map() }))
+      : { large: new Map(), cat: new Map() };
+
+    // Attritional projection base: the STRIPPED incurred triangle (large/CAT
+    // removed). The saved INCURRED dev factors are calibrated on this basis in
+    // DevFactorsScreen, so they must be applied here — not to the full paid+OS
+    // triangle. Falls back to the full incurred matrix if the stripped triangle
+    // is unavailable. Column index aligns with `im` because stripping reduces
+    // cell values but never drops (origin_year, dev_months) keys.
+    const strippedObj = buildMatrixFromCells(crd(incExclRes?.stripped?.cells || []));
+    const imStripped = strippedObj
+      ? yrs.map(y => { const r = []; for (let c = 0; c < mc; c++) r.push(gv(strippedObj, y, c)); return r; })
+      : im;
+
     // Paid-only matrix (no OS) — used to project the paid ultimate
     // for the under/over reserving comparison on the projected summary.
     const paidM = yrs.map(y => {
@@ -154,17 +194,19 @@ export async function loadProjectedRows(contractId, opts) {
       return r;
     });
 
-    let lossProj = [], paidProj = [], premProj = [], source = 'triangle-recalc';
+    let attrProj = [], paidProj = [], premProj = [], source = 'triangle-recalc';
 
-    // Project losses — prefer saved factors
+    // Project the ATTRITIONAL incurred from the stripped triangle — prefer the
+    // underwriter's saved factors. Large/CAT are not projected here; they are
+    // added back unprojected when assembling the rows below.
     if (savedIncCdfs) {
-      lossProj = projectWithCdfs(im, yrs, savedIncCdfs);
+      attrProj = projectWithCdfs(imStripped, yrs, savedIncCdfs);
       source = 'saved-factors';
     } else {
       try {
-        const cdfs = recalcCdfs(im);
-        lossProj = projectWithCdfs(im, yrs, cdfs);
-      } catch (e) { lossProj = []; }
+        const cdfs = recalcCdfs(imStripped);
+        attrProj = projectWithCdfs(imStripped, yrs, cdfs);
+      } catch (e) { attrProj = []; }
     }
 
     // Project paid (used for under/over reserving comparison)
@@ -188,18 +230,30 @@ export async function loadProjectedRows(contractId, opts) {
       } catch (e) { premProj = []; }
     }
 
+    // Actual (latest) incurred is the raw FULL paid+OS diagonal — large/CAT are
+    // part of the realised experience and are only stripped for the projection.
+    const fullLatest = latestPerYear(im, yrs);
+
     const rows = yrs.map(y => {
       const pP = premProj.find(p => p.year === y);
-      const lP = lossProj.find(p => p.year === y);
+      const aP = attrProj.find(p => p.year === y);
       const dP = paidProj.find(p => p.year === y);
+      const fl = fullLatest.find(p => p.year === y);
+      const large = stripLC ? (lossCat.large.get(Number(y)) || 0) : 0;
+      const cat = stripLC ? (lossCat.cat.get(Number(y)) || 0) : 0;
+      // Total projected incurred = attritional projected ultimate + large loss
+      // loading + CAT loading. deriveLossComponents downstream subtracts the
+      // same large/CAT back out to recover the attritional component, so this
+      // value must remain the full incurred total.
+      const ultLoss = (aP?.ultimate || 0) + large + cat;
       return {
         year: y,
         ultPrem: pP?.ultimate || 0,
-        ultLoss: lP?.ultimate || 0,
+        ultLoss,
         ultPaid: dP?.ultimate || 0,
-        ultIncurred: lP?.ultimate || 0,
+        ultIncurred: ultLoss,
         actPrem: pP?.latest || 0,
-        actLoss: lP?.latest || 0,
+        actLoss: fl?.latest || 0,
         actPaid: dP?.latest || 0,
       };
     });
