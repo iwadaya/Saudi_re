@@ -932,9 +932,11 @@
 }
 
 /* Wide tables (many columns) size each column to its content and scroll
-   horizontally inside .qs-table-shell rather than truncating. */
-.QUICK_SUMMARY_PAGE .qs-table-modern.qs-table--scroll{
-  table-layout: auto;
+   horizontally inside .qs-table-shell rather than truncating. Uses !important
+   to beat the later table-layout:fixed rule on .qs-table.qs-stats. */
+.QUICK_SUMMARY_PAGE .qs-table-modern.qs-table--scroll,
+.QUICK_SUMMARY_PAGE .qs-table.qs-stats.qs-table--scroll{
+  table-layout: auto !important;
   min-width: 1180px;
 }
 
