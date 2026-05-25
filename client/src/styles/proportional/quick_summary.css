@@ -939,6 +939,14 @@
   table-layout: auto !important;
   min-width: 1180px;
 }
+/* Every column except the first (UW Year) and last (Cum. %) gets a uniform
+   width wide enough for the "Attritional Loss" header, so nothing truncates
+   and the table scrolls horizontally inside its shell. */
+.QUICK_SUMMARY_PAGE .qs-table--scroll th:not(:first-child):not(:last-child),
+.QUICK_SUMMARY_PAGE .qs-table--scroll td:not(:first-child):not(:last-child){
+  width: 160px !important;
+  min-width: 160px !important;
+}
 
 .QUICK_SUMMARY_PAGE .qs-table-modern thead th{
   position: sticky;
