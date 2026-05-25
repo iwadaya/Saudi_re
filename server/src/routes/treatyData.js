@@ -291,6 +291,33 @@ router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
+// ── PORTFOLIO FALLBACK LOSSES ──
+// Individual large/cat loss records drawn from the cedant's OTHER treaties.
+// Used by the Pareto screens to fall back to portfolio-average experience when
+// the current treaty has no large/cat losses of its own.
+router.get("/treaties/:id/portfolio-losses/:lossType", asyncHandler(async (req, res) => {
+  const { id, lossType } = req.params;
+  const isCat = String(lossType).toLowerCase() === 'cat';
+  // Table names are selected by a boolean, never interpolated from raw input.
+  const reportTable = isCat ? 'public.contract_cat_loss_report' : 'public.contract_large_loss_report';
+  const lossTable = isCat ? 'public.contract_cat_losses' : 'public.contract_large_losses';
+
+  const { rows: cRows } = await pool.query(`SELECT cedant_id FROM public.contract WHERE contract_id=$1`, [id]);
+  const cedantId = cRows[0]?.cedant_id;
+  if (!cedantId) return res.json({ losses: [], treatyCount: 0 });
+
+  const { rows: losses } = await pool.query(
+    `SELECT l.uw_year, l.incurred, l.paid, l.os, l.inflation_factor, l.is_selected, c.contract_id
+       FROM ${lossTable} l
+       JOIN ${reportTable} r ON r.report_id = l.report_id
+       JOIN public.contract c ON c.contract_id = r.contract_id
+      WHERE c.cedant_id = $1 AND c.contract_id <> $2`,
+    [cedantId, id]
+  );
+  const treatyCount = new Set(losses.map(l => l.contract_id)).size;
+  res.json({ losses, treatyCount });
+}));
+
 
 // ── AI: MAP LOSSES TO DEVELOPMENT QUARTERS ──
 // Advisory: suggests the development period each large/cat loss most likely

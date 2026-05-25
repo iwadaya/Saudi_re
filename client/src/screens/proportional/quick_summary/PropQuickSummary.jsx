@@ -4,6 +4,7 @@ import { useContractId } from '../../../hooks/useContractId';
 import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
 import { loadProjectedRows } from '../../../logic/projectWithSavedFactors';
+import { loadLossCategoryByYear } from '../../../logic/lossCategoryAmounts';
 import { fmtOrEm as fmt } from '../../../utils/format';
 import {
   cn,
@@ -183,6 +184,7 @@ export default function PropQuickSummary() {
   const [modal, setModal] = useState(null);
   const [showPerfAnalysis, setShowPerfAnalysis] = useState(false);
   const [projSource, setProjSource] = useState('');
+  const [lossCat, setLossCat] = useState({ large: new Map(), cat: new Map() });
 
   useEffect(() => {
     if (!contractId) return;
@@ -201,12 +203,22 @@ export default function PropQuickSummary() {
         if (!standardRows || standardRows.length === 0) { setCalcRows([]); setLoading(false); return; }
         const { rows, totals: tot } = runFinancialEngine(standardRows, t);
         setCalcRows(rows); setTotals(tot);
+        setLossCat(await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() })));
       } catch (e) { console.error('Quick Summary Load Failed', e); setError(e.message); }
       setLoading(false);
     })();
   }, [appState.propTreatyDetail, appState.quoteMode, contractId]);
 
   const stats = calcStats(calcRows);
+
+  /* Large/CAT amounts come from the saved loss grids (raw incurred) and are
+     identical across the projected and actual sections — only premium and
+     attritional losses change between them. Attritional = total − large − cat. */
+  const largeAmt = yr => lossCat.large.get(Number(yr)) || 0;
+  const catAmt = yr => lossCat.cat.get(Number(yr)) || 0;
+  const totalLargeAmt = calcRows.reduce((a, r) => a + largeAmt(r.year), 0);
+  const totalCatAmt = calcRows.reduce((a, r) => a + catAmt(r.year), 0);
+  const lrPct = (num, den) => (den > 0 ? (num / den) * 100 : 0);
 
   const TD = ({ v, pct, neg, pos }) => (
     <td className={neg ? 'qs-val--neg' : pos ? 'qs-val--pos' : ''}><div className="qs-td qs-td--num">{pct ? fp(v) : fmt(v)}</div></td>
@@ -242,15 +254,18 @@ export default function PropQuickSummary() {
           { label: 'Ult. Combined Ratio', value: fp(ultCR) },
         ]} />
         <div className="qs-table-shell"><table className="qs-table qs-stats qs-table-modern">
-          <thead><tr><th className="qs-left">UW Year</th><th>Premium</th><th>Ult. Claims</th><th>Commission</th><th>Profit Comm.</th><th>Brokerage</th><th>Taxes</th><th>LPC</th><th>Result</th><th>Cumulative</th><th>Cum. %</th></tr></thead>
+          <thead><tr><th className="qs-left">UW Year</th><th>Premium</th><th>Attritional Loss Ratio</th><th>Large Loss Ratio</th><th>CAT Claims Ratio</th><th>Commission</th><th>Profit Comm.</th><th>Brokerage</th><th>Taxes</th><th>LPC</th><th>Result</th><th>Cumulative</th><th>Cum. %</th></tr></thead>
           <tbody>
-            {calcRows.map(r => (
+            {calcRows.map(r => {
+              const lg = largeAmt(r.year), ct = catAmt(r.year);
+              return (
               <tr key={r.year}><th className="qs-left qs-year">{r.year}</th>
-                <TD v={r.premium}/><TD v={r.ultClaims}/><TD v={r.comm}/><TD v={r.profitComm}/><TD v={r.brokerage}/>
+                <TD v={r.premium}/><TD v={lrPct(r.ultClaims - lg - ct, r.premium)} pct/><TD v={lrPct(lg, r.premium)} pct/><TD v={lrPct(ct, r.premium)} pct/><TD v={r.comm}/><TD v={r.profitComm}/><TD v={r.brokerage}/>
                 <TD v={r.taxes}/><TD v={r.lpc}/><TD v={r.result} neg={r.result<0} pos={r.result>0}/><TD v={r.cumResult} neg={r.cumResult<0} pos={r.cumResult>0}/><TD v={r.cumResultPct} pct neg={r.cumResultPct<0} pos={r.cumResultPct>0}/></tr>
-            ))}
+              );
+            })}
             <tr className="qs-total"><th className="qs-left qs-year">Total</th>
-              <TD v={totals.premium}/><TD v={totals.ultClaims}/><TD v={totals.comm}/><TD v={totals.profitComm}/><TD v={totals.brokerage}/>
+              <TD v={totals.premium}/><TD v={lrPct(totals.ultClaims - totalLargeAmt - totalCatAmt, totals.premium)} pct/><TD v={lrPct(totalLargeAmt, totals.premium)} pct/><TD v={lrPct(totalCatAmt, totals.premium)} pct/><TD v={totals.comm}/><TD v={totals.profitComm}/><TD v={totals.brokerage}/>
               <TD v={totals.taxes}/><TD v={totals.lpc}/><TD v={totals.result} neg={totals.result<0} pos={totals.result>0}/><TD v={totals.cumResult} neg={totals.cumResult<0} pos={totals.cumResult>0}/><TD v={totals.cumResultPct} pct neg={totals.cumResultPct<0} pos={totals.cumResultPct>0}/></tr>
           </tbody>
         </table></div>
@@ -273,15 +288,18 @@ export default function PropQuickSummary() {
           { label: 'Inc. Combined Ratio', value: fp(actCR) },
         ]} />
         <div className="qs-table-shell"><table className="qs-table qs-stats qs-table-modern">
-          <thead><tr><th className="qs-left">UW Year</th><th>Premium</th><th>Inc. Claims</th><th>Commission</th><th>Profit Comm.</th><th>Brokerage</th><th>Taxes</th><th>LPC</th><th>Result</th><th>Cumulative</th><th>Cum. %</th></tr></thead>
+          <thead><tr><th className="qs-left">UW Year</th><th>Premium</th><th>Attritional Loss Ratio</th><th>Large Loss Ratio</th><th>CAT Claims Ratio</th><th>Commission</th><th>Profit Comm.</th><th>Brokerage</th><th>Taxes</th><th>LPC</th><th>Result</th><th>Cumulative</th><th>Cum. %</th></tr></thead>
           <tbody>
-            {calcRows.map(r => (
+            {calcRows.map(r => {
+              const lg = largeAmt(r.year), ct = catAmt(r.year);
+              return (
               <tr key={r.year}><th className="qs-left qs-year">{r.year}</th>
-                <TD v={r.actPremium}/><TD v={r.actClaims}/><TD v={r.actComm}/><TD v={r.actPC}/><TD v={r.actBrokerage}/>
+                <TD v={r.actPremium}/><TD v={lrPct(r.actClaims - lg - ct, r.actPremium)} pct/><TD v={lrPct(lg, r.actPremium)} pct/><TD v={lrPct(ct, r.actPremium)} pct/><TD v={r.actComm}/><TD v={r.actPC}/><TD v={r.actBrokerage}/>
                 <TD v={r.actTaxes}/><TD v={r.actLPC}/><TD v={r.actResult} neg={r.actResult<0} pos={r.actResult>0}/><TD v={r.actCumResult} neg={r.actCumResult<0} pos={r.actCumResult>0}/><TD v={r.actCumResultPct} pct neg={r.actCumResultPct<0} pos={r.actCumResultPct>0}/></tr>
-            ))}
+              );
+            })}
             <tr className="qs-total"><th className="qs-left qs-year">Total</th>
-              <TD v={totals.actPremium}/><TD v={totals.actClaims}/><TD v={totals.actComm}/><TD v={totals.actPC}/><TD v={totals.actBrokerage}/>
+              <TD v={totals.actPremium}/><TD v={lrPct(totals.actClaims - totalLargeAmt - totalCatAmt, totals.actPremium)} pct/><TD v={lrPct(totalLargeAmt, totals.actPremium)} pct/><TD v={lrPct(totalCatAmt, totals.actPremium)} pct/><TD v={totals.actComm}/><TD v={totals.actPC}/><TD v={totals.actBrokerage}/>
               <TD v={totals.actTaxes}/><TD v={totals.actLPC}/><TD v={totals.actResult} neg={totals.actResult<0} pos={totals.actResult>0}/><TD v={totals.actCumResult} neg={totals.actCumResult<0} pos={totals.actCumResult>0}/><TD v={totals.actCumResultPct} pct neg={totals.actCumResultPct<0} pos={totals.actCumResultPct>0}/></tr>
           </tbody>
         </table></div>

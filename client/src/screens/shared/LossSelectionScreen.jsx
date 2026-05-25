@@ -13,6 +13,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
   const { state: appState } = useAppState();
   const [losses, setLosses] = useState([]);
   const [threshold, setThreshold] = useState('');
+  const [thresholdFocused, setThresholdFocused] = useState(false);
   const [loading, setLoading] = useState(true);
   const [dirty, setDirty] = useState(false);
   const [saveMsg, setSaveMsg] = useState(null);
@@ -425,7 +426,17 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
                 <div className="ls-toolbar-left">
                   <div className="ls-field" title="Losses with inflated incurred below this threshold are excluded from curve fitting.">
                     <span className="ls-flabel">Threshold</span>
-                    <input className="ls-finput" type="text" value={threshold} onChange={e => setThreshold(e.target.value)} placeholder="e.g. 500,000" style={{ width: 120 }} />
+                    <input
+                      className="ls-finput"
+                      type="text"
+                      inputMode="numeric"
+                      value={thresholdFocused ? threshold : (String(threshold).trim() === '' ? '' : cn(threshold).toLocaleString('en-US', { maximumFractionDigits: 0 }))}
+                      onChange={e => setThreshold(e.target.value)}
+                      onFocus={() => setThresholdFocused(true)}
+                      onBlur={() => setThresholdFocused(false)}
+                      placeholder="e.g. 500,000"
+                      style={{ width: 120 }}
+                    />
                     <button className="ls-btn" onClick={applyThreshold}>Apply</button>
                   </div>
                   <button className="ls-btn ls-btn--green" onClick={() => { setShowInflModal(true); }}>Inflation{inflData.length > 0 ? ` (${countryName || 'loaded'})` : ''}</button>

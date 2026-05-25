@@ -4,6 +4,7 @@ import { useContractId } from '../../../hooks/useContractId';
 import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
 import { loadProjectedRows } from '../../../logic/projectWithSavedFactors';
+import { loadLossCategoryByYear } from '../../../logic/lossCategoryAmounts';
 
 const ROUTE_KEY = 'PROP_PROJECTED_SUMMARY';
 
@@ -20,6 +21,9 @@ export default function PropProjectedSummary() {
   const [error, setError] = useState(null);
   const [source, setSource] = useState('');
   const [showAnalyses, setShowAnalyses] = useState(false);
+  const [lossCat, setLossCat] = useState({ large: new Map(), cat: new Map() });
+  const [showLossModal, setShowLossModal] = useState(false);
+  const [modalTab, setModalTab] = useState('abs');
 
   useEffect(() => {
     if (!contractId) return;
@@ -30,6 +34,7 @@ export default function PropProjectedSummary() {
         const qm = appState.quoteMode ? { quote: true } : undefined;
         const { rows: standardRows, source: src } = await loadProjectedRows(contractId, qm);
         setSource(src || '');
+        setLossCat(await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() })));
 
         if (standardRows && standardRows.length > 0) {
           setResults(standardRows.map(r => ({
@@ -72,6 +77,24 @@ export default function PropProjectedSummary() {
   const reservingStatus = !Number.isFinite(reservingDelta) || (tUPaid === 0 && tUInc === 0)
     ? 'NONE'
     : reservingDelta > 0 ? 'UNDER' : reservingDelta < 0 ? 'OVER' : 'BALANCED';
+
+  /* ── Loss-breakdown modal data ──
+     Large/CAT amounts come from the saved loss grids (raw incurred) and are the
+     same for the actual and projected bases; attritional = total − large − cat. */
+  const totalLarge = results.reduce((a, r) => a + (lossCat.large.get(Number(r.year)) || 0), 0);
+  const totalCat = results.reduce((a, r) => a + (lossCat.cat.get(Number(r.year)) || 0), 0);
+  const lossModalRows = [
+    { key: 'ACTUAL', label: 'Actual', premium: tPrem, total: tAL },
+    { key: 'PROJECTED', label: 'Projected', premium: tUP, total: tUL },
+  ].map(r => {
+    const attritional = r.total - totalLarge - totalCat;
+    return {
+      ...r, attritional, large: totalLarge, cat: totalCat,
+      attrLR: r.premium > 0 ? attritional / r.premium : 0,
+      largeLR: r.premium > 0 ? totalLarge / r.premium : 0,
+      catLR: r.premium > 0 ? totalCat / r.premium : 0,
+    };
+  });
 
   /* ── Bar Chart ── */
   const BarChart = ({ title, subtitle, showToggle }) => {
@@ -184,6 +207,23 @@ export default function PropProjectedSummary() {
                     <div className="ps-block">
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                         <div className="ps-block-title" style={{ marginBottom: 0 }}>Projected Ultimate</div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          onClick={() => setShowLossModal(true)}
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: '0.04em',
+                            padding: '6px 12px',
+                            borderRadius: 8,
+                            cursor: 'pointer',
+                            border: '1px solid rgba(56,189,248,0.45)',
+                            background: 'rgba(56,189,248,0.08)',
+                            color: '#7dd3fc',
+                          }}
+                        >
+                          ▦ Loss Breakdown
+                        </button>
                         <button
                           onClick={() => setShowAnalyses(s => !s)}
                           style={{
@@ -200,6 +240,7 @@ export default function PropProjectedSummary() {
                         >
                           {showAnalyses ? '▾ Analyses' : '▸ Analyses'}
                         </button>
+                        </div>
                       </div>
                       {showAnalyses && (() => {
                         const classify = (paid, inc) => {
@@ -284,7 +325,7 @@ export default function PropProjectedSummary() {
                                 <td className={`ps-dash ${lrCls(r.projectedLR)}`}><div className="ps-cell">{fPct(r.projectedLR)}</div></td>
                               </tr>
                             ))}
-                            <tr className="ps-total">
+                            <tr className="ps-total" onClick={() => setShowLossModal(true)} style={{ cursor: 'pointer' }} title="View attritional / large / CAT loss breakdown">
                               <td className="ps-year"><div className="ps-cell">Total</div></td>
                               <td className="ps-dash"><div className="ps-cell">{fmt0(tUP)}</div></td>
                               <td className="ps-dash"><div className="ps-cell">{fmt0(tUL)}</div></td>
@@ -310,7 +351,7 @@ export default function PropProjectedSummary() {
                                 <td className={`ps-dash ${lrCls(r.actualLR)}`}><div className="ps-cell">{fPct(r.actualLR)}</div></td>
                               </tr>
                             ))}
-                            <tr className="ps-total">
+                            <tr className="ps-total" onClick={() => setShowLossModal(true)} style={{ cursor: 'pointer' }} title="View attritional / large / CAT loss breakdown">
                               <td className="ps-year"><div className="ps-cell">Total</div></td>
                               <td className="ps-dash"><div className="ps-cell">{fmt0(tPrem)}</div></td>
                               <td className="ps-dash"><div className="ps-cell">{fmt0(tAL)}</div></td>
@@ -320,6 +361,64 @@ export default function PropProjectedSummary() {
                         </table>
                       </div>
                     </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {showLossModal && (
+            <div
+              onClick={e => { if (e.target === e.currentTarget) setShowLossModal(false); }}
+              style={{ position: 'fixed', inset: 0, zIndex: 120000, background: 'rgba(2,6,23,0.72)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+            >
+              <div role="dialog" aria-modal="true" className="glass" style={{ width: 'min(920px,96vw)', maxHeight: '88vh', overflow: 'auto', borderRadius: 16, border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(8,16,40,0.97)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid rgba(148,163,184,0.14)' }}>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: '0.03em', color: '#e2e8f0' }}>Loss Breakdown — Actual vs Projected</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>Attritional = ultimate / incurred loss − large − CAT (raw incurred from the saved loss grids)</div>
+                  </div>
+                  <button onClick={() => setShowLossModal(false)} style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid rgba(148,163,184,0.25)', background: 'transparent', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 14 }}>✕</button>
+                </div>
+                <div style={{ display: 'flex', padding: '0 20px', borderBottom: '1px solid rgba(148,163,184,0.14)' }}>
+                  {[{ k: 'abs', l: 'Amounts' }, { k: 'pct', l: 'Percentages' }].map(t => (
+                    <button key={t.k} onClick={() => setModalTab(t.k)} style={{ padding: '12px 18px', fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer', background: 'transparent', color: modalTab === t.k ? '#38bdf8' : 'rgba(255,255,255,0.45)', borderBottom: modalTab === t.k ? '2px solid #38bdf8' : '2px solid transparent', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{t.l}</button>
+                  ))}
+                </div>
+                <div style={{ padding: 20 }}>
+                  <div className="ps-table-wrap">
+                    <table className="ps-table">
+                      <thead><tr>
+                        <th>Basis</th><th>Premium</th><th>Attritional</th><th>Large Loss</th><th>CAT Loss</th><th>Attr. LR</th><th>Large LR</th><th>CAT LR</th>
+                      </tr></thead>
+                      <tbody>
+                        {lossModalRows.map(r => (
+                          <tr key={r.key}>
+                            <td className="ps-year"><div className="ps-cell">{r.label}</div></td>
+                            {modalTab === 'abs' ? (
+                              <>
+                                <td className="ps-dash"><div className="ps-cell">{fmt0(r.premium)}</div></td>
+                                <td className="ps-dash"><div className="ps-cell">{fmt0(r.attritional)}</div></td>
+                                <td className="ps-dash"><div className="ps-cell">{fmt0(r.large)}</div></td>
+                                <td className="ps-dash"><div className="ps-cell">{fmt0(r.cat)}</div></td>
+                                <td className={`ps-dash ${lrCls(r.attrLR)}`}><div className="ps-cell">{r.attrLR.toFixed(3)}</div></td>
+                                <td className="ps-dash"><div className="ps-cell">{r.largeLR.toFixed(3)}</div></td>
+                                <td className="ps-dash"><div className="ps-cell">{r.catLR.toFixed(3)}</div></td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="ps-dash"><div className="ps-cell">100.0%</div></td>
+                                <td className={`ps-dash ${lrCls(r.attrLR)}`}><div className="ps-cell">{fPct(r.attrLR)}</div></td>
+                                <td className="ps-dash"><div className="ps-cell">{fPct(r.largeLR)}</div></td>
+                                <td className="ps-dash"><div className="ps-cell">{fPct(r.catLR)}</div></td>
+                                <td className={`ps-dash ${lrCls(r.attrLR)}`}><div className="ps-cell">{fPct(r.attrLR)}</div></td>
+                                <td className="ps-dash"><div className="ps-cell">{fPct(r.largeLR)}</div></td>
+                                <td className="ps-dash"><div className="ps-cell">{fPct(r.catLR)}</div></td>
+                              </>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>
