@@ -57,7 +57,11 @@ router.get("/treaties/:id/triangles/:type/with-exclusions", asyncHandler(async (
        JOIN public.contract_cat_loss_report r ON r.report_id = cl.report_id
       WHERE r.contract_id = $1`, [id]
   );
-  const field = stripFieldForType(t);
+  // Honour the per-treaty strip flag: when stripping is off, the stripped
+  // variant is identical to the full triangle (no losses removed).
+  const { rows: pd } = await pool.query(`SELECT strip_large_cat_losses FROM public.contract_prop_details WHERE contract_id=$1`, [id]);
+  const stripEnabled = pd[0]?.strip_large_cat_losses !== false; // default true
+  const field = stripEnabled ? stripFieldForType(t) : null;
   const allLosses = field ? [...largeLosses, ...catLosses] : [];
   const stripped = stripTriangleCells(cells, allLosses, field);
   const placement = summarizeLossPlacement(cells, allLosses, field);

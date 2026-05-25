@@ -1165,7 +1165,9 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: '0.03em', color: '#e2e8f0' }}>Incurred Triangle — Stripped of Large/CAT</div>
                     <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
-                      Cumulative incurred (Paid + OS) with {exclusions.largeLossCount} large and {exclusions.catLossCount} CAT loss{(exclusions.largeLossCount + exclusions.catLossCount) === 1 ? '' : 'es'} removed — the attritional basis used for dev-factor selection.
+                      {stripLargeCat
+                        ? `Cumulative incurred (Paid + OS) with ${exclusions.largeLossCount} large and ${exclusions.catLossCount} CAT loss${(exclusions.largeLossCount + exclusions.catLossCount) === 1 ? '' : 'es'} removed — the attritional basis used for dev-factor selection.`
+                        : 'Stripping is OFF for this treaty — the stripped triangle is identical to the full (original) triangle.'}
                     </div>
                   </div>
                   <button onClick={() => setShowStrippedModal(false)} style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid rgba(148,163,184,0.25)', background: 'transparent', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 14 }}>✕</button>

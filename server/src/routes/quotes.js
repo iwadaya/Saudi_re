@@ -718,7 +718,9 @@ router.get("/quotes/:id/triangles/:type/with-exclusions", asyncHandler(async (re
        JOIN public.contract_cat_loss_report r ON r.report_id = cl.report_id
       WHERE r.quote_id = $1`, [id]
   );
-  const field = stripFieldForType(t);
+  const { rows: pd } = await pool.query(`SELECT strip_large_cat_losses FROM public.quote_prop_details WHERE quote_id=$1`, [id]);
+  const stripEnabled = pd[0]?.strip_large_cat_losses !== false; // default true
+  const field = stripEnabled ? stripFieldForType(t) : null;
   const allLosses = field ? [...largeLosses, ...catLosses] : [];
   const stripped = stripTriangleCells(cells, allLosses, field);
   const placement = summarizeLossPlacement(cells, allLosses, field);
