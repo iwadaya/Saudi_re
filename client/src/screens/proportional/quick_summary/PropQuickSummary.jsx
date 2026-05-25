@@ -4,7 +4,7 @@ import { useContractId } from '../../../hooks/useContractId';
 import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
 import { loadProjectedRows } from '../../../logic/projectWithSavedFactors';
-import { loadLossCategoryByYear } from '../../../logic/lossCategoryAmounts';
+import { loadLossCategoryByYear, deriveLossComponents } from '../../../logic/lossCategoryAmounts';
 import { fmtOrEm as fmt } from '../../../utils/format';
 import {
   cn,
@@ -211,14 +211,16 @@ export default function PropQuickSummary() {
 
   const stats = calcStats(calcRows);
 
-  /* Large/CAT amounts come from the saved loss grids (raw incurred) and are
-     identical across the projected and actual sections — only premium and
-     attritional losses change between them. Attritional = total − large − cat. */
+  /* Loss components per UW year. Projected basis uses the projected (capped)
+     claims; actual basis uses the unprojected (capped) incurred. Both route
+     through deriveLossComponents so attritional/large/cat are zero-floored and
+     claims = attritional + large + cat. Large/CAT are the same raw saved
+     figures in both bases. */
   const largeAmt = yr => lossCat.large.get(Number(yr)) || 0;
   const catAmt = yr => lossCat.cat.get(Number(yr)) || 0;
-  const totalLargeAmt = calcRows.reduce((a, r) => a + largeAmt(r.year), 0);
-  const totalCatAmt = calcRows.reduce((a, r) => a + catAmt(r.year), 0);
-  const lrPct = (num, den) => (den > 0 ? (num / den) * 100 : 0);
+  const projComp = r => deriveLossComponents({ premium: r.premium, incurredTotal: r.ultClaims, large: largeAmt(r.year), cat: catAmt(r.year) });
+  const actComp = r => deriveLossComponents({ premium: r.actPremium, incurredTotal: r.actClaims, large: largeAmt(r.year), cat: catAmt(r.year) });
+  const sumComp = (fn, key) => calcRows.reduce((a, r) => a + fn(r)[key], 0);
 
   const TD = ({ v, pct, neg, pos }) => (
     <td className={neg ? 'qs-val--neg' : pos ? 'qs-val--pos' : ''}><div className="qs-td qs-td--num">{pct ? fp(v) : fmt(v)}</div></td>
@@ -257,15 +259,15 @@ export default function PropQuickSummary() {
           <thead><tr><th className="qs-left">UW Year</th><th>Premium</th><th>Attritional Loss</th><th>Large Loss</th><th>CAT Loss</th><th>Commission</th><th>Profit Comm.</th><th>Brokerage</th><th>Taxes</th><th>LPC</th><th>Result</th><th>Cumulative</th><th>Cum. %</th></tr></thead>
           <tbody>
             {calcRows.map(r => {
-              const lg = largeAmt(r.year), ct = catAmt(r.year);
+              const c = projComp(r);
               return (
               <tr key={r.year}><th className="qs-left qs-year">{r.year}</th>
-                <TD v={r.premium}/><TD v={r.ultClaims - lg - ct}/><TD v={lg}/><TD v={ct}/><TD v={r.comm}/><TD v={r.profitComm}/><TD v={r.brokerage}/>
+                <TD v={r.premium}/><TD v={c.attritional}/><TD v={c.large}/><TD v={c.cat}/><TD v={r.comm}/><TD v={r.profitComm}/><TD v={r.brokerage}/>
                 <TD v={r.taxes}/><TD v={r.lpc}/><TD v={r.result} neg={r.result<0} pos={r.result>0}/><TD v={r.cumResult} neg={r.cumResult<0} pos={r.cumResult>0}/><TD v={r.cumResultPct} pct neg={r.cumResultPct<0} pos={r.cumResultPct>0}/></tr>
               );
             })}
             <tr className="qs-total"><th className="qs-left qs-year">Total</th>
-              <TD v={totals.premium}/><TD v={totals.ultClaims - totalLargeAmt - totalCatAmt}/><TD v={totalLargeAmt}/><TD v={totalCatAmt}/><TD v={totals.comm}/><TD v={totals.profitComm}/><TD v={totals.brokerage}/>
+              <TD v={totals.premium}/><TD v={sumComp(projComp, 'attritional')}/><TD v={sumComp(projComp, 'large')}/><TD v={sumComp(projComp, 'cat')}/><TD v={totals.comm}/><TD v={totals.profitComm}/><TD v={totals.brokerage}/>
               <TD v={totals.taxes}/><TD v={totals.lpc}/><TD v={totals.result} neg={totals.result<0} pos={totals.result>0}/><TD v={totals.cumResult} neg={totals.cumResult<0} pos={totals.cumResult>0}/><TD v={totals.cumResultPct} pct neg={totals.cumResultPct<0} pos={totals.cumResultPct>0}/></tr>
           </tbody>
         </table></div>
@@ -291,15 +293,15 @@ export default function PropQuickSummary() {
           <thead><tr><th className="qs-left">UW Year</th><th>Premium</th><th>Attritional Loss</th><th>Large Loss</th><th>CAT Loss</th><th>Commission</th><th>Profit Comm.</th><th>Brokerage</th><th>Taxes</th><th>LPC</th><th>Result</th><th>Cumulative</th><th>Cum. %</th></tr></thead>
           <tbody>
             {calcRows.map(r => {
-              const lg = largeAmt(r.year), ct = catAmt(r.year);
+              const c = actComp(r);
               return (
               <tr key={r.year}><th className="qs-left qs-year">{r.year}</th>
-                <TD v={r.actPremium}/><TD v={r.actClaims - lg - ct}/><TD v={lg}/><TD v={ct}/><TD v={r.actComm}/><TD v={r.actPC}/><TD v={r.actBrokerage}/>
+                <TD v={r.actPremium}/><TD v={c.attritional}/><TD v={c.large}/><TD v={c.cat}/><TD v={r.actComm}/><TD v={r.actPC}/><TD v={r.actBrokerage}/>
                 <TD v={r.actTaxes}/><TD v={r.actLPC}/><TD v={r.actResult} neg={r.actResult<0} pos={r.actResult>0}/><TD v={r.actCumResult} neg={r.actCumResult<0} pos={r.actCumResult>0}/><TD v={r.actCumResultPct} pct neg={r.actCumResultPct<0} pos={r.actCumResultPct>0}/></tr>
               );
             })}
             <tr className="qs-total"><th className="qs-left qs-year">Total</th>
-              <TD v={totals.actPremium}/><TD v={totals.actClaims - totalLargeAmt - totalCatAmt}/><TD v={totalLargeAmt}/><TD v={totalCatAmt}/><TD v={totals.actComm}/><TD v={totals.actPC}/><TD v={totals.actBrokerage}/>
+              <TD v={totals.actPremium}/><TD v={sumComp(actComp, 'attritional')}/><TD v={sumComp(actComp, 'large')}/><TD v={sumComp(actComp, 'cat')}/><TD v={totals.actComm}/><TD v={totals.actPC}/><TD v={totals.actBrokerage}/>
               <TD v={totals.actTaxes}/><TD v={totals.actLPC}/><TD v={totals.actResult} neg={totals.actResult<0} pos={totals.actResult>0}/><TD v={totals.actCumResult} neg={totals.actCumResult<0} pos={totals.actCumResult>0}/><TD v={totals.actCumResultPct} pct neg={totals.actCumResultPct<0} pos={totals.actCumResultPct>0}/></tr>
           </tbody>
         </table></div>
@@ -352,7 +354,7 @@ export default function PropQuickSummary() {
                       <thead><tr><th className="qs-left">UW Year</th><th>Loss Ratio</th><th>Attritional LR</th><th>Large Loss LR</th><th>CAT Loss LR</th><th>Expense Ratio</th><th>Combined Ratio</th><th>Result %</th><th>Cum. Result %</th></tr></thead>
                       <tbody>
                         {calcRows.map(r => {
-                          const lg = largeAmt(r.year), ct = catAmt(r.year);
+                          const c = actComp(r);
                           const exp = r.actComm + r.actBrokerage + r.actTaxes + r.actPC;
                           const lr = r.actPremium > 0 ? (r.actClaims / r.actPremium) * 100 : 0;
                           const er = r.actPremium > 0 ? (exp / r.actPremium) * 100 : 0;
@@ -360,16 +362,16 @@ export default function PropQuickSummary() {
                           const rp = r.actPremium > 0 ? (r.actResult / r.actPremium) * 100 : 0;
                           return (<tr key={r.year}><th className="qs-left qs-year">{r.year}</th>
                             <td>{fp(lr)}</td>
-                            <td>{fp(lrPct(r.actClaims - lg - ct, r.actPremium))}</td><td>{fp(lrPct(lg, r.actPremium))}</td><td>{fp(lrPct(ct, r.actPremium))}</td>
+                            <td>{fp(c.attrLR * 100)}</td><td>{fp(c.largeLR * 100)}</td><td>{fp(c.catLR * 100)}</td>
                             <td>{fp(er)}</td><td>{fp(lr + er - lpcPct)}</td>
                             <td className={rp < 0 ? 'qs-neg' : 'qs-pos'}>{fp(rp)}</td>
                             <td className={r.actCumResultPct < 0 ? 'qs-neg' : 'qs-pos'}>{fp(r.actCumResultPct)}</td></tr>);
                         })}
                         <tr className="qs-total"><th className="qs-left qs-year">Total</th>
                           <td>{fp(totals.actPremium > 0 ? (totals.actClaims / totals.actPremium) * 100 : 0)}</td>
-                          <td>{fp(lrPct(totals.actClaims - totalLargeAmt - totalCatAmt, totals.actPremium))}</td>
-                          <td>{fp(lrPct(totalLargeAmt, totals.actPremium))}</td>
-                          <td>{fp(lrPct(totalCatAmt, totals.actPremium))}</td>
+                          <td>{fp(totals.actPremium > 0 ? (sumComp(actComp, 'attritional') / totals.actPremium) * 100 : 0)}</td>
+                          <td>{fp(totals.actPremium > 0 ? (sumComp(actComp, 'large') / totals.actPremium) * 100 : 0)}</td>
+                          <td>{fp(totals.actPremium > 0 ? (sumComp(actComp, 'cat') / totals.actPremium) * 100 : 0)}</td>
                           <td>{fp(totals.actPremium > 0 ? ((totals.actComm + totals.actBrokerage + totals.actTaxes + totals.actPC) / totals.actPremium) * 100 : 0)}</td>
                           <td>{fp(totals.actPremium > 0 ? ((totals.actClaims + totals.actComm + totals.actBrokerage + totals.actTaxes + totals.actPC - totals.actLPC) / totals.actPremium) * 100 : 0)}</td>
                           <td className={totals.actResult < 0 ? 'qs-neg' : 'qs-pos'}>{fp(totals.actPremium > 0 ? (totals.actResult / totals.actPremium) * 100 : 0)}</td>
