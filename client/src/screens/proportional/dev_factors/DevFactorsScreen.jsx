@@ -500,8 +500,11 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   const [showMunichHelp, setShowMunichHelp] = useState(false);
   const [showStrippedModal, setShowStrippedModal] = useState(false);
   // True when the source triangle has been saved more recently than these
-  // factors — the underwriter should re-review. Cleared on save here.
+  // factors — the underwriter should re-review. Re-fetched from the DB on
+  // mount and whenever `savedTick` bumps (after a successful save), so the
+  // banner reflects server ground truth rather than an optimistic local clear.
   const [stale, setStale] = useState(false);
+  const [savedTick, setSavedTick] = useState(0);
   // Both paid + OS triangles are required for Munich Chain Ladder, so on
   // screens that already source both (Incurred Dev Factors) the toggle
   // does meaningful work. On Premium / Paid-only / OS-only screens we
@@ -618,7 +621,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
       .then(d => { if (!cancelled) setStale(!!d?.stale); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [contractId, devType, apiOpts]);
+  }, [contractId, devType, apiOpts, savedTick]);
 
   /* Build matrix + calculations for the displayed basis, plus the full
      (unstripped) basis used for the conservative reference column. */
@@ -809,7 +812,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
       });
     }
     setDirty(false);
-    setStale(false); // factors are now newer than the triangle
+    setSavedTick(t => t + 1); // re-fetch staleness from the DB (ground truth)
     return true;
   }, [contractId, dirty, chosenLdfs, devType, avgMethod, apiOpts, appState.quoteMode, calcs?.pattern, calcs?.cdfs, calcs?.paramLdfs, calcs?.paramCdfs, chosenBase, chosenCdfs, ielr, projMethod, excluded, useMunich, startYear, numDevYears, isPremium, percentAchieved, years, epiPerYear, basis]);
 

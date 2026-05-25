@@ -176,4 +176,55 @@ describe('DevFactorsScreen', () => {
     const pricingPayload = apiMock.savePricingPattern.mock.calls[0][2];
     expect(pricingPayload.selected_factors.chosen_base).toBe('LINK_RATIO');
   });
+
+  it('re-fetches staleness from the server after saving (not a local clear)', async () => {
+    const triCells = [
+      { origin_year: 2021, dev_months: 12, cum_value: 100 },
+      { origin_year: 2021, dev_months: 24, cum_value: 120 },
+      { origin_year: 2021, dev_months: 36, cum_value: 144 },
+      { origin_year: 2021, dev_months: 48, cum_value: 160 },
+      { origin_year: 2021, dev_months: 60, cum_value: 176 },
+      { origin_year: 2022, dev_months: 12, cum_value: 110 },
+      { origin_year: 2022, dev_months: 24, cum_value: 132 },
+      { origin_year: 2022, dev_months: 36, cum_value: 150 },
+      { origin_year: 2022, dev_months: 48, cum_value: 170 },
+      { origin_year: 2023, dev_months: 12, cum_value: 90 },
+      { origin_year: 2023, dev_months: 24, cum_value: 108 },
+      { origin_year: 2023, dev_months: 36, cum_value: 126 },
+      { origin_year: 2024, dev_months: 12, cum_value: 80 },
+      { origin_year: 2024, dev_months: 24, cum_value: 96 },
+      { origin_year: 2025, dev_months: 12, cum_value: 70 },
+    ];
+    apiMock.getTriangle.mockResolvedValue({ cells: triCells });
+    apiMock.getTriangleWithExclusions.mockResolvedValue({
+      full: { cells: triCells }, stripped: { cells: triCells },
+      exclusions: { largeLossCount: 0, catLossCount: 0, applies: false },
+    });
+    // Stale on the mount fetch; the server reports fresh on the post-save fetch.
+    apiMock.getDevFactorStaleness
+      .mockResolvedValueOnce({ triangleUpdatedAt: '2026-02-01T00:00:00Z', factorsSavedAt: '2026-01-01T00:00:00Z', stale: true })
+      .mockResolvedValue({ triangleUpdatedAt: '2026-02-01T00:00:00Z', factorsSavedAt: '2026-03-01T00:00:00Z', stale: false });
+
+    render(
+      <DevFactorsScreen
+        routeKey="PROP_PREMIUM_DEV_FACTORS"
+        title="Premium Development Factors"
+        headerPill="PROPORTIONAL TREATY: PREMIUM DEVELOPMENT FACTORS"
+      />,
+    );
+
+    // Banner shows from the mount fetch.
+    expect(await screen.findByText(/Triangle updated since factors were last saved/i)).toBeInTheDocument();
+    expect(apiMock.getDevFactorStaleness).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getAllByText(/Link Ratios/i)[0]);
+    expect(await screen.findByText(/^Weighted$/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/Save Link Ratio Factors/i));
+
+    // Save triggers a real re-fetch (call #2), and the banner clears from the
+    // server's fresh result — not an optimistic local reset.
+    await waitFor(() => expect(apiMock.saveDevFactors).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(apiMock.getDevFactorStaleness).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText(/Triangle updated since factors were last saved/i)).toBeNull());
+  });
 });
