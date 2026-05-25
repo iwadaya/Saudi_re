@@ -411,6 +411,31 @@ function buildCalcs(triCells, { isIncurred, triSources, startYear, numDevYears, 
   return { matrix, factors, pattern, patternWarnings, cdfs, paramLdfs, paramCdfs, clProjections };
 }
 
+/* Read-only cumulative triangle grid (years × dev months). */
+function TriangleGrid({ matrix, years, numDevYears }) {
+  if (!matrix) return <div className="muted" style={{ padding: 12 }}>No triangle data.</div>;
+  const cols = Array.from({ length: numDevYears }, (_, i) => (i + 1) * 12);
+  const fmtCell = v => (v == null ? '' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 }));
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table className="tri-table">
+        <thead><tr><th className="tri-hdr" style={{ minWidth: 60 }}>Year</th>{cols.map(c => <th key={c} className="tri-hdr">{c}</th>)}</tr></thead>
+        <tbody>
+          {years.map((yr, r) => (
+            <tr key={yr}>
+              <td className="tri-yr">{yr}</td>
+              {cols.map((c, ci) => {
+                const v = matrix[r]?.[ci];
+                return <td key={ci} className={v == null ? 'tri-off' : 'tri-cell'}>{v != null && <div className="tri-inp">{fmtCell(v)}</div>}</td>;
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════
    MAIN DevFactorsScreen
    ═══════════════════════════════════════════ */
@@ -471,6 +496,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   const [benchmarks, setBenchmarks] = useState(null);
   const [useMunich, setUseMunich] = useState(false);
   const [showMunichHelp, setShowMunichHelp] = useState(false);
+  const [showStrippedModal, setShowStrippedModal] = useState(false);
   // Both paid + OS triangles are required for Munich Chain Ladder, so on
   // screens that already source both (Incurred Dev Factors) the toggle
   // does meaningful work. On Premium / Paid-only / OS-only screens we
@@ -542,6 +568,13 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
     for (const t of triSources) map[t] = triData[t]?.full || [];
     return map;
   }, [triData, triSources]);
+  // Always-stripped cells (large + cat removed), used by the comparison modal
+  // regardless of the basis currently shown on screen.
+  const strippedTriCells = useMemo(() => {
+    const map = {};
+    for (const t of triSources) map[t] = triData[t]?.stripped || [];
+    return map;
+  }, [triData, triSources]);
 
   /* Load premium data for BF */
   useEffect(() => {
@@ -568,6 +601,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   );
   const calcs = useMemo(() => buildCalcs(triCells, calcParams), [triCells, calcParams]);
   const fullCalcs = useMemo(() => buildCalcs(fullTriCells, calcParams), [fullTriCells, calcParams]);
+  const strippedCalcs = useMemo(() => buildCalcs(strippedTriCells, calcParams), [strippedTriCells, calcParams]);
 
   const bfResults = useMemo(() => {
     if (!calcs?.clProjections || projMethod !== 'BF' || isPremium) return null;
@@ -804,6 +838,18 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                 Stripped is the attritional basis — recommended. Saved per treaty: choosing Full uses
                 the original triangle and folds large/cat into attritional (shown as nil) on the summaries.
               </span>
+              {isIncurred && (
+                <button
+                  type="button"
+                  onClick={() => setShowStrippedModal(true)}
+                  style={{
+                    marginLeft: 'auto', fontSize: 11, fontWeight: 700, letterSpacing: '.04em',
+                    padding: '7px 14px', borderRadius: 8, cursor: 'pointer',
+                    border: '1px solid rgba(16,185,129,0.45)', color: '#6ee7b7',
+                    background: 'rgba(16,185,129,0.10)', whiteSpace: 'nowrap',
+                  }}
+                >▦ Stripped Incurred Triangle</button>
+              )}
             </div>
           )}
 
@@ -1109,6 +1155,30 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
             )}
 
           </>)}
+          {showStrippedModal && (
+            <div
+              onClick={e => { if (e.target === e.currentTarget) setShowStrippedModal(false); }}
+              style={{ position: 'fixed', inset: 0, zIndex: 120000, background: 'rgba(2,6,23,0.72)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+            >
+              <div role="dialog" aria-modal="true" className="glass" style={{ width: 'min(1100px,97vw)', maxHeight: '88vh', overflow: 'auto', borderRadius: 16, border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(8,16,40,0.97)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid rgba(148,163,184,0.14)' }}>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: '0.03em', color: '#e2e8f0' }}>Incurred Triangle — Stripped of Large/CAT</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
+                      Cumulative incurred (Paid + OS) with {exclusions.largeLossCount} large and {exclusions.catLossCount} CAT loss{(exclusions.largeLossCount + exclusions.catLossCount) === 1 ? '' : 'es'} removed — the attritional basis used for dev-factor selection.
+                    </div>
+                  </div>
+                  <button onClick={() => setShowStrippedModal(false)} style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid rgba(148,163,184,0.25)', background: 'transparent', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 14 }}>✕</button>
+                </div>
+                <div style={{ padding: 20 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: '#6ee7b7', marginBottom: 8 }}>STRIPPED (ATTRITIONAL)</div>
+                  <TriangleGrid matrix={strippedCalcs?.matrix} years={years} numDevYears={numDevYears} />
+                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: '#fbbf24', margin: '20px 0 8px' }}>FULL (ORIGINAL — BEFORE STRIPPING)</div>
+                  <TriangleGrid matrix={fullCalcs?.matrix} years={years} numDevYears={numDevYears} />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </WizardLayout>
