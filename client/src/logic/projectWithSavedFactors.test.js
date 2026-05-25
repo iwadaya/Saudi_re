@@ -101,6 +101,18 @@ describe('loadProjectedRows — attritional projection', () => {
     expect(r.actLoss).toBe(1000);
   });
 
+  it('does not double-count large/CAT when the stripped triangle is unavailable', async () => {
+    primeApi({ strip: true });
+    // With-exclusions returns no stripped cells (e.g. that endpoint failed while
+    // the plain paid/OS triangles loaded). imStripped falls back to the full
+    // triangle, so large/CAT are already in the projection.
+    apiMock.getTriangleWithExclusions.mockResolvedValue({ full: { cells: [] }, stripped: { cells: [] }, exclusions: {} });
+    const { rows } = await loadProjectedRows('c1');
+    const r = rows.find(x => x.year === 2021);
+    // 1000 * 1.5 = 1500. The 400 large loss must NOT be added on top again.
+    expect(r.ultLoss).toBe(1500);
+  });
+
   it('flags usedPlaceholderLdfs when it falls back to benchmark curves', async () => {
     // No triangle, no saved factors, no saved LDF blend → straight-benchmark.
     apiMock.getTriangle.mockResolvedValue({ cells: [] });

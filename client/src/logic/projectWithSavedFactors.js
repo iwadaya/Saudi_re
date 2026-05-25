@@ -243,8 +243,12 @@ export async function loadProjectedRows(contractId, opts) {
       const aP = attrProj.find(p => p.year === y);
       const dP = paidProj.find(p => p.year === y);
       const fl = fullLatest.find(p => p.year === y);
-      const large = stripLC ? (lossCat.large.get(Number(y)) || 0) : 0;
-      const cat = stripLC ? (lossCat.cat.get(Number(y)) || 0) : 0;
+      // Only add large/CAT back when we actually projected the STRIPPED
+      // (attritional) triangle. If the stripped fetch failed, imStripped fell
+      // back to the full triangle — large/CAT are already in the projection, so
+      // adding them again would double-count.
+      const large = (stripLC && strippedObj) ? (lossCat.large.get(Number(y)) || 0) : 0;
+      const cat = (stripLC && strippedObj) ? (lossCat.cat.get(Number(y)) || 0) : 0;
       // Total projected incurred = attritional projected ultimate + large loss
       // loading + CAT loading. deriveLossComponents downstream subtracts the
       // same large/CAT back out to recover the attritional component, so this
