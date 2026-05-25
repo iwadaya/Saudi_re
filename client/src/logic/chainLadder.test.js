@@ -182,6 +182,23 @@ describe('calculatePattern — averaging methods', () => {
     const { pattern } = calculatePattern(matrix, factors, 'last5');
     expect(pattern[0]).toBeCloseTo((1.5 + 1.6 + 1.3 + 1.4 + 1.2) / 5, 10);
   });
+
+  it('drops excluded "r:c" cells before averaging (simple and weighted)', () => {
+    const m = [[100, 150], [100, 160], [100, 130]]; // factors 1.5, 1.6, 1.3
+    const f = calculateAgeToAgeFactors(m);
+    const excluded = new Set(['1:0']); // drop the 1.6 outlier
+    // simple mean of 1.5 and 1.3 = 1.4
+    expect(calculatePattern(m, f, 'simple', { excluded }).pattern[0]).toBeCloseTo(1.4, 10);
+    // weighted (150+130)/(100+100) = 1.4
+    expect(calculatePattern(m, f, 'weighted', { excluded }).pattern[0]).toBeCloseTo(1.4, 10);
+  });
+
+  it('respects exclusions when slicing last3 (excluded rows are not "recent")', () => {
+    // factors: 1.5, 1.6, 1.3, 1.4, 1.2 ; exclude the most-recent (1.2) → last3 of
+    // the remaining = 1.6, 1.3, 1.4 → mean 1.4333…
+    const { pattern } = calculatePattern(matrix, factors, 'last3', { excluded: new Set(['4:0']) });
+    expect(pattern[0]).toBeCloseTo((1.6 + 1.3 + 1.4) / 3, 10);
+  });
 });
 
 describe('buildMatrixFromCells — null cell handling', () => {

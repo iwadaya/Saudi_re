@@ -244,7 +244,8 @@ function MclProjectionsTable({ mcl }) {
 }
 
 /* ═══════════════ Link Ratio View with outlier exclusion ═══════════════ */
-function LinkRatioView({ matrix, years, numDevYears, excluded, setExcluded, onPatternChange }) {
+const AVG_METHOD_LABEL = { weighted: 'Weighted', simple: 'Simple', last3: 'Last 3', last5: 'Last 5' };
+function LinkRatioView({ matrix, years, numDevYears, excluded, setExcluded, onPatternChange, method = 'weighted' }) {
   // Rules-of-hooks: every hook must run on every render. The old
   // layout had `if (!matrix) return …` before the useEffect below,
   // which made the hook order conditional — lint error. Compute the
@@ -260,23 +261,15 @@ function LinkRatioView({ matrix, years, numDevYears, excluded, setExcluded, onPa
     setExcluded(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s; });
   };
 
+  // Single source of truth: the same calculatePattern used by the Dev Factors
+  // view, so the link-ratio recalculation honours the selected averaging method
+  // (weighted / simple / last3 / last5) as well as the excluded cells.
   const { filteredPattern, filteredCdfs } = useMemo(() => {
-    const pattern = [];
-    if (matrix && factors) {
-      for (let c = 0; c < N; c++) {
-        let sumPrev = 0, sumCur = 0;
-        for (let r = 0; r < matrix.length; r++) {
-          if (!inTriangle(r, c)) continue;
-          if (excluded.has(`${r}:${c}`)) continue;
-          if (factors[r]?.[c] != null) { sumPrev += matrix[r][c]; sumCur += matrix[r][c + 1]; }
-        }
-        pattern.push(sumPrev !== 0 ? sumCur / sumPrev : 1.0);
-      }
-    }
-    const cdfs = new Array(pattern.length + 1).fill(1.0);
-    for (let i = pattern.length - 1; i >= 0; i--) cdfs[i] = pattern[i] * cdfs[i + 1];
-    return { filteredPattern: pattern, filteredCdfs: cdfs.slice(0, pattern.length) };
-  }, [excluded, factors, inTriangle, matrix, N]);
+    if (!matrix || !factors) return { filteredPattern: [], filteredCdfs: [] };
+    const { pattern } = calculatePattern(matrix, factors, method, { excluded });
+    const cdfs = calculateCdfs(pattern, 1.0).slice(0, pattern.length);
+    return { filteredPattern: pattern, filteredCdfs: cdfs };
+  }, [excluded, factors, matrix, method]);
 
   // Notify parent of filtered pattern — hook now runs unconditionally
   useEffect(() => { onPatternChange?.(filteredPattern, filteredCdfs); }, [filteredCdfs, filteredPattern, onPatternChange]);
@@ -305,7 +298,7 @@ function LinkRatioView({ matrix, years, numDevYears, excluded, setExcluded, onPa
               </tr>
             ))}
             <tr style={{ borderTop: '2px solid rgba(var(--accent-rgb),0.3)' }}>
-              <td className="tri-yr" style={{ color: 'var(--accent)' }}>Weighted</td>
+              <td className="tri-yr" style={{ color: 'var(--accent)' }}>{AVG_METHOD_LABEL[method] || 'Weighted'}</td>
               {filteredPattern.map((v, c) => <td key={c} className="tri-cell"><div className="tri-inp" style={{ fontWeight: 700, color: 'var(--accent)' }}>{fmt4(v)}</div></td>)}
             </tr>
             <tr>
@@ -392,7 +385,7 @@ function ComparisonGraph({ pattern, paramCdfs, benchmarks }) {
    cdfs → projections) from a {type: cells[]} map. Pulled out of the
    component so it can run once for the displayed basis and once for the
    full (unstripped) basis that feeds the conservative reference column. */
-function buildCalcs(triCells, { isIncurred, triSources, startYear, numDevYears, avgMethod, years }) {
+function buildCalcs(triCells, { isIncurred, triSources, startYear, numDevYears, avgMethod, years, excluded }) {
   let matrix;
   if (isIncurred) {
     const p = buildMatrixFromCells(triCells['CLAIMS_PAID'] || [], startYear, numDevYears);
@@ -405,7 +398,7 @@ function buildCalcs(triCells, { isIncurred, triSources, startYear, numDevYears, 
     matrix = d.matrix;
   }
   const factors = calculateAgeToAgeFactors(matrix);
-  const { pattern, warnings: patternWarnings } = calculatePattern(matrix, factors, avgMethod);
+  const { pattern, warnings: patternWarnings } = calculatePattern(matrix, factors, avgMethod, { excluded });
   const cdfs = calculateCdfs(pattern, 1.0);
   const paramCdfs = fitExponentialCdfs(cdfs);
   const paramLdfs = deriveLdfsFromCdfs(paramCdfs);
@@ -570,8 +563,8 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   /* Build matrix + calculations for the displayed basis, plus the full
      (unstripped) basis used for the conservative reference column. */
   const calcParams = useMemo(
-    () => ({ isIncurred, triSources, startYear, numDevYears, avgMethod, years }),
-    [isIncurred, triSources, startYear, numDevYears, avgMethod, years],
+    () => ({ isIncurred, triSources, startYear, numDevYears, avgMethod, years, excluded }),
+    [isIncurred, triSources, startYear, numDevYears, avgMethod, years, excluded],
   );
   const calcs = useMemo(() => buildCalcs(triCells, calcParams), [triCells, calcParams]);
   const fullCalcs = useMemo(() => buildCalcs(fullTriCells, calcParams), [fullTriCells, calcParams]);
@@ -1077,7 +1070,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
             {/* ═══ LINK RATIOS VIEW ═══ */}
             {view === 'LINK_RATIOS' && (<>
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginBottom: 8, padding: '8px 14px', borderRadius: 10, background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
-                Excluding link ratios here will <b style={{ color: '#fb923c' }}>override</b> the Underwriter Chosen Factors with the recalculated weighted averages.
+                Excluding link ratios here will <b style={{ color: '#fb923c' }}>override</b> the Underwriter Chosen Factors with the recalculated {(AVG_METHOD_LABEL[avgMethod] || 'Weighted').toLowerCase()} averages.
               </div>
               <LinkRatioView
                 matrix={calcs.matrix}
@@ -1086,6 +1079,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                 excluded={excluded}
                 setExcluded={handleLinkRatioExcludedChange}
                 onPatternChange={applyLinkRatioPattern}
+                method={avgMethod}
               />
               <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
                 <button className="orange-gloss-btn" onClick={async () => {
