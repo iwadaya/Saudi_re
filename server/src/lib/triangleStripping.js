@@ -110,6 +110,32 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// INCURRED stripping: always strip the incurred amount directly from the combined
+// (paid + OS) triangle. Do NOT strip paid and OS separately and sum — this would
+// produce the wrong result if loss.paid + loss.os != loss.incurred on any record.
+//
+// Builds the combined incurred triangle by summing paid + OS cells per
+// (origin_year, dev_months). A cell present in only one leg counts the other as
+// zero. Output is sorted (origin_year, dev_months) like the raw triangle queries.
+export function combineIncurredCells(paidCells, osCells) {
+  const byKey = new Map();
+  const accumulate = (cells) => {
+    for (const c of Array.isArray(cells) ? cells : []) {
+      const origin_year = Number(c.origin_year);
+      const dev_months = Number(c.dev_months);
+      const key = `${origin_year}:${dev_months}`;
+      const prev = byKey.get(key) || { origin_year, dev_months, cum_value: 0 };
+      prev.cum_value += num(c.cum_value);
+      byKey.set(key, prev);
+    }
+  };
+  accumulate(paidCells);
+  accumulate(osCells);
+  return [...byKey.values()].sort(
+    (a, b) => a.origin_year - b.origin_year || a.dev_months - b.dev_months,
+  );
+}
+
 /**
  * Strip losses from triangle cells.
  *

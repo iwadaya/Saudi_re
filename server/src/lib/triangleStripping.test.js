@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stripTriangleCells, lossEntryDevMonths, stripFieldForType, summarizeLossPlacement } from './triangleStripping.js';
+import { stripTriangleCells, lossEntryDevMonths, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from './triangleStripping.js';
 
 describe('stripFieldForType', () => {
   it('maps claims types to their loss amount column', () => {
@@ -49,6 +49,38 @@ describe('summarizeLossPlacement', () => {
       { uw_year: 2099, incurred: 50, date_of_loss: '2099-03-10' },        // no row → skipped
     ];
     expect(summarizeLossPlacement(cells, losses, 'incurred')).toEqual({ reported: 0, proxy: 0, total: 0 });
+  });
+});
+
+describe('combineIncurredCells', () => {
+  const cell = (year, dev, val) => ({ origin_year: year, dev_months: dev, cum_value: val });
+
+  it('sums paid + OS per origin_year/dev_months', () => {
+    const paid = [cell(2021, 12, 100), cell(2021, 24, 150)];
+    const os = [cell(2021, 12, 40), cell(2021, 24, 30)];
+    expect(combineIncurredCells(paid, os)).toEqual([
+      cell(2021, 12, 140),
+      cell(2021, 24, 180),
+    ]);
+  });
+
+  it('treats a cell present in only one leg as the other being zero', () => {
+    const paid = [cell(2021, 12, 100)];
+    const os = [cell(2021, 24, 30)]; // no paid at dev24, no OS at dev12
+    expect(combineIncurredCells(paid, os)).toEqual([
+      cell(2021, 12, 100),
+      cell(2021, 24, 30),
+    ]);
+  });
+
+  it('sorts output by origin_year then dev_months and coerces numeric strings', () => {
+    const paid = [cell(2022, 12, 10), cell(2021, 24, 5)];
+    const os = [{ origin_year: '2021', dev_months: '12', cum_value: '7' }];
+    expect(combineIncurredCells(paid, os)).toEqual([
+      cell(2021, 12, 7),
+      cell(2021, 24, 5),
+      cell(2022, 12, 10),
+    ]);
   });
 });
 

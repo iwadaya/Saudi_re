@@ -4,7 +4,7 @@ import { pool } from "../db/pool.js";
 import { asyncHandler, numOrNull, dateOrNull, boolOrDefault } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from '../lib/triangleBounds.js';
-import { stripTriangleCells, stripFieldForType, summarizeLossPlacement } from '../lib/triangleStripping.js';
+import { stripTriangleCells, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from '../lib/triangleStripping.js';
 import { suggestLossQuarters } from '../lib/lossQuarterMapper.js';
 import { logAudit } from '../services/audit.js';
 import { contractContextJoins } from '../db/contractJoins.js';
@@ -702,10 +702,23 @@ router.get("/quotes/:id/triangles/:type/with-exclusions", asyncHandler(async (re
   const typeParse = triangleTypeSchema.safeParse(type.toUpperCase());
   if (!typeParse.success) return res.status(400).json({ error: 'Invalid triangle type', code: 'VALIDATION_FAILED' });
   const t = typeParse.data;
-  const { rows: cells } = await pool.query(
-    `SELECT cell_id,origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type=$2::public.triangle_type ORDER BY origin_year,dev_months`,
-    [id, t]
-  );
+  // INCURRED is not stored as its own triangle — it is paid + OS. Build the
+  // combined full triangle here so the incurred loss amount can be stripped
+  // directly from it (see combineIncurredCells in lib/triangleStripping.js).
+  let cells;
+  if (t === 'INCURRED') {
+    const [{ rows: paidCells }, { rows: osCells }] = await Promise.all([
+      pool.query(`SELECT origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type='CLAIMS_PAID'::public.triangle_type ORDER BY origin_year,dev_months`, [id]),
+      pool.query(`SELECT origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type='CLAIMS_OS'::public.triangle_type ORDER BY origin_year,dev_months`, [id]),
+    ]);
+    cells = combineIncurredCells(paidCells, osCells);
+  } else {
+    const { rows } = await pool.query(
+      `SELECT cell_id,origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type=$2::public.triangle_type ORDER BY origin_year,dev_months`,
+      [id, t]
+    );
+    cells = rows;
+  }
   const { rows: largeLosses } = await pool.query(
     `SELECT ll.uw_year, ll.date_of_loss, ll.actuarial_reported_date, ll.paid, ll.os, ll.incurred
        FROM public.contract_large_losses ll

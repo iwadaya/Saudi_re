@@ -21,7 +21,10 @@ const TRIANGLE_SOURCE = {
   PROP_PREMIUM_DEV_FACTORS: ['PREMIUM'],
   PROP_PAID_CLAIMS_DEV_FACTORS: ['CLAIMS_PAID'],
   PROP_OS_CLAIMS_DEV_FACTORS: ['CLAIMS_OS'],
-  PROP_INCURRED_DEV_FACTORS: ['CLAIMS_PAID', 'CLAIMS_OS'],
+  // Incurred is served as a single combined type — the server builds the full
+  // (paid + OS) triangle and strips the incurred amount directly from it. See
+  // combineIncurredCells in server/src/lib/triangleStripping.js.
+  PROP_INCURRED_DEV_FACTORS: ['INCURRED'],
 };
 
 const fmt4   = n => (n == null || !Number.isFinite(Number(n))) ? '' : Number(n).toFixed(4);
@@ -385,18 +388,13 @@ function ComparisonGraph({ pattern, paramCdfs, benchmarks }) {
    cdfs → projections) from a {type: cells[]} map. Pulled out of the
    component so it can run once for the displayed basis and once for the
    full (unstripped) basis that feeds the conservative reference column. */
-function buildCalcs(triCells, { isIncurred, triSources, startYear, numDevYears, avgMethod, years, excluded }) {
-  let matrix;
-  if (isIncurred) {
-    const p = buildMatrixFromCells(triCells['CLAIMS_PAID'] || [], startYear, numDevYears);
-    const o = buildMatrixFromCells(triCells['CLAIMS_OS'] || [], startYear, numDevYears);
-    if (!p || !o) return null;
-    matrix = p.matrix.map((row, r) => row.map((v, c) => { const pv = v ?? 0, ov = o.matrix[r]?.[c] ?? 0; return (v == null && o.matrix[r]?.[c] == null) ? null : pv + ov; }));
-  } else {
-    const d = buildMatrixFromCells(triCells[triSources[0]] || [], startYear, numDevYears);
-    if (!d) return null;
-    matrix = d.matrix;
-  }
+function buildCalcs(triCells, { triSources, startYear, numDevYears, avgMethod, years, excluded }) {
+  // Every screen now has a single triangle source — including Incurred, which
+  // the server returns as a combined (paid + OS) triangle already stripped of
+  // the incurred loss amount when applicable.
+  const d = buildMatrixFromCells(triCells[triSources[0]] || [], startYear, numDevYears);
+  if (!d) return null;
+  const matrix = d.matrix;
   const factors = calculateAgeToAgeFactors(matrix);
   const { pattern, warnings: patternWarnings } = calculatePattern(matrix, factors, avgMethod, { excluded });
   const cdfs = calculateCdfs(pattern, 1.0);
@@ -444,7 +442,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   const { state: appState, setSlice } = useAppState();
   const devType = TYPE_MAP[routeKey] || 'PREMIUM';
   const triSources = useMemo(() => TRIANGLE_SOURCE[routeKey] || ['PREMIUM'], [routeKey]);
-  const isIncurred = triSources.length > 1;
+  const isIncurred = devType === 'INCURRED';
   const isPremium = devType === 'PREMIUM';
 
   const meta = appState.triangleMeta || {};
@@ -476,6 +474,10 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   // endpoint. Both variants are always fetched so the conservative
   // (full-basis) reference column is available regardless of the basis shown.
   const [triData, setTriData] = useState({});
+  // Munich Chain Ladder needs the paid and OS legs separately (full only — MCL
+  // does not use stripped data). The Incurred screen now sources a single
+  // combined INCURRED triangle, so fetch paid + OS here just for MCL.
+  const [mclCells, setMclCells] = useState({ CLAIMS_PAID: [], CLAIMS_OS: [] });
   const [exclusions, setExclusions] = useState({ largeLossCount: 0, catLossCount: 0, applies: false, proxyPlaced: 0 });
   const [lossWarningDismissed, setLossWarningDismissed] = useState(false);
   const [projMethod, setProjMethod] = useState('CHAIN');
@@ -552,6 +554,18 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
     }).finally(() => setLoading(false));
   }, [contractId, apiOpts, triSources]);
 
+  /* Load the paid + OS legs (full only) for Munich Chain Ladder. Only the
+     Incurred screen offers MCL, and it no longer fetches paid/OS via the
+     combined INCURRED source, so pull them separately here. */
+  useEffect(() => {
+    if (!contractId || !isIncurred) return;
+    const pickCells = d => d?.cells || (Array.isArray(d) ? d : []);
+    Promise.all([
+      api.getTriangle(contractId, 'CLAIMS_PAID', apiOpts).then(pickCells).catch(() => []),
+      api.getTriangle(contractId, 'CLAIMS_OS', apiOpts).then(pickCells).catch(() => []),
+    ]).then(([paid, os]) => setMclCells({ CLAIMS_PAID: paid, CLAIMS_OS: os }));
+  }, [contractId, isIncurred, apiOpts]);
+
   // Cells for the basis currently shown, and always-full cells for the
   // conservative reference. `calcs` reads triCells so it recomputes when
   // the basis toggles.
@@ -596,8 +610,8 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   /* Build matrix + calculations for the displayed basis, plus the full
      (unstripped) basis used for the conservative reference column. */
   const calcParams = useMemo(
-    () => ({ isIncurred, triSources, startYear, numDevYears, avgMethod, years, excluded }),
-    [isIncurred, triSources, startYear, numDevYears, avgMethod, years, excluded],
+    () => ({ triSources, startYear, numDevYears, avgMethod, years, excluded }),
+    [triSources, startYear, numDevYears, avgMethod, years, excluded],
   );
   const calcs = useMemo(() => buildCalcs(triCells, calcParams), [triCells, calcParams]);
   const fullCalcs = useMemo(() => buildCalcs(fullTriCells, calcParams), [fullTriCells, calcParams]);
@@ -608,14 +622,13 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
     return calculateBF(calcs.clProjections, premiums, Number(ielr) || 0);
   }, [calcs, projMethod, premiums, ielr, isPremium]);
 
-  /* Munich Chain Ladder — needs both paid and incurred matrices.
-     We rebuild paid + (paid + OS) here rather than reusing `calcs.matrix`
-     because for the Incurred screen `matrix` is already paid+OS, and MCL
-     wants the paid leg separately. */
+  /* Munich Chain Ladder — needs both the paid and incurred (paid + OS)
+     matrices, with the paid leg separate. Uses the full paid/OS legs fetched
+     into `mclCells` (MCL never runs on stripped data). */
   const mclResult = useMemo(() => {
     if (!useMunich || projMethod !== 'CHAIN' || !munichAvailable) return null;
-    const paidObj = buildMatrixFromCells(triCells['CLAIMS_PAID'] || [], startYear, numDevYears);
-    const osObj   = buildMatrixFromCells(triCells['CLAIMS_OS']   || [], startYear, numDevYears);
+    const paidObj = buildMatrixFromCells(mclCells['CLAIMS_PAID'] || [], startYear, numDevYears);
+    const osObj   = buildMatrixFromCells(mclCells['CLAIMS_OS']   || [], startYear, numDevYears);
     if (!paidObj || !osObj) return null;
     const incurred = paidObj.matrix.map((row, r) =>
       row.map((v, c) => {
@@ -624,7 +637,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
       }),
     );
     return calculateMunichChainLadder({ paid: paidObj.matrix, incurred, years });
-  }, [useMunich, projMethod, munichAvailable, triCells, startYear, numDevYears, years]);
+  }, [useMunich, projMethod, munichAvailable, mclCells, startYear, numDevYears, years]);
 
   // Comma-tolerant numeric parse for the EPI input cells.
   const parseNum = (v) => {
