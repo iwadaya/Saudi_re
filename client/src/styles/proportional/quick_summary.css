@@ -931,6 +931,13 @@
   min-width: 920px; /* keeps columns readable; scrolls on small screens */
 }
 
+/* Wide tables (many columns) size each column to its content and scroll
+   horizontally inside .qs-table-shell rather than truncating. */
+.QUICK_SUMMARY_PAGE .qs-table-modern.qs-table--scroll{
+  table-layout: auto;
+  min-width: 1180px;
+}
+
 .QUICK_SUMMARY_PAGE .qs-table-modern thead th{
   position: sticky;
   top: 0;
