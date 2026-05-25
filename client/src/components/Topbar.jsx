@@ -1,7 +1,7 @@
 // src/components/Topbar.jsx
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { clearSession, getSession, ROLE_LABELS, canAccessApprovals, isAtLeast, isTestSession, getUserDisplayName } from '../utils/auth';
+import { clearSession, getSession, ROLE_LABELS, canAccessApprovals, isAtLeast } from '../utils/auth';
 import { api } from '../api';
 import ThemeSwitcher from './ThemeSwitcher';
 

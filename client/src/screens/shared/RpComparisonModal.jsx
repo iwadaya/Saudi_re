@@ -223,7 +223,7 @@ export default function RpComparisonModal({
                       onChange={(e) => setTpRows(prev => {
                         // Strip commas and other non-numeric chars before
                         // storing so parseFloat / parseRows still work.
-                        const cleaned = String(e.target.value).replace(/[^0-9.\-]/g, '');
+                        const cleaned = String(e.target.value).replace(/[^0-9.-]/g, '');
                         const next = [...prev];
                         while (next.length <= i) next.push({ rp: String(fittedRows[next.length]?.rp ?? ''), loss: '' });
                         next[i] = { rp: String(r.rp), loss: cleaned };
