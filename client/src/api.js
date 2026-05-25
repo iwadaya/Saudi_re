@@ -125,6 +125,7 @@ const PATHS = {
   deleteDocument: (docId) => `/api/documents/${enc(docId)}`,
   largeLosses: (id) => `/api/treaties/${enc(id)}/large-losses`,
   catLosses: (id) => `/api/treaties/${enc(id)}/cat-losses`,
+  stripLargeCat: (id) => `/api/treaties/${enc(id)}/strip-large-cat`,
   portfolioLosses: (id, lossType) => `/api/treaties/${enc(id)}/portfolio-losses/${enc(lossType)}`,
   suggestLossQuarters: (id) => `/api/treaties/${enc(id)}/losses/suggest-quarters`,
   treatyCobs: (id) => `/api/treaties/${enc(id)}/cobs`,
@@ -183,6 +184,7 @@ const QUOTE_PATHS = {
   quoteWordingChecklistAi: (id) => `/api/quotes/${enc(id)}/wording-checklist/ai-check`,
   largeLosses: (id) => `/api/quotes/${enc(id)}/large-losses`,
   catLosses: (id) => `/api/quotes/${enc(id)}/cat-losses`,
+  stripLargeCat: (id) => `/api/quotes/${enc(id)}/strip-large-cat`,
   suggestLossQuarters: (id) => `/api/quotes/${enc(id)}/losses/suggest-quarters`,
   quoteCobs: (id) => `/api/quotes/${enc(id)}/cobs`,
   riskProfile: (id, cobId) => `/api/quotes/${enc(id)}/risk-profiles/${enc(cobId)}`,
@@ -429,6 +431,7 @@ export const api = {
   saveLargeLosses(id, payload, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.largeLosses(id) : PATHS.largeLosses(id), { method: 'PUT', body: payload, ...opts }); },
   getCatLosses(id, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.catLosses(id) : PATHS.catLosses(id), opts); },
   getPortfolioLosses(id, lossType, opts) { return request(PATHS.portfolioLosses(id, lossType), opts); },
+  setStripLargeCat(id, value, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.stripLargeCat(id) : PATHS.stripLargeCat(id), { method: 'PUT', body: { strip_large_cat_losses: value }, ...opts }); },
   saveCatLosses(id, payload, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.catLosses(id) : PATHS.catLosses(id), { method: 'PUT', body: payload, ...opts }); },
   suggestLossQuarters(id, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.suggestLossQuarters(id) : PATHS.suggestLossQuarters(id), { method: 'POST', body: {}, ...opts }); },
   getLossSelectionLatest(id, lossType, opts) {

@@ -102,6 +102,7 @@ export function QuickSummaryEmbed({ contractId: propContractId }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lossCat, setLossCat] = useState({ large: new Map(), cat: new Map() });
+  const [stripLC, setStripLC] = useState(true);
 
   useEffect(() => {
     if (!contractId) return;
@@ -111,6 +112,7 @@ export function QuickSummaryEmbed({ contractId: propContractId }) {
       try {
         const contract = await api.getContract(contractId, qm).catch(() => ({}));
         const t = buildTreatyTerms(contract, appState.propTreatyDetail || {});
+        setStripLC(t.strip_large_cat !== false);
         const { rows: standardRows } = await loadProjectedRows(contractId, qm);
         if (!standardRows || standardRows.length === 0) { setCalcRows([]); setLoading(false); return; }
         const { rows, totals: tot } = runFinancialEngine(standardRows, t);
@@ -128,8 +130,8 @@ export function QuickSummaryEmbed({ contractId: propContractId }) {
   const TD = ({ v, pct, neg, pos }) => (
     <td className={neg ? 'qs-val--neg' : pos ? 'qs-val--pos' : ''}><div className="qs-td qs-td--num">{pct ? fp(v) : fmt(v)}</div></td>
   );
-  const largeAmt = yr => lossCat.large.get(Number(yr)) || 0;
-  const catAmt = yr => lossCat.cat.get(Number(yr)) || 0;
+  const largeAmt = yr => (stripLC ? (lossCat.large.get(Number(yr)) || 0) : 0);
+  const catAmt = yr => (stripLC ? (lossCat.cat.get(Number(yr)) || 0) : 0);
   const projComp = r => deriveLossComponents({ premium: r.premium, incurredTotal: r.ultClaims, large: largeAmt(r.year), cat: catAmt(r.year) });
   const actComp = r => deriveLossComponents({ premium: r.actPremium, incurredTotal: r.actClaims, large: largeAmt(r.year), cat: catAmt(r.year) });
   const sumComp = (fn, key) => calcRows.reduce((a, r) => a + fn(r)[key], 0);
@@ -223,8 +225,11 @@ export default function PropQuickSummary() {
      through deriveLossComponents so attritional/large/cat are zero-floored and
      claims = attritional + large + cat. Large/CAT are the same raw saved
      figures in both bases. */
-  const largeAmt = yr => lossCat.large.get(Number(yr)) || 0;
-  const catAmt = yr => lossCat.cat.get(Number(yr)) || 0;
+  // When the treaty opts out of stripping, large/cat fold into attritional
+  // (shown as nil); otherwise they come from the saved loss grids.
+  const stripLC = terms?.strip_large_cat !== false;
+  const largeAmt = yr => (stripLC ? (lossCat.large.get(Number(yr)) || 0) : 0);
+  const catAmt = yr => (stripLC ? (lossCat.cat.get(Number(yr)) || 0) : 0);
   const projComp = r => deriveLossComponents({ premium: r.premium, incurredTotal: r.ultClaims, large: largeAmt(r.year), cat: catAmt(r.year) });
   const actComp = r => deriveLossComponents({ premium: r.actPremium, incurredTotal: r.actClaims, large: largeAmt(r.year), cat: catAmt(r.year) });
   const sumComp = (fn, key) => calcRows.reduce((a, r) => a + fn(r)[key], 0);

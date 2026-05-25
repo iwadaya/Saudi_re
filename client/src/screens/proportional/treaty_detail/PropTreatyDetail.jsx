@@ -583,6 +583,7 @@ export default function PropTreatyDetail() {
         quotaShareEpi: cleanNum(d.quota_share_epi), surplusEpi: cleanNum(d.surplus_epi),
         epiSplit: Array.isArray(data.epi_split) ? data.epi_split.map(r => ({ classId: r.class_id, premium: cleanNum(r.premium) })) : [],
         brokeragePct: cleanNum(d.brokerage_pct), taxesPct: cleanNum(d.taxes_pct), lossCapPct: cleanNum(d.loss_cap_pct),
+        stripLargeCat: d.strip_large_cat_losses !== false,
         _updatedAt: data.updated_at || data.updatedAt || null,
         _loadedFromServer: true,
       });
@@ -652,6 +653,7 @@ export default function PropTreatyDetail() {
           total_capacity: numOrNull(cur.totalCapacity), event_limit: numOrNull(cur.eventLimit), aal: numOrNull(cur.aal),
           quota_share_epi: numOrNull(cur.quotaShareEpi), surplus_epi: numOrNull(cur.surplusEpi),
           brokerage_pct: numOrNull(cur.brokeragePct), taxes_pct: numOrNull(cur.taxesPct), loss_cap_pct: numOrNull(cur.lossCapPct),
+          strip_large_cat_losses: cur.stripLargeCat !== false,
         },
         commissions: { mode: isSlidingNow ? 'SLIDING' : 'FIXED', fixed_commission_qs_pct: numOrNull(cur.fixedCommissionQSPct), fixed_commission_surplus_pct: numOrNull(cur.fixedCommissionSurplusPct), sliding_min_loss_ratio: numOrNull(cur.slidingMinLossRatio), sliding_max_loss_ratio: numOrNull(cur.slidingMaxLossRatio), sliding_min_commission: numOrNull(cur.slidingMinCommission), sliding_max_commission: numOrNull(cur.slidingMaxCommission), sliding_table: cur.slidingTable || [], provisional_commission_pct: numOrNull(cur.provisionalCommissionPct), mgmt_expenses_pct: numOrNull(cur.mgmtExpensesPct), profit_commission_pct: numOrNull(cur.profitCommissionPct), lcf_years: cur.lcfYears === 'extinction' ? null : numOrNull(cur.lcfYears), lcf_extinction: cur.lcfYears === 'extinction' || cur.lcfExtinction || false },
         lossParticipation: {

@@ -318,6 +318,19 @@ router.get("/treaties/:id/portfolio-losses/:lossType", asyncHandler(async (req, 
   res.json({ losses, treatyCount });
 }));
 
+// ── STRIP LARGE/CAT TOGGLE ──
+// Per-treaty choice of whether large + cat losses are stripped from the claims
+// triangle. Focused single-column update so it can be persisted from the Dev
+// Factors screen without overwriting the rest of the treaty detail.
+router.put("/treaties/:id/strip-large-cat", asyncHandler(async (req, res) => {
+  const strip = req.body?.strip_large_cat_losses !== false;
+  await pool.query(
+    `UPDATE public.contract_prop_details SET strip_large_cat_losses=$2, updated_at=now() WHERE contract_id=$1`,
+    [req.params.id, strip]
+  );
+  res.json({ ok: true, strip_large_cat_losses: strip });
+}));
+
 
 // ── AI: MAP LOSSES TO DEVELOPMENT QUARTERS ──
 // Advisory: suggests the development period each large/cat loss most likely

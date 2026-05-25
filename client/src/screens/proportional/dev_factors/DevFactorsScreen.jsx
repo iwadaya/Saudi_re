@@ -423,7 +423,7 @@ function buildCalcs(triCells, { isIncurred, triSources, startYear, numDevYears, 
    ═══════════════════════════════════════════ */
 export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   const contractId = useContractId();
-  const { state: appState } = useAppState();
+  const { state: appState, setSlice } = useAppState();
   const devType = TYPE_MAP[routeKey] || 'PREMIUM';
   const triSources = useMemo(() => TRIANGLE_SOURCE[routeKey] || ['PREMIUM'], [routeKey]);
   const isIncurred = triSources.length > 1;
@@ -443,10 +443,17 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   );
 
   const [view, setView] = useState('DEV_FACTORS'); // DEV_FACTORS | LINK_RATIOS | GRAPH
-  // Triangle basis is a view-only preference (not persisted). Default to
-  // "stripped" — the attritional basis is the actuarially correct one for
-  // selecting development factors.
-  const [basis, setBasis] = useState('STRIPPED'); // STRIPPED | FULL
+  // Triangle basis is a persisted per-treaty choice: STRIPPED (the attritional
+  // basis — strip large/cat, the actuarial default) or FULL (use original data,
+  // which also folds large/cat into attritional on the summaries). It's derived
+  // from the saved strip_large_cat_losses flag and written through on toggle.
+  const stripLargeCat = appState.propTreatyDetail?.stripLargeCat !== false;
+  const basis = stripLargeCat ? 'STRIPPED' : 'FULL';
+  const setBasis = (next) => {
+    const strip = next === 'STRIPPED';
+    setSlice('propTreatyDetail', { ...(appState.propTreatyDetail || {}), stripLargeCat: strip });
+    api.setStripLargeCat(contractId, strip, apiOpts).catch(() => {});
+  };
   // Per-type { full: cells[], stripped: cells[] } from the with-exclusions
   // endpoint. Both variants are always fetched so the conservative
   // (full-basis) reference column is available regardless of the basis shown.
@@ -789,7 +796,8 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                 <span className={`toggle-option${basis === 'STRIPPED' ? ' active' : ''}`} onClick={() => setBasis('STRIPPED')}>Stripped of Large/Cat Losses</span>
               </div>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                Stripped is the attritional basis — recommended for selecting factors.
+                Stripped is the attritional basis — recommended. Saved per treaty: choosing Full uses
+                the original triangle and folds large/cat into attritional (shown as nil) on the summaries.
               </span>
             </div>
           )}
