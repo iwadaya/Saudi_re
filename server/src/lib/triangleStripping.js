@@ -166,11 +166,15 @@ export function stripTriangleCells(cells, losses, amountField) {
       for (const { entry, amt } of lossesForYear) {
         if (entry <= dev) subtract += amt;
       }
-      const rawStripped = num(c.cum_value) - subtract;
-      // Clamp to zero, then enforce cumulative monotonicity (never drop
-      // below the prior stripped column). max() folds both rules together
-      // since prevStripped is always >= 0.
-      const stripped = Math.max(rawStripped, prevStripped);
+      const fullVal = num(c.cum_value);
+      const rawStripped = fullVal - subtract;
+      // Zero-floor + cumulative monotonicity (never drop below the prior stripped
+      // column), but NEVER exceed the original cell: stripping only removes value,
+      // so a stripped cell is always <= its full counterpart. The min cap matters
+      // when the full triangle dips (reserve release) — without it the monotonic
+      // clamp would lift the stripped value above the full one, and a loss-free
+      // year would be raised to its monotonic envelope.
+      const stripped = Math.min(fullVal, Math.max(rawStripped, prevStripped));
       prevStripped = stripped;
       out.push({ ...c, cum_value: stripped });
     }

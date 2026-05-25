@@ -182,6 +182,31 @@ describe('stripTriangleCells', () => {
     expect(out.map(c => c.cum_value)).toEqual([0, 150, 170]);
   });
 
+  it('never produces a stripped cell greater than its full cell, even when the full triangle dips', () => {
+    const cells = [...annualRow(2020, [200, 150, 400]), ...annualRow(2021, [100, 80, 90])];
+    const losses = [
+      { uw_year: 2020, incurred: 60, date_of_loss: '2020-01-01' },
+      { uw_year: 2021, incurred: 20, date_of_loss: '2021-06-01' },
+    ];
+    const out = stripTriangleCells(cells, losses, 'incurred');
+    const full = new Map(cells.map(c => [`${c.origin_year}:${c.dev_months}`, c.cum_value]));
+    for (const c of out) {
+      expect(c.cum_value).toBeLessThanOrEqual(full.get(`${c.origin_year}:${c.dev_months}`));
+    }
+  });
+
+  it('leaves a loss-free year identical to full even when its triangle dips', () => {
+    // 2021 has no large/cat losses; 2020 does (so stripping is active). 2021's
+    // incurred dips 100→50 then recovers — it must come back untouched, not
+    // raised to the monotonic envelope [100,100,100].
+    const cells = [...annualRow(2020, [200, 260, 300]), ...annualRow(2021, [100, 50, 60])];
+    const losses = [{ uw_year: 2020, incurred: 40, date_of_loss: '2020-01-01' }];
+    const out = stripTriangleCells(cells, losses, 'incurred');
+    const y2021 = out.filter(c => c.origin_year === 2021)
+      .sort((a, b) => a.dev_months - b.dev_months).map(c => c.cum_value);
+    expect(y2021).toEqual([100, 50, 60]);
+  });
+
   it('sums multiple losses that enter at different periods', () => {
     const cells = annualRow(2021, [100, 300, 600]);
     const out = stripTriangleCells(
