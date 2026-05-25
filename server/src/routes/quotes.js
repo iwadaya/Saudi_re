@@ -815,6 +815,30 @@ router.get("/quotes/:id/dev-factors/:type", asyncHandler(async (req, res) => {
   );
   res.json(rows);
 }));
+// Quote mirror of the treaty dev-factor staleness check (see treatyData.js).
+router.get("/quotes/:id/dev-factors/:type/staleness", asyncHandler(async (req, res) => {
+  const { id, type } = req.params;
+  const typeParse = triangleTypeSchema.safeParse(type.toUpperCase());
+  if (!typeParse.success) return res.status(400).json({ error: 'Invalid triangle type', code: 'VALIDATION_FAILED' });
+  const t = typeParse.data;
+  const sourceTypes = t === 'INCURRED' ? ['CLAIMS_PAID', 'CLAIMS_OS'] : [t];
+  const [triRes, dfRes] = await Promise.all([
+    pool.query(
+      `SELECT MAX(updated_at) AS ts FROM public.quote_triangle_cells
+        WHERE quote_id=$1 AND type = ANY($2::public.triangle_type[])`,
+      [id, sourceTypes]
+    ),
+    pool.query(
+      `SELECT MAX(saved_at) AS ts FROM public.quote_dev_factor
+        WHERE quote_id=$1 AND triangle_type=$2::public.triangle_type`,
+      [id, t]
+    ),
+  ]);
+  const triangleUpdatedAt = triRes.rows[0]?.ts || null;
+  const factorsSavedAt = dfRes.rows[0]?.ts || null;
+  const stale = !!(triangleUpdatedAt && factorsSavedAt && new Date(triangleUpdatedAt) > new Date(factorsSavedAt));
+  res.json({ triangleUpdatedAt, factorsSavedAt, stale });
+}));
 router.put("/quotes/:id/dev-factors/:type", validateBody(devFactorPutSchema), asyncHandler(async (req, res) => {
   const { id, type } = req.params;
   const typeParse = triangleTypeSchema.safeParse(type.toUpperCase());

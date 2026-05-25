@@ -148,6 +148,33 @@ router.get("/treaties/:id/dev-factors/:type", asyncHandler(async (req, res) => {
   const {rows}=await pool.query(`SELECT * FROM public.contract_dev_factor WHERE contract_id=$1 AND triangle_type=$2 ORDER BY dev_month`,[req.params.id,req.params.type.toUpperCase()]);
   res.json(rows);
 }));
+// Staleness: was the source triangle saved more recently than the dev factors
+// for this type? INCURRED factors are driven by the paid + OS triangles, so
+// both feed its "triangle last updated". `stale` is only true when factors
+// exist and the triangle was saved after them.
+router.get("/treaties/:id/dev-factors/:type/staleness", asyncHandler(async (req, res) => {
+  const { id, type } = req.params;
+  const typeParse = triangleTypeSchema.safeParse(type.toUpperCase());
+  if (!typeParse.success) return res.status(400).json({ error: 'Invalid triangle type', code: 'VALIDATION_FAILED' });
+  const t = typeParse.data;
+  const sourceTypes = t === 'INCURRED' ? ['CLAIMS_PAID', 'CLAIMS_OS'] : [t];
+  const [triRes, dfRes] = await Promise.all([
+    pool.query(
+      `SELECT MAX(updated_at) AS ts FROM public.contract_triangle_cells
+        WHERE contract_id=$1 AND type = ANY($2::public.triangle_type[])`,
+      [id, sourceTypes]
+    ),
+    pool.query(
+      `SELECT MAX(saved_at) AS ts FROM public.contract_dev_factor
+        WHERE contract_id=$1 AND triangle_type=$2::public.triangle_type`,
+      [id, t]
+    ),
+  ]);
+  const triangleUpdatedAt = triRes.rows[0]?.ts || null;
+  const factorsSavedAt = dfRes.rows[0]?.ts || null;
+  const stale = !!(triangleUpdatedAt && factorsSavedAt && new Date(triangleUpdatedAt) > new Date(factorsSavedAt));
+  res.json({ triangleUpdatedAt, factorsSavedAt, stale });
+}));
 router.put("/treaties/:id/dev-factors/:type", validateBody(devFactorPutSchema), asyncHandler(async (req, res) => {
   const { id, type } = req.params;
   const typeParse = triangleTypeSchema.safeParse(type.toUpperCase());

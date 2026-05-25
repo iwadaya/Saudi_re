@@ -7,6 +7,7 @@ const { apiMock, appStateMock, contractIdRef } = vi.hoisted(() => ({
     getTriangle: vi.fn(),
     getTriangleWithExclusions: vi.fn(),
     getDevFactors: vi.fn(),
+    getDevFactorStaleness: vi.fn(),
     getPricingPattern: vi.fn(),
     saveDevFactors: vi.fn(),
     savePricingPattern: vi.fn(),
@@ -46,6 +47,7 @@ beforeEach(() => {
     exclusions: { largeLossCount: 0, catLossCount: 0, applies: false },
   });
   apiMock.getDevFactors.mockResolvedValue([]);
+  apiMock.getDevFactorStaleness.mockResolvedValue({ triangleUpdatedAt: null, factorsSavedAt: null, stale: false });
   apiMock.getPricingPattern.mockResolvedValue(null);
   apiMock.saveDevFactors.mockResolvedValue({ ok: true });
   apiMock.savePricingPattern.mockResolvedValue({ ok: true });
@@ -62,6 +64,21 @@ describe('DevFactorsScreen', () => {
     );
 
     expect(await screen.findByText(/No triangle data found/i)).toBeInTheDocument();
+  });
+
+  it('shows the staleness warning when the triangle is newer than the factors', async () => {
+    apiMock.getDevFactorStaleness.mockResolvedValue({
+      triangleUpdatedAt: '2026-02-01T00:00:00Z', factorsSavedAt: '2026-01-01T00:00:00Z', stale: true,
+    });
+    render(
+      <DevFactorsScreen
+        routeKey="PROP_PREMIUM_DEV_FACTORS"
+        title="Premium Development Factors"
+        headerPill="PROPORTIONAL TREATY: PREMIUM DEVELOPMENT FACTORS"
+      />,
+    );
+
+    expect(await screen.findByText(/Triangle updated since factors were last saved/i)).toBeInTheDocument();
   });
 
   it('applies link-ratio factors without repeatedly updating parent state', async () => {

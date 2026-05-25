@@ -134,6 +134,7 @@ const PATHS = {
   crestaData: (id) => `/api/treaties/${enc(id)}/cresta`,
   cedantExposure: (id) => `/api/treaties/${enc(id)}/cedant-exposure`,
   devFactors: (id, type) => `/api/treaties/${enc(id)}/dev-factors/${enc(type)}`,
+  devFactorStaleness: (id, type) => `/api/treaties/${enc(id)}/dev-factors/${enc(type)}/staleness`,
   pricingSave: '/api/pricing/save',
   pricing: (id) => `/api/treaties/${enc(id)}/pricing`,
   pricingOutputs: (id) => `/api/treaties/${enc(id)}/pricing-outputs`,
@@ -192,6 +193,7 @@ const QUOTE_PATHS = {
   crestaData: (id) => `/api/quotes/${enc(id)}/cresta`,
   cedantExposure: (id) => `/api/quotes/${enc(id)}/cedant-exposure`,
   devFactors: (id, type) => `/api/quotes/${enc(id)}/dev-factors/${enc(type)}`,
+  devFactorStaleness: (id, type) => `/api/quotes/${enc(id)}/dev-factors/${enc(type)}/staleness`,
   pricing: (id) => `/api/quotes/${enc(id)}/pricing`,
   pricingOutputs: (id) => `/api/quotes/${enc(id)}/pricing-outputs`,
   pricingYearly: (id) => `/api/quotes/${enc(id)}/pricing-yearly`,
@@ -422,6 +424,7 @@ export const api = {
   // Dev factors
   getDevFactors(id, type, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.devFactors(id, type) : PATHS.devFactors(id, type), opts); },
   saveDevFactors(id, type, payload, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.devFactors(id, type) : PATHS.devFactors(id, type), { method: 'PUT', body: payload, ...opts }); },
+  getDevFactorStaleness(id, type, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.devFactorStaleness(id, type) : PATHS.devFactorStaleness(id, type), opts); },
   getBenchmarks(countryId, triangleType) { return request(`/api/benchmarks/${enc(countryId)}/${enc(triangleType)}`); },
   getPricingPattern(id, type) { return request(`/api/treaties/${enc(id)}/pricing-pattern/${enc(type)}`); },
   savePricingPattern(id, type, payload) { return request(`/api/treaties/${enc(id)}/pricing-pattern/${enc(type)}`, { method: 'PUT', body: payload }); },

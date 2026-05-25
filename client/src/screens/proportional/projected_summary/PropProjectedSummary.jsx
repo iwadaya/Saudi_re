@@ -24,6 +24,9 @@ export default function PropProjectedSummary() {
   const [lossCat, setLossCat] = useState({ large: new Map(), cat: new Map() });
   const [showLossModal, setShowLossModal] = useState(false);
   const [modalTab, setModalTab] = useState('abs');
+  // True when the paid/OS triangles were saved after the INCURRED dev factors
+  // that drive this projection — the underwriter should re-review them.
+  const [stale, setStale] = useState(false);
 
   useEffect(() => {
     if (!contractId) return;
@@ -63,6 +66,17 @@ export default function PropProjectedSummary() {
       }
       setLoading(false);
     })();
+  }, [appState.quoteMode, contractId]);
+
+  /* Staleness: were the paid/OS triangles saved after the INCURRED factors? */
+  useEffect(() => {
+    if (!contractId) return;
+    let cancelled = false;
+    const qm = appState.quoteMode ? { quote: true } : undefined;
+    api.getDevFactorStaleness(contractId, 'INCURRED', qm)
+      .then(d => { if (!cancelled) setStale(!!d?.stale); })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, [appState.quoteMode, contractId]);
 
   /* ── Per-UW-year loss model ──
@@ -226,6 +240,11 @@ export default function PropProjectedSummary() {
                   ({sourceLabel})
                 </span>}
               </h2>
+              {stale && (
+                <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5 }}>
+                  Triangle updated since factors were last saved — consider reviewing dev factors.
+                </div>
+              )}
               <div style={{
                 margin: '4px 0 16px',
                 padding: '10px 14px',

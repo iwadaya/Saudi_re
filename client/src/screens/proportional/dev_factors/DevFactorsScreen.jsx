@@ -499,6 +499,9 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   const [useMunich, setUseMunich] = useState(false);
   const [showMunichHelp, setShowMunichHelp] = useState(false);
   const [showStrippedModal, setShowStrippedModal] = useState(false);
+  // True when the source triangle has been saved more recently than these
+  // factors — the underwriter should re-review. Cleared on save here.
+  const [stale, setStale] = useState(false);
   // Both paid + OS triangles are required for Munich Chain Ladder, so on
   // screens that already source both (Incurred Dev Factors) the toggle
   // does meaningful work. On Premium / Paid-only / OS-only screens we
@@ -606,6 +609,16 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
     if (!countryId) return;
     api.getBenchmarks(countryId, devType).then(setBenchmarks).catch(() => {});
   }, [appState.propTreatyDetail?.countryId, devType]);
+
+  /* Staleness: were the source triangles saved after these factors? */
+  useEffect(() => {
+    if (!contractId) return;
+    let cancelled = false;
+    api.getDevFactorStaleness(contractId, devType, apiOpts)
+      .then(d => { if (!cancelled) setStale(!!d?.stale); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [contractId, devType, apiOpts]);
 
   /* Build matrix + calculations for the displayed basis, plus the full
      (unstripped) basis used for the conservative reference column. */
@@ -796,6 +809,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
       });
     }
     setDirty(false);
+    setStale(false); // factors are now newer than the triangle
     return true;
   }, [contractId, dirty, chosenLdfs, devType, avgMethod, apiOpts, appState.quoteMode, calcs?.pattern, calcs?.cdfs, calcs?.paramLdfs, calcs?.paramCdfs, chosenBase, chosenCdfs, ielr, projMethod, excluded, useMunich, startYear, numDevYears, isPremium, percentAchieved, years, epiPerYear, basis]);
 
@@ -811,6 +825,12 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
     <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill} onBeforeNext={save} onBeforeBack={save}>
       {({ showToast, wizard }) => (
         <div className="DEV_FACTORS_PAGE">
+          {/* Staleness — triangle saved more recently than these factors */}
+          {stale && (
+            <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5 }}>
+              Triangle updated since factors were last saved — consider reviewing dev factors.
+            </div>
+          )}
           {/* Zero-loss warning — no large/cat losses identified yet */}
           {showZeroLossWarning && (
             <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
