@@ -8,6 +8,7 @@ import { buildMatrixFromCells, calculateAgeToAgeFactors, calculatePattern, proje
 import { projectStraightStats, DEFAULT_LDF_KEY } from '../../../logic/straightProjections';
 import { projectFromSavedBlend, loadProjectedRows } from '../../../logic/projectWithSavedFactors';
 import { buildTreatyTerms } from '../../../logic/propTreatyEngine';
+import { loadLossCategoryByYear, deriveLossComponents } from '../../../logic/lossCategoryAmounts';
 import LossSelectionScreen from '../../shared/LossSelectionScreen';
 import ProfileScreen from '../../shared/ProfileScreen';
 import PropCrestaAggregates from '../cresta_zones/PropCrestaAggregates';
@@ -255,12 +256,14 @@ export default function PropPricing() {
     (async () => {
       try {
         const projectedLRs = [], actualLRs = [];
+        // Totals (premium-weighted) feed the attritional & actual loadings.
+        let totProjLoss = 0, totProjPrem = 0, totActLoss = 0, totActPrem = 0;
         if (yearly.length > 0) {
           yearly.forEach(r => {
             const p = cn(r.ultimate_premium), l = cn(r.ultimate_loss);
             const rt = String(r.record_type || '').toUpperCase();
-            if (p > 0 && rt === 'PROJECTED') projectedLRs.push(l / p);
-            if (p > 0 && rt === 'ACTUAL') actualLRs.push(l / p);
+            if (p > 0 && rt === 'PROJECTED') { projectedLRs.push(l / p); totProjLoss += l; totProjPrem += p; }
+            if (p > 0 && rt === 'ACTUAL') { actualLRs.push(l / p); totActLoss += l; totActPrem += p; }
           });
         }
         if (!projectedLRs.length) {
@@ -286,8 +289,8 @@ export default function PropPricing() {
             yrs.forEach(y => {
               const pP = premProj.find(p => p.year === y), lP = lossProj.find(p => p.year === y);
               const up = pP?.ultimate || 0, ul = lP?.ultimate || 0, ap = pP?.latest || 0, al = lP?.latest || 0;
-              if (up > 0) projectedLRs.push(ul / up);
-              if (ap > 0) actualLRs.push(al / ap);
+              if (up > 0) { projectedLRs.push(ul / up); totProjLoss += ul; totProjPrem += up; }
+              if (ap > 0) { actualLRs.push(al / ap); totActLoss += al; totActPrem += ap; }
             });
           } else {
             const ssData = await api.getStraightStats(cid).catch(() => null);
@@ -299,14 +302,29 @@ export default function PropPricing() {
               const blendRows = await projectFromSavedBlend(cid, parsed);
               const rows = blendRows || projectStraightStats(parsed, ssData?.primary_class_key || DEFAULT_LDF_KEY);
               rows.forEach(r => {
-                if (r.ultPrem > 0) projectedLRs.push(r.ultLoss / r.ultPrem);
-                if (r.actPrem > 0) actualLRs.push(r.actLoss / r.actPrem);
+                if (r.ultPrem > 0) { projectedLRs.push(r.ultLoss / r.ultPrem); totProjLoss += r.ultLoss; totProjPrem += r.ultPrem; }
+                if (r.actPrem > 0) { actualLRs.push(r.actLoss / r.actPrem); totActLoss += r.actLoss; totActPrem += r.actPrem; }
               });
             }
           }
         }
         const avgActualLR = actualLRs.length ? actualLRs.reduce((a, b) => a + b, 0) / actualLRs.length : 0;
         const avgProjectedLR = projectedLRs.length ? projectedLRs.reduce((a, b) => a + b, 0) / projectedLRs.length : avgActualLR;
+
+        // Large/CAT totals (raw incurred) + per-treaty strip flag. When stripping
+        // is on, attritional is the loss net of large+CAT; otherwise large/CAT
+        // fold into attritional and their loadings are nil.
+        const lossCat = await loadLossCategoryByYear(cid, appState.quoteMode ? { quote: true } : undefined)
+          .catch(() => ({ large: new Map(), cat: new Map() }));
+        const totalLarge = [...lossCat.large.values()].reduce((a, b) => a + b, 0);
+        const totalCat = [...lossCat.cat.values()].reduce((a, b) => a + b, 0);
+        const stripLC = (det.strip_large_cat_losses ?? td.stripLargeCat ?? true) !== false;
+        // Attritional on each basis via the shared loss-component model.
+        // Actuarial uses projected totals; actual uses unprojected (raw) totals.
+        const projComp = deriveLossComponents({ premium: totProjPrem, incurredTotal: totProjLoss, large: stripLC ? totalLarge : 0, cat: stripLC ? totalCat : 0 });
+        const actComp = deriveLossComponents({ premium: totActPrem, incurredTotal: totActLoss, large: stripLC ? totalLarge : 0, cat: stripLC ? totalCat : 0 });
+        const actuarialAttrLR = totProjPrem > 0 ? projComp.attrLR : avgProjectedLR;
+        const actualAttrLR = totActPrem > 0 ? actComp.attrLR : avgActualLR;
 
         let largeLossLoad = 0;
         try {
@@ -386,15 +404,20 @@ export default function PropPricing() {
         setComponents(prev => {
           const nc = { ...prev };
           const sc = (row, col, val) => { if (!nc[row]) nc[row] = {}; nc[row] = { ...nc[row], [col]: fmtV(val) }; };
-          sc('Attritional Loss Ratio', 'actuarial', avgProjectedLR);
-          sc('Large Loss Loading', 'actuarial', largeLossLoad);
-          sc('Cat Loss Loading', 'actuarial', catLoad);
-          sc('Attritional Loss Ratio', 'actual', avgActualLR);
-          sc('Large Loss Loading', 'actual', 0); sc('Cat Loss Loading', 'actual', 0);
+          // Actuarial: attritional stripped of large/CAT (when stripping on);
+          // large/CAT shown as the MODELLED loadings (Pareto / return-period).
+          sc('Attritional Loss Ratio', 'actuarial', actuarialAttrLR);
+          sc('Large Loss Loading', 'actuarial', stripLC ? largeLossLoad : 0);
+          sc('Cat Loss Loading', 'actuarial', stripLC ? catLoad : 0);
+          // Actual (unprojected burning cost): attritional = (incurred−large−cat)/prem,
+          // large = large/prem, cat = cat/prem.
+          sc('Attritional Loss Ratio', 'actual', actualAttrLR);
+          sc('Large Loss Loading', 'actual', actComp.largeLR);
+          sc('Cat Loss Loading', 'actual', actComp.catLR);
           if (exposureLR > 0) {
             sc('Attritional Loss Ratio', 'exposure', exposureLR);
-            sc('Large Loss Loading', 'exposure', largeLossLoad);
-            sc('Cat Loss Loading', 'exposure', catLoad);
+            sc('Large Loss Loading', 'exposure', stripLC ? largeLossLoad : 0);
+            sc('Cat Loss Loading', 'exposure', stripLC ? catLoad : 0);
           }
           sc('Commissions', 'exposure', commissionPct); sc('Brokerage', 'exposure', brokeragePct); sc('Taxes', 'exposure', taxesPct);
           const mktSet = (row, data) => { if (data?.avg != null) sc(row, 'market', Number(data.avg)); };
@@ -404,7 +427,7 @@ export default function PropPricing() {
           mktSet('Commissions', marketAvg['Commissions']); mktSet('Brokerage', marketAvg['Brokerage']); mktSet('Taxes', marketAvg['Taxes']);
           const downsideAtt = Math.max(worstLR.lr || 0, 2.50);
           sc('Attritional Loss Ratio', 'downside', downsideAtt);
-          sc('Large Loss Loading', 'downside', largeLossLoad); sc('Cat Loss Loading', 'downside', catLoad);
+          sc('Large Loss Loading', 'downside', stripLC ? largeLossLoad : 0); sc('Cat Loss Loading', 'downside', stripLC ? catLoad : 0);
           sc('Commissions', 'downside', commissionPct); sc('Brokerage', 'downside', brokeragePct); sc('Taxes', 'downside', taxesPct);
           for (const rowName of ['Attritional Loss Ratio', 'Large Loss Loading', 'Cat Loss Loading', 'Commissions', 'Brokerage', 'Taxes']) {
             if (nc[rowName]?.actuarial && !nc[rowName]?.uw) nc[rowName] = { ...nc[rowName], uw: nc[rowName].actuarial };
@@ -413,7 +436,7 @@ export default function PropPricing() {
         });
       } catch (e) { console.error('Auto-calc pricing failed:', e); }
     })();
-  }, [appState.quoteMode, cid, loading, yearly.length, td.quotaShareEpi, td.surplusEpi, td.fixedCommissionQSPct, td.fixedCommissionSurplusPct, td.brokeragePct, td.taxesPct, td.provisionalCommissionPct, td.commissionMode, contract.detail?.brokerage_pct, contract.detail?.taxes_pct, contract.commissions?.fixed_commission_qs_pct, contract.commissions?.fixed_commission_surplus_pct, worstLR.lr, contract.header?.country_id, td.countryId, contract, td.country_id, yearly]);
+  }, [appState.quoteMode, cid, loading, yearly.length, td.quotaShareEpi, td.surplusEpi, td.fixedCommissionQSPct, td.fixedCommissionSurplusPct, td.brokeragePct, td.taxesPct, td.provisionalCommissionPct, td.commissionMode, td.stripLargeCat, contract.detail?.brokerage_pct, contract.detail?.taxes_pct, contract.commissions?.fixed_commission_qs_pct, contract.commissions?.fixed_commission_surplus_pct, worstLR.lr, contract.header?.country_id, td.countryId, contract, td.country_id, yearly]);
 
   // ── Component helpers ─────────────────────────────────────────────────────
   const getC = useCallback((row, col) => components[row]?.[col] || '', [components]);
