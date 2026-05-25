@@ -4,9 +4,7 @@ import { useAppState } from '../../../context/AppContext';
 import { useContractId } from '../../../hooks/useContractId';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
-import { buildMatrixFromCells, calculateAgeToAgeFactors, calculatePattern, projectToUltimate } from '../../../logic/chainLadder';
-import { projectStraightStats, DEFAULT_LDF_KEY } from '../../../logic/straightProjections';
-import { projectFromSavedBlend, loadProjectedRows } from '../../../logic/projectWithSavedFactors';
+import { loadProjectedRows } from '../../../logic/projectWithSavedFactors';
 import { buildTreatyTerms } from '../../../logic/propTreatyEngine';
 import { loadLossCategoryByYear, deriveLossComponents } from '../../../logic/lossCategoryAmounts';
 import LossSelectionScreen from '../../shared/LossSelectionScreen';
@@ -267,46 +265,22 @@ export default function PropPricing() {
           });
         }
         if (!projectedLRs.length) {
-          const crd = data => { const rows = Array.isArray(data) ? data : (data?.cells || []); return rows.map(r => ({ origin_year: Number(r.origin_year), dev_months: Number(r.dev_months), cum_value: r.cum_value == null ? null : cn(r.cum_value) })); };
-          const triangleOpts = appState.quoteMode ? { quote: true } : undefined;
-          const [premRes, paidRes, osRes] = await Promise.all([
-            api.getTriangle(cid, 'PREMIUM', triangleOpts).catch(() => ({ cells: [] })),
-            api.getTriangle(cid, 'CLAIMS_PAID', triangleOpts).catch(() => ({ cells: [] })),
-            api.getTriangle(cid, 'CLAIMS_OS', triangleOpts).catch(() => ({ cells: [] })),
-          ]);
-          const po = buildMatrixFromCells(crd(premRes)), pdo = buildMatrixFromCells(crd(paidRes)), oso = buildMatrixFromCells(crd(osRes));
-          if (po || pdo || oso) {
-            const allYears = new Set([...(po?.years || []), ...(pdo?.years || []), ...(oso?.years || [])]);
-            const yrs = Array.from(allYears).sort((a, b) => a - b);
-            let mc = 0; [po, pdo, oso].filter(Boolean).forEach(o => (o.matrix || []).forEach(r => { mc = Math.max(mc, r.length); }));
-            if (!mc) mc = 1;
-            const gv = (o, y, c) => { if (!o) return null; const i = o.years.indexOf(y); return i === -1 ? null : o.matrix[i]?.[c] ?? null; };
-            const im = yrs.map(y => { const r = []; for (let c = 0; c < mc; c++) { const p = gv(pdo, y, c), o = gv(oso, y, c); r.push(p === null && o === null ? null : (p || 0) + (o || 0)); } return r; });
-            const pm = yrs.map(y => { const r = []; for (let c = 0; c < mc; c++) r.push(gv(po, y, c)); return r; });
-            let lossProj = [], premProj = [];
-            try { const f = calculateAgeToAgeFactors(im); const { pattern: p } = calculatePattern(im, f, 'weighted'); lossProj = projectToUltimate(p, 1.0, { matrix: im, years: yrs }).projections || []; } catch (e) {}
-            try { const f = calculateAgeToAgeFactors(pm); const { pattern: p } = calculatePattern(pm, f, 'weighted'); premProj = projectToUltimate(p, 1.0, { matrix: pm, years: yrs }).projections || []; } catch (e) {}
-            yrs.forEach(y => {
-              const pP = premProj.find(p => p.year === y), lP = lossProj.find(p => p.year === y);
-              const up = pP?.ultimate || 0, ul = lP?.ultimate || 0, ap = pP?.latest || 0, al = lP?.latest || 0;
-              if (up > 0) { projectedLRs.push(ul / up); totProjLoss += ul; totProjPrem += up; }
-              if (ap > 0) { actualLRs.push(al / ap); totActLoss += al; totActPrem += ap; }
-            });
-          } else {
-            const ssData = await api.getStraightStats(cid).catch(() => null);
-            const stats = ssData?.stats || [];
-            if (stats.length > 0) {
-              const parsed = stats.map(s => ({ year: Number(s.underwriting_year || s.year), premium: cn(s.premium), paid: cn(s.paid_claims || s.paid), os: cn(s.os_claims || s.os) }));
-              // Prefer the underwriter's saved LDF blend; fall back to a
-              // benchmark curve only when no blend exists for this contract.
-              const blendRows = await projectFromSavedBlend(cid, parsed);
-              const rows = blendRows || projectStraightStats(parsed, ssData?.primary_class_key || DEFAULT_LDF_KEY);
-              rows.forEach(r => {
-                if (r.ultPrem > 0) { projectedLRs.push(r.ultLoss / r.ultPrem); totProjLoss += r.ultLoss; totProjPrem += r.ultPrem; }
-                if (r.actPrem > 0) { actualLRs.push(r.actLoss / r.actPrem); totActLoss += r.actLoss; totActPrem += r.actPrem; }
-              });
-            }
-          }
+          // Projection philosophy: dev factors are calibrated on the attritional (stripped)
+          // triangle. They must be applied to the stripped triangle only. Large loss and CAT
+          // amounts are added back explicitly after projection — never projected via the
+          // attritional CDF, since those factors carry no information about large/CAT development.
+          //
+          // loadProjectedRows encapsulates exactly this: it projects the stripped incurred
+          // triangle with the saved INCURRED factors and adds the raw large/CAT loadings back
+          // on top (falling back to straight stats when there is no triangle). It is the same
+          // path the Projected Summary uses, so both screens report consistent ultimates for
+          // identical inputs. The large/CAT folded into ultLoss here are subtracted back out
+          // by deriveLossComponents below to recover the attritional loading.
+          const projRows = (await loadProjectedRows(cid, appState.quoteMode ? { quote: true } : undefined)).rows || [];
+          projRows.forEach(r => {
+            if (r.ultPrem > 0) { projectedLRs.push(r.ultLoss / r.ultPrem); totProjLoss += r.ultLoss; totProjPrem += r.ultPrem; }
+            if (r.actPrem > 0) { actualLRs.push(r.actLoss / r.actPrem); totActLoss += r.actLoss; totActPrem += r.actPrem; }
+          });
         }
         const avgActualLR = actualLRs.length ? actualLRs.reduce((a, b) => a + b, 0) / actualLRs.length : 0;
         const avgProjectedLR = projectedLRs.length ? projectedLRs.reduce((a, b) => a + b, 0) / projectedLRs.length : avgActualLR;

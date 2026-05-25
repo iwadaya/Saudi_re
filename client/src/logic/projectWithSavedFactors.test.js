@@ -16,6 +16,7 @@ const { apiMock } = vi.hoisted(() => ({
 vi.mock('../api', () => ({ api: apiMock }));
 
 import { loadProjectedRows } from './projectWithSavedFactors';
+import { deriveLossComponents } from './lossCategoryAmounts';
 
 const cell = (year, dev, val) => ({ origin_year: year, dev_months: dev, cum_value: val });
 
@@ -59,6 +60,27 @@ describe('loadProjectedRows — attritional projection', () => {
     // It applied the CDF to the stripped triangle, never the with-exclusions
     // INCURRED type was requested.
     expect(apiMock.getTriangleWithExclusions).toHaveBeenCalledWith('c1', 'INCURRED', undefined);
+  });
+
+  it('feeds PropPricing and Projected Summary the same attritional-based ultimate', async () => {
+    // Both screens consume loadProjectedRows rows. PropPricing aggregates them
+    // into totProjLoss/totProjPrem then calls deriveLossComponents to recover the
+    // attritional loading; Projected Summary does the per-row equivalent. This
+    // confirms the fallback path resolves to the attritional projection, not the
+    // (inflated) full-triangle projection.
+    primeApi({ strip: true });
+    const { rows } = await loadProjectedRows('c1');
+
+    // PropPricing-style aggregation of the projected basis.
+    let totProjLoss = 0, totProjPrem = 0;
+    rows.forEach(r => { if (r.ultPrem > 0) { totProjLoss += r.ultLoss; totProjPrem += r.ultPrem; } });
+    expect(totProjLoss).toBe(1300); // 900 attritional + 400 large, never 1500
+
+    // The large/CAT folded into ultLoss are subtracted back out to the pure
+    // attritional projected ultimate (900), identically on both screens.
+    const projComp = deriveLossComponents({ premium: totProjPrem, incurredTotal: totProjLoss, large: 400, cat: 0 });
+    expect(projComp.attritional).toBe(900);
+    expect(projComp.incurred).toBe(1300);
   });
 
   it('collapses to the full projection when stripping is off', async () => {
