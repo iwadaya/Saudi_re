@@ -26,3 +26,35 @@ export async function loadLossCategoryByYear(contractId, opts) {
   ]);
   return { large: sumByYear(largeData), cat: sumByYear(catData) };
 }
+
+/* Single source of truth for the projected-summary loss model.
+   Incurred Loss is ALWAYS the sum of its three components — never sourced or
+   calculated independently. Large and CAT are passed straight through from the
+   saved loss grids (raw incurred) and are never projected; attritional is what
+   remains of the incurred total (projected or actual) once large + CAT are
+   removed.
+
+   Pass `incurredTotal` as the projected ultimate loss for the projected basis,
+   or the raw incurred for the actual basis. `large`/`cat` are the same raw
+   saved figures in both bases. */
+export function deriveLossComponents({ premium = 0, incurredTotal = 0, large = 0, cat = 0 }) {
+  // NOTE: Zero-floor applied to all loss components. Exception: clean cut treaties may legitimately
+  // produce negative loss figures due to profit commissions and adjustments. When building clean
+  // cut treaty support, revisit this floor and make it configurable per treaty type.
+  const largeAmt = Math.max(0, large);
+  const catAmt = Math.max(0, cat);
+  const attritional = Math.max(0, incurredTotal - largeAmt - catAmt);
+  const incurred = attritional + largeAmt + catAmt;
+  const lr = n => (premium > 0 ? n / premium : 0);
+  return {
+    premium,
+    attritional,
+    large: largeAmt,
+    cat: catAmt,
+    incurred,
+    attrLR: lr(attritional),
+    largeLR: lr(largeAmt),
+    catLR: lr(catAmt),
+    incurredLR: lr(incurred),
+  };
+}
