@@ -378,8 +378,13 @@ router.get("/treaties/:id/portfolio-losses/:lossType", asyncHandler(async (req, 
 // Factors screen without overwriting the rest of the treaty detail.
 router.put("/treaties/:id/strip-large-cat", asyncHandler(async (req, res) => {
   const strip = req.body?.strip_large_cat_losses !== false;
+  // Upsert so the toggle persists even if Dev Factors is reached before the
+  // detail screen has created the prop-details row (no silent no-op).
   await pool.query(
-    `UPDATE public.contract_prop_details SET strip_large_cat_losses=$2, updated_at=now() WHERE contract_id=$1`,
+    `INSERT INTO public.contract_prop_details (contract_id, strip_large_cat_losses)
+       VALUES ($1, $2)
+     ON CONFLICT (contract_id) DO UPDATE
+       SET strip_large_cat_losses=EXCLUDED.strip_large_cat_losses, updated_at=now()`,
     [req.params.id, strip]
   );
   res.json({ ok: true, strip_large_cat_losses: strip });
@@ -553,8 +558,14 @@ router.put("/treaties/:id/loss-selection/:lossType/snapshot", asyncHandler(async
       }
     }
     // Mark the selection as saved now so the staleness check can tell whether
-    // losses have been edited since (no-op if the prop-details row is absent).
-    await cl.query(`UPDATE public.contract_prop_details SET loss_selection_saved_at=now(), updated_at=now() WHERE contract_id=$1`,[req.params.id]);
+    // losses have been edited since. Upsert so it persists even if Loss
+    // Selection is reached before the detail screen created the row.
+    await cl.query(
+      `INSERT INTO public.contract_prop_details (contract_id, loss_selection_saved_at)
+         VALUES ($1, now())
+       ON CONFLICT (contract_id) DO UPDATE SET loss_selection_saved_at=now(), updated_at=now()`,
+      [req.params.id]
+    );
     await cl.query("COMMIT");
     res.json({ok:true, snapshot:snap});
   }catch(e){

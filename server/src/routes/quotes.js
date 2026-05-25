@@ -749,8 +749,13 @@ router.get("/quotes/:id/triangles/:type/with-exclusions", asyncHandler(async (re
 // Per-quote choice of whether large + cat losses are stripped from the triangle.
 router.put("/quotes/:id/strip-large-cat", asyncHandler(async (req, res) => {
   const strip = req.body?.strip_large_cat_losses !== false;
+  // Upsert so the toggle persists even if Dev Factors is reached before the
+  // detail screen has created the prop-details row (no silent no-op).
   await pool.query(
-    `UPDATE public.quote_prop_details SET strip_large_cat_losses=$2, updated_at=now() WHERE quote_id=$1`,
+    `INSERT INTO public.quote_prop_details (quote_id, strip_large_cat_losses)
+       VALUES ($1, $2)
+     ON CONFLICT (quote_id) DO UPDATE
+       SET strip_large_cat_losses=EXCLUDED.strip_large_cat_losses, updated_at=now()`,
     [req.params.id, strip]
   );
   res.json({ ok: true, strip_large_cat_losses: strip });
@@ -1940,8 +1945,14 @@ router.put("/quotes/:id/loss-selection/:lossType/snapshot", asyncHandler(async (
     leadingId: sid,
   });
   if (snapItemInsert) await cl.query(snapItemInsert.sql, snapItemInsert.params);
-  // Mark the selection as saved now (no-op if the prop-details row is absent).
-  await cl.query(`UPDATE public.quote_prop_details SET loss_selection_saved_at=now(), updated_at=now() WHERE quote_id=$1`,[id]);
+  // Mark the selection as saved now. Upsert so it persists even if Loss
+  // Selection is reached before the detail screen created the row.
+  await cl.query(
+    `INSERT INTO public.quote_prop_details (quote_id, loss_selection_saved_at)
+       VALUES ($1, now())
+     ON CONFLICT (quote_id) DO UPDATE SET loss_selection_saved_at=now(), updated_at=now()`,
+    [id]
+  );
   await cl.query("COMMIT");res.json({ok:true,snapshot_id:sid});
   }catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
