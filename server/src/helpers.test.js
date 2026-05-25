@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseNum, toNum, numOrNull, dateOrNull, boolOrDefault, safeSqlIdentifier, yearFromDate, safeUwYear, preserveBool, preserveNum } from './helpers.js';
+import { parseNum, toNum, numOrNull, dateOrNull, boolOrDefault, safeSqlIdentifier, yearFromDate, safeUwYear, preserveBool, preserveNum, isStaleSince } from './helpers.js';
 
 // These helpers sit on every save path for numeric/date/bool inputs, so
 // bugs here show up as wrong data in Postgres. Locking the behaviour
@@ -177,5 +177,25 @@ describe('preserveBool / preserveNum (Finding 1 — preserve when omitted)', () 
   it('treats stringy booleans as present', () => {
     expect(preserveBool('false', true)).toBe(false);
     expect(preserveBool('true', false)).toBe(true);
+  });
+});
+
+describe('isStaleSince (loss-selection / dev-factor staleness logic)', () => {
+  const earlier = '2026-01-01T00:00:00Z';
+  const later = '2026-02-01T00:00:00Z';
+
+  it('is stale when the source was updated strictly after the save', () => {
+    expect(isStaleSince(later, earlier)).toBe(true);
+  });
+  it('is not stale when the source is older than or equal to the save', () => {
+    expect(isStaleSince(earlier, later)).toBe(false);
+    expect(isStaleSince(earlier, earlier)).toBe(false);
+  });
+  it('is never stale (false, not null) when nothing has been saved', () => {
+    expect(isStaleSince(later, null)).toBe(false);
+    expect(isStaleSince(later, undefined)).toBe(false);
+  });
+  it('is not stale when the source has never been updated', () => {
+    expect(isStaleSince(null, earlier)).toBe(false);
   });
 });

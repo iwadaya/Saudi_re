@@ -88,6 +88,8 @@ export default function PropPricing() {
   // True when pricing fell back to placeholder benchmark curves (no saved
   // pricing rows, no saved factors, no triangle, no saved blend).
   const [usedPlaceholderLdfs, setUsedPlaceholderLdfs] = useState(false);
+  // True when large/cat losses were edited after the loss selection was saved.
+  const [lossStale, setLossStale] = useState(false);
   const [showQuickSummary, setShowQuickSummary] = useState(false);
   const [showMarketIntelligence, setShowMarketIntelligence] = useState(false);
   const [showAggBreakdown, setShowAggBreakdown] = useState(false);
@@ -523,6 +525,16 @@ export default function PropPricing() {
   }, [cid, loading, epi, limit, eventLimit, hdr.country_id, td.countryId, td.country_id, td.cessionPct, det2.cession_pct, calcCR, appState.quoteMode]);
 
   // ── Worst LR ─────────────────────────────────────────────────────────────
+  // Loss-selection staleness — were large/cat losses edited after the last save?
+  useEffect(() => {
+    if (!cid) return;
+    let cancelled = false;
+    api.getLossSelectionStaleness(cid, appState.quoteMode ? { quote: true } : undefined)
+      .then(d => { if (!cancelled) setLossStale(!!d?.stale); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [cid, appState.quoteMode]);
+
   useEffect(() => {
     if (!cid || loading) return;
     let cancelled = false;
@@ -763,6 +775,11 @@ export default function PropPricing() {
           {usedPlaceholderLdfs && (
             <div role="alert" style={{ margin: '0 0 12px', padding: '12px 16px', borderRadius: 10, background: 'rgba(249,115,22,0.14)', border: '2px solid #f97316', color: '#fdba74', fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>
               No saved development factors found — projection is using placeholder benchmark curves. Go to the Development Factors screen to select and save factors before relying on these figures.
+            </div>
+          )}
+          {lossStale && (
+            <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5 }}>
+              Loss selection is outdated — losses have changed since the last selection was saved.
             </div>
           )}
 

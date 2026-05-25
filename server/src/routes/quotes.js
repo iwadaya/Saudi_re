@@ -1,7 +1,7 @@
 // server/src/routes/quotes.js — Quote CRUD + sub-entities, using quote_* tables
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { asyncHandler, numOrNull, dateOrNull, boolOrDefault, safeUwYear, preserveBool, preserveNum, assertExists } from '../helpers.js';
+import { asyncHandler, numOrNull, dateOrNull, boolOrDefault, safeUwYear, preserveBool, preserveNum, assertExists, isStaleSince } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from '../lib/triangleBounds.js';
 import { stripTriangleCells, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from '../lib/triangleStripping.js';
@@ -754,6 +754,28 @@ router.put("/quotes/:id/strip-large-cat", asyncHandler(async (req, res) => {
     [req.params.id, strip]
   );
   res.json({ ok: true, strip_large_cat_losses: strip });
+}));
+// Loss-selection staleness — quote mirror of the treaty route (see treatyData.js).
+router.get("/quotes/:id/losses/staleness", asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const [lossRes, detRes] = await Promise.all([
+    pool.query(
+      `SELECT GREATEST(
+         (SELECT MAX(l.updated_at) FROM public.contract_large_losses l
+            JOIN public.contract_large_loss_report r ON r.report_id=l.report_id WHERE r.quote_id=$1),
+         (SELECT MAX(l.updated_at) FROM public.contract_cat_losses l
+            JOIN public.contract_cat_loss_report r ON r.report_id=l.report_id WHERE r.quote_id=$1)
+       ) AS ts`,
+      [id]
+    ),
+    pool.query(
+      `SELECT loss_selection_saved_at AS ts FROM public.quote_prop_details WHERE quote_id=$1`,
+      [id]
+    ),
+  ]);
+  const lossesUpdatedAt = lossRes.rows[0]?.ts || null;
+  const selectionSavedAt = detRes.rows[0]?.ts || null;
+  res.json({ lossesUpdatedAt, selectionSavedAt, stale: isStaleSince(lossesUpdatedAt, selectionSavedAt) });
 }));
 router.post("/quotes/:id/triangles/:type", asyncHandler(async (req, res) => {
   const { id, type } = req.params;
@@ -1918,6 +1940,8 @@ router.put("/quotes/:id/loss-selection/:lossType/snapshot", asyncHandler(async (
     leadingId: sid,
   });
   if (snapItemInsert) await cl.query(snapItemInsert.sql, snapItemInsert.params);
+  // Mark the selection as saved now (no-op if the prop-details row is absent).
+  await cl.query(`UPDATE public.quote_prop_details SET loss_selection_saved_at=now(), updated_at=now() WHERE quote_id=$1`,[id]);
   await cl.query("COMMIT");res.json({ok:true,snapshot_id:sid});
   }catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));

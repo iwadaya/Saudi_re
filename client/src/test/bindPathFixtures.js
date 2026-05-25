@@ -289,6 +289,7 @@ export function makeBindPathApiMock(fn, overrides = {}) {
     getTriangle: fn().mockResolvedValue({ cells: [] }),
     getStraightStats: fn().mockResolvedValue(null),
     getLossSelectionLatest: fn().mockResolvedValue({}),
+    getLossSelectionStaleness: fn().mockResolvedValue({ stale: false }),
     getLargeLosses: fn().mockResolvedValue([]),
     getCatLosses: fn().mockResolvedValue([]),
     getContractCobs: fn().mockResolvedValue(copy(refData.cobs)),

@@ -28,6 +28,8 @@ export default function PropProjectedSummary() {
   // (incurred) and premium triangles, each compared against their saved
   // factors. Either being stale prompts a re-review.
   const [stale, setStale] = useState({ incurred: false, premium: false });
+  // True when large/cat losses were edited after the loss selection was saved.
+  const [lossStale, setLossStale] = useState(false);
   // True when the projection fell back to hard-coded placeholder benchmark
   // curves (no saved factors, no triangle, no saved blend).
   const [usedPlaceholderLdfs, setUsedPlaceholderLdfs] = useState(false);
@@ -82,8 +84,11 @@ export default function PropProjectedSummary() {
     Promise.all([
       api.getDevFactorStaleness(contractId, 'INCURRED', qm).catch(() => null),
       api.getDevFactorStaleness(contractId, 'PREMIUM', qm).catch(() => null),
-    ]).then(([inc, prem]) => {
-      if (!cancelled) setStale({ incurred: !!inc?.stale, premium: !!prem?.stale });
+      api.getLossSelectionStaleness(contractId, qm).catch(() => null),
+    ]).then(([inc, prem, loss]) => {
+      if (cancelled) return;
+      setStale({ incurred: !!inc?.stale, premium: !!prem?.stale });
+      setLossStale(!!loss?.stale);
     });
     return () => { cancelled = true; };
   }, [appState.quoteMode, contractId]);
@@ -232,13 +237,11 @@ export default function PropProjectedSummary() {
     : source === 'straight-short' ? 'Short Tail portfolio dev factors'
     : '';
 
-  const staleMessage = stale.premium && stale.incurred
-    ? 'Premium and incurred triangles updated since dev factors were last saved — consider reviewing.'
-    : stale.incurred
-      ? 'Incurred triangle updated since dev factors were last saved — consider reviewing.'
-      : stale.premium
-        ? 'Premium triangle updated since dev factors were last saved — consider reviewing.'
-        : null;
+  const staleMessages = [];
+  if (stale.premium && stale.incurred) staleMessages.push('Premium and incurred triangles updated since dev factors were last saved — consider reviewing.');
+  else if (stale.incurred) staleMessages.push('Incurred triangle updated since dev factors were last saved — consider reviewing.');
+  else if (stale.premium) staleMessages.push('Premium triangle updated since dev factors were last saved — consider reviewing.');
+  if (lossStale) staleMessages.push('Loss selection is outdated — losses have changed since the last selection was saved.');
 
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Projected Summary" headerPill="PROPORTIONAL TREATY: PROJECTED SUMMARY" onBeforeNext={save} onBeforeBack={save}>
@@ -262,9 +265,9 @@ export default function PropProjectedSummary() {
                   No saved development factors found — projection is using placeholder benchmark curves. Go to the Development Factors screen to select and save factors before relying on these figures.
                 </div>
               )}
-              {staleMessage && (
+              {staleMessages.length > 0 && (
                 <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5 }}>
-                  {staleMessage}
+                  {staleMessages.map((m, i) => <div key={i}>{m}</div>)}
                 </div>
               )}
               <div style={{

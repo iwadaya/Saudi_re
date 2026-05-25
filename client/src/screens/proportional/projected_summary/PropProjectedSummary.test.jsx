@@ -3,7 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import PropProjectedSummary from './PropProjectedSummary.jsx';
 
 const { apiMock, appStateMock, contractIdRef, loadProjectedRowsMock } = vi.hoisted(() => ({
-  apiMock: { getDevFactorStaleness: vi.fn(), savePricingYearly: vi.fn() },
+  apiMock: { getDevFactorStaleness: vi.fn(), getLossSelectionStaleness: vi.fn(), savePricingYearly: vi.fn() },
   appStateMock: { quoteMode: false, propTreatyDetail: {} },
   contractIdRef: { current: 'contract-1' },
   loadProjectedRowsMock: vi.fn(),
@@ -34,6 +34,7 @@ beforeEach(() => {
   contractIdRef.current = 'contract-1';
   appStateMock.quoteMode = false;
   appStateMock.propTreatyDetail = {};
+  apiMock.getLossSelectionStaleness.mockResolvedValue({ stale: false });
   loadProjectedRowsMock.mockResolvedValue({
     rows: [{ year: 2021, ultPrem: 1000, ultLoss: 500, actPrem: 1000, actLoss: 500, ultPaid: 400 }],
     source: 'saved-factors',
@@ -71,6 +72,21 @@ describe('PropProjectedSummary staleness banner', () => {
     // Wait for the page to render, then assert the (only) alert is absent.
     expect(await screen.findByText(/UNCAPPED ULTIMATES/i)).toBeInTheDocument();
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('shows the loss-selection-outdated message when loss selection is stale', async () => {
+    apiMock.getDevFactorStaleness.mockImplementation(staleness(false, false));
+    apiMock.getLossSelectionStaleness.mockResolvedValue({ stale: true });
+    render(<PropProjectedSummary />);
+    expect(await screen.findByText(/Loss selection is outdated/i)).toBeInTheDocument();
+  });
+
+  it('combines factor and loss staleness in one banner', async () => {
+    apiMock.getDevFactorStaleness.mockImplementation(staleness(true, false));
+    apiMock.getLossSelectionStaleness.mockResolvedValue({ stale: true });
+    render(<PropProjectedSummary />);
+    expect(await screen.findByText(/Incurred triangle updated since dev factors/i)).toBeInTheDocument();
+    expect(screen.getByText(/Loss selection is outdated/i)).toBeInTheDocument();
   });
 
   it('shows the prominent placeholder-curve banner when projection used benchmark curves', async () => {

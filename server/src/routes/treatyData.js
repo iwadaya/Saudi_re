@@ -1,7 +1,7 @@
 // server/src/routes/treatyData.js — Sub-entity endpoints (triangles, losses, profiles, cresta, docs, etc.)
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { asyncHandler, numOrNull, dateOrNull, safeUwYear, preserveBool, preserveNum, assertExists } from '../helpers.js';
+import { asyncHandler, numOrNull, dateOrNull, safeUwYear, preserveBool, preserveNum, assertExists, isStaleSince } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from '../lib/triangleBounds.js';
 import { stripTriangleCells, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from '../lib/triangleStripping.js';
@@ -385,6 +385,32 @@ router.put("/treaties/:id/strip-large-cat", asyncHandler(async (req, res) => {
   res.json({ ok: true, strip_large_cat_losses: strip });
 }));
 
+// ── LOSS-SELECTION STALENESS ──
+// Warns the UI that the saved loss selection is outdated when large/cat losses
+// have been edited (MAX updated_at) after the selection snapshot was last saved
+// (loss_selection_saved_at). Never stale when no selection has been saved.
+router.get("/treaties/:id/losses/staleness", asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const [lossRes, detRes] = await Promise.all([
+    pool.query(
+      `SELECT GREATEST(
+         (SELECT MAX(l.updated_at) FROM public.contract_large_losses l
+            JOIN public.contract_large_loss_report r ON r.report_id=l.report_id WHERE r.contract_id=$1),
+         (SELECT MAX(l.updated_at) FROM public.contract_cat_losses l
+            JOIN public.contract_cat_loss_report r ON r.report_id=l.report_id WHERE r.contract_id=$1)
+       ) AS ts`,
+      [id]
+    ),
+    pool.query(
+      `SELECT loss_selection_saved_at AS ts FROM public.contract_prop_details WHERE contract_id=$1`,
+      [id]
+    ),
+  ]);
+  const lossesUpdatedAt = lossRes.rows[0]?.ts || null;
+  const selectionSavedAt = detRes.rows[0]?.ts || null;
+  res.json({ lossesUpdatedAt, selectionSavedAt, stale: isStaleSince(lossesUpdatedAt, selectionSavedAt) });
+}));
+
 
 // ── AI: MAP LOSSES TO DEVELOPMENT QUARTERS ──
 // Advisory: suggests the development period each large/cat loss most likely
@@ -526,6 +552,9 @@ router.put("/treaties/:id/loss-selection/:lossType/snapshot", asyncHandler(async
         );
       }
     }
+    // Mark the selection as saved now so the staleness check can tell whether
+    // losses have been edited since (no-op if the prop-details row is absent).
+    await cl.query(`UPDATE public.contract_prop_details SET loss_selection_saved_at=now(), updated_at=now() WHERE contract_id=$1`,[req.params.id]);
     await cl.query("COMMIT");
     res.json({ok:true, snapshot:snap});
   }catch(e){

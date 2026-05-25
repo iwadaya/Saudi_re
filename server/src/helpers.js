@@ -144,3 +144,12 @@ export async function assertExists(client, table, idColumn, id, label = 'Resourc
     throw err;
   }
 }
+
+/**
+ * Staleness predicate shared by the dev-factor and loss-selection checks:
+ * true only when a save timestamp exists AND the source was updated strictly
+ * after it. A null savedAt (never saved) is never stale.
+ */
+export function isStaleSince(sourceUpdatedAt, savedAt) {
+  return !!(savedAt && sourceUpdatedAt && new Date(sourceUpdatedAt) > new Date(savedAt));
+}

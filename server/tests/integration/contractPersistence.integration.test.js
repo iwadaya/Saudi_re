@@ -913,5 +913,27 @@ describe.skipIf(shouldSkipDb)('integration: contract save and rehydrate every ro
       body: { report_date: '2026-03-31', losses: [] },
     });
     expect(badId.status).toBe(400);
+
+    // ── Loss-selection staleness (migration 114) ──
+    // Large losses were re-saved (above) after the loss-selection snapshot was
+    // saved, so the selection is now stale.
+    const lossStale = await jsonOk(
+      await harness.fetchApp('GET', `/api/treaties/${contractId}/losses/staleness`),
+      'loss staleness (stale)',
+    );
+    expect(lossStale.selectionSavedAt).not.toBeNull();
+    expect(lossStale.stale).toBe(true);
+    // Re-saving the selection snapshot clears the staleness.
+    await expectOk(
+      await harness.fetchApp('PUT', `/api/treaties/${contractId}/loss-selection/large/snapshot`, {
+        body: { selected_losses: [] },
+      }),
+      're-save loss selection',
+    );
+    const lossFresh = await jsonOk(
+      await harness.fetchApp('GET', `/api/treaties/${contractId}/losses/staleness`),
+      'loss staleness (fresh)',
+    );
+    expect(lossFresh.stale).toBe(false);
   });
 });
