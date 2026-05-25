@@ -207,6 +207,43 @@ describe('stripTriangleCells', () => {
     expect(y2021).toEqual([100, 50, 60]);
   });
 
+  it('stripped cell never exceeds its full counterpart', () => {
+    // Reserve-release row: full incurred peaks at dev24 (1200) then releases
+    // to 1100 at dev36. A 400 large loss present from dev3 is stripped from
+    // every column. Naive per-cell subtraction would read [600, 800, 700],
+    // but the cumulative-monotonic floor holds dev36 at the dev24 stripped
+    // level (800) because the raw 700 would dip below it. Either way every
+    // stripped cell stays at or below its full counterpart — the invariant
+    // under test, which must survive a dipping (reserve-release) full row.
+    const cells = annualRow(2021, [1000, 1200, 1100]);
+    const losses = [{ uw_year: 2021, incurred: 400, date_of_loss: '2021-01-15' }];
+    const out = stripTriangleCells(cells, losses, 'incurred');
+    const full = new Map(cells.map((c) => [c.dev_months, c.cum_value]));
+    for (const c of out) {
+      expect(c.cum_value).toBeLessThanOrEqual(full.get(c.dev_months));
+    }
+    expect(out.map((c) => c.cum_value)).toEqual([600, 800, 800]);
+  });
+
+  it('zero-floor when loss exceeds triangle cell', () => {
+    // The loss (300) exceeds the first observed cell (100): that column floors
+    // to 0 rather than going negative, and later columns stay non-decreasing
+    // and at or below their full counterparts.
+    const cells = annualRow(2021, [100, 500, 600]);
+    const losses = [{ uw_year: 2021, incurred: 300, date_of_loss: '2021-01-15' }];
+    const out = stripTriangleCells(cells, losses, 'incurred');
+    const vals = out.map((c) => c.cum_value);
+    expect(vals).toEqual([0, 200, 300]);
+    const full = new Map(cells.map((c) => [c.dev_months, c.cum_value]));
+    for (const c of out) {
+      expect(c.cum_value).toBeGreaterThanOrEqual(0);
+      expect(c.cum_value).toBeLessThanOrEqual(full.get(c.dev_months));
+    }
+    for (let i = 1; i < vals.length; i++) {
+      expect(vals[i]).toBeGreaterThanOrEqual(vals[i - 1]); // cumulative monotonicity
+    }
+  });
+
   it('sums multiple losses that enter at different periods', () => {
     const cells = annualRow(2021, [100, 300, 600]);
     const out = stripTriangleCells(
