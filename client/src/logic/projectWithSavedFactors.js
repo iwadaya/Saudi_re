@@ -331,7 +331,7 @@ function blendCurveToCdfArray(blended) {
   return sorted.map(p => Number(p.cdf));
 }
 
-export async function projectFromSavedBlend(contractId, parsed, opts) {
+async function projectFromSavedBlend(contractId, parsed, opts) {
   const [prem, claims] = await Promise.all([
     api.getLdfBlend(contractId, 'PREMIUM', opts).catch(() => null),
     api.getLdfBlend(contractId, 'CLAIMS_PAID', opts).catch(() => null),
