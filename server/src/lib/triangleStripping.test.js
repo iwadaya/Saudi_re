@@ -31,6 +31,17 @@ describe('summarizeLossPlacement', () => {
     expect(summarizeLossPlacement(cells, losses, 'incurred')).toEqual({ reported: 1, proxy: 2, total: 3 });
   });
 
+  it('does not count a loss whose entry falls past the observed dev range', () => {
+    // Only the 12m column is observed. A late-November loss (age 10) enters at
+    // dev 13 — beyond the row — so stripTriangleCells never strips it and it
+    // shouldn't be flagged as placed either.
+    const cells = annualRow(2021, [100]);
+    const losses = [{ uw_year: 2021, incurred: 50, date_of_loss: '2021-11-20' }];
+    expect(summarizeLossPlacement(cells, losses, 'incurred')).toEqual({ reported: 0, proxy: 0, total: 0 });
+    // Sanity: stripping leaves the observed column untouched.
+    expect(stripTriangleCells(cells, losses, 'incurred').map(c => c.cum_value)).toEqual([100]);
+  });
+
   it('ignores zero-amount losses and losses with no matching row', () => {
     const cells = annualRow(2021, [100, 200]);
     const losses = [

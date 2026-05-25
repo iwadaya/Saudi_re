@@ -93,7 +93,12 @@ export function summarizeLossPlacement(cells, losses, amountField) {
     if (num(l[amountField]) <= 0) continue;
     const yr = Number(l.uw_year);
     if (!Number.isFinite(yr) || !maxDev.has(yr)) continue; // no matching row → not placed
-    const { basis } = resolveLossEntry(yr, l.date_of_loss, l.actuarial_reported_date, maxDev.get(yr));
+    const rowMaxDev = maxDev.get(yr);
+    const { entry, basis } = resolveLossEntry(yr, l.date_of_loss, l.actuarial_reported_date, rowMaxDev);
+    // Only count losses that actually enter within the observed triangle. A
+    // loss whose entry period is past the latest observed dev column is not
+    // stripped from any observed cell, so it shouldn't be flagged as placed.
+    if (entry > rowMaxDev) continue;
     out[basis] += 1;
     out.total += 1;
   }
