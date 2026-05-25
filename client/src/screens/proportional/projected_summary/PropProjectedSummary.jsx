@@ -24,9 +24,10 @@ export default function PropProjectedSummary() {
   const [lossCat, setLossCat] = useState({ large: new Map(), cat: new Map() });
   const [showLossModal, setShowLossModal] = useState(false);
   const [modalTab, setModalTab] = useState('abs');
-  // True when the paid/OS triangles were saved after the INCURRED dev factors
-  // that drive this projection — the underwriter should re-review them.
-  const [stale, setStale] = useState(false);
+  // Staleness of the dev factors driving this projection: the paid/OS
+  // (incurred) and premium triangles, each compared against their saved
+  // factors. Either being stale prompts a re-review.
+  const [stale, setStale] = useState({ incurred: false, premium: false });
 
   useEffect(() => {
     if (!contractId) return;
@@ -68,14 +69,18 @@ export default function PropProjectedSummary() {
     })();
   }, [appState.quoteMode, contractId]);
 
-  /* Staleness: were the paid/OS triangles saved after the INCURRED factors? */
+  /* Staleness: were the incurred (paid/OS) or premium triangles saved after
+     their respective dev factors? Both endpoints fetched in parallel. */
   useEffect(() => {
     if (!contractId) return;
     let cancelled = false;
     const qm = appState.quoteMode ? { quote: true } : undefined;
-    api.getDevFactorStaleness(contractId, 'INCURRED', qm)
-      .then(d => { if (!cancelled) setStale(!!d?.stale); })
-      .catch(() => {});
+    Promise.all([
+      api.getDevFactorStaleness(contractId, 'INCURRED', qm).catch(() => null),
+      api.getDevFactorStaleness(contractId, 'PREMIUM', qm).catch(() => null),
+    ]).then(([inc, prem]) => {
+      if (!cancelled) setStale({ incurred: !!inc?.stale, premium: !!prem?.stale });
+    });
     return () => { cancelled = true; };
   }, [appState.quoteMode, contractId]);
 
@@ -223,6 +228,14 @@ export default function PropProjectedSummary() {
     : source === 'straight-short' ? 'Short Tail portfolio dev factors'
     : '';
 
+  const staleMessage = stale.premium && stale.incurred
+    ? 'Premium and incurred triangles updated since dev factors were last saved — consider reviewing.'
+    : stale.incurred
+      ? 'Incurred triangle updated since dev factors were last saved — consider reviewing.'
+      : stale.premium
+        ? 'Premium triangle updated since dev factors were last saved — consider reviewing.'
+        : null;
+
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Projected Summary" headerPill="PROPORTIONAL TREATY: PROJECTED SUMMARY" onBeforeNext={save} onBeforeBack={save}>
       {() => (
@@ -240,9 +253,9 @@ export default function PropProjectedSummary() {
                   ({sourceLabel})
                 </span>}
               </h2>
-              {stale && (
+              {staleMessage && (
                 <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5 }}>
-                  Triangle updated since factors were last saved — consider reviewing dev factors.
+                  {staleMessage}
                 </div>
               )}
               <div style={{
