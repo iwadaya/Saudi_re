@@ -31,6 +31,13 @@ export default function PropProjectedSummary() {
     (async () => {
       try {
         /* ── Use saved dev factors via shared utility ── */
+        // Incurred figures here are NOT read from stored INCURRED cells nor the
+        // /with-exclusions endpoint. loadProjectedRows builds the incurred
+        // triangle as paid + OS (plain endpoint) and projects it to ultimate
+        // with the saved INCURRED dev factors (falling back to PAID factors,
+        // then a fresh weighted recalc). r.projectedLosses / r.actualLosses are
+        // those projected/latest incurred totals; deriveLossComponents below
+        // then splits them into attritional + large + CAT.
         const qm = appState.quoteMode ? { quote: true } : undefined;
         const { rows: standardRows, source: src } = await loadProjectedRows(contractId, qm);
         setSource(src || '');
