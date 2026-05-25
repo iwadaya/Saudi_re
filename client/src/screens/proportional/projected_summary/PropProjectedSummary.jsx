@@ -407,7 +407,7 @@ export default function PropProjectedSummary() {
               onClick={e => { if (e.target === e.currentTarget) setShowLossModal(false); }}
               style={{ position: 'fixed', inset: 0, zIndex: 120000, background: 'rgba(2,6,23,0.72)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
             >
-              <div role="dialog" aria-modal="true" className="glass" style={{ width: 'min(920px,96vw)', maxHeight: '88vh', overflow: 'auto', borderRadius: 16, border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(8,16,40,0.97)' }}>
+              <div role="dialog" aria-modal="true" className="glass" style={{ width: 'min(1380px,96vw)', maxHeight: '88vh', overflow: 'auto', borderRadius: 16, border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(8,16,40,0.97)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid rgba(148,163,184,0.14)' }}>
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: '0.03em', color: '#e2e8f0' }}>Loss Breakdown — Actual vs Projected</div>
