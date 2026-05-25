@@ -101,6 +101,7 @@ export function QuickSummaryEmbed({ contractId: propContractId }) {
   const [totals, setTotals] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [lossCat, setLossCat] = useState({ large: new Map(), cat: new Map() });
 
   useEffect(() => {
     if (!contractId) return;
@@ -114,6 +115,7 @@ export function QuickSummaryEmbed({ contractId: propContractId }) {
         if (!standardRows || standardRows.length === 0) { setCalcRows([]); setLoading(false); return; }
         const { rows, totals: tot } = runFinancialEngine(standardRows, t);
         setCalcRows(rows); setTotals(tot);
+        setLossCat(await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() })));
       } catch (e) { console.error('Quick Summary Embed Load Failed', e); setError(e.message); }
       setLoading(false);
     })();
@@ -126,6 +128,11 @@ export function QuickSummaryEmbed({ contractId: propContractId }) {
   const TD = ({ v, pct, neg, pos }) => (
     <td className={neg ? 'qs-val--neg' : pos ? 'qs-val--pos' : ''}><div className="qs-td qs-td--num">{pct ? fp(v) : fmt(v)}</div></td>
   );
+  const largeAmt = yr => lossCat.large.get(Number(yr)) || 0;
+  const catAmt = yr => lossCat.cat.get(Number(yr)) || 0;
+  const projComp = r => deriveLossComponents({ premium: r.premium, incurredTotal: r.ultClaims, large: largeAmt(r.year), cat: catAmt(r.year) });
+  const actComp = r => deriveLossComponents({ premium: r.actPremium, incurredTotal: r.actClaims, large: largeAmt(r.year), cat: catAmt(r.year) });
+  const sumComp = (fn, key) => calcRows.reduce((a, r) => a + fn(r)[key], 0);
   const ultLR = totals.premium > 0 ? (totals.ultClaims / totals.premium * 100) : 0;
   const actLR = totals.actPremium > 0 ? (totals.actClaims / totals.actPremium * 100) : 0;
 
@@ -146,26 +153,26 @@ export function QuickSummaryEmbed({ contractId: propContractId }) {
         </div>
       </div>
       <div style={{fontSize:12,fontWeight:700,color:'#ff9600',marginBottom:8}}>PROJECTED (ULTIMATE)</div>
-      <div className="qs-table-shell" style={{marginBottom:20}}><table className="qs-table qs-stats qs-table-modern">
-        <thead><tr><th className="qs-left">UW Year</th><th>Premium</th><th>Ult. Claims</th><th>Commission</th><th>Brokerage</th><th>Taxes</th><th>Result</th><th>Cum. %</th></tr></thead>
+      <div className="qs-table-shell" style={{marginBottom:20}}><table className="qs-table qs-stats qs-table-modern qs-table--scroll">
+        <thead><tr><th className="qs-left">UW Year</th><th>Premium</th><th>Attritional Loss</th><th>Large Loss</th><th>CAT Loss</th><th>Commission</th><th>Brokerage</th><th>Taxes</th><th>Result</th><th>Cum. %</th></tr></thead>
         <tbody>
-          {calcRows.map(r => (<tr key={r.year}><th className="qs-left qs-year">{r.year}</th>
-            <TD v={r.premium}/><TD v={r.ultClaims}/><TD v={r.comm}/><TD v={r.brokerage}/><TD v={r.taxes}/>
-            <TD v={r.result} neg={r.result<0} pos={r.result>0}/><TD v={r.cumResultPct} pct neg={r.cumResultPct<0} pos={r.cumResultPct>0}/></tr>))}
+          {calcRows.map(r => { const c = projComp(r); return (<tr key={r.year}><th className="qs-left qs-year">{r.year}</th>
+            <TD v={r.premium}/><TD v={c.attritional}/><TD v={c.large}/><TD v={c.cat}/><TD v={r.comm}/><TD v={r.brokerage}/><TD v={r.taxes}/>
+            <TD v={r.result} neg={r.result<0} pos={r.result>0}/><TD v={r.cumResultPct} pct neg={r.cumResultPct<0} pos={r.cumResultPct>0}/></tr>); })}
           <tr className="qs-total"><th className="qs-left qs-year">Total</th>
-            <TD v={totals.premium}/><TD v={totals.ultClaims}/><TD v={totals.comm}/><TD v={totals.brokerage}/><TD v={totals.taxes}/>
+            <TD v={totals.premium}/><TD v={sumComp(projComp, 'attritional')}/><TD v={sumComp(projComp, 'large')}/><TD v={sumComp(projComp, 'cat')}/><TD v={totals.comm}/><TD v={totals.brokerage}/><TD v={totals.taxes}/>
             <TD v={totals.result} neg={totals.result<0} pos={totals.result>0}/><TD v={totals.cumResultPct} pct neg={totals.cumResultPct<0} pos={totals.cumResultPct>0}/></tr>
         </tbody>
       </table></div>
       <div style={{fontSize:12,fontWeight:700,color:'#00d4ff',marginBottom:8}}>ACTUAL (INCURRED)</div>
-      <div className="qs-table-shell"><table className="qs-table qs-stats qs-table-modern">
-        <thead><tr><th className="qs-left">UW Year</th><th>Premium</th><th>Inc. Claims</th><th>Commission</th><th>Brokerage</th><th>Taxes</th><th>Result</th><th>Cum. %</th></tr></thead>
+      <div className="qs-table-shell"><table className="qs-table qs-stats qs-table-modern qs-table--scroll">
+        <thead><tr><th className="qs-left">UW Year</th><th>Premium</th><th>Attritional Loss</th><th>Large Loss</th><th>CAT Loss</th><th>Commission</th><th>Brokerage</th><th>Taxes</th><th>Result</th><th>Cum. %</th></tr></thead>
         <tbody>
-          {calcRows.map(r => (<tr key={r.year}><th className="qs-left qs-year">{r.year}</th>
-            <TD v={r.actPremium}/><TD v={r.actClaims}/><TD v={r.actComm}/><TD v={r.actBrokerage}/><TD v={r.actTaxes}/>
-            <TD v={r.actResult} neg={r.actResult<0} pos={r.actResult>0}/><TD v={r.actCumResultPct} pct neg={r.actCumResultPct<0} pos={r.actCumResultPct>0}/></tr>))}
+          {calcRows.map(r => { const c = actComp(r); return (<tr key={r.year}><th className="qs-left qs-year">{r.year}</th>
+            <TD v={r.actPremium}/><TD v={c.attritional}/><TD v={c.large}/><TD v={c.cat}/><TD v={r.actComm}/><TD v={r.actBrokerage}/><TD v={r.actTaxes}/>
+            <TD v={r.actResult} neg={r.actResult<0} pos={r.actResult>0}/><TD v={r.actCumResultPct} pct neg={r.actCumResultPct<0} pos={r.actCumResultPct>0}/></tr>); })}
           <tr className="qs-total"><th className="qs-left qs-year">Total</th>
-            <TD v={totals.actPremium}/><TD v={totals.actClaims}/><TD v={totals.actComm}/><TD v={totals.actBrokerage}/><TD v={totals.actTaxes}/>
+            <TD v={totals.actPremium}/><TD v={sumComp(actComp, 'attritional')}/><TD v={sumComp(actComp, 'large')}/><TD v={sumComp(actComp, 'cat')}/><TD v={totals.actComm}/><TD v={totals.actBrokerage}/><TD v={totals.actTaxes}/>
             <TD v={totals.actResult} neg={totals.actResult<0} pos={totals.actResult>0}/><TD v={totals.actCumResultPct} pct neg={totals.actCumResultPct<0} pos={totals.actCumResultPct>0}/></tr>
         </tbody>
       </table></div>
