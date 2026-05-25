@@ -19,6 +19,7 @@ import { toN as cn } from '../utils/format';
 import {
   buildMatrixFromCells, calculateAgeToAgeFactors, calculatePattern, calculateCdfs,
 } from './chainLadder';
+import { loadLossCategoryByYear } from './lossCategoryAmounts';
 function crd(data) {
   const rows = Array.isArray(data) ? data : (data?.cells || []);
   return rows.map(r => ({
@@ -218,11 +219,36 @@ export async function loadProjectedRows(contractId, opts) {
     os: cn(s.os_claims || s.os),
   }));
 
+  // No-triangulation stripping is straightforward: remove the year's large/cat
+  // losses from its incurred, project the remaining attritional with the same
+  // loss dev factor, then add large/cat back unprojected — so downstream
+  // Incurred = attritional + large + cat. Honours the per-treaty strip flag
+  // (default on). Actual incurred (actLoss) is left raw.
+  const contract = await api.getContract(contractId, opts).catch(() => ({}));
+  const stripLC = (contract?.detail?.strip_large_cat_losses ?? true) !== false;
+  const lossCat = stripLC
+    ? await loadLossCategoryByYear(contractId, opts).catch(() => ({ large: new Map(), cat: new Map() }))
+    : null;
+  const applyStrip = (projRows) => {
+    if (!stripLC || !lossCat) return projRows;
+    return projRows.map(r => {
+      const large = lossCat.large.get(Number(r.year)) || 0;
+      const cat = lossCat.cat.get(Number(r.year)) || 0;
+      if (large + cat <= 0) return r;
+      const incurred = r.actLoss || 0;
+      const cdf = Number.isFinite(r.devFactor) && r.devFactor > 0
+        ? r.devFactor
+        : (incurred > 0 ? (r.ultLoss || 0) / incurred : 1);
+      const ultAttritional = Math.max(0, incurred - large - cat) * cdf;
+      return { ...r, ultLoss: ultAttritional + large + cat };
+    });
+  };
+
   // 3a) Preferred: project against the underwriter's saved per-class
   // blend (the LDF Analysis modal writes here). Tail type is just a
   // marker — the curve itself lives in contract_ldf_blend_curve.
   const blendRows = await projectFromSavedBlend(contractId, parsed, opts);
-  if (blendRows) return { rows: blendRows, source: 'straight-blend' };
+  if (blendRows) return { rows: applyStrip(blendRows), source: 'straight-blend' };
 
   // 3b) Last resort: hard-coded benchmark curve, picked by the contract's
   // primary class of business (falls through to DEFAULT_LDF_KEY when the
@@ -231,7 +257,7 @@ export async function loadProjectedRows(contractId, opts) {
   const { projectStraightStats, DEFAULT_LDF_KEY } = await import('./straightProjections');
   const classKey = ssData?.primary_class_key || DEFAULT_LDF_KEY;
   const rows = projectStraightStats(parsed, classKey);
-  return { rows, source: 'straight-benchmark' };
+  return { rows: applyStrip(rows), source: 'straight-benchmark' };
 }
 
 // ── Saved-blend projection ───────────────────────────────────────────────
