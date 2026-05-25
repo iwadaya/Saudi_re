@@ -260,12 +260,12 @@ export default function PropQuickSummary() {
               const lg = largeAmt(r.year), ct = catAmt(r.year);
               return (
               <tr key={r.year}><th className="qs-left qs-year">{r.year}</th>
-                <TD v={r.premium}/><TD v={-(r.ultClaims - lg - ct)} neg/><TD v={-lg} neg/><TD v={-ct} neg/><TD v={r.comm}/><TD v={r.profitComm}/><TD v={r.brokerage}/>
+                <TD v={r.premium}/><TD v={r.ultClaims - lg - ct}/><TD v={lg}/><TD v={ct}/><TD v={r.comm}/><TD v={r.profitComm}/><TD v={r.brokerage}/>
                 <TD v={r.taxes}/><TD v={r.lpc}/><TD v={r.result} neg={r.result<0} pos={r.result>0}/><TD v={r.cumResult} neg={r.cumResult<0} pos={r.cumResult>0}/><TD v={r.cumResultPct} pct neg={r.cumResultPct<0} pos={r.cumResultPct>0}/></tr>
               );
             })}
             <tr className="qs-total"><th className="qs-left qs-year">Total</th>
-              <TD v={totals.premium}/><TD v={-(totals.ultClaims - totalLargeAmt - totalCatAmt)} neg/><TD v={-totalLargeAmt} neg/><TD v={-totalCatAmt} neg/><TD v={totals.comm}/><TD v={totals.profitComm}/><TD v={totals.brokerage}/>
+              <TD v={totals.premium}/><TD v={totals.ultClaims - totalLargeAmt - totalCatAmt}/><TD v={totalLargeAmt}/><TD v={totalCatAmt}/><TD v={totals.comm}/><TD v={totals.profitComm}/><TD v={totals.brokerage}/>
               <TD v={totals.taxes}/><TD v={totals.lpc}/><TD v={totals.result} neg={totals.result<0} pos={totals.result>0}/><TD v={totals.cumResult} neg={totals.cumResult<0} pos={totals.cumResult>0}/><TD v={totals.cumResultPct} pct neg={totals.cumResultPct<0} pos={totals.cumResultPct>0}/></tr>
           </tbody>
         </table></div>
@@ -294,12 +294,12 @@ export default function PropQuickSummary() {
               const lg = largeAmt(r.year), ct = catAmt(r.year);
               return (
               <tr key={r.year}><th className="qs-left qs-year">{r.year}</th>
-                <TD v={r.actPremium}/><TD v={-(r.actClaims - lg - ct)} neg/><TD v={-lg} neg/><TD v={-ct} neg/><TD v={r.actComm}/><TD v={r.actPC}/><TD v={r.actBrokerage}/>
+                <TD v={r.actPremium}/><TD v={r.actClaims - lg - ct}/><TD v={lg}/><TD v={ct}/><TD v={r.actComm}/><TD v={r.actPC}/><TD v={r.actBrokerage}/>
                 <TD v={r.actTaxes}/><TD v={r.actLPC}/><TD v={r.actResult} neg={r.actResult<0} pos={r.actResult>0}/><TD v={r.actCumResult} neg={r.actCumResult<0} pos={r.actCumResult>0}/><TD v={r.actCumResultPct} pct neg={r.actCumResultPct<0} pos={r.actCumResultPct>0}/></tr>
               );
             })}
             <tr className="qs-total"><th className="qs-left qs-year">Total</th>
-              <TD v={totals.actPremium}/><TD v={-(totals.actClaims - totalLargeAmt - totalCatAmt)} neg/><TD v={-totalLargeAmt} neg/><TD v={-totalCatAmt} neg/><TD v={totals.actComm}/><TD v={totals.actPC}/><TD v={totals.actBrokerage}/>
+              <TD v={totals.actPremium}/><TD v={totals.actClaims - totalLargeAmt - totalCatAmt}/><TD v={totalLargeAmt}/><TD v={totalCatAmt}/><TD v={totals.actComm}/><TD v={totals.actPC}/><TD v={totals.actBrokerage}/>
               <TD v={totals.actTaxes}/><TD v={totals.actLPC}/><TD v={totals.actResult} neg={totals.actResult<0} pos={totals.actResult>0}/><TD v={totals.actCumResult} neg={totals.actCumResult<0} pos={totals.actCumResult>0}/><TD v={totals.actCumResultPct} pct neg={totals.actCumResultPct<0} pos={totals.actCumResultPct>0}/></tr>
           </tbody>
         </table></div>
