@@ -779,14 +779,26 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
             </div>
           )}
 
-          {/* Triangle basis toggle — view preference, not persisted. Claims
-              screens only; premium isn't reduced by losses. */}
+          {/* Triangle basis toggle — persisted per treaty. Claims screens only;
+              premium isn't reduced by losses. */}
           {!isPremium && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '0 0 12px', padding: '10px 14px', borderRadius: 12, background: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.20)' }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#bae6fd' }}>Triangle basis</span>
-              <div className="toggle-group">
-                <span className={`toggle-option${basis === 'FULL' ? ' active' : ''}`} onClick={() => setBasis('FULL')}>Full</span>
-                <span className={`toggle-option${basis === 'STRIPPED' ? ' active' : ''}`} onClick={() => setBasis('STRIPPED')}>Stripped of Large/Cat Losses</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '0 0 12px', padding: '10px 14px', borderRadius: 12, background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.30)' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#bae6fd', letterSpacing: '.04em' }}>Triangle basis</span>
+              <div className="toggle-group" style={{ boxShadow: '0 0 0 1px rgba(148,163,184,0.18)' }}>
+                <span
+                  className={`toggle-option${basis === 'FULL' ? ' active' : ''}`}
+                  onClick={() => setBasis('FULL')}
+                  style={basis === 'FULL'
+                    ? { background: 'linear-gradient(135deg,#f59e0b,#f97316)', color: '#1a1206', fontWeight: 800, boxShadow: '0 0 16px rgba(249,115,22,0.65)', textShadow: 'none' }
+                    : { color: '#fbbf24', fontWeight: 700 }}
+                >Full</span>
+                <span
+                  className={`toggle-option${basis === 'STRIPPED' ? ' active' : ''}`}
+                  onClick={() => setBasis('STRIPPED')}
+                  style={basis === 'STRIPPED'
+                    ? { background: 'linear-gradient(135deg,#10b981,#06b6d4)', color: '#042f2a', fontWeight: 800, boxShadow: '0 0 16px rgba(16,185,129,0.65)', textShadow: 'none' }
+                    : { color: '#5eead4', fontWeight: 700 }}
+                >Stripped of Large/Cat Losses</span>
               </div>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                 Stripped is the attritional basis — recommended. Saved per treaty: choosing Full uses
