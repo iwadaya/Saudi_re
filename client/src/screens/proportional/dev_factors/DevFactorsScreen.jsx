@@ -1121,7 +1121,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                     }}>💾 Save Factors</button>
                   </div>
                 </div>
-                <FactorTable pattern={chosenLdfs} cdfs={chosenCdfs} editable onChange={handleChosenChange} sectionClass="df-card--chosen" fullLdfs={fullCalcs?.pattern} fullCdfs={fullCalcs?.cdfs} />
+                <FactorTable pattern={chosenLdfs} cdfs={chosenCdfs} editable onChange={handleChosenChange} sectionClass="df-card--chosen" fullLdfs={basis === 'STRIPPED' ? fullCalcs?.pattern : undefined} fullCdfs={basis === 'STRIPPED' ? fullCalcs?.cdfs : undefined} />
               </div>
             </>)}
 
