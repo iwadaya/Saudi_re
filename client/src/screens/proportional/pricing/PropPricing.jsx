@@ -287,6 +287,9 @@ export default function PropPricing() {
         // The underwriter column is where the two bases are reconciled.
         // It is the same path the Projected Summary uses, so both screens
         // always report consistent ultimates.
+        // Note: the stripLC gate applies only to the projected (actuarial) basis —
+        // the actual basis always subtracts totalLarge/totalCat since totActLoss is
+        // always raw incurred regardless of triangle setting.
         //
         // Run it unconditionally: the placeholder flag must reflect the CURRENT projection
         // regardless of whether saved yearly pricing rows exist — otherwise a treaty whose
@@ -312,7 +315,7 @@ export default function PropPricing() {
         // Attritional on each basis via the shared loss-component model.
         // Actuarial uses projected totals; actual uses unprojected (raw) totals.
         const projComp = deriveLossComponents({ premium: totProjPrem, incurredTotal: totProjLoss, large: stripLC ? totalLarge : 0, cat: stripLC ? totalCat : 0 });
-        const actComp = deriveLossComponents({ premium: totActPrem, incurredTotal: totActLoss, large: stripLC ? totalLarge : 0, cat: stripLC ? totalCat : 0 });
+        const actComp = deriveLossComponents({ premium: totActPrem, incurredTotal: totActLoss, large: totalLarge, cat: totalCat });
         const actuarialAttrLR = totProjPrem > 0 ? projComp.attrLR : avgProjectedLR;
         const actualAttrLR = totActPrem > 0 ? actComp.attrLR : avgActualLR;
 
