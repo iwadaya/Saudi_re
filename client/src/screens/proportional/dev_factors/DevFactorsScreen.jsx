@@ -1223,10 +1223,10 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                   <button onClick={() => setShowStrippedModal(false)} style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid rgba(148,163,184,0.25)', background: 'transparent', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 14 }}>✕</button>
                 </div>
                 <div style={{ padding: 20 }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: '#6ee7b7', marginBottom: 8 }}>{stripLargeCat ? 'STRIPPED (ATTRITIONAL)' : 'ATTRITIONAL BASIS (reference — not active)'}</div>
-                  <TriangleGrid matrix={strippedCalcs?.matrix} years={years} numDevYears={numDevYears} />
-                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: '#fbbf24', margin: '20px 0 8px' }}>FULL (ORIGINAL — BEFORE STRIPPING)</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: '#fbbf24', marginBottom: 8 }}>FULL (ORIGINAL — BEFORE STRIPPING)</div>
                   <TriangleGrid matrix={fullCalcs?.matrix} years={years} numDevYears={numDevYears} />
+                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: '#6ee7b7', margin: '20px 0 8px' }}>{stripLargeCat ? 'STRIPPED (ATTRITIONAL)' : 'ATTRITIONAL BASIS (reference — not active)'}</div>
+                  <TriangleGrid matrix={strippedCalcs?.matrix} years={years} numDevYears={numDevYears} />
                 </div>
               </div>
             </div>
