@@ -304,8 +304,8 @@ export default function PropPricing() {
         const stripLC = (det.strip_large_cat_losses ?? td.stripLargeCat ?? true) !== false;
         // Attritional on each basis via the shared loss-component model.
         // Actuarial uses projected totals; actual uses unprojected (raw) totals.
-        const projComp = deriveLossComponents({ premium: totProjPrem, incurredTotal: totProjLoss, large: stripLC ? totalLarge : 0, cat: stripLC ? totalCat : 0 });
-        const actComp = deriveLossComponents({ premium: totActPrem, incurredTotal: totActLoss, large: stripLC ? totalLarge : 0, cat: stripLC ? totalCat : 0 });
+        const projComp = deriveLossComponents({ premium: totProjPrem, incurredTotal: totProjLoss, large: totalLarge, cat: totalCat });
+        const actComp = deriveLossComponents({ premium: totActPrem, incurredTotal: totActLoss, large: totalLarge, cat: totalCat });
         const actuarialAttrLR = totProjPrem > 0 ? projComp.attrLR : avgProjectedLR;
         const actualAttrLR = totActPrem > 0 ? actComp.attrLR : avgActualLR;
 
@@ -390,8 +390,8 @@ export default function PropPricing() {
           // Actuarial: attritional stripped of large/CAT (when stripping on);
           // large/CAT shown as the MODELLED loadings (Pareto / return-period).
           sc('Attritional Loss Ratio', 'actuarial', actuarialAttrLR);
-          sc('Large Loss Loading', 'actuarial', stripLC ? largeLossLoad : 0);
-          sc('Cat Loss Loading', 'actuarial', stripLC ? catLoad : 0);
+          sc('Large Loss Loading', 'actuarial', largeLossLoad);
+          sc('Cat Loss Loading', 'actuarial', catLoad);
           // Actual (unprojected burning cost): attritional = (incurred−large−cat)/prem,
           // large = large/prem, cat = cat/prem.
           sc('Attritional Loss Ratio', 'actual', actualAttrLR);
@@ -399,8 +399,8 @@ export default function PropPricing() {
           sc('Cat Loss Loading', 'actual', actComp.catLR);
           if (exposureLR > 0) {
             sc('Attritional Loss Ratio', 'exposure', exposureLR);
-            sc('Large Loss Loading', 'exposure', stripLC ? largeLossLoad : 0);
-            sc('Cat Loss Loading', 'exposure', stripLC ? catLoad : 0);
+            sc('Large Loss Loading', 'exposure', largeLossLoad);
+            sc('Cat Loss Loading', 'exposure', catLoad);
           }
           sc('Commissions', 'exposure', commissionPct); sc('Brokerage', 'exposure', brokeragePct); sc('Taxes', 'exposure', taxesPct);
           const mktSet = (row, data) => { if (data?.avg != null) sc(row, 'market', Number(data.avg)); };
