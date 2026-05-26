@@ -51,6 +51,9 @@ export default function PropPricing() {
   const [saveMsg, setSaveMsg] = useState(null);
   const [contract, setContract] = useState({});
   const [components, setComponents] = useState({});
+  // Rows whose UW cell the user has explicitly edited — these are no longer
+  // re-seeded from the actuarial column when it re-calculates.
+  const [uwUserEdited, setUwUserEdited] = useState(new Set());
   const [leads, setLeads] = useState({});
   const [shareRows, setShareRows] = useState(DEFAULT_SHARE_ROWS.slice());
   const [shareGrid, setShareGrid] = useState({});
@@ -110,7 +113,7 @@ export default function PropPricing() {
     if (prevCidRef.current !== cid) {
       prevCidRef.current = cid;
       setLoading(true); setDirty(false); setSaveMsg(null);
-      setContract({}); setComponents({}); setLeads({});
+      setContract({}); setComponents({}); setUwUserEdited(new Set()); setLeads({});
       setShareRows(DEFAULT_SHARE_ROWS.slice()); setShareGrid({});
       setReinsurers([]); setYearly([]); setComment('');
       setLastUpdatedAt(null);
@@ -193,9 +196,6 @@ export default function PropPricing() {
         cg[row].actuarial = fv; cg[row].actual = fv;
       };
       injectCBT('Commissions', commPctL); injectCBT('Brokerage', brokPctL); injectCBT('Taxes', taxPctL);
-      for (const rowName of ['Attritional Loss Ratio', 'Large Loss Loading', 'Cat Loss Loading', 'Commissions', 'Brokerage', 'Taxes']) {
-        if (cg[rowName] && cg[rowName].actuarial && !cg[rowName].uw) cg[rowName].uw = cg[rowName].actuarial;
-      }
       setComponents(cg);
 
       // Normalize DB status values to UI status values
@@ -465,18 +465,20 @@ export default function PropPricing() {
           sc('Large Loss Loading', 'downside', stripLC ? largeLossLoad : 0); sc('Cat Loss Loading', 'downside', stripLC ? catLoad : 0);
           sc('Commissions', 'downside', commissionPct); sc('Brokerage', 'downside', brokeragePct); sc('Taxes', 'downside', taxesPct);
           for (const rowName of ['Attritional Loss Ratio', 'Large Loss Loading', 'Cat Loss Loading', 'Commissions', 'Brokerage', 'Taxes']) {
-            if (nc[rowName]?.actuarial && !nc[rowName]?.uw) nc[rowName] = { ...nc[rowName], uw: nc[rowName].actuarial };
+            if (nc[rowName]?.actuarial && !uwUserEdited.has(rowName)) nc[rowName] = { ...nc[rowName], uw: nc[rowName].actuarial };
           }
           return nc;
         });
       } catch (e) { console.error('Auto-calc pricing failed:', e); }
     })();
-  }, [appState.quoteMode, cid, loading, yearly.length, td.quotaShareEpi, td.surplusEpi, td.fixedCommissionQSPct, td.fixedCommissionSurplusPct, td.brokeragePct, td.taxesPct, td.provisionalCommissionPct, td.commissionMode, td.stripLargeCat, td.totalCapacity, td.qsLimit, td.eventLimit, contract.detail?.total_capacity, contract.detail?.qs_limit, contract.detail?.event_limit, contract.detail?.brokerage_pct, contract.detail?.taxes_pct, contract.commissions?.fixed_commission_qs_pct, contract.commissions?.fixed_commission_surplus_pct, worstLR.lr, contract.header?.country_id, td.countryId, contract, td.country_id, yearly]);
+  }, [appState.quoteMode, cid, loading, yearly.length, td.quotaShareEpi, td.surplusEpi, td.fixedCommissionQSPct, td.fixedCommissionSurplusPct, td.brokeragePct, td.taxesPct, td.provisionalCommissionPct, td.commissionMode, td.stripLargeCat, td.totalCapacity, td.qsLimit, td.eventLimit, contract.detail?.total_capacity, contract.detail?.qs_limit, contract.detail?.event_limit, contract.detail?.brokerage_pct, contract.detail?.taxes_pct, contract.commissions?.fixed_commission_qs_pct, contract.commissions?.fixed_commission_surplus_pct, worstLR.lr, contract.header?.country_id, td.countryId, contract, td.country_id, yearly, uwUserEdited]);
 
   // ── Component helpers ─────────────────────────────────────────────────────
   const getC = useCallback((row, col) => components[row]?.[col] || '', [components]);
   const setC = (row, col, val) => {
     setComponents(prev => ({ ...prev, [row]: { ...(prev[row] || {}), [col]: val } }));
+    // A manual UW edit pins that row so the actuarial re-seed no longer overwrites it.
+    if (col === 'uw') setUwUserEdited(prev => new Set([...prev, row]));
     setDirty(true);
   };
 
