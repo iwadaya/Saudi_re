@@ -33,9 +33,10 @@ import { InternalMetricsPanel } from './components/insight/InternalMetricsPanel'
 import { TreatyMetricsPanel } from './components/insight/TreatyMetricsPanel';
 import {
   COMPONENT_ROWS, DEFAULT_SHARE_ROWS, INSIGHT_BUTTONS,
-  cn, fmt, fmtPct, parsePct, mbbefdG, SWISS_RE_C, fitPareto, paretoQ,
+  cn, fmt, fmtPct, parsePct, mbbefdG, SWISS_RE_C, fitPareto,
   UW_MAX_LIMIT,
 } from './components/propPricingConstants';
+import { paretoLayerExpectedLoss } from '../../../utils/npPricingEngine';
 
 import { exportPropPricingToExcel } from './exportPropPricingToExcel.js';
 
@@ -246,6 +247,12 @@ export default function PropPricing() {
     const brokeragePct = (cn(td.brokeragePct) || cn(det.brokerage_pct)) / 100;
     const taxesPct = (cn(td.taxesPct) || cn(det.taxes_pct)) / 100;
     const effEpi = qsPrem + surPrem || 0;
+    const treatyCapacity =
+      cn(td.totalCapacity) || cn(det.total_capacity) ||
+      cn(td.qsLimit)       || cn(det.qs_limit) || 0;
+    const treatyEventLimit =
+      cn(td.eventLimit) || cn(det.event_limit) || 0;
+    const catCap = treatyEventLimit > 0 ? treatyEventLimit : treatyCapacity * 3;
     const fmtV = val => typeof val === 'number' ? `${(val * 100).toFixed(2)}%` : val;
 
     setComponents(prev => {
@@ -312,19 +319,37 @@ export default function PropPricing() {
         let largeLossLoad = 0;
         try {
           const llSnap = await api.getLossSelectionLatest(cid, 'large').catch(() => ({}));
-          const kp = llSnap?.snapshot?.return_period_key_points || {};
-          const rp10 = cn(kp.rp10) || cn((llSnap?.snapshot?.return_period_curve || {})?.points?.find?.(p => Number(p.rp) === 10)?.loss);
-          if (rp10 > 0 && effEpi > 0) { largeLossLoad = (rp10 / 10) / effEpi; }
-          else {
+          const snap = llSnap?.snapshot || {};
+          const savedAlpha = cn(snap.pareto_alpha);
+          const savedXm    = cn(snap.pareto_xm);
+          const savedYears = cn(snap.observation_years);
+          const savedN     = cn(snap.selected_count);
+
+          if (savedAlpha > 1 && savedXm > 0 && savedYears > 0 && savedN > 0
+              && treatyCapacity > savedXm && effEpi > 0) {
+            // Primary path: use saved Pareto fit from snapshot.
+            largeLossLoad = paretoLayerExpectedLoss(
+              savedAlpha, savedXm,
+              savedXm, treatyCapacity - savedXm,
+              savedN, savedYears
+            ) / effEpi;
+          } else {
+            // Fallback: fit Pareto from raw loss list.
             const rawLL = await api.getLargeLosses(cid).catch(() => []);
-            const losses = (rawLL?.losses || rawLL || []).map(l => cn(l.incurred || l.paid) + cn(l.os)).filter(v => v > 0);
-            if (losses.length >= 3 && effEpi > 0) {
+            const losses = (rawLL?.losses || rawLL || [])
+              .map(l => cn(l.incurred || l.paid) + cn(l.os))
+              .filter(v => v > 0);
+            if (losses.length >= 3 && treatyCapacity > 0 && effEpi > 0) {
               const sorted = [...losses].sort((a, b) => a - b);
               const xm = sorted[Math.floor(sorted.length * 0.25)] || sorted[0];
               const { alpha, n } = fitPareto(losses, xm);
-              if (alpha > 0) {
-                const years = llSnap?.snapshot?.observation_years || Math.max(5, new Set((rawLL?.losses || rawLL || []).map(l => l.uw_year)).size);
-                largeLossLoad = (paretoQ(1 - 1 / (10 * (n / years)), alpha, xm) / 10) / effEpi;
+              const years = Math.max(5, new Set(
+                (rawLL?.losses || rawLL || []).map(l => l.uw_year)
+              ).size);
+              if (alpha > 1 && treatyCapacity > xm) {
+                largeLossLoad = paretoLayerExpectedLoss(
+                  alpha, xm, xm, treatyCapacity - xm, n, years
+                ) / effEpi;
               }
             }
           }
@@ -333,19 +358,37 @@ export default function PropPricing() {
         let catLoad = 0;
         try {
           const catSnap = await api.getLossSelectionLatest(cid, 'cat').catch(() => ({}));
-          const kp = catSnap?.snapshot?.return_period_key_points || {};
-          const rp50 = cn(kp.rp50) || cn((catSnap?.snapshot?.return_period_curve || {})?.points?.find?.(p => Number(p.rp) === 50)?.loss);
-          if (rp50 > 0 && effEpi > 0) { catLoad = (rp50 / 50) / effEpi; }
-          else {
+          const snap = catSnap?.snapshot || {};
+          const savedAlpha = cn(snap.pareto_alpha);
+          const savedXm    = cn(snap.pareto_xm);
+          const savedYears = cn(snap.observation_years);
+          const savedN     = cn(snap.selected_count);
+
+          if (savedAlpha > 1 && savedXm > 0 && savedYears > 0 && savedN > 0
+              && catCap > savedXm && effEpi > 0) {
+            // Primary path: saved Pareto fit, layer up to event limit (or 3× treaty limit).
+            catLoad = paretoLayerExpectedLoss(
+              savedAlpha, savedXm,
+              savedXm, catCap - savedXm,
+              savedN, savedYears
+            ) / effEpi;
+          } else {
+            // Fallback: fit Pareto from raw cat loss list.
             const rawCat = await api.getCatLosses(cid).catch(() => []);
-            const losses = (rawCat?.losses || rawCat || []).map(l => cn(l.incurred || l.paid) + cn(l.os)).filter(v => v > 0);
-            if (losses.length >= 3 && effEpi > 0) {
+            const losses = (rawCat?.losses || rawCat || [])
+              .map(l => cn(l.incurred || l.paid) + cn(l.os))
+              .filter(v => v > 0);
+            if (losses.length >= 3 && catCap > 0 && effEpi > 0) {
               const sorted = [...losses].sort((a, b) => a - b);
               const xm = sorted[Math.floor(sorted.length * 0.25)] || sorted[0];
               const { alpha, n } = fitPareto(losses, xm);
-              if (alpha > 0) {
-                const years = catSnap?.snapshot?.observation_years || Math.max(5, new Set((rawCat?.losses || rawCat || []).map(l => l.uw_year)).size);
-                catLoad = (paretoQ(1 - 1 / (50 * (n / years)), alpha, xm) / 50) / effEpi;
+              const years = Math.max(5, new Set(
+                (rawCat?.losses || rawCat || []).map(l => l.uw_year)
+              ).size);
+              if (alpha > 1 && catCap > xm) {
+                catLoad = paretoLayerExpectedLoss(
+                  alpha, xm, xm, catCap - xm, n, years
+                ) / effEpi;
               }
             }
           }
@@ -419,7 +462,7 @@ export default function PropPricing() {
         });
       } catch (e) { console.error('Auto-calc pricing failed:', e); }
     })();
-  }, [appState.quoteMode, cid, loading, yearly.length, td.quotaShareEpi, td.surplusEpi, td.fixedCommissionQSPct, td.fixedCommissionSurplusPct, td.brokeragePct, td.taxesPct, td.provisionalCommissionPct, td.commissionMode, td.stripLargeCat, contract.detail?.brokerage_pct, contract.detail?.taxes_pct, contract.commissions?.fixed_commission_qs_pct, contract.commissions?.fixed_commission_surplus_pct, worstLR.lr, contract.header?.country_id, td.countryId, contract, td.country_id, yearly]);
+  }, [appState.quoteMode, cid, loading, yearly.length, td.quotaShareEpi, td.surplusEpi, td.fixedCommissionQSPct, td.fixedCommissionSurplusPct, td.brokeragePct, td.taxesPct, td.provisionalCommissionPct, td.commissionMode, td.stripLargeCat, td.totalCapacity, td.qsLimit, td.eventLimit, contract.detail?.total_capacity, contract.detail?.qs_limit, contract.detail?.event_limit, contract.detail?.brokerage_pct, contract.detail?.taxes_pct, contract.commissions?.fixed_commission_qs_pct, contract.commissions?.fixed_commission_surplus_pct, worstLR.lr, contract.header?.country_id, td.countryId, contract, td.country_id, yearly]);
 
   // ── Component helpers ─────────────────────────────────────────────────────
   const getC = useCallback((row, col) => components[row]?.[col] || '', [components]);
