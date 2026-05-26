@@ -276,17 +276,15 @@ export default function PropPricing() {
             if (p > 0 && rt === 'ACTUAL') { actualLRs.push(l / p); totActLoss += l; totActPrem += p; }
           });
         }
-        // Projection philosophy: dev factors are calibrated on the incurred triangle
-        // (stripped or full, per treaty setting). The actuarial attritional is derived
-        // by subtracting selected large/CAT losses from projected incurred — this is
-        // correct on both bases. Large/CAT loadings always use the Pareto-fitted
-        // expected annual loss regardless of triangle basis; the underwriter column
-        // is where adjustments are made.
-        //
-        // loadProjectedRows encapsulates exactly this: it projects the stripped incurred
-        // triangle with the saved INCURRED factors and adds the raw large/CAT loadings back
-        // on top (falling back to straight stats when there is no triangle). It is the same
-        // path the Projected Summary uses, so both screens report consistent ultimates.
+        // Projection philosophy: loadProjectedRows projects the incurred triangle
+        // (stripped or full, per treaty setting) and returns per-year ultimates.
+        // On the STRIPPED basis, deriveLossComponents subtracts selected large/CAT
+        // losses from projected incurred to recover the attritional component; the
+        // separate Pareto-fitted large/CAT loadings are then added back explicitly.
+        // On the FULL basis, large/CAT are already baked into the projected ultimates
+        // so no subtraction is applied — attrLR carries the combined loss ratio and
+        // the Pareto loadings represent the explicit large/CAT charge on top.
+        // The underwriter column is where the two bases are reconciled.
         //
         // Run it unconditionally: the placeholder flag must reflect the CURRENT projection
         // regardless of whether saved yearly pricing rows exist — otherwise a treaty whose
