@@ -529,6 +529,11 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
           .filter(l=>l.is_selected!==false)
           .map(l=>{const inc=cn(l.incurred)||(cn(l.paid)+cn(l.os));return{...l,incurred:inc,inflated:inc*cn(l.inflation_factor||1)};})
           .filter(l=>l.inflated>0);
+        // Portfolio fallback uses all inflated losses regardless of their
+        // is_selected status on the source treaties, so skip that filter.
+        const parsePortfolioLossList = (raw) => (Array.isArray(raw)?raw:[])
+          .map(l=>{const inc=cn(l.incurred)||(cn(l.paid)+cn(l.os));return{...l,incurred:inc,inflated:inc*cn(l.inflation_factor||1)};})
+          .filter(l=>l.inflated>0);
         const list=lossData?.losses||lossData?.rows||lossData||[];
         let parsed=parseLossList(list);
         // No losses saved for this treaty → fall back to the cedant's wider
@@ -537,7 +542,7 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
         let fallback=null;
         if(parsed.length===0 && !qm){
           const pf=await api.getPortfolioLosses(contractId, lossType).catch(()=>null);
-          const pfParsed=parseLossList(pf?.losses||[]);
+          const pfParsed=parsePortfolioLossList(pf?.losses||[]);
           if(pfParsed.length>0){ parsed=pfParsed; fallback={treatyCount:pf?.treatyCount||0}; }
         }
         setLosses(parsed);
