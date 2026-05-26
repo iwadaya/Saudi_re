@@ -353,7 +353,7 @@ export default function PropPricing() {
               }
             }
           }
-        } catch (e) {}
+        } catch (e) { console.error('Large loss load calc failed:', e); }
 
         let catLoad = 0;
         try {
@@ -392,7 +392,7 @@ export default function PropPricing() {
               }
             }
           }
-        } catch (e) {}
+        } catch (e) { console.error('Cat load calc failed:', e); }
 
         let exposureLR = 0;
         let cobIds = [];
