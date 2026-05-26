@@ -446,7 +446,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   const isPremium = devType === 'PREMIUM';
 
   const meta = appState.triangleMeta || {};
-  const startYear = meta.startYear || 2015;
+  const startYear = meta.startYear ?? null;
   const inceptionYear = meta.inceptionYear || meta.renewalYear || new Date().getFullYear();
   const numDevYears = Math.max(1, Math.min(60, inceptionYear - startYear));
   const years = useMemo(() => Array.from({ length: numDevYears }, (_, i) => startYear + i), [numDevYears, startYear]);
@@ -833,6 +833,11 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   // Surface the "no losses identified" nudge only when this is a claims
   // screen that actually has triangle data to price against.
   const showZeroLossWarning = !lossWarningDismissed && !isPremium && hasData && totalLossCount === 0;
+
+  // triangleMeta not yet loaded (e.g. just after a hard reset, before
+  // PropTreatyDetail re-fetches the contract). Avoid rendering with a
+  // bogus year range. Placed after all hooks to respect rules of hooks.
+  if (!startYear) return <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill}><div style={{ padding: 32, color: 'rgba(255,255,255,0.5)' }}>Loading…</div></WizardLayout>;
 
   return (
     <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill} onBeforeNext={save} onBeforeBack={save}>
