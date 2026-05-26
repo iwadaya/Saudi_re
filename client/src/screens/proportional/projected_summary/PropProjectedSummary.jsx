@@ -5,6 +5,9 @@ import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
 import { loadProjectedRows } from '../../../logic/projectWithSavedFactors';
 import { loadLossCategoryByYear, deriveLossComponents } from '../../../logic/lossCategoryAmounts';
+import { runFinancialEngine } from '../quick_summary/PropQuickSummary';
+import { buildTreatyTerms } from '../../../logic/propTreatyEngine';
+import { toN as cn } from '../../../utils/format';
 
 const ROUTE_KEY = 'PROP_PROJECTED_SUMMARY';
 
@@ -24,6 +27,7 @@ export default function PropProjectedSummary() {
   const [lossCat, setLossCat] = useState({ large: new Map(), cat: new Map() });
   const [showLossModal, setShowLossModal] = useState(false);
   const [modalTab, setModalTab] = useState('abs');
+  const [terms, setTerms] = useState({});
   // Staleness of the dev factors driving this projection: the paid/OS
   // (incurred) and premium triangles, each compared against their saved
   // factors. Either being stale prompts a re-review.
@@ -49,6 +53,9 @@ export default function PropProjectedSummary() {
         // deriveLossComponents below subtracts large/CAT back out to recover
         // the attritional component.
         const qm = appState.quoteMode ? { quote: true } : undefined;
+        const contract = await api.getContract(contractId, qm).catch(() => ({}));
+        const t = buildTreatyTerms(contract, appState.propTreatyDetail || {});
+        setTerms(t);
         const { rows: standardRows, source: src, usedPlaceholderLdfs: placeholder } = await loadProjectedRows(contractId, qm);
         setSource(src || '');
         setUsedPlaceholderLdfs(!!placeholder);
@@ -73,7 +80,7 @@ export default function PropProjectedSummary() {
       }
       setLoading(false);
     })();
-  }, [appState.quoteMode, contractId]);
+  }, [appState.propTreatyDetail, appState.quoteMode, contractId]);
 
   /* Staleness: were the incurred (paid/OS) or premium triangles saved after
      their respective dev factors? Both endpoints fetched in parallel. */
@@ -113,6 +120,21 @@ export default function PropProjectedSummary() {
     };
   });
 
+  /* Per-year financials (commission, brokerage, taxes, profit comm, LPC,
+     result) from the shared Quick Summary engine, used to derive the
+     expense / combined / result columns in the loss-breakdown modal. */
+  const engineRows = results.map(r => ({
+    year: r.year,
+    ultPrem: r.projectedPremium,
+    ultLoss: r.projectedLosses,
+    actPrem: r.premium,
+    actLoss: r.actualLosses,
+  }));
+  const finRows = Object.keys(terms).length > 0
+    ? runFinancialEngine(engineRows, terms).rows
+    : [];
+  const finByYear = new Map(finRows.map(r => [r.year, r]));
+
   const save = async () => {
     if (!contractId || !rows.length) return true;
     try {
@@ -144,15 +166,49 @@ export default function PropProjectedSummary() {
     const attritional = rs.reduce((a, r) => a + r.attritional, 0);
     const large = rs.reduce((a, r) => a + r.large, 0);
     const cat = rs.reduce((a, r) => a + r.cat, 0);
+    // Ratios aggregate as sum(ratio × premium) ÷ total premium — equivalent
+    // to summing the underlying amounts then dividing, matching the LR rows.
+    const expenseAmt = rs.reduce((a, r) => a + (r.expenseRatio || 0) * r.premium, 0);
+    const combinedAmt = rs.reduce((a, r) => a + (r.combinedRatio || 0) * r.premium, 0);
+    const resultAmt = rs.reduce((a, r) => a + (r.resultPct || 0) * r.premium, 0);
     const lr = n => (premium > 0 ? n / premium : 0);
     return {
       year: 'Total', premium, attritional, large, cat, incurred: attritional + large + cat,
       attrLR: lr(attritional), largeLR: lr(large), catLR: lr(cat), incurredLR: lr(attritional + large + cat),
+      expenseRatio: lr(expenseAmt), combinedRatio: lr(combinedAmt), resultPct: lr(resultAmt),
     };
   };
   const lossModalBases = [
-    { key: 'ACTUAL', label: 'Actual (Incurred)', rows: rows.map(r => ({ year: r.year, ...r.act })) },
-    { key: 'PROJECTED', label: 'Projected (Ultimate)', rows: rows.map(r => ({ year: r.year, ...r.proj })) },
+    {
+      key: 'ACTUAL', label: 'Actual (Incurred)',
+      rows: rows.map(r => {
+        const fin = finByYear.get(r.year) || {};
+        const prem = r.act.premium;
+        const exp = prem > 0
+          ? (cn(fin.actComm) + cn(fin.actBrokerage) + cn(fin.actTaxes) + cn(fin.actPC)) / prem
+          : 0;
+        const cr = prem > 0
+          ? (r.act.incurred + cn(fin.actComm) + cn(fin.actBrokerage) + cn(fin.actTaxes) + cn(fin.actPC) - cn(fin.actLPC)) / prem
+          : 0;
+        const rp = prem > 0 ? cn(fin.actResult) / prem : 0;
+        return { year: r.year, ...r.act, expenseRatio: exp, combinedRatio: cr, resultPct: rp };
+      }),
+    },
+    {
+      key: 'PROJECTED', label: 'Projected (Ultimate)',
+      rows: rows.map(r => {
+        const fin = finByYear.get(r.year) || {};
+        const prem = r.proj.premium;
+        const exp = prem > 0
+          ? (cn(fin.comm) + cn(fin.brokerage) + cn(fin.taxes) + cn(fin.profitComm)) / prem
+          : 0;
+        const cr = prem > 0
+          ? (r.proj.incurred + cn(fin.comm) + cn(fin.brokerage) + cn(fin.taxes) + cn(fin.profitComm) - cn(fin.lpc)) / prem
+          : 0;
+        const rp = prem > 0 ? cn(fin.result) / prem : 0;
+        return { year: r.year, ...r.proj, expenseRatio: exp, combinedRatio: cr, resultPct: rp };
+      }),
+    },
   ];
   const renderLossCells = r => modalTab === 'abs' ? (
     <>
@@ -160,9 +216,9 @@ export default function PropProjectedSummary() {
       <td className="ps-dash"><div className="ps-cell">{fmt0(r.attritional)}</div></td>
       <td className="ps-dash"><div className="ps-cell">{fmt0(r.large)}</div></td>
       <td className="ps-dash"><div className="ps-cell">{fmt0(r.cat)}</div></td>
-      <td className={`ps-dash ${lrCls(r.attrLR)}`}><div className="ps-cell">{fPct(r.attrLR)}</div></td>
-      <td className="ps-dash"><div className="ps-cell">{fPct(r.largeLR)}</div></td>
-      <td className="ps-dash"><div className="ps-cell">{fPct(r.catLR)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fPct(r.expenseRatio)}</div></td>
+      <td className={`ps-dash ${lrCls(r.combinedRatio)}`}><div className="ps-cell">{fPct(r.combinedRatio)}</div></td>
+      <td className={`ps-dash ${r.resultPct < 0 ? 'ps-cell--hot' : ''}`}><div className="ps-cell">{fPct(r.resultPct)}</div></td>
     </>
   ) : (
     <>
@@ -170,9 +226,9 @@ export default function PropProjectedSummary() {
       <td className={`ps-dash ${lrCls(r.attrLR)}`}><div className="ps-cell">{fPct(r.attrLR)}</div></td>
       <td className="ps-dash"><div className="ps-cell">{fPct(r.largeLR)}</div></td>
       <td className="ps-dash"><div className="ps-cell">{fPct(r.catLR)}</div></td>
-      <td className={`ps-dash ${lrCls(r.attrLR)}`}><div className="ps-cell">{fPct(r.attrLR)}</div></td>
-      <td className="ps-dash"><div className="ps-cell">{fPct(r.largeLR)}</div></td>
-      <td className="ps-dash"><div className="ps-cell">{fPct(r.catLR)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fPct(r.expenseRatio)}</div></td>
+      <td className={`ps-dash ${lrCls(r.combinedRatio)}`}><div className="ps-cell">{fPct(r.combinedRatio)}</div></td>
+      <td className={`ps-dash ${r.resultPct < 0 ? 'ps-cell--hot' : ''}`}><div className="ps-cell">{fPct(r.resultPct)}</div></td>
     </>
   );
 
@@ -488,7 +544,7 @@ export default function PropProjectedSummary() {
                       <div className="ps-table-wrap">
                         <table className="ps-table">
                           <thead><tr>
-                            <th>UW Year</th><th>Premium</th><th>Attritional</th><th>Large Loss</th><th>CAT Loss</th><th>Attr. LR</th><th>Large LR</th><th>CAT LR</th>
+                            <th>UW Year</th><th>Premium</th><th>Attritional</th><th>Large Loss</th><th>CAT Loss</th><th>Expense Ratio</th><th>Combined Ratio</th><th>Result %</th>
                           </tr></thead>
                           <tbody>
                             {base.rows.map(r => (
