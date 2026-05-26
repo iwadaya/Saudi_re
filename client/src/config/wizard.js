@@ -29,7 +29,6 @@ export const PROP_WIZARD_ORDER = [
   'PROP_CRESTA_AGGREGATES',
   'PROP_EVENT_LOSS_TABLES',
   'PROP_PRICING',
-  'PROP_FINAL_BIND',
 ];
 
 export const NP_WIZARD_ORDER = [
@@ -287,7 +286,7 @@ export const PROP_TAB_GROUPS = [
   { label: 'Summaries', keys: ['PROP_NO_TRIANGULATION', 'PROP_PROJECTED_SUMMARY', 'PROP_QUICK_SUMMARY'] },
   { label: 'Profiles', keys: ['PROP_RISK_PROFILE', 'PROP_CLAIMS_PROFILE'] },
   { label: 'Exposure', keys: ['PROP_CRESTA_AGGREGATES', 'PROP_EVENT_LOSS_TABLES'] },
-  { label: 'Pricing', keys: ['PROP_PRICING', 'PROP_FINAL_BIND'] },
+  { label: 'Pricing', keys: ['PROP_PRICING'] },
 ];
 
 export const NP_TAB_GROUPS = [
