@@ -285,6 +285,8 @@ export default function PropPricing() {
         // so no subtraction is applied — attrLR carries the combined loss ratio and
         // the Pareto loadings represent the explicit large/CAT charge on top.
         // The underwriter column is where the two bases are reconciled.
+        // It is the same path the Projected Summary uses, so both screens
+        // always report consistent ultimates.
         //
         // Run it unconditionally: the placeholder flag must reflect the CURRENT projection
         // regardless of whether saved yearly pricing rows exist — otherwise a treaty whose
