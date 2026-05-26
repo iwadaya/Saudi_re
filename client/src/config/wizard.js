@@ -114,7 +114,6 @@ export const STEP_LABELS = {
   PROP_CRESTA_AGGREGATES: 'CRESTA Aggregates',
   PROP_EVENT_LOSS_TABLES: 'Event Loss Tables',
   PROP_PRICING: 'Pricing',
-  PROP_FINAL_BIND: 'Final Bind',
   NP_TREATY_DETAIL: 'Treaty Detail',
   NP_TREATY_DOCUMENTS: 'Documents',
   NP_EXPIRING_STRUCTURE: 'Expiring Structure',
@@ -184,7 +183,6 @@ export const ROUTE_PATHS = {
   PROP_CRESTA_AGGREGATES: '/prop/cresta-aggregates',
   PROP_EVENT_LOSS_TABLES: '/prop/event-loss-tables',
   PROP_PRICING: '/prop/pricing',
-  PROP_FINAL_BIND: '/prop/final-bind',
   NP_TREATY_DETAIL: '/np/treaty-detail',
   NP_TREATY_DOCUMENTS: '/np/documents',
   NP_EXPIRING_STRUCTURE: '/np/expiring-structure',
@@ -256,6 +254,10 @@ export function getWizardNav(routeKey, { quoteMode = false, triangulationsEnable
     }
   } else {
     order = [...PROP_WIZARD_ORDER];
+    // Keep this in sync with WizardTabs.shouldShow(): when triangulations are
+    // enabled the No-Triangulation screen is hidden, and when disabled the
+    // triangle / dev-factor screens are. Sidebar visibility and Next/Back
+    // navigation must agree, or a tab could be clickable but unreachable.
     if (triangulationsEnabled) {
       order = order.filter(k => k !== 'PROP_NO_TRIANGULATION');
     } else {

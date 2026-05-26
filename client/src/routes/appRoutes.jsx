@@ -31,7 +31,6 @@ const PropClaimsProfile = lazy(() => import('../screens/proportional/claims_prof
 const PropCrestaAggregates = lazy(() => import('../screens/proportional/cresta_zones/PropCrestaAggregates'));
 const PropEventLossTables = lazy(() => import('../screens/proportional/event_loss_tables/PropEventLossTables'));
 const PropPricing = lazy(() => import('../screens/proportional/pricing/PropPricing'));
-const PropFinalBind = lazy(() => import('../screens/proportional/final_bind/PropFinalBind'));
 
 const NpTreatyDetail = lazy(() => import('../screens/non_proportional/treaty_detail/NpTreatyDetail'));
 const NpDocuments = lazy(() => import('../screens/non_proportional/documents/NpDocuments'));
@@ -107,7 +106,6 @@ export const appRoutes = [
   { path: '/prop/cresta-aggregates', component: PropCrestaAggregates },
   { path: '/prop/event-loss-tables', component: PropEventLossTables },
   { path: '/prop/pricing', component: PropPricing },
-  { path: '/prop/final-bind', component: PropFinalBind },
 
   { path: '/np/treaty-detail', component: NpTreatyDetail },
   { path: '/np/documents', component: NpDocuments },

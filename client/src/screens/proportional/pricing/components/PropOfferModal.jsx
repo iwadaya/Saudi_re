@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom';
 import { fmtPct, UW_MAX_LIMIT } from './propPricingConstants.js';
 import { useGlobalToast } from '../../../../hooks/useToast';
 import PctInput from '../../../../components/PctInput';
@@ -43,7 +42,6 @@ export default function PropOfferModal({
   isQuote = false,
 }) {
   const showToast = useGlobalToast();
-  const navigate = useNavigate();
   if(!show) return null;
 
   const stepIndex = offerStatus==='DRAFT'?0:offerStatus==='AWAITING_APPROVAL'?1:offerStatus==='AWAITING_SIGNED_LINE'?2:3;
@@ -104,25 +102,6 @@ export default function PropOfferModal({
                 <div className="off-row"><span className="off-k">Line Limit</span><span className={`off-v ${overLimit?'bad':''}`}>{lineLimit?money(lineLimit):'—'}{overLimit?' ⚠':''}</span></div>
                 <div className="off-row"><span className="off-k" style={{color:'rgba(255,255,255,0.3)'}}>Authority Max</span><span className="off-v" style={{color:'rgba(255,255,255,0.35)'}}>{money(uwMaxLimitCcy)}{safeCcy!=='USD'?<span style={{fontSize:10,opacity:0.5,marginLeft:4}}>(USD 50m)</span>:''}</span></div>
               </div>
-
-              {/* Signed Line capture lives on the dedicated Final Bind
-                  screen (PROP_FINAL_BIND). The modal only signposts it
-                  once CU approval lands; it cannot mark signed itself. */}
-              {!isQuote && offerStatus==='AWAITING_SIGNED_LINE' && (
-                <div className="off-card" style={{border:'1px solid rgba(96,165,250,0.30)',background:'rgba(96,165,250,0.04)'}}>
-                  <div className="off-card-title" style={{color:'#60a5fa'}}>✍ Ready to Bind</div>
-                  <div style={{fontSize:12,color:'rgba(255,255,255,0.55)',marginTop:6,marginBottom:10}}>
-                    Offer approved{offerLine?<> at written line <b style={{color:'#60a5fa'}}>{offerLine}%</b></>:''}.
-                    Signed-line capture and the SIGNED transition now live on the dedicated Final Bind screen.
-                  </div>
-                  <button
-                    type="button"
-                    className="bbg-btn bbg-btn--offer"
-                    style={{width:'100%'}}
-                    onClick={()=>{ onClose&&onClose(); navigate('/prop/final-bind'); }}
-                  >Continue to Final Bind →</button>
-                </div>
-              )}
 
               {/* Standalone-quote terminal: APPROVED is the end of the road
                   for quotes in this build (sign + bind are disabled). */}

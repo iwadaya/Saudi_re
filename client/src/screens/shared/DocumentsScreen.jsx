@@ -314,6 +314,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
   const currentFile = dragFile || (fileRef.current?.files?.[0]);
 
   return (
+    // uploads are fire-and-forget — no onBeforeNext needed
     <WizardLayout routeKey={routeKey} title="Documents" headerPill={headerPill}>
       {() => (
         <div>

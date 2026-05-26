@@ -276,10 +276,12 @@ export default function PropPricing() {
             if (p > 0 && rt === 'ACTUAL') { actualLRs.push(l / p); totActLoss += l; totActPrem += p; }
           });
         }
-        // Projection philosophy: dev factors are calibrated on the attritional (stripped)
-        // triangle. They must be applied to the stripped triangle only. Large loss and CAT
-        // amounts are added back explicitly after projection — never projected via the
-        // attritional CDF, since those factors carry no information about large/CAT development.
+        // Projection philosophy: dev factors are calibrated on the incurred triangle
+        // (stripped or full, per treaty setting). The actuarial attritional is derived
+        // by subtracting selected large/CAT losses from projected incurred — this is
+        // correct on both bases. Large/CAT loadings always use the Pareto-fitted
+        // expected annual loss regardless of triangle basis; the underwriter column
+        // is where adjustments are made.
         //
         // loadProjectedRows encapsulates exactly this: it projects the stripped incurred
         // triangle with the saved INCURRED factors and adds the raw large/CAT loadings back
@@ -301,9 +303,7 @@ export default function PropPricing() {
         const avgActualLR = actualLRs.length ? actualLRs.reduce((a, b) => a + b, 0) / actualLRs.length : 0;
         const avgProjectedLR = projectedLRs.length ? projectedLRs.reduce((a, b) => a + b, 0) / projectedLRs.length : avgActualLR;
 
-        // Large/CAT totals (raw incurred) + per-treaty strip flag. When stripping
-        // is on, attritional is the loss net of large+CAT; otherwise large/CAT
-        // fold into attritional and their loadings are nil.
+        // Large/CAT totals (raw incurred) and the per-treaty strip flag.
         const lossCat = await loadLossCategoryByYear(cid, appState.quoteMode ? { quote: true } : undefined)
           .catch(() => ({ large: new Map(), cat: new Map() }));
         const totalLarge = [...lossCat.large.values()].reduce((a, b) => a + b, 0);

@@ -1,5 +1,5 @@
 // src/components/app/AppShell.jsx
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppProvider } from '../../context/AppContext';
 import { getSession, canAccessApprovals } from '../../utils/auth';
@@ -64,9 +64,18 @@ function RoutedScreenBoundary({ children }) {
   return <ScreenErrorBoundary key={location.pathname}>{children}</ScreenErrorBoundary>;
 }
 
+// Reset scroll to the top of the page on every route change, so navigating
+// from a scrolled-down screen doesn't land the user mid-page on the next one.
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+}
+
 export default function AppShell() {
   return (
     <AppProvider>
+      <ScrollToTop />
       <ToastProvider>
         <ChunkErrorBoundary>
           <Suspense fallback={<ScreenFallback />}>

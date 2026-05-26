@@ -177,8 +177,8 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
   }, [inTriangle, numDevYears]);
 
   // triangleMeta not yet loaded (e.g. just after a hard reset, before
-  // PropTreatyDetail re-fetches the contract). Avoid rendering with a
-  // bogus year range. Placed after all hooks to respect rules of hooks.
+  // PropTreatyDetail re-fetches the contract). Avoid rendering with a bogus year range.
+  // Guard must stay after all hooks — Rules of Hooks.
   if (!startYear) return <div style={{ padding: 32, color: 'rgba(255,255,255,0.5)' }}>Loading triangle…</div>;
 
   return (

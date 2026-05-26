@@ -835,8 +835,8 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   const showZeroLossWarning = !lossWarningDismissed && !isPremium && hasData && totalLossCount === 0;
 
   // triangleMeta not yet loaded (e.g. just after a hard reset, before
-  // PropTreatyDetail re-fetches the contract). Avoid rendering with a
-  // bogus year range. Placed after all hooks to respect rules of hooks.
+  // PropTreatyDetail re-fetches the contract). Avoid rendering with a bogus year range.
+  // Guard must stay after all hooks — Rules of Hooks.
   if (!startYear) return <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill}><div style={{ padding: 32, color: 'rgba(255,255,255,0.5)' }}>Loading…</div></WizardLayout>;
 
   return (
