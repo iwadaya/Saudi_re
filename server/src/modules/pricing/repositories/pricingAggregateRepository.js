@@ -244,25 +244,40 @@ export async function getAggDrilldown(contractId) {
   };
 }
 
-export async function getMarketAverage(countryId, exclude) {
-  // Weighted average across all contracts in the country, weighted by 100% premium
-  // (quota_share_epi + surplus_epi for proportional; est_gnpi for non-proportional).
-  // Excludes contracts in QUOTED status; includes DRAFT, SIGNED, NTU, DECLINED, and others.
-  // Returns avg_value as a decimal (e.g. 0.0062 for 0.62%, 0.05 for 5%).
-  const baseQuery = `
-    WITH parsed AS (
+const MIN_CONTRACTS = 3;
+
+const TREATY_TYPE_JOIN = `JOIN public.treaty_type tt ON tt.treaty_type_id = c.treaty_type_id`;
+
+// Proportional treaty types. The schema uses treaty_type.category
+// ('PROPORTIONAL' | 'NON_PROPORTIONAL'); there is no product_line column,
+// so we match category plus name fallbacks (Quota Share, surpluses, etc.).
+const PROP_FILTER = `AND (
+        tt.category = 'PROPORTIONAL'
+        OR tt.treaty_type ILIKE '%quota%'
+        OR tt.treaty_type ILIKE '%surplus%'
+        OR tt.treaty_type ILIKE '%proportional%'
+      )`;
+
+// Same CTE structure / weighted-average formula as the original query; each
+// tier injects its own JOIN and WHERE fragments while the contract set is
+// resolved once in the `eligible` CTE so the filter isn't duplicated.
+function buildAvgQuery(joinClause, whereClause) {
+  return `
+    WITH eligible AS (
+      SELECT DISTINCT c.contract_id
+      FROM public.contract c
+      ${joinClause}
+      WHERE COALESCE(c.status::text, '') <> 'QUOTED'
+        ${whereClause}
+    ),
+    parsed AS (
       SELECT pc.contract_id,
              pc.component_name,
              NULLIF(replace(replace(pc.actuarial_value, '%', ''), ',', ''), '')::numeric / 100.0 AS value_decimal
       FROM public.pricing_components pc
-      JOIN public.contract c ON c.contract_id = pc.contract_id
-      LEFT JOIN public.contract_prop_details pd ON pd.contract_id = c.contract_id
-      LEFT JOIN public.contract_np_details   nd ON nd.contract_id = c.contract_id
-      WHERE c.country_id = $1
-        AND COALESCE(c.status::text, '') <> 'QUOTED'
-        AND pc.actuarial_value IS NOT NULL
+      JOIN eligible e ON e.contract_id = pc.contract_id
+      WHERE pc.actuarial_value IS NOT NULL
         AND pc.actuarial_value <> ''
-        ${exclude ? 'AND pc.contract_id <> $2' : ''}
     ),
     weights AS (
       SELECT c.contract_id,
@@ -272,11 +287,9 @@ export async function getMarketAverage(countryId, exclude) {
                + COALESCE(nd.est_gnpi, 0)
              ) AS total_premium
       FROM public.contract c
+      JOIN eligible e ON e.contract_id = c.contract_id
       LEFT JOIN public.contract_prop_details pd ON pd.contract_id = c.contract_id
       LEFT JOIN public.contract_np_details   nd ON nd.contract_id = c.contract_id
-      WHERE c.country_id = $1
-        AND COALESCE(c.status::text, '') <> 'QUOTED'
-        ${exclude ? 'AND c.contract_id <> $2' : ''}
     )
     SELECT parsed.component_name,
            CASE
@@ -290,7 +303,104 @@ export async function getMarketAverage(countryId, exclude) {
     JOIN weights w ON w.contract_id = parsed.contract_id
     WHERE parsed.value_decimal IS NOT NULL
     GROUP BY parsed.component_name`;
-  const params = exclude ? [countryId, exclude] : [countryId];
-  const { rows } = await pool.query(baseQuery, params);
-  return rows;
+}
+
+function toComponents(rows) {
+  return Object.fromEntries(
+    rows.map(r => [r.component_name, r.avg_value != null ? Number(r.avg_value) : null]),
+  );
+}
+
+function maxContractCount(rows) {
+  return rows.reduce((m, r) => Math.max(m, Number(r.contract_count) || 0), 0);
+}
+
+export async function getMarketAverage(countryId, exclude, {
+  treatyTypeId = null,
+  cobIds = [],
+  region = null,
+} = {}) {
+  // Tiered market average: filter by treaty type + COB, falling back through
+  // progressively broader geographic / type scopes until a tier has enough
+  // (≥ MIN_CONTRACTS distinct) contracts. The weighted-average formula, the
+  // QUOTED-status exclusion, and the component names are unchanged from the
+  // original single-tier query. avg_value is a decimal (0.0062 = 0.62%).
+  const currentId = exclude; // the current contract is also the one excluded
+  // Appends the current-contract exclusion, allocating the next param slot.
+  const excludeClause = (params) => {
+    if (!exclude) return '';
+    params.push(exclude);
+    return ` AND c.contract_id <> $${params.length}`;
+  };
+
+  const tiers = [];
+
+  // Tier 1: same country + same treaty type + COB overlap with current contract.
+  // Overlap = candidate shares ≥ 1 class_of_business_id with the current contract.
+  if (countryId && treatyTypeId && currentId && cobIds.length > 0) {
+    tiers.push({
+      tier: 1,
+      join: `
+        JOIN public.contract_class_of_business ccob
+          ON ccob.contract_id = c.contract_id
+        JOIN public.contract_class_of_business ccob_curr
+          ON ccob_curr.class_of_business_id = ccob.class_of_business_id
+         AND ccob_curr.contract_id = $3`,
+      where: `AND c.country_id = $1 AND c.treaty_type_id = $2 AND c.contract_id <> $3`,
+      params: [countryId, treatyTypeId, currentId],
+    });
+  }
+
+  // Tier 2: same country + same treaty type (ignore COB).
+  if (countryId && treatyTypeId) {
+    const params = [countryId, treatyTypeId];
+    const where = `AND c.country_id = $1 AND c.treaty_type_id = $2${excludeClause(params)}`;
+    tiers.push({ tier: 2, join: '', where, params });
+  }
+
+  // Tier 3: same country + any proportional treaty type.
+  if (countryId) {
+    const params = [countryId];
+    const where = `AND c.country_id = $1 ${PROP_FILTER}${excludeClause(params)}`;
+    tiers.push({ tier: 3, join: TREATY_TYPE_JOIN, where, params });
+  }
+
+  // Tier 4: same region + any proportional.
+  if (region) {
+    const params = [region];
+    const where = `${PROP_FILTER}${excludeClause(params)}`;
+    tiers.push({
+      tier: 4,
+      join: `${TREATY_TYPE_JOIN}
+        JOIN public.country co ON co.country_id = c.country_id AND co.region = $1`,
+      where,
+      params,
+    });
+  }
+
+  // Tier 5: global + any proportional.
+  {
+    const params = [];
+    const where = `${PROP_FILTER}${excludeClause(params)}`;
+    tiers.push({ tier: 5, join: TREATY_TYPE_JOIN, where, params });
+  }
+
+  let fallback = { components: {}, tier: null, contractCount: 0 };
+  for (const t of tiers) {
+    let rows;
+    try {
+      ({ rows } = await pool.query(buildAvgQuery(t.join, t.where), t.params));
+    } catch {
+      continue; // a tier whose optional inputs don't fit the schema is skipped
+    }
+    const count = maxContractCount(rows);
+    // Broadest tier doubles as the fallback when nothing meets the threshold.
+    if (t.tier === 5) {
+      fallback = { components: toComponents(rows), tier: rows.length ? 5 : null, contractCount: count };
+    }
+    if (count >= MIN_CONTRACTS) {
+      return { components: toComponents(rows), tier: t.tier, contractCount: count };
+    }
+  }
+  return fallback;
 }

@@ -395,10 +395,12 @@ export default function PropPricing() {
         } catch (e) {}
 
         let exposureLR = 0;
+        let cobIds = [];
         try {
           const cobsRes = await api.getContractCobs(cid).catch(() => []);
           const cobRows = cobsRes?.rows || cobsRes || [];
           const cobList = cobRows.map(x => x.cob_id || x.id || x.class_of_business_id);
+          cobIds = cobRows.map(x => x.class_of_business_id || x.cob_id || x.id).filter(Boolean);
           const cobNames = cobRows.map(x => x.name || x.cob_name || x.class_of_business || '').filter(Boolean);
           if (cobNames.length) setCobLabel(cobNames.join(', '));
           let totalExpLoss = 0;
@@ -423,8 +425,14 @@ export default function PropPricing() {
 
         let marketAvg = {};
         try {
-          const countryId = (contract.header || contract || {}).country_id || td.countryId || td.country_id || '';
-          if (countryId) marketAvg = await api.getMarketAverage(countryId, null).catch(() => ({}));
+          const hdrDetail = contract?.header || contract || {};
+          const treatyTypeId = hdrDetail.treaty_type_id || td.treatyTypeId || null;
+          const countryId = hdrDetail.country_id || td.countryId || td.country_id || '';
+          const countryData = countryId ? await api.getCountry(countryId).catch(() => ({})) : {};
+          const region = countryData?.region || null;
+          if (countryId) {
+            marketAvg = await api.getMarketAverage(countryId, cid, { treatyTypeId, cobIds, region }).catch(() => ({}));
+          }
         } catch (e) {}
 
         setComponents(prev => {
@@ -446,11 +454,12 @@ export default function PropPricing() {
             sc('Cat Loss Loading', 'exposure', catLoad);
           }
           sc('Commissions', 'exposure', commissionPct); sc('Brokerage', 'exposure', brokeragePct); sc('Taxes', 'exposure', taxesPct);
-          const mktSet = (row, data) => { if (data?.avg != null) sc(row, 'market', Number(data.avg)); };
-          mktSet('Attritional Loss Ratio', marketAvg['Attritional Loss Ratio']);
-          mktSet('Large Loss Loading', marketAvg['Large Loss Loading']);
-          mktSet('Cat Loss Loading', marketAvg['Cat Loss Loading']);
-          mktSet('Commissions', marketAvg['Commissions']); mktSet('Brokerage', marketAvg['Brokerage']); mktSet('Taxes', marketAvg['Taxes']);
+          const mktComponents = marketAvg?.components || marketAvg || {};
+          const mktSet = (row, val) => { const n = Number(val); if (val != null && Number.isFinite(n)) sc(row, 'market', n); };
+          mktSet('Attritional Loss Ratio', mktComponents['Attritional Loss Ratio']);
+          mktSet('Large Loss Loading', mktComponents['Large Loss Loading']);
+          mktSet('Cat Loss Loading', mktComponents['Cat Loss Loading']);
+          mktSet('Commissions', mktComponents['Commissions']); mktSet('Brokerage', mktComponents['Brokerage']); mktSet('Taxes', mktComponents['Taxes']);
           const downsideAtt = Math.max(worstLR.lr || 0, 2.50);
           sc('Attritional Loss Ratio', 'downside', downsideAtt);
           sc('Large Loss Loading', 'downside', stripLC ? largeLossLoad : 0); sc('Cat Loss Loading', 'downside', stripLC ? catLoad : 0);

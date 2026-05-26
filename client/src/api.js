@@ -510,7 +510,16 @@ export const api = {
     const isQuote = isQuoteMode(opts);
     return request(isQuote ? `/api/quotes/${enc(contractId)}/approval-trail` : `/api/treaties/${enc(contractId)}/approval-trail`, opts);
   },
-  getMarketAverage(countryId, excludeId, opts) { return request(PATHS.marketAverage(countryId, excludeId), opts); },
+  getMarketAverage(countryId, exclude, { treatyTypeId, cobIds = [], region } = {}, opts) {
+    const params = new URLSearchParams();
+    if (exclude) params.set('exclude', exclude);
+    if (treatyTypeId) params.set('treatyTypeId', treatyTypeId);
+    if (cobIds.length) params.set('cobIds', cobIds.join(','));
+    if (region) params.set('region', region);
+    const qs = params.toString();
+    return request(`/api/pricing/market-average/${enc(countryId)}${qs ? `?${qs}` : ''}`, opts);
+  },
+  getCountry(id, opts) { return request(`/api/countries/${enc(id)}`, opts); },
   saveComponentSnapshot(id, payload, opts) { return request(PATHS.componentSnapshot(id), { method: 'POST', body: payload, ...opts }); },
   getComponentSnapshots(id, opts) { return request(PATHS.componentSnapshots(id), opts); },
   deleteComponentSnapshot(snapId, opts) { return request(PATHS.deleteComponentSnapshot(snapId), { method: 'DELETE', ...opts }); },

@@ -308,6 +308,14 @@ router.get("/treaty-types", asyncHandler(async (req, res) => {
   });
 }));
 
+// Single country by id (used by pricing for region-tier market averages)
+router.get("/countries/:id", asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    'SELECT * FROM public.country WHERE country_id = $1', [req.params.id]
+  );
+  res.json(rows[0] || null);
+}));
+
 // Class of Business
 router.get("/class-of-business", asyncHandler(async (req, res) => {
   await sendRef(req, res, 'class-of-business', async () => {
