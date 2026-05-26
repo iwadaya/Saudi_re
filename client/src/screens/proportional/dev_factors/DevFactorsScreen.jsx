@@ -791,8 +791,10 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
        contract_dev_factor + contract_pricing_patterns and stamps an audit
        row, even when the on-screen factors are unchanged from the saved
        values. Mirrors the same dirty-gate TriangleScreen and useScreenSave
-       use. */
-    if (!dirty) return true;
+       use. Exception: when no factors have ever been saved for this type,
+       persist the currently-displayed selection on the way out so the
+       underwriter doesn't have to click Save explicitly. */
+    if (!dirty && !(factorsNeverSaved && chosenLdfs.length > 0)) return true;
     const N = chosenLdfs.length;
     const factors = Array.from({ length: N }, (_, i) => ({
       dev_month: (i + 1) * 12, actual_ldf: calcs?.pattern?.[i] ?? null, actual_cdf: calcs?.cdfs?.[i] ?? null,
@@ -822,7 +824,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
     setDirty(false);
     setSavedTick(t => t + 1); // re-fetch staleness from the DB (ground truth)
     return true;
-  }, [contractId, dirty, chosenLdfs, devType, avgMethod, apiOpts, appState.quoteMode, calcs?.pattern, calcs?.cdfs, calcs?.paramLdfs, calcs?.paramCdfs, chosenBase, chosenCdfs, ielr, projMethod, excluded, useMunich, startYear, numDevYears, isPremium, percentAchieved, years, epiPerYear, basis]);
+  }, [contractId, dirty, factorsNeverSaved, chosenLdfs, devType, avgMethod, apiOpts, appState.quoteMode, calcs?.pattern, calcs?.cdfs, calcs?.paramLdfs, calcs?.paramCdfs, chosenBase, chosenCdfs, ielr, projMethod, excluded, useMunich, startYear, numDevYears, isPremium, percentAchieved, years, epiPerYear, basis]);
 
   const hasData = calcs && calcs.pattern?.length > 0;
   const totalLossCount = (exclusions.largeLossCount || 0) + (exclusions.catLossCount || 0);
@@ -836,12 +838,6 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
     <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill} onBeforeNext={save} onBeforeBack={save}>
       {({ showToast, wizard }) => (
         <div className="DEV_FACTORS_PAGE">
-          {/* Never-saved — projections rest on placeholder curves until saved */}
-          {factorsNeverSaved && (
-            <div role="alert" style={{ margin: '0 0 12px', padding: '12px 16px', borderRadius: 10, background: 'rgba(249,115,22,0.14)', border: '2px solid #f97316', color: '#fdba74', fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>
-              Factors not yet saved for this treaty. Projected summary figures are based on placeholder curves until you save your selection.
-            </div>
-          )}
           {/* Staleness — triangle saved more recently than these factors */}
           {stale && (
             <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5 }}>
@@ -1078,35 +1074,6 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
               <div className="df-note">No triangle data found. Enter data in the triangle screens first, then return here.</div>
             </div>
           ) : (<>
-
-            {/* Thin-column LDF warnings — surfaced from calculatePattern.
-                A column whose LDF derives from fewer than 3 origin years
-                is one or two observations dressed up as a portfolio
-                average. Show the underwriter before they pick a base. */}
-            {Array.isArray(calcs?.patternWarnings) && calcs.patternWarnings.length > 0 && (
-              <div
-                role="alert"
-                style={{
-                  marginTop: 14,
-                  padding: '10px 14px',
-                  borderRadius: 8,
-                  background: 'rgba(251,146,60,0.08)',
-                  border: '1px solid rgba(251,146,60,0.30)',
-                  color: '#fbbf24',
-                  fontSize: 12,
-                  lineHeight: 1.5,
-                }}
-              >
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>
-                  ⚠ Thin LDF columns ({calcs.patternWarnings.length})
-                </div>
-                {calcs.patternWarnings.map((w) => (
-                  <div key={w.column} style={{ opacity: 0.9 }}>
-                    {w.devPeriod} — {w.contributingRows} origin year{w.contributingRows === 1 ? '' : 's'} (recommended ≥ 3)
-                  </div>
-                ))}
-              </div>
-            )}
 
             {/* ═══ DEV FACTORS VIEW ═══ */}
             {view === 'DEV_FACTORS' && (<>
