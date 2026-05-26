@@ -324,6 +324,11 @@ export default function PropPricing() {
           const savedXm    = cn(snap.pareto_xm);
           const savedYears = cn(snap.observation_years);
           const savedN     = cn(snap.selected_count);
+          console.log('[LARGE LOSS LOAD] snap fields:', {
+            savedAlpha, savedXm, savedYears, savedN, treatyCapacity, effEpi,
+            primaryGuard: savedAlpha > 1 && savedXm > 0 && savedYears > 0
+                          && savedN > 0 && treatyCapacity > savedXm && effEpi > 0,
+          });
 
           if (savedAlpha > 1 && savedXm > 0 && savedYears > 0 && savedN > 0
               && treatyCapacity > savedXm && effEpi > 0) {
@@ -353,6 +358,7 @@ export default function PropPricing() {
               }
             }
           }
+          console.log('[LARGE LOSS LOAD] result:', largeLossLoad);
         } catch (e) { console.error('Large loss load calc failed:', e); }
 
         let catLoad = 0;
@@ -363,6 +369,12 @@ export default function PropPricing() {
           const savedXm    = cn(snap.pareto_xm);
           const savedYears = cn(snap.observation_years);
           const savedN     = cn(snap.selected_count);
+          console.log('[CAT LOAD] snap fields:', {
+            savedAlpha, savedXm, savedYears, savedN, catCap, treatyEventLimit,
+            treatyCapacity, effEpi,
+            primaryGuard: savedAlpha > 1 && savedXm > 0 && savedYears > 0
+                          && savedN > 0 && catCap > savedXm && effEpi > 0,
+          });
 
           if (savedAlpha > 1 && savedXm > 0 && savedYears > 0 && savedN > 0
               && catCap > savedXm && effEpi > 0) {
@@ -392,6 +404,7 @@ export default function PropPricing() {
               }
             }
           }
+          console.log('[CAT LOAD] result:', catLoad);
         } catch (e) { console.error('Cat load calc failed:', e); }
 
         let exposureLR = 0;
