@@ -980,7 +980,7 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
       lastAutoSaveOkRef.current = ok;
     }, 800);
     return () => { clearTimeout(t); };
-  }, [loading, contractId, lossType, losses, xm, limit, activeDist, yearsOvr, returnPeriods, saveSnapshot, showToast, portfolioFallback]);
+  }, [loading, contractId, lossType, losses, xm, limit, alpha, activeDist, yearsOvr, returnPeriods, saveSnapshot, showToast, portfolioFallback]);
 
   const bestFit=useMemo(()=>[...fits].sort((a,b)=>a.ks.ks-b.ks.ks)[0]?.key||'pareto',[fits]);
 
