@@ -948,7 +948,9 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
   // Explicit save function
   const saveSnapshot = useCallback(async () => {
     // Never persist a portfolio-fallback curve as this treaty's own snapshot.
-    if (!contractId || !losses.length || xm <= 0 || portfolioFallback) return false;
+    // Nothing to save here is a clean no-op, not a failure — return true so
+    // WizardLayout doesn't surface a red "Save failed" banner on navigation.
+    if (!contractId || !losses.length || xm <= 0 || portfolioFallback) return true;
     try {
       setSaving(true); setSaveError(null);
       const payload = await buildSnapshotPayload();
