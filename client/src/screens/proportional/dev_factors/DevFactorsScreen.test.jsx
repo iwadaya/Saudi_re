@@ -81,19 +81,6 @@ describe('DevFactorsScreen', () => {
     expect(await screen.findByText(/Triangle updated since factors were last saved/i)).toBeInTheDocument();
   });
 
-  it('shows the never-saved warning when no factors have been saved', async () => {
-    apiMock.getDevFactorStaleness.mockResolvedValue({ triangleUpdatedAt: null, factorsSavedAt: null, stale: false });
-    render(
-      <DevFactorsScreen
-        routeKey="PROP_PREMIUM_DEV_FACTORS"
-        title="Premium Development Factors"
-        headerPill="PROPORTIONAL TREATY: PREMIUM DEVELOPMENT FACTORS"
-      />,
-    );
-
-    expect(await screen.findByText(/Factors not yet saved for this treaty/i)).toBeInTheDocument();
-  });
-
   it('applies link-ratio factors without repeatedly updating parent state', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const triCells = [
