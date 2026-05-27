@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseNum, toNum, numOrNull, dateOrNull, boolOrDefault, safeSqlIdentifier } from './helpers.js';
+import { parseNum, toNum, numOrNull, dateOrNull, boolOrDefault, safeSqlIdentifier, yearFromDate, safeUwYear, preserveBool, preserveNum, isStaleSince } from './helpers.js';
 
 // These helpers sit on every save path for numeric/date/bool inputs, so
 // bugs here show up as wrong data in Postgres. Locking the behaviour
@@ -129,5 +129,73 @@ describe('safeSqlIdentifier', () => {
     expect(safeSqlIdentifier('contract; DROP TABLE users; --')).toBe('"dashboard"');
     expect(safeSqlIdentifier("' OR 1=1 --")).toBe('"dashboard"');
     expect(safeSqlIdentifier('1numeric_start')).toBe('"dashboard"');
+  });
+});
+
+describe('yearFromDate', () => {
+  it('returns the UTC year for a valid date', () => {
+    expect(yearFromDate('2020-05-01')).toBe(2020);
+  });
+  it('returns null for missing or invalid dates (never NaN)', () => {
+    expect(yearFromDate(null)).toBeNull();
+    expect(yearFromDate('')).toBeNull();
+    expect(yearFromDate('not-a-date')).toBeNull();
+  });
+});
+
+describe('safeUwYear (Finding 4 — NaN guard)', () => {
+  it('prefers an explicit uw_year, then inception, then loss year', () => {
+    expect(safeUwYear({ uw_year: 2021, policy_inception_date: '2019-01-01' })).toBe(2021);
+    expect(safeUwYear({ policy_inception_date: '2019-03-01' })).toBe(2019);
+    expect(safeUwYear({ date_of_loss: '2018-07-01' })).toBe(2018);
+  });
+  it('does NOT propagate NaN from an invalid policy_inception_date', () => {
+    // Previously new Date('not-a-date').getUTCFullYear() === NaN, and ?? does
+    // not catch NaN, so NaN reached the integer column and aborted the save.
+    expect(safeUwYear({ policy_inception_date: 'not-a-date' })).toBeNull();
+    expect(safeUwYear({ policy_inception_date: 'not-a-date', date_of_loss: '2017-01-01' })).toBe(2017);
+  });
+});
+
+describe('preserveBool / preserveNum (Finding 1 — preserve when omitted)', () => {
+  it('keeps the existing value when the incoming field is omitted', () => {
+    // The loss-list grid omits is_selected → must NOT reset a saved `false`.
+    expect(preserveBool(undefined, false)).toBe(false);
+    expect(preserveBool(undefined, true)).toBe(true);
+    // inflation_factor omitted → keep the saved 1.5 (pg returns numeric as string).
+    expect(preserveNum(undefined, '1.5', 1)).toBe(1.5);
+  });
+  it('lets an explicit incoming value win', () => {
+    expect(preserveBool(true, false)).toBe(true);
+    expect(preserveBool(false, true)).toBe(false);
+    expect(preserveNum(2.0, '1.5', 1)).toBe(2);
+  });
+  it('applies the default for a brand-new loss (no incoming, no prev)', () => {
+    expect(preserveBool(undefined, undefined)).toBe(true);
+    expect(preserveNum(undefined, undefined, 1)).toBe(1);
+  });
+  it('treats stringy booleans as present', () => {
+    expect(preserveBool('false', true)).toBe(false);
+    expect(preserveBool('true', false)).toBe(true);
+  });
+});
+
+describe('isStaleSince (loss-selection / dev-factor staleness logic)', () => {
+  const earlier = '2026-01-01T00:00:00Z';
+  const later = '2026-02-01T00:00:00Z';
+
+  it('is stale when the source was updated strictly after the save', () => {
+    expect(isStaleSince(later, earlier)).toBe(true);
+  });
+  it('is not stale when the source is older than or equal to the save', () => {
+    expect(isStaleSince(earlier, later)).toBe(false);
+    expect(isStaleSince(earlier, earlier)).toBe(false);
+  });
+  it('is never stale (false, not null) when nothing has been saved', () => {
+    expect(isStaleSince(later, null)).toBe(false);
+    expect(isStaleSince(later, undefined)).toBe(false);
+  });
+  it('is not stale when the source has never been updated', () => {
+    expect(isStaleSince(null, earlier)).toBe(false);
   });
 });

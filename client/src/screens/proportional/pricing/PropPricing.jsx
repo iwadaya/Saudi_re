@@ -4,11 +4,9 @@ import { useAppState } from '../../../context/AppContext';
 import { useContractId } from '../../../hooks/useContractId';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
-import { buildMatrixFromCells, calculateAgeToAgeFactors, calculatePattern, projectToUltimate } from '../../../logic/chainLadder';
-import { projectStraightStats, DEFAULT_LDF_KEY } from '../../../logic/straightProjections';
-import { projectFromSavedBlend } from '../../../logic/projectWithSavedFactors';
 import { loadProjectedRows } from '../../../logic/projectWithSavedFactors';
 import { buildTreatyTerms } from '../../../logic/propTreatyEngine';
+import { loadLossCategoryByYear, deriveLossComponents } from '../../../logic/lossCategoryAmounts';
 import LossSelectionScreen from '../../shared/LossSelectionScreen';
 import ProfileScreen from '../../shared/ProfileScreen';
 import PropCrestaAggregates from '../cresta_zones/PropCrestaAggregates';
@@ -35,9 +33,10 @@ import { InternalMetricsPanel } from './components/insight/InternalMetricsPanel'
 import { TreatyMetricsPanel } from './components/insight/TreatyMetricsPanel';
 import {
   COMPONENT_ROWS, DEFAULT_SHARE_ROWS, INSIGHT_BUTTONS,
-  cn, fmt, fmtPct, parsePct, mbbefdG, SWISS_RE_C, fitPareto, paretoQ,
+  cn, fmt, fmtPct, parsePct, mbbefdG, SWISS_RE_C, fitPareto,
   UW_MAX_LIMIT,
 } from './components/propPricingConstants';
+import { paretoLayerExpectedLoss } from '../../../utils/npPricingEngine';
 
 import { exportPropPricingToExcel } from './exportPropPricingToExcel.js';
 
@@ -52,6 +51,9 @@ export default function PropPricing() {
   const [saveMsg, setSaveMsg] = useState(null);
   const [contract, setContract] = useState({});
   const [components, setComponents] = useState({});
+  // Rows whose UW cell the user has explicitly edited — these are no longer
+  // re-seeded from the actuarial column when it re-calculates.
+  const [uwUserEdited, setUwUserEdited] = useState(new Set());
   const [leads, setLeads] = useState({});
   const [shareRows, setShareRows] = useState(DEFAULT_SHARE_ROWS.slice());
   const [shareGrid, setShareGrid] = useState({});
@@ -87,6 +89,11 @@ export default function PropPricing() {
   const [fxRates, setFxRates] = useState({});
   const [showUSD, setShowUSD] = useState(false);
   const [worstLR, setWorstLR] = useState({ lr: null, year: '' });
+  // True when pricing fell back to placeholder benchmark curves (no saved
+  // pricing rows, no saved factors, no triangle, no saved blend).
+  const [usedPlaceholderLdfs, setUsedPlaceholderLdfs] = useState(false);
+  // True when large/cat losses were edited after the loss selection was saved.
+  const [lossStale, setLossStale] = useState(false);
   const [showQuickSummary, setShowQuickSummary] = useState(false);
   const [showMarketIntelligence, setShowMarketIntelligence] = useState(false);
   const [showAggBreakdown, setShowAggBreakdown] = useState(false);
@@ -106,7 +113,7 @@ export default function PropPricing() {
     if (prevCidRef.current !== cid) {
       prevCidRef.current = cid;
       setLoading(true); setDirty(false); setSaveMsg(null);
-      setContract({}); setComponents({}); setLeads({});
+      setContract({}); setComponents({}); setUwUserEdited(new Set()); setLeads({});
       setShareRows(DEFAULT_SHARE_ROWS.slice()); setShareGrid({});
       setReinsurers([]); setYearly([]); setComment('');
       setLastUpdatedAt(null);
@@ -189,9 +196,6 @@ export default function PropPricing() {
         cg[row].actuarial = fv; cg[row].actual = fv;
       };
       injectCBT('Commissions', commPctL); injectCBT('Brokerage', brokPctL); injectCBT('Taxes', taxPctL);
-      for (const rowName of ['Attritional Loss Ratio', 'Large Loss Loading', 'Cat Loss Loading', 'Commissions', 'Brokerage', 'Taxes']) {
-        if (cg[rowName] && cg[rowName].actuarial && !cg[rowName].uw) cg[rowName].uw = cg[rowName].actuarial;
-      }
       setComponents(cg);
 
       // Normalize DB status values to UI status values
@@ -243,6 +247,12 @@ export default function PropPricing() {
     const brokeragePct = (cn(td.brokeragePct) || cn(det.brokerage_pct)) / 100;
     const taxesPct = (cn(td.taxesPct) || cn(det.taxes_pct)) / 100;
     const effEpi = qsPrem + surPrem || 0;
+    const treatyCapacity =
+      cn(td.totalCapacity) || cn(det.total_capacity) ||
+      cn(td.qsLimit)       || cn(det.qs_limit) || 0;
+    const treatyEventLimit =
+      cn(td.eventLimit) || cn(det.event_limit) || 0;
+    const catCap = treatyEventLimit > 0 ? treatyEventLimit : treatyCapacity * 3;
     const fmtV = val => typeof val === 'number' ? `${(val * 100).toFixed(2)}%` : val;
 
     setComponents(prev => {
@@ -256,106 +266,157 @@ export default function PropPricing() {
     (async () => {
       try {
         const projectedLRs = [], actualLRs = [];
+        // Totals (premium-weighted) feed the attritional & actual loadings.
+        let totProjLoss = 0, totProjPrem = 0, totActLoss = 0, totActPrem = 0;
         if (yearly.length > 0) {
           yearly.forEach(r => {
             const p = cn(r.ultimate_premium), l = cn(r.ultimate_loss);
             const rt = String(r.record_type || '').toUpperCase();
-            if (p > 0 && rt === 'PROJECTED') projectedLRs.push(l / p);
-            if (p > 0 && rt === 'ACTUAL') actualLRs.push(l / p);
+            if (p > 0 && rt === 'PROJECTED') { projectedLRs.push(l / p); totProjLoss += l; totProjPrem += p; }
+            if (p > 0 && rt === 'ACTUAL') { actualLRs.push(l / p); totActLoss += l; totActPrem += p; }
           });
         }
+        // Projection philosophy: loadProjectedRows projects the incurred triangle
+        // (stripped or full, per treaty setting) and returns per-year ultimates.
+        // On the STRIPPED basis, deriveLossComponents subtracts selected large/CAT
+        // losses from projected incurred to recover the attritional component; the
+        // separate Pareto-fitted large/CAT loadings are then added back explicitly.
+        // On the FULL basis, large/CAT are already baked into the projected ultimates
+        // so no subtraction is applied — attrLR carries the combined loss ratio and
+        // the Pareto loadings represent the explicit large/CAT charge on top.
+        // The underwriter column is where the two bases are reconciled.
+        // It is the same path the Projected Summary uses, so both screens
+        // always report consistent ultimates.
+        // Note: the stripLC gate applies only to the projected (actuarial) basis —
+        // the actual basis always subtracts totalLarge/totalCat since totActLoss is
+        // always raw incurred regardless of triangle setting.
+        //
+        // Run it unconditionally: the placeholder flag must reflect the CURRENT projection
+        // regardless of whether saved yearly pricing rows exist — otherwise a treaty whose
+        // dev factors were deleted/reset after a prior save would keep hiding the warning.
+        // Its rows only feed the LRs when there are no saved yearly rows to drive them.
+        const proj = await loadProjectedRows(cid, appState.quoteMode ? { quote: true } : undefined);
+        setUsedPlaceholderLdfs(!!proj.usedPlaceholderLdfs);
         if (!projectedLRs.length) {
-          const crd = data => { const rows = Array.isArray(data) ? data : (data?.cells || []); return rows.map(r => ({ origin_year: Number(r.origin_year), dev_months: Number(r.dev_months), cum_value: r.cum_value == null ? null : cn(r.cum_value) })); };
-          const triangleOpts = appState.quoteMode ? { quote: true } : undefined;
-          const [premRes, paidRes, osRes] = await Promise.all([
-            api.getTriangle(cid, 'PREMIUM', triangleOpts).catch(() => ({ cells: [] })),
-            api.getTriangle(cid, 'CLAIMS_PAID', triangleOpts).catch(() => ({ cells: [] })),
-            api.getTriangle(cid, 'CLAIMS_OS', triangleOpts).catch(() => ({ cells: [] })),
-          ]);
-          const po = buildMatrixFromCells(crd(premRes)), pdo = buildMatrixFromCells(crd(paidRes)), oso = buildMatrixFromCells(crd(osRes));
-          if (po || pdo || oso) {
-            const allYears = new Set([...(po?.years || []), ...(pdo?.years || []), ...(oso?.years || [])]);
-            const yrs = Array.from(allYears).sort((a, b) => a - b);
-            let mc = 0; [po, pdo, oso].filter(Boolean).forEach(o => (o.matrix || []).forEach(r => { mc = Math.max(mc, r.length); }));
-            if (!mc) mc = 1;
-            const gv = (o, y, c) => { if (!o) return null; const i = o.years.indexOf(y); return i === -1 ? null : o.matrix[i]?.[c] ?? null; };
-            const im = yrs.map(y => { const r = []; for (let c = 0; c < mc; c++) { const p = gv(pdo, y, c), o = gv(oso, y, c); r.push(p === null && o === null ? null : (p || 0) + (o || 0)); } return r; });
-            const pm = yrs.map(y => { const r = []; for (let c = 0; c < mc; c++) r.push(gv(po, y, c)); return r; });
-            let lossProj = [], premProj = [];
-            try { const f = calculateAgeToAgeFactors(im); const { pattern: p } = calculatePattern(im, f, 'weighted'); lossProj = projectToUltimate(p, 1.0, { matrix: im, years: yrs }).projections || []; } catch (e) {}
-            try { const f = calculateAgeToAgeFactors(pm); const { pattern: p } = calculatePattern(pm, f, 'weighted'); premProj = projectToUltimate(p, 1.0, { matrix: pm, years: yrs }).projections || []; } catch (e) {}
-            yrs.forEach(y => {
-              const pP = premProj.find(p => p.year === y), lP = lossProj.find(p => p.year === y);
-              const up = pP?.ultimate || 0, ul = lP?.ultimate || 0, ap = pP?.latest || 0, al = lP?.latest || 0;
-              if (up > 0) projectedLRs.push(ul / up);
-              if (ap > 0) actualLRs.push(al / ap);
-            });
-          } else {
-            const ssData = await api.getStraightStats(cid).catch(() => null);
-            const stats = ssData?.stats || [];
-            if (stats.length > 0) {
-              const parsed = stats.map(s => ({ year: Number(s.underwriting_year || s.year), premium: cn(s.premium), paid: cn(s.paid_claims || s.paid), os: cn(s.os_claims || s.os) }));
-              // Prefer the underwriter's saved LDF blend; fall back to a
-              // benchmark curve only when no blend exists for this contract.
-              const blendRows = await projectFromSavedBlend(cid, parsed);
-              const rows = blendRows || projectStraightStats(parsed, ssData?.primary_class_key || DEFAULT_LDF_KEY);
-              rows.forEach(r => {
-                if (r.ultPrem > 0) projectedLRs.push(r.ultLoss / r.ultPrem);
-                if (r.actPrem > 0) actualLRs.push(r.actLoss / r.actPrem);
-              });
-            }
-          }
+          (proj.rows || []).forEach(r => {
+            if (r.ultPrem > 0) { projectedLRs.push(r.ultLoss / r.ultPrem); totProjLoss += r.ultLoss; totProjPrem += r.ultPrem; }
+            if (r.actPrem > 0) { actualLRs.push(r.actLoss / r.actPrem); totActLoss += r.actLoss; totActPrem += r.actPrem; }
+          });
         }
         const avgActualLR = actualLRs.length ? actualLRs.reduce((a, b) => a + b, 0) / actualLRs.length : 0;
         const avgProjectedLR = projectedLRs.length ? projectedLRs.reduce((a, b) => a + b, 0) / projectedLRs.length : avgActualLR;
 
+        // Large/CAT totals (raw incurred) and the per-treaty strip flag.
+        const lossCat = await loadLossCategoryByYear(cid, appState.quoteMode ? { quote: true } : undefined)
+          .catch(() => ({ large: new Map(), cat: new Map() }));
+        const totalLarge = [...lossCat.large.values()].reduce((a, b) => a + b, 0);
+        const totalCat = [...lossCat.cat.values()].reduce((a, b) => a + b, 0);
+        const stripLC = (det.strip_large_cat_losses ?? td.stripLargeCat ?? true) !== false;
+        // Attritional on each basis via the shared loss-component model.
+        // Actuarial uses projected totals; actual uses unprojected (raw) totals.
+        const projComp = deriveLossComponents({ premium: totProjPrem, incurredTotal: totProjLoss, large: stripLC ? totalLarge : 0, cat: stripLC ? totalCat : 0 });
+        const actComp = deriveLossComponents({ premium: totActPrem, incurredTotal: totActLoss, large: totalLarge, cat: totalCat });
+        const actuarialAttrLR = totProjPrem > 0 ? projComp.attrLR : avgProjectedLR;
+        const actualAttrLR = totActPrem > 0 ? actComp.attrLR : avgActualLR;
+
         let largeLossLoad = 0;
         try {
           const llSnap = await api.getLossSelectionLatest(cid, 'large').catch(() => ({}));
-          const kp = llSnap?.snapshot?.return_period_key_points || {};
-          const rp10 = cn(kp.rp10) || cn((llSnap?.snapshot?.return_period_curve || {})?.points?.find?.(p => Number(p.rp) === 10)?.loss);
-          if (rp10 > 0 && effEpi > 0) { largeLossLoad = (rp10 / 10) / effEpi; }
-          else {
+          const snap = llSnap?.snapshot || {};
+          const savedAlpha = cn(snap.pareto_alpha);
+          const savedXm    = cn(snap.pareto_xm);
+          const savedYears = cn(snap.observation_years);
+          const savedN     = cn(snap.selected_count);
+          console.log('[LARGE LOSS LOAD] snap fields:', {
+            savedAlpha, savedXm, savedYears, savedN, treatyCapacity, effEpi,
+            primaryGuard: savedAlpha > 1 && savedXm > 0 && savedYears > 0
+                          && savedN > 0 && treatyCapacity > savedXm && effEpi > 0,
+          });
+
+          if (savedAlpha > 1 && savedXm > 0 && savedYears > 0 && savedN > 0
+              && treatyCapacity > savedXm && effEpi > 0) {
+            // Primary path: use saved Pareto fit from snapshot.
+            largeLossLoad = paretoLayerExpectedLoss(
+              savedAlpha, savedXm,
+              savedXm, treatyCapacity - savedXm,
+              savedN, savedYears
+            ) / effEpi;
+          } else {
+            // Fallback: fit Pareto from raw loss list.
             const rawLL = await api.getLargeLosses(cid).catch(() => []);
-            const losses = (rawLL?.losses || rawLL || []).map(l => cn(l.incurred || l.paid) + cn(l.os)).filter(v => v > 0);
-            if (losses.length >= 3 && effEpi > 0) {
+            const losses = (rawLL?.losses || rawLL || [])
+              .map(l => cn(l.incurred || l.paid) + cn(l.os))
+              .filter(v => v > 0);
+            if (losses.length >= 3 && treatyCapacity > 0 && effEpi > 0) {
               const sorted = [...losses].sort((a, b) => a - b);
               const xm = sorted[Math.floor(sorted.length * 0.25)] || sorted[0];
               const { alpha, n } = fitPareto(losses, xm);
-              if (alpha > 0) {
-                const years = llSnap?.snapshot?.observation_years || Math.max(5, new Set((rawLL?.losses || rawLL || []).map(l => l.uw_year)).size);
-                largeLossLoad = (paretoQ(1 - 1 / (10 * (n / years)), alpha, xm) / 10) / effEpi;
+              const years = Math.max(5, new Set(
+                (rawLL?.losses || rawLL || []).map(l => l.uw_year)
+              ).size);
+              if (alpha > 1 && treatyCapacity > xm) {
+                largeLossLoad = paretoLayerExpectedLoss(
+                  alpha, xm, xm, treatyCapacity - xm, n, years
+                ) / effEpi;
               }
             }
           }
-        } catch (e) {}
+          console.log('[LARGE LOSS LOAD] result:', largeLossLoad);
+        } catch (e) { console.error('Large loss load calc failed:', e); }
 
         let catLoad = 0;
         try {
           const catSnap = await api.getLossSelectionLatest(cid, 'cat').catch(() => ({}));
-          const kp = catSnap?.snapshot?.return_period_key_points || {};
-          const rp50 = cn(kp.rp50) || cn((catSnap?.snapshot?.return_period_curve || {})?.points?.find?.(p => Number(p.rp) === 50)?.loss);
-          if (rp50 > 0 && effEpi > 0) { catLoad = (rp50 / 50) / effEpi; }
-          else {
+          const snap = catSnap?.snapshot || {};
+          const savedAlpha = cn(snap.pareto_alpha);
+          const savedXm    = cn(snap.pareto_xm);
+          const savedYears = cn(snap.observation_years);
+          const savedN     = cn(snap.selected_count);
+          console.log('[CAT LOAD] snap fields:', {
+            savedAlpha, savedXm, savedYears, savedN, catCap, treatyEventLimit,
+            treatyCapacity, effEpi,
+            primaryGuard: savedAlpha > 1 && savedXm > 0 && savedYears > 0
+                          && savedN > 0 && catCap > savedXm && effEpi > 0,
+          });
+
+          if (savedAlpha > 1 && savedXm > 0 && savedYears > 0 && savedN > 0
+              && catCap > savedXm && effEpi > 0) {
+            // Primary path: saved Pareto fit, layer up to event limit (or 3× treaty limit).
+            catLoad = paretoLayerExpectedLoss(
+              savedAlpha, savedXm,
+              savedXm, catCap - savedXm,
+              savedN, savedYears
+            ) / effEpi;
+          } else {
+            // Fallback: fit Pareto from raw cat loss list.
             const rawCat = await api.getCatLosses(cid).catch(() => []);
-            const losses = (rawCat?.losses || rawCat || []).map(l => cn(l.incurred || l.paid) + cn(l.os)).filter(v => v > 0);
-            if (losses.length >= 3 && effEpi > 0) {
+            const losses = (rawCat?.losses || rawCat || [])
+              .map(l => cn(l.incurred || l.paid) + cn(l.os))
+              .filter(v => v > 0);
+            if (losses.length >= 3 && catCap > 0 && effEpi > 0) {
               const sorted = [...losses].sort((a, b) => a - b);
               const xm = sorted[Math.floor(sorted.length * 0.25)] || sorted[0];
               const { alpha, n } = fitPareto(losses, xm);
-              if (alpha > 0) {
-                const years = catSnap?.snapshot?.observation_years || Math.max(5, new Set((rawCat?.losses || rawCat || []).map(l => l.uw_year)).size);
-                catLoad = (paretoQ(1 - 1 / (50 * (n / years)), alpha, xm) / 50) / effEpi;
+              const years = Math.max(5, new Set(
+                (rawCat?.losses || rawCat || []).map(l => l.uw_year)
+              ).size);
+              if (alpha > 1 && catCap > xm) {
+                catLoad = paretoLayerExpectedLoss(
+                  alpha, xm, xm, catCap - xm, n, years
+                ) / effEpi;
               }
             }
           }
-        } catch (e) {}
+          console.log('[CAT LOAD] result:', catLoad);
+        } catch (e) { console.error('Cat load calc failed:', e); }
 
         let exposureLR = 0;
+        let cobIds = [];
         try {
           const cobsRes = await api.getContractCobs(cid).catch(() => []);
           const cobRows = cobsRes?.rows || cobsRes || [];
           const cobList = cobRows.map(x => x.cob_id || x.id || x.class_of_business_id);
+          cobIds = cobRows.map(x => x.class_of_business_id || x.cob_id || x.id).filter(Boolean);
           const cobNames = cobRows.map(x => x.name || x.cob_name || x.class_of_business || '').filter(Boolean);
           if (cobNames.length) setCobLabel(cobNames.join(', '));
           let totalExpLoss = 0;
@@ -380,46 +441,60 @@ export default function PropPricing() {
 
         let marketAvg = {};
         try {
-          const countryId = (contract.header || contract || {}).country_id || td.countryId || td.country_id || '';
-          if (countryId) marketAvg = await api.getMarketAverage(countryId, null).catch(() => ({}));
+          const hdrDetail = contract?.header || contract || {};
+          const treatyTypeId = hdrDetail.treaty_type_id || td.treatyTypeId || null;
+          const countryId = hdrDetail.country_id || td.countryId || td.country_id || '';
+          const countryData = countryId ? await api.getCountry(countryId).catch(() => ({})) : {};
+          const region = countryData?.region || null;
+          if (countryId) {
+            marketAvg = await api.getMarketAverage(countryId, cid, { treatyTypeId, cobIds, region }).catch(() => ({}));
+          }
         } catch (e) {}
 
         setComponents(prev => {
           const nc = { ...prev };
           const sc = (row, col, val) => { if (!nc[row]) nc[row] = {}; nc[row] = { ...nc[row], [col]: fmtV(val) }; };
-          sc('Attritional Loss Ratio', 'actuarial', avgProjectedLR);
+          // Actuarial: attritional stripped of large/CAT (when stripping on);
+          // large/CAT shown as the MODELLED loadings (Pareto / return-period).
+          sc('Attritional Loss Ratio', 'actuarial', actuarialAttrLR);
           sc('Large Loss Loading', 'actuarial', largeLossLoad);
           sc('Cat Loss Loading', 'actuarial', catLoad);
-          sc('Attritional Loss Ratio', 'actual', avgActualLR);
-          sc('Large Loss Loading', 'actual', 0); sc('Cat Loss Loading', 'actual', 0);
+          // Actual (unprojected burning cost): attritional = (incurred−large−cat)/prem,
+          // large = large/prem, cat = cat/prem.
+          sc('Attritional Loss Ratio', 'actual', actualAttrLR);
+          sc('Large Loss Loading', 'actual', actComp.largeLR);
+          sc('Cat Loss Loading', 'actual', actComp.catLR);
           if (exposureLR > 0) {
             sc('Attritional Loss Ratio', 'exposure', exposureLR);
             sc('Large Loss Loading', 'exposure', largeLossLoad);
             sc('Cat Loss Loading', 'exposure', catLoad);
           }
           sc('Commissions', 'exposure', commissionPct); sc('Brokerage', 'exposure', brokeragePct); sc('Taxes', 'exposure', taxesPct);
-          const mktSet = (row, data) => { if (data?.avg != null) sc(row, 'market', Number(data.avg)); };
-          mktSet('Attritional Loss Ratio', marketAvg['Attritional Loss Ratio']);
-          mktSet('Large Loss Loading', marketAvg['Large Loss Loading']);
-          mktSet('Cat Loss Loading', marketAvg['Cat Loss Loading']);
-          mktSet('Commissions', marketAvg['Commissions']); mktSet('Brokerage', marketAvg['Brokerage']); mktSet('Taxes', marketAvg['Taxes']);
+          const mktComponents = marketAvg?.components || marketAvg || {};
+          const mktSet = (row, val) => { const n = Number(val); if (val != null && Number.isFinite(n)) sc(row, 'market', n); };
+          mktSet('Attritional Loss Ratio', mktComponents['Attritional Loss Ratio']);
+          mktSet('Large Loss Loading', mktComponents['Large Loss Loading']);
+          mktSet('Cat Loss Loading', mktComponents['Cat Loss Loading']);
+          mktSet('Commissions', mktComponents['Commissions']); mktSet('Brokerage', mktComponents['Brokerage']); mktSet('Taxes', mktComponents['Taxes']);
           const downsideAtt = Math.max(worstLR.lr || 0, 2.50);
           sc('Attritional Loss Ratio', 'downside', downsideAtt);
-          sc('Large Loss Loading', 'downside', largeLossLoad); sc('Cat Loss Loading', 'downside', catLoad);
+          sc('Large Loss Loading', 'downside', stripLC ? largeLossLoad : 0); sc('Cat Loss Loading', 'downside', stripLC ? catLoad : 0);
           sc('Commissions', 'downside', commissionPct); sc('Brokerage', 'downside', brokeragePct); sc('Taxes', 'downside', taxesPct);
           for (const rowName of ['Attritional Loss Ratio', 'Large Loss Loading', 'Cat Loss Loading', 'Commissions', 'Brokerage', 'Taxes']) {
-            if (nc[rowName]?.actuarial && !nc[rowName]?.uw) nc[rowName] = { ...nc[rowName], uw: nc[rowName].actuarial };
+            if (nc[rowName]?.actuarial && !uwUserEdited.has(rowName)) nc[rowName] = { ...nc[rowName], uw: nc[rowName].actuarial };
           }
           return nc;
         });
       } catch (e) { console.error('Auto-calc pricing failed:', e); }
     })();
-  }, [appState.quoteMode, cid, loading, yearly.length, td.quotaShareEpi, td.surplusEpi, td.fixedCommissionQSPct, td.fixedCommissionSurplusPct, td.brokeragePct, td.taxesPct, td.provisionalCommissionPct, td.commissionMode, contract.detail?.brokerage_pct, contract.detail?.taxes_pct, contract.commissions?.fixed_commission_qs_pct, contract.commissions?.fixed_commission_surplus_pct, worstLR.lr, contract.header?.country_id, td.countryId, contract, td.country_id, yearly]);
+  }, [appState.quoteMode, cid, loading, yearly.length, td.quotaShareEpi, td.surplusEpi, td.fixedCommissionQSPct, td.fixedCommissionSurplusPct, td.brokeragePct, td.taxesPct, td.provisionalCommissionPct, td.commissionMode, td.stripLargeCat, td.totalCapacity, td.qsLimit, td.eventLimit, contract.detail?.total_capacity, contract.detail?.qs_limit, contract.detail?.event_limit, contract.detail?.brokerage_pct, contract.detail?.taxes_pct, contract.commissions?.fixed_commission_qs_pct, contract.commissions?.fixed_commission_surplus_pct, worstLR.lr, contract.header?.country_id, td.countryId, contract, td.country_id, yearly, uwUserEdited]);
 
   // ── Component helpers ─────────────────────────────────────────────────────
   const getC = useCallback((row, col) => components[row]?.[col] || '', [components]);
   const setC = (row, col, val) => {
     setComponents(prev => ({ ...prev, [row]: { ...(prev[row] || {}), [col]: val } }));
+    // A manual UW edit pins that row so the actuarial re-seed no longer overwrites it.
+    if (col === 'uw') setUwUserEdited(prev => new Set([...prev, row]));
     setDirty(true);
   };
 
@@ -520,6 +595,16 @@ export default function PropPricing() {
   }, [cid, loading, epi, limit, eventLimit, hdr.country_id, td.countryId, td.country_id, td.cessionPct, det2.cession_pct, calcCR, appState.quoteMode]);
 
   // ── Worst LR ─────────────────────────────────────────────────────────────
+  // Loss-selection staleness — were large/cat losses edited after the last save?
+  useEffect(() => {
+    if (!cid) return;
+    let cancelled = false;
+    api.getLossSelectionStaleness(cid, appState.quoteMode ? { quote: true } : undefined)
+      .then(d => { if (!cancelled) setLossStale(!!d?.stale); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [cid, appState.quoteMode]);
+
   useEffect(() => {
     if (!cid || loading) return;
     let cancelled = false;
@@ -756,6 +841,17 @@ export default function PropPricing() {
     <WizardLayout routeKey={ROUTE_KEY} title="Pricing" headerPill="PROPORTIONAL TREATY: FINAL PRICING" onBeforeNext={save} onBeforeBack={save}>
       {() => (
         <div className="PRICING_PAGE">
+
+          {usedPlaceholderLdfs && (
+            <div role="alert" style={{ margin: '0 0 12px', padding: '12px 16px', borderRadius: 10, background: 'rgba(249,115,22,0.14)', border: '2px solid #f97316', color: '#fdba74', fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>
+              No saved development factors found — projection is using placeholder benchmark curves. Go to the Development Factors screen to select and save factors before relying on these figures.
+            </div>
+          )}
+          {lossStale && (
+            <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5 }}>
+              Loss selection is outdated — losses have changed since the last selection was saved.
+            </div>
+          )}
 
           {/* ═══ BLOOMBERG HERO ═══ */}
           <PropBloombergHero

@@ -8,24 +8,27 @@ export const PROP_WIZARD_ORDER = [
   'PROP_CLAIMS_PAID_TRIANGLES',
   'PROP_OS_CLAIMS_TRIANGLES',
   'PROP_INCURRED_CLAIMS_TRIANGLES',
-  'PROP_PREMIUM_DEV_FACTORS',
-  'PROP_PAID_CLAIMS_DEV_FACTORS',
-  'PROP_OS_CLAIMS_DEV_FACTORS',
-  'PROP_INCURRED_DEV_FACTORS',
-  'PROP_PROJECTED_SUMMARY',
-  'PROP_QUICK_SUMMARY',
+  // Large/cat losses are identified before dev factors so the factor
+  // screens can offer a triangle stripped of those losses (the
+  // attritional basis). Summaries consume the selected factors, so they
+  // stay immediately after the dev-factor screens.
   'PROP_LARGE_LOSS_LIST',
   'PROP_LARGE_LOSS_SELECTION',
   'PROP_LARGE_LOSS_PARETO',
   'PROP_CAT_LOSS_LIST',
   'PROP_CAT_LOSS_SELECTION',
   'PROP_CAT_LOSS_PARETO',
+  'PROP_PREMIUM_DEV_FACTORS',
+  'PROP_PAID_CLAIMS_DEV_FACTORS',
+  'PROP_OS_CLAIMS_DEV_FACTORS',
+  'PROP_INCURRED_DEV_FACTORS',
+  'PROP_PROJECTED_SUMMARY',
+  'PROP_QUICK_SUMMARY',
   'PROP_RISK_PROFILE',
   'PROP_CLAIMS_PROFILE',
   'PROP_CRESTA_AGGREGATES',
   'PROP_EVENT_LOSS_TABLES',
   'PROP_PRICING',
-  'PROP_FINAL_BIND',
 ];
 
 export const NP_WIZARD_ORDER = [
@@ -111,7 +114,6 @@ export const STEP_LABELS = {
   PROP_CRESTA_AGGREGATES: 'CRESTA Aggregates',
   PROP_EVENT_LOSS_TABLES: 'Event Loss Tables',
   PROP_PRICING: 'Pricing',
-  PROP_FINAL_BIND: 'Final Bind',
   NP_TREATY_DETAIL: 'Treaty Detail',
   NP_TREATY_DOCUMENTS: 'Documents',
   NP_EXPIRING_STRUCTURE: 'Expiring Structure',
@@ -181,7 +183,6 @@ export const ROUTE_PATHS = {
   PROP_CRESTA_AGGREGATES: '/prop/cresta-aggregates',
   PROP_EVENT_LOSS_TABLES: '/prop/event-loss-tables',
   PROP_PRICING: '/prop/pricing',
-  PROP_FINAL_BIND: '/prop/final-bind',
   NP_TREATY_DETAIL: '/np/treaty-detail',
   NP_TREATY_DOCUMENTS: '/np/documents',
   NP_EXPIRING_STRUCTURE: '/np/expiring-structure',
@@ -253,6 +254,10 @@ export function getWizardNav(routeKey, { quoteMode = false, triangulationsEnable
     }
   } else {
     order = [...PROP_WIZARD_ORDER];
+    // Keep this in sync with WizardTabs.shouldShow(): when triangulations are
+    // enabled the No-Triangulation screen is hidden, and when disabled the
+    // triangle / dev-factor screens are. Sidebar visibility and Next/Back
+    // navigation must agree, or a tab could be clickable but unreachable.
     if (triangulationsEnabled) {
       order = order.filter(k => k !== 'PROP_NO_TRIANGULATION');
     } else {
@@ -277,13 +282,13 @@ export function getWizardNav(routeKey, { quoteMode = false, triangulationsEnable
 export const PROP_TAB_GROUPS = [
   { label: 'Setup', keys: ['PROP_TREATY_DETAIL', 'PROP_TREATY_DOCUMENTS'] },
   { label: 'Triangles', keys: ['PROP_PREMIUM_TRIANGLES', 'PROP_CLAIMS_PAID_TRIANGLES', 'PROP_OS_CLAIMS_TRIANGLES', 'PROP_INCURRED_CLAIMS_TRIANGLES'] },
-  { label: 'Dev Factors', keys: ['PROP_PREMIUM_DEV_FACTORS', 'PROP_PAID_CLAIMS_DEV_FACTORS', 'PROP_OS_CLAIMS_DEV_FACTORS', 'PROP_INCURRED_DEV_FACTORS'] },
-  { label: 'Summaries', keys: ['PROP_NO_TRIANGULATION', 'PROP_PROJECTED_SUMMARY', 'PROP_QUICK_SUMMARY'] },
   { label: 'Large Losses', keys: ['PROP_LARGE_LOSS_LIST', 'PROP_LARGE_LOSS_SELECTION', 'PROP_LARGE_LOSS_PARETO'] },
   { label: 'Cat Losses', keys: ['PROP_CAT_LOSS_LIST', 'PROP_CAT_LOSS_SELECTION', 'PROP_CAT_LOSS_PARETO'] },
+  { label: 'Dev Factors', keys: ['PROP_PREMIUM_DEV_FACTORS', 'PROP_PAID_CLAIMS_DEV_FACTORS', 'PROP_OS_CLAIMS_DEV_FACTORS', 'PROP_INCURRED_DEV_FACTORS'] },
+  { label: 'Summaries', keys: ['PROP_NO_TRIANGULATION', 'PROP_PROJECTED_SUMMARY', 'PROP_QUICK_SUMMARY'] },
   { label: 'Profiles', keys: ['PROP_RISK_PROFILE', 'PROP_CLAIMS_PROFILE'] },
   { label: 'Exposure', keys: ['PROP_CRESTA_AGGREGATES', 'PROP_EVENT_LOSS_TABLES'] },
-  { label: 'Pricing', keys: ['PROP_PRICING', 'PROP_FINAL_BIND'] },
+  { label: 'Pricing', keys: ['PROP_PRICING'] },
 ];
 
 export const NP_TAB_GROUPS = [

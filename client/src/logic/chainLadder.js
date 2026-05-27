@@ -55,13 +55,14 @@ export function calculateAgeToAgeFactors(matrix) {
  *
  * @returns {{ pattern:number[], warnings:Array<{column:number, devPeriod:string, contributingRows:number, message:string}> }}
  */
-export function calculatePattern(matrix, factors, method = 'weighted') {
+export function calculatePattern(matrix, factors, method = 'weighted', { excluded } = {}) {
   const width = matrix[0]?.length || 0;
   const pattern = [];
   const warnings = [];
+  const isExcluded = excluded ? (r, c) => excluded.has(`${r}:${c}`) : () => false;
   for (let c = 0; c < width - 1; c++) {
     const validRows = [];
-    for (let r = 0; r < matrix.length; r++) if (factors[r]?.[c] !== null) validRows.push(r);
+    for (let r = 0; r < matrix.length; r++) if (factors[r]?.[c] !== null && !isExcluded(r, c)) validRows.push(r);
     let rowsToUse = validRows;
     if (method === 'last3') rowsToUse = validRows.slice(-3);
     if (method === 'last5') rowsToUse = validRows.slice(-5);

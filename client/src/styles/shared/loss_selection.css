@@ -40,7 +40,8 @@
   font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: rgba(148,163,184,.70);
 }
 .LOSS_SELECTION_PAGE .ls-finput{
-  height: 28px; padding: 0 8px; border-radius: 6px;
+  height: 28px !important; line-height: 26px; box-sizing: border-box;
+  padding: 0 8px; border-radius: 6px;
   border: 1px solid rgba(var(--accent-rgb),.25) !important;
   background: rgba(8,16,40,.25) !important; color: rgba(226,232,240,.90);
   font-size: 12px; box-shadow: none !important; appearance: none; -webkit-appearance: none;

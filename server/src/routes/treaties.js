@@ -129,7 +129,8 @@ router.get("/treaties/:id", asyncHandler(async (req, res) => {
       surplus_max_retention:detail.surplus_max_retention,num_lines:detail.num_lines,
       total_capacity:detail.total_capacity,event_limit:detail.event_limit,aal:detail.aal,
       quota_share_epi:detail.quota_share_epi,surplus_epi:detail.surplus_epi,
-      brokerage_pct:detail.brokerage_pct,taxes_pct:detail.taxes_pct,loss_cap_pct:detail.loss_cap_pct},
+      brokerage_pct:detail.brokerage_pct,taxes_pct:detail.taxes_pct,loss_cap_pct:detail.loss_cap_pct,
+      strip_large_cat_losses:detail.strip_large_cat_losses??true},
     commissions:{mode:comm.mode||"FIXED",fixed_commission_pct:comm.fixed_commission_pct,
       fixed_commission_qs_pct:comm.fixed_commission_qs_pct,
       fixed_commission_surplus_pct:comm.fixed_commission_surplus_pct,
@@ -213,9 +214,9 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
     if(terms.detail && Object.keys(terms.detail).length) {
       const d=terms.detail;
       await client.query(
-        `INSERT INTO public.contract_prop_details (contract_id,triangulations_available,qs_limit,retention_pct,retention_amt,cession_pct,cession_amt,surplus_max_retention,num_lines,total_capacity,event_limit,aal,quota_share_epi,surplus_epi,brokerage_pct,taxes_pct,loss_cap_pct,experience_start_year)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-         ON CONFLICT (contract_id) DO UPDATE SET triangulations_available=EXCLUDED.triangulations_available,qs_limit=EXCLUDED.qs_limit,retention_pct=EXCLUDED.retention_pct,retention_amt=EXCLUDED.retention_amt,cession_pct=EXCLUDED.cession_pct,cession_amt=EXCLUDED.cession_amt,surplus_max_retention=EXCLUDED.surplus_max_retention,num_lines=EXCLUDED.num_lines,total_capacity=EXCLUDED.total_capacity,event_limit=EXCLUDED.event_limit,aal=EXCLUDED.aal,quota_share_epi=EXCLUDED.quota_share_epi,surplus_epi=EXCLUDED.surplus_epi,brokerage_pct=EXCLUDED.brokerage_pct,taxes_pct=EXCLUDED.taxes_pct,loss_cap_pct=EXCLUDED.loss_cap_pct,experience_start_year=EXCLUDED.experience_start_year,updated_at=now()`,
+        `INSERT INTO public.contract_prop_details (contract_id,triangulations_available,qs_limit,retention_pct,retention_amt,cession_pct,cession_amt,surplus_max_retention,num_lines,total_capacity,event_limit,aal,quota_share_epi,surplus_epi,brokerage_pct,taxes_pct,loss_cap_pct,experience_start_year,strip_large_cat_losses)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+         ON CONFLICT (contract_id) DO UPDATE SET triangulations_available=EXCLUDED.triangulations_available,qs_limit=EXCLUDED.qs_limit,retention_pct=EXCLUDED.retention_pct,retention_amt=EXCLUDED.retention_amt,cession_pct=EXCLUDED.cession_pct,cession_amt=EXCLUDED.cession_amt,surplus_max_retention=EXCLUDED.surplus_max_retention,num_lines=EXCLUDED.num_lines,total_capacity=EXCLUDED.total_capacity,event_limit=EXCLUDED.event_limit,aal=EXCLUDED.aal,quota_share_epi=EXCLUDED.quota_share_epi,surplus_epi=EXCLUDED.surplus_epi,brokerage_pct=EXCLUDED.brokerage_pct,taxes_pct=EXCLUDED.taxes_pct,loss_cap_pct=EXCLUDED.loss_cap_pct,experience_start_year=EXCLUDED.experience_start_year,strip_large_cat_losses=EXCLUDED.strip_large_cat_losses,updated_at=now()`,
         [id,boolOrDefault(d.triangulations_available??d.triangulationsAvailable,true),
          numOrNull(d.qs_limit??d.qsLimit),numOrNull(d.retention_pct??d.retentionPct),numOrNull(d.retention_amt??d.retentionAmt),
          numOrNull(d.cession_pct??d.cessionPct),numOrNull(d.cession_amt??d.cessionAmt),
@@ -223,7 +224,8 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
          numOrNull(d.total_capacity??d.totalCapacity),numOrNull(d.event_limit??d.eventLimit),numOrNull(d.aal),
          numOrNull(d.quota_share_epi??d.quotaShareEpi),numOrNull(d.surplus_epi??d.surplusEpi),
          numOrNull(d.brokerage_pct??d.brokeragePct),numOrNull(d.taxes_pct??d.taxesPct),numOrNull(d.loss_cap_pct??d.lossCapPct),
-         numOrNull(d.experience_start_year??d.experienceStartYear)]);
+         numOrNull(d.experience_start_year??d.experienceStartYear),
+         boolOrDefault(d.strip_large_cat_losses??d.stripLargeCatLosses,true)]);
     }
 
     // ── Commissions (only if commissions section provided) ──

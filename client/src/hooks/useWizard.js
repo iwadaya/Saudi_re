@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useCallback } from 'react';
 import { useAppState } from '../context/AppContext';
-import { getWizardNav, ROUTE_PATHS } from '../config/wizard';
+import { getWizardNav, ROUTE_PATHS, STEP_LABELS } from '../config/wizard';
 import { isNpCatFlowDisabled, isNpRiskFlowDisabled, isNpStopLossTreaty } from '../utils/npTreatyType';
 
 export function useWizard(routeKey) {
@@ -39,6 +39,10 @@ export function useWizard(routeKey) {
     wizardMode,
     quoteMode,
     routeKey,
+    // Display labels for the adjacent steps so the nav dock can read
+    // "Next: <step> →" / "← Back: <step>" without hardcoding routes.
+    nextLabel: nav.next ? STEP_LABELS[nav.next] || null : null,
+    prevLabel: nav.prev ? STEP_LABELS[nav.prev] || null : null,
   };
 }
 

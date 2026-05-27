@@ -116,6 +116,7 @@ const PATHS = {
   npLargeLossLdfs: (id) => `/api/treaties/${enc(id)}/np/large-loss-ldfs`,
   npCatLossLdfs: (id) => `/api/treaties/${enc(id)}/np/cat-loss-ldfs`,
   triangle: (id, type) => `/api/treaties/${enc(id)}/triangles/${enc(type)}`,
+  triangleWithExclusions: (id, type) => `/api/treaties/${enc(id)}/triangles/${enc(type)}/with-exclusions`,
   treatyDocuments: (id) => `/api/treaties/${enc(id)}/documents`,
   wordingChecklist: (id) => `/api/treaties/${enc(id)}/wording-checklist`,
   wordingChecklistAi: (id) => `/api/treaties/${enc(id)}/wording-checklist/ai-check`,
@@ -124,12 +125,17 @@ const PATHS = {
   deleteDocument: (docId) => `/api/documents/${enc(docId)}`,
   largeLosses: (id) => `/api/treaties/${enc(id)}/large-losses`,
   catLosses: (id) => `/api/treaties/${enc(id)}/cat-losses`,
+  stripLargeCat: (id) => `/api/treaties/${enc(id)}/strip-large-cat`,
+  portfolioLosses: (id, lossType) => `/api/treaties/${enc(id)}/portfolio-losses/${enc(lossType)}`,
+  suggestLossQuarters: (id) => `/api/treaties/${enc(id)}/losses/suggest-quarters`,
   treatyCobs: (id) => `/api/treaties/${enc(id)}/cobs`,
   riskProfile: (id, cobId) => `/api/treaties/${enc(id)}/risk-profiles/${enc(cobId)}`,
   claimsProfile: (id, cobId) => `/api/treaties/${enc(id)}/claims-profiles/${enc(cobId)}`,
   crestaData: (id) => `/api/treaties/${enc(id)}/cresta`,
   cedantExposure: (id) => `/api/treaties/${enc(id)}/cedant-exposure`,
   devFactors: (id, type) => `/api/treaties/${enc(id)}/dev-factors/${enc(type)}`,
+  devFactorStaleness: (id, type) => `/api/treaties/${enc(id)}/dev-factors/${enc(type)}/staleness`,
+  lossesStaleness: (id) => `/api/treaties/${enc(id)}/losses/staleness`,
   pricingSave: '/api/pricing/save',
   pricing: (id) => `/api/treaties/${enc(id)}/pricing`,
   pricingOutputs: (id) => `/api/treaties/${enc(id)}/pricing-outputs`,
@@ -174,17 +180,22 @@ const QUOTE_PATHS = {
   npLargeLossLdfs: (id) => `/api/quotes/${enc(id)}/np/large-loss-ldfs`,
   npCatLossLdfs: (id) => `/api/quotes/${enc(id)}/np/cat-loss-ldfs`,
   triangle: (id, type) => `/api/quotes/${enc(id)}/triangles/${enc(type)}`,
+  triangleWithExclusions: (id, type) => `/api/quotes/${enc(id)}/triangles/${enc(type)}/with-exclusions`,
   quoteDocuments: (id) => `/api/quotes/${enc(id)}/documents`,
   quoteWordingChecklist: (id) => `/api/quotes/${enc(id)}/wording-checklist`,
   quoteWordingChecklistAi: (id) => `/api/quotes/${enc(id)}/wording-checklist/ai-check`,
   largeLosses: (id) => `/api/quotes/${enc(id)}/large-losses`,
   catLosses: (id) => `/api/quotes/${enc(id)}/cat-losses`,
+  stripLargeCat: (id) => `/api/quotes/${enc(id)}/strip-large-cat`,
+  suggestLossQuarters: (id) => `/api/quotes/${enc(id)}/losses/suggest-quarters`,
   quoteCobs: (id) => `/api/quotes/${enc(id)}/cobs`,
   riskProfile: (id, cobId) => `/api/quotes/${enc(id)}/risk-profiles/${enc(cobId)}`,
   claimsProfile: (id, cobId) => `/api/quotes/${enc(id)}/claims-profiles/${enc(cobId)}`,
   crestaData: (id) => `/api/quotes/${enc(id)}/cresta`,
   cedantExposure: (id) => `/api/quotes/${enc(id)}/cedant-exposure`,
   devFactors: (id, type) => `/api/quotes/${enc(id)}/dev-factors/${enc(type)}`,
+  devFactorStaleness: (id, type) => `/api/quotes/${enc(id)}/dev-factors/${enc(type)}/staleness`,
+  lossesStaleness: (id) => `/api/quotes/${enc(id)}/losses/staleness`,
   pricing: (id) => `/api/quotes/${enc(id)}/pricing`,
   pricingOutputs: (id) => `/api/quotes/${enc(id)}/pricing-outputs`,
   pricingYearly: (id) => `/api/quotes/${enc(id)}/pricing-yearly`,
@@ -409,11 +420,14 @@ export const api = {
 
   // Triangles
   getTriangle(id, type, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.triangle(id, type) : PATHS.triangle(id, type), opts); },
+  getTriangleWithExclusions(id, type, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.triangleWithExclusions(id, type) : PATHS.triangleWithExclusions(id, type), opts); },
   saveTriangle(id, type, payload, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.triangle(id, type) : PATHS.triangle(id, type), { method: 'POST', body: payload, ...opts }); },
 
   // Dev factors
   getDevFactors(id, type, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.devFactors(id, type) : PATHS.devFactors(id, type), opts); },
   saveDevFactors(id, type, payload, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.devFactors(id, type) : PATHS.devFactors(id, type), { method: 'PUT', body: payload, ...opts }); },
+  getDevFactorStaleness(id, type, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.devFactorStaleness(id, type) : PATHS.devFactorStaleness(id, type), opts); },
+  getLossSelectionStaleness(id, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.lossesStaleness(id) : PATHS.lossesStaleness(id), opts); },
   getBenchmarks(countryId, triangleType) { return request(`/api/benchmarks/${enc(countryId)}/${enc(triangleType)}`); },
   getPricingPattern(id, type) { return request(`/api/treaties/${enc(id)}/pricing-pattern/${enc(type)}`); },
   savePricingPattern(id, type, payload) { return request(`/api/treaties/${enc(id)}/pricing-pattern/${enc(type)}`, { method: 'PUT', body: payload }); },
@@ -422,7 +436,10 @@ export const api = {
   getLargeLosses(id, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.largeLosses(id) : PATHS.largeLosses(id), opts); },
   saveLargeLosses(id, payload, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.largeLosses(id) : PATHS.largeLosses(id), { method: 'PUT', body: payload, ...opts }); },
   getCatLosses(id, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.catLosses(id) : PATHS.catLosses(id), opts); },
+  getPortfolioLosses(id, lossType, opts) { return request(PATHS.portfolioLosses(id, lossType), opts); },
+  setStripLargeCat(id, value, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.stripLargeCat(id) : PATHS.stripLargeCat(id), { method: 'PUT', body: { strip_large_cat_losses: value }, ...opts }); },
   saveCatLosses(id, payload, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.catLosses(id) : PATHS.catLosses(id), { method: 'PUT', body: payload, ...opts }); },
+  suggestLossQuarters(id, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.suggestLossQuarters(id) : PATHS.suggestLossQuarters(id), { method: 'POST', body: {}, ...opts }); },
   getLossSelectionLatest(id, lossType, opts) {
     return request(isQuoteMode(opts) ? QUOTE_PATHS.lossSelectionLatest(id, lossType) : PATHS.lossSelectionLatest(id, lossType), opts);
   },
@@ -493,7 +510,16 @@ export const api = {
     const isQuote = isQuoteMode(opts);
     return request(isQuote ? `/api/quotes/${enc(contractId)}/approval-trail` : `/api/treaties/${enc(contractId)}/approval-trail`, opts);
   },
-  getMarketAverage(countryId, excludeId, opts) { return request(PATHS.marketAverage(countryId, excludeId), opts); },
+  getMarketAverage(countryId, exclude, { treatyTypeId, cobIds = [], region } = {}, opts) {
+    const params = new URLSearchParams();
+    if (exclude) params.set('exclude', exclude);
+    if (treatyTypeId) params.set('treatyTypeId', treatyTypeId);
+    if (cobIds.length) params.set('cobIds', cobIds.join(','));
+    if (region) params.set('region', region);
+    const qs = params.toString();
+    return request(`/api/pricing/market-average/${enc(countryId)}${qs ? `?${qs}` : ''}`, opts);
+  },
+  getCountry(id, opts) { return request(`/api/countries/${enc(id)}`, opts); },
   saveComponentSnapshot(id, payload, opts) { return request(PATHS.componentSnapshot(id), { method: 'POST', body: payload, ...opts }); },
   getComponentSnapshots(id, opts) { return request(PATHS.componentSnapshots(id), opts); },
   deleteComponentSnapshot(snapId, opts) { return request(PATHS.deleteComponentSnapshot(snapId), { method: 'DELETE', ...opts }); },

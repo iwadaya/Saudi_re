@@ -247,14 +247,12 @@ export async function aggDrilldownController(req, res) {
 }
 
 export async function marketAverageController(req, res) {
-  const rows = await getMarketAverage(req.params.countryId, req.query.exclude || null);
-  const result = {};
-  for (const row of rows) {
-    result[row.component_name] = {
-      avg: row.avg_value != null ? Number(row.avg_value) : null,
-      count: Number(row.contract_count),
-    };
-  }
+  const result = await getMarketAverage(req.params.countryId, req.query.exclude || null, {
+    treatyTypeId: req.query.treatyTypeId || null,
+    cobIds: req.query.cobIds ? req.query.cobIds.split(',').filter(Boolean) : [],
+    region: req.query.region || null,
+  });
+  // { components: { [name]: avgValue }, tier, contractCount }
   res.json(result);
 }
 

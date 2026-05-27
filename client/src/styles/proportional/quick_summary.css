@@ -155,7 +155,7 @@
 }
 
 .qs-modal {
-  width: 1000px;
+  width: 1500px;
   max-width: 95vw;
   max-height: 90vh;
   display: flex;
@@ -929,6 +929,23 @@
   border-spacing: 0;
   table-layout: fixed;
   min-width: 920px; /* keeps columns readable; scrolls on small screens */
+}
+
+/* Wide tables (many columns) size each column to its content and scroll
+   horizontally inside .qs-table-shell rather than truncating. Uses !important
+   to beat the later table-layout:fixed rule on .qs-table.qs-stats. */
+.QUICK_SUMMARY_PAGE .qs-table-modern.qs-table--scroll,
+.QUICK_SUMMARY_PAGE .qs-table.qs-stats.qs-table--scroll{
+  table-layout: auto !important;
+  min-width: 1180px;
+}
+/* Every column except the first (UW Year) and last (Cum. %) gets a uniform
+   width wide enough for the "Attritional Loss" header, so nothing truncates
+   and the table scrolls horizontally inside its shell. */
+.QUICK_SUMMARY_PAGE .qs-table--scroll th:not(:first-child):not(:last-child),
+.QUICK_SUMMARY_PAGE .qs-table--scroll td:not(:first-child):not(:last-child){
+  width: 160px !important;
+  min-width: 160px !important;
 }
 
 .QUICK_SUMMARY_PAGE .qs-table-modern thead th{

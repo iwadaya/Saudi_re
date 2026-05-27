@@ -151,6 +151,56 @@ describe('calculatePattern (returns { pattern, warnings })', () => {
   });
 });
 
+describe('calculatePattern — averaging methods', () => {
+  // Five single-transition rows so column 0 has factors 1.5, 1.6, 1.3, 1.4, 1.2
+  const matrix = [
+    [100, 150], // 1.5
+    [200, 320], // 1.6
+    [100, 130], // 1.3
+    [100, 140], // 1.4
+    [100, 120], // 1.2
+  ];
+  const factors = calculateAgeToAgeFactors(matrix);
+
+  it('weighted = Σnext / Σprev across all valid rows (volume-weighted)', () => {
+    const { pattern } = calculatePattern(matrix, factors, 'weighted');
+    // (150+320+130+140+120) / (100+200+100+100+100) = 860 / 600
+    expect(pattern[0]).toBeCloseTo(860 / 600, 10);
+  });
+
+  it('simple = unweighted mean of the link ratios', () => {
+    const { pattern } = calculatePattern(matrix, factors, 'simple');
+    expect(pattern[0]).toBeCloseTo((1.5 + 1.6 + 1.3 + 1.4 + 1.2) / 5, 10); // 1.4
+  });
+
+  it('last3 = simple mean of the three most recent origin years', () => {
+    const { pattern } = calculatePattern(matrix, factors, 'last3');
+    expect(pattern[0]).toBeCloseTo((1.3 + 1.4 + 1.2) / 3, 10); // 1.3
+  });
+
+  it('last5 (exactly 5 rows) = simple mean of all five', () => {
+    const { pattern } = calculatePattern(matrix, factors, 'last5');
+    expect(pattern[0]).toBeCloseTo((1.5 + 1.6 + 1.3 + 1.4 + 1.2) / 5, 10);
+  });
+
+  it('drops excluded "r:c" cells before averaging (simple and weighted)', () => {
+    const m = [[100, 150], [100, 160], [100, 130]]; // factors 1.5, 1.6, 1.3
+    const f = calculateAgeToAgeFactors(m);
+    const excluded = new Set(['1:0']); // drop the 1.6 outlier
+    // simple mean of 1.5 and 1.3 = 1.4
+    expect(calculatePattern(m, f, 'simple', { excluded }).pattern[0]).toBeCloseTo(1.4, 10);
+    // weighted (150+130)/(100+100) = 1.4
+    expect(calculatePattern(m, f, 'weighted', { excluded }).pattern[0]).toBeCloseTo(1.4, 10);
+  });
+
+  it('respects exclusions when slicing last3 (excluded rows are not "recent")', () => {
+    // factors: 1.5, 1.6, 1.3, 1.4, 1.2 ; exclude the most-recent (1.2) → last3 of
+    // the remaining = 1.6, 1.3, 1.4 → mean 1.4333…
+    const { pattern } = calculatePattern(matrix, factors, 'last3', { excluded: new Set(['4:0']) });
+    expect(pattern[0]).toBeCloseTo((1.6 + 1.3 + 1.4) / 3, 10);
+  });
+});
+
 describe('buildMatrixFromCells — null cell handling', () => {
   const cells = [
     { origin_year: 2020, dev_months: 12, cum_value: 100 },

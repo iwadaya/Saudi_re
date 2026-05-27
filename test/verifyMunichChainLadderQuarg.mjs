@@ -93,7 +93,6 @@ function clUlt(triangle, pattern, r) {
   return val;
 }
 
-let allSummaryOk = true;
 for (let i = 0; i < r.projections.length; i++) {
   const p = r.projections[i];
   const e = expSummary[p.year];
@@ -116,7 +115,7 @@ for (let i = 0; i < r.projections.length; i++) {
     ['mclUltI', p.ultimateIncurred, e.mclUltI],
   ];
   for (const [name, c, x] of checks) {
-    if (Math.abs(c - x) > TOL) { allSummaryOk = false; pass = false; console.log(`     FAIL ${name}: ${c} vs ${x}`); }
+    if (Math.abs(c - x) > TOL) { pass = false; console.log(`     FAIL ${name}: ${c} vs ${x}`); }
   }
 }
 

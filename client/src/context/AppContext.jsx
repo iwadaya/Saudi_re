@@ -12,7 +12,7 @@ const initialState = {
   propTreatyDetail: {},
   npTreatyDetail: {},
   facRiskDetail: {}, // Facultative active risk; mirrors prop/np pattern
-  triangleMeta: { source: 'TREATY_DETAIL', startYear: 2015, renewalYear: 2026, version: 0 },
+  triangleMeta: { source: 'TREATY_DETAIL', startYear: null, inceptionYear: null, renewalYear: null, version: 0 },
   trianglePages: {},
   treatyDocuments: { saved: false, files: [], filters: { type: 'ALL', status: 'ALL' } },
   pricing: {},
@@ -50,7 +50,7 @@ function reducer(state, action) {
         nonPropLargeLossList: {},
         nonPropCatLossList: {},
         trianglePages: {},
-        triangleMeta: { source: 'TREATY_DETAIL', startYear: 2015, renewalYear: 2026, version: 0 },
+        triangleMeta: { source: 'TREATY_DETAIL', startYear: null, inceptionYear: null, renewalYear: null, version: 0 },
         treatyDocuments: { saved: false, files: [], filters: { type: 'ALL', status: 'ALL' } },
         pricing: {},
         npStructureLayers: [],

@@ -13,9 +13,14 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
   const { state: appState } = useAppState();
   const [losses, setLosses] = useState([]);
   const [threshold, setThreshold] = useState('');
+  const [thresholdFocused, setThresholdFocused] = useState(false);
   const [loading, setLoading] = useState(true);
   const [dirty, setDirty] = useState(false);
   const [saveMsg, setSaveMsg] = useState(null);
+  // Loss-selection staleness: true when large/cat losses were edited after the
+  // last selection save. Re-fetched on mount and after each save (savedTick).
+  const [lossStale, setLossStale] = useState(false);
+  const [savedTick, setSavedTick] = useState(0);
 
   // Inflation state
   const [showInflModal, setShowInflModal] = useState(false);
@@ -42,6 +47,16 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
 
   // Additional loadings
   const [loadings, setLoadings] = useState([]);
+
+  // Loss-selection staleness — were large/cat losses edited after the last save?
+  useEffect(() => {
+    if (!contractId) return;
+    let cancelled = false;
+    api.getLossSelectionStaleness(contractId, appState.quoteMode ? { quote: true } : undefined)
+      .then(d => { if (!cancelled) setLossStale(!!d?.stale); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [contractId, appState.quoteMode, savedTick]);
 
   // Load contract info
   useEffect(() => {
@@ -331,6 +346,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
         console.warn('Snapshot save failed:', e);
       }
       setDirty(false);
+      setSavedTick(t => t + 1); // re-check staleness against the just-saved selection
       if (snapshotOk) {
         setSaveMsg({ type: 'ok', text: 'Saved' });
       } else {
@@ -400,6 +416,11 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
 
   const content = (
         <div className="LOSS_SELECTION_PAGE">
+          {lossStale && (
+            <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5 }}>
+              Losses have been added or edited since the last selection was saved — review and re-save your selection.
+            </div>
+          )}
           {loading ? <div className="ls-loading">Loading...</div> : (
             <>
               {/* KPI Strip */}
@@ -425,7 +446,17 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
                 <div className="ls-toolbar-left">
                   <div className="ls-field" title="Losses with inflated incurred below this threshold are excluded from curve fitting.">
                     <span className="ls-flabel">Threshold</span>
-                    <input className="ls-finput" type="text" value={threshold} onChange={e => setThreshold(e.target.value)} placeholder="e.g. 500,000" style={{ width: 120 }} />
+                    <input
+                      className="ls-finput"
+                      type="text"
+                      inputMode="numeric"
+                      value={thresholdFocused ? threshold : (String(threshold).trim() === '' ? '' : cn(threshold).toLocaleString('en-US', { maximumFractionDigits: 0 }))}
+                      onChange={e => setThreshold(e.target.value)}
+                      onFocus={() => setThresholdFocused(true)}
+                      onBlur={() => setThresholdFocused(false)}
+                      placeholder="e.g. 500,000"
+                      style={{ width: 120 }}
+                    />
                     <button className="ls-btn" onClick={applyThreshold}>Apply</button>
                   </div>
                   <button className="ls-btn ls-btn--green" onClick={() => { setShowInflModal(true); }}>Inflation{inflData.length > 0 ? ` (${countryName || 'loaded'})` : ''}</button>

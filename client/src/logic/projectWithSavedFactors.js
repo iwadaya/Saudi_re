@@ -19,6 +19,7 @@ import { toN as cn } from '../utils/format';
 import {
   buildMatrixFromCells, calculateAgeToAgeFactors, calculatePattern, calculateCdfs,
 } from './chainLadder';
+import { loadLossCategoryByYear } from './lossCategoryAmounts';
 function crd(data) {
   const rows = Array.isArray(data) ? data : (data?.cells || []);
   return rows.map(r => ({
@@ -62,6 +63,17 @@ function projectWithCdfs(matrix, years, cdfs) {
   });
 }
 
+/** Latest non-null cumulative value per origin year (the actual diagonal). */
+function latestPerYear(matrix, years) {
+  return years.map((yr, r) => {
+    let latest = 0;
+    for (let c = (matrix[r]?.length || 0) - 1; c >= 0; c--) {
+      if (matrix[r][c] != null) { latest = matrix[r][c]; break; }
+    }
+    return { year: yr, latest };
+  });
+}
+
 /**
  * Fallback: recalculate CDFs from raw triangle matrix using weighted average.
  */
@@ -81,10 +93,19 @@ function recalcCdfs(matrix) {
  *   triangles + dev factors instead of the live contract tables).
  * @returns {Promise<{rows: Array, source: string}>}
  *   rows: [{year, ultPrem, ultLoss, actPrem, actLoss}]
- *   source: 'saved-factors' | 'triangle-recalc' | 'straight-short' | 'straight-long' | null
+ *   source: 'saved-factors' | 'triangle-recalc' | 'straight-blend' | 'straight-benchmark' | null
+ *   usedPlaceholderLdfs: true when the projection fell back to the hard-coded
+ *     benchmark curves (straightProjections.js) — i.e. no saved factors, no
+ *     triangle, and no saved LDF blend. Lets the UI warn that figures rest on
+ *     placeholder data.
  */
 export async function loadProjectedRows(contractId, opts) {
-  if (!contractId) return { rows: [], source: null };
+  if (!contractId) return { rows: [], source: null, usedPlaceholderLdfs: false };
+
+  // Projection philosophy: dev factors are calibrated on the attritional (stripped)
+  // triangle. They must be applied to the stripped triangle only. Large loss and CAT
+  // amounts are added back explicitly after projection — never projected via the
+  // attritional CDF, since those factors carry no information about large/CAT development.
 
   // 1) Load all triangles in parallel
   const [premRes, paidRes, osRes] = await Promise.all([
@@ -128,11 +149,15 @@ export async function loadProjectedRows(contractId, opts) {
       return r;
     });
 
-    // 2) Try to load saved dev factors for INCURRED, PAID, and PREMIUM
-    const [incFactorsRes, paidFactorsRes, premFactorsRes] = await Promise.all([
+    // 2) Load saved dev factors (INCURRED, PAID, PREMIUM), the stripped
+    //    (attritional) incurred triangle and the per-treaty strip flag — all
+    //    keyed on contractId, fetched together.
+    const [incFactorsRes, paidFactorsRes, premFactorsRes, incExclRes, contract] = await Promise.all([
       api.getDevFactors(contractId, 'INCURRED', opts).catch(() => []),
       api.getDevFactors(contractId, 'CLAIMS_PAID', opts).catch(() => []),
       api.getDevFactors(contractId, 'PREMIUM', opts).catch(() => []),
+      api.getTriangleWithExclusions(contractId, 'INCURRED', opts).catch(() => null),
+      api.getContract(contractId, opts).catch(() => ({})),
     ]);
     const incFactors = incFactorsRes?.factors || (Array.isArray(incFactorsRes) ? incFactorsRes : []);
     const paidFactors = paidFactorsRes?.factors || (Array.isArray(paidFactorsRes) ? paidFactorsRes : []);
@@ -145,6 +170,26 @@ export async function loadProjectedRows(contractId, opts) {
     const savedPaidCdfs = buildCdfsFromSaved(paidFactors);
     const savedPremCdfs = buildCdfsFromSaved(premFactors);
 
+    // Large/CAT loadings, added back unprojected after the attritional projection.
+    // When stripping is off the server returns the full triangle as `stripped`
+    // and the loadings are nil, so the result collapses to the plain full
+    // projection (back-compatible).
+    const stripLC = (contract?.detail?.strip_large_cat_losses ?? true) !== false;
+    const lossCat = stripLC
+      ? await loadLossCategoryByYear(contractId, opts).catch(() => ({ large: new Map(), cat: new Map() }))
+      : { large: new Map(), cat: new Map() };
+
+    // Attritional projection base: the STRIPPED incurred triangle (large/CAT
+    // removed). The saved INCURRED dev factors are calibrated on this basis in
+    // DevFactorsScreen, so they must be applied here — not to the full paid+OS
+    // triangle. Falls back to the full incurred matrix if the stripped triangle
+    // is unavailable. Column index aligns with `im` because stripping reduces
+    // cell values but never drops (origin_year, dev_months) keys.
+    const strippedObj = buildMatrixFromCells(crd(incExclRes?.stripped?.cells || []));
+    const imStripped = strippedObj
+      ? yrs.map(y => { const r = []; for (let c = 0; c < mc; c++) r.push(gv(strippedObj, y, c)); return r; })
+      : im;
+
     // Paid-only matrix (no OS) — used to project the paid ultimate
     // for the under/over reserving comparison on the projected summary.
     const paidM = yrs.map(y => {
@@ -153,17 +198,19 @@ export async function loadProjectedRows(contractId, opts) {
       return r;
     });
 
-    let lossProj = [], paidProj = [], premProj = [], source = 'triangle-recalc';
+    let attrProj = [], paidProj = [], premProj = [], source = 'triangle-recalc';
 
-    // Project losses — prefer saved factors
+    // Project the ATTRITIONAL incurred from the stripped triangle — prefer the
+    // underwriter's saved factors. Large/CAT are not projected here; they are
+    // added back unprojected when assembling the rows below.
     if (savedIncCdfs) {
-      lossProj = projectWithCdfs(im, yrs, savedIncCdfs);
+      attrProj = projectWithCdfs(imStripped, yrs, savedIncCdfs);
       source = 'saved-factors';
     } else {
       try {
-        const cdfs = recalcCdfs(im);
-        lossProj = projectWithCdfs(im, yrs, cdfs);
-      } catch (e) { lossProj = []; }
+        const cdfs = recalcCdfs(imStripped);
+        attrProj = projectWithCdfs(imStripped, yrs, cdfs);
+      } catch (e) { attrProj = []; }
     }
 
     // Project paid (used for under/over reserving comparison)
@@ -187,29 +234,45 @@ export async function loadProjectedRows(contractId, opts) {
       } catch (e) { premProj = []; }
     }
 
+    // Actual (latest) incurred is the raw FULL paid+OS diagonal — large/CAT are
+    // part of the realised experience and are only stripped for the projection.
+    const fullLatest = latestPerYear(im, yrs);
+
     const rows = yrs.map(y => {
       const pP = premProj.find(p => p.year === y);
-      const lP = lossProj.find(p => p.year === y);
+      const aP = attrProj.find(p => p.year === y);
       const dP = paidProj.find(p => p.year === y);
+      const fl = fullLatest.find(p => p.year === y);
+      // Only add large/CAT back when we actually projected the STRIPPED
+      // (attritional) triangle. If the stripped fetch failed, imStripped fell
+      // back to the full triangle — large/CAT are already in the projection, so
+      // adding them again would double-count.
+      const large = (stripLC && strippedObj) ? (lossCat.large.get(Number(y)) || 0) : 0;
+      const cat = (stripLC && strippedObj) ? (lossCat.cat.get(Number(y)) || 0) : 0;
+      // Total projected incurred = attritional projected ultimate + large loss
+      // loading + CAT loading. deriveLossComponents downstream subtracts the
+      // same large/CAT back out to recover the attritional component, so this
+      // value must remain the full incurred total.
+      const ultLoss = (aP?.ultimate || 0) + large + cat;
       return {
         year: y,
         ultPrem: pP?.ultimate || 0,
-        ultLoss: lP?.ultimate || 0,
+        ultLoss,
         ultPaid: dP?.ultimate || 0,
-        ultIncurred: lP?.ultimate || 0,
+        ultIncurred: ultLoss,
         actPrem: pP?.latest || 0,
-        actLoss: lP?.latest || 0,
+        actLoss: fl?.latest || 0,
         actPaid: dP?.latest || 0,
       };
     });
 
-    if (rows.length > 0) return { rows, source };
+    if (rows.length > 0) return { rows, source, usedPlaceholderLdfs: false };
   }
 
   // 3) Fallback: straight stats (no-triangulation)
   const ssData = await api.getStraightStats(contractId, opts).catch(() => null);
   const stats = ssData?.stats || [];
-  if (stats.length === 0) return { rows: [], source: null };
+  if (stats.length === 0) return { rows: [], source: null, usedPlaceholderLdfs: false };
 
   const parsed = stats.map(s => ({
     year: Number(s.underwriting_year || s.year),
@@ -218,11 +281,36 @@ export async function loadProjectedRows(contractId, opts) {
     os: cn(s.os_claims || s.os),
   }));
 
+  // No-triangulation stripping is straightforward: remove the year's large/cat
+  // losses from its incurred, project the remaining attritional with the same
+  // loss dev factor, then add large/cat back unprojected — so downstream
+  // Incurred = attritional + large + cat. Honours the per-treaty strip flag
+  // (default on). Actual incurred (actLoss) is left raw.
+  const contract = await api.getContract(contractId, opts).catch(() => ({}));
+  const stripLC = (contract?.detail?.strip_large_cat_losses ?? true) !== false;
+  const lossCat = stripLC
+    ? await loadLossCategoryByYear(contractId, opts).catch(() => ({ large: new Map(), cat: new Map() }))
+    : null;
+  const applyStrip = (projRows) => {
+    if (!stripLC || !lossCat) return projRows;
+    return projRows.map(r => {
+      const large = lossCat.large.get(Number(r.year)) || 0;
+      const cat = lossCat.cat.get(Number(r.year)) || 0;
+      if (large + cat <= 0) return r;
+      const incurred = r.actLoss || 0;
+      const cdf = Number.isFinite(r.devFactor) && r.devFactor > 0
+        ? r.devFactor
+        : (incurred > 0 ? (r.ultLoss || 0) / incurred : 1);
+      const ultAttritional = Math.max(0, incurred - large - cat) * cdf;
+      return { ...r, ultLoss: ultAttritional + large + cat };
+    });
+  };
+
   // 3a) Preferred: project against the underwriter's saved per-class
   // blend (the LDF Analysis modal writes here). Tail type is just a
   // marker — the curve itself lives in contract_ldf_blend_curve.
   const blendRows = await projectFromSavedBlend(contractId, parsed, opts);
-  if (blendRows) return { rows: blendRows, source: 'straight-blend' };
+  if (blendRows) return { rows: applyStrip(blendRows), source: 'straight-blend', usedPlaceholderLdfs: false };
 
   // 3b) Last resort: hard-coded benchmark curve, picked by the contract's
   // primary class of business (falls through to DEFAULT_LDF_KEY when the
@@ -231,7 +319,8 @@ export async function loadProjectedRows(contractId, opts) {
   const { projectStraightStats, DEFAULT_LDF_KEY } = await import('./straightProjections');
   const classKey = ssData?.primary_class_key || DEFAULT_LDF_KEY;
   const rows = projectStraightStats(parsed, classKey);
-  return { rows, source: 'straight-benchmark' };
+  // Hard-coded benchmark/placeholder curves — flag so the UI can warn.
+  return { rows: applyStrip(rows), source: 'straight-benchmark', usedPlaceholderLdfs: true };
 }
 
 // ── Saved-blend projection ───────────────────────────────────────────────
@@ -251,7 +340,7 @@ function blendCurveToCdfArray(blended) {
   return sorted.map(p => Number(p.cdf));
 }
 
-export async function projectFromSavedBlend(contractId, parsed, opts) {
+async function projectFromSavedBlend(contractId, parsed, opts) {
   const [prem, claims] = await Promise.all([
     api.getLdfBlend(contractId, 'PREMIUM', opts).catch(() => null),
     api.getLdfBlend(contractId, 'CLAIMS_PAID', opts).catch(() => null),

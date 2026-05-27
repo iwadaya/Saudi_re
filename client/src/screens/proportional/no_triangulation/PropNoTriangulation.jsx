@@ -23,8 +23,18 @@ function incurred(row) {
 }
 export default function PropNoTriangulation() {
   const contractId = useContractId();
-  const { state: appState } = useAppState();
+  const { state: appState, setSlice } = useAppState();
   const td = appState.propTreatyDetail || {};
+  const apiOpts = appState.quoteMode ? { quote: true } : undefined;
+
+  // Per-treaty large/CAT stripping choice (default on). On this no-triangulation
+  // basis, stripping removes the year's large/CAT from incurred before
+  // projecting; the projected & quick summaries fold them back accordingly.
+  const stripLargeCat = td.stripLargeCat !== false;
+  const setStrip = (strip) => {
+    setSlice('propTreatyDetail', { ...td, stripLargeCat: strip });
+    if (contractId) api.setStripLargeCat(contractId, strip, apiOpts).catch(() => {});
+  };
 
 
   // Derive start year from treaty detail, renewal year from inception date
@@ -247,6 +257,17 @@ export default function PropNoTriangulation() {
                       cursor: 'pointer',
                     }}
                   >🔍 LDF Analysis</button>
+                </div>
+                {/* Large / CAT stripping basis (persisted per treaty) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#bae6fd' }}>Large / CAT losses</span>
+                  <div className="toggle-group">
+                    <span className={`toggle-option${stripLargeCat ? ' active' : ''}`} onClick={() => setStrip(true)}>Strip from incurred</span>
+                    <span className={`toggle-option${!stripLargeCat ? ' active' : ''}`} onClick={() => setStrip(false)}>Keep in incurred</span>
+                  </div>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                    Saved per treaty. Strip removes large/CAT from incurred before projecting and adds them back unprojected; Keep projects the full incurred and folds everything into attritional.
+                  </span>
                 </div>
               </div>
 

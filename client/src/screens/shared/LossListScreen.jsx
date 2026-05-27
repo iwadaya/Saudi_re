@@ -3,19 +3,34 @@ import { api } from '../../api';
 import { useContractId } from '../../hooks/useContractId';
 import { useAppState } from '../../context/AppContext';
 import WizardLayout from '../../components/WizardLayout';
-import { parseFlexibleNumber, dateInputValue, todayIso } from '../../utils/format';
+import { parseFlexibleNumber, dateInputValue } from '../../utils/format';
 import LossAnalysisModal from './LossAnalysisModal';
+import LossQuarterSuggestModal from './LossQuarterSuggestModal';
 
 const COLS = [
+  // UW Year leads — it's the origin-year key stripping joins the triangle on.
+  // The underwriter fills it in; it also auto-derives from Date of Loss when
+  // left blank, but a typed/pasted value overrides the auto-calc.
+  { key: 'uwYear',      label: 'UW Year',        type: 'year', w: 90 },
   { key: 'insuredName', label: 'Insured Name', type: 'text', w: 180 },
   { key: 'lossName',    label: 'Loss / Event',  type: 'text', w: 160 },
   { key: 'dateOfLoss',  label: 'Date of Loss',  type: 'date', w: 120 },
+  { key: 'actuarialReportedDate', label: 'Reported (Actuarial)', type: 'actuarial', w: 150, title: "Actuarial reported date — when the loss was reported / booked into the cedant's triangle. Drives which development period it is stripped from. Leave blank to default to date of loss + a quarter." },
   { key: 'classOfBusiness', label: 'Class',      type: 'cob',  w: 140 },
   { key: 'paid',        label: 'Paid',           type: 'num',  w: 110 },
   { key: 'os',          label: 'O/S',            type: 'num',  w: 110 },
 ];
 
-function emptyRow() { return { lossId: '', reportedDate: '', insuredName: '', lossName: '', dateOfLoss: '', classOfBusiness: '', paid: '', os: '' }; }
+// UW Year auto-derivation: loss year (when not entered manually).
+function yearOf(dateStr) {
+  const m = /^(\d{4})/.exec(String(dateStr || '').trim());
+  return m ? m[1] : '';
+}
+function deriveUwYear(row) {
+  return yearOf(row.dateOfLoss) || '';
+}
+
+function emptyRow() { return { lossId: '', reportedDate: '', actuarialReportedDate: '', uwYear: '', uwYearManual: false, insuredName: '', lossName: '', dateOfLoss: '', classOfBusiness: '', paid: '', os: '' }; }
 
 // COB dropdown cell — shows treaty classes, flags unknowns, supports paste
 function CobCell({ value, cobOptions, onChange, onPaste, dataRow, dataCol }) {
@@ -153,6 +168,8 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
   // kept separately for the analysis modal so we don't tangle it with the
   // editable grid state.
   const [serverLosses, setServerLosses] = useState([]);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestState, setSuggestState] = useState(null); // { suggestions, provider }
   const tableRef = useRef(null);
 
   const loadFn = lossType === 'cat' ? api.getCatLosses : api.getLargeLosses;
@@ -212,16 +229,26 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
       const losses = data?.losses || data?.rows || [];
       setServerLosses(losses);
       if (losses.length > 0) {
-        const loaded = losses.map(l => ({
-          lossId: l.loss_id || l.lossId || '',
-          reportedDate: dateInputValue(l.reported_date || l.reportedDate || ''),
-          insuredName: l.insured_name || l.insuredName || '',
-          lossName: l.loss_name || l.lossName || '',
-          dateOfLoss: dateInputValue(l.date_of_loss || l.dateOfLoss || ''),
-          classOfBusiness: l.class_of_business || l.classOfBusiness || '',
-          paid: l.paid != null && l.paid !== 0 ? String(l.paid) : '',
-          os: l.os != null && l.os !== 0 ? String(l.os) : '',
-        }));
+        const loaded = losses.map(l => {
+          const dateOfLoss = dateInputValue(l.date_of_loss || l.dateOfLoss || '');
+          const uwYear = (l.uw_year ?? l.uwYear) != null ? String(l.uw_year ?? l.uwYear) : '';
+          const derived = yearOf(dateOfLoss) || '';
+          return {
+            lossId: l.loss_id || l.lossId || '',
+            reportedDate: dateInputValue(l.reported_date || l.reportedDate || ''),
+            actuarialReportedDate: dateInputValue(l.actuarial_reported_date || l.actuarialReportedDate || ''),
+            uwYear,
+            // Treat a stored UW year that differs from the derived value as a
+            // manual override so editing the date of loss won't clobber it.
+            uwYearManual: !!uwYear && uwYear !== derived,
+            insuredName: l.insured_name || l.insuredName || '',
+            lossName: l.loss_name || l.lossName || '',
+            dateOfLoss,
+            classOfBusiness: l.class_of_business || l.classOfBusiness || '',
+            paid: l.paid != null && l.paid !== 0 ? String(l.paid) : '',
+            os: l.os != null && l.os !== 0 ? String(l.os) : '',
+          };
+        });
         // Pad to MIN_ROWS
         while (loaded.length < MIN_ROWS) loaded.push(emptyRow());
         setRows(loaded);
@@ -242,28 +269,19 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Cell update
-  const updateRow = (idx, field, val) => {
-    setRows(prev => {
-      const n = [...prev];
-      n[idx] = { ...n[idx], [field]: val };
-      return n;
-    });
-    setDirty(true);
-  };
-
   // Save
   const save = useCallback(async () => {
     if (!contractId) return true;
-    const today = todayIso();
     const payload = rows.filter(r => !isRowEmpty(r)).map(r => ({
-      // loss_id lets the server preserve the original reported_date for rows
-      // already in the table — without it the delete+reinsert would reset it.
       loss_id: r.lossId || null,
-      // For brand-new rows pin reported_date to today; existing rows keep
-      // whatever the server already has.
-      reported_date: r.reportedDate || (r.lossId ? null : today),
+      // Actuarial reporting date drives where the loss is stripped from
+      // (nullable → server falls back to date_of_loss + a quarter). The
+      // "saved in Universe" date (reported_date) is set server-side from the
+      // report date, so it isn't sent from here.
+      actuarial_reported_date: r.actuarialReportedDate || null,
       insured_name: r.insuredName, loss_name: r.lossName,
+      // Underwriting year drives which triangle row the loss strips from.
+      uw_year: r.uwYear ? Number(String(r.uwYear).replace(/[^0-9]/g, '')) || null : null,
       date_of_loss: dateInputValue(r.dateOfLoss) || null, class_of_business: r.classOfBusiness,
       paid: parseNum(r.paid), os: parseNum(r.os), incurred: incurred(r),
     }));
@@ -289,6 +307,39 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
     setDirty(true);
   };
 
+  // AI: ask the server to map each loss to the development quarter it most
+  // likely entered the triangle. Advisory — results open in a review modal.
+  const runSuggestQuarters = useCallback(async () => {
+    if (!contractId) return;
+    setSuggesting(true);
+    try {
+      const out = await api.suggestLossQuarters(contractId, quoteMode ? { quote: true } : undefined);
+      setSuggestState({ suggestions: out?.suggestions || [], provider: out?.provider || null });
+    } catch (e) {
+      const msg = e?.status === 503
+        ? 'AI is not configured on the server (set an LLM API key).'
+        : (e?.message || 'AI mapping failed');
+      setSaveMsg({ type: 'err', text: msg });
+      setTimeout(() => setSaveMsg(null), 4000);
+    } finally {
+      setSuggesting(false);
+    }
+  }, [contractId, quoteMode]);
+
+  // Apply chosen suggestions: fill the actuarial reported date on matching
+  // rows (by loss_id). The user still reviews and saves.
+  const applyQuarterSuggestions = useCallback((chosen) => {
+    const byId = new Map(chosen.map((s) => [String(s.loss_id), s.suggested_reported_date]));
+    setRows((prev) => prev.map((r) => {
+      const d = r.lossId ? byId.get(String(r.lossId)) : null;
+      return d ? { ...r, actuarialReportedDate: d } : r;
+    }));
+    setDirty(true);
+    setSuggestState(null);
+    setSaveMsg({ type: 'ok', text: `Applied ${chosen.length} suggestion${chosen.length === 1 ? '' : 's'} — review and save` });
+    setTimeout(() => setSaveMsg(null), 3000);
+  }, []);
+
   // Paste handler — auto-expands rows
   const handlePaste = useCallback((e) => {
     const text = e.clipboardData?.getData('text/plain');
@@ -313,11 +364,19 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
           const colIdx = ci + pc;
           if (colIdx < COLS.length) {
             let v = val.trim();
+            const key = COLS[colIdx].key;
             // Normalize date values on paste
-            if (COLS[colIdx].key === 'dateOfLoss' && v) v = dateInputValue(v);
-            n[rowIdx] = { ...n[rowIdx], [COLS[colIdx].key]: v };
+            if ((key === 'dateOfLoss' || key === 'actuarialReportedDate') && v) v = dateInputValue(v);
+            n[rowIdx] = { ...n[rowIdx], [key]: v };
+            // A pasted UW year is a manual override.
+            if (key === 'uwYear') n[rowIdx].uwYearManual = String(v).trim() !== '';
           }
         });
+        // Auto-derive UW year for rows where it wasn't pasted manually.
+        if (!n[rowIdx].uwYearManual) {
+          const d = deriveUwYear(n[rowIdx]);
+          if (d) n[rowIdx] = { ...n[rowIdx], uwYear: d };
+        }
       });
       // Ensure minimum trailing empty rows
       let lastFilled = n.length - 1;
@@ -331,16 +390,24 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
 
   // Auto-add row when typing in last row
   const handleChange = (idx, field, val) => {
-    // Normalize date values when typing/changing
-    const v = field === 'dateOfLoss' ? dateInputValue(val) || val : val;
-    updateRow(idx, field, v);
-    if (idx >= rows.length - 2 && val) {
-      setRows(prev => {
-        const n = [...prev];
-        while (n.length < idx + 3) n.push(emptyRow());
-        return n;
-      });
-    }
+    const v = (field === 'dateOfLoss' || field === 'actuarialReportedDate')
+      ? dateInputValue(val) || val
+      : val;
+    setRows(prev => {
+      const n = [...prev];
+      const row = { ...n[idx], [field]: v };
+      if (field === 'uwYear') {
+        // A typed UW year is a manual override; clearing it re-enables auto.
+        row.uwYearManual = String(v).trim() !== '';
+        if (!row.uwYearManual) row.uwYear = deriveUwYear(row);
+      } else if (field === 'dateOfLoss' && !row.uwYearManual) {
+        row.uwYear = deriveUwYear(row) || row.uwYear;
+      }
+      n[idx] = row;
+      if (idx >= n.length - 2 && val) { while (n.length < idx + 3) n.push(emptyRow()); }
+      return n;
+    });
+    setDirty(true);
   };
 
   // Total
@@ -386,6 +453,13 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                 style={{ opacity: serverLosses.length === 0 ? 0.5 : 1 }}>
                 📊 Loss Analysis
               </button>
+              <button className="ll-btn ll-btn--analysis"
+                onClick={runSuggestQuarters}
+                disabled={serverLosses.length === 0 || suggesting}
+                title={serverLosses.length === 0 ? 'Save losses first to map them to the triangle' : 'Use AI to suggest the development quarter each loss entered the triangle'}
+                style={{ opacity: serverLosses.length === 0 ? 0.5 : 1 }}>
+                {suggesting ? '… Mapping' : '✨ Map to quarters (AI)'}
+              </button>
               <button className="ll-btn ll-btn--load" onClick={loadData} title="Reload from server">⟳ Load</button>
               <button className="ll-btn ll-btn--clear" onClick={clear} title="Clear all rows">✕ Clear</button>
               <button className={`ll-btn ll-btn--save ${dirty ? 'll-btn--dirty' : ''}`} onClick={save} title="Save to server">💾 Save</button>
@@ -400,9 +474,9 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                 <thead>
                   <tr>
                     <th className="ll-th ll-th--num">#</th>
-                    {COLS.map(c => <th key={c.key} className="ll-th" style={{ minWidth: c.w }}>{c.label}</th>)}
+                    {COLS.map(c => <th key={c.key} className="ll-th" style={{ minWidth: c.w }} title={c.title}>{c.label}</th>)}
                     <th className="ll-th ll-th--calc">Incurred</th>
-                    <th className="ll-th" style={{ minWidth: 100 }} title="Date this loss was first put into the contract — set on save and preserved across edits.">Reported</th>
+                    <th className="ll-th" style={{ minWidth: 100 }} title="Saved in Universe — mirrors the loss-list report date. Set automatically on save.">Saved</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -414,7 +488,25 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                         <td className="ll-td ll-td--num">{i + 1}</td>
                         {COLS.map((c, ci) => (
                           <td key={c.key} className="ll-td">
-                            {c.type === 'num' ? (
+                            {c.type === 'actuarial' ? (
+                              <>
+                                <input
+                                  className="ll-inp"
+                                  type="date"
+                                  value={r.actuarialReportedDate || ''}
+                                  data-row={i} data-col={ci}
+                                  onChange={e => handleChange(i, 'actuarialReportedDate', e.target.value)}
+                                  onPaste={handlePaste}
+                                  title={(!empty && !r.actuarialReportedDate)
+                                    ? 'No actuarial reported date — this loss is placed by the loss-date proxy (estimated quarter). Set a date to place it precisely.'
+                                    : 'Actuarial reported date — drives where this loss is stripped from.'}
+                                  style={(!empty && !r.actuarialReportedDate) ? { borderColor: 'rgba(251,146,60,0.6)' } : undefined}
+                                />
+                                {(!empty && !r.actuarialReportedDate) && (
+                                  <span title="Placed by loss-date proxy" style={{ marginLeft: 4, color: '#fbbf24', fontSize: 11 }}>⚠ proxy</span>
+                                )}
+                              </>
+                            ) : c.type === 'num' ? (
                               <NumCell value={r[c.key]} onChange={v => handleChange(i, c.key, v)}
                                 onPaste={handlePaste} dataRow={i} dataCol={ci} />
                             ) : c.type === 'cob' ? (
@@ -428,7 +520,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                             ) : (
                               <input
                                 className="ll-inp"
-                                type={c.type === 'date' ? 'date' : 'text'}
+                                type={c.type === 'date' ? 'date' : c.type === 'year' ? 'number' : 'text'}
                                 value={r[c.key] || ''}
                                 data-row={i} data-col={ci}
                                 onChange={e => handleChange(i, c.key, e.target.value)}
@@ -448,8 +540,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                   {/* Totals */}
                   <tr className="ll-total">
                     <td className="ll-td ll-td--num"></td>
-                    <td className="ll-td" colSpan={3}><span className="ll-total-label">Total</span></td>
-                    <td className="ll-td"></td>
+                    <td className="ll-td" colSpan={6}><span className="ll-total-label">Total</span></td>
                     <td className="ll-td ll-td--calc">{fmtN(totalPaid)}</td>
                     <td className="ll-td ll-td--calc">{fmtN(totalOS)}</td>
                     <td className="ll-td ll-td--calc ll-td--total">{fmtN(totalInc)}</td>
@@ -464,6 +555,15 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
               losses={serverLosses}
               lossType={lossType}
               onClose={() => setShowAnalysis(false)}
+            />
+          )}
+          {suggestState && (
+            <LossQuarterSuggestModal
+              suggestions={suggestState.suggestions}
+              serverLosses={serverLosses}
+              provider={suggestState.provider}
+              onApply={applyQuarterSuggestions}
+              onClose={() => setSuggestState(null)}
             />
           )}
         </div>

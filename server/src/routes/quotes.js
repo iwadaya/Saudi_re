@@ -1,9 +1,11 @@
 // server/src/routes/quotes.js — Quote CRUD + sub-entities, using quote_* tables
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { asyncHandler, numOrNull, dateOrNull, boolOrDefault } from '../helpers.js';
+import { asyncHandler, numOrNull, dateOrNull, boolOrDefault, safeUwYear, preserveBool, preserveNum, assertExists, isStaleSince } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from '../lib/triangleBounds.js';
+import { stripTriangleCells, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from '../lib/triangleStripping.js';
+import { suggestLossQuarters } from '../lib/lossQuarterMapper.js';
 import { logAudit } from '../services/audit.js';
 import { contractContextJoins } from '../db/contractJoins.js';
 import { assertEntityUnchanged, optimisticLockOverrideRequested } from '../db/optimisticLock.js';
@@ -540,7 +542,8 @@ router.get("/quotes/:id", asyncHandler(async (req, res) => {
       cession_pct:detail.cession_pct,cession_amt:detail.cession_amt,surplus_max_retention:detail.surplus_max_retention,
       num_lines:detail.num_lines,total_capacity:detail.total_capacity,event_limit:detail.event_limit,aal:detail.aal,
       quota_share_epi:detail.quota_share_epi,surplus_epi:detail.surplus_epi,
-      brokerage_pct:detail.brokerage_pct,taxes_pct:detail.taxes_pct,loss_cap_pct:detail.loss_cap_pct},
+      brokerage_pct:detail.brokerage_pct,taxes_pct:detail.taxes_pct,loss_cap_pct:detail.loss_cap_pct,
+      strip_large_cat_losses:detail.strip_large_cat_losses??true},
     commissions:{mode:comm.mode||"FIXED",fixed_commission_pct:comm.fixed_commission_pct,
       fixed_commission_qs_pct:comm.fixed_commission_qs_pct,fixed_commission_surplus_pct:comm.fixed_commission_surplus_pct,
       provisional_commission_pct:comm.provisional_commission_pct,
@@ -603,8 +606,8 @@ router.put("/quotes/:id", validateBody(quotePutBodySchema), asyncHandler(async (
     const d=terms.detail;
     // renewal_date lives on the quote (header) — the detail-table
     // renewal_date column is deprecated, no longer written here.
-    await cl.query(`INSERT INTO public.quote_prop_details (quote_id,triangulations_available,qs_limit,retention_pct,retention_amt,cession_pct,cession_amt,surplus_max_retention,num_lines,total_capacity,event_limit,aal,quota_share_epi,surplus_epi,brokerage_pct,taxes_pct,loss_cap_pct,experience_start_year) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) ON CONFLICT (quote_id) DO UPDATE SET triangulations_available=EXCLUDED.triangulations_available,qs_limit=EXCLUDED.qs_limit,retention_pct=EXCLUDED.retention_pct,retention_amt=EXCLUDED.retention_amt,cession_pct=EXCLUDED.cession_pct,cession_amt=EXCLUDED.cession_amt,surplus_max_retention=EXCLUDED.surplus_max_retention,num_lines=EXCLUDED.num_lines,total_capacity=EXCLUDED.total_capacity,event_limit=EXCLUDED.event_limit,aal=EXCLUDED.aal,quota_share_epi=EXCLUDED.quota_share_epi,surplus_epi=EXCLUDED.surplus_epi,brokerage_pct=EXCLUDED.brokerage_pct,taxes_pct=EXCLUDED.taxes_pct,loss_cap_pct=EXCLUDED.loss_cap_pct,experience_start_year=EXCLUDED.experience_start_year,updated_at=now()`,
-      [id,boolOrDefault(d.triangulations_available,true),numOrNull(d.qs_limit),numOrNull(d.retention_pct),numOrNull(d.retention_amt),numOrNull(d.cession_pct),numOrNull(d.cession_amt),numOrNull(d.surplus_max_retention),numOrNull(d.num_lines),numOrNull(d.total_capacity),numOrNull(d.event_limit),numOrNull(d.aal),numOrNull(d.quota_share_epi),numOrNull(d.surplus_epi),numOrNull(d.brokerage_pct),numOrNull(d.taxes_pct),numOrNull(d.loss_cap_pct),numOrNull(d.experience_start_year??d.experienceStartYear)]);
+    await cl.query(`INSERT INTO public.quote_prop_details (quote_id,triangulations_available,qs_limit,retention_pct,retention_amt,cession_pct,cession_amt,surplus_max_retention,num_lines,total_capacity,event_limit,aal,quota_share_epi,surplus_epi,brokerage_pct,taxes_pct,loss_cap_pct,experience_start_year,strip_large_cat_losses) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) ON CONFLICT (quote_id) DO UPDATE SET triangulations_available=EXCLUDED.triangulations_available,qs_limit=EXCLUDED.qs_limit,retention_pct=EXCLUDED.retention_pct,retention_amt=EXCLUDED.retention_amt,cession_pct=EXCLUDED.cession_pct,cession_amt=EXCLUDED.cession_amt,surplus_max_retention=EXCLUDED.surplus_max_retention,num_lines=EXCLUDED.num_lines,total_capacity=EXCLUDED.total_capacity,event_limit=EXCLUDED.event_limit,aal=EXCLUDED.aal,quota_share_epi=EXCLUDED.quota_share_epi,surplus_epi=EXCLUDED.surplus_epi,brokerage_pct=EXCLUDED.brokerage_pct,taxes_pct=EXCLUDED.taxes_pct,loss_cap_pct=EXCLUDED.loss_cap_pct,experience_start_year=EXCLUDED.experience_start_year,strip_large_cat_losses=EXCLUDED.strip_large_cat_losses,updated_at=now()`,
+      [id,boolOrDefault(d.triangulations_available,true),numOrNull(d.qs_limit),numOrNull(d.retention_pct),numOrNull(d.retention_amt),numOrNull(d.cession_pct),numOrNull(d.cession_amt),numOrNull(d.surplus_max_retention),numOrNull(d.num_lines),numOrNull(d.total_capacity),numOrNull(d.event_limit),numOrNull(d.aal),numOrNull(d.quota_share_epi),numOrNull(d.surplus_epi),numOrNull(d.brokerage_pct),numOrNull(d.taxes_pct),numOrNull(d.loss_cap_pct),numOrNull(d.experience_start_year??d.experienceStartYear),boolOrDefault(d.strip_large_cat_losses??d.stripLargeCatLosses,true)]);
   }
   if(terms.commissions) {
     const cm=terms.commissions;
@@ -691,6 +694,94 @@ router.get("/quotes/:id/triangles/:type", asyncHandler(async (req, res) => {
   );
   res.json({ cells: rows });
 }));
+// Two-variant triangle (full + stripped of large/cat losses) — quote mirror
+// of the treaty route. Losses live in the shared contract_* tables linked to
+// the quote via quote_id on the report.
+router.get("/quotes/:id/triangles/:type/with-exclusions", asyncHandler(async (req, res) => {
+  const { id, type } = req.params;
+  const typeParse = triangleTypeSchema.safeParse(type.toUpperCase());
+  if (!typeParse.success) return res.status(400).json({ error: 'Invalid triangle type', code: 'VALIDATION_FAILED' });
+  const t = typeParse.data;
+  // INCURRED is not stored as its own triangle — it is paid + OS. Build the
+  // combined full triangle here so the incurred loss amount can be stripped
+  // directly from it (see combineIncurredCells in lib/triangleStripping.js).
+  let cells;
+  if (t === 'INCURRED') {
+    const [{ rows: paidCells }, { rows: osCells }] = await Promise.all([
+      pool.query(`SELECT origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type='CLAIMS_PAID'::public.triangle_type ORDER BY origin_year,dev_months`, [id]),
+      pool.query(`SELECT origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type='CLAIMS_OS'::public.triangle_type ORDER BY origin_year,dev_months`, [id]),
+    ]);
+    cells = combineIncurredCells(paidCells, osCells);
+  } else {
+    const { rows } = await pool.query(
+      `SELECT cell_id,origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type=$2::public.triangle_type ORDER BY origin_year,dev_months`,
+      [id, t]
+    );
+    cells = rows;
+  }
+  const { rows: largeLosses } = await pool.query(
+    `SELECT ll.uw_year, ll.date_of_loss, ll.actuarial_reported_date, ll.paid, ll.os, ll.incurred
+       FROM public.contract_large_losses ll
+       JOIN public.contract_large_loss_report r ON r.report_id = ll.report_id
+      WHERE r.quote_id = $1`, [id]
+  );
+  const { rows: catLosses } = await pool.query(
+    `SELECT cl.uw_year, cl.date_of_loss, cl.actuarial_reported_date, cl.paid, cl.os, cl.incurred
+       FROM public.contract_cat_losses cl
+       JOIN public.contract_cat_loss_report r ON r.report_id = cl.report_id
+      WHERE r.quote_id = $1`, [id]
+  );
+  const { rows: pd } = await pool.query(`SELECT strip_large_cat_losses FROM public.quote_prop_details WHERE quote_id=$1`, [id]);
+  const stripEnabled = pd[0]?.strip_large_cat_losses !== false; // default true
+  const field = stripEnabled ? stripFieldForType(t) : null;
+  const allLosses = field ? [...largeLosses, ...catLosses] : [];
+  const stripped = stripTriangleCells(cells, allLosses, field);
+  const placement = summarizeLossPlacement(cells, allLosses, field);
+  res.json({
+    full: { cells },
+    stripped: { cells: stripped },
+    exclusions: {
+      largeLossCount: largeLosses.length, catLossCount: catLosses.length, applies: !!field,
+      proxyPlaced: placement.proxy, reportedPlaced: placement.reported,
+    },
+  });
+}));
+// Per-quote choice of whether large + cat losses are stripped from the triangle.
+router.put("/quotes/:id/strip-large-cat", asyncHandler(async (req, res) => {
+  const strip = req.body?.strip_large_cat_losses !== false;
+  // Upsert so the toggle persists even if Dev Factors is reached before the
+  // detail screen has created the prop-details row (no silent no-op).
+  await pool.query(
+    `INSERT INTO public.quote_prop_details (quote_id, strip_large_cat_losses)
+       VALUES ($1, $2)
+     ON CONFLICT (quote_id) DO UPDATE
+       SET strip_large_cat_losses=EXCLUDED.strip_large_cat_losses, updated_at=now()`,
+    [req.params.id, strip]
+  );
+  res.json({ ok: true, strip_large_cat_losses: strip });
+}));
+// Loss-selection staleness — quote mirror of the treaty route (see treatyData.js).
+router.get("/quotes/:id/losses/staleness", asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const [lossRes, detRes] = await Promise.all([
+    pool.query(
+      `SELECT GREATEST(
+         (SELECT MAX(l.updated_at) FROM public.contract_large_losses l
+            JOIN public.contract_large_loss_report r ON r.report_id=l.report_id WHERE r.quote_id=$1),
+         (SELECT MAX(l.updated_at) FROM public.contract_cat_losses l
+            JOIN public.contract_cat_loss_report r ON r.report_id=l.report_id WHERE r.quote_id=$1)
+       ) AS ts`,
+      [id]
+    ),
+    pool.query(
+      `SELECT loss_selection_saved_at AS ts FROM public.quote_prop_details WHERE quote_id=$1`,
+      [id]
+    ),
+  ]);
+  const lossesUpdatedAt = lossRes.rows[0]?.ts || null;
+  const selectionSavedAt = detRes.rows[0]?.ts || null;
+  res.json({ lossesUpdatedAt, selectionSavedAt, stale: isStaleSince(lossesUpdatedAt, selectionSavedAt) });
+}));
 router.post("/quotes/:id/triangles/:type", asyncHandler(async (req, res) => {
   const { id, type } = req.params;
   const typeParse = triangleTypeSchema.safeParse(type.toUpperCase());
@@ -751,6 +842,30 @@ router.get("/quotes/:id/dev-factors/:type", asyncHandler(async (req, res) => {
   );
   res.json(rows);
 }));
+// Quote mirror of the treaty dev-factor staleness check (see treatyData.js).
+router.get("/quotes/:id/dev-factors/:type/staleness", asyncHandler(async (req, res) => {
+  const { id, type } = req.params;
+  const typeParse = triangleTypeSchema.safeParse(type.toUpperCase());
+  if (!typeParse.success) return res.status(400).json({ error: 'Invalid triangle type', code: 'VALIDATION_FAILED' });
+  const t = typeParse.data;
+  const sourceTypes = t === 'INCURRED' ? ['CLAIMS_PAID', 'CLAIMS_OS'] : [t];
+  const [triRes, dfRes] = await Promise.all([
+    pool.query(
+      `SELECT MAX(updated_at) AS ts FROM public.quote_triangle_cells
+        WHERE quote_id=$1 AND type = ANY($2::public.triangle_type[])`,
+      [id, sourceTypes]
+    ),
+    pool.query(
+      `SELECT MAX(saved_at) AS ts FROM public.quote_dev_factor
+        WHERE quote_id=$1 AND triangle_type=$2::public.triangle_type`,
+      [id, t]
+    ),
+  ]);
+  const triangleUpdatedAt = triRes.rows[0]?.ts || null;
+  const factorsSavedAt = dfRes.rows[0]?.ts || null;
+  const stale = !!(triangleUpdatedAt && factorsSavedAt && new Date(triangleUpdatedAt) > new Date(factorsSavedAt));
+  res.json({ triangleUpdatedAt, factorsSavedAt, stale });
+}));
 router.put("/quotes/:id/dev-factors/:type", validateBody(devFactorPutSchema), asyncHandler(async (req, res) => {
   const { id, type } = req.params;
   const typeParse = triangleTypeSchema.safeParse(type.toUpperCase());
@@ -796,7 +911,7 @@ router.put("/quotes/:id/dev-factors/:type", validateBody(devFactorPutSchema), as
     await logAudit(pool, {
       entityType: 'QUOTE', entityId: id, eventType: 'DEV_FACTORS_SAVED',
       actor: req.body?._actor || req.user?.displayName || 'SYSTEM',
-      payload: { triangle_type: t, count: factors.length, method: req.body?.method || null },
+      payload: { triangle_type: t, count: factors.length, method: req.body?.method || null, basis: req.body?.basis || null },
     });
     res.json({ ok: true });
   } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }
@@ -812,21 +927,37 @@ router.get("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
 router.put("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
   const {id}=req.params;const {report_date,losses=[]}=req.body;const cl=await pool.connect();
   try{await cl.query("BEGIN");
+  await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
   // No UNIQUE(quote_id) on contract_large_loss_report, so check existence first
   const {rows:existing}=await cl.query(`SELECT report_id FROM public.contract_large_loss_report WHERE quote_id=$1`,[id]);
   let rid;
   if(existing.length){rid=existing[0].report_id;await cl.query(`UPDATE public.contract_large_loss_report SET report_date=$2,updated_at=now() WHERE report_id=$1`,[rid,dateOrNull(report_date)]);
   }else{const {rows:rr}=await cl.query(`INSERT INTO public.contract_large_loss_report (quote_id,report_date) VALUES ($1,$2) RETURNING report_id`,[id,dateOrNull(report_date)]);rid=rr[0].report_id;}
-  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
+  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
   const prevReported=new Map(prev.map(r=>[String(r.loss_id),r.reported_date]));
+  const prevSelected=new Map(prev.map(r=>[String(r.loss_id),r.is_selected]));
+  const prevInfl=new Map(prev.map(r=>[String(r.loss_id),r.inflation_factor]));
   await cl.query(`DELETE FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
   const today=new Date().toISOString().slice(0,10);
+  const reportSaved=dateOrNull(report_date)||today;
   const savedLosses = [];
   for(const l of losses) {
-    const existedReported=l.loss_id?prevReported.get(String(l.loss_id)):null;
-    const reported=dateOrNull(l.reported_date)||existedReported||today;
-    const {rows:ins}=await cl.query(`INSERT INTO public.contract_large_losses (report_id,loss_id,uw_year,insured_name,loss_name,date_of_loss,class_of_business,paid,os,incurred,is_selected,inflation_factor,reported_date) VALUES ($1,COALESCE($2,gen_random_uuid()),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING loss_id`,
-    [rid,l.loss_id||null,numOrNull(l.uw_year),l.insured_name,l.loss_name,dateOrNull(l.date_of_loss),l.class_of_business,numOrNull(l.paid),numOrNull(l.os),numOrNull(l.incurred),l.is_selected??true,numOrNull(l.inflation_factor)??1,reported]);
+    const key=l.loss_id?String(l.loss_id):null;
+    const existedReported=key?prevReported.get(key):null;
+    // "Saved in Universe": report date of the cycle the loss first entered,
+    // preserved across saves for year-over-year comparison (new rows take the
+    // current report date). Actuarial date is the user-entered booking date
+    // that drives stripping (nullable).
+    const reported=existedReported||reportSaved;
+    const actuarial=dateOrNull(l.actuarial_reported_date);
+    const pinc=dateOrNull(l.policy_inception_date);
+    // NaN-guarded underwriting year (see treaty handler).
+    const uwy=safeUwYear(l);
+    // Preserve selection + inflation when the save omits them.
+    const selected=preserveBool(l.is_selected, key?prevSelected.get(key):undefined);
+    const infl=preserveNum(l.inflation_factor, key?prevInfl.get(key):undefined, 1);
+    const {rows:ins}=await cl.query(`INSERT INTO public.contract_large_losses (report_id,loss_id,uw_year,insured_name,loss_name,date_of_loss,class_of_business,paid,os,incurred,is_selected,inflation_factor,reported_date,actuarial_reported_date,policy_inception_date) VALUES ($1,COALESCE($2,gen_random_uuid()),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING loss_id`,
+    [rid,l.loss_id||null,uwy,l.insured_name,l.loss_name,dateOrNull(l.date_of_loss),l.class_of_business,numOrNull(l.paid),numOrNull(l.os),numOrNull(l.incurred),selected,infl,reported,actuarial,pinc]);
     savedLosses.push(ins[0]?.loss_id);
   }
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
@@ -1523,38 +1654,90 @@ router.put("/quotes/:id/cat-losses", asyncHandler(async (req, res) => {
   const {id}=req.params;const {report_date,losses=[]}=req.body;const cl=await pool.connect();
   const reportDateNorm=report_date?new Date(report_date).toISOString().slice(0,10):null;
   try{await cl.query("BEGIN");
+  await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
   const {rows:existing}=await cl.query(`SELECT report_id FROM public.contract_cat_loss_report WHERE quote_id=$1`,[id]);
   let rid;
   if(existing.length){rid=existing[0].report_id;await cl.query(`UPDATE public.contract_cat_loss_report SET report_date=$2,updated_at=now() WHERE report_id=$1`,[rid,reportDateNorm]);
   }else{const {rows:rr}=await cl.query(`INSERT INTO public.contract_cat_loss_report (quote_id,report_date) VALUES ($1,$2) RETURNING report_id`,[id,reportDateNorm]);rid=rr[0].report_id;}
-  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
+  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
   const prevReported=new Map(prev.map(r=>[String(r.loss_id),r.reported_date]));
+  const prevSelected=new Map(prev.map(r=>[String(r.loss_id),r.is_selected]));
+  const prevInfl=new Map(prev.map(r=>[String(r.loss_id),r.inflation_factor]));
   await cl.query(`DELETE FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
   const today=new Date().toISOString().slice(0,10);
+  const reportSaved=reportDateNorm||today;
   // Assign loss IDs up-front so we can batch the INSERT and still
   // return the same loss_ids array we used to one-row-at-a-time.
   const lossesWithIds = losses.map((l) => {
-    const existedReported = l.loss_id ? prevReported.get(String(l.loss_id)) : null;
+    const key = l.loss_id ? String(l.loss_id) : null;
+    const existedReported = key ? prevReported.get(key) : null;
     return {
       ...l,
       _loss_id: l.loss_id || randomUUID(),
-      _reported: l.reported_date ? new Date(l.reported_date).toISOString().slice(0,10) : (existedReported||today),
+      // "Saved in Universe": report date of the cycle the loss first entered,
+      // preserved across saves for year-over-year comparison. New rows take
+      // the current report date.
+      _reported: existedReported || reportSaved,
+      // Actuarial reporting date — user-entered, nullable, drives stripping.
+      _actuarial: l.actuarial_reported_date ? new Date(l.actuarial_reported_date).toISOString().slice(0,10) : null,
       _dol: l.date_of_loss ? new Date(l.date_of_loss).toISOString().slice(0,10) : null,
+      _pinc: l.policy_inception_date ? new Date(l.policy_inception_date).toISOString().slice(0,10) : null,
+      // NaN-guarded underwriting year (see treaty handler).
+      _uwy: safeUwYear(l),
+      // Preserve selection + inflation when the save omits them.
+      _selected: preserveBool(l.is_selected, key ? prevSelected.get(key) : undefined),
+      _infl: preserveNum(l.inflation_factor, key ? prevInfl.get(key) : undefined, 1),
     };
   });
   const lossesInsert = buildBatchInsert({
     table: 'public.contract_cat_losses',
-    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date'],
+    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date','actuarial_reported_date','policy_inception_date'],
     rows: lossesWithIds.map((l) => [
-      l._loss_id, numOrNull(l.uw_year), l.insured_name, l.loss_name, l._dol,
+      l._loss_id, l._uwy, l.insured_name, l.loss_name, l._dol,
       l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
-      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported,
+      l._selected, l._infl, l._reported, l._actuarial, l._pinc,
     ]),
     leadingId: rid,
   });
   if (lossesInsert) await cl.query(lossesInsert.sql, lossesInsert.params);
   const savedLosses = lossesWithIds.map((l) => l._loss_id);
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
+}));
+
+// POST /quotes/:id/losses/suggest-quarters — AI loss-to-quarter mapping
+// (quote mirror of the treaty route). Advisory: returns suggestions only.
+router.post("/quotes/:id/losses/suggest-quarters", asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { rows: incurredCells } = await pool.query(
+    `SELECT origin_year, dev_months, SUM(cum_value) AS cum_value
+       FROM public.quote_triangle_cells
+      WHERE quote_id=$1 AND type IN ('CLAIMS_PAID','CLAIMS_OS')
+      GROUP BY origin_year, dev_months
+      ORDER BY origin_year, dev_months`, [id]
+  );
+  const { rows: largeLosses } = await pool.query(
+    `SELECT ll.loss_id, ll.uw_year, ll.date_of_loss, ll.actuarial_reported_date, ll.paid, ll.os, ll.incurred
+       FROM public.contract_large_losses ll
+       JOIN public.contract_large_loss_report r ON r.report_id = ll.report_id
+      WHERE r.quote_id = $1`, [id]
+  );
+  const { rows: catLosses } = await pool.query(
+    `SELECT cl.loss_id, cl.uw_year, cl.date_of_loss, cl.actuarial_reported_date, cl.paid, cl.os, cl.incurred
+       FROM public.contract_cat_losses cl
+       JOIN public.contract_cat_loss_report r ON r.report_id = cl.report_id
+      WHERE r.quote_id = $1`, [id]
+  );
+  const losses = [...largeLosses, ...catLosses];
+  if (!losses.length) return res.json({ suggestions: [], provider: null });
+  try {
+    const out = await suggestLossQuarters({ losses, triangleCells: incurredCells, triangleType: 'INCURRED' });
+    res.json(out);
+  } catch (e) {
+    const msg = e?.message || 'AI mapping failed';
+    const noProvider = /No LLM provider configured/i.test(msg);
+    logger.error('[quotes losses/suggest-quarters] failed', { error: msg });
+    return res.status(noProvider ? 503 : 502).json({ error: msg });
+  }
 }));
 
 // PUT /quotes/:id/cobs
@@ -1762,6 +1945,14 @@ router.put("/quotes/:id/loss-selection/:lossType/snapshot", asyncHandler(async (
     leadingId: sid,
   });
   if (snapItemInsert) await cl.query(snapItemInsert.sql, snapItemInsert.params);
+  // Mark the selection as saved now. Upsert so it persists even if Loss
+  // Selection is reached before the detail screen created the row.
+  await cl.query(
+    `INSERT INTO public.quote_prop_details (quote_id, loss_selection_saved_at)
+       VALUES ($1, now())
+     ON CONFLICT (quote_id) DO UPDATE SET loss_selection_saved_at=now(), updated_at=now()`,
+    [id]
+  );
   await cl.query("COMMIT");res.json({ok:true,snapshot_id:sid});
   }catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));

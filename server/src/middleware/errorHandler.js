@@ -1,13 +1,37 @@
 import { env } from '../config/env.js';
 import { logger, serializeError } from '../lib/logger.js';
 
+// Known Postgres SQLSTATE codes mapped to client-facing HTTP status, code and
+// message. These turn a raw driver error (which otherwise resolves to 500) into
+// an accurate 4xx — e.g. writing to a non-existent treaty id is a client error,
+// not a server fault.
+const PG_ERROR = {
+  '23503': { status: 400, code: 'FK_VIOLATION',    message: 'Referenced record does not exist' },
+  '22P02': { status: 400, code: 'INVALID_ID',      message: 'Invalid identifier format' },
+  '23505': { status: 409, code: 'DUPLICATE',       message: 'Record already exists' },
+  // raise_exception from a trigger — keep the trigger's own message, just the status.
+  'P0001': { status: 422, code: 'CHECK_VIOLATION', message: null },
+};
+
+function pgMapping(err) {
+  // Only treat as a pg error when the caller hasn't set an explicit HTTP status
+  // (app-level errors like STALE_WRITE/VALIDATION_FAILED set their own status).
+  const hasExplicitStatus = Number.isFinite(Number(err?.status ?? err?.statusCode));
+  if (hasExplicitStatus) return null;
+  return (typeof err?.code === 'string' && PG_ERROR[err.code]) || null;
+}
+
 function resolveStatus(err) {
-  const status = Number(err?.status || err?.statusCode || 500);
-  if (!Number.isFinite(status) || status < 400 || status > 599) return 500;
-  return status;
+  const explicit = Number(err?.status || err?.statusCode || 0);
+  if (Number.isFinite(explicit) && explicit >= 400 && explicit <= 599) return explicit;
+  const pg = pgMapping(err);
+  if (pg) return pg.status;
+  return 500;
 }
 
 function resolveCode(err, status) {
+  const pg = pgMapping(err);
+  if (pg) return pg.code;
   if (typeof err?.code === 'string' && err.code.trim()) return err.code;
   if (status === 404) return 'NOT_FOUND';
   if (status === 401) return 'UNAUTHORIZED';
@@ -19,7 +43,8 @@ function resolveCode(err, status) {
 export function errorHandler(err, req, res, _next) {
   const status = resolveStatus(err);
   const code = resolveCode(err, status);
-  const message = err?.message || 'Internal server error';
+  const pg = pgMapping(err);
+  const message = (pg && pg.message) || err?.message || 'Internal server error';
   const requestId = res.locals.requestId || req.id || null;
 
   const log = status >= 500 ? logger.error : logger.warn;

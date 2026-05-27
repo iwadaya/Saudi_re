@@ -21,7 +21,10 @@ const TRIANGLE_SOURCE = {
   PROP_PREMIUM_DEV_FACTORS: ['PREMIUM'],
   PROP_PAID_CLAIMS_DEV_FACTORS: ['CLAIMS_PAID'],
   PROP_OS_CLAIMS_DEV_FACTORS: ['CLAIMS_OS'],
-  PROP_INCURRED_DEV_FACTORS: ['CLAIMS_PAID', 'CLAIMS_OS'],
+  // Incurred is served as a single combined type — the server builds the full
+  // (paid + OS) triangle and strips the incurred amount directly from it. See
+  // combineIncurredCells in server/src/lib/triangleStripping.js.
+  PROP_INCURRED_DEV_FACTORS: ['INCURRED'],
 };
 
 const fmt4   = n => (n == null || !Number.isFinite(Number(n))) ? '' : Number(n).toFixed(4);
@@ -36,10 +39,18 @@ function serializeChosenSource(source) {
 }
 
 /* ═══════════════ Factor Table ═══════════════ */
-function FactorTable({ pattern, cdfs, editable, onChange, sectionClass }) {
+// `fullLdfs`/`fullCdfs`, when supplied, add a greyed-out reference row showing
+// what each factor would have been on the full (unstripped) triangle — the
+// "conservative" basis including large/cat events. When the table is editable
+// we also amber-flag any selected LDF that exceeds its full-basis counterpart,
+// which is unusual (stripping losses normally lowers factors) and worth a check.
+const OVER_FULL_EPS = 1e-4;
+function FactorTable({ pattern, cdfs, editable, onChange, sectionClass, fullLdfs, fullCdfs }) {
   const N = pattern?.length || 0;
   if (!N) return <div className="muted" style={{ padding: 12 }}>No factors calculated yet.</div>;
   const headers = Array.from({ length: N }, (_, i) => `${i + 1}–${i + 2}`);
+  const hasConservative = Array.isArray(fullLdfs) && fullLdfs.length > 0;
+  const refStyle = { color: 'var(--text-muted)', opacity: 0.7 };
   return (
     <div className={`df-card ${sectionClass || ''}`}>
       <div className="df-scrollX">
@@ -51,11 +62,26 @@ function FactorTable({ pattern, cdfs, editable, onChange, sectionClass }) {
           <tbody>
             <tr>
               <td className="df-r df-r--sticky">Link Ratio (LDF)</td>
-              {(pattern || []).map((v, i) => (
-                <td key={i} className="df-c">{editable
-                  ? <input className="df-input" value={fmt4(v)} onChange={e => onChange?.('ldf', i, e.target.value)} />
-                  : <div className="df-val">{fmt4(v)}</div>}</td>
-              ))}
+              {(pattern || []).map((v, i) => {
+                const overFull = editable && hasConservative
+                  && Number.isFinite(Number(v)) && Number.isFinite(Number(fullLdfs[i]))
+                  && Number(v) > Number(fullLdfs[i]) + OVER_FULL_EPS;
+                return (
+                  <td
+                    key={i}
+                    className="df-c"
+                    title={overFull ? 'Selected factor exceeds the full-triangle factor — please verify.' : undefined}
+                    style={overFull ? { background: 'rgba(251,146,60,0.16)' } : undefined}
+                  >{editable
+                    ? <input
+                        className="df-input"
+                        value={fmt4(v)}
+                        onChange={e => onChange?.('ldf', i, e.target.value)}
+                        style={overFull ? { borderColor: 'rgba(251,146,60,0.8)', color: '#fbbf24' } : undefined}
+                      />
+                    : <div className="df-val">{fmt4(v)}</div>}</td>
+                );
+              })}
             </tr>
             <tr>
               <td className="df-r df-r--sticky">Cumulative (CDF)</td>
@@ -65,6 +91,20 @@ function FactorTable({ pattern, cdfs, editable, onChange, sectionClass }) {
                   : <div className="df-val">{fmt4(v)}</div>}</td>
               ))}
             </tr>
+            {hasConservative && (<>
+              <tr title="What this factor would be on the full (unstripped) triangle — reference only.">
+                <td className="df-r df-r--sticky" style={refStyle}>Incl. L/C — LDF (ref)</td>
+                {Array.from({ length: N }, (_, i) => (
+                  <td key={i} className="df-c"><div className="df-val" style={refStyle}>{fmt4(fullLdfs[i])}</div></td>
+                ))}
+              </tr>
+              <tr title="Cumulative factor on the full (unstripped) triangle — reference only.">
+                <td className="df-r df-r--sticky" style={refStyle}>Incl. L/C — CDF (ref)</td>
+                {Array.from({ length: N }, (_, i) => (
+                  <td key={i} className="df-c"><div className="df-val" style={refStyle}>{fmt4((fullCdfs || [])[i])}</div></td>
+                ))}
+              </tr>
+            </>)}
           </tbody>
         </table>
       </div>
@@ -207,7 +247,8 @@ function MclProjectionsTable({ mcl }) {
 }
 
 /* ═══════════════ Link Ratio View with outlier exclusion ═══════════════ */
-function LinkRatioView({ matrix, years, numDevYears, excluded, setExcluded, onPatternChange }) {
+const AVG_METHOD_LABEL = { weighted: 'Weighted', simple: 'Simple', last3: 'Last 3', last5: 'Last 5' };
+function LinkRatioView({ matrix, years, numDevYears, excluded, setExcluded, onPatternChange, method = 'weighted' }) {
   // Rules-of-hooks: every hook must run on every render. The old
   // layout had `if (!matrix) return …` before the useEffect below,
   // which made the hook order conditional — lint error. Compute the
@@ -223,23 +264,15 @@ function LinkRatioView({ matrix, years, numDevYears, excluded, setExcluded, onPa
     setExcluded(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s; });
   };
 
+  // Single source of truth: the same calculatePattern used by the Dev Factors
+  // view, so the link-ratio recalculation honours the selected averaging method
+  // (weighted / simple / last3 / last5) as well as the excluded cells.
   const { filteredPattern, filteredCdfs } = useMemo(() => {
-    const pattern = [];
-    if (matrix && factors) {
-      for (let c = 0; c < N; c++) {
-        let sumPrev = 0, sumCur = 0;
-        for (let r = 0; r < matrix.length; r++) {
-          if (!inTriangle(r, c)) continue;
-          if (excluded.has(`${r}:${c}`)) continue;
-          if (factors[r]?.[c] != null) { sumPrev += matrix[r][c]; sumCur += matrix[r][c + 1]; }
-        }
-        pattern.push(sumPrev !== 0 ? sumCur / sumPrev : 1.0);
-      }
-    }
-    const cdfs = new Array(pattern.length + 1).fill(1.0);
-    for (let i = pattern.length - 1; i >= 0; i--) cdfs[i] = pattern[i] * cdfs[i + 1];
-    return { filteredPattern: pattern, filteredCdfs: cdfs.slice(0, pattern.length) };
-  }, [excluded, factors, inTriangle, matrix, N]);
+    if (!matrix || !factors) return { filteredPattern: [], filteredCdfs: [] };
+    const { pattern } = calculatePattern(matrix, factors, method, { excluded });
+    const cdfs = calculateCdfs(pattern, 1.0).slice(0, pattern.length);
+    return { filteredPattern: pattern, filteredCdfs: cdfs };
+  }, [excluded, factors, matrix, method]);
 
   // Notify parent of filtered pattern — hook now runs unconditionally
   useEffect(() => { onPatternChange?.(filteredPattern, filteredCdfs); }, [filteredCdfs, filteredPattern, onPatternChange]);
@@ -268,7 +301,7 @@ function LinkRatioView({ matrix, years, numDevYears, excluded, setExcluded, onPa
               </tr>
             ))}
             <tr style={{ borderTop: '2px solid rgba(var(--accent-rgb),0.3)' }}>
-              <td className="tri-yr" style={{ color: 'var(--accent)' }}>Weighted</td>
+              <td className="tri-yr" style={{ color: 'var(--accent)' }}>{AVG_METHOD_LABEL[method] || 'Weighted'}</td>
               {filteredPattern.map((v, c) => <td key={c} className="tri-cell"><div className="tri-inp" style={{ fontWeight: 700, color: 'var(--accent)' }}>{fmt4(v)}</div></td>)}
             </tr>
             <tr>
@@ -351,19 +384,69 @@ function ComparisonGraph({ pattern, paramCdfs, benchmarks }) {
   );
 }
 
+/* Build the full chain-ladder calc bundle (matrix → factors → pattern →
+   cdfs → projections) from a {type: cells[]} map. Pulled out of the
+   component so it can run once for the displayed basis and once for the
+   full (unstripped) basis that feeds the conservative reference column. */
+function buildCalcs(triCells, { triSources, startYear, numDevYears, avgMethod, years, excluded }) {
+  // Every screen now has a single triangle source — including Incurred, which
+  // the server returns as a combined (paid + OS) triangle already stripped of
+  // the incurred loss amount when applicable.
+  const d = buildMatrixFromCells(triCells[triSources[0]] || [], startYear, numDevYears);
+  if (!d) return null;
+  const matrix = d.matrix;
+  const factors = calculateAgeToAgeFactors(matrix);
+  const { pattern, warnings: patternWarnings } = calculatePattern(matrix, factors, avgMethod, { excluded });
+  const cdfs = calculateCdfs(pattern, 1.0);
+  const paramCdfs = fitExponentialCdfs(cdfs);
+  const paramLdfs = deriveLdfsFromCdfs(paramCdfs);
+  const clProjections = years.map((yr, r) => {
+    let latestVal = 0, latestCol = -1;
+    for (let c = matrix[r].length - 1; c >= 0; c--) if (matrix[r][c] != null) { latestVal = matrix[r][c]; latestCol = c; break; }
+    const cdf = latestCol >= 0 ? (cdfs[latestCol] || 1.0) : 1.0;
+    return { year: yr, latest: latestVal, cdf, ultimate: latestVal * cdf, ibnr: latestVal * cdf - latestVal };
+  });
+  return { matrix, factors, pattern, patternWarnings, cdfs, paramLdfs, paramCdfs, clProjections };
+}
+
+/* Read-only cumulative triangle grid (years × dev months). */
+function TriangleGrid({ matrix, years, numDevYears }) {
+  if (!matrix) return <div className="muted" style={{ padding: 12 }}>No triangle data.</div>;
+  const cols = Array.from({ length: numDevYears }, (_, i) => (i + 1) * 12);
+  const fmtCell = v => (v == null ? '' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 }));
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table className="tri-table">
+        <thead><tr><th className="tri-hdr" style={{ minWidth: 60 }}>Year</th>{cols.map(c => <th key={c} className="tri-hdr">{c}</th>)}</tr></thead>
+        <tbody>
+          {years.map((yr, r) => (
+            <tr key={yr}>
+              <td className="tri-yr">{yr}</td>
+              {cols.map((c, ci) => {
+                const v = matrix[r]?.[ci];
+                return <td key={ci} className={v == null ? 'tri-off' : 'tri-cell'}>{v != null && <div className="tri-inp">{fmtCell(v)}</div>}</td>;
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════
    MAIN DevFactorsScreen
    ═══════════════════════════════════════════ */
 export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   const contractId = useContractId();
-  const { state: appState } = useAppState();
+  const { state: appState, setSlice } = useAppState();
   const devType = TYPE_MAP[routeKey] || 'PREMIUM';
   const triSources = useMemo(() => TRIANGLE_SOURCE[routeKey] || ['PREMIUM'], [routeKey]);
-  const isIncurred = triSources.length > 1;
+  const isIncurred = devType === 'INCURRED';
   const isPremium = devType === 'PREMIUM';
 
   const meta = appState.triangleMeta || {};
-  const startYear = meta.startYear || 2015;
+  const startYear = meta.startYear ?? null;
   const inceptionYear = meta.inceptionYear || meta.renewalYear || new Date().getFullYear();
   const numDevYears = Math.max(1, Math.min(60, inceptionYear - startYear));
   const years = useMemo(() => Array.from({ length: numDevYears }, (_, i) => startYear + i), [numDevYears, startYear]);
@@ -376,7 +459,27 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   );
 
   const [view, setView] = useState('DEV_FACTORS'); // DEV_FACTORS | LINK_RATIOS | GRAPH
-  const [triCells, setTriCells] = useState({});
+  // Triangle basis is a persisted per-treaty choice: STRIPPED (the attritional
+  // basis — strip large/cat, the actuarial default) or FULL (use original data,
+  // which also folds large/cat into attritional on the summaries). It's derived
+  // from the saved strip_large_cat_losses flag and written through on toggle.
+  const stripLargeCat = appState.propTreatyDetail?.stripLargeCat !== false;
+  const basis = stripLargeCat ? 'STRIPPED' : 'FULL';
+  const setBasis = (next) => {
+    const strip = next === 'STRIPPED';
+    setSlice('propTreatyDetail', { ...(appState.propTreatyDetail || {}), stripLargeCat: strip });
+    api.setStripLargeCat(contractId, strip, apiOpts).catch(() => {});
+  };
+  // Per-type { full: cells[], stripped: cells[] } from the with-exclusions
+  // endpoint. Both variants are always fetched so the conservative
+  // (full-basis) reference column is available regardless of the basis shown.
+  const [triData, setTriData] = useState({});
+  // Munich Chain Ladder needs the paid and OS legs separately (full only — MCL
+  // does not use stripped data). The Incurred screen now sources a single
+  // combined INCURRED triangle, so fetch paid + OS here just for MCL.
+  const [mclCells, setMclCells] = useState({ CLAIMS_PAID: [], CLAIMS_OS: [] });
+  const [exclusions, setExclusions] = useState({ largeLossCount: 0, catLossCount: 0, applies: false, proxyPlaced: 0 });
+  const [lossWarningDismissed, setLossWarningDismissed] = useState(false);
   const [projMethod, setProjMethod] = useState('CHAIN');
   const [avgMethod, setAvgMethod] = useState('weighted');
   const [chosenBase, setChosenBase] = useState('ACTUAL');
@@ -395,6 +498,16 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   const [benchmarks, setBenchmarks] = useState(null);
   const [useMunich, setUseMunich] = useState(false);
   const [showMunichHelp, setShowMunichHelp] = useState(false);
+  const [showStrippedModal, setShowStrippedModal] = useState(false);
+  // True when the source triangle has been saved more recently than these
+  // factors — the underwriter should re-review. Re-fetched from the DB on
+  // mount and whenever `savedTick` bumps (after a successful save), so the
+  // banner reflects server ground truth rather than an optimistic local clear.
+  const [stale, setStale] = useState(false);
+  // True when no factors have ever been saved for this type — the projected
+  // summary / pricing then rest on placeholder curves until a selection is saved.
+  const [factorsNeverSaved, setFactorsNeverSaved] = useState(false);
+  const [savedTick, setSavedTick] = useState(0);
   // Both paid + OS triangles are required for Munich Chain Ladder, so on
   // screens that already source both (Incurred Dev Factors) the toggle
   // does meaningful work. On Premium / Paid-only / OS-only screens we
@@ -418,14 +531,73 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
     }
   }, [startYear, numDevYears]);
 
-  /* Load triangle cells */
+  /* Load triangle cells — both full + stripped variants for every source. */
   useEffect(() => {
     if (!contractId) { setLoading(false); return; }
     setLoading(true);
     Promise.all(triSources.map(t =>
-      api.getTriangle(contractId, t, apiOpts).then(d => [t, d?.cells || (Array.isArray(d) ? d : [])]).catch(() => [t, []])
-    )).then(results => { const map = {}; results.forEach(([t, cells]) => { map[t] = cells; }); setTriCells(map); }).finally(() => setLoading(false));
+      api.getTriangleWithExclusions(contractId, t, apiOpts)
+        .then(d => [t, {
+          full: d?.full?.cells || [],
+          stripped: d?.stripped?.cells || [],
+          excl: d?.exclusions || null,
+        }])
+        .catch(() => [t, { full: [], stripped: [], excl: null }])
+    )).then(results => {
+      const map = {};
+      let excl = { largeLossCount: 0, catLossCount: 0, applies: false, proxyPlaced: 0 };
+      results.forEach(([t, data]) => {
+        map[t] = { full: data.full, stripped: data.stripped };
+        // Loss counts are contract-wide (identical across types); fold to be safe.
+        if (data.excl) {
+          excl = {
+            largeLossCount: Math.max(excl.largeLossCount, data.excl.largeLossCount || 0),
+            catLossCount: Math.max(excl.catLossCount, data.excl.catLossCount || 0),
+            applies: excl.applies || !!data.excl.applies,
+            proxyPlaced: Math.max(excl.proxyPlaced, data.excl.proxyPlaced || 0),
+          };
+        }
+      });
+      setTriData(map);
+      setExclusions(excl);
+    }).finally(() => setLoading(false));
   }, [contractId, apiOpts, triSources]);
+
+  /* Load the paid + OS legs (full only) for Munich Chain Ladder. Only the
+     Incurred screen offers MCL, and it no longer fetches paid/OS via the
+     combined INCURRED source, so pull them separately here. */
+  useEffect(() => {
+    if (!contractId || !isIncurred) return;
+    const pickCells = d => d?.cells || (Array.isArray(d) ? d : []);
+    Promise.all([
+      api.getTriangle(contractId, 'CLAIMS_PAID', apiOpts).then(pickCells).catch(() => []),
+      api.getTriangle(contractId, 'CLAIMS_OS', apiOpts).then(pickCells).catch(() => []),
+    ]).then(([paid, os]) => setMclCells({ CLAIMS_PAID: paid, CLAIMS_OS: os }));
+  }, [contractId, isIncurred, apiOpts]);
+
+  // Cells for the basis currently shown, and always-full cells for the
+  // conservative reference. `calcs` reads triCells so it recomputes when
+  // the basis toggles.
+  const triCells = useMemo(() => {
+    const map = {};
+    for (const t of triSources) {
+      const d = triData[t];
+      map[t] = d ? (basis === 'STRIPPED' ? d.stripped : d.full) : [];
+    }
+    return map;
+  }, [triData, triSources, basis]);
+  const fullTriCells = useMemo(() => {
+    const map = {};
+    for (const t of triSources) map[t] = triData[t]?.full || [];
+    return map;
+  }, [triData, triSources]);
+  // Always-stripped cells (large + cat removed), used by the comparison modal
+  // regardless of the basis currently shown on screen.
+  const strippedTriCells = useMemo(() => {
+    const map = {};
+    for (const t of triSources) map[t] = triData[t]?.stripped || [];
+    return map;
+  }, [triData, triSources]);
 
   /* Load premium data for BF */
   useEffect(() => {
@@ -444,46 +616,43 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
     api.getBenchmarks(countryId, devType).then(setBenchmarks).catch(() => {});
   }, [appState.propTreatyDetail?.countryId, devType]);
 
-  /* Build matrix + calculations */
-  const calcs = useMemo(() => {
-    let matrix;
-    if (isIncurred) {
-      const p = buildMatrixFromCells(triCells['CLAIMS_PAID'] || [], startYear, numDevYears);
-      const o = buildMatrixFromCells(triCells['CLAIMS_OS'] || [], startYear, numDevYears);
-      if (!p || !o) return null;
-      matrix = p.matrix.map((row, r) => row.map((v, c) => { const pv = v ?? 0, ov = o.matrix[r]?.[c] ?? 0; return (v == null && o.matrix[r]?.[c] == null) ? null : pv + ov; }));
-    } else {
-      const d = buildMatrixFromCells(triCells[triSources[0]] || [], startYear, numDevYears);
-      if (!d) return null;
-      matrix = d.matrix;
-    }
-    const factors = calculateAgeToAgeFactors(matrix);
-    const { pattern, warnings: patternWarnings } = calculatePattern(matrix, factors, avgMethod);
-    const cdfs = calculateCdfs(pattern, 1.0);
-    const paramCdfs = fitExponentialCdfs(cdfs);
-    const paramLdfs = deriveLdfsFromCdfs(paramCdfs);
-    const clProjections = years.map((yr, r) => {
-      let latestVal = 0, latestCol = -1;
-      for (let c = matrix[r].length - 1; c >= 0; c--) if (matrix[r][c] != null) { latestVal = matrix[r][c]; latestCol = c; break; }
-      const cdf = latestCol >= 0 ? (cdfs[latestCol] || 1.0) : 1.0;
-      return { year: yr, latest: latestVal, cdf, ultimate: latestVal * cdf, ibnr: latestVal * cdf - latestVal };
-    });
-    return { matrix, factors, pattern, patternWarnings, cdfs, paramLdfs, paramCdfs, clProjections };
-  }, [isIncurred, avgMethod, years, triCells, startYear, numDevYears, triSources]);
+  /* Staleness + never-saved: were the source triangles saved after these
+     factors, and have any factors been saved for this type at all? */
+  useEffect(() => {
+    if (!contractId) return;
+    let cancelled = false;
+    api.getDevFactorStaleness(contractId, devType, apiOpts)
+      .then(d => {
+        if (cancelled) return;
+        setStale(!!d?.stale);
+        setFactorsNeverSaved(!d?.factorsSavedAt);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [contractId, devType, apiOpts, savedTick]);
+
+  /* Build matrix + calculations for the displayed basis, plus the full
+     (unstripped) basis used for the conservative reference column. */
+  const calcParams = useMemo(
+    () => ({ triSources, startYear, numDevYears, avgMethod, years, excluded }),
+    [triSources, startYear, numDevYears, avgMethod, years, excluded],
+  );
+  const calcs = useMemo(() => buildCalcs(triCells, calcParams), [triCells, calcParams]);
+  const fullCalcs = useMemo(() => buildCalcs(fullTriCells, calcParams), [fullTriCells, calcParams]);
+  const strippedCalcs = useMemo(() => buildCalcs(strippedTriCells, calcParams), [strippedTriCells, calcParams]);
 
   const bfResults = useMemo(() => {
     if (!calcs?.clProjections || projMethod !== 'BF' || isPremium) return null;
     return calculateBF(calcs.clProjections, premiums, Number(ielr) || 0);
   }, [calcs, projMethod, premiums, ielr, isPremium]);
 
-  /* Munich Chain Ladder — needs both paid and incurred matrices.
-     We rebuild paid + (paid + OS) here rather than reusing `calcs.matrix`
-     because for the Incurred screen `matrix` is already paid+OS, and MCL
-     wants the paid leg separately. */
+  /* Munich Chain Ladder — needs both the paid and incurred (paid + OS)
+     matrices, with the paid leg separate. Uses the full paid/OS legs fetched
+     into `mclCells` (MCL never runs on stripped data). */
   const mclResult = useMemo(() => {
     if (!useMunich || projMethod !== 'CHAIN' || !munichAvailable) return null;
-    const paidObj = buildMatrixFromCells(triCells['CLAIMS_PAID'] || [], startYear, numDevYears);
-    const osObj   = buildMatrixFromCells(triCells['CLAIMS_OS']   || [], startYear, numDevYears);
+    const paidObj = buildMatrixFromCells(mclCells['CLAIMS_PAID'] || [], startYear, numDevYears);
+    const osObj   = buildMatrixFromCells(mclCells['CLAIMS_OS']   || [], startYear, numDevYears);
     if (!paidObj || !osObj) return null;
     const incurred = paidObj.matrix.map((row, r) =>
       row.map((v, c) => {
@@ -492,7 +661,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
       }),
     );
     return calculateMunichChainLadder({ paid: paidObj.matrix, incurred, years });
-  }, [useMunich, projMethod, munichAvailable, triCells, startYear, numDevYears, years]);
+  }, [useMunich, projMethod, munichAvailable, mclCells, startYear, numDevYears, years]);
 
   // Comma-tolerant numeric parse for the EPI input cells.
   const parseNum = (v) => {
@@ -622,8 +791,10 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
        contract_dev_factor + contract_pricing_patterns and stamps an audit
        row, even when the on-screen factors are unchanged from the saved
        values. Mirrors the same dirty-gate TriangleScreen and useScreenSave
-       use. */
-    if (!dirty) return true;
+       use. Exception: when no factors have ever been saved for this type,
+       persist the currently-displayed selection on the way out so the
+       underwriter doesn't have to click Save explicitly. */
+    if (!dirty && !(factorsNeverSaved && chosenLdfs.length > 0)) return true;
     const N = chosenLdfs.length;
     const factors = Array.from({ length: N }, (_, i) => ({
       dev_month: (i + 1) * 12, actual_ldf: calcs?.pattern?.[i] ?? null, actual_cdf: calcs?.cdfs?.[i] ?? null,
@@ -631,7 +802,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
       chosen_source: serializeChosenSource(chosenBase), chosen_ldf: chosenLdfs[i] ?? null, chosen_cdf: chosenCdfs[i] ?? null,
       selected_ldf: chosenLdfs[i] ?? null, selected_cdf: chosenCdfs[i] ?? null,
     }));
-    await api.saveDevFactors(contractId, devType, { factors, method: avgMethod, tail_factor: 1.0 }, apiOpts);
+    await api.saveDevFactors(contractId, devType, { factors, method: avgMethod, tail_factor: 1.0, basis: basis === 'STRIPPED' ? 'stripped' : 'full' }, apiOpts);
     // Pricing-pattern is contract-only on the server. In quote mode we
     // skip it rather than 404 — the dev factors themselves still save.
     if (!appState.quoteMode) {
@@ -651,15 +822,100 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
       });
     }
     setDirty(false);
+    setSavedTick(t => t + 1); // re-fetch staleness from the DB (ground truth)
     return true;
-  }, [contractId, dirty, chosenLdfs, devType, avgMethod, apiOpts, appState.quoteMode, calcs?.pattern, calcs?.cdfs, calcs?.paramLdfs, calcs?.paramCdfs, chosenBase, chosenCdfs, ielr, projMethod, excluded, useMunich, startYear, numDevYears, isPremium, percentAchieved, years, epiPerYear]);
+  }, [contractId, dirty, factorsNeverSaved, chosenLdfs, devType, avgMethod, apiOpts, appState.quoteMode, calcs?.pattern, calcs?.cdfs, calcs?.paramLdfs, calcs?.paramCdfs, chosenBase, chosenCdfs, ielr, projMethod, excluded, useMunich, startYear, numDevYears, isPremium, percentAchieved, years, epiPerYear, basis]);
 
   const hasData = calcs && calcs.pattern?.length > 0;
+  const totalLossCount = (exclusions.largeLossCount || 0) + (exclusions.catLossCount || 0);
+  const stripApplies = !isPremium && exclusions.applies;
+  const showStrippedBanner = stripApplies && basis === 'STRIPPED' && totalLossCount > 0;
+  // Surface the "no losses identified" nudge only when this is a claims
+  // screen that actually has triangle data to price against.
+  const showZeroLossWarning = !lossWarningDismissed && !isPremium && hasData && totalLossCount === 0;
+
+  // triangleMeta not yet loaded (e.g. just after a hard reset, before
+  // PropTreatyDetail re-fetches the contract). Avoid rendering with a bogus year range.
+  // Guard must stay after all hooks — Rules of Hooks.
+  if (!startYear) return <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill}><div style={{ padding: 32, color: 'rgba(255,255,255,0.5)' }}>Loading…</div></WizardLayout>;
 
   return (
     <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill} onBeforeNext={save} onBeforeBack={save}>
-      {({ showToast }) => (
+      {({ showToast, wizard }) => (
         <div className="DEV_FACTORS_PAGE">
+          {/* Staleness — triangle saved more recently than these factors */}
+          {stale && (
+            <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5 }}>
+              Triangle updated since factors were last saved — consider reviewing dev factors.
+            </div>
+          )}
+          {/* Zero-loss warning — no large/cat losses identified yet */}
+          {showZeroLossWarning && (
+            <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                No large losses or cat losses have been identified. Consider reviewing the Large Loss and Cat Loss screens before finalising factors.
+                <div style={{ marginTop: 8 }}>
+                  <button type="button" onClick={() => wizard?.goTo?.('PROP_LARGE_LOSS_LIST')} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', border: '1px solid rgba(251,146,60,0.4)', background: 'rgba(251,146,60,0.10)', color: '#fbbf24' }}>
+                    Go to Large Loss screen →
+                  </button>
+                </div>
+              </div>
+              <button type="button" aria-label="Dismiss warning" onClick={() => setLossWarningDismissed(true)} style={{ background: 'none', border: 'none', color: '#fbbf24', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+            </div>
+          )}
+
+          {/* Triangle basis toggle — persisted per treaty. Claims screens only;
+              premium isn't reduced by losses. */}
+          {!isPremium && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '0 0 12px', padding: '10px 14px', borderRadius: 12, background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.30)' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#bae6fd', letterSpacing: '.04em' }}>Triangle basis</span>
+              <div className="toggle-group" style={{ boxShadow: '0 0 0 1px rgba(148,163,184,0.18)' }}>
+                <span
+                  className={`toggle-option${basis === 'FULL' ? ' active' : ''}`}
+                  onClick={() => setBasis('FULL')}
+                  style={basis === 'FULL'
+                    ? { background: 'linear-gradient(135deg,#f59e0b,#f97316)', color: '#1a1206', fontWeight: 800, boxShadow: '0 0 16px rgba(249,115,22,0.65)', textShadow: 'none' }
+                    : { color: '#fbbf24', fontWeight: 700 }}
+                >Full</span>
+                <span
+                  className={`toggle-option${basis === 'STRIPPED' ? ' active' : ''}`}
+                  onClick={() => setBasis('STRIPPED')}
+                  style={basis === 'STRIPPED'
+                    ? { background: 'linear-gradient(135deg,#10b981,#06b6d4)', color: '#042f2a', fontWeight: 800, boxShadow: '0 0 16px rgba(16,185,129,0.65)', textShadow: 'none' }
+                    : { color: '#5eead4', fontWeight: 700 }}
+                >Stripped of Large/Cat Losses</span>
+              </div>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                Stripped is the attritional basis — recommended. Saved per treaty: choosing Full uses
+                the original triangle and folds large/cat into attritional (shown as nil) on the summaries.
+              </span>
+              {isIncurred && (
+                <button
+                  type="button"
+                  onClick={() => setShowStrippedModal(true)}
+                  style={{
+                    marginLeft: 'auto', fontSize: 11, fontWeight: 700, letterSpacing: '.04em',
+                    padding: '7px 14px', borderRadius: 8, cursor: 'pointer',
+                    border: '1px solid rgba(16,185,129,0.45)', color: '#6ee7b7',
+                    background: 'rgba(16,185,129,0.10)', whiteSpace: 'nowrap',
+                  }}
+                >▦ Stripped Incurred Triangle</button>
+              )}
+            </div>
+          )}
+
+          {/* Stripped-mode info banner */}
+          {showStrippedBanner && (
+            <div role="status" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.25)', color: '#86efac', fontSize: 12, lineHeight: 1.5 }}>
+              {exclusions.largeLossCount} large loss{exclusions.largeLossCount === 1 ? '' : 'es'} and {exclusions.catLossCount} cat loss{exclusions.catLossCount === 1 ? '' : 'es'} have been excluded from this triangle. Selected factors reflect the underlying attritional experience.
+              {exclusions.proxyPlaced > 0 && (
+                <div style={{ marginTop: 6, color: '#fbbf24' }}>
+                  ⚠ {exclusions.proxyPlaced} loss{exclusions.proxyPlaced === 1 ? '' : 'es'} placed by loss date (actuarial reported date not set) — their development period is an estimate. Set a reported date on the loss screens to place them precisely.
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Meta bar */}
           <div className="df-toprow">
             <div className="df-controls">
@@ -824,35 +1080,6 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
             </div>
           ) : (<>
 
-            {/* Thin-column LDF warnings — surfaced from calculatePattern.
-                A column whose LDF derives from fewer than 3 origin years
-                is one or two observations dressed up as a portfolio
-                average. Show the underwriter before they pick a base. */}
-            {Array.isArray(calcs?.patternWarnings) && calcs.patternWarnings.length > 0 && (
-              <div
-                role="alert"
-                style={{
-                  marginTop: 14,
-                  padding: '10px 14px',
-                  borderRadius: 8,
-                  background: 'rgba(251,146,60,0.08)',
-                  border: '1px solid rgba(251,146,60,0.30)',
-                  color: '#fbbf24',
-                  fontSize: 12,
-                  lineHeight: 1.5,
-                }}
-              >
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>
-                  ⚠ Thin LDF columns ({calcs.patternWarnings.length})
-                </div>
-                {calcs.patternWarnings.map((w) => (
-                  <div key={w.column} style={{ opacity: 0.9 }}>
-                    {w.devPeriod} — {w.contributingRows} origin year{w.contributingRows === 1 ? '' : 's'} (recommended ≥ 3)
-                  </div>
-                ))}
-              </div>
-            )}
-
             {/* ═══ DEV FACTORS VIEW ═══ */}
             {view === 'DEV_FACTORS' && (<>
               {/* Average method */}
@@ -916,14 +1143,14 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                     }}>💾 Save Factors</button>
                   </div>
                 </div>
-                <FactorTable pattern={chosenLdfs} cdfs={chosenCdfs} editable onChange={handleChosenChange} sectionClass="df-card--chosen" />
+                <FactorTable pattern={chosenLdfs} cdfs={chosenCdfs} editable onChange={handleChosenChange} sectionClass="df-card--chosen" fullLdfs={basis === 'STRIPPED' ? fullCalcs?.pattern : undefined} fullCdfs={basis === 'STRIPPED' ? fullCalcs?.cdfs : undefined} />
               </div>
             </>)}
 
             {/* ═══ LINK RATIOS VIEW ═══ */}
             {view === 'LINK_RATIOS' && (<>
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginBottom: 8, padding: '8px 14px', borderRadius: 10, background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
-                Excluding link ratios here will <b style={{ color: '#fb923c' }}>override</b> the Underwriter Chosen Factors with the recalculated weighted averages.
+                Excluding link ratios here will <b style={{ color: '#fb923c' }}>override</b> the Underwriter Chosen Factors with the recalculated {(AVG_METHOD_LABEL[avgMethod] || 'Weighted').toLowerCase()} averages.
               </div>
               <LinkRatioView
                 matrix={calcs.matrix}
@@ -932,6 +1159,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                 excluded={excluded}
                 setExcluded={handleLinkRatioExcludedChange}
                 onPatternChange={applyLinkRatioPattern}
+                method={avgMethod}
               />
               <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
                 <button className="orange-gloss-btn" onClick={async () => {
@@ -949,6 +1177,32 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
             )}
 
           </>)}
+          {showStrippedModal && (
+            <div
+              onClick={e => { if (e.target === e.currentTarget) setShowStrippedModal(false); }}
+              style={{ position: 'fixed', inset: 0, zIndex: 120000, background: 'rgba(2,6,23,0.72)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+            >
+              <div role="dialog" aria-modal="true" className="glass" style={{ width: 'min(1100px,97vw)', maxHeight: '88vh', overflow: 'auto', borderRadius: 16, border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(8,16,40,0.97)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid rgba(148,163,184,0.14)' }}>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: '0.03em', color: '#e2e8f0' }}>Incurred Triangle — Stripped of Large/CAT</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
+                      {stripLargeCat
+                        ? `Cumulative incurred (Paid + OS) with ${exclusions.largeLossCount} large and ${exclusions.catLossCount} CAT loss${(exclusions.largeLossCount + exclusions.catLossCount) === 1 ? '' : 'es'} removed — the attritional basis used for dev-factor selection.`
+                        : 'Stripping is OFF — development factors are calculated on the full triangle. The attritional view below shows what stripping would remove, for reference only.'}
+                    </div>
+                  </div>
+                  <button onClick={() => setShowStrippedModal(false)} style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid rgba(148,163,184,0.25)', background: 'transparent', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 14 }}>✕</button>
+                </div>
+                <div style={{ padding: 20 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: '#fbbf24', marginBottom: 8 }}>FULL (ORIGINAL — BEFORE STRIPPING)</div>
+                  <TriangleGrid matrix={fullCalcs?.matrix} years={years} numDevYears={numDevYears} />
+                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: '#6ee7b7', margin: '20px 0 8px' }}>{stripLargeCat ? 'STRIPPED (ATTRITIONAL)' : 'ATTRITIONAL BASIS (reference — not active)'}</div>
+                  <TriangleGrid matrix={strippedCalcs?.matrix} years={years} numDevYears={numDevYears} />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </WizardLayout>

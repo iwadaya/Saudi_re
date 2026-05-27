@@ -1,9 +1,11 @@
 // server/src/routes/treatyData.js — Sub-entity endpoints (triangles, losses, profiles, cresta, docs, etc.)
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { asyncHandler, numOrNull, dateOrNull } from '../helpers.js';
+import { asyncHandler, numOrNull, dateOrNull, safeUwYear, preserveBool, preserveNum, assertExists, isStaleSince } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from '../lib/triangleBounds.js';
+import { stripTriangleCells, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from '../lib/triangleStripping.js';
+import { suggestLossQuarters } from '../lib/lossQuarterMapper.js';
 import { logAudit } from '../services/audit.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
@@ -30,6 +32,62 @@ function parseDateFlex(v){return dateOrNull(v);}
 router.get("/treaties/:id/triangles/:type", asyncHandler(async (req, res) => {
   const {rows}=await pool.query(`SELECT cell_id,origin_year,dev_months,cum_value FROM public.contract_triangle_cells WHERE contract_id=$1 AND type=$2::public.triangle_type ORDER BY origin_year,dev_months`,[req.params.id,req.params.type.toUpperCase()]);
   res.json({cells:rows});
+}));
+// Returns the triangle in two variants: `full` (raw cells) and `stripped`
+// (large + cat losses removed — the attritional basis for selecting dev
+// factors). See lib/triangleStripping.js for the stripping rules.
+router.get("/treaties/:id/triangles/:type/with-exclusions", asyncHandler(async (req, res) => {
+  const { id, type } = req.params;
+  const typeParse = triangleTypeSchema.safeParse(type.toUpperCase());
+  if (!typeParse.success) return res.status(400).json({ error: 'Invalid triangle type', code: 'VALIDATION_FAILED' });
+  const t = typeParse.data;
+  // INCURRED is not stored as its own triangle — it is paid + OS. Build the
+  // combined full triangle here so the incurred loss amount can be stripped
+  // directly from it (see combineIncurredCells in lib/triangleStripping.js).
+  let cells;
+  if (t === 'INCURRED') {
+    const [{ rows: paidCells }, { rows: osCells }] = await Promise.all([
+      pool.query(`SELECT origin_year,dev_months,cum_value FROM public.contract_triangle_cells WHERE contract_id=$1 AND type='CLAIMS_PAID'::public.triangle_type ORDER BY origin_year,dev_months`, [id]),
+      pool.query(`SELECT origin_year,dev_months,cum_value FROM public.contract_triangle_cells WHERE contract_id=$1 AND type='CLAIMS_OS'::public.triangle_type ORDER BY origin_year,dev_months`, [id]),
+    ]);
+    cells = combineIncurredCells(paidCells, osCells);
+  } else {
+    const { rows } = await pool.query(
+      `SELECT cell_id,origin_year,dev_months,cum_value FROM public.contract_triangle_cells WHERE contract_id=$1 AND type=$2::public.triangle_type ORDER BY origin_year,dev_months`,
+      [id, t]
+    );
+    cells = rows;
+  }
+  const { rows: largeLosses } = await pool.query(
+    `SELECT ll.uw_year, ll.date_of_loss, ll.actuarial_reported_date, ll.paid, ll.os, ll.incurred
+       FROM public.contract_large_losses ll
+       JOIN public.contract_large_loss_report r ON r.report_id = ll.report_id
+      WHERE r.contract_id = $1`, [id]
+  );
+  const { rows: catLosses } = await pool.query(
+    `SELECT cl.uw_year, cl.date_of_loss, cl.actuarial_reported_date, cl.paid, cl.os, cl.incurred
+       FROM public.contract_cat_losses cl
+       JOIN public.contract_cat_loss_report r ON r.report_id = cl.report_id
+      WHERE r.contract_id = $1`, [id]
+  );
+  // Honour the per-treaty strip flag: when stripping is off, the stripped
+  // variant is identical to the full triangle (no losses removed).
+  const { rows: pd } = await pool.query(`SELECT strip_large_cat_losses FROM public.contract_prop_details WHERE contract_id=$1`, [id]);
+  const stripEnabled = pd[0]?.strip_large_cat_losses !== false; // default true
+  const field = stripEnabled ? stripFieldForType(t) : null;
+  const allLosses = field ? [...largeLosses, ...catLosses] : [];
+  const stripped = stripTriangleCells(cells, allLosses, field);
+  const placement = summarizeLossPlacement(cells, allLosses, field);
+  res.json({
+    full: { cells },
+    stripped: { cells: stripped },
+    exclusions: {
+      largeLossCount: largeLosses.length, catLossCount: catLosses.length, applies: !!field,
+      // Losses placed by the loss-date proxy (no reliable reported date) —
+      // the actuary should verify these placements.
+      proxyPlaced: placement.proxy, reportedPlaced: placement.reported,
+    },
+  });
 }));
 router.post("/treaties/:id/triangles/:type", asyncHandler(async (req, res) => {
   const { id, type } = req.params;
@@ -90,6 +148,33 @@ router.get("/treaties/:id/dev-factors/:type", asyncHandler(async (req, res) => {
   const {rows}=await pool.query(`SELECT * FROM public.contract_dev_factor WHERE contract_id=$1 AND triangle_type=$2 ORDER BY dev_month`,[req.params.id,req.params.type.toUpperCase()]);
   res.json(rows);
 }));
+// Staleness: was the source triangle saved more recently than the dev factors
+// for this type? INCURRED factors are driven by the paid + OS triangles, so
+// both feed its "triangle last updated". `stale` is only true when factors
+// exist and the triangle was saved after them.
+router.get("/treaties/:id/dev-factors/:type/staleness", asyncHandler(async (req, res) => {
+  const { id, type } = req.params;
+  const typeParse = triangleTypeSchema.safeParse(type.toUpperCase());
+  if (!typeParse.success) return res.status(400).json({ error: 'Invalid triangle type', code: 'VALIDATION_FAILED' });
+  const t = typeParse.data;
+  const sourceTypes = t === 'INCURRED' ? ['CLAIMS_PAID', 'CLAIMS_OS'] : [t];
+  const [triRes, dfRes] = await Promise.all([
+    pool.query(
+      `SELECT MAX(updated_at) AS ts FROM public.contract_triangle_cells
+        WHERE contract_id=$1 AND type = ANY($2::public.triangle_type[])`,
+      [id, sourceTypes]
+    ),
+    pool.query(
+      `SELECT MAX(saved_at) AS ts FROM public.contract_dev_factor
+        WHERE contract_id=$1 AND triangle_type=$2::public.triangle_type`,
+      [id, t]
+    ),
+  ]);
+  const triangleUpdatedAt = triRes.rows[0]?.ts || null;
+  const factorsSavedAt = dfRes.rows[0]?.ts || null;
+  const stale = !!(triangleUpdatedAt && factorsSavedAt && new Date(triangleUpdatedAt) > new Date(factorsSavedAt));
+  res.json({ triangleUpdatedAt, factorsSavedAt, stale });
+}));
 router.put("/treaties/:id/dev-factors/:type", validateBody(devFactorPutSchema), asyncHandler(async (req, res) => {
   const { id, type } = req.params;
   const typeParse = triangleTypeSchema.safeParse(type.toUpperCase());
@@ -134,7 +219,7 @@ router.put("/treaties/:id/dev-factors/:type", validateBody(devFactorPutSchema), 
     await logAudit(pool, {
       entityType: 'CONTRACT', entityId: id, eventType: 'DEV_FACTORS_SAVED',
       actor: req.body?._actor || req.user?.displayName || 'SYSTEM',
-      payload: { triangle_type: t, count: factors.length, method: req.body?.method || null },
+      payload: { triangle_type: t, count: factors.length, method: req.body?.method || null, basis: req.body?.basis || null },
     });
     res.json({ ok: true });
   } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }
@@ -150,32 +235,52 @@ router.get("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
 router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
   const {id}=req.params;const {report_date,losses=[]}=req.body;const cl=await pool.connect();
   try{await cl.query("BEGIN");
+  await assertExists(cl, 'public.contract', 'contract_id', id, 'Treaty');
   const {rows:rr}=await cl.query(`INSERT INTO public.contract_large_loss_report (contract_id,report_date) VALUES ($1,$2) ON CONFLICT (contract_id) DO UPDATE SET report_date=EXCLUDED.report_date,updated_at=now() RETURNING report_id`,[id,dateOrNull(report_date)]);
   const rid=rr[0].report_id;
-  // Snapshot existing reported_date per loss_id so a delete+reinsert doesn't
-  // erase when each loss first entered this contract.
-  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
+  // Snapshot existing reported_date / is_selected / inflation_factor per loss_id
+  // so a delete+reinsert doesn't erase them when this save omits them (the
+  // loss-list grid sends neither selection nor inflation).
+  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
   const prevReported=new Map(prev.map(r=>[String(r.loss_id),r.reported_date]));
+  const prevSelected=new Map(prev.map(r=>[String(r.loss_id),r.is_selected]));
+  const prevInfl=new Map(prev.map(r=>[String(r.loss_id),r.inflation_factor]));
   await cl.query(`DELETE FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
   const today=new Date().toISOString().slice(0,10);
+  const reportSaved=dateOrNull(report_date)||today;
   // Generate loss_ids up front so we can batch the insert and still
   // return the same array of ids one-row-at-a-time used to surface.
   const largeLossesWithIds = losses.map((l) => {
-    const existedReported = l.loss_id ? prevReported.get(String(l.loss_id)) : null;
+    const key = l.loss_id ? String(l.loss_id) : null;
+    const existedReported = key ? prevReported.get(key) : null;
     return {
       ...l,
       _loss_id: l.loss_id || randomUUID(),
-      _reported: parseDateFlex(l.reported_date) || existedReported || today,
+      // "Saved in Universe": the report date of the cycle in which this loss
+      // first entered, preserved across later saves so year-over-year report
+      // comparison can tell which losses are new. New rows take the current
+      // report date.
+      _reported: existedReported || reportSaved,
+      // Actuarial reporting date (when the loss was booked into the triangle)
+      // — user-entered, nullable, drives stripping.
+      _actuarial: parseDateFlex(l.actuarial_reported_date),
       _dol: parseDateFlex(l.date_of_loss),
+      _pinc: parseDateFlex(l.policy_inception_date),
+      // Underwriting year — NaN-guarded so an invalid inception/loss date
+      // can't push NaN into the integer column and abort the save.
+      _uwy: safeUwYear(l),
+      // Preserve selection + inflation when the save omits them.
+      _selected: preserveBool(l.is_selected, key ? prevSelected.get(key) : undefined),
+      _infl: preserveNum(l.inflation_factor, key ? prevInfl.get(key) : undefined, 1),
     };
   });
   const largeLossesInsert = buildBatchInsert({
     table: 'public.contract_large_losses',
-    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date'],
+    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date','actuarial_reported_date','policy_inception_date'],
     rows: largeLossesWithIds.map((l) => [
-      l._loss_id, numOrNull(l.uw_year), l.insured_name, l.loss_name, l._dol,
+      l._loss_id, l._uwy, l.insured_name, l.loss_name, l._dol,
       l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
-      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported,
+      l._selected, l._infl, l._reported, l._actuarial, l._pinc,
     ]),
     leadingId: rid,
   });
@@ -194,28 +299,44 @@ router.get("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
 router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
   const {id}=req.params;const {report_date,losses=[]}=req.body;const cl=await pool.connect();
   try{await cl.query("BEGIN");
+  await assertExists(cl, 'public.contract', 'contract_id', id, 'Treaty');
   const {rows:rr}=await cl.query(`INSERT INTO public.contract_cat_loss_report (contract_id,report_date) VALUES ($1,$2) ON CONFLICT (contract_id) DO UPDATE SET report_date=EXCLUDED.report_date,updated_at=now() RETURNING report_id`,[id,dateOrNull(report_date)]);
   const rid=rr[0].report_id;
-  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
+  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
   const prevReported=new Map(prev.map(r=>[String(r.loss_id),r.reported_date]));
+  const prevSelected=new Map(prev.map(r=>[String(r.loss_id),r.is_selected]));
+  const prevInfl=new Map(prev.map(r=>[String(r.loss_id),r.inflation_factor]));
   await cl.query(`DELETE FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
   const today=new Date().toISOString().slice(0,10);
+  const reportSaved=dateOrNull(report_date)||today;
   const catLossesWithIds = losses.map((l) => {
-    const existedReported = l.loss_id ? prevReported.get(String(l.loss_id)) : null;
+    const key = l.loss_id ? String(l.loss_id) : null;
+    const existedReported = key ? prevReported.get(key) : null;
     return {
       ...l,
       _loss_id: l.loss_id || randomUUID(),
-      _reported: parseDateFlex(l.reported_date) || existedReported || today,
+      // "Saved in Universe": report date of the cycle the loss first entered,
+      // preserved across saves for year-over-year comparison. New rows take
+      // the current report date.
+      _reported: existedReported || reportSaved,
+      // Actuarial reporting date — user-entered, nullable, drives stripping.
+      _actuarial: parseDateFlex(l.actuarial_reported_date),
       _dol: parseDateFlex(l.date_of_loss),
+      _pinc: parseDateFlex(l.policy_inception_date),
+      // NaN-guarded underwriting year (see large-loss handler).
+      _uwy: safeUwYear(l),
+      // Preserve selection + inflation when the save omits them.
+      _selected: preserveBool(l.is_selected, key ? prevSelected.get(key) : undefined),
+      _infl: preserveNum(l.inflation_factor, key ? prevInfl.get(key) : undefined, 1),
     };
   });
   const catLossesInsert = buildBatchInsert({
     table: 'public.contract_cat_losses',
-    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date'],
+    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date','actuarial_reported_date','policy_inception_date'],
     rows: catLossesWithIds.map((l) => [
-      l._loss_id, numOrNull(l.uw_year), l.insured_name, l.loss_name, l._dol,
+      l._loss_id, l._uwy, l.insured_name, l.loss_name, l._dol,
       l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
-      l.is_selected ?? true, numOrNull(l.inflation_factor) ?? 1, l._reported,
+      l._selected, l._infl, l._reported, l._actuarial, l._pinc,
     ]),
     leadingId: rid,
   });
@@ -224,6 +345,116 @@ router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
+// ── PORTFOLIO FALLBACK LOSSES ──
+// Individual large/cat loss records drawn from the cedant's OTHER treaties.
+// Used by the Pareto screens to fall back to portfolio-average experience when
+// the current treaty has no large/cat losses of its own.
+router.get("/treaties/:id/portfolio-losses/:lossType", asyncHandler(async (req, res) => {
+  const { id, lossType } = req.params;
+  const isCat = String(lossType).toLowerCase() === 'cat';
+  // Table names are selected by a boolean, never interpolated from raw input.
+  const reportTable = isCat ? 'public.contract_cat_loss_report' : 'public.contract_large_loss_report';
+  const lossTable = isCat ? 'public.contract_cat_losses' : 'public.contract_large_losses';
+
+  const { rows: cRows } = await pool.query(`SELECT cedant_id FROM public.contract WHERE contract_id=$1`, [id]);
+  const cedantId = cRows[0]?.cedant_id;
+  if (!cedantId) return res.json({ losses: [], treatyCount: 0 });
+
+  const { rows: losses } = await pool.query(
+    `SELECT l.uw_year, l.incurred, l.paid, l.os, l.inflation_factor, l.is_selected, c.contract_id
+       FROM ${lossTable} l
+       JOIN ${reportTable} r ON r.report_id = l.report_id
+       JOIN public.contract c ON c.contract_id = r.contract_id
+      WHERE c.cedant_id = $1 AND c.contract_id <> $2`,
+    [cedantId, id]
+  );
+  const treatyCount = new Set(losses.map(l => l.contract_id)).size;
+  res.json({ losses, treatyCount });
+}));
+
+// ── STRIP LARGE/CAT TOGGLE ──
+// Per-treaty choice of whether large + cat losses are stripped from the claims
+// triangle. Focused single-column update so it can be persisted from the Dev
+// Factors screen without overwriting the rest of the treaty detail.
+router.put("/treaties/:id/strip-large-cat", asyncHandler(async (req, res) => {
+  const strip = req.body?.strip_large_cat_losses !== false;
+  // Upsert so the toggle persists even if Dev Factors is reached before the
+  // detail screen has created the prop-details row (no silent no-op).
+  await pool.query(
+    `INSERT INTO public.contract_prop_details (contract_id, strip_large_cat_losses)
+       VALUES ($1, $2)
+     ON CONFLICT (contract_id) DO UPDATE
+       SET strip_large_cat_losses=EXCLUDED.strip_large_cat_losses, updated_at=now()`,
+    [req.params.id, strip]
+  );
+  res.json({ ok: true, strip_large_cat_losses: strip });
+}));
+
+// ── LOSS-SELECTION STALENESS ──
+// Warns the UI that the saved loss selection is outdated when large/cat losses
+// have been edited (MAX updated_at) after the selection snapshot was last saved
+// (loss_selection_saved_at). Never stale when no selection has been saved.
+router.get("/treaties/:id/losses/staleness", asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const [lossRes, detRes] = await Promise.all([
+    pool.query(
+      `SELECT GREATEST(
+         (SELECT MAX(l.updated_at) FROM public.contract_large_losses l
+            JOIN public.contract_large_loss_report r ON r.report_id=l.report_id WHERE r.contract_id=$1),
+         (SELECT MAX(l.updated_at) FROM public.contract_cat_losses l
+            JOIN public.contract_cat_loss_report r ON r.report_id=l.report_id WHERE r.contract_id=$1)
+       ) AS ts`,
+      [id]
+    ),
+    pool.query(
+      `SELECT loss_selection_saved_at AS ts FROM public.contract_prop_details WHERE contract_id=$1`,
+      [id]
+    ),
+  ]);
+  const lossesUpdatedAt = lossRes.rows[0]?.ts || null;
+  const selectionSavedAt = detRes.rows[0]?.ts || null;
+  res.json({ lossesUpdatedAt, selectionSavedAt, stale: isStaleSince(lossesUpdatedAt, selectionSavedAt) });
+}));
+
+
+// ── AI: MAP LOSSES TO DEVELOPMENT QUARTERS ──
+// Advisory: suggests the development period each large/cat loss most likely
+// entered the triangle (matching loss amounts to row jumps + reporting lag).
+// Returns suggestions only — the actuary applies them by setting the
+// actuarial reported date and saving.
+router.post("/treaties/:id/losses/suggest-quarters", asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { rows: incurredCells } = await pool.query(
+    `SELECT origin_year, dev_months, SUM(cum_value) AS cum_value
+       FROM public.contract_triangle_cells
+      WHERE contract_id=$1 AND type IN ('CLAIMS_PAID','CLAIMS_OS')
+      GROUP BY origin_year, dev_months
+      ORDER BY origin_year, dev_months`, [id]
+  );
+  const { rows: largeLosses } = await pool.query(
+    `SELECT ll.loss_id, ll.uw_year, ll.date_of_loss, ll.actuarial_reported_date, ll.paid, ll.os, ll.incurred
+       FROM public.contract_large_losses ll
+       JOIN public.contract_large_loss_report r ON r.report_id = ll.report_id
+      WHERE r.contract_id = $1`, [id]
+  );
+  const { rows: catLosses } = await pool.query(
+    `SELECT cl.loss_id, cl.uw_year, cl.date_of_loss, cl.actuarial_reported_date, cl.paid, cl.os, cl.incurred
+       FROM public.contract_cat_losses cl
+       JOIN public.contract_cat_loss_report r ON r.report_id = cl.report_id
+      WHERE r.contract_id = $1`, [id]
+  );
+  const losses = [...largeLosses, ...catLosses];
+  if (!losses.length) return res.json({ suggestions: [], provider: null });
+  try {
+    const out = await suggestLossQuarters({ losses, triangleCells: incurredCells, triangleType: 'INCURRED' });
+    res.json(out);
+  } catch (e) {
+    const msg = e?.message || 'AI mapping failed';
+    const noProvider = /No LLM provider configured/i.test(msg);
+    logger.error('[losses/suggest-quarters] failed', { error: msg });
+    return res.status(noProvider ? 503 : 502).json({ error: msg });
+  }
+}));
 
 // ── LOSS SELECTION SNAPSHOTS (Return Period Curves) ──
 // Stores derived return period curves/key points from Pareto screens so downstream pricing can consume
@@ -326,6 +557,15 @@ router.put("/treaties/:id/loss-selection/:lossType/snapshot", asyncHandler(async
         );
       }
     }
+    // Mark the selection as saved now so the staleness check can tell whether
+    // losses have been edited since. Upsert so it persists even if Loss
+    // Selection is reached before the detail screen created the row.
+    await cl.query(
+      `INSERT INTO public.contract_prop_details (contract_id, loss_selection_saved_at)
+         VALUES ($1, now())
+       ON CONFLICT (contract_id) DO UPDATE SET loss_selection_saved_at=now(), updated_at=now()`,
+      [req.params.id]
+    );
     await cl.query("COMMIT");
     res.json({ok:true, snapshot:snap});
   }catch(e){

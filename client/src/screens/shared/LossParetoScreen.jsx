@@ -467,6 +467,7 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
   const isNpMode = appState.wizardMode === 'NP' || appState.quoteMode;
   const td = isNpMode ? (appState.npTreatyDetail || {}) : (appState.propTreatyDetail || {});
   const [losses,setLosses]=useState([]);
+  const [portfolioFallback,setPortfolioFallback]=useState(null); // {treatyCount} when the curve is fitted to cedant-portfolio losses
   const [loading,setLoading]=useState(true);
   const [xm,setXm]=useState(0);
   const [limit,setLimit]=useState(0);
@@ -524,12 +525,28 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
           (lossType==='cat'?api.getCatLosses:api.getLargeLosses)(contractId, qm),
           api.getLossSelectionLatest(contractId, lossType, qm).catch(()=>null),
         ]);
-        const list=lossData?.losses||lossData?.rows||lossData||[];
-        const parsed=(Array.isArray(list)?list:[])
+        const parseLossList = (raw) => (Array.isArray(raw)?raw:[])
           .filter(l=>l.is_selected!==false)
           .map(l=>{const inc=cn(l.incurred)||(cn(l.paid)+cn(l.os));return{...l,incurred:inc,inflated:inc*cn(l.inflation_factor||1)};})
           .filter(l=>l.inflated>0);
+        // Portfolio fallback uses all inflated losses regardless of their
+        // is_selected status on the source treaties, so skip that filter.
+        const parsePortfolioLossList = (raw) => (Array.isArray(raw)?raw:[])
+          .map(l=>{const inc=cn(l.incurred)||(cn(l.paid)+cn(l.os));return{...l,incurred:inc,inflated:inc*cn(l.inflation_factor||1)};})
+          .filter(l=>l.inflated>0);
+        const list=lossData?.losses||lossData?.rows||lossData||[];
+        let parsed=parseLossList(list);
+        // No losses saved for this treaty → fall back to the cedant's wider
+        // portfolio (large/cat losses across its other treaties) so the curve
+        // still renders. Contract mode only; quotes keep the empty state.
+        let fallback=null;
+        if(parsed.length===0 && !qm){
+          const pf=await api.getPortfolioLosses(contractId, lossType).catch(()=>null);
+          const pfParsed=parsePortfolioLossList(pf?.losses||[]);
+          if(pfParsed.length>0){ parsed=pfParsed; fallback={treatyCount:pf?.treatyCount||0}; }
+        }
         setLosses(parsed);
+        setPortfolioFallback(fallback);
         const vals=parsed.map(l=>l.inflated).sort((a,b)=>a-b);
         const det=treaty?.detail||{};
         // NP: use risk or cat layer sum from structure. Prop: for cat use event_limit; for large loss use capacity/limit.
@@ -677,7 +694,6 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
   const uwYrs=Number(yearsOvr)||10;
   const freq=inflated.filter(l=>l>=xm).length/uwYrs;
   const avgYr=uwYrs>0?total/uwYrs:0;
-  const lp=useMemo(()=>calcLayerPrice(alpha,xm,freq,xm,limit||xm*10),[alpha,xm,freq,limit]);
 
   // Survival function P(X > x) for the currently selected distribution.
   // Used by both the per-loss RP column and the layer burning cost table.
@@ -701,11 +717,24 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
     return null;
   }, [activeDist, fits, xm, alpha]);
 
+  // Risk Pure Premium: Pareto uses the analytical LEV; other fitted
+  // distributions integrate the survival function numerically. Defined after
+  // survivalFn since it depends on it.
+  const lp = useMemo(() => {
+    if (!survivalFn) return { severity: null, rpp: null, error: 'No fit' };
+    if (activeDist === 'pareto') {
+      return calcLayerPrice(alpha, xm, freq, xm, limit || xm * 10);
+    }
+    return calcLayerPriceNumerical(freq, xm, limit || xm * 10, survivalFn);
+  }, [activeDist, survivalFn, alpha, xm, freq, limit]);
+
   // Structure layers scoped to this loss type (RISK for large, CAT for cat).
   // Source: appState.npStructureLayers (set by NpStructure screen on load).
   const isNpCat = lossType === 'cat';
   const structureLayers = useMemo(() => {
-    const raw = appState.npStructureLayers || [];
+    const raw = Array.isArray(appState.npStructureLayers)
+      ? appState.npStructureLayers
+      : appState.npStructureLayers?.layers || [];
     return raw.filter(l => {
       if (l.peril_scope !== undefined) {
         return isNpCat
@@ -930,7 +959,10 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
 
   // Explicit save function
   const saveSnapshot = useCallback(async () => {
-    if (!contractId || !losses.length || xm <= 0) return false;
+    // Never persist a portfolio-fallback curve as this treaty's own snapshot.
+    // Nothing to save here is a clean no-op, not a failure — return true so
+    // WizardLayout doesn't surface a red "Save failed" banner on navigation.
+    if (!contractId || !losses.length || xm <= 0 || portfolioFallback) return true;
     try {
       setSaving(true); setSaveError(null);
       const payload = await buildSnapshotPayload();
@@ -944,14 +976,14 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
       setSaving(false);
       return false;
     }
-  }, [contractId, lossType, losses, xm, buildSnapshotPayload, appState.quoteMode]);
+  }, [contractId, lossType, losses, xm, buildSnapshotPayload, appState.quoteMode, portfolioFallback]);
 
   // Auto-save on debounce when key parameters change. Toast only on the
   // OK→failed transition so a flaky network doesn't spam the user every
   // 800ms; the inline ⚠ banner already shows the persistent error.
   const lastAutoSaveOkRef = useRef(true);
   useEffect(() => {
-    if (loading || !contractId || !losses.length || xm <= 0 || !returnPeriods.length) return;
+    if (loading || !contractId || !losses.length || xm <= 0 || !returnPeriods.length || portfolioFallback) return;
     const t = setTimeout(async () => {
       const ok = await saveSnapshot();
       if (!ok && lastAutoSaveOkRef.current) {
@@ -960,7 +992,7 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
       lastAutoSaveOkRef.current = ok;
     }, 800);
     return () => { clearTimeout(t); };
-  }, [loading, contractId, lossType, losses, xm, limit, activeDist, yearsOvr, returnPeriods, saveSnapshot, showToast]);
+  }, [loading, contractId, lossType, losses, xm, limit, alpha, activeDist, yearsOvr, returnPeriods, saveSnapshot, showToast, portfolioFallback]);
 
   const bestFit=useMemo(()=>[...fits].sort((a,b)=>a.ks.ks-b.ks.ks)[0]?.key||'pareto',[fits]);
 
@@ -971,6 +1003,13 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
           {loading?<div style={{padding:32,color:'rgba(255,255,255,.4)'}}>Loading…</div>:count===0?(
             <div style={{padding:32,textAlign:'center',color:'rgba(255,255,255,.4)'}}>No selected losses. Go to Loss Selection first.</div>
           ):(<>
+            {portfolioFallback && (
+              <div style={{margin:'0 0 14px',padding:'10px 16px',borderRadius:10,background:'rgba(251,191,36,0.08)',border:'1px solid rgba(251,191,36,0.30)',fontSize:12,color:'rgba(253,230,138,0.95)',lineHeight:1.5}}>
+                <b style={{letterSpacing:'.04em'}}>PORTFOLIO AVERAGE.</b>{' '}
+                This treaty has no {lossType === 'cat' ? 'CAT' : 'large'} losses of its own — the curve below is fitted to the cedant's wider portfolio
+                ({lossType === 'cat' ? 'CAT' : 'large'} losses from {portfolioFallback.treatyCount} other {portfolioFallback.treatyCount === 1 ? 'treaty' : 'treaties'}). Add losses on the Loss Selection step to fit this treaty's own experience.
+              </div>
+            )}
             {/* HERO */}
             <div className="llp-hero">
               <div className="llp-hero-left">
@@ -1357,7 +1396,7 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
                       Cat Model OEP Burning Cost {showOep ? '▲' : '▼'}
                     </div>
                     <div className="llp-card-sub">
-                      Enter OEP curve from cat model (RMS / AIR / Verisk). Layer burning cost = ∫[D, D+L] P(occ loss > x) dx.
+                      Enter OEP curve from cat model (RMS / AIR / Verisk). Layer burning cost = ∫[D, D+L] P(occ loss &gt; x) dx.
                     </div>
                   </div>
                 </div>

@@ -35,7 +35,7 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
   const isDerived = triType === 'INCURRED';
 
   const meta = appState.triangleMeta || {};
-  const startYear = meta.startYear || 2015;
+  const startYear = meta.startYear ?? null;
   const inceptionYear = meta.inceptionYear || meta.renewalYear || new Date().getFullYear();
   const numDevYears = Math.max(1, Math.min(60, inceptionYear - startYear));
   const years = useMemo(() => Array.from({ length: numDevYears }, (_, i) => startYear + i), [numDevYears, startYear]);
@@ -175,6 +175,11 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
       showToast(`Skipped ${parts.join(', ')}.`, 5000);
     }
   }, [inTriangle, numDevYears]);
+
+  // triangleMeta not yet loaded (e.g. just after a hard reset, before
+  // PropTreatyDetail re-fetches the contract). Avoid rendering with a bogus year range.
+  // Guard must stay after all hooks — Rules of Hooks.
+  if (!startYear) return <div style={{ padding: 32, color: 'rgba(255,255,255,0.5)' }}>Loading triangle…</div>;
 
   return (
     <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill} onBeforeNext={save} onBeforeBack={save}>

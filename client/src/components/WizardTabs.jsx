@@ -18,6 +18,7 @@ export default function WizardTabs({ activeKey }) {
     if (mode === 'PROP') {
       if (!triEnabled && (key.includes('TRIANGLES') || key.includes('DEV_FACTORS') || key === 'PROP_PROJECTED_SUMMARY')) return false;
       if (triEnabled && key === 'PROP_NO_TRIANGULATION') return false;
+      if (key === 'PROP_FINAL_BIND') return false;
     }
     if (mode === 'NP') {
       // Quote-mode tab visibility — keep this list aligned with

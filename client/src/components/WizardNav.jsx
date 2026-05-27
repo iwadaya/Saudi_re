@@ -6,7 +6,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 // when reading a table, long enough that casual pauses don't flicker.
 const IDLE_MS = 2500;
 
-export default function WizardNav({ onBack, onNext, hasPrev = true, hasNext = true }) {
+export default function WizardNav({ onBack, onNext, hasPrev = true, hasNext = true, backLabel = null, nextLabel = null }) {
   const [busy, setBusy] = useState(false);
   const [hidden, setHidden] = useState(false);
   const idleTimerRef = useRef(null);
@@ -60,21 +60,21 @@ export default function WizardNav({ onBack, onNext, hasPrev = true, hasNext = tr
         className="wizard-dock-btn wizard-dock-btn--back"
         onClick={handleBack}
         disabled={busy || !hasPrev}
-        aria-label="Go to previous step"
+        aria-label={backLabel ? `Go to previous step: ${backLabel}` : 'Go to previous step'}
         style={{ display: hasPrev ? '' : 'none' }}
       >
-        <span aria-hidden="true">← </span>Back
+        <span aria-hidden="true">← </span>{backLabel ? `Back: ${backLabel}` : 'Back'}
       </button>
       <button
         type="button"
         className={`wizard-dock-btn wizard-dock-btn--next ${busy ? 'is-busy' : ''}`}
         onClick={handleNext}
         disabled={busy || !hasNext}
-        aria-label={busy ? 'Saving and continuing' : 'Go to next step'}
+        aria-label={busy ? 'Saving and continuing' : (nextLabel ? `Go to next step: ${nextLabel}` : 'Go to next step')}
         aria-busy={busy}
         style={{ display: hasNext ? '' : 'none' }}
       >
-        Next<span aria-hidden="true"> →</span>
+        {nextLabel ? `Next: ${nextLabel}` : 'Next'}<span aria-hidden="true"> →</span>
       </button>
     </nav>
   );

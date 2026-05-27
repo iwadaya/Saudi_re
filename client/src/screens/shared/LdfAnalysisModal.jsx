@@ -132,8 +132,10 @@ export default function LdfAnalysisModal({
   // Cancel any pending preview timers when the modal closes.
   useEffect(() => {
     if (isOpen) return undefined;
+    // The ref holds one stable object for the component's lifetime, so capturing
+    // it here is equivalent to reading .current at cleanup time.
+    const t = previewTimer.current;
     return () => {
-      const t = previewTimer.current;
       if (t.PREMIUM) { clearTimeout(t.PREMIUM); t.PREMIUM = null; }
       if (t.CLAIMS_PAID) { clearTimeout(t.CLAIMS_PAID); t.CLAIMS_PAID = null; }
     };

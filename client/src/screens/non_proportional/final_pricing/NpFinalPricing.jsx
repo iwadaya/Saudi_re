@@ -1044,7 +1044,7 @@ export default function NpFinalPricing() {
         const sl = structLayers[i] || {};
         const pl = pricingLayers[i] || {};
         const sv = savedLayers[i] || {};
-        merged.push({
+        const ml = {
           ...emptyLayerPricing(i),
           layer: sl.layer || `L${i + 1}`,
           limit: sl.limit || pl.limit || '',
@@ -1059,7 +1059,44 @@ export default function NpFinalPricing() {
           classOfBusinessIds: sl.classOfBusinessIds || [],
           ...pl,
           ...sv,
-        });
+        };
+
+        // Re-derive component totals + combined UW price from the loaded
+        // actuarial fields so a price saved under the old Rate-%-of-EPI scale
+        // doesn't persist. Only overwrite a UW price when it still tracks the
+        // saved total (i.e. the user hasn't manually diverged it) — the same
+        // guard runCalcEngine applies. Uses pct() to match the engine's format.
+        if (ml.risk) {
+          const riskTotal = deriveComponentTotal(
+            ml.riskPureBurn, ml.riskPareto, ml.riskExposure,
+            ml.riskWeightBurn || '50', ml.riskWeightPareto || '0',
+            ml.riskWeightExposure || '50', ml.riskLoading || '15',
+          );
+          if (riskTotal > 0) {
+            const uwTracks = !ml.riskUwPrice || ml.riskUwPrice === '0.00%' || toN(ml.riskUwPrice) === toN(ml.riskTotalPrice);
+            ml.riskTotalPrice = pct(riskTotal);
+            if (uwTracks) ml.riskUwPrice = pct(riskTotal);
+          }
+        }
+        if (ml.cat) {
+          const catTotal = deriveComponentTotal(
+            ml.catPureBurn, ml.catPareto, ml.catExposure,
+            ml.catWeightBurn || '50', ml.catWeightPareto || '0',
+            ml.catWeightExposure || '50', ml.catLoading || '15',
+          );
+          if (catTotal > 0) {
+            const uwTracks = !ml.catUwPrice || ml.catUwPrice === '0.00%' || toN(ml.catUwPrice) === toN(ml.catTotalPrice);
+            ml.catTotalPrice = pct(catTotal);
+            if (uwTracks) ml.catUwPrice = pct(catTotal);
+          }
+        }
+        const combined = deriveCombinedUwPrice(ml);
+        if (combined > 0) {
+          const uwTracks = !ml.uwPrice || ml.uwPrice === '0.00%' || toN(ml.uwPrice) === toN(ml.totalPrice);
+          ml.totalPrice = pct(combined);
+          if (uwTracks) ml.uwPrice = pct(combined);
+        }
+        merged.push(ml);
       }
       setLayers(merged);
 
@@ -1497,7 +1534,11 @@ export default function NpFinalPricing() {
         // layer), snap.reinsurer/lead are indexed to the old list — skip them
         // to avoid writing one layer's ROL onto another.
         const snapAligned = snap.reinsurer.length === prev.length;
-        const reins = (snapAligned && snap.reinsurer[i] !== undefined ? snap.reinsurer[i] : '') || '';
+        // Guard against stale ROLs saved under the old Rate-%-of-EPI scale: a
+        // reinsurer ROL above 500% is physically impossible for a sensible XL
+        // layer, so treat it as stale and discard (re-entry / re-compute fixes it).
+        const rawReins = snapAligned && snap.reinsurer[i] !== undefined ? snap.reinsurer[i] : '';
+        const reins = toN(rawReins) > 500 ? '' : (rawReins || '');
         const lead  = (snapAligned && snap.lead[i]      !== undefined ? snap.lead[i]      : '') || '';
         const exp   = expKnown ? computeExpiringFor(l, i, expKnown) : '';
 

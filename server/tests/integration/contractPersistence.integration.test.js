@@ -856,5 +856,84 @@ describe.skipIf(shouldSkipDb)('integration: contract save and rehydrate every ro
       const rows = await many(check.sql, [contractId]);
       expect(rows.length, `${check.label} should have saved rows for ${contractId}`).toBe(1);
     }
+
+    // ── Finding 1 (HIGH): a re-save that OMITS is_selected/inflation_factor —
+    // as the loss-list grid does — must preserve the previously-saved values,
+    // not reset them to true/1. (Appended last; uses full-replace saves.) ──
+    const llBefore = await jsonOk(
+      await harness.fetchApp('GET', `/api/treaties/${contractId}/large-losses`),
+      'load large losses (preserve setup)',
+    );
+    const preserveId = llBefore.losses[0].loss_id;
+    // Selection-screen save: deselect + set inflation 1.5 on the existing loss.
+    await expectOk(
+      await harness.fetchApp('PUT', `/api/treaties/${contractId}/large-losses`, {
+        body: { report_date: '2026-03-31', losses: [{
+          loss_id: preserveId, uw_year: 2024, insured_name: 'Audit Insured', loss_name: 'Audit Loss',
+          date_of_loss: '2024-05-20', class_of_business: 'Property', paid: 100, os: 20, incurred: 120,
+          is_selected: false, inflation_factor: 1.5,
+        }] },
+      }),
+      'save large losses (deselect + inflate)',
+    );
+    // Loss-list grid save: omits is_selected and inflation_factor entirely.
+    await expectOk(
+      await harness.fetchApp('PUT', `/api/treaties/${contractId}/large-losses`, {
+        body: { report_date: '2026-03-31', losses: [{
+          loss_id: preserveId, uw_year: 2024, insured_name: 'Audit Insured', loss_name: 'Audit Loss',
+          date_of_loss: '2024-05-20', class_of_business: 'Property', paid: 100, os: 20, incurred: 120,
+        }] },
+      }),
+      'resave large losses omitting selection/inflation',
+    );
+    const llAfter = await jsonOk(
+      await harness.fetchApp('GET', `/api/treaties/${contractId}/large-losses`),
+      'reload large losses (preserve check)',
+    );
+    expect(llAfter.losses[0].is_selected).toBe(false);            // preserved, not reset to true
+    expect(n(llAfter.losses[0].inflation_factor)).toBeCloseTo(1.5); // preserved, not reset to 1
+
+    // ── Finding 4 (MEDIUM): a loss with no uw_year and an invalid
+    // policy_inception_date must not 500 (NaN into the integer column). ──
+    const badYear = await harness.fetchApp('PUT', `/api/treaties/${contractId}/large-losses`, {
+      body: { report_date: '2026-03-31', losses: [{
+        insured_name: 'Bad Year', loss_name: 'Bad Year', date_of_loss: '2024-05-20',
+        class_of_business: 'Property', incurred: 50, policy_inception_date: 'not-a-date',
+      }] },
+    });
+    expect(badYear.status).toBeLessThan(500);
+
+    // ── Finding 2 (MEDIUM): writes to a non-existent / malformed id return
+    // 404 / 400, not 500. ──
+    const missing = await harness.fetchApp('PUT', '/api/treaties/00000000-0000-0000-0000-0000000000ff/large-losses', {
+      body: { report_date: '2026-03-31', losses: [] },
+    });
+    expect(missing.status).toBe(404);
+    const badId = await harness.fetchApp('PUT', '/api/treaties/not-a-uuid/large-losses', {
+      body: { report_date: '2026-03-31', losses: [] },
+    });
+    expect(badId.status).toBe(400);
+
+    // ── Loss-selection staleness (migration 114) ──
+    // Large losses were re-saved (above) after the loss-selection snapshot was
+    // saved, so the selection is now stale.
+    const lossStale = await jsonOk(
+      await harness.fetchApp('GET', `/api/treaties/${contractId}/losses/staleness`),
+      'loss staleness (stale)',
+    );
+    expect(lossStale.selectionSavedAt).not.toBeNull();
+    expect(lossStale.stale).toBe(true);
+    // Re-saving the selection snapshot clears the staleness.
+    await expectOk(
+      await harness.fetchApp('PUT', `/api/treaties/${contractId}/loss-selection/large/snapshot`, {
+        body: { selected_losses: [] },
+      }),
+      're-save loss selection',
+    );
+    const lossFresh = await jsonOk(
+      await harness.fetchApp('GET', `/api/treaties/${contractId}/losses/staleness`),
+      'loss staleness (fresh)',
+    );
+    expect(lossFresh.stale).toBe(false);
   });
 });

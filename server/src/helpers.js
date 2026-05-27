@@ -89,3 +89,67 @@ export function boolOrDefault(v, def = true) {
   if (v === false || v === 'false' || v === 0) return false;
   return def;
 }
+
+/** Calendar year (UTC) from a date-like value; null when missing or invalid. */
+export function yearFromDate(dateLike) {
+  if (!dateLike) return null;
+  const y = new Date(dateLike).getUTCFullYear();
+  return Number.isFinite(y) ? y : null;
+}
+
+/**
+ * Underwriting year for a loss record. Explicit uw_year wins, then the policy
+ * inception year, then the loss-date year. Each derived year is NaN-guarded
+ * (via yearFromDate) so an invalid date string never propagates into the
+ * integer uw_year column and aborts the whole save.
+ */
+export function safeUwYear(loss) {
+  return numOrNull(loss?.uw_year) ?? yearFromDate(loss?.policy_inception_date) ?? yearFromDate(loss?.date_of_loss);
+}
+
+/**
+ * Merge an incoming boolean with the previously-saved value: an explicit
+ * incoming value (true/false, 'true'/'false', 1/0) wins; otherwise keep the
+ * existing DB value; otherwise the default. Lets a save that OMITS the field
+ * (e.g. the loss-list grid, which doesn't send is_selected) preserve a choice
+ * made elsewhere instead of silently resetting it.
+ */
+export function preserveBool(incoming, prev, fallback = true) {
+  if (incoming === true || incoming === 'true' || incoming === 1) return true;
+  if (incoming === false || incoming === 'false' || incoming === 0) return false;
+  if (prev === true || prev === false) return prev;
+  return fallback;
+}
+
+/** Numeric counterpart of preserveBool: incoming (if present) → existing → default. */
+export function preserveNum(incoming, prev, fallback) {
+  const inc = numOrNull(incoming);
+  if (inc !== null) return inc;
+  const p = numOrNull(prev);
+  if (p !== null) return p;
+  return fallback;
+}
+
+/**
+ * Throw a 404 when a parent row doesn't exist, before a write FK-fails with a
+ * 500. `table`/`idColumn` MUST be trusted literals (never user input) — they
+ * are interpolated into SQL. `client` is a pg pool or connection.
+ */
+export async function assertExists(client, table, idColumn, id, label = 'Resource') {
+  const { rowCount } = await client.query(`SELECT 1 FROM ${table} WHERE ${idColumn} = $1`, [id]);
+  if (!rowCount) {
+    const err = new Error(`${label} not found`);
+    err.status = 404;
+    err.code = 'NOT_FOUND';
+    throw err;
+  }
+}
+
+/**
+ * Staleness predicate shared by the dev-factor and loss-selection checks:
+ * true only when a save timestamp exists AND the source was updated strictly
+ * after it. A null savedAt (never saved) is never stale.
+ */
+export function isStaleSince(sourceUpdatedAt, savedAt) {
+  return !!(savedAt && sourceUpdatedAt && new Date(sourceUpdatedAt) > new Date(savedAt));
+}

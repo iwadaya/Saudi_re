@@ -164,7 +164,7 @@ export function paretoExhaustion(alpha, xm, deductible, limit) {
  *      → loss cost % for that year.
  *   5. Average loss costs across all observation years (including zero-loss years)
  *      → average loss cost as % of EGNPI.
- *   6. ROL = avgLossCost × (avgEgnpi / limit).
+ *   6. ROL = avgAnnualLayerLoss / limit  (true Rate-on-Line).
  *
  * @param {Array}  losses      - Array of {uw_year, incurred, inflated_incurred, inflation_factor, is_selected}
  * @param {number} deductible  - Layer attachment (same currency as losses)
@@ -245,12 +245,13 @@ export function calcPureBurningCost(losses, deductible, limit, egnpi, obsYears, 
   //       this branch returned loss / limit. The blend in deriveComponentTotal
   //       then summed mismatched units.
   //
-  // Fix: avgAnnualLayerLoss = avgLossCost × prospective_EGNPI; express the
-  // rate as % of premium (matches Pareto + exposure). rol simplifies to
-  // avgLossCost. Multiply by EGNPI for currency, or by EGNPI/limit for ROL.
+  // avgAnnualLayerLoss = avgLossCost × prospective_EGNPI gives the expected
+  // annual layer loss in currency, then
+  // rol = avgAnnualLayerLoss / limit — true Rate-on-Line, consistent with
+  // Pareto and exposure rating which also divide expected layer loss by limit.
   const prospectiveEgnpi = cn(egnpi);
   const avgAnnualLayerLoss = avgLossCost * prospectiveEgnpi;
-  const rol = avgLossCost;
+  const rol = limit > 0 ? avgAnnualLayerLoss / limit : 0;
 
   return { rol, avgLossCost, avgAnnualLayerLoss, avgEgnpi, totalLayerLoss, years };
 }
@@ -301,7 +302,7 @@ export function calcParetoROL(losses, deductible, limit, egnpi, savedParams) {
 
   // Expected layer cost per year
   const expLayerLoss = paretoLayerExpectedLoss(alpha, xm, deductible, limit, n, years);
-  const rol = expLayerLoss / egnpi;
+  const rol = limit > 0 ? expLayerLoss / limit : 0;
 
   // Probability of attachment and exhaustion
   const prAttach  = Math.min(1, paretoAttachment(alpha, xm, deductible));
@@ -395,7 +396,7 @@ export function calcRiskExposureRating(profiles, deductible, limit, egnpi) {
     totalExpLoss *= grossLossRatio;
   }
 
-  const rol = totalSI > 0 ? totalExpLoss / egnpi : 0;
+  const rol = (totalSI > 0 && limit > 0) ? totalExpLoss / limit : 0;
   return { rol, totalExpLoss, totalSI };
 }
 
@@ -457,7 +458,7 @@ export function calcCatExposureRating(crestaRows, deductible, limit, egnpi, catS
         const h2 = Math.max(0, Math.min(p2.loss - deductible, limit));
         aep += (f1 - f2) * (h1 + h2) / 2;
       }
-      const rol = aep / egnpi;
+      const rol = limit > 0 ? aep / limit : 0;
       // Prob attachment / exhaustion: interpolate from OEP curve
       const prAttach  = interpOEP(points, deductible);
       const prExhaust = interpOEP(points, deductible + limit);
@@ -476,7 +477,7 @@ export function calcCatExposureRating(crestaRows, deductible, limit, egnpi, catS
       const years = obsYears || Math.max(5, new Set(selected.map(l => l.uw_year)).size);
       if (alpha > 0) {
         const expLayerLoss = paretoLayerExpectedLoss(alpha, xm, deductible, limit, n, years);
-        const rol = expLayerLoss / egnpi;
+        const rol = limit > 0 ? expLayerLoss / limit : 0;
         const prAttach  = Math.min(1, paretoAttachment(alpha, xm, deductible));
         const prExhaust = Math.min(1, paretoExhaustion(alpha, xm, deductible, limit));
         return { rol, alpha, xm, prAttach, prExhaust, expLayerLoss, method: 'pareto' };
@@ -496,7 +497,9 @@ export function calcCatExposureRating(crestaRows, deductible, limit, egnpi, catS
       s + cn(r.eq_agg) + cn(r.ws_agg) + cn(r.flood_agg) + cn(r.srcc_agg) + cn(r.others_agg), 0);
     if (totalExposure > 0 && egnpi > 0) {
       const impliedLoss = egnpi * 0.15; // base: 15% expected annual loss ratio as seed
-      const rol = Math.max(0, Math.min(impliedLoss - deductible, limit)) / (egnpi * (obsYears || 10));
+      const rol = limit > 0
+        ? Math.max(0, Math.min(impliedLoss - deductible, limit)) / (limit * (obsYears || 10))
+        : 0;
       return { rol, totalExposure, method: 'flat_loss_ratio_fallback' };
     }
   }
@@ -701,6 +704,7 @@ export async function calcLayerPricing(api, contractId, layers, npDetail, mode, 
       exposureRating:expResult.rol    > 0 ? fmtRol(expResult.rol)    : '0.00%',
       prAttach:  prAttach  > 0 ? (prAttach  * 100).toFixed(2) + '%' : '0.00%',
       prExhaust: prExhaust > 0 ? (prExhaust * 100).toFixed(2) + '%' : '0.00%',
+      // All three _*Rol fields are true ROL (annualLoss / limit), not Rate % EPI.
       _pureBurnRol: burnResult.rol,
       _paretoRol:   paretoResult.rol,
       _exposureRol: expResult.rol,

@@ -4,6 +4,10 @@ import { useContractId } from '../../../hooks/useContractId';
 import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
 import { loadProjectedRows } from '../../../logic/projectWithSavedFactors';
+import { loadLossCategoryByYear, deriveLossComponents } from '../../../logic/lossCategoryAmounts';
+import { runFinancialEngine } from '../quick_summary/PropQuickSummary';
+import { buildTreatyTerms } from '../../../logic/propTreatyEngine';
+import { toN as cn } from '../../../utils/format';
 
 const ROUTE_KEY = 'PROP_PROJECTED_SUMMARY';
 
@@ -20,6 +24,19 @@ export default function PropProjectedSummary() {
   const [error, setError] = useState(null);
   const [source, setSource] = useState('');
   const [showAnalyses, setShowAnalyses] = useState(false);
+  const [lossCat, setLossCat] = useState({ large: new Map(), cat: new Map() });
+  const [showLossModal, setShowLossModal] = useState(false);
+  const [modalTab, setModalTab] = useState('abs');
+  const [terms, setTerms] = useState({});
+  // Staleness of the dev factors driving this projection: the paid/OS
+  // (incurred) and premium triangles, each compared against their saved
+  // factors. Either being stale prompts a re-review.
+  const [stale, setStale] = useState({ incurred: false, premium: false });
+  // True when large/cat losses were edited after the loss selection was saved.
+  const [lossStale, setLossStale] = useState(false);
+  // True when the projection fell back to hard-coded placeholder benchmark
+  // curves (no saved factors, no triangle, no saved blend).
+  const [usedPlaceholderLdfs, setUsedPlaceholderLdfs] = useState(false);
 
   useEffect(() => {
     if (!contractId) return;
@@ -27,19 +44,32 @@ export default function PropProjectedSummary() {
     (async () => {
       try {
         /* ── Use saved dev factors via shared utility ── */
+        // Incurred figures here are NOT read from stored INCURRED cells.
+        // loadProjectedRows projects the STRIPPED (attritional) incurred
+        // triangle with the saved INCURRED dev factors (falling back to PAID
+        // factors, then a fresh weighted recalc) and adds the raw large/CAT
+        // loadings back on top. r.projectedLosses is that full incurred total;
+        // r.actualLosses is the raw full paid+OS latest diagonal.
+        // deriveLossComponents below subtracts large/CAT back out to recover
+        // the attritional component.
         const qm = appState.quoteMode ? { quote: true } : undefined;
-        const { rows: standardRows, source: src } = await loadProjectedRows(contractId, qm);
+        const contract = await api.getContract(contractId, qm).catch(() => ({}));
+        const t = buildTreatyTerms(contract, appState.propTreatyDetail || {});
+        setTerms(t);
+        const { rows: standardRows, source: src, usedPlaceholderLdfs: placeholder } = await loadProjectedRows(contractId, qm);
         setSource(src || '');
+        setUsedPlaceholderLdfs(!!placeholder);
+        setLossCat(await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() })));
 
         if (standardRows && standardRows.length > 0) {
+          // Raw projection outputs only. Loss components and the derived
+          // Incurred (= Attritional + Large + CAT) are computed below via
+          // deriveLossComponents so incurred is never an independent figure.
           setResults(standardRows.map(r => ({
             year: r.year,
             premium: r.actPrem, projectedPremium: r.ultPrem,
             actualLosses: r.actLoss, projectedLosses: r.ultLoss,
             ultPaid: r.ultPaid ?? null,
-            ultIncurred: r.ultIncurred ?? r.ultLoss,
-            projectedLR: r.ultPrem > 0 ? r.ultLoss / r.ultPrem : 0,
-            actualLR: r.actPrem > 0 ? r.actLoss / r.actPrem : 0,
           })));
         } else {
           setResults([]);
@@ -50,35 +80,164 @@ export default function PropProjectedSummary() {
       }
       setLoading(false);
     })();
+  }, [appState.propTreatyDetail, appState.quoteMode, contractId]);
+
+  /* Staleness: were the incurred (paid/OS) or premium triangles saved after
+     their respective dev factors? Both endpoints fetched in parallel. */
+  useEffect(() => {
+    if (!contractId) return;
+    let cancelled = false;
+    const qm = appState.quoteMode ? { quote: true } : undefined;
+    Promise.all([
+      api.getDevFactorStaleness(contractId, 'INCURRED', qm).catch(() => null),
+      api.getDevFactorStaleness(contractId, 'PREMIUM', qm).catch(() => null),
+      api.getLossSelectionStaleness(contractId, qm).catch(() => null),
+    ]).then(([inc, prem, loss]) => {
+      if (cancelled) return;
+      setStale({ incurred: !!inc?.stale, premium: !!prem?.stale });
+      setLossStale(!!loss?.stale);
+    });
+    return () => { cancelled = true; };
   }, [appState.quoteMode, contractId]);
 
+  /* ── Per-UW-year loss model ──
+     PROJECTED basis: premium + incurred total are projected (dev factors via
+     loadProjectedRows); large/CAT are NOT projected. ACTUAL basis: raw saved
+     figures with no projection. Both bases route through deriveLossComponents,
+     which enforces Incurred = Attritional + Large + CAT with zero-floored
+     components — incurred is never sourced independently of its parts. */
+  // When the treaty opts out of stripping, large/cat fold into attritional
+  // (shown as nil) on both bases. Defaults to stripping.
+  const stripLC = appState.propTreatyDetail?.stripLargeCat !== false;
+  const rows = results.map(r => {
+    const large = stripLC ? (lossCat.large.get(Number(r.year)) || 0) : 0;
+    const cat = stripLC ? (lossCat.cat.get(Number(r.year)) || 0) : 0;
+    return {
+      year: r.year,
+      ultPaid: r.ultPaid,
+      proj: deriveLossComponents({ premium: r.projectedPremium, incurredTotal: r.projectedLosses, large, cat }),
+      act: deriveLossComponents({ premium: r.premium, incurredTotal: r.actualLosses, large, cat }),
+    };
+  });
+
+  /* Per-year financials (commission, brokerage, taxes, profit comm, LPC,
+     result) from the shared Quick Summary engine, used to derive the
+     expense / combined / result columns in the loss-breakdown modal. */
+  const engineRows = results.map(r => ({
+    year: r.year,
+    ultPrem: r.projectedPremium,
+    ultLoss: r.projectedLosses,
+    actPrem: r.premium,
+    actLoss: r.actualLosses,
+  }));
+  const finRows = Object.keys(terms).length > 0
+    ? runFinancialEngine(engineRows, terms).rows
+    : [];
+  const finByYear = new Map(finRows.map(r => [r.year, r]));
+
   const save = async () => {
-    if (!contractId || !results.length) return true;
+    if (!contractId || !rows.length) return true;
     try {
       const payload = [];
-      results.forEach(r => {
-        payload.push({ uw_year: r.year, record_type: 'ACTUAL', ultimate_premium: r.premium, ultimate_loss: r.actualLosses, loss_ratio: r.actualLR });
-        payload.push({ uw_year: r.year, record_type: 'PROJECTED', ultimate_premium: r.projectedPremium, ultimate_loss: r.projectedLosses, loss_ratio: r.projectedLR });
+      rows.forEach(r => {
+        payload.push({ uw_year: r.year, record_type: 'ACTUAL', ultimate_premium: r.act.premium, ultimate_loss: r.act.incurred, loss_ratio: r.act.incurredLR });
+        payload.push({ uw_year: r.year, record_type: 'PROJECTED', ultimate_premium: r.proj.premium, ultimate_loss: r.proj.incurred, loss_ratio: r.proj.incurredLR });
       });
       await api.savePricingYearly(contractId, payload);
       return true;
     } catch (e) { console.error('Save failed:', e); return false; }
   };
 
-  const sum = k => results.reduce((a, x) => a + (x[k] || 0), 0);
-  const tPrem = sum('premium'), tUP = sum('projectedPremium'), tAL = sum('actualLosses'), tUL = sum('projectedLosses');
-  const tUPaid = sum('ultPaid'), tUInc = sum('ultIncurred');
+  const tPrem = rows.reduce((a, r) => a + r.act.premium, 0);
+  const tUP = rows.reduce((a, r) => a + r.proj.premium, 0);
+  const tAL = rows.reduce((a, r) => a + r.act.incurred, 0);
+  const tUL = rows.reduce((a, r) => a + r.proj.incurred, 0);
+  const tUPaid = rows.reduce((a, r) => a + (r.ultPaid || 0), 0);
+  // Incurred ultimate is the derived projected incurred — never an independent value.
+  const tUInc = tUL;
   const reservingDelta = tUPaid - tUInc;
   const reservingStatus = !Number.isFinite(reservingDelta) || (tUPaid === 0 && tUInc === 0)
     ? 'NONE'
     : reservingDelta > 0 ? 'UNDER' : reservingDelta < 0 ? 'OVER' : 'BALANCED';
 
+  /* ── Loss-breakdown modal data (per underwriting year) ── */
+  const sumYearRows = rs => {
+    const premium = rs.reduce((a, r) => a + r.premium, 0);
+    const attritional = rs.reduce((a, r) => a + r.attritional, 0);
+    const large = rs.reduce((a, r) => a + r.large, 0);
+    const cat = rs.reduce((a, r) => a + r.cat, 0);
+    // Ratios aggregate as sum(ratio × premium) ÷ total premium — equivalent
+    // to summing the underlying amounts then dividing, matching the LR rows.
+    const expenseAmt = rs.reduce((a, r) => a + (r.expenseRatio || 0) * r.premium, 0);
+    const combinedAmt = rs.reduce((a, r) => a + (r.combinedRatio || 0) * r.premium, 0);
+    const resultAmt = rs.reduce((a, r) => a + (r.resultPct || 0) * r.premium, 0);
+    const lr = n => (premium > 0 ? n / premium : 0);
+    return {
+      year: 'Total', premium, attritional, large, cat, incurred: attritional + large + cat,
+      attrLR: lr(attritional), largeLR: lr(large), catLR: lr(cat), incurredLR: lr(attritional + large + cat),
+      expenseRatio: lr(expenseAmt), combinedRatio: lr(combinedAmt), resultPct: lr(resultAmt),
+    };
+  };
+  const lossModalBases = [
+    {
+      key: 'ACTUAL', label: 'Actual (Incurred)',
+      rows: rows.map(r => {
+        const fin = finByYear.get(r.year) || {};
+        const prem = r.act.premium;
+        const exp = prem > 0
+          ? (cn(fin.actComm) + cn(fin.actBrokerage) + cn(fin.actTaxes) + cn(fin.actPC)) / prem
+          : 0;
+        const cr = prem > 0
+          ? (r.act.incurred + cn(fin.actComm) + cn(fin.actBrokerage) + cn(fin.actTaxes) + cn(fin.actPC) - cn(fin.actLPC)) / prem
+          : 0;
+        const rp = prem > 0 ? cn(fin.actResult) / prem : 0;
+        return { year: r.year, ...r.act, expenseRatio: exp, combinedRatio: cr, resultPct: rp };
+      }),
+    },
+    {
+      key: 'PROJECTED', label: 'Projected (Ultimate)',
+      rows: rows.map(r => {
+        const fin = finByYear.get(r.year) || {};
+        const prem = r.proj.premium;
+        const exp = prem > 0
+          ? (cn(fin.comm) + cn(fin.brokerage) + cn(fin.taxes) + cn(fin.profitComm)) / prem
+          : 0;
+        const cr = prem > 0
+          ? (r.proj.incurred + cn(fin.comm) + cn(fin.brokerage) + cn(fin.taxes) + cn(fin.profitComm) - cn(fin.lpc)) / prem
+          : 0;
+        const rp = prem > 0 ? cn(fin.result) / prem : 0;
+        return { year: r.year, ...r.proj, expenseRatio: exp, combinedRatio: cr, resultPct: rp };
+      }),
+    },
+  ];
+  const renderLossCells = r => modalTab === 'abs' ? (
+    <>
+      <td className="ps-dash"><div className="ps-cell">{fmt0(r.premium)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fmt0(r.attritional)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fmt0(r.large)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fmt0(r.cat)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fPct(r.expenseRatio)}</div></td>
+      <td className={`ps-dash ${lrCls(r.combinedRatio)}`}><div className="ps-cell">{fPct(r.combinedRatio)}</div></td>
+      <td className={`ps-dash ${r.resultPct < 0 ? 'ps-cell--hot' : ''}`}><div className="ps-cell">{fPct(r.resultPct)}</div></td>
+    </>
+  ) : (
+    <>
+      <td className="ps-dash"><div className="ps-cell">{r.premium > 0 ? '100.0%' : '—'}</div></td>
+      <td className={`ps-dash ${lrCls(r.attrLR)}`}><div className="ps-cell">{fPct(r.attrLR)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fPct(r.largeLR)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fPct(r.catLR)}</div></td>
+      <td className="ps-dash"><div className="ps-cell">{fPct(r.expenseRatio)}</div></td>
+      <td className={`ps-dash ${lrCls(r.combinedRatio)}`}><div className="ps-cell">{fPct(r.combinedRatio)}</div></td>
+      <td className={`ps-dash ${r.resultPct < 0 ? 'ps-cell--hot' : ''}`}><div className="ps-cell">{fPct(r.resultPct)}</div></td>
+    </>
+  );
+
   /* ── Bar Chart ── */
   const BarChart = ({ title, subtitle, showToggle }) => {
-    const years = results.map(r => r.year);
+    const years = rows.map(r => r.year);
     const isLoss = topMetric === 'LOSSES';
-    const actSeries = results.map(r => isLoss ? r.actualLosses : r.premium);
-    const projSeries = results.map(r => isLoss ? r.projectedLosses : r.projectedPremium);
+    const actSeries = rows.map(r => isLoss ? r.act.incurred : r.act.premium);
+    const projSeries = rows.map(r => isLoss ? r.proj.incurred : r.proj.premium);
     const max = Math.max(...actSeries, ...projSeries, 1);
     const h = v => Math.max(2, Math.round((v / max) * 100));
     return (
@@ -106,8 +265,8 @@ export default function PropProjectedSummary() {
 
   /* ── LR Chart ── */
   const LRChart = () => {
-    const years = results.map(r => r.year);
-    const act = results.map(r => r.actualLR * 100), proj = results.map(r => r.projectedLR * 100);
+    const years = rows.map(r => r.year);
+    const act = rows.map(r => r.act.incurredLR * 100), proj = rows.map(r => r.proj.incurredLR * 100);
     const max = Math.max(...act, ...proj, 1);
     const h = v => Math.max(2, Math.round((v / max) * 100));
     return (
@@ -134,6 +293,12 @@ export default function PropProjectedSummary() {
     : source === 'straight-short' ? 'Short Tail portfolio dev factors'
     : '';
 
+  const staleMessages = [];
+  if (stale.premium && stale.incurred) staleMessages.push('Premium and incurred triangles updated since dev factors were last saved — consider reviewing.');
+  else if (stale.incurred) staleMessages.push('Incurred triangle updated since dev factors were last saved — consider reviewing.');
+  else if (stale.premium) staleMessages.push('Premium triangle updated since dev factors were last saved — consider reviewing.');
+  if (lossStale) staleMessages.push('Loss selection is outdated — losses have changed since the last selection was saved.');
+
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Projected Summary" headerPill="PROPORTIONAL TREATY: PROJECTED SUMMARY" onBeforeNext={save} onBeforeBack={save}>
       {() => (
@@ -151,6 +316,16 @@ export default function PropProjectedSummary() {
                   ({sourceLabel})
                 </span>}
               </h2>
+              {usedPlaceholderLdfs && (
+                <div role="alert" style={{ margin: '0 0 12px', padding: '12px 16px', borderRadius: 10, background: 'rgba(249,115,22,0.14)', border: '2px solid #f97316', color: '#fdba74', fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>
+                  No saved development factors found — projection is using placeholder benchmark curves. Go to the Development Factors screen to select and save factors before relying on these figures.
+                </div>
+              )}
+              {staleMessages.length > 0 && (
+                <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5 }}>
+                  {staleMessages.map((m, i) => <div key={i}>{m}</div>)}
+                </div>
+              )}
               <div style={{
                 margin: '4px 0 16px',
                 padding: '10px 14px',
@@ -184,6 +359,23 @@ export default function PropProjectedSummary() {
                     <div className="ps-block">
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                         <div className="ps-block-title" style={{ marginBottom: 0 }}>Projected Ultimate</div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          onClick={() => setShowLossModal(true)}
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: '0.04em',
+                            padding: '6px 12px',
+                            borderRadius: 8,
+                            cursor: 'pointer',
+                            border: '1px solid rgba(56,189,248,0.45)',
+                            background: 'rgba(56,189,248,0.08)',
+                            color: '#7dd3fc',
+                          }}
+                        >
+                          ▦ Loss Breakdown
+                        </button>
                         <button
                           onClick={() => setShowAnalyses(s => !s)}
                           style={{
@@ -200,6 +392,7 @@ export default function PropProjectedSummary() {
                         >
                           {showAnalyses ? '▾ Analyses' : '▸ Analyses'}
                         </button>
+                        </div>
                       </div>
                       {showAnalyses && (() => {
                         const classify = (paid, inc) => {
@@ -227,15 +420,16 @@ export default function PropProjectedSummary() {
                                 <table className="ps-table">
                                   <thead><tr><th>UW Year</th><th>Paid Ult</th><th>Incurred Ult</th><th>Δ</th><th>Status</th></tr></thead>
                                   <tbody>
-                                    {results.map(r => {
-                                      const status = classify(r.ultPaid, r.ultIncurred);
+                                    {rows.map(r => {
+                                      const incUlt = r.proj.incurred;
+                                      const status = classify(r.ultPaid, incUlt);
                                       const t = toneFor(status);
-                                      const delta = (r.ultPaid || 0) - (r.ultIncurred || 0);
+                                      const delta = (r.ultPaid || 0) - incUlt;
                                       return (
                                         <tr key={r.year}>
                                           <td className="ps-year"><div className="ps-cell">{r.year}</div></td>
                                           <td className="ps-dash"><div className="ps-cell">{fmt0(r.ultPaid)}</div></td>
-                                          <td className="ps-dash"><div className="ps-cell">{fmt0(r.ultIncurred)}</div></td>
+                                          <td className="ps-dash"><div className="ps-cell">{fmt0(incUlt)}</div></td>
                                           <td className="ps-dash"><div className="ps-cell" style={{ color: t.text }}>{fmt0(delta)}</div></td>
                                           <td className="ps-dash">
                                             <div className="ps-cell" style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', color: t.text, background: t.bg, border: `1px solid ${t.border}` }}>
@@ -276,15 +470,15 @@ export default function PropProjectedSummary() {
                         <table className="ps-table">
                           <thead><tr><th>UW Year</th><th>Premium</th><th>Ult. Losses</th><th>Ult. LR %</th></tr></thead>
                           <tbody>
-                            {results.map(r => (
+                            {rows.map(r => (
                               <tr key={r.year}>
                                 <td className="ps-year"><div className="ps-cell">{r.year}</div></td>
-                                <td className="ps-dash"><div className="ps-cell">{fmt0(r.projectedPremium)}</div></td>
-                                <td className="ps-dash"><div className="ps-cell">{fmt0(r.projectedLosses)}</div></td>
-                                <td className={`ps-dash ${lrCls(r.projectedLR)}`}><div className="ps-cell">{fPct(r.projectedLR)}</div></td>
+                                <td className="ps-dash"><div className="ps-cell">{fmt0(r.proj.premium)}</div></td>
+                                <td className="ps-dash"><div className="ps-cell">{fmt0(r.proj.incurred)}</div></td>
+                                <td className={`ps-dash ${lrCls(r.proj.incurredLR)}`}><div className="ps-cell">{fPct(r.proj.incurredLR)}</div></td>
                               </tr>
                             ))}
-                            <tr className="ps-total">
+                            <tr className="ps-total" onClick={() => setShowLossModal(true)} style={{ cursor: 'pointer' }} title="View attritional / large / CAT loss breakdown">
                               <td className="ps-year"><div className="ps-cell">Total</div></td>
                               <td className="ps-dash"><div className="ps-cell">{fmt0(tUP)}</div></td>
                               <td className="ps-dash"><div className="ps-cell">{fmt0(tUL)}</div></td>
@@ -302,15 +496,15 @@ export default function PropProjectedSummary() {
                         <table className="ps-table">
                           <thead><tr><th>UW Year</th><th>Premium</th><th>Incurred</th><th>Inc. LR %</th></tr></thead>
                           <tbody>
-                            {results.map(r => (
+                            {rows.map(r => (
                               <tr key={r.year}>
                                 <td className="ps-year"><div className="ps-cell">{r.year}</div></td>
-                                <td className="ps-dash"><div className="ps-cell">{fmt0(r.premium)}</div></td>
-                                <td className="ps-dash"><div className="ps-cell">{fmt0(r.actualLosses)}</div></td>
-                                <td className={`ps-dash ${lrCls(r.actualLR)}`}><div className="ps-cell">{fPct(r.actualLR)}</div></td>
+                                <td className="ps-dash"><div className="ps-cell">{fmt0(r.act.premium)}</div></td>
+                                <td className="ps-dash"><div className="ps-cell">{fmt0(r.act.incurred)}</div></td>
+                                <td className={`ps-dash ${lrCls(r.act.incurredLR)}`}><div className="ps-cell">{fPct(r.act.incurredLR)}</div></td>
                               </tr>
                             ))}
-                            <tr className="ps-total">
+                            <tr className="ps-total" onClick={() => setShowLossModal(true)} style={{ cursor: 'pointer' }} title="View attritional / large / CAT loss breakdown">
                               <td className="ps-year"><div className="ps-cell">Total</div></td>
                               <td className="ps-dash"><div className="ps-cell">{fmt0(tPrem)}</div></td>
                               <td className="ps-dash"><div className="ps-cell">{fmt0(tAL)}</div></td>
@@ -321,6 +515,53 @@ export default function PropProjectedSummary() {
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {showLossModal && (
+            <div
+              onClick={e => { if (e.target === e.currentTarget) setShowLossModal(false); }}
+              style={{ position: 'fixed', inset: 0, zIndex: 120000, background: 'rgba(2,6,23,0.72)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+            >
+              <div role="dialog" aria-modal="true" className="glass" style={{ width: 'min(1380px,96vw)', maxHeight: '88vh', overflow: 'auto', borderRadius: 16, border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(8,16,40,0.97)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid rgba(148,163,184,0.14)' }}>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: '0.03em', color: '#e2e8f0' }}>Loss Breakdown — Actual vs Projected</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>Attritional = ultimate / incurred loss − large − CAT (raw incurred from the saved loss grids)</div>
+                  </div>
+                  <button onClick={() => setShowLossModal(false)} style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid rgba(148,163,184,0.25)', background: 'transparent', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 14 }}>✕</button>
+                </div>
+                <div style={{ display: 'flex', padding: '0 20px', borderBottom: '1px solid rgba(148,163,184,0.14)' }}>
+                  {[{ k: 'abs', l: 'Amounts' }, { k: 'pct', l: 'Percentages' }].map(t => (
+                    <button key={t.k} onClick={() => setModalTab(t.k)} style={{ padding: '12px 18px', fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer', background: 'transparent', color: modalTab === t.k ? '#38bdf8' : 'rgba(255,255,255,0.45)', borderBottom: modalTab === t.k ? '2px solid #38bdf8' : '2px solid transparent', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{t.l}</button>
+                  ))}
+                </div>
+                <div style={{ padding: 20 }}>
+                  {lossModalBases.map(base => (
+                    <div key={base.key} style={{ marginBottom: 18 }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: '#c7d2fe', marginBottom: 8 }}>{base.label}</div>
+                      <div className="ps-table-wrap">
+                        <table className="ps-table">
+                          <thead><tr>
+                            <th>UW Year</th><th>Premium</th><th>Attritional</th><th>Large Loss</th><th>CAT Loss</th><th>Expense Ratio</th><th>Combined Ratio</th><th>Result %</th>
+                          </tr></thead>
+                          <tbody>
+                            {base.rows.map(r => (
+                              <tr key={r.year}>
+                                <td className="ps-year"><div className="ps-cell">{r.year}</div></td>
+                                {renderLossCells(r)}
+                              </tr>
+                            ))}
+                            <tr className="ps-total">
+                              <td className="ps-year"><div className="ps-cell">Total</div></td>
+                              {renderLossCells(sumYearRows(base.rows))}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
