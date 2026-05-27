@@ -694,7 +694,6 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
   const uwYrs=Number(yearsOvr)||10;
   const freq=inflated.filter(l=>l>=xm).length/uwYrs;
   const avgYr=uwYrs>0?total/uwYrs:0;
-  const lp=useMemo(()=>calcLayerPrice(alpha,xm,freq,xm,limit||xm*10),[alpha,xm,freq,limit]);
 
   // Survival function P(X > x) for the currently selected distribution.
   // Used by both the per-loss RP column and the layer burning cost table.
@@ -717,6 +716,17 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
     }
     return null;
   }, [activeDist, fits, xm, alpha]);
+
+  // Risk Pure Premium: Pareto uses the analytical LEV; other fitted
+  // distributions integrate the survival function numerically. Defined after
+  // survivalFn since it depends on it.
+  const lp = useMemo(() => {
+    if (!survivalFn) return { severity: null, rpp: null, error: 'No fit' };
+    if (activeDist === 'pareto') {
+      return calcLayerPrice(alpha, xm, freq, xm, limit || xm * 10);
+    }
+    return calcLayerPriceNumerical(freq, xm, limit || xm * 10, survivalFn);
+  }, [activeDist, survivalFn, alpha, xm, freq, limit]);
 
   // Structure layers scoped to this loss type (RISK for large, CAT for cat).
   // Source: appState.npStructureLayers (set by NpStructure screen on load).
