@@ -266,15 +266,15 @@ describe('calcPureBurningCost', () => {
     expect(calcPureBurningCost([{ incurred: 200 }], 100, 0, 10_000_000, 5).rol).toBe(0);
   });
 
-  it('single loss fully inside the layer — ROL = layerLoss / years / EGNPI', () => {
+  it('single loss fully inside the layer — ROL = annualLoss / limit', () => {
     // One 500k loss, D=100k, L=500k → layerHit = min(400k, 500k) = 400k
     // obsYears=5; egnpi=10M
-    // avgLossCost = (400k / 5) / 10M = 0.008  (rate as % of EGNPI)
+    // avgLossCost = (400k / 5) / 10M = 0.008  (loss-cost rate, intermediate only)
     // avgAnnualLayerLoss = avgLossCost × prospective_egnpi = 0.008 × 10M = 80k
-    // rol = avgLossCost = 0.008  (matches Pareto + exposure-rating units)
+    // rol = avgAnnualLayerLoss / limit = 80k / 500k = 0.16  (true rate on line)
     const losses = [{ uw_year: 2020, inflated_incurred: 500_000 }];
     const r = calcPureBurningCost(losses, 100_000, 500_000, 10_000_000, 5);
-    expect(r.rol).toBeCloseTo(0.008, 4);
+    expect(r.rol).toBeCloseTo(0.16, 4);
     expect(r.avgAnnualLayerLoss).toBeCloseTo(80_000, 0);
   });
 
@@ -285,23 +285,23 @@ describe('calcPureBurningCost', () => {
     ];
     const r = calcPureBurningCost(losses, 100_000, 500_000, 10_000_000, 5);
     // Only the 300k loss contributes; layer hit = 200k.
-    // avgLossCost = (200k / 5) / 10M = 0.004
-    expect(r.rol).toBeCloseTo(0.004, 4);
+    // avgLossCost = (200k / 5) / 10M = 0.004 → rol = 0.004 × 10M / 500k = 0.08 (ROL)
+    expect(r.rol).toBeCloseTo(0.08, 4);
   });
 
   it('caps layer hit at the limit', () => {
     // 10M loss into a 500k xs 100k layer → layer hit capped at 500k
     const losses = [{ uw_year: 2020, inflated_incurred: 10_000_000 }];
     const r = calcPureBurningCost(losses, 100_000, 500_000, 10_000_000, 5);
-    // avgLossCost = (500k / 5) / 10M = 0.01
-    expect(r.rol).toBeCloseTo(0.01, 4);
+    // avgLossCost = (500k / 5) / 10M = 0.01 → rol = 0.01 × 10M / 500k = 0.20 (ROL)
+    expect(r.rol).toBeCloseTo(0.20, 4);
   });
 
   it('falls back to incurred+os when inflated_incurred is missing', () => {
     const losses = [{ uw_year: 2020, incurred: 300_000, os: 200_000 }];
     const r = calcPureBurningCost(losses, 100_000, 500_000, 10_000_000, 5);
-    // 500k loss → layer hit 400k → avgLossCost = (400k/5)/10M = 0.008
-    expect(r.rol).toBeCloseTo(0.008, 4);
+    // 500k loss → layer hit 400k → avgLossCost = (400k/5)/10M = 0.008 → rol = 0.16 (ROL)
+    expect(r.rol).toBeCloseTo(0.16, 4);
   });
 
   it('uses per-year EGNPI when provided (Clark alignment)', () => {
