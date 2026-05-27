@@ -3,7 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import PropProjectedSummary from './PropProjectedSummary.jsx';
 
 const { apiMock, appStateMock, contractIdRef, loadProjectedRowsMock } = vi.hoisted(() => ({
-  apiMock: { getDevFactorStaleness: vi.fn(), getLossSelectionStaleness: vi.fn(), savePricingYearly: vi.fn() },
+  apiMock: { getContract: vi.fn().mockResolvedValue({}), getDevFactorStaleness: vi.fn(), getLossSelectionStaleness: vi.fn(), savePricingYearly: vi.fn() },
   appStateMock: { quoteMode: false, propTreatyDetail: {} },
   contractIdRef: { current: 'contract-1' },
   loadProjectedRowsMock: vi.fn(),
