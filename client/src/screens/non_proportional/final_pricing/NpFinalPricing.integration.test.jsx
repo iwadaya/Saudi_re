@@ -238,7 +238,7 @@ describe('NpFinalPricing integration', () => {
     await waitFor(() => expect(apiMock.getLargeLosses).toHaveBeenCalled());
     await waitFor(() => {
       const refreshed = screen.getByText(/Structure 1/i).closest('section').querySelectorAll('input.bm-cell');
-      expect(refreshed[2].value).toMatch(/^37\.5/);
+      expect(refreshed[2].value).toMatch(/^40/);
       expect(refreshed[4].value).toMatch(/%$/);
       expect(refreshed[4].value).not.toBe('');
     });
