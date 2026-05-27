@@ -24,7 +24,7 @@ const ROUTE_KEY = 'NP_STRUCTURE';
 export default function NpStructure() {
   const contractId = useContractId();
   const showToast = useGlobalToast();
-  const { state: appState, setSlice, structRefsMap } = useAppState();
+  const { state: appState, setSlice, replaceSlice, structRefsMap } = useAppState();
   const [layers, setLayers] = useState([]);
   const [cobRows, setCobRows] = useState([]);
   const [coveredProps, setCoveredProps] = useState([]);
@@ -80,8 +80,8 @@ export default function NpStructure() {
   // touch the cross-tree slice from inside a state updater, which
   // triggered React's "setState during render" warning.
   useEffect(() => {
-    setSlice('npStructureLayers', layers);
-  }, [layers, setSlice]);
+    replaceSlice('npStructureLayers', layers);
+  }, [layers, replaceSlice]);
 
   /* Structures to Quote: stored in npTreatyDetail so it persists across screens */
   const structuresCount = Math.max(1, parseInt(npDetail.quoteStructuresCount || '1', 10) || 1);
@@ -310,7 +310,7 @@ export default function NpStructure() {
         ls = applyTreatyModeCovers(ls);
         ls = recalcFinancialsOnly(ls);  // load: deductibles already from DB, only recompute earned/rol/mdpPct
         setLayers(ls);
-        setSlice('npStructureLayers', ls);
+        replaceSlice('npStructureLayers', ls);
 
         // ── Build cobRows ──
         // For standard mode: reconstruct from relational data (UW limits + junction table COB ids per layer).
@@ -396,7 +396,7 @@ export default function NpStructure() {
         ls = applyTreatyModeCovers(ls);
         ls = fullRecalc(ls);
         setLayers(ls);
-        setSlice('npStructureLayers', ls);
+        replaceSlice('npStructureLayers', ls);
         setCoveredProps([emptyCoveredProp()]);
       })
       .finally(() => { setLoading(false); loaded.current = true; });

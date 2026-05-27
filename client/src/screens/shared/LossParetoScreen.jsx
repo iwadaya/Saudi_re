@@ -732,7 +732,9 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
   // Source: appState.npStructureLayers (set by NpStructure screen on load).
   const isNpCat = lossType === 'cat';
   const structureLayers = useMemo(() => {
-    const raw = appState.npStructureLayers || [];
+    const raw = Array.isArray(appState.npStructureLayers)
+      ? appState.npStructureLayers
+      : appState.npStructureLayers?.layers || [];
     return raw.filter(l => {
       if (l.peril_scope !== undefined) {
         return isNpCat
