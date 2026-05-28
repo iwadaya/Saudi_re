@@ -39,7 +39,7 @@ export default function LdfCurveTable({
   const headerCell = {
     padding: compact ? '6px 8px' : '10px 10px',
     textAlign: 'right',
-    fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase',
+    fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase',
     color: 'var(--muted)',
     borderBottom: '1px solid var(--hairline)',
     whiteSpace: 'nowrap',

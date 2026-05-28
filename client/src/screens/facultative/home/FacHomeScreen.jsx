@@ -122,8 +122,8 @@ export default function FacHomeScreen() {
             boxShadow: '0 0 14px rgba(35,209,139,0.35)',
           }}>U3</div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.12em', color: 'rgba(226,232,240,0.95)' }}>THE UNIVERSE™</div>
-            <div style={{ fontSize: 9, color: 'rgba(0,212,255,0.65)', letterSpacing: '.08em' }}>FACULTATIVE</div>
+            <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 0, color: 'rgba(226,232,240,0.95)' }}>THE UNIVERSE™</div>
+            <div style={{ fontSize: 9, color: 'rgba(0,212,255,0.65)', letterSpacing: 0 }}>FACULTATIVE</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -152,7 +152,7 @@ export default function FacHomeScreen() {
               background: 'rgba(8,14,30,0.70)', border: '1px solid rgba(255,255,255,0.09)',
               borderRadius: 14, padding: '16px 20px',
             }}>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.50)', marginBottom: 6 }}>{k.label}</div>
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(148,163,184,0.50)', marginBottom: 6 }}>{k.label}</div>
               <div style={{ fontSize: 28, fontWeight: 900, color: k.color }}>{k.value}</div>
             </div>
           ))}
@@ -195,7 +195,7 @@ export default function FacHomeScreen() {
           {statuses.map(s => (
             <button key={s} onClick={() => setStatusFilter(s)} style={{
               appearance: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 700,
-              letterSpacing: '.06em', padding: '7px 14px', borderRadius: 999,
+              letterSpacing: 0, padding: '7px 14px', borderRadius: 999,
               border: statusFilter === s ? '1px solid rgba(35,209,139,0.45)' : '1px solid rgba(148,163,184,0.18)',
               background: statusFilter === s ? 'rgba(35,209,139,0.10)' : 'rgba(8,16,40,0.45)',
               color: statusFilter === s ? '#23d18b' : 'rgba(148,163,184,0.70)',
@@ -214,7 +214,7 @@ export default function FacHomeScreen() {
                   {['Reference', 'Insured', 'Type', 'Class', 'Country', 'Sum Insured', 'RI Premium', 'Inception', 'Status', ''].map(h => (
                     <th key={h} style={{
                       padding: '11px 16px', textAlign: h === 'Sum Insured' || h === 'RI Premium' ? 'right' : 'left',
-                      fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase',
+                      fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase',
                       color: 'rgba(148,163,184,0.55)', borderBottom: '1px solid rgba(255,255,255,0.08)',
                       whiteSpace: 'nowrap',
                     }}>{h}</th>
@@ -254,7 +254,7 @@ export default function FacHomeScreen() {
                       <td style={{ padding: '12px 16px' }}>
                         <span style={{
                           display: 'inline-flex', alignItems: 'center',
-                          padding: '3px 10px', borderRadius: 20, fontSize: 10, fontWeight: 800, letterSpacing: '.06em',
+                          padding: '3px 10px', borderRadius: 20, fontSize: 10, fontWeight: 800, letterSpacing: 0,
                           background: sc.bg, border: `1px solid ${sc.border}`, color: sc.color,
                         }}>{r.status}</span>
                       </td>

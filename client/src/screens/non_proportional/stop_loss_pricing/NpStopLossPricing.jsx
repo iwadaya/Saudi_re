@@ -103,7 +103,7 @@ const styles = {
   sectionTitle: {
     fontSize: 11,
     fontWeight: 800,
-    letterSpacing: '.14em',
+    letterSpacing: 0,
     textTransform: 'uppercase',
     color: COLORS.cyan,
     marginBottom: 14,
@@ -117,7 +117,7 @@ const styles = {
   label: {
     fontSize: 10,
     fontWeight: 700,
-    letterSpacing: '.10em',
+    letterSpacing: 0,
     textTransform: 'uppercase',
     color: 'rgba(148,163,184,0.65)',
     marginBottom: 5,
@@ -151,7 +151,7 @@ const styles = {
     padding: '11px 10px',
     fontSize: 9,
     fontWeight: 800,
-    letterSpacing: '.12em',
+    letterSpacing: 0,
     textTransform: 'uppercase',
     color: 'rgba(255,255,255,0.45)',
     borderBottom: '1px solid rgba(255,255,255,0.10)',
@@ -191,7 +191,7 @@ const styles = {
   resultLabel: {
     fontSize: 9,
     fontWeight: 800,
-    letterSpacing: '.12em',
+    letterSpacing: 0,
     textTransform: 'uppercase',
     color: 'rgba(148,163,184,0.50)',
     marginBottom: 6,
@@ -959,7 +959,7 @@ export default function NpStopLossPricing() {
                 return (
                   <tfoot>
                     <tr style={{ background: 'rgba(0,212,255,0.06)', borderTop: '2px solid rgba(0,212,255,0.30)' }}>
-                      <td style={{ ...styles.td, fontWeight: 800, color: COLORS.cyan, letterSpacing: '.08em' }}>TOTAL</td>
+                      <td style={{ ...styles.td, fontWeight: 800, color: COLORS.cyan, letterSpacing: 0 }}>TOTAL</td>
                       <td style={{ ...styles.td, ...styles.readonlyCell, fontWeight: 700, textAlign: 'center' }}>
                         {fmtMoneyFull(totalLimit)}
                       </td>
@@ -982,7 +982,7 @@ export default function NpStopLossPricing() {
 
           {result.warnings && result.warnings.length > 0 && (
             <div style={styles.warningBox}>
-              <div style={{ fontWeight: 800, marginBottom: 4, letterSpacing: '.08em', textTransform: 'uppercase', fontSize: 10 }}>
+              <div style={{ fontWeight: 800, marginBottom: 4, letterSpacing: 0, textTransform: 'uppercase', fontSize: 10 }}>
                 Warnings
               </div>
               <ul style={{ margin: 0, paddingLeft: 16 }}>

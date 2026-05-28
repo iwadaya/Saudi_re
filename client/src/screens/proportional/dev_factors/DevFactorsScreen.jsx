@@ -868,7 +868,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
               premium isn't reduced by losses. */}
           {!isPremium && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '0 0 12px', padding: '10px 14px', borderRadius: 12, background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.30)' }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#bae6fd', letterSpacing: '.04em' }}>Triangle basis</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#bae6fd', letterSpacing: 0 }}>Triangle basis</span>
               <div className="toggle-group" style={{ boxShadow: '0 0 0 1px rgba(148,163,184,0.18)' }}>
                 <span
                   className={`toggle-option${basis === 'FULL' ? ' active' : ''}`}
@@ -894,7 +894,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                   type="button"
                   onClick={() => setShowStrippedModal(true)}
                   style={{
-                    marginLeft: 'auto', fontSize: 11, fontWeight: 700, letterSpacing: '.04em',
+                    marginLeft: 'auto', fontSize: 11, fontWeight: 700, letterSpacing: 0,
                     padding: '7px 14px', borderRadius: 8, cursor: 'pointer',
                     border: '1px solid rgba(16,185,129,0.45)', color: '#6ee7b7',
                     background: 'rgba(16,185,129,0.10)', whiteSpace: 'nowrap',
@@ -1084,7 +1084,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
             {view === 'DEV_FACTORS' && (<>
               {/* Average method */}
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Average</span>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 0 }}>Average</span>
                 <div className="toggle-group">
                   {['weighted', 'simple', 'last3', 'last5'].map(m => (
                     <span key={m} className={`toggle-option${avgMethod === m ? ' active' : ''}`} onClick={() => { setAvgMethod(m); setDirty(true); }}>
@@ -1185,7 +1185,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
               <div role="dialog" aria-modal="true" className="glass" style={{ width: 'min(1100px,97vw)', maxHeight: '88vh', overflow: 'auto', borderRadius: 16, border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(8,16,40,0.97)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid rgba(148,163,184,0.14)' }}>
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: '0.03em', color: '#e2e8f0' }}>Incurred Triangle — Stripped of Large/CAT</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: 0, color: '#e2e8f0' }}>Incurred Triangle — Stripped of Large/CAT</div>
                     <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
                       {stripLargeCat
                         ? `Cumulative incurred (Paid + OS) with ${exclusions.largeLossCount} large and ${exclusions.catLossCount} CAT loss${(exclusions.largeLossCount + exclusions.catLossCount) === 1 ? '' : 'es'} removed — the attritional basis used for dev-factor selection.`
@@ -1195,9 +1195,9 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                   <button onClick={() => setShowStrippedModal(false)} style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid rgba(148,163,184,0.25)', background: 'transparent', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 14 }}>✕</button>
                 </div>
                 <div style={{ padding: 20 }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: '#fbbf24', marginBottom: 8 }}>FULL (ORIGINAL — BEFORE STRIPPING)</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0, color: '#fbbf24', marginBottom: 8 }}>FULL (ORIGINAL — BEFORE STRIPPING)</div>
                   <TriangleGrid matrix={fullCalcs?.matrix} years={years} numDevYears={numDevYears} />
-                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: '#6ee7b7', margin: '20px 0 8px' }}>{stripLargeCat ? 'STRIPPED (ATTRITIONAL)' : 'ATTRITIONAL BASIS (reference — not active)'}</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0, color: '#6ee7b7', margin: '20px 0 8px' }}>{stripLargeCat ? 'STRIPPED (ATTRITIONAL)' : 'ATTRITIONAL BASIS (reference — not active)'}</div>
                   <TriangleGrid matrix={strippedCalcs?.matrix} years={years} numDevYears={numDevYears} />
                 </div>
               </div>

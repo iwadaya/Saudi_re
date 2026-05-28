@@ -258,7 +258,7 @@ export function QuoteStructureSection({
               {numLayers > 0 && (
                 <tfoot>
                   <tr style={{ borderTop: '2px solid rgba(0,212,255,0.35)', background: 'rgba(0,212,255,0.05)' }}>
-                    <td style={{ textAlign: 'center', color: '#00d4ff', fontSize: 10, fontWeight: 800, letterSpacing: '.08em', padding: '10px 6px' }}>TOTAL</td>
+                    <td style={{ textAlign: 'center', color: '#00d4ff', fontSize: 10, fontWeight: 800, letterSpacing: 0, padding: '10px 6px' }}>TOTAL</td>
                     <td className="bm-np-td--limit"><CommaInput value={totals.totLimit ? String(totals.totLimit) : ''} readOnly suffix={currency} onChange={() => {}} /></td>
                     <td className="bm-np-td--limit"><CommaInput value={totals.firstDed ? String(totals.firstDed) : ''} readOnly suffix={currency} onChange={() => {}} /></td>
                     <td className="bm-np-td--limit"><CommaInput value={totals.totAgg ? String(totals.totAgg) : ''} readOnly suffix={currency} onChange={() => {}} /></td>

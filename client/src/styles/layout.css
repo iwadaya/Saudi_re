@@ -7,6 +7,8 @@ body{
   /* font-family is set canonically in components.css (uses --font-sans). */
   margin:0;
   font-size: 14px;
+  line-height: 1.42;
+  letter-spacing: 0;
   color: var(--text);
   background:
     radial-gradient(1200px 700px at 20% -10%, var(--body-spot-1), transparent 55%),
@@ -58,7 +60,7 @@ button{ font-family:inherit; }
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
+  letter-spacing: 0;
   color: rgba(255,255,255,0.55);
   padding: 6px 10px 4px;
   margin-bottom: 2px;
@@ -98,7 +100,7 @@ button{ font-family:inherit; }
 .wizard-content{
   flex: 1;
   min-width: 0;
-  padding: 20px 28px 80px;
+  padding: 20px var(--app-gutter) 80px;
   overflow-y: auto;
   height: 100%;
 }
@@ -106,7 +108,7 @@ button{ font-family:inherit; }
 /* On very wide screens: give wizard content a comfortable reading width */
 @media (min-width: 1680px) {
   .wizard-content{
-    padding: 24px 48px 80px;
+    padding-top: 24px;
   }
 }
 
@@ -119,7 +121,7 @@ button{ font-family:inherit; }
   color: var(--accent);
   font-size: 14px;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0;
   text-transform: uppercase;
   margin-bottom: 16px;
 }
@@ -200,8 +202,8 @@ button{ font-family:inherit; }
   margin: 0 auto;
 }
 
-/* Home / Dashboard container — fills wide displays via --app-max-content
-   (no hard cap). --app-gutter keeps content off the viewport edges. */
+/* Home / Dashboard container — uses the shared readable wide-screen lane.
+   --app-gutter keeps content off the viewport edges. */
 .container--full{
   width: calc(100% - 2 * var(--app-gutter));
   max-width: var(--app-max-content);
@@ -267,7 +269,7 @@ button{ font-family:inherit; }
 
 .screen-modal-title{
   font-weight: 700;
-  letter-spacing: .3px;
+  letter-spacing: 0;
 }
 
 .screen-modal-close{
@@ -312,7 +314,7 @@ button{ font-family:inherit; }
 .slide-modal-header{
   padding: 16px 20px;
   font-weight: 600;
-  letter-spacing: 0.3px;
+  letter-spacing: 0;
   border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
@@ -342,7 +344,7 @@ button{ font-family:inherit; }
   cursor:pointer;
   color:var(--accent-contrast);
   font-weight:700;
-  letter-spacing:.2px;
+  letter-spacing: 0;
   padding:10px 16px;
   border-radius:12px;
   background:

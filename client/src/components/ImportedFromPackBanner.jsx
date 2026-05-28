@@ -80,7 +80,7 @@ export default function ImportedFromPackBanner({ quoteId, importedFromState }) {
           font-size: 10px; padding: 2px 8px; border-radius: 10px;
           background: rgba(250,191,36,.14); color: #fbbf24;
           border: 1px solid rgba(250,191,36,.28);
-          letter-spacing: .05em; text-transform: uppercase; font-weight: 700;
+          letter-spacing: 0; text-transform: uppercase; font-weight: 700;
         }
         .ipb-act {
           background: none; border: none; padding: 4px 8px;

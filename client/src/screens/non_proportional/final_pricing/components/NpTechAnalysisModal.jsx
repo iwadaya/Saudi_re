@@ -147,10 +147,10 @@ export default function NpTechAnalysisModal({
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
                       <tr>
-                        <th style={{ textAlign: 'left',   padding: '4px 8px 8px 0', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>Class</th>
-                        <th style={{ textAlign: 'right',  padding: '4px 8px 8px',   color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>UW Limit</th>
+                        <th style={{ textAlign: 'left',   padding: '4px 8px 8px 0', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 10, letterSpacing: 0, textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>Class</th>
+                        <th style={{ textAlign: 'right',  padding: '4px 8px 8px',   color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 10, letterSpacing: 0, textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>UW Limit</th>
                         {(cobUwLimits[0]?.layers || []).map((_, i) => (
-                          <th key={i} style={{ textAlign: 'center', padding: '4px 6px 8px', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 10, letterSpacing: '.06em', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>L{i + 1}</th>
+                          <th key={i} style={{ textAlign: 'center', padding: '4px 6px 8px', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 10, letterSpacing: 0, textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>L{i + 1}</th>
                         ))}
                       </tr>
                     </thead>

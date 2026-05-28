@@ -27,7 +27,7 @@ function Pill({ tone = 'neutral', children, style }) {
   return (
     <span style={{
       display: 'inline-block', padding: '2px 8px', borderRadius: 10,
-      fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+      fontSize: 10, fontWeight: 700, letterSpacing: 0,
       background: palette.bg, border: `1px solid ${palette.border}`, color: palette.color,
       ...style,
     }}>{children}</span>
@@ -218,7 +218,7 @@ export default function FormulaDetail() {
             border: '1px solid rgba(96,165,250,.18)',
           }}>
             <div style={{
-              fontSize: 10, letterSpacing: 1.2, fontWeight: 700,
+              fontSize: 10, letterSpacing: 0, fontWeight: 700,
               color: 'rgba(191,219,254,.7)', marginBottom: 8,
             }}>FORMULA</div>
             <pre style={{

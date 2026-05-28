@@ -96,8 +96,8 @@ export default function LossAnalysisModal({ losses = [], lossType = 'large', onC
   }, [leftDate, rightDate, snapshotAsOf]);
 
   const card = { padding: '14px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', marginBottom: 14 };
-  const cardTitle = { fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 };
-  const th = { textAlign: 'left', padding: '6px 8px', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.04em', borderBottom: '1px solid rgba(255,255,255,0.08)' };
+  const cardTitle = { fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0, marginBottom: 10 };
+  const th = { textAlign: 'left', padding: '6px 8px', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0, borderBottom: '1px solid rgba(255,255,255,0.08)' };
   const td = { padding: '6px 8px', fontSize: 12, color: '#fff', borderBottom: '1px solid rgba(255,255,255,0.04)' };
   const tdNum = { ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
 
@@ -129,7 +129,7 @@ export default function LossAnalysisModal({ losses = [], lossType = 'large', onC
                 background: tab === t.key ? 'rgba(0,232,184,0.1)' : 'transparent',
                 color: tab === t.key ? '#00e8b8' : 'rgba(255,255,255,0.45)',
                 borderBottom: tab === t.key ? '2px solid #00e8b8' : '2px solid transparent',
-                letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                letterSpacing: 0, textTransform: 'uppercase' }}>
               {t.label}
             </button>
           ))}
@@ -151,7 +151,7 @@ export default function LossAnalysisModal({ losses = [], lossType = 'large', onC
                     </div>
                     {i === 0 && b.date !== '—' && (
                       <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 999,
-                        background: 'rgba(0,232,184,0.15)', color: '#00e8b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        background: 'rgba(0,232,184,0.15)', color: '#00e8b8', textTransform: 'uppercase', letterSpacing: 0 }}>
                         Latest
                       </span>
                     )}
@@ -200,7 +200,7 @@ export default function LossAnalysisModal({ losses = [], lossType = 'large', onC
                 <>
                   <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Prior</span>
+                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 0 }}>Prior</span>
                       <select value={leftDate} onChange={e => setLeftDate(e.target.value)}
                         style={{ background: '#0f1a2e', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', padding: '6px 10px', fontSize: 12 }}>
                         {realBatches.map(b => <option key={b.date} value={b.date}>{b.date}</option>)}
@@ -208,7 +208,7 @@ export default function LossAnalysisModal({ losses = [], lossType = 'large', onC
                     </div>
                     <div style={{ fontSize: 18, color: 'rgba(255,255,255,0.4)' }}>→</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Current</span>
+                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 0 }}>Current</span>
                       <select value={rightDate} onChange={e => setRightDate(e.target.value)}
                         style={{ background: '#0f1a2e', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', padding: '6px 10px', fontSize: 12 }}>
                         {realBatches.map(b => <option key={b.date} value={b.date}>{b.date}</option>)}

@@ -21,7 +21,7 @@ export default function RestoreImportConfirm({ open, onConfirm, onCancel, busy =
           padding: 22px 22px 18px;
           box-shadow: 0 24px 60px rgba(0,0,0,.45);
         }
-        .ric-title { font-size: 13px; font-weight: 800; letter-spacing: .06em;
+        .ric-title { font-size: 13px; font-weight: 800; letter-spacing: 0;
                      text-transform: uppercase; margin-bottom: 10px; }
         .ric-msg { font-size: 13px; line-height: 1.5;
                    color: rgba(226,232,240,0.80); margin-bottom: 18px; }
@@ -29,7 +29,7 @@ export default function RestoreImportConfirm({ open, onConfirm, onCancel, busy =
         .ric-btn {
           padding: 8px 16px; border-radius: 8px; cursor: pointer;
           font-family: inherit; font-size: 12px; font-weight: 700;
-          letter-spacing: .04em; border: 1px solid transparent;
+          letter-spacing: 0; border: 1px solid transparent;
         }
         .ric-btn--ghost {
           background: transparent; color: rgba(226,232,240,0.78);

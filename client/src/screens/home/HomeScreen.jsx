@@ -623,7 +623,7 @@ export default function HomeScreen() {
         <div className="crumb glass">
           <span className="dot" style={backgroundRefreshing ? { background: '#23d18b', boxShadow: '0 0 6px #23d18b' } : {}} />
           <span className="crumb-text">{viewingUser ? `VIEWING: ${(viewingUser.role_name || '').toUpperCase()}` : 'WORKSPACE: HOME PAGE'}</span>
-          {backgroundRefreshing && <span style={{ fontSize: 9, color: 'rgba(35,209,139,0.6)', marginLeft: 6, letterSpacing: '.06em' }}>SYNCING</span>}
+          {backgroundRefreshing && <span style={{ fontSize: 9, color: 'rgba(35,209,139,0.6)', marginLeft: 6, letterSpacing: 0 }}>SYNCING</span>}
         </div>
         <section className="hero glass">
           <div className="hero-top"><div className="welcome-row"><span className="welcome-pill">WELCOME</span><h1 className="welcome-title">{getUserDisplayName() || 'Underwriter'}</h1></div>

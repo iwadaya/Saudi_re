@@ -24,7 +24,7 @@ function RoleBadge({ code }) {
   return (
     <span style={{
       display: 'inline-block', padding: '2px 8px', borderRadius: 20,
-      fontSize: 10, fontWeight: 700, letterSpacing: '.04em',
+      fontSize: 10, fontWeight: 700, letterSpacing: 0,
       background: c.bg, border: `1px solid ${c.border}`, color: c.text,
     }}>{code}</span>
   );
@@ -75,7 +75,7 @@ function TestAccessPanel({ onLogin }) {
       background: 'rgba(35,209,139,0.07)',
       border: '1px solid rgba(35,209,139,0.25)',
     }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(35,209,139,0.8)', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 10 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(35,209,139,0.8)', letterSpacing: 0, textTransform: 'uppercase', marginBottom: 10 }}>
         Test Access — Underwriter
       </div>
       <div style={{ fontSize: 12, color: 'rgba(255,255,255,.45)', marginBottom: 12, lineHeight: 1.5 }}>
@@ -181,13 +181,13 @@ export default function LoginScreen() {
 
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,rgba(35,209,139,.9),rgba(18,160,100,.9))', fontSize: 22, fontWeight: 900, color: '#04120b', marginBottom: 12, boxShadow: '0 8px 24px rgba(35,209,139,.3)' }}>U3</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: 'rgba(255,255,255,.92)', letterSpacing: '.01em' }}>The Universe™</div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,.35)', marginTop: 3, letterSpacing: '.07em', textTransform: 'uppercase' }}>Reinsurance Underwriting Platform</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: 'rgba(255,255,255,.92)', letterSpacing: 0 }}>The Universe™</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,.35)', marginTop: 3, letterSpacing: 0, textTransform: 'uppercase' }}>Reinsurance Underwriting Platform</div>
         </div>
 
         <div className="glass" style={{ borderRadius: 16, padding: 24, border: '1px solid rgba(255,255,255,.10)' }}>
           <div style={{ marginBottom: 18 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.40)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 8 }}>Select User</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.40)', letterSpacing: 0, textTransform: 'uppercase', marginBottom: 8 }}>Select User</div>
             {loadingUsers ? (
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,.35)', padding: '10px 0' }} aria-live="polite">Loading users…</div>
             ) : (
@@ -226,11 +226,11 @@ export default function LoginScreen() {
               <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{ROLE_LABELS[rc] || rc}</div>
               <div style={{ display: 'flex', gap: 14 }}>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 9, color: 'rgba(255,255,255,.30)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Treaty Limit</div>
+                  <div style={{ fontSize: 9, color: 'rgba(255,255,255,.30)', textTransform: 'uppercase', letterSpacing: 0 }}>Treaty Limit</div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.80)' }}>{fmtLimit(sel.treaty_limit_usd ?? sel.authority_limit_usd)}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 9, color: 'rgba(255,255,255,.30)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Approvals</div>
+                  <div style={{ fontSize: 9, color: 'rgba(255,255,255,.30)', textTransform: 'uppercase', letterSpacing: 0 }}>Approvals</div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.80)' }}>{sel.approvals_required ?? 1}×</div>
                 </div>
               </div>
@@ -239,7 +239,7 @@ export default function LoginScreen() {
 
           <form onSubmit={handleLogin} aria-label="Sign in">
             <div style={{ marginBottom: 16 }}>
-              <label htmlFor="login-password" style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.40)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 6 }}>Password</label>
+              <label htmlFor="login-password" style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.40)', letterSpacing: 0, textTransform: 'uppercase', marginBottom: 6 }}>Password</label>
               <div style={{ position: 'relative' }}>
                 <input id="login-password" type={showPw ? 'text' : 'password'} className="form-input"
                   value={password} onChange={e => { setPassword(e.target.value); setError(''); }}
@@ -279,7 +279,7 @@ export default function LoginScreen() {
               <button
                 type="button"
                 onClick={() => setShowTestPanel(true)}
-                style={{ width: '100%', background: 'none', border: '1px dashed rgba(35,209,139,0.30)', borderRadius: 8, padding: '9px 12px', color: 'rgba(35,209,139,0.65)', fontSize: 12, fontWeight: 600, cursor: 'pointer', letterSpacing: '.03em', transition: 'all .15s' }}
+                style={{ width: '100%', background: 'none', border: '1px dashed rgba(35,209,139,0.30)', borderRadius: 8, padding: '9px 12px', color: 'rgba(35,209,139,0.65)', fontSize: 12, fontWeight: 600, cursor: 'pointer', letterSpacing: 0, transition: 'all .15s' }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(35,209,139,0.55)'}
                 onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(35,209,139,0.30)'}
               >
@@ -291,7 +291,7 @@ export default function LoginScreen() {
           </div>
         </div>
 
-        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 10, color: 'rgba(255,255,255,.18)', letterSpacing: '.04em' }}>
+        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 10, color: 'rgba(255,255,255,.18)', letterSpacing: 0 }}>
           The Universe™ · by Darchville Analytics
         </div>
       </div>

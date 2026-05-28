@@ -99,7 +99,7 @@ export default function FacLossHistory() {
 
         {/* ── Ten-year matrix ── */}
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em',
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0,
                         textTransform: 'uppercase', color: 'rgba(0,212,255,0.55)',
                         marginBottom: 10, paddingBottom: 6,
                         borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
@@ -111,7 +111,7 @@ export default function FacLossHistory() {
                 {['Year', 'Claims', 'FGU Paid', 'FGU O/S', 'FGU Incurred', 'RI Incurred', 'As-if Claim Ratio'].map((h) => (
                   <th key={h} style={{ padding: '8px 10px',
                                        textAlign: h === 'Year' ? 'left' : 'right',
-                                       fontSize: 9, fontWeight: 800, letterSpacing: '.10em',
+                                       fontSize: 9, fontWeight: 800, letterSpacing: 0,
                                        textTransform: 'uppercase', color: 'rgba(148,163,184,0.50)',
                                        borderBottom: '1px solid rgba(255,255,255,0.08)',
                                        whiteSpace: 'nowrap' }}>{h}</th>
@@ -170,7 +170,7 @@ export default function FacLossHistory() {
             <thead>
               <tr style={{ background: 'rgba(5,8,16,0.6)' }}>
                 {['Year', 'Date', 'Description', 'Cause', 'FGU Paid', 'FGU O/S', 'FGU Incurred', 'Mitigation', ''].map(h => (
-                  <th key={h} style={{ padding: '8px 8px', textAlign: ['FGU Paid','FGU O/S','FGU Incurred'].includes(h) ? 'right' : 'left', fontSize: 9, fontWeight: 800, letterSpacing: '.10em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.50)', borderBottom: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap' }}>{h}</th>
+                  <th key={h} style={{ padding: '8px 8px', textAlign: ['FGU Paid','FGU O/S','FGU Incurred'].includes(h) ? 'right' : 'left', fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(148,163,184,0.50)', borderBottom: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>

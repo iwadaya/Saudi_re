@@ -100,7 +100,7 @@ export default function Topbar({ title, subtitle, actions }) {
     <header className="topbar glass" role="banner" style={{ position:"relative", zIndex:10001 }}>
       <div className="topbar-left">
         <div className="logo-badge" aria-hidden="true">U</div>
-        <h1 className="topbar-title" style={{ margin: 0, fontSize: 'inherit', fontWeight: 'inherit', letterSpacing: 'inherit' }}>{title || 'MODELLING TOOL'}</h1>
+        <h1 className="topbar-title" style={{ margin: 0, fontSize: 'inherit', fontWeight: 'inherit', letterSpacing: 0 }}>{title || 'MODELLING TOOL'}</h1>
         {subtitle && <div className="topbar-sub muted" style={{ marginLeft: 8 }}>{subtitle}</div>}
       </div>
       <div className="topbar-right" role="toolbar" aria-label="Top bar actions">
@@ -123,14 +123,14 @@ export default function Topbar({ title, subtitle, actions }) {
           {settingsOpen && (
             <div style={{ position: 'fixed', top: 52, right: 12, width: 300, background: 'rgba(10,18,45,0.99)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 14, boxShadow: '0 24px 64px rgba(0,0,0,0.80)', zIndex: 99999, overflow: 'hidden' }}>
               {/* Heading */}
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', letterSpacing: '.10em' }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', letterSpacing: 0 }}>
                 Settings
               </div>
 
               {/* Theme */}
               {session && (
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Theme</div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: 0, marginBottom: 6 }}>Theme</div>
                   <ThemeSwitcher />
                 </div>
               )}
@@ -138,7 +138,7 @@ export default function Topbar({ title, subtitle, actions }) {
               {/* Identity / view-as */}
               {session && (
                 <div ref={ref} style={{ position: 'relative', padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Role</div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: 0, marginBottom: 6 }}>Role</div>
                   <button
                     onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px 4px 6px', borderRadius: 20, background: displayC.bg, border: `1px solid ${displayC.border}`, cursor: 'pointer', position: 'relative', width: '100%' }}
@@ -166,7 +166,7 @@ export default function Topbar({ title, subtitle, actions }) {
                       without resizing it. */}
                   {open && (
                     <div style={{ position: 'absolute', top: '100%', left: 16, right: 16, marginTop: 6, background: 'rgba(10,18,45,0.99)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 14, boxShadow: '0 24px 64px rgba(0,0,0,0.80)', zIndex: 99999, overflow: 'hidden' }}>
-                      <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+                      <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: 0 }}>
                         View Portfolio
                       </div>
                       <button onClick={selectSelf} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 14px', border: 'none', background: !isViewing ? 'rgba(var(--accent-rgb),0.10)' : 'transparent', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
@@ -180,7 +180,7 @@ export default function Topbar({ title, subtitle, actions }) {
                         {!isViewing && <span style={{ fontSize: 10, color: 'var(--accent)' }}>✓</span>}
                       </button>
                       {teamUsers.length > 0 && (
-                        <div style={{ padding: '6px 14px 4px', fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Team</div>
+                        <div style={{ padding: '6px 14px 4px', fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: 0 }}>Team</div>
                       )}
                       {teamUsers.map(u => {
                         const urc = u.role_code;

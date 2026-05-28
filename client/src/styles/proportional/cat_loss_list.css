@@ -32,7 +32,7 @@
 .CAT_LOSS_LIST_PAGE .ll-title{
   font-size: 18px;        /* smaller than large loss list */
   font-weight: 900;
-  letter-spacing: .1px;
+  letter-spacing: 0;
   color: rgba(241,245,249,.96);
   margin: 0;
 }
@@ -67,7 +67,7 @@
 
 .CAT_LOSS_LIST_PAGE .ll-field-label{
   font-size: 11px;
-  letter-spacing: .14em;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: rgba(148,163,184,.85);
   font-weight: 850;
@@ -158,7 +158,7 @@
 .CAT_LOSS_LIST_PAGE .ll-section-title{
   font-size: 13px;      /* compact */
   font-weight: 900;
-  letter-spacing: .2px;
+  letter-spacing: 0;
   margin: 0 0 8px;
   color: rgba(226,232,240,.92);
 }
@@ -191,7 +191,7 @@
   border-bottom: 1px solid rgba(148,163,184,.14);
 
   font-size: 10.5px;
-  letter-spacing: .12em;
+  letter-spacing: 0;
   text-transform: uppercase;
   opacity: .86;
 

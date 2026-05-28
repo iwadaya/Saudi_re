@@ -219,7 +219,7 @@ export default function FQBenchmarkModal({
     return (
       <div style={{ marginBottom: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'rgba(226,232,240,0.75)' }}>{label}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0, color: 'rgba(226,232,240,0.75)' }}>{label}</span>
           <span style={{ fontSize: 10, color: 'rgba(148,163,184,0.55)' }}>P10 {formatter(p10)} · Median {formatter(p50)} · P90 {formatter(p90)}</span>
         </div>
         <svg viewBox="0 0 100 24" style={{ width: '100%', height: 28, display: 'block' }} preserveAspectRatio="none">
@@ -280,7 +280,7 @@ export default function FQBenchmarkModal({
   const sectionTitleStyle = {
     fontSize: 11,
     fontWeight: 850,
-    letterSpacing: '.14em',
+    letterSpacing: 0,
     color: 'rgba(148,163,184,0.72)',
     textTransform: 'uppercase',
     marginBottom: 10,
@@ -318,7 +318,7 @@ export default function FQBenchmarkModal({
                     color: scope === s.k ? '#00d4ff' : 'rgba(226,232,240,0.65)',
                     fontSize: 11,
                     fontWeight: 800,
-                    letterSpacing: '.08em',
+                    letterSpacing: 0,
                     textTransform: 'uppercase',
                     cursor: 'pointer',
                   }}>
@@ -351,7 +351,7 @@ export default function FQBenchmarkModal({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(150px, 1fr))', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
               {cards.map((c) => (
                 <div key={c.key} style={{ background: 'rgba(5,8,16,0.46)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 10, padding: '10px 12px' }}>
-                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.14em', color: 'rgba(148,163,184,0.55)', textTransform: 'uppercase' }}>{c.label}</div>
+                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0, color: 'rgba(148,163,184,0.55)', textTransform: 'uppercase' }}>{c.label}</div>
                   <div style={{ fontSize: 16, fontWeight: 700, color: 'rgba(226,232,240,0.92)', marginTop: 4 }}>{c.value}</div>
                   <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.55)', marginTop: 2 }}>Market median <b style={{ color: 'rgba(226,232,240,0.75)' }}>{c.market}</b></div>
                   {c.p != null && (
@@ -384,7 +384,7 @@ export default function FQBenchmarkModal({
                     border: 'none',
                     borderBottom: tab === t.k ? '2px solid #00d4ff' : '2px solid transparent',
                     color: tab === t.k ? '#00d4ff' : 'rgba(226,232,240,0.65)',
-                    fontSize: 11, fontWeight: 700, letterSpacing: '.06em', cursor: 'pointer', textTransform: 'uppercase',
+                    fontSize: 11, fontWeight: 700, letterSpacing: 0, cursor: 'pointer', textTransform: 'uppercase',
                   }}>
                   {t.label}
                 </button>
@@ -490,7 +490,7 @@ export default function FQBenchmarkModal({
                       {fits.map((f) => (
                         <span key={f.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                           <span style={{ width: 16, height: 2, background: f.color, opacity: f.key === 'source' ? 1 : 0.75, borderRadius: 1 }} />
-                          <b style={{ color: f.color, letterSpacing: '.04em' }}>{f.label}</b>
+                          <b style={{ color: f.color, letterSpacing: 0 }}>{f.label}</b>
                           <span style={{ color: 'rgba(148,163,184,0.55)' }}>· {f.n} {f.sample}</span>
                         </span>
                       ))}
@@ -501,7 +501,7 @@ export default function FQBenchmarkModal({
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
                     {fits.map((f) => (
                       <div key={f.key} style={{ background: 'rgba(8,14,30,0.70)', border: `1px solid ${f.color}33`, borderRadius: 10, padding: '10px 12px' }}>
-                        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.14em', color: f.color, textTransform: 'uppercase', marginBottom: 4 }}>{f.label}</div>
+                        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0, color: f.color, textTransform: 'uppercase', marginBottom: 4 }}>{f.label}</div>
                         <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(226,232,240,0.92)', fontFamily: 'var(--font-mono)' }}>{eqStr(f.fit.a, f.fit.b)}</div>
                         <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.65)', marginTop: 4 }}>
                           R² <b style={{ color: 'rgba(226,232,240,0.85)' }}>{fmtR2(f.fit.r2)}</b>
@@ -513,16 +513,16 @@ export default function FQBenchmarkModal({
 
                   {/* Metrics comparison table */}
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: 'rgba(148,163,184,0.65)', textTransform: 'uppercase', marginBottom: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0, color: 'rgba(148,163,184,0.65)', textTransform: 'uppercase', marginBottom: 6 }}>
                       Curve Metrics Comparison
                     </div>
                     <div style={{ border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, overflow: 'hidden' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                         <thead style={{ background: 'rgba(5,8,16,0.95)' }}>
                           <tr>
-                            <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 10, fontWeight: 800, letterSpacing: '.12em', color: 'rgba(148,163,184,0.65)', textTransform: 'uppercase' }}>Metric</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 10, fontWeight: 800, letterSpacing: 0, color: 'rgba(148,163,184,0.65)', textTransform: 'uppercase' }}>Metric</th>
                             {fits.map((f) => (
-                              <th key={f.key} style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, fontWeight: 800, letterSpacing: '.12em', color: f.color, textTransform: 'uppercase' }}>{f.label}</th>
+                              <th key={f.key} style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, fontWeight: 800, letterSpacing: 0, color: f.color, textTransform: 'uppercase' }}>{f.label}</th>
                             ))}
                           </tr>
                         </thead>
@@ -589,7 +589,7 @@ export default function FQBenchmarkModal({
                       { k: 'egnpi',   label: 'EGNPI' },
                       { k: 'rolPct',  label: 'ROL %' },
                     ].map((h) => (
-                      <th key={h.k} onClick={headerSort(h.k)} style={{ padding: '6px 10px', textAlign: h.k === 'cedant' || h.k === 'cob' || h.k === 'country' ? 'left' : 'right', fontSize: 10, fontWeight: 800, letterSpacing: '.12em', color: 'rgba(148,163,184,0.65)', textTransform: 'uppercase', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.10)', userSelect: 'none' }}>
+                      <th key={h.k} onClick={headerSort(h.k)} style={{ padding: '6px 10px', textAlign: h.k === 'cedant' || h.k === 'cob' || h.k === 'country' ? 'left' : 'right', fontSize: 10, fontWeight: 800, letterSpacing: 0, color: 'rgba(148,163,184,0.65)', textTransform: 'uppercase', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.10)', userSelect: 'none' }}>
                         {h.label}{sortArrow(h.k)}
                       </th>
                     ))}
@@ -631,7 +631,7 @@ export default function FQBenchmarkModal({
                   color: '#00d4ff',
                   fontSize: 11,
                   fontWeight: 800,
-                  letterSpacing: '.08em',
+                  letterSpacing: 0,
                   textTransform: 'uppercase',
                   cursor: commentaryLoading || filtered.length === 0 || !contractId ? 'not-allowed' : 'pointer',
                   opacity: commentaryLoading || filtered.length === 0 || !contractId ? 0.5 : 1,
@@ -662,7 +662,7 @@ export default function FQBenchmarkModal({
                     color: verdictColor[activeCommentary.signal] || '#94a3b8',
                     fontSize: 10,
                     fontWeight: 800,
-                    letterSpacing: '.12em',
+                    letterSpacing: 0,
                   }}>
                     {activeCommentary.signal}
                   </span>
@@ -683,8 +683,8 @@ export default function FQBenchmarkModal({
                         padding: '8px 10px',
                       }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.10em', color: 'rgba(148,163,184,0.65)', textTransform: 'uppercase' }}>{h.metric}</span>
-                          <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.10em', color: verdictColor[h.verdict] || '#94a3b8' }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0, color: 'rgba(148,163,184,0.65)', textTransform: 'uppercase' }}>{h.metric}</span>
+                          <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0, color: verdictColor[h.verdict] || '#94a3b8' }}>
                             {h.verdict}
                           </span>
                         </div>

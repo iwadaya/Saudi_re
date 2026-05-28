@@ -675,7 +675,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
 
                           <div style={{ display: 'flex', gap: 14, marginTop: 14, flexWrap: 'wrap' }}>
                             <div style={{ flex: 1, minWidth: 200, padding: '10px 14px', borderRadius: 8, background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)' }}>
-                              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0, marginBottom: 4 }}>
                                 Premium-weighted loading (inflated)
                               </div>
                               <div style={{ fontSize: 22, fontWeight: 800, color: '#fbbf24' }}>
@@ -686,7 +686,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
                               </div>
                             </div>
                             <div style={{ flex: 1, minWidth: 200, padding: '10px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0, marginBottom: 4 }}>
                                 Simple-average yearly (inflated)
                               </div>
                               <div style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>

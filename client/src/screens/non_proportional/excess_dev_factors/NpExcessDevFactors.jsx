@@ -819,7 +819,7 @@ export default function NpExcessDevFactors() {
               {/* TRIANGLE: avg method */}
               {dataMode === 'TRIANGLE' && (
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center', margin: '12px 0' }}>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Average</span>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 0 }}>Average</span>
                   <div className="toggle-group">
                     {['weighted', 'simple', 'last3', 'last5'].map(m => (
                       <span key={m} className={`toggle-option${avgMethod === m ? ' active' : ''}`}

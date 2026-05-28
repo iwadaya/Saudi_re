@@ -130,7 +130,7 @@ export default function PropBloombergHero({
           });
           return (
             <div style={{marginTop:8,paddingTop:8,borderTop:'1px solid rgba(255,255,255,0.07)'}}>
-              <div style={{fontSize:10,fontWeight:700,letterSpacing:'.07em',textTransform:'uppercase',color:'rgba(255,255,255,0.35)',marginBottom:6}}>EPI Split</div>
+              <div style={{fontSize:10,fontWeight:700,letterSpacing: 0, textTransform:'uppercase',color:'rgba(255,255,255,0.35)',marginBottom:6}}>EPI Split</div>
               <div style={{display:'flex',alignItems:'center',gap:10}}>
                 <svg width="68" height="68" viewBox="0 0 68 68" style={{flexShrink:0}}>
                   {slices.map((s,i)=><path key={i} d={s.d} fill={s.color} opacity={0.9}><title>{s.name}: {s.pct}%</title></path>)}

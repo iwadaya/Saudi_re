@@ -61,7 +61,7 @@
 
 .DEV_FACTORS_PAGE .df-mini-label{
   font-size: 11px;
-  letter-spacing: .14em;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: rgba(226,232,240,.70);
   font-weight: 600; /* reduced */
@@ -90,7 +90,7 @@
 
 .DEV_FACTORS_PAGE .df-method-label{
   font-size: 11px;
-  letter-spacing: .14em;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: rgba(226,232,240,.62);
   font-weight: 600; /* reduced */
@@ -190,7 +190,7 @@
   border-bottom: 1px solid rgba(148,163,184,.10);
   color: rgba(226,232,240,.65);
   font-size: 11px;
-  letter-spacing: .12em;
+  letter-spacing: 0;
   text-transform: uppercase;
   font-weight: 600; /* reduced */
   padding: 10px 12px;
@@ -216,7 +216,7 @@
 .DEV_FACTORS_PAGE .tri-r-sticky--row{
   color: rgba(226,232,240,.90);
   font-size: 13px;
-  letter-spacing: .02em;
+  letter-spacing: 0;
   text-transform: none;
   font-weight: 600; /* reduced */
 }
@@ -309,7 +309,7 @@
 
   color: rgba(226,232,240,.65);
   font-size: 11px;
-  letter-spacing: .12em;
+  letter-spacing: 0;
   text-transform: uppercase;
   font-weight: 600; /* reduced */
 

@@ -27,7 +27,7 @@ function FR({ label, children, hint }) {
 }
 function Sec({ title, color, children }) {
   return <>
-    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: color || 'rgba(0,212,255,0.55)', marginTop: 28, marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{title}</div>
+    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: color || 'rgba(0,212,255,0.55)', marginTop: 28, marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{title}</div>
     {children}
   </>;
 }
@@ -248,19 +248,19 @@ function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
              onClick={() => setCollapsed((c) => !c)}>
           <span style={{ fontSize: 13, color: 'rgba(168,85,247,0.80)' }}>{collapsed ? '▶' : '▼'}</span>
-          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em',
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0,
                          textTransform: 'uppercase', color: 'rgba(168,85,247,0.80)' }}>
             Underwriting Factors — Drivers of Rate &amp; Score
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+            <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0,
                           textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>Scheme</div>
             <div style={{ fontSize: 11, fontWeight: 800, color: '#a855f7', fontVariantNumeric: 'tabular-nums' }}>{scheme}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+            <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0,
                           textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>Score</div>
             <div style={{ fontSize: 18, fontWeight: 900, color: '#23d18b', fontVariantNumeric: 'tabular-nums' }}>
               {liveScore ? liveScore.underwriting_score.toFixed(2) : '—'}
@@ -296,20 +296,20 @@ function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange }) {
                                  padding: '0 0 8px',
                                  borderBottom: '1px solid rgba(255,255,255,0.06)',
                                  marginBottom: 8 }}>
-                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0,
                                    textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>
                       Factor
                     </div>
-                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0,
                                    textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>
                       Option
                     </div>
-                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0,
                                    textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)',
                                    textAlign: 'right' }}>
                       Score
                     </div>
-                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0,
                                    textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)',
                                    textAlign: 'right' }}>
                       Loading
@@ -439,7 +439,7 @@ function EngineReadout({ output, premiums, totalLocSar }) {
         <div style={{ marginTop: 10, padding: '8px 12px',
                        background: 'rgba(251,191,36,0.05)',
                        border: '1px solid rgba(251,191,36,0.25)', borderRadius: 8 }}>
-          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0,
                         color: 'rgba(251,191,36,0.70)', marginBottom: 4 }}>WARNINGS</div>
           {output.warnings.map((w, i) => (
             <div key={i} style={{ fontSize: 11, color: 'rgba(251,191,36,0.80)' }}>{w}</div>
@@ -936,7 +936,7 @@ export default function FacPricing() {
             const catColor = CATEGORY_COLORS[category] || '#a855f7';
             return (
               <div key={category} style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em', color: catColor, marginBottom: 6, textTransform: 'uppercase' }}>{category}</div>
+                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0, color: catColor, marginBottom: 6, textTransform: 'uppercase' }}>{category}</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
                   {exts.map(ext => extCheckbox(ext, catColor))}
                 </div>
@@ -947,7 +947,7 @@ export default function FacPricing() {
           {/* Custom extensions */}
           {customExtensions.length > 0 && (
             <div style={{ marginTop: 14, marginBottom: 8 }}>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em', color: 'rgba(251,191,36,0.60)', marginBottom: 6, textTransform: 'uppercase' }}>CUSTOM EXTENSIONS</div>
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0, color: 'rgba(251,191,36,0.60)', marginBottom: 6, textTransform: 'uppercase' }}>CUSTOM EXTENSIONS</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
                 {customExtensions.map(ext => (
                   <div key={ext.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1034,11 +1034,11 @@ export default function FacPricing() {
           <div style={{ marginTop: 16, padding: 16, background: 'rgba(35,209,139,0.06)', border: '1px solid rgba(35,209,139,0.25)', borderRadius: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(35,209,139,0.55)' }}>Final Rate (‰)</div>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(35,209,139,0.55)' }}>Final Rate (‰)</div>
                 <div style={{ fontSize: 24, fontWeight: 900, color: '#23d18b', marginTop: 4 }}>{cleanNum(f.final_rate_per_mille) || '—'}</div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(35,209,139,0.55)' }}>Final Premium</div>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(35,209,139,0.55)' }}>Final Premium</div>
                 <div style={{ fontSize: 24, fontWeight: 900, color: '#23d18b', marginTop: 4 }}>{fmtN(f.final_premium)}</div>
               </div>
             </div>

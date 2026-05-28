@@ -284,7 +284,7 @@ function TabBar({ active, onChange }) {
               padding: '10px 14px',
               fontSize: 12,
               fontWeight: 700,
-              letterSpacing: '.06em',
+              letterSpacing: 0,
               textTransform: 'uppercase',
               color: isActive ? '#22d3ee' : 'rgba(255,255,255,0.45)',
               borderBottom: isActive ? '2px solid #22d3ee' : '2px solid transparent',
@@ -304,7 +304,7 @@ function YearFilterSelect({ value, onChange, options }) {
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
       <label style={{
-        fontSize: 11, color: 'rgba(255,255,255,0.45)', letterSpacing: '.08em',
+        fontSize: 11, color: 'rgba(255,255,255,0.45)', letterSpacing: 0,
         textTransform: 'uppercase', fontWeight: 700, whiteSpace: 'nowrap',
       }}>UW Year</label>
       <select
@@ -331,7 +331,7 @@ function DriverChip({ share, ntr }) {
   const tooltip = `Contributes ${(share * 100).toFixed(1)}% of |portfolio technical result|`;
   return (
     <span title={tooltip} style={{
-      fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase',
+      fontSize: 10, fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase',
       padding: '3px 8px', borderRadius: 12, whiteSpace: 'nowrap',
       background: `${c}18`, color: c, border: `1px solid ${c}40`,
     }}>{label}</span>
@@ -420,7 +420,7 @@ function OverviewTab({
   const setLine = (id, val) => setLineSizes(prev => ({ ...prev, [id]: val }));
 
   const thS = {
-    padding: '11px 10px', fontSize: 11, fontWeight: 700, letterSpacing: '.07em',
+    padding: '11px 10px', fontSize: 11, fontWeight: 700, letterSpacing: 0,
     textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)',
     borderBottom: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'nowrap',
     position: 'sticky', top: 0, zIndex: 3, background: 'rgba(15,26,46,0.98)',
@@ -546,7 +546,7 @@ function OverviewTab({
           </tbody>
           <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 2 }}>
             <tr style={{ background: 'rgba(15,26,46,0.98)' }}>
-              <td colSpan={5} style={{ ...tdS, borderTop: '2px solid rgba(255,255,255,0.15)', fontWeight: 700, fontSize: 10, letterSpacing: '.06em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)' }}>
+              <td colSpan={5} style={{ ...tdS, borderTop: '2px solid rgba(255,255,255,0.15)', fontWeight: 700, fontSize: 10, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)' }}>
                 PORTFOLIO TOTALS ({included.length} treaties)
               </td>
               <td style={{ ...tdS, borderTop: '2px solid rgba(255,255,255,0.15)', textAlign: 'right', fontWeight: 700 }}>{fmtMoney(currency, totPrem100)}</td>
@@ -698,7 +698,7 @@ function SectionTitle({ children, count }) {
       padding: '18px 20px 8px',
     }}>
       <div style={{
-        fontSize: 12, fontWeight: 800, letterSpacing: '.10em', textTransform: 'uppercase',
+        fontSize: 12, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase',
         color: '#22d3ee',
       }}>{children}</div>
       {count != null && (
@@ -722,7 +722,7 @@ function SectionEmpty({ text }) {
 
 function NpSection({ currency, groups, contractId, driverShares, pctOfPortfolio }) {
   const thS = {
-    padding: '10px 10px', fontSize: 11, fontWeight: 700, letterSpacing: '.07em',
+    padding: '10px 10px', fontSize: 11, fontWeight: 700, letterSpacing: 0,
     textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)',
     borderBottom: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'nowrap',
     background: 'rgba(15,26,46,0.98)',
@@ -779,13 +779,13 @@ function NpSection({ currency, groups, contractId, driverShares, pctOfPortfolio 
                         {year && (
                           <span style={{
                             marginLeft: 10, color: '#22d3ee', fontWeight: 700,
-                            fontSize: 11, letterSpacing: '.06em',
+                            fontSize: 11, letterSpacing: 0,
                           }}>{year}</span>
                         )}
                         {cur && (
                           <span style={{
                             marginLeft: 10, fontSize: 10, fontWeight: 700, color: '#4ade80',
-                            textTransform: 'uppercase', letterSpacing: '.06em',
+                            textTransform: 'uppercase', letterSpacing: 0,
                           }}>▶ Current</span>
                         )}
                         <span style={{ marginLeft: 12, color: 'rgba(255,255,255,0.5)', fontWeight: 500, fontSize: 11 }}>
@@ -828,7 +828,7 @@ function NpSection({ currency, groups, contractId, driverShares, pctOfPortfolio 
 
 function PropSection({ currency, rows, contractId, driverShares, pctOfPortfolio }) {
   const thS = {
-    padding: '10px 10px', fontSize: 11, fontWeight: 700, letterSpacing: '.07em',
+    padding: '10px 10px', fontSize: 11, fontWeight: 700, letterSpacing: 0,
     textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)',
     borderBottom: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'nowrap',
     background: 'rgba(15,26,46,0.98)',
@@ -881,7 +881,7 @@ function PropSection({ currency, rows, contractId, driverShares, pctOfPortfolio 
                       <div style={{ fontWeight: cur ? 700 : 600, color: '#e2e8f0' }}>{desc}</div>
                       <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
                         {year && <span style={{ color: '#22d3ee', fontSize: 11, fontWeight: 700 }}>{year}</span>}
-                        {cur && <span style={{ fontSize: 9, fontWeight: 700, color: '#4ade80', textTransform: 'uppercase', letterSpacing: '.06em' }}>▶ Current</span>}
+                        {cur && <span style={{ fontSize: 9, fontWeight: 700, color: '#4ade80', textTransform: 'uppercase', letterSpacing: 0 }}>▶ Current</span>}
                       </div>
                     </td>
                     <td style={{ ...tdS, fontSize: 11 }}>{ttype}</td>
@@ -1301,7 +1301,7 @@ function RunControls({
   onGenerate, generating, disabled,
 }) {
   const labelS = {
-    fontSize: 11, fontWeight: 700, letterSpacing: '.08em',
+    fontSize: 11, fontWeight: 700, letterSpacing: 0,
     textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)',
     whiteSpace: 'nowrap',
   };
@@ -1345,7 +1345,7 @@ function RunControls({
                   border: 'none',
                   borderRight: i < RISK_OPTIONS.length - 1 ? '1px solid rgba(255,255,255,0.15)' : 'none',
                   padding: '7px 14px',
-                  fontSize: 12, fontWeight: 700, letterSpacing: '.04em',
+                  fontSize: 12, fontWeight: 700, letterSpacing: 0,
                   color: isActive ? '#22d3ee' : 'rgba(255,255,255,0.65)',
                   cursor: 'pointer', transition: 'color .15s, background .15s',
                 }}
@@ -1446,7 +1446,7 @@ function PortfolioMetricsBar({ metrics }) {
           borderRadius: 8,
         }}>
           <div style={{
-            fontSize: 10, fontWeight: 700, letterSpacing: '.08em',
+            fontSize: 10, fontWeight: 700, letterSpacing: 0,
             textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)',
             marginBottom: 4,
           }}>{c.label}</div>
@@ -1501,10 +1501,10 @@ function RecommendationCard({ rec, currency, contract, onStage, onEditStage, onR
             <span style={{
               fontSize: 10, padding: '2px 8px', borderRadius: 12,
               background: 'rgba(34,211,238,0.12)', color: '#22d3ee',
-              border: '1px solid rgba(34,211,238,0.3)', fontWeight: 700, letterSpacing: '.04em',
+              border: '1px solid rgba(34,211,238,0.3)', fontWeight: 700, letterSpacing: 0,
             }}>{ttype}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: 700, letterSpacing: '.06em' }}>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: 700, letterSpacing: 0 }}>
                 CONF
               </div>
               <div style={{ width: 60, height: 6, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' }}>
@@ -1596,7 +1596,7 @@ function StatusChip({ kind }) {
     : { bg: 'rgba(148,163,184,0.18)', fg: '#94a3b8', text: 'Committed' };
   return (
     <span style={{
-      fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase',
+      fontSize: 10, fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase',
       padding: '3px 9px', borderRadius: 12, whiteSpace: 'nowrap',
       background: cfg.bg, color: cfg.fg, border: `1px solid ${cfg.fg}55`,
     }}>{cfg.text}</span>
@@ -1606,17 +1606,17 @@ function StatusChip({ kind }) {
 const btnPrimary = () => ({
   background: 'rgba(34,211,238,0.18)', border: '1px solid rgba(34,211,238,0.45)',
   color: '#22d3ee', padding: '6px 12px', borderRadius: 6,
-  fontSize: 12, fontWeight: 700, letterSpacing: '.04em', cursor: 'pointer',
+  fontSize: 12, fontWeight: 700, letterSpacing: 0, cursor: 'pointer',
 });
 const btnSecondary = () => ({
   background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.18)',
   color: 'rgba(255,255,255,0.8)', padding: '6px 12px', borderRadius: 6,
-  fontSize: 12, fontWeight: 700, letterSpacing: '.04em', cursor: 'pointer',
+  fontSize: 12, fontWeight: 700, letterSpacing: 0, cursor: 'pointer',
 });
 const btnDanger = () => ({
   background: 'rgba(248,113,113,0.10)', border: '1px solid rgba(248,113,113,0.35)',
   color: '#f87171', padding: '6px 12px', borderRadius: 6,
-  fontSize: 12, fontWeight: 700, letterSpacing: '.04em', cursor: 'pointer',
+  fontSize: 12, fontWeight: 700, letterSpacing: 0, cursor: 'pointer',
 });
 
 // ── Staging Section (compare + commit) ────────────────────────────
@@ -1655,7 +1655,7 @@ function StagingSection({ stagedRows, impact, currency, contractsById, onUnstage
         display: 'flex', alignItems: 'center', gap: 10,
       }}>
         <div style={{
-          fontSize: 12, fontWeight: 800, letterSpacing: '.10em',
+          fontSize: 12, fontWeight: 800, letterSpacing: 0,
           textTransform: 'uppercase', color: '#22d3ee',
         }}>Staged Changes — Review &amp; Commit</div>
         <span style={{
@@ -1763,7 +1763,7 @@ function sortValue(row, key, contractsById) {
 
 function thSortStyle({ align = 'left', width }) {
   return {
-    padding: '10px 10px', fontSize: 11, fontWeight: 700, letterSpacing: '.07em',
+    padding: '10px 10px', fontSize: 11, fontWeight: 700, letterSpacing: 0,
     textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)',
     borderBottom: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'nowrap',
     textAlign: align, width,
@@ -1804,7 +1804,7 @@ function PortfolioImpactPanel({ impact, currency }) {
       borderRadius: 8,
     }}>
       <div style={{
-        fontSize: 10, fontWeight: 700, letterSpacing: '.08em',
+        fontSize: 10, fontWeight: 700, letterSpacing: 0,
         textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)',
         marginBottom: 4,
       }}>{label}</div>

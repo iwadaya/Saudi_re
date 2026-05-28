@@ -328,7 +328,7 @@ export default function MarketIntelligenceModal({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {report && (
               <span style={{
-                fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase',
+                fontSize: 10, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase',
                 padding: '3px 8px', borderRadius: 999,
                 background: report.cached ? 'rgba(96,165,250,0.10)' : 'rgba(74,222,128,0.10)',
                 border: `1px solid ${report.cached ? 'rgba(96,165,250,0.30)' : 'rgba(74,222,128,0.30)'}`,
@@ -450,7 +450,7 @@ export default function MarketIntelligenceModal({
 function SectionHeader({ children }) {
   return (
     <div style={{
-      fontSize: 10, fontWeight: 800, letterSpacing: '.18em', textTransform: 'uppercase',
+      fontSize: 10, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase',
       color: '#67e8f9', marginBottom: 8, paddingBottom: 6,
       borderBottom: '1px solid rgba(103,232,249,0.18)',
     }}>{children}</div>
@@ -765,7 +765,7 @@ function MacroCell({ row }) {
       borderRadius: 8, padding: '10px 12px',
     }}>
       <div style={{
-        fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase',
+        fontSize: 10, fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase',
         color: 'rgba(255,255,255,0.50)', marginBottom: 6,
       }}>{row.label}</div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
@@ -869,7 +869,7 @@ function BenchmarkRow({ row }) {
       </td>
       <td style={cellR}>
         <span style={{
-          fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase',
+          fontSize: 10, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase',
           padding: '2px 8px', borderRadius: 999,
           background: style.bg, border: `1px solid ${style.border}`, color: style.fg,
         }}>{v.replace('_', ' ')}</span>
@@ -972,7 +972,7 @@ function RecommendationCard({ rec, staging, onStage, onReject, onClose }) {
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
         <span style={{
-          fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase',
+          fontSize: 10, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase',
           padding: '2px 8px', borderRadius: 999,
           background: a.bg, border: `1px solid ${a.border}`, color: a.fg,
         }}>{rec.action_type}</span>
@@ -1071,7 +1071,7 @@ function StatusChip({ status }) {
   const s = map[status] || map.PENDING;
   return (
     <span style={{
-      fontSize: 9, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase',
+      fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase',
       padding: '2px 6px', borderRadius: 6, background: s.bg, color: s.fg,
     }}>{status}</span>
   );
@@ -1164,7 +1164,7 @@ function ConfirmStageDialog({ warnings, onCancel, onConfirm }) {
         borderRadius: 12, padding: 18, width: 'min(440px, 100%)', color: '#fff',
       }}>
         <div style={{
-          fontSize: 12, fontWeight: 900, letterSpacing: '.12em',
+          fontSize: 12, fontWeight: 900, letterSpacing: 0,
           textTransform: 'uppercase', color: '#fbbf24', marginBottom: 10,
         }}>⚠ Compliance warning{warnings.length === 1 ? '' : 's'}</div>
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.80)', marginBottom: 10 }}>
@@ -1190,7 +1190,7 @@ function ConfirmStageDialog({ warnings, onCancel, onConfirm }) {
 // ──────────────────────────────────────────────────────────────────
 // Style helpers
 // ──────────────────────────────────────────────────────────────────
-const cellHeadL = { textAlign: 'left',  fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', padding: '4px 6px 6px 0', borderBottom: '1px solid rgba(255,255,255,0.08)' };
+const cellHeadL = { textAlign: 'left',  fontSize: 10, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', padding: '4px 6px 6px 0', borderBottom: '1px solid rgba(255,255,255,0.08)' };
 const cellHeadR = { ...cellHeadL, textAlign: 'right' };
 const cellL = { padding: '6px 6px 6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.85)' };
 const cellR = { ...cellL, textAlign: 'right', fontVariantNumeric: 'tabular-nums' };

@@ -52,7 +52,7 @@ function StatusChip({ status }) {
   return (
     <span style={{
       display: 'inline-block', padding: '2px 8px', borderRadius: 20,
-      fontSize: 10, fontWeight: 800, letterSpacing: '.08em',
+      fontSize: 10, fontWeight: 800, letterSpacing: 0,
       background: p.bg, border: `1px solid ${p.border}`, color: p.fg,
     }}>
       {status === 'RUNNING' ? 'Analysing…' : status}
@@ -153,7 +153,7 @@ function RecommendationCard({ rec, factorOptions, onAccept, onReject, busy, just
                      marginBottom: 6 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 800,
-                          letterSpacing: '.10em', background: 'rgba(168,85,247,0.10)',
+                          letterSpacing: 0, background: 'rgba(168,85,247,0.10)',
                           border: '1px solid rgba(168,85,247,0.30)', color: '#a855f7' }}>
             {rec.target_screen}
           </span>
@@ -199,7 +199,7 @@ function RecommendationCard({ rec, factorOptions, onAccept, onReject, busy, just
         <div style={{ marginTop: 8, padding: '8px 10px',
                        background: 'rgba(0,212,255,0.04)',
                        border: '1px solid rgba(0,212,255,0.25)', borderRadius: 6 }}>
-          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0,
                          textTransform: 'uppercase', color: 'rgba(0,212,255,0.65)', marginBottom: 6 }}>
             Override value · {inputKind.toLowerCase()}
           </div>
@@ -547,7 +547,7 @@ function AnalysisDrawer({ analysisId, riskId, onClose }) {
             <div style={{ padding: '18px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                              marginBottom: 8 }}>
-                <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.14em',
+                <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0,
                                 textTransform: 'uppercase', color: 'rgba(0,212,255,0.55)' }}>
                   AI Analysis
                 </span>
@@ -577,7 +577,7 @@ function AnalysisDrawer({ analysisId, riskId, onClose }) {
 
             {/* Summary */}
             <div style={{ padding: '16px 20px' }}>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0,
                              textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)',
                              marginBottom: 6 }}>Summary</div>
               <div style={{ fontSize: 12, lineHeight: 1.6, color: 'rgba(226,232,240,0.85)' }}>
@@ -599,7 +599,7 @@ function AnalysisDrawer({ analysisId, riskId, onClose }) {
             <div style={{ padding: '6px 20px 14px' }}>
               <div onClick={() => setExtractedOpen((v) => !v)}
                    style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-                            fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
+                            fontSize: 10, fontWeight: 800, letterSpacing: 0,
                             textTransform: 'uppercase', color: 'rgba(148,163,184,0.55)',
                             marginBottom: 6 }}>
                 <span>{extractedOpen ? '▾' : '▸'}</span>
@@ -659,7 +659,7 @@ function AnalysisDrawer({ analysisId, riskId, onClose }) {
 
             {/* Recommendations */}
             <div style={{ padding: '6px 20px 30px' }}>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0,
                              textTransform: 'uppercase', color: 'rgba(148,163,184,0.55)',
                              marginBottom: 8 }}>
                 Recommendations ({recs.length})
@@ -714,7 +714,7 @@ function RecGroup({ title, status, groups, startCollapsed = false, cardProps = {
     <div style={{ marginBottom: 14 }}>
       <div onClick={() => setCollapsed((v) => !v)}
            style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-                    fontSize: 10, fontWeight: 800, letterSpacing: '.10em',
+                    fontSize: 10, fontWeight: 800, letterSpacing: 0,
                     textTransform: 'uppercase', color: tone.color, marginBottom: 6 }}>
         <span>{collapsed ? '▸' : '▾'}</span>
         <span>{title}</span>
@@ -722,7 +722,7 @@ function RecGroup({ title, status, groups, startCollapsed = false, cardProps = {
       </div>
       {!collapsed && groups.map(([screen, list]) => (
         <div key={screen} style={{ marginBottom: 8 }}>
-          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0,
                          color: 'rgba(148,163,184,0.45)', marginBottom: 4 }}>
             {screen}
           </div>
@@ -1123,7 +1123,7 @@ export default function FacDocuments() {
               <tr style={{ background: 'rgba(5,8,16,0.6)' }}>
                 {['Filename', 'Kind', 'Size', 'Uploaded by', 'Status', 'Actions'].map((h) => (
                   <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 9, fontWeight: 800,
-                                       letterSpacing: '.12em', textTransform: 'uppercase',
+                                       letterSpacing: 0, textTransform: 'uppercase',
                                        color: 'rgba(148,163,184,0.50)',
                                        borderBottom: '1px solid rgba(255,255,255,0.08)' }}>{h}</th>
                 ))}

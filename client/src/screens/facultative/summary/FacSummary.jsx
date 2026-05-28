@@ -58,7 +58,7 @@ function Row({ label, value, color }) {
 function Sec({ title, color, children }) {
   return (
     <div style={{ marginBottom: 22 }}>
-      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em',
+      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0,
                     textTransform: 'uppercase', color: color || 'rgba(0,212,255,0.55)',
                     marginBottom: 10, paddingBottom: 6,
                     borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{title}</div>
@@ -218,7 +218,7 @@ export default function FacSummary() {
                        background: 'rgba(251,191,36,0.06)',
                        border: '1px solid rgba(251,191,36,0.25)',
                        borderRadius: 12, textAlign: 'center' }}>
-          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em',
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0,
                         textTransform: 'uppercase', color: '#fbbf24', marginBottom: 8 }}>
             Pricing incomplete
           </div>
@@ -340,7 +340,7 @@ export default function FacSummary() {
                          background: 'rgba(8,14,30,0.40)', border: '1px solid rgba(255,255,255,0.08)',
                          borderRadius: 10 }}>
             <div>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0,
                             textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>Score</div>
               <div style={{ fontSize: 32, fontWeight: 900, color: '#e2e8f0',
                             fontVariantNumeric: 'tabular-nums' }}>
@@ -348,20 +348,20 @@ export default function FacSummary() {
               </div>
             </div>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0,
                             textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>Grade</div>
               <div style={{ fontSize: 36, fontWeight: 900, color: gradeColor(grade) }}>
                 {grade || '—'}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0,
                             textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>Action</div>
               <div style={{ marginTop: 4 }}>
                 <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 20,
                                background: `${gradeColor(grade)}26`, border: `1px solid ${gradeColor(grade)}66`,
                                color: gradeColor(grade), fontSize: 11, fontWeight: 800,
-                               letterSpacing: '.08em' }}>
+                               letterSpacing: 0 }}>
                   {pricing.uw_action || '—'}
                 </span>
               </div>
@@ -509,7 +509,7 @@ export default function FacSummary() {
             <div onClick={(e) => e.stopPropagation()}
                  style={{ width: 480, padding: 22, background: '#0f1729',
                           border: '1px solid rgba(248,113,113,0.30)', borderRadius: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.10em',
+              <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 0,
                             textTransform: 'uppercase', color: '#f87171', marginBottom: 10 }}>
                 Decline Risk
               </div>
@@ -573,7 +573,7 @@ function SignatureSlot({ title, event, fallback }) {
     <div style={{ padding: '10px 14px', background: empty ? 'rgba(8,14,30,0.30)' : 'rgba(35,209,139,0.05)',
                    border: '1px dashed', borderColor: empty ? 'rgba(148,163,184,0.20)' : 'rgba(35,209,139,0.30)',
                    borderRadius: 8 }}>
-      <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+      <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0,
                     textTransform: 'uppercase', color: 'rgba(148,163,184,0.55)', marginBottom: 4 }}>
         {title}
       </div>

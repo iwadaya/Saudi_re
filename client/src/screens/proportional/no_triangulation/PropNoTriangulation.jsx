@@ -253,7 +253,7 @@ export default function PropNoTriangulation() {
                     style={{
                       background: 'var(--accent)', color: 'var(--accent-contrast)',
                       border: 'none', padding: '9px 16px', borderRadius: 8,
-                      fontWeight: 800, fontSize: 12, letterSpacing: '.06em', textTransform: 'uppercase',
+                      fontWeight: 800, fontSize: 12, letterSpacing: 0, textTransform: 'uppercase',
                       cursor: 'pointer',
                     }}
                   >🔍 LDF Analysis</button>
@@ -276,11 +276,11 @@ export default function PropNoTriangulation() {
                 <table className="nt-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed' }}>
                   <thead>
                     <tr style={{ background: 'rgba(5,8,16,0.85)' }}>
-                      <th style={{ width: 90, textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.60)', whiteSpace: 'nowrap' }}>UW Year</th>
-                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.60)' }}>Gross Premium</th>
-                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.60)' }}>Paid Claims</th>
-                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.60)' }}>OS Claims</th>
-                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.60)' }}>Incurred (Calc)</th>
+                      <th style={{ width: 90, textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.60)', whiteSpace: 'nowrap' }}>UW Year</th>
+                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.60)' }}>Gross Premium</th>
+                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.60)' }}>Paid Claims</th>
+                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.60)' }}>OS Claims</th>
+                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.60)' }}>Incurred (Calc)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -294,7 +294,7 @@ export default function PropNoTriangulation() {
                               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                               padding: '3px 12px', borderRadius: 6,
                               background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.30)',
-                              color: '#a78bfa', fontSize: 12, fontWeight: 800, letterSpacing: '.04em',
+                              color: '#a78bfa', fontSize: 12, fontWeight: 800, letterSpacing: 0,
                             }}>{year}</span>
                           </td>
                           {COLS.map((col, ci) => (
@@ -338,7 +338,7 @@ export default function PropNoTriangulation() {
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                           padding: '3px 12px', borderRadius: 6,
                           background: 'rgba(0,212,255,0.10)', border: '1px solid rgba(0,212,255,0.30)',
-                          color: '#00d4ff', fontSize: 11, fontWeight: 800, letterSpacing: '.06em',
+                          color: '#00d4ff', fontSize: 11, fontWeight: 800, letterSpacing: 0,
                         }}>Total</span>
                       </td>
                       <td className="num" style={{ padding: 6, color: 'rgba(255,255,255,0.8)', paddingRight: 12 }}>{fmtC(totals.premium)}</td>
@@ -369,13 +369,13 @@ export default function PropNoTriangulation() {
                   <div style={{ display: 'grid', gap: 14 }}>
                     {premiumBlend?.blended?.length > 0 && (
                       <div>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Premium</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0, marginBottom: 6 }}>Premium</div>
                         <LdfCurveTable classes={premiumBlend.classes} blended={premiumBlend.blended} classLabelById={classLabelById} compact />
                       </div>
                     )}
                     {claimsBlend?.blended?.length > 0 && (
                       <div>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Claims</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0, marginBottom: 6 }}>Claims</div>
                         <LdfCurveTable classes={claimsBlend.classes} blended={claimsBlend.blended} classLabelById={classLabelById} compact />
                       </div>
                     )}

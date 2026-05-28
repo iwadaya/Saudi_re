@@ -104,7 +104,7 @@
 .TRIANGLES_PAGE .tri-h2{
   font-size: 22px;
   font-weight: 800;
-  letter-spacing: -.02em;
+  letter-spacing: 0;
   color: rgba(226,232,240,.95);
 }
 
@@ -154,7 +154,7 @@
   backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(148,163,184,.14);
   font-size: 12px;
-  letter-spacing: .10em;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: rgba(226,232,240,.70);
   padding: 10px 8px;
@@ -299,7 +299,7 @@
 .PROP_PREMIUM_TRIANGLES h2{
   font-size: 12px;
   font-weight: 400 !important;
-  letter-spacing: .02em;
+  letter-spacing: 0;
   color: rgba(226,232,240,.65);
   margin-bottom: 6px;
 }
@@ -381,7 +381,7 @@
 .TRIANGLES_PAGE .tri-h2{
   font-size: 12px !important;
   font-weight: 400 !important;
-  letter-spacing: .01em !important;
+  letter-spacing: 0;
   color: rgba(226,232,240,.65) !important;
 }
 
@@ -431,7 +431,7 @@
   border-radius: 10px;
   cursor: pointer;
   font-size: 12px;
-  letter-spacing: .4px;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -469,7 +469,7 @@
 
 .TRIANGLES_PAGE .lr-x{
   font-size: 10px;
-  letter-spacing: .4px;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: rgba(226,232,240,.6);
 }

@@ -35,6 +35,18 @@ export default defineConfig({
           if (id.includes('node_modules')) {
             return 'vendor';
           }
+          // The local Excel adapter dynamically imports exceljs. Keep the
+          // adapter separate from app-core so one pay-on-click import does
+          // not make the core chunk participate in the exceljs graph.
+          if (id.includes('/utils/excel')) {
+            return 'excel-adapter';
+          }
+          // Straight-projection defaults are used by the workbench and a
+          // no-triangulation fallback. Isolate them from app-core so the
+          // fallback remains lazy and the workbench can share a small chunk.
+          if (id.includes('/logic/straightProjections')) {
+            return 'straight-projections';
+          }
           // Logic/utilities — must come before screens to avoid circular dependency.
           // straightProjections.js and other logic files are shared across prop/shared screens.
           if (id.includes('/logic/') || id.includes('/utils/') ||
@@ -56,6 +68,28 @@ export default defineConfig({
           }
           // Shared screens — must come before prop-screens
           if (id.includes('/screens/shared/')) {
+            if (id.includes('/screens/shared/ExcelImportAgent')) {
+              return 'excel-import-agent';
+            }
+            if (id.includes('/screens/shared/LossParetoScreen') ||
+                id.includes('/screens/shared/RpComparisonModal')) {
+              return 'loss-pareto-screen';
+            }
+            if (id.includes('/screens/shared/LossSelectionScreen') ||
+                id.includes('/screens/shared/LossAnalysisModal') ||
+                id.includes('/screens/shared/LossQuarterSuggestModal')) {
+              return 'loss-selection-screen';
+            }
+            if (id.includes('/screens/shared/LossListScreen')) {
+              return 'loss-list-screen';
+            }
+            if (id.includes('/screens/shared/ProfileScreen')) {
+              return 'profile-screen';
+            }
+            if (id.includes('/screens/shared/DocumentsScreen') ||
+                id.includes('/screens/shared/Wording')) {
+              return 'documents-screen';
+            }
             return 'shared-screens';
           }
           // Proportional screens

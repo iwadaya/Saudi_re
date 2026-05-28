@@ -22,11 +22,11 @@ export default function SelectScreen() {
           width: 52, height: 52, borderRadius: 14,
           background: 'linear-gradient(135deg, #23d18b, #0aa36a)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 16, fontWeight: 900, color: '#08140e', letterSpacing: '-.02em',
+          fontSize: 16, fontWeight: 900, color: '#08140e', letterSpacing: 0,
           boxShadow: '0 0 24px rgba(35,209,139,0.40)',
           margin: '0 auto 20px',
         }}>U3</div>
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.18em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.55)', marginBottom: 8 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(148,163,184,0.55)', marginBottom: 8 }}>
           The Universe™
         </div>
         <div style={{ fontSize: 22, fontWeight: 700, color: 'rgba(226,232,240,0.92)', marginBottom: 6 }}>
@@ -56,7 +56,7 @@ export default function SelectScreen() {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 18, marginBottom: 18,
           }}>📋</div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: 'rgba(226,232,240,0.92)', marginBottom: 6, letterSpacing: '.01em' }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: 'rgba(226,232,240,0.92)', marginBottom: 6, letterSpacing: 0 }}>
             Treaty Reinsurance
           </div>
           <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.55)', lineHeight: 1.6, marginBottom: 20 }}>
@@ -65,7 +65,7 @@ export default function SelectScreen() {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {['Proportional', 'Non-Proportional', 'XL / QS', 'Portfolio'].map(tag => (
               <span key={tag} style={{
-                fontSize: 10, fontWeight: 700, letterSpacing: '.08em',
+                fontSize: 10, fontWeight: 700, letterSpacing: 0,
                 padding: '3px 8px', borderRadius: 20,
                 background: 'rgba(35,209,139,0.08)', border: '1px solid rgba(35,209,139,0.20)',
                 color: '#23d18b',
@@ -92,7 +92,7 @@ export default function SelectScreen() {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 18, marginBottom: 18,
           }}>🔎</div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: 'rgba(226,232,240,0.92)', marginBottom: 6, letterSpacing: '.01em' }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: 'rgba(226,232,240,0.92)', marginBottom: 6, letterSpacing: 0 }}>
             Facultative Reinsurance
           </div>
           <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.55)', lineHeight: 1.6, marginBottom: 20 }}>
@@ -101,7 +101,7 @@ export default function SelectScreen() {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {['Per Risk', 'Pro-Rata', 'XS of Retention', 'Fac Cert'].map(tag => (
               <span key={tag} style={{
-                fontSize: 10, fontWeight: 700, letterSpacing: '.08em',
+                fontSize: 10, fontWeight: 700, letterSpacing: 0,
                 padding: '3px 8px', borderRadius: 20,
                 background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.18)',
                 color: '#00d4ff',
@@ -116,7 +116,7 @@ export default function SelectScreen() {
       </div>
 
       {/* Footer */}
-      <div style={{ marginTop: 52, fontSize: 10, color: 'rgba(255,255,255,.15)', letterSpacing: '.04em' }}>
+      <div style={{ marginTop: 52, fontSize: 10, color: 'rgba(255,255,255,.15)', letterSpacing: 0 }}>
         The Universe™ · by Darchville Analytics
       </div>
 

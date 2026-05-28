@@ -221,7 +221,7 @@ export function TreatyMetricsPanel({ shareGrid, contract, td, epi, limit, yearly
   };
 
   // Styles matching CompareTermsPanel
-  const thS = { padding: '10px 10px', fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'nowrap', background: 'rgba(15,26,46,0.98)', position: 'sticky', top: 0, zIndex: 2, textAlign: 'center' };
+  const thS = { padding: '10px 10px', fontSize: 11, fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'nowrap', background: 'rgba(15,26,46,0.98)', position: 'sticky', top: 0, zIndex: 2, textAlign: 'center' };
   const tdBase = { padding: '5px 6px', verticalAlign: 'middle', borderBottom: '1px solid rgba(148,163,184,0.06)', textAlign: 'center', fontSize: 13 };
   const cellRo = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: 32, borderRadius: 6, border: '1px solid rgba(148,163,184,0.10)', background: 'rgba(2,6,23,0.22)', color: 'rgba(226,232,240,0.92)', fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums', boxSizing: 'border-box', padding: '0 8px', opacity: 0.85 };
   const inpS = { width: '100%', height: 32, borderRadius: 6, border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(2,6,23,0.30)', color: 'rgba(226,232,240,0.92)', padding: '0 8px', fontSize: 13, fontWeight: 500, outline: 'none', textAlign: 'center', fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums', boxSizing: 'border-box' };
@@ -248,7 +248,7 @@ export function TreatyMetricsPanel({ shareGrid, contract, td, epi, limit, yearly
 
       {view === 'graphs' ? (
         <div style={{ flex: 1, overflow: 'auto', minHeight: 0, padding: '16px 20px' }}>
-          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
             {curYear} vs {prevYear} — at a glance
           </div>
           <MetricBars rows={METRIC_ROWS

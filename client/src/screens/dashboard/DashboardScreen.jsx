@@ -178,7 +178,7 @@ export default function DashboardScreen() {
                   {['USD','SAR','GBP'].map(ccy => (
                     <button key={ccy} onClick={() => setFilters(p => ({ ...p, currency: ccy }))} style={{
                       padding:'4px 12px', borderRadius:6, border:'none', cursor:'pointer',
-                      fontSize:11, fontWeight:700, letterSpacing:'.06em',
+                      fontSize:11, fontWeight:700, letterSpacing: 0,
                       background: currency === ccy ? 'rgba(0,212,255,0.18)' : 'transparent',
                       color: currency === ccy ? '#00d4ff' : 'rgba(255,255,255,0.40)',
                       transition:'all .15s',

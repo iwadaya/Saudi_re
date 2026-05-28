@@ -454,7 +454,7 @@ export default function NpStructure() {
         : (Array.isArray(exp.terms?.coveredProps) ? exp.terms.coveredProps : []);
       setExpiringCoveredProps(expCp.length > 0 ? expCp : [emptyCoveredProp()]);
     }).catch(() => {});
-  }, [contractId, getNumLayers, applyTreatyModeCovers, fullRecalc, recalcFinancialsOnly, quoteMode, setSlice, expiringRecalc, npDetail.expiringNumberOfLayers, npDetail.expiring_number_of_layers]);
+  }, [contractId, getNumLayers, applyTreatyModeCovers, fullRecalc, recalcFinancialsOnly, quoteMode, replaceSlice, setSlice, expiringRecalc, npDetail.expiringNumberOfLayers, npDetail.expiring_number_of_layers]);
 
   /* ── Re-sync layers when treaty detail deductible or numberOfLayers changes ──
      When the user edits these fields on Treaty Detail and navigates back to Structure,
@@ -1173,7 +1173,7 @@ export default function NpStructure() {
                       return (
                         <tfoot>
                           <tr style={{ borderTop: '2px solid rgba(0,212,255,0.45)', background: 'rgba(0,212,255,0.06)' }}>
-                            <th className="np-table-sticky cell-center" style={{ color: '#00d4ff', fontSize: 10, letterSpacing: '.08em', fontWeight: 800, background: 'rgba(0,212,255,0.08)' }}>TOTAL</th>
+                            <th className="np-table-sticky cell-center" style={{ color: '#00d4ff', fontSize: 10, letterSpacing: 0, fontWeight: 800, background: 'rgba(0,212,255,0.08)' }}>TOTAL</th>
                             <td><CommaInput value={totLimit ? String(totLimit) : ''} readOnly suffix={currency} onChange={() => {}} /></td>
                             <td><CommaInput value={firstDed ? String(firstDed) : ''} readOnly suffix={currency} onChange={() => {}} /></td>
                             <td><CommaInput value={totAgg ? String(totAgg) : ''} readOnly suffix={currency} onChange={() => {}} /></td>
@@ -1345,7 +1345,7 @@ export default function NpStructure() {
                     const locked = isRenewal && expiringAutoPopulated;
                     return (
                       <div key={k}>
-                        <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.55)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</div>
+                        <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.55)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0 }}>{label}</div>
                         <input
                           className={`np-mini-input${locked ? ' np-mini-input--readonly' : ''}`}
                           value={expiringTerms[k] ?? ''}
@@ -1450,7 +1450,7 @@ export default function NpStructure() {
                       return (
                         <tfoot>
                           <tr style={{ borderTop: '2px solid rgba(0,212,255,0.45)', background: 'rgba(0,212,255,0.06)' }}>
-                            <th className="np-table-sticky cell-center" style={{ color: '#00d4ff', fontSize: 10, letterSpacing: '.08em', fontWeight: 800, background: 'rgba(0,212,255,0.08)' }}>TOTAL</th>
+                            <th className="np-table-sticky cell-center" style={{ color: '#00d4ff', fontSize: 10, letterSpacing: 0, fontWeight: 800, background: 'rgba(0,212,255,0.08)' }}>TOTAL</th>
                             <td><CommaInput value={totLimit ? String(totLimit) : ''} readOnly suffix={currency} onChange={() => {}} /></td>
                             <td><CommaInput value={firstDed ? String(firstDed) : ''} readOnly suffix={currency} onChange={() => {}} /></td>
                             <td><CommaInput value={totAgg ? String(totAgg) : ''} readOnly suffix={currency} onChange={() => {}} /></td>
@@ -1598,7 +1598,7 @@ export default function NpStructure() {
                     <div className="glass" role="dialog" aria-modal="true" style={{ background: 'var(--glass-bg, #0d1117)', border: '1px solid rgba(0,212,255,0.25)', borderRadius: 12, width: '92vw', maxWidth: 1000, maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                         <div>
-                          <div style={{ fontWeight: 800, fontSize: 14, letterSpacing: '.06em', color: '#e2e8f0' }}>IMPLIED PRICING CURVE</div>
+                          <div style={{ fontWeight: 800, fontSize: 14, letterSpacing: 0, color: '#e2e8f0' }}>IMPLIED PRICING CURVE</div>
                           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>
                             Fitted from expiring layer attachments and tops. Requires at least two expiring layers with EGNPI and ROL.
                           </div>

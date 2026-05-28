@@ -224,7 +224,7 @@ body::after{
 .card-title,
 .card-header-label{
   color: var(--text-strong);
-  letter-spacing: .08em;
+  letter-spacing: 0;
 }
 
 .topbar{
@@ -244,7 +244,7 @@ body::after{
 .topbar-title,
 .brand-title{
   color: var(--text-strong);
-  letter-spacing: .10em;
+  letter-spacing: 0;
 }
 
 .topbar-btn,
@@ -312,7 +312,7 @@ body::after{
 
 .wizard-tab-group-label{
   color: var(--text-subtle);
-  letter-spacing: .12em;
+  letter-spacing: 0;
   padding: 8px 10px 5px;
 }
 
@@ -461,7 +461,7 @@ body::after{
   background: transparent;
   cursor: pointer;
   font-size: 11px;
-  letter-spacing: .10em;
+  letter-spacing: 0;
   text-transform: uppercase;
   transition: background .14s ease, border-color .14s ease, color .14s ease, transform .12s ease;
 }
@@ -491,7 +491,7 @@ body::after{
 
 .theme-switcher__label{
   font-size: 10px;
-  letter-spacing: .12em;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: var(--text-subtle);
 }
@@ -500,7 +500,7 @@ body::after{
   grid-column: 2 / -1;
   margin-top: -2px;
   font-size: 10px;
-  letter-spacing: .02em;
+  letter-spacing: 0;
   color: var(--muted-2);
 }
 

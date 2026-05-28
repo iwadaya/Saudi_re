@@ -44,7 +44,7 @@
   font-feature-settings: "tnum", "zero", "lnum" !important;
   text-align: center !important;
   line-height: var(--num-cell-lh) !important;
-  letter-spacing: 0 !important;
+  letter-spacing: 0;
 }
 
 input[type="number"],
@@ -110,7 +110,7 @@ td[data-numeric],
 .title-xl{
   font-size: var(--num-title-fs) !important;
   font-weight: var(--num-cell-fw) !important;
-  letter-spacing: 0 !important;
+  letter-spacing: 0;
   text-transform: none !important;
   color: var(--text-strong) !important;
 }
@@ -150,7 +150,7 @@ td[data-numeric],
 .df-method-label{
   font-size: var(--num-th-fs) !important;
   font-weight: var(--num-cell-fw) !important;
-  letter-spacing: var(--num-th-letter-spacing) !important;
+  letter-spacing: 0;
   text-transform: uppercase !important;
   color: var(--num-th-color) !important;
 }

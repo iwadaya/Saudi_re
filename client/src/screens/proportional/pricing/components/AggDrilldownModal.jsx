@@ -108,7 +108,7 @@ export default function AggDrilldownModal({ contractId, shareRows: _shareRows, o
     return [...set];
   }, [data]);
 
-  const thS = { padding:'8px 12px', fontSize:10, fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase',
+  const thS = { padding:'8px 12px', fontSize:10, fontWeight:700, letterSpacing: 0, textTransform:'uppercase',
     color:'rgba(255,255,255,0.4)', borderBottom:'1px solid rgba(255,255,255,0.08)', whiteSpace:'nowrap',
     background:'rgba(8,14,28,0.98)', position:'sticky', top:0, zIndex:2, cursor:'pointer' };
   const tdS = { padding:'8px 12px', borderBottom:'1px solid rgba(255,255,255,0.05)', fontSize:12, verticalAlign:'middle' };
@@ -125,7 +125,7 @@ export default function AggDrilldownModal({ contractId, shareRows: _shareRows, o
         {/* ── Header ── */}
         <div style={{ padding:'14px 20px', borderBottom:'1px solid rgba(255,255,255,0.08)', display:'flex', alignItems:'center', gap:16, flexShrink:0 }}>
           <div style={{ flex:1 }}>
-            <div style={{ fontWeight:800, fontSize:15, color:'#fff', letterSpacing:'.02em' }}>
+            <div style={{ fontWeight:800, fontSize:15, color:'#fff', letterSpacing: 0 }}>
               ◈ Aggregate Analysis
               {data?.contract?.country_name && <span style={{ marginLeft:10, fontSize:12, color:'rgba(96,165,250,0.8)', fontWeight:600 }}>{data.contract.country_name} · UW {data.contract.uw_year}</span>}
             </div>
@@ -142,7 +142,7 @@ export default function AggDrilldownModal({ contractId, shareRows: _shareRows, o
                 background: tab===t.key ? 'rgba(96,165,250,0.12)' : 'transparent',
                 color: tab===t.key ? '#60a5fa' : 'rgba(255,255,255,0.45)',
                 borderBottom: tab===t.key ? '2px solid #60a5fa' : '2px solid transparent',
-                letterSpacing:'0.04em', textTransform:'uppercase', transition:'all 0.15s' }}>
+                letterSpacing: 0, textTransform:'uppercase', transition:'all 0.15s' }}>
               {t.label}
             </button>
           ))}
@@ -164,7 +164,7 @@ export default function AggDrilldownModal({ contractId, shareRows: _shareRows, o
             <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
               {/* (a) Country header strip */}
               <div style={{ padding:'12px 16px', borderRadius:10, background:'rgba(96,165,250,0.05)', border:'1px solid rgba(96,165,250,0.2)' }}>
-                <div style={{ fontSize:11, fontWeight:700, color:'rgba(96,165,250,0.8)', textTransform:'uppercase', letterSpacing:'0.05em' }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'rgba(96,165,250,0.8)', textTransform:'uppercase', letterSpacing: 0 }}>
                   Aggregate Exposure — {data.contract?.country_name || '—'} · UW {data.contract?.uw_year || '—'}
                 </div>
                 <div style={{ fontSize:24, fontWeight:800, color:'#fff', marginTop:4 }}>
@@ -201,11 +201,11 @@ export default function AggDrilldownModal({ contractId, shareRows: _shareRows, o
               {/* (c) Peak exposure zone-peril combo card */}
               {peakCell.value > 0 ? (
                 <div style={{ padding:'18px 20px', borderRadius:10, background:'rgba(255,255,255,0.04)', border:`1px solid ${PERIL_COLORS[peakCell.peril]}`, boxShadow:`0 0 24px ${PERIL_COLORS[peakCell.peril]}15` }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.5)', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:6 }}>Peak Exposure</div>
+                  <div style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.5)', textTransform:'uppercase', letterSpacing: 0, marginBottom:6 }}>Peak Exposure</div>
                   <div style={{ fontSize:13, fontWeight:600, color: PERIL_COLORS[peakCell.peril], marginBottom:4 }}>
                     {peakCell.zone.zone_name || peakCell.zone.zone_id} — {PERIL_LABELS[peakCell.peril]}
                   </div>
-                  <div style={{ fontSize:28, fontWeight:800, color:'#fff', letterSpacing:'-0.01em' }}>
+                  <div style={{ fontSize:28, fontWeight:800, color:'#fff', letterSpacing: 0 }}>
                     {fmt(peakCell.value)}
                   </div>
                   <div style={{ fontSize:11, color:'rgba(255,255,255,0.5)', marginTop:6 }}>
@@ -435,7 +435,7 @@ export default function AggDrilldownModal({ contractId, shareRows: _shareRows, o
               <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
                 {/* Panel 1 — By Peril */}
                 <div style={{ flex:1, minWidth:320, padding:'14px 16px', borderRadius:10, background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)' }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.5)', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10 }}>Share Impact By Peril</div>
+                  <div style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.5)', textTransform:'uppercase', letterSpacing: 0, marginBottom:10 }}>Share Impact By Peril</div>
                   <table style={{ width:'100%', borderCollapse:'collapse' }}>
                     <thead>
                       <tr>
@@ -474,7 +474,7 @@ export default function AggDrilldownModal({ contractId, shareRows: _shareRows, o
 
                 {/* Panel 2 — By Class */}
                 <div style={{ flex:1, minWidth:320, padding:'14px 16px', borderRadius:10, background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)' }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.5)', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10 }}>Share Impact By Class</div>
+                  <div style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.5)', textTransform:'uppercase', letterSpacing: 0, marginBottom:10 }}>Share Impact By Class</div>
                   <table style={{ width:'100%', borderCollapse:'collapse' }}>
                     <thead>
                       <tr>

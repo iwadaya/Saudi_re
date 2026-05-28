@@ -79,7 +79,7 @@ function MandateModal({ user, onClose, onSave }) {
 
   const fi = (label, key, opts = {}) => (
     <div style={{ marginBottom:14 }}>
-      <label style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>{label}</label>
+      <label style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.40)', textTransform:'uppercase', letterSpacing: 0, marginBottom:5 }}>{label}</label>
       <input className="form-input" type={opts.type || 'text'} value={form[key]}
         onChange={e => set(key, e.target.value)} placeholder={opts.placeholder || ''} style={{ width:'100%' }} />
     </div>
@@ -101,7 +101,7 @@ function MandateModal({ user, onClose, onSave }) {
         {fi('Single Risk Limit (USD)', 'single_risk_limit_usd', { type:'number', placeholder:'Leave blank = use treaty limit' })}
 
         <div style={{ marginBottom:14 }}>
-          <label style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>Treaty Type Scope</label>
+          <label style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.40)', textTransform:'uppercase', letterSpacing: 0, marginBottom:5 }}>Treaty Type Scope</label>
           <select className="form-input" value={form.treaty_type_scope} onChange={e => set('treaty_type_scope', e.target.value)} style={{ width:'100%' }}>
             <option value="BOTH">Both Proportional & Non-Proportional</option>
             <option value="PROP_ONLY">Proportional Only</option>
@@ -110,7 +110,7 @@ function MandateModal({ user, onClose, onSave }) {
         </div>
 
         <div style={{ marginBottom:14 }}>
-          <label style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>Approvals Required</label>
+          <label style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.40)', textTransform:'uppercase', letterSpacing: 0, marginBottom:5 }}>Approvals Required</label>
           <select className="form-input" value={form.approvals_required} onChange={e => set('approvals_required', e.target.value)} style={{ width:'100%' }}>
             <option value={1}>1 — Single approval</option>
             <option value={2}>2 — Dual approval</option>
@@ -154,7 +154,7 @@ function AddUserModal({ roles, onClose, onSave }) {
 
   const fi = (label, key, opts = {}) => (
     <div style={{ marginBottom:14 }}>
-      <label style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>{label}</label>
+      <label style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.40)', textTransform:'uppercase', letterSpacing: 0, marginBottom:5 }}>{label}</label>
       {opts.select ? (
         <select className="form-input" value={form[key]} onChange={e => set(key, e.target.value)} style={{ width:'100%' }}>{opts.select}</select>
       ) : (
@@ -254,12 +254,12 @@ export default function UserManagementScreen() {
               <div key={role.role_id} style={{ marginBottom:24 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, paddingLeft:4 }}>
                   <span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', background:color }} />
-                  <span style={{ fontSize:12, fontWeight:700, color:'rgba(255,255,255,.65)', textTransform:'uppercase', letterSpacing:'.06em' }}>{role.role_name}</span>
+                  <span style={{ fontSize:12, fontWeight:700, color:'rgba(255,255,255,.65)', textTransform:'uppercase', letterSpacing: 0 }}>{role.role_name}</span>
                   <span style={{ fontSize:10, color:'rgba(255,255,255,.30)' }}>Lvl {role.hierarchy_level} · {role.authority_limit_usd ? fmtLimit(role.authority_limit_usd) + ' role default' : 'Unlimited'}</span>
                   <span style={{ fontSize:10, color:'rgba(255,255,255,.25)', marginLeft:'auto' }}>{roleUsers.length} user{roleUsers.length !== 1 ? 's' : ''}</span>
                 </div>
                 <div className="glass" style={{ borderRadius:12, border:'1px solid rgba(255,255,255,.08)', overflow:'hidden' }}>
-                  <div style={{ display:'grid', gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr auto', gap:12, padding:'8px 16px', borderBottom:'1px solid rgba(255,255,255,.06)', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.30)', textTransform:'uppercase', letterSpacing:'.06em' }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr auto', gap:12, padding:'8px 16px', borderBottom:'1px solid rgba(255,255,255,.06)', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.30)', textTransform:'uppercase', letterSpacing: 0 }}>
                     <div>Name</div><div>Role</div><div>Treaty Limit</div><div>Scope</div><div>Status</div><div>Actions</div>
                   </div>
                   {roleUsers.map(u => (

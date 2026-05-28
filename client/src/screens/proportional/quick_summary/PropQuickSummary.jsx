@@ -486,7 +486,7 @@ export default function PropQuickSummary() {
                 lineHeight: 1.5,
                 width: '100%',
               }}>
-                <b style={{ color: '#00e8b8', letterSpacing: '.04em' }}>POST-TREATY-TERMS.</b>{' '}
+                <b style={{ color: '#00e8b8', letterSpacing: 0 }}>POST-TREATY-TERMS.</b>{' '}
                 Premium / claims totals are the same projected ultimates shown on the
                 Projected Summary, then transformed by this treaty's <b>loss cap</b>,
                 commission (fixed or sliding), brokerage, taxes, profit commission

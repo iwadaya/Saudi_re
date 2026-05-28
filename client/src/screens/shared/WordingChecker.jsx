@@ -60,7 +60,7 @@ function Section({ title, badge, children, expanded, onToggle }) {
       <div onClick={onToggle} style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
         padding:'8px 12px', cursor:'pointer', background: expanded ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)' }}>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-          <span style={{ fontSize:10, fontWeight:700, color:'rgba(255,255,255,0.6)', textTransform:'uppercase', letterSpacing:'0.05em' }}>{title}</span>
+          <span style={{ fontSize:10, fontWeight:700, color:'rgba(255,255,255,0.6)', textTransform:'uppercase', letterSpacing: 0 }}>{title}</span>
           {badge}
         </div>
         <span style={{ fontSize:10, color:'rgba(255,255,255,0.3)' }}>{expanded ? '▲' : '▼'}</span>
@@ -297,7 +297,7 @@ export default function WordingChecker({ contractId, parentContractId, docs: pro
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
         <div>
-          <div style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.55)', letterSpacing:'0.06em', textTransform:'uppercase' }}>
+          <div style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.55)', letterSpacing: 0, textTransform:'uppercase' }}>
             Wording Analysis
             {rating && <span style={{ marginLeft:8, fontSize:12, color: ratingColor[rating]||'#fff' }}>● {rating}</span>}
           </div>
@@ -326,7 +326,7 @@ export default function WordingChecker({ contractId, parentContractId, docs: pro
         <div style={{ padding:'10px 14px', borderRadius:8, background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.10)', marginBottom:10 }}>
           {analysis.wordingSource && (
             <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>
-              <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em', color:'rgba(255,255,255,0.3)' }}>Analysed from</span>
+              <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing: 0, color:'rgba(255,255,255,0.3)' }}>Analysed from</span>
               <span style={{ fontSize:10, fontWeight:800, padding:'2px 8px', borderRadius:8, background:'rgba(34,197,94,0.12)', border:'1px solid rgba(34,197,94,0.3)', color:'rgba(34,197,94,0.9)' }}>{analysis.wordingSource}</span>
             </div>
           )}

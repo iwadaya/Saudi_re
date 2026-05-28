@@ -109,7 +109,7 @@ export default function NpAggregateXlHero({
               fontSize: 9, padding: '2px 7px', borderRadius: 10,
               background: 'rgba(0,212,255,0.12)',
               border: '1px solid rgba(0,212,255,0.35)',
-              color: '#00d4ff', fontWeight: 700, letterSpacing: '.04em',
+              color: '#00d4ff', fontWeight: 700, letterSpacing: 0,
             }}>
               {quoteRef}
             </span>
@@ -120,7 +120,7 @@ export default function NpAggregateXlHero({
               fontSize: 9, padding: '2px 7px', borderRadius: 10,
               background: 'rgba(168,85,247,0.12)',
               border: '1px solid rgba(168,85,247,0.35)',
-              color: '#a855f7', fontWeight: 700, letterSpacing: '.04em',
+              color: '#a855f7', fontWeight: 700, letterSpacing: 0,
             }}>
               FRANCHISE
             </span>
@@ -130,7 +130,7 @@ export default function NpAggregateXlHero({
               fontSize: 9, padding: '2px 7px', borderRadius: 10,
               background: 'rgba(251,191,36,0.12)',
               border: '1px solid rgba(251,191,36,0.35)',
-              color: '#fbbf24', fontWeight: 700, letterSpacing: '.04em',
+              color: '#fbbf24', fontWeight: 700, letterSpacing: 0,
             }}>
               STRUCTURED
             </span>
@@ -143,7 +143,7 @@ export default function NpAggregateXlHero({
           {broker  && <span>BROKER <b>{broker}</b></span>}
           <span>CCY <b>{currency}</b></span>
           <span>UW YEAR <b>{uwYear}</b></span>
-          <span style={{ color: statusColor, fontWeight: 700, letterSpacing: '.08em' }}>
+          <span style={{ color: statusColor, fontWeight: 700, letterSpacing: 0 }}>
             {(offerStatus || 'DRAFT').replace(/_/g, ' ')}
           </span>
         </div>
@@ -171,7 +171,7 @@ export default function NpAggregateXlHero({
         ))}
 
         <div className="bbg-row bbg-row--subhead" style={{ marginTop: 6 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', color: 'rgba(255,255,255,0.4)' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0, color: 'rgba(255,255,255,0.4)' }}>
             COST STRUCTURE
           </span>
         </div>
@@ -275,7 +275,7 @@ export default function NpAggregateXlHero({
               <div key={i}>
                 <div className="bbg-row bbg-row--subhead" style={{ marginTop: i === 0 ? 2 : 6 }}>
                   <span style={{
-                    fontSize: 10, fontWeight: 700, letterSpacing: '.1em',
+                    fontSize: 10, fontWeight: 700, letterSpacing: 0,
                     color: 'rgba(0,212,255,0.85)',
                   }}>
                     LAYER {i + 1}

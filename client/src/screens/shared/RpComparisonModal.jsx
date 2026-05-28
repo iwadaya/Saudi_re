@@ -162,7 +162,7 @@ export default function RpComparisonModal({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
           <div>
             <div id="rp-comparison-title" style={{
-              fontSize: 14, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text)',
+              fontSize: 14, fontWeight: 900, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--text)',
             }}>
               Return Period Comparison
             </div>
@@ -180,7 +180,7 @@ export default function RpComparisonModal({
 
         {/* Third-party source label */}
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-          <label style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+          <label style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--muted)' }}>
             Third-party source
           </label>
           <input
@@ -280,7 +280,7 @@ export default function RpComparisonModal({
           background: 'var(--surface-2)', border: '1px solid var(--hairline)',
           marginBottom: 14,
         }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--muted)' }}>
             Use
           </div>
           {[
@@ -296,7 +296,7 @@ export default function RpComparisonModal({
                 onClick={() => setRpSource(opt.key)}
                 style={{
                   padding: '6px 12px', borderRadius: 7, fontSize: 11, fontWeight: 700,
-                  letterSpacing: '.04em', textTransform: 'uppercase',
+                  letterSpacing: 0, textTransform: 'uppercase',
                   border: '1px solid ' + (active ? 'var(--accent)' : 'var(--hairline)'),
                   background: active ? 'rgba(var(--accent-rgb), 0.15)' : 'transparent',
                   color: active ? 'var(--accent)' : 'var(--muted)',
@@ -346,7 +346,7 @@ export default function RpComparisonModal({
 
 const th = (align, divider) => ({
   padding: '10px 12px', textAlign: align,
-  fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase',
+  fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase',
   color: 'var(--muted)',
   fontFamily: 'var(--font-sans)',
   borderBottom: '1px solid var(--hairline-strong)',
@@ -361,11 +361,11 @@ const td = (align, mono, divider) => ({
 const primaryBtn = {
   background: 'var(--accent)', color: 'var(--accent-contrast)',
   border: 'none', padding: '8px 18px', borderRadius: 8,
-  fontWeight: 800, fontSize: 12, letterSpacing: '.06em', textTransform: 'uppercase',
+  fontWeight: 800, fontSize: 12, letterSpacing: 0, textTransform: 'uppercase',
 };
 const secondaryBtn = {
   background: 'transparent', color: 'var(--muted)',
   border: '1px solid var(--hairline)', padding: '8px 18px', borderRadius: 8,
-  fontWeight: 700, fontSize: 12, letterSpacing: '.06em', textTransform: 'uppercase',
+  fontWeight: 700, fontSize: 12, letterSpacing: 0, textTransform: 'uppercase',
   cursor: 'pointer',
 };

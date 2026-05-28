@@ -219,9 +219,9 @@ export function CompareTermsPanel({ contractId, contract, td }) {
   const isManualMode = !prevLoading && !prevContract;
 
   /* ── Shared cell style: matches pricing table (.bbg-inp / .bbg-td) ── */
-  const thS = { padding: '10px 10px', fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'nowrap', background: 'rgba(15,26,46,0.98)', position: 'sticky', top: 0, zIndex: 2, textAlign: 'center' };
+  const thS = { padding: '10px 10px', fontSize: 11, fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'nowrap', background: 'rgba(15,26,46,0.98)', position: 'sticky', top: 0, zIndex: 2, textAlign: 'center' };
   const tdBase = { padding: '5px 6px', verticalAlign: 'middle', borderBottom: '1px solid rgba(148,163,184,0.06)', textAlign: 'center', fontSize: 13 };
-  const secS = { padding: '10px 12px', fontSize: 10, fontWeight: 800, letterSpacing: '.16em', textTransform: 'uppercase', color: '#ff9a00', borderBottom: '1px solid rgba(255,165,0,0.18)', background: 'rgba(255,165,0,0.04)' };
+  const secS = { padding: '10px 12px', fontSize: 10, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: '#ff9a00', borderBottom: '1px solid rgba(255,165,0,0.18)', background: 'rgba(255,165,0,0.04)' };
 
   /* Read-only cell pill — matches .bbg-inp--ro */
   const cellRo = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: 32, borderRadius: 6, border: '1px solid rgba(148,163,184,0.10)', background: 'rgba(2,6,23,0.22)', color: 'rgba(226,232,240,0.92)', fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums', boxSizing: 'border-box', padding: '0 8px', opacity: 0.85 };
@@ -254,7 +254,7 @@ export function CompareTermsPanel({ contractId, contract, td }) {
 
       {view === 'graphs' ? (
         <div style={{ flex: 1, overflow: 'auto', minHeight: 0, padding: '16px 20px' }}>
-          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
             {curYear} vs {prevYear} — headline moves
           </div>
           <MetricBars rows={METRIC_ROWS

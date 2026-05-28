@@ -32,7 +32,7 @@ function CommaInput({ value, onChange, placeholder, readOnly }) {
   return <input className="fi" type="text" inputMode="numeric" placeholder={placeholder} value={display} onChange={handleChange} readOnly={readOnly} />;
 }
 function SectionTitle({ children }) {
-  return <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(0,212,255,0.55)', marginTop: 32, marginBottom: 14, paddingBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{children}</div>;
+  return <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(0,212,255,0.55)', marginTop: 32, marginBottom: 14, paddingBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{children}</div>;
 }
 
 const CATEGORY_COLORS = {
@@ -49,11 +49,11 @@ function SectionCobChecklist({ sectionIndex, selected, facClasses, classesByCate
   };
   return (
     <div style={{ background: 'rgba(8,14,30,0.50)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 16px', marginBottom: 10 }}>
-      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.10em', color: 'rgba(0,212,255,0.50)', marginBottom: 10 }}>SECTION {sectionIndex + 1} — CLASSES COVERED</div>
+      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0, color: 'rgba(0,212,255,0.50)', marginBottom: 10 }}>SECTION {sectionIndex + 1} — CLASSES COVERED</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
         {Object.entries(classesByCategory).map(([cat, items]) => (
           <React.Fragment key={cat}>
-            <div style={{ gridColumn: '1 / -1', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', color: 'rgba(148,163,184,0.40)', marginTop: 6, marginBottom: 2, textTransform: 'uppercase' }}>{cat}</div>
+            <div style={{ gridColumn: '1 / -1', fontSize: 9, fontWeight: 800, letterSpacing: 0, color: 'rgba(148,163,184,0.40)', marginTop: 6, marginBottom: 2, textTransform: 'uppercase' }}>{cat}</div>
             {items.map(c => {
               const checked = selected.has(c.fac_cob_id);
               return (
@@ -226,7 +226,7 @@ function RelatedTreatiesSection({ riskId, hasCedant, hasCob }) {
                       {l.contract_label}
                     </span>
                     <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 800,
-                                    letterSpacing: '.10em',
+                                    letterSpacing: 0,
                                     background: `${LINK_TYPE_COLOR[l.link_type] || '#94a3b8'}1f`,
                                     border: `1px solid ${LINK_TYPE_COLOR[l.link_type] || '#94a3b8'}66`,
                                     color: LINK_TYPE_COLOR[l.link_type] || 'rgba(148,163,184,0.85)' }}>
@@ -722,19 +722,19 @@ export default function FacRiskDetail() {
           {f.occupancy_code && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 8, fontSize: 11 }}>
               <div>
-                <div style={{ color: 'rgba(148,163,184,0.45)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Hazard Grade</div>
+                <div style={{ color: 'rgba(148,163,184,0.45)', textTransform: 'uppercase', letterSpacing: 0 }}>Hazard Grade</div>
                 <div style={{ color: '#e2e8f0', fontWeight: 700 }}>{effectiveHazardGrade ?? '—'}</div>
               </div>
               <div>
-                <div style={{ color: 'rgba(148,163,184,0.45)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Hazard Category</div>
+                <div style={{ color: 'rgba(148,163,184,0.45)', textTransform: 'uppercase', letterSpacing: 0 }}>Hazard Category</div>
                 <div style={{ color: '#e2e8f0', fontWeight: 700 }}>{f.hazard_category || '—'}</div>
               </div>
               <div>
-                <div style={{ color: 'rgba(148,163,184,0.45)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Risk Category</div>
+                <div style={{ color: 'rgba(148,163,184,0.45)', textTransform: 'uppercase', letterSpacing: 0 }}>Risk Category</div>
                 <div style={{ color: '#e2e8f0', fontWeight: 700 }}>{f.risk_category || '—'}</div>
               </div>
               <div>
-                <div style={{ color: 'rgba(148,163,184,0.45)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Frequency</div>
+                <div style={{ color: 'rgba(148,163,184,0.45)', textTransform: 'uppercase', letterSpacing: 0 }}>Frequency</div>
                 <div style={{ color: '#e2e8f0', fontWeight: 700 }}>{f.frequency_category || '—'}</div>
               </div>
             </div>
@@ -782,7 +782,7 @@ export default function FacRiskDetail() {
             <div key={id} style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 12, alignItems: 'center', marginBottom: 8, padding: '8px 14px', background: 'rgba(8,14,30,0.40)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, borderLeft: `3px solid ${catColor}` }}>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(226,232,240,0.85)' }}>{cls.class_name}</div>
-                <div style={{ fontSize: 9, color: catColor, fontWeight: 700, letterSpacing: '.08em', marginTop: 1 }}>SEC {section + 1} · {cls.category}</div>
+                <div style={{ fontSize: 9, color: catColor, fontWeight: 700, letterSpacing: 0, marginTop: 1 }}>SEC {section + 1} · {cls.category}</div>
               </div>
               <CommaInput value={cobSiValues[id] || ''} onChange={v => handleCobSiChange(id, v)} placeholder="Sum Insured" />
             </div>
@@ -792,7 +792,7 @@ export default function FacRiskDetail() {
         {/* Total SI */}
         {totalSi > 0 && (
           <div style={{ marginTop: 10, padding: '10px 16px', background: 'rgba(35,209,139,0.06)', border: '1px solid rgba(35,209,139,0.20)', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.10em', color: 'rgba(35,209,139,0.55)', textTransform: 'uppercase' }}>Total Sum Insured</span>
+            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0, color: 'rgba(35,209,139,0.55)', textTransform: 'uppercase' }}>Total Sum Insured</span>
             <span style={{ fontSize: 18, fontWeight: 900, color: '#23d18b' }}>{fmt(totalSi)}</span>
           </div>
         )}

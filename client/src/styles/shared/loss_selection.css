@@ -17,7 +17,7 @@
 .LOSS_SELECTION_PAGE .ls-kpi--blue{ border-color: rgba(59,130,246,.28); }
 .LOSS_SELECTION_PAGE .ls-kpi--amber{ border-color: rgba(245,158,11,.28); }
 .LOSS_SELECTION_PAGE .ls-kpi-label{
-  font-size: 10px; text-transform: uppercase; letter-spacing: .10em; color: rgba(148,163,184,.70); margin-bottom: 4px;
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0; color: rgba(148,163,184,.70); margin-bottom: 4px;
 }
 .LOSS_SELECTION_PAGE .ls-kpi-value{
   font-size: 16px; font-weight: 800; color: rgba(226,232,240,.92);
@@ -37,7 +37,7 @@
   display: flex; align-items: center; gap: 6px;
 }
 .LOSS_SELECTION_PAGE .ls-flabel{
-  font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: rgba(148,163,184,.70);
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0; color: rgba(148,163,184,.70);
 }
 .LOSS_SELECTION_PAGE .ls-finput{
   height: 28px !important; line-height: 26px; box-sizing: border-box;
@@ -81,7 +81,7 @@
   width: 100%; border-collapse: separate; border-spacing: 3px;
 }
 .LOSS_SELECTION_PAGE .ls-th{
-  padding: 5px 8px; font-size: 10px; font-weight: 700; letter-spacing: .10em;
+  padding: 5px 8px; font-size: 10px; font-weight: 700; letter-spacing: 0;
   text-transform: uppercase; color: rgba(var(--accent-rgb),.75); text-align: center; white-space: nowrap;
 }
 .LOSS_SELECTION_PAGE .ls-th--r{ text-align: center; }
@@ -114,7 +114,7 @@
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
 }
 .LOSS_SELECTION_PAGE .ls-loadings-title{
-  font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: rgba(226,232,240,.80);
+  font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0; color: rgba(226,232,240,.80);
 }
 .LOSS_SELECTION_PAGE .ls-loadings-empty{
   font-size: 11px; color: rgba(148,163,184,.50); padding: 8px 0;
@@ -145,7 +145,7 @@
   background: rgba(8,16,40,.40);
 }
 .LOSS_SELECTION_PAGE .ls-modal-title{
-  font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; color: rgba(226,232,240,.92);
+  font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: 0; color: rgba(226,232,240,.92);
 }
 .LOSS_SELECTION_PAGE .ls-modal-x{
   background: none; border: 1px solid rgba(148,163,184,.18); border-radius: 999px;
@@ -200,7 +200,7 @@
 }
 .LOSS_SELECTION_PAGE .ls-infl-table th{
   padding: 6px 12px; font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .08em; color: rgba(148,163,184,.70); text-align: center;
+  letter-spacing: 0; color: rgba(148,163,184,.70); text-align: center;
   background: rgba(8,16,40,.40); position: sticky; top: 0;
 }
 .LOSS_SELECTION_PAGE .ls-infl-table td{

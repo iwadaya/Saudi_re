@@ -104,7 +104,7 @@ export default function FacDeductibles() {
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Deductibles & Terms" headerPill="FACULTATIVE" onBeforeNext={save} onBeforeBack={save}>
       <div style={{ maxWidth: 720, margin: '0 auto', padding: '8px 0 40px' }}>
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(0,212,255,0.55)', marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Deductible Structure</div>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(0,212,255,0.55)', marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Deductible Structure</div>
 
         <FR label="Deductible Amount">
           <input className="fi" type="text" inputMode="numeric" value={fmtComma(f.deductible_amount)} onChange={e => set('deductible_amount', stripDigits(e.target.value))} placeholder="0" />
@@ -125,7 +125,7 @@ export default function FacDeductibles() {
         {/* ── Clauses & Exclusions checklist ── */}
         <div style={{ marginTop: 32, paddingBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.06)',
                        display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase',
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase',
                         color: 'rgba(0,212,255,0.55)' }}>
             Clauses &amp; Exclusions Checklist
           </div>
@@ -135,7 +135,7 @@ export default function FacDeductibles() {
                           background: 'rgba(248,113,113,0.10)',
                           border: '1px solid rgba(248,113,113,0.30)' }}>
               <span style={{ width: 8, height: 8, borderRadius: 4, background: '#f87171' }} />
-              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.10em',
+              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0,
                              color: '#f87171', textTransform: 'uppercase' }}>
                 {missingMandatory} mandatory missing
               </span>
@@ -154,7 +154,7 @@ export default function FacDeductibles() {
                 {['Clause', 'Mandatory', 'Checked', 'Comments'].map((h) => (
                   <th key={h} style={{ padding: '8px 10px',
                                        textAlign: h === 'Checked' || h === 'Mandatory' ? 'center' : 'left',
-                                       fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+                                       fontSize: 9, fontWeight: 800, letterSpacing: 0,
                                        textTransform: 'uppercase', color: 'rgba(148,163,184,0.50)',
                                        borderBottom: '1px solid rgba(255,255,255,0.08)' }}>{h}</th>
                 ))}

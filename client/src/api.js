@@ -162,7 +162,6 @@ const PATHS = {
   authUsers: '/api/auth/users',
   authRoles: '/api/auth/roles',
   dashboardFilters: '/api/dashboard/filters',
-  dashboardOverview: (qs = '') => `/api/dashboard/overview${qs ? `?${qs}` : ''}`,
   dashboardPage: (tab, qs = '') => `/api/dashboard/page/${enc(tab || 'portfolio-overview')}${qs ? `?${qs}` : ''}`,
   lossSelectionLatest: (id, lossType) => `/api/treaties/${enc(id)}/loss-selection/${enc(lossType)}/latest`,
   saveLossSelectionSnapshot: (id, lossType) => `/api/treaties/${enc(id)}/loss-selection/${enc(lossType)}/snapshot`,
@@ -635,7 +634,6 @@ export const api = {
 
   // Dashboard
   dashboardFilters(opts) { return request(PATHS.dashboardFilters, opts); },
-  dashboardOverview(params = {}, opts) { return request(PATHS.dashboardOverview(toQuery(params)), opts); },
   dashboardPage(tab, params = {}, opts) { return request(PATHS.dashboardPage(tab, toQuery(params)), opts); },
 
   // ── Facultative ──────────────────────────────────────────────────────────

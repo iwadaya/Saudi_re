@@ -56,7 +56,7 @@ export default function ImportProgressModal({ open, filename }) {
           color: rgba(226,232,240,0.92);
           padding: 22px;
         }
-        .ipm-title { font-size: 13px; font-weight: 800; letter-spacing: .08em;
+        .ipm-title { font-size: 13px; font-weight: 800; letter-spacing: 0;
                      text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
         .ipm-file  { font-size: 12px; color: rgba(226,232,240,0.60); margin-bottom: 14px;
                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

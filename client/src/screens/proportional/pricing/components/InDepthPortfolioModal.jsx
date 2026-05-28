@@ -180,8 +180,8 @@ export default function InDepthPortfolioModal({ getC, snapshots, onClose }) {
 
   const S = { // shared styles
     card:  { padding: '14px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', marginBottom: 14 },
-    title: { fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 },
-    th:    { padding: '8px 12px', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em',
+    title: { fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0, marginBottom: 10 },
+    th:    { padding: '8px 12px', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 0,
              borderBottom: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap', background: 'rgba(6,12,24,0.95)', position: 'sticky', top: 0 },
     td:    { padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: 12, verticalAlign: 'middle' },
   };
@@ -219,7 +219,7 @@ export default function InDepthPortfolioModal({ getC, snapshots, onClose }) {
                 background: tab===t.key ? 'rgba(96,165,250,0.10)' : 'transparent',
                 color: tab===t.key ? '#60a5fa' : 'rgba(255,255,255,0.45)',
                 borderBottom: tab===t.key ? '2px solid #60a5fa' : '2px solid transparent',
-                letterSpacing:'0.04em', textTransform:'uppercase' }}>
+                letterSpacing: 0, textTransform:'uppercase' }}>
               {t.label}
             </button>
           ))}

@@ -401,7 +401,7 @@ export default function NpPremiumsTable() {
                         className="dock-btn dock-btn--ghost"
                         onClick={() => setShowRateModal(true)}
                         title="Capture rate changes year-over-year and view on-level adjusted premium"
-                        style={{ fontSize: 11, fontWeight: 700, padding: '5px 12px', letterSpacing: '.05em' }}
+                        style={{ fontSize: 11, fontWeight: 700, padding: '5px 12px', letterSpacing: 0 }}
                       >
                         ⚙ Rate Changes
                       </button>
@@ -604,11 +604,11 @@ function RateChangesModal({ years, uwRows, rateChangeRows, onChange, onClose }) 
               </colgroup>
               <thead>
                 <tr style={{ background: '#050810' }}>
-                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>UW Year</th>
-                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)', textAlign: 'right' }}>Premium</th>
-                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: '#00d4ff', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>Rate Change %</th>
-                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)', textAlign: 'right' }}>On-Level Factor</th>
-                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: '#4ade80', borderBottom: '1px solid rgba(255,255,255,0.10)', textAlign: 'right' }}>Adjusted Premium</th>
+                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>UW Year</th>
+                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)', textAlign: 'right' }}>Premium</th>
+                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: '#00d4ff', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>Rate Change %</th>
+                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)', textAlign: 'right' }}>On-Level Factor</th>
+                  <th style={{ padding: '10px 8px', fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: '#4ade80', borderBottom: '1px solid rgba(255,255,255,0.10)', textAlign: 'right' }}>Adjusted Premium</th>
                 </tr>
               </thead>
               <tbody>

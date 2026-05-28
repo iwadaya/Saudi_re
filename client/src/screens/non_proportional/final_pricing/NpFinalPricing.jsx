@@ -2293,7 +2293,7 @@ export default function NpFinalPricing() {
       textAlign: 'right',
       fontSize: 9,
       fontWeight: 850,
-      letterSpacing: '.11em',
+      letterSpacing: 0,
       color: 'rgba(148,163,184,0.68)',
       textTransform: 'uppercase',
       borderBottom: '1px solid rgba(255,255,255,0.08)',
@@ -2309,7 +2309,7 @@ export default function NpFinalPricing() {
         <section key={scopeKey} style={{ background: 'rgba(8,14,30,0.72)', border: `1px solid ${scope.color}35`, borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: scope.color }}>
+              <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: 0, textTransform: 'uppercase', color: scope.color }}>
                 {scope.label} Pricing Analysis
               </div>
               <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.58)', marginTop: 2 }}>
@@ -2394,7 +2394,7 @@ export default function NpFinalPricing() {
             {renderScopeSection('cat')}
             <section style={{ background: 'rgba(8,14,30,0.72)', border: '1px solid rgba(35,209,139,0.28)', borderRadius: 12, overflow: 'hidden' }}>
               <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-                <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: '#23d18b' }}>Total Section</div>
+                <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: 0, textTransform: 'uppercase', color: '#23d18b' }}>Total Section</div>
                 <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.58)', marginTop: 2 }}>Combined component premium and weighted ROL used by the main structure table.</div>
               </div>
               <div style={{ overflowX: 'auto' }}>
@@ -3370,7 +3370,7 @@ export default function NpFinalPricing() {
                       </div>
                     </div>
                     <div className="np-final-card np-final-card--flush">
-                      <div style={{ padding: '7px 14px', fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(226,232,240,0.35)', borderBottom: '1px solid rgba(148,163,184,0.08)' }}>
+                      <div style={{ padding: '7px 14px', fontSize: 10, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(226,232,240,0.35)', borderBottom: '1px solid rgba(148,163,184,0.08)' }}>
                         Programme Limits &amp; Downside
                       </div>
                       <div className="np-final-table-wrap np-final-table-wrap--wide">
@@ -3622,7 +3622,7 @@ export default function NpFinalPricing() {
                               flex: 1, padding: '10px 16px',
                               borderRight: idx < arr.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
                             }}>
-                              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.32)', marginBottom: 4 }}>{item.k}</div>
+                              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.32)', marginBottom: 4 }}>{item.k}</div>
                               <div style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.v || '—'}</div>
                             </div>
                           ))}
@@ -3703,7 +3703,7 @@ export default function NpFinalPricing() {
                           const bQ = Math.max(0,Math.min(1,balRatio/60));
                           const aiLinePct  = Math.max(1,Math.min(20,Math.round((mQ*0.6+bQ*0.4)*20*10)/10 || 10));
                           const isApproved = offerStatus === 'AWAITING_SIGNED_LINE';
-                          const th = { padding:'7px 10px', fontSize:9, fontWeight:700, letterSpacing:'.10em',
+                          const th = { padding:'7px 10px', fontSize:9, fontWeight:700, letterSpacing: 0,
                             textTransform:'uppercase', color:'rgba(255,255,255,0.35)', whiteSpace:'nowrap',
                             borderBottom:'1px solid rgba(255,255,255,0.08)', textAlign:'right' };
                           const thC = {...th, textAlign:'center'};
@@ -3724,7 +3724,7 @@ export default function NpFinalPricing() {
                                         {!isTerminal&&<button onClick={()=>{const n={};layerData.forEach((_,i)=>n[i]=String(aiLinePct));setLayerWrittenLines(n);}} style={{fontSize:8,padding:'1px 6px',borderRadius:8,border:'1px solid rgba(0,232,184,0.3)',background:'rgba(0,232,184,0.07)',color:'rgba(0,232,184,0.7)',cursor:'pointer',fontWeight:700,marginTop:2}}>apply all</button>}
                                       </th>
                                       <th style={{...th,color: isApproved?'#60a5fa':'rgba(255,255,255,0.2)',textAlign:'center',minWidth:90}}>
-                                        Signed %{!isApproved&&<span style={{fontSize:8,display:'block',color:'rgba(255,255,255,0.2)',fontWeight:400,letterSpacing:0}}>unlocks on approval</span>}
+                                        Signed %{!isApproved&&<span style={{fontSize:8,display:'block',color:'rgba(255,255,255,0.2)',fontWeight:400,letterSpacing: 0 }}>unlocks on approval</span>}
                                       </th>
                                     </tr>
                                   </thead>
@@ -3782,7 +3782,7 @@ export default function NpFinalPricing() {
                                   {layerData.length > 1 && (
                                     <tfoot>
                                       <tr style={{ borderTop:'2px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.04)' }}>
-                                        <td colSpan={3} style={{ padding:'8px 10px', fontWeight:800, fontSize:11, color:'rgba(255,255,255,0.5)', letterSpacing:'.06em', textTransform:'uppercase' }}>TOTAL</td>
+                                        <td colSpan={3} style={{ padding:'8px 10px', fontWeight:800, fontSize:11, color:'rgba(255,255,255,0.5)', letterSpacing: 0, textTransform:'uppercase' }}>TOTAL</td>
                                         <td style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, color:'rgba(255,255,255,0.7)', fontVariantNumeric:'tabular-nums' }}>{totalLinePrem>0?fmtC(totalLinePrem):'—'}</td>
                                         <td colSpan={4}/>
                                       </tr>
@@ -3803,7 +3803,7 @@ export default function NpFinalPricing() {
                             <div className="off-card" style={{ border:'1px solid rgba(0,212,255,0.22)', background:'rgba(0,212,255,0.03)' }}>
                               <div className="off-card-title" style={{ color:'rgba(0,212,255,0.85)' }}>Submit For Approval</div>
                               <div style={{ marginBottom:12 }}>
-                                <div style={{ fontSize:10, fontWeight:700, letterSpacing:'.10em', textTransform:'uppercase', color:'rgba(255,255,255,0.32)', marginBottom:6 }}>Send to</div>
+                                <div style={{ fontSize:10, fontWeight:700, letterSpacing: 0, textTransform:'uppercase', color:'rgba(255,255,255,0.32)', marginBottom:6 }}>Send to</div>
                                 <select value={offerApprover} onChange={e=>setOfferApprover(e.target.value)}
                                   style={{ width:'100%', boxSizing:'border-box', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(0,212,255,0.32)', borderRadius:8, color:offerApprover?'#fff':'rgba(255,255,255,0.32)', padding:'9px 12px', fontSize:13, fontFamily:'inherit', outline:'none', cursor:'pointer' }}>
                                   <option value="">Select approver…</option>
@@ -3811,7 +3811,7 @@ export default function NpFinalPricing() {
                                 </select>
                               </div>
                               <div style={{ marginBottom:14 }}>
-                                <div style={{ fontSize:10, fontWeight:700, letterSpacing:'.10em', textTransform:'uppercase', color:'rgba(255,255,255,0.32)', marginBottom:6 }}>Offer Note</div>
+                                <div style={{ fontSize:10, fontWeight:700, letterSpacing: 0, textTransform:'uppercase', color:'rgba(255,255,255,0.32)', marginBottom:6 }}>Offer Note</div>
                                 <textarea className="bbg-textarea" rows={2} value={offerComment} onChange={e=>setOfferComment(e.target.value)}
                                   placeholder="Optional note to the approver…" style={{ width:'100%', boxSizing:'border-box', resize:'vertical' }}/>
                               </div>
@@ -3941,7 +3941,7 @@ export default function NpFinalPricing() {
                           {/* ── APPROVAL TRAIL ── */}
                           {approvalTrail.length > 0 && (
                             <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
-                              <div style={{ fontSize:10, fontWeight:700, letterSpacing:'.10em', textTransform:'uppercase', color:'rgba(255,255,255,0.35)', marginBottom:4 }}>Approval Trail</div>
+                              <div style={{ fontSize:10, fontWeight:700, letterSpacing: 0, textTransform:'uppercase', color:'rgba(255,255,255,0.35)', marginBottom:4 }}>Approval Trail</div>
                               {approvalTrail.slice(0,5).map((ev,i) => {
                                 const evC = { SUBMITTED:{bg:'rgba(96,165,250,0.08)',border:'rgba(96,165,250,0.25)',label:'#60a5fa',icon:'📤'}, SUBMITTED_FOR_APPROVAL:{bg:'rgba(96,165,250,0.08)',border:'rgba(96,165,250,0.25)',label:'#60a5fa',icon:'📤'}, APPROVED:{bg:'rgba(74,222,128,0.08)',border:'rgba(74,222,128,0.25)',label:'#4ade80',icon:'✅'}, RETURNED_TO_UW:{bg:'rgba(0,212,255,0.08)',border:'rgba(0,212,255,0.25)',label:'#00d4ff',icon:'↩'}, RETURNED:{bg:'rgba(0,212,255,0.08)',border:'rgba(0,212,255,0.25)',label:'#00d4ff',icon:'↩'}, RECALLED:{bg:'rgba(0,212,255,0.08)',border:'rgba(0,212,255,0.25)',label:'#00d4ff',icon:'↩'}, DECLINED:{bg:'rgba(248,113,113,0.08)',border:'rgba(248,113,113,0.25)',label:'#f87171',icon:'❌'}, SIGNED:{bg:'rgba(74,222,128,0.06)',border:'rgba(74,222,128,0.20)',label:'#4ade80',icon:'✍'}, NTU:{bg:'rgba(0,212,255,0.08)',border:'rgba(0,212,255,0.25)',label:'#fb923c',icon:'🚫'} };
                                 const c = evC[ev.event_type] || {bg:'rgba(255,255,255,0.04)',border:'rgba(255,255,255,0.12)',label:'rgba(255,255,255,0.6)',icon:'•'};

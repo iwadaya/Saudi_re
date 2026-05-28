@@ -26,7 +26,7 @@ function Pill({ tone = 'neutral', children }) {
   return (
     <span style={{
       display: 'inline-block', padding: '2px 8px', borderRadius: 10,
-      fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+      fontSize: 10, fontWeight: 700, letterSpacing: 0,
       background: palette.bg, border: `1px solid ${palette.border}`, color: palette.color,
     }}>
       {children}
@@ -105,7 +105,7 @@ export default function FormulaWorkbench() {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                     <div>
-                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', letterSpacing: 1, marginBottom: 4 }}>
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', letterSpacing: 0, marginBottom: 4 }}>
                         {f.module}
                       </div>
                       <div style={{ fontSize: 14, fontWeight: 600 }}>{f.label}</div>

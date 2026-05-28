@@ -173,7 +173,7 @@ export default function PropOfferModal({
                   <div className="off-card-title" style={{color:'#fbbf24'}}>🔐 Chief Underwriter Decision</div>
                   <div style={{fontSize:12,color:'rgba(255,255,255,0.50)',marginBottom:8}}>Submitted by underwriter for your review. You may adjust the written line before approving.</div>
                   <div style={{marginBottom:10}}>
-                    <div style={{fontSize:11,fontWeight:700,letterSpacing:'.08em',textTransform:'uppercase',color:'rgba(255,255,255,0.35)',marginBottom:4}}>Written Line</div>
+                    <div style={{fontSize:11,fontWeight:700,letterSpacing: 0, textTransform:'uppercase',color:'rgba(255,255,255,0.35)',marginBottom:4}}>Written Line</div>
                     <PctInput className="off-line-input"
                       value={offerLine}
                       onChange={v=>setOfferLine(v)}
@@ -242,7 +242,7 @@ export default function PropOfferModal({
           {/* Approval trail */}
           {approvalTrail.length>0&&(
             <div style={{marginTop:4}}>
-              <div style={{fontSize:11,fontWeight:800,letterSpacing:'.10em',textTransform:'uppercase',color:'rgba(255,255,255,0.35)',marginBottom:8}}>Approval Trail</div>
+              <div style={{fontSize:11,fontWeight:800,letterSpacing: 0, textTransform:'uppercase',color:'rgba(255,255,255,0.35)',marginBottom:8}}>Approval Trail</div>
               <div style={{display:'flex',flexDirection:'column',gap:6}}>
                 {approvalTrail.map((ev,i)=>{
                   const evC={SUBMITTED_FOR_APPROVAL:{bg:'rgba(96,165,250,0.08)',border:'rgba(96,165,250,0.25)',label:'#60a5fa',icon:'📤'},APPROVED:{bg:'rgba(74,222,128,0.08)',border:'rgba(74,222,128,0.25)',label:'#4ade80',icon:'✅'},RETURNED_TO_UW:{bg:'rgba(251,191,36,0.08)',border:'rgba(251,191,36,0.25)',label:'#fbbf24',icon:'↩'},RETURNED:{bg:'rgba(251,191,36,0.08)',border:'rgba(251,191,36,0.25)',label:'#fbbf24',icon:'↩'},DECLINED:{bg:'rgba(248,113,113,0.08)',border:'rgba(248,113,113,0.25)',label:'#f87171',icon:'❌'},SIGNED:{bg:'rgba(74,222,128,0.06)',border:'rgba(74,222,128,0.20)',label:'#4ade80',icon:'✍'},NTU:{bg:'rgba(249,115,22,0.08)',border:'rgba(249,115,22,0.25)',label:'#fb923c',icon:'🚫'},OFFERED:{bg:'rgba(167,139,250,0.08)',border:'rgba(167,139,250,0.25)',label:'#a78bfa',icon:'📋'}};

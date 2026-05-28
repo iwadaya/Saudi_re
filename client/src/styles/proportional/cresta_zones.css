@@ -7,7 +7,7 @@
 .CRESTA_AGGREGATES_PAGE .ca-hero{ margin-bottom: 10px; }
 .CRESTA_AGGREGATES_PAGE .ca-title{
   font-size: 16px; font-weight: 900; color: rgba(226,232,240,.92);
-  letter-spacing: .02em;
+  letter-spacing: 0;
 }
 .CRESTA_AGGREGATES_PAGE .ca-sub{
   font-size: 12px; color: rgba(148,163,184,.65); margin-top: 4px;
@@ -18,7 +18,7 @@
   display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
 }
 .CRESTA_AGGREGATES_PAGE .ca-savedlabel{
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .10em;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0;
   color: rgba(148,163,184,.65);
 }
 .CRESTA_AGGREGATES_PAGE .ca-pills-area{ display: flex; gap: 6px; flex-wrap: wrap; }
@@ -50,7 +50,7 @@
   display: flex; align-items: center; gap: 6px;
 }
 .CRESTA_AGGREGATES_PAGE .ca-flabel{
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0;
   color: rgba(148,163,184,.70);
 }
 .CRESTA_AGGREGATES_PAGE .ca-select{
@@ -116,7 +116,7 @@
   width: 100%; border-collapse: separate; border-spacing: 3px;
 }
 .CRESTA_AGGREGATES_PAGE .ca-th{
-  padding: 6px 10px; font-size: 10px; font-weight: 700; letter-spacing: .10em;
+  padding: 6px 10px; font-size: 10px; font-weight: 700; letter-spacing: 0;
   text-transform: uppercase; color: rgba(var(--accent-rgb),.75); text-align: center; white-space: nowrap;
 }
 .CRESTA_AGGREGATES_PAGE .ca-th--c{ text-align: center; }
@@ -149,7 +149,7 @@
 /* Total row */
 .CRESTA_AGGREGATES_PAGE .ca-total-row .ca-td{ padding: 6px 10px; }
 .CRESTA_AGGREGATES_PAGE .ca-total-label{
-  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: rgba(var(--accent-rgb),.70);
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0; color: rgba(var(--accent-rgb),.70);
 }
 
 /* Modal */
@@ -168,7 +168,7 @@
   padding: 14px 18px; border-bottom: 1px solid rgba(var(--accent-rgb),.12); background: rgba(8,16,40,.40);
 }
 .CRESTA_AGGREGATES_PAGE .ca-modal-title{
-  font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; color: rgba(226,232,240,.92);
+  font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: 0; color: rgba(226,232,240,.92);
 }
 .CRESTA_AGGREGATES_PAGE .ca-modal-x{
   background: none; border: 1px solid rgba(148,163,184,.18); border-radius: 999px;
@@ -223,7 +223,7 @@
   gap: 6px;
 }
 .ca-cob-tabs-label {
-  font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+  font-size: 10px; letter-spacing: 0; text-transform: uppercase;
   color: rgba(148,163,184,.7); font-weight: 800;
 }
 .ca-cob-tabs-row {

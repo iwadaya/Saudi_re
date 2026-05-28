@@ -212,7 +212,7 @@ export default function NpMarketAnalysis({
     return { limit: totalLim, own: wtAvg('own'), lead: wtAvg('lead'), expiring: wtAvg('expiring'), country: wtAvg('country'), region: wtAvg('region'), global: wtAvg('global') };
   }, [layerRows]);
 
-  const thS = { padding: '10px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)', whiteSpace: 'nowrap', textAlign: 'center' };
+  const thS = { padding: '10px 8px', fontSize: 10, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)', whiteSpace: 'nowrap', textAlign: 'center' };
   const tdS = { padding: '9px 8px', fontSize: 12, textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', fontVariantNumeric: 'tabular-nums' };
 
   return (
@@ -286,7 +286,7 @@ export default function NpMarketAnalysis({
       </div>
 
       {/* ── Comparison Table by Layer ── */}
-      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(0,212,255,0.50)', marginBottom: 10 }}>Benchmark Comparison by Layer</div>
+      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(0,212,255,0.50)', marginBottom: 10 }}>Benchmark Comparison by Layer</div>
       <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
           <thead>
@@ -335,7 +335,7 @@ export default function NpMarketAnalysis({
           {layerRows.length > 0 && (
             <tfoot>
               <tr style={{ background: '#0a1125', borderTop: '2px solid rgba(255,255,255,0.10)' }}>
-                <td style={{ ...tdS, textAlign: 'left', paddingLeft: 14, fontWeight: 800, fontSize: 10, letterSpacing: '.10em', color: 'rgba(148,163,184,0.55)' }}>WEIGHTED AVG</td>
+                <td style={{ ...tdS, textAlign: 'left', paddingLeft: 14, fontWeight: 800, fontSize: 10, letterSpacing: 0, color: 'rgba(148,163,184,0.55)' }}>WEIGHTED AVG</td>
                 <td style={{ ...tdS, fontWeight: 700 }}>{fmtC(totals.limit)}</td>
                 <td style={tdS}></td>
                 <td style={{ ...tdS, color: '#00d4ff', fontWeight: 800 }}>{fmtP(totals.own)}</td>

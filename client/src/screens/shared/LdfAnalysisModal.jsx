@@ -276,7 +276,7 @@ export default function LdfAnalysisModal({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
           <div>
             <div id="ldf-analysis-title" style={{
-              fontSize: 14, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text)',
+              fontSize: 14, fontWeight: 900, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--text)',
             }}>
               LDF Analysis{contractName ? ` — ${contractName}` : ''}
             </div>
@@ -322,7 +322,7 @@ export default function LdfAnalysisModal({
                 key={t.key} type="button" onClick={() => setActiveTab(t.key)}
                 style={{
                   padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700,
-                  letterSpacing: '.04em', textTransform: 'uppercase',
+                  letterSpacing: 0, textTransform: 'uppercase',
                   border: 'none', cursor: 'pointer',
                   background: active ? 'var(--accent)' : 'transparent',
                   color: active ? 'var(--accent-contrast)' : 'var(--muted)',
@@ -420,7 +420,7 @@ export default function LdfAnalysisModal({
                             }
                             style={{
                               display: 'inline-block', padding: '3px 8px', borderRadius: 6,
-                              fontSize: 10, fontWeight: 800, letterSpacing: '.08em',
+                              fontSize: 10, fontWeight: 800, letterSpacing: 0,
                               background: scope.bg, color: scope.fg,
                             }}
                           >{scope.label}</span>
@@ -466,7 +466,7 @@ export default function LdfAnalysisModal({
               {previewing[activeTab] && (
                 <div style={{
                   position: 'absolute', top: 6, right: 10,
-                  fontSize: 10, color: 'var(--muted)', letterSpacing: '.08em',
+                  fontSize: 10, color: 'var(--muted)', letterSpacing: 0,
                 }}>updating…</div>
               )}
               <LdfCurveTable
@@ -509,7 +509,7 @@ export default function LdfAnalysisModal({
 // ── style helpers — kept local since these are modal-private ────────────
 const th = (align) => ({
   padding: '10px 12px', textAlign: align,
-  fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase',
+  fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase',
   color: 'var(--muted)',
   borderBottom: '1px solid var(--hairline)',
 });
@@ -528,12 +528,12 @@ const miniBtn = {
 const primaryBtn = {
   background: 'var(--accent)', color: 'var(--accent-contrast)',
   border: 'none', padding: '8px 18px', borderRadius: 8,
-  fontWeight: 800, fontSize: 12, letterSpacing: '.06em', textTransform: 'uppercase',
+  fontWeight: 800, fontSize: 12, letterSpacing: 0, textTransform: 'uppercase',
   cursor: 'pointer',
 };
 const secondaryBtn = {
   background: 'transparent', color: 'var(--muted)',
   border: '1px solid var(--hairline)', padding: '8px 18px', borderRadius: 8,
-  fontWeight: 700, fontSize: 12, letterSpacing: '.06em', textTransform: 'uppercase',
+  fontWeight: 700, fontSize: 12, letterSpacing: 0, textTransform: 'uppercase',
   cursor: 'pointer',
 };

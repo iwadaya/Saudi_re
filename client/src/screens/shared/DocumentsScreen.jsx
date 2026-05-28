@@ -303,8 +303,8 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
   // so transparencies survive theme swaps.
   const card      = { borderRadius: 18, border: '1px solid var(--hairline)', background: 'var(--surface-2)', padding: '14px 18px', marginBottom: 16 };
   const dropzone  = { ...card, border: `1px dashed ${dragOver ? 'rgba(var(--accent-rgb), 0.60)' : 'var(--stroke-soft)'}`, background: dragOver ? 'rgba(var(--accent-rgb), 0.06)' : 'var(--surface-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, transition: 'all .15s' };
-  const greenBtn  = { borderRadius: 999, padding: '10px 18px', border: '1px solid rgba(var(--accent-rgb), 0.75)', background: 'linear-gradient(180deg, rgba(var(--accent-rgb), 0.88), rgba(var(--accent2-rgb), 0.78))', color: 'var(--accent-contrast)', fontWeight: 900, letterSpacing: '.05em', cursor: 'pointer', fontSize: 13 };
-  const lbl       = { color: 'var(--muted)', fontSize: 10, fontWeight: 800, letterSpacing: '.10em', textTransform: 'uppercase', marginBottom: 4 };
+  const greenBtn  = { borderRadius: 999, padding: '10px 18px', border: '1px solid rgba(var(--accent-rgb), 0.75)', background: 'linear-gradient(180deg, rgba(var(--accent-rgb), 0.88), rgba(var(--accent2-rgb), 0.78))', color: 'var(--accent-contrast)', fontWeight: 900, letterSpacing: 0, cursor: 'pointer', fontSize: 13 };
+  const lbl       = { color: 'var(--muted)', fontSize: 10, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', marginBottom: 4 };
   const inp       = { width: '100%', borderRadius: 999, border: '1px solid var(--stroke-soft)', background: 'var(--control-bg)', color: 'var(--text)', padding: '8px 14px', outline: 'none', fontSize: 12, boxSizing: 'border-box' };
   const sel       = { ...inp, appearance: 'none', WebkitAppearance: 'none', paddingRight: 28 };
   const smBtn     = { borderRadius: 999, padding: '6px 14px', border: '1px solid var(--stroke-soft)', background: 'var(--control-bg)', color: 'var(--text)', fontWeight: 800, fontSize: 12, cursor: 'pointer' };
@@ -321,7 +321,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
           {/* Header */}
           <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'6px 12px', borderRadius:999, background:'var(--surface-muted)', border:'1px solid var(--stroke-soft)', marginBottom:6 }}>
             <span style={{ width:8, height:8, borderRadius:999, background:'var(--accent)', boxShadow:'0 0 0 4px rgba(var(--accent-rgb), 0.10)' }}/>
-            <span style={{ fontSize:11, fontWeight:800, letterSpacing:'.10em', textTransform:'uppercase', color:'var(--text)' }}>Files for Treaty</span>
+            <span style={{ fontSize:11, fontWeight:800, letterSpacing: 0, textTransform:'uppercase', color:'var(--text)' }}>Files for Treaty</span>
           </div>
           <div style={{ fontSize:12, color:'var(--muted)', marginBottom:16, marginTop:4 }}>
             <span style={{ fontWeight:700 }}>CONTRACT ID:</span>{' '}<span style={{ fontFamily:'var(--font-mono)', opacity:0.8 }}>{contractId||'—'}</span>
@@ -397,7 +397,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
             ) : (
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                 <thead>
-                  <tr style={{ borderBottom:'1px solid var(--hairline)', color:'var(--text-subtle)', fontSize:10, letterSpacing:'.14em', textTransform:'uppercase' }}>
+                  <tr style={{ borderBottom:'1px solid var(--hairline)', color:'var(--text-subtle)', fontSize:10, letterSpacing: 0, textTransform:'uppercase' }}>
                     <th style={{ textAlign:'left', padding:'8px 4px' }}>File</th>
                     <th style={{ textAlign:'left', padding:'8px 4px' }}>Type</th>
                     <th style={{ textAlign:'left', padding:'8px 4px' }}>Title</th>

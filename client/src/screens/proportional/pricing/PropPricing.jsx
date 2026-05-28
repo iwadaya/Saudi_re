@@ -487,7 +487,7 @@ export default function PropPricing() {
         });
       } catch (e) { console.error('Auto-calc pricing failed:', e); }
     })();
-  }, [appState.quoteMode, cid, loading, yearly.length, td.quotaShareEpi, td.surplusEpi, td.fixedCommissionQSPct, td.fixedCommissionSurplusPct, td.brokeragePct, td.taxesPct, td.provisionalCommissionPct, td.commissionMode, td.stripLargeCat, td.totalCapacity, td.qsLimit, td.eventLimit, contract.detail?.total_capacity, contract.detail?.qs_limit, contract.detail?.event_limit, contract.detail?.brokerage_pct, contract.detail?.taxes_pct, contract.commissions?.fixed_commission_qs_pct, contract.commissions?.fixed_commission_surplus_pct, worstLR.lr, contract.header?.country_id, td.countryId, contract, td.country_id, yearly, uwUserEdited]);
+  }, [appState.quoteMode, cid, loading, yearly.length, td.quotaShareEpi, td.surplusEpi, td.fixedCommissionQSPct, td.fixedCommissionSurplusPct, td.brokeragePct, td.taxesPct, td.provisionalCommissionPct, td.commissionMode, td.stripLargeCat, td.totalCapacity, td.qsLimit, td.eventLimit, td.treatyTypeId, contract.detail?.total_capacity, contract.detail?.qs_limit, contract.detail?.event_limit, contract.detail?.brokerage_pct, contract.detail?.taxes_pct, contract.commissions?.fixed_commission_qs_pct, contract.commissions?.fixed_commission_surplus_pct, worstLR.lr, contract.header?.country_id, td.countryId, contract, td.country_id, yearly, uwUserEdited]);
 
   // ── Component helpers ─────────────────────────────────────────────────────
   const getC = useCallback((row, col) => components[row]?.[col] || '', [components]);

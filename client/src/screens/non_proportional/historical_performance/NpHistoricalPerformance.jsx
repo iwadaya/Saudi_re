@@ -170,7 +170,7 @@ export default function NpHistoricalPerformance() {
   }, [computedRows, maWindow]);
 
   // ── Styles ──
-  const thS = { padding: '11px 10px', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)', whiteSpace: 'nowrap', textAlign: 'center', background: '#050810' };
+  const thS = { padding: '11px 10px', fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.10)', whiteSpace: 'nowrap', textAlign: 'center', background: '#050810' };
   const tdS = { padding: '7px 8px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', fontVariantNumeric: 'tabular-nums', fontSize: 12, verticalAlign: 'middle' };
   const inputS = { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, color: 'rgba(226,232,240,0.90)', padding: '6px 10px', height: 32, width: '100%', textAlign: 'center', fontSize: 12, outline: 'none', fontVariantNumeric: 'tabular-nums', fontWeight: 600 };
   const readonlyS = { ...tdS, color: 'rgba(148,163,184,0.70)', fontWeight: 600 };
@@ -250,7 +250,7 @@ export default function NpHistoricalPerformance() {
             {totals && (
               <tfoot>
                 <tr style={{ background: '#060c1a', borderTop: '2px solid rgba(255,255,255,0.10)' }}>
-                  <td style={{ ...tdS, fontWeight: 800, fontSize: 10, letterSpacing: '.10em', color: 'rgba(148,163,184,0.55)' }}>TOTAL / AVG</td>
+                  <td style={{ ...tdS, fontWeight: 800, fontSize: 10, letterSpacing: 0, color: 'rgba(148,163,184,0.55)' }}>TOTAL / AVG</td>
                   <td style={{ ...tdS, fontWeight: 700, color: 'rgba(226,232,240,0.85)' }}>{fmtC(totals.premiums)}</td>
                   <td style={{ ...tdS, fontWeight: 700, color: 'rgba(226,232,240,0.85)' }}>{fmtC(totals.claims)}</td>
                   <td style={{ ...tdS, fontWeight: 700, color: 'rgba(226,232,240,0.85)' }}>{fmtC(totals.egnpi)}</td>
@@ -355,7 +355,7 @@ export default function NpHistoricalPerformance() {
                         { label: 'Latest MA Trend', value: trend != null ? `${trend > 0 ? '▲' : '▼'} ${Math.abs(trend).toFixed(1)}pp` : '—', color: trend != null ? (trend > 0 ? '#f87171' : '#4ade80') : 'rgba(148,163,184,0.40)' },
                       ].map(({ label, value, color }) => (
                         <div key={label} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '12px 14px', textAlign: 'center' }}>
-                          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.10em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)', marginBottom: 4 }}>{label}</div>
+                          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)', marginBottom: 4 }}>{label}</div>
                           <div style={{ fontSize: 18, fontWeight: 900, color }}>{value}</div>
                         </div>
                       ))}

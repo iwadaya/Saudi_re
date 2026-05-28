@@ -568,7 +568,7 @@ export default function FQPricingGraphModal({
               { label: 'Country Curve', value: fmtPct(totals.country), color: SERIES[3].color, sub: countryStatus },
             ].map(card => (
               <div key={card.label} style={{ background: 'rgba(8,14,30,0.72)', border: `1px solid ${card.color}33`, borderRadius: 10, padding: '10px 12px' }}>
-                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.14em', color: card.color, textTransform: 'uppercase' }}>{card.label}</div>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0, color: card.color, textTransform: 'uppercase' }}>{card.label}</div>
                 <div style={{ fontSize: 18, fontWeight: 800, color: 'rgba(226,232,240,0.95)', marginTop: 4 }}>{card.value}</div>
                 <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.55)', marginTop: 2 }}>{card.sub}</div>
               </div>
@@ -641,7 +641,7 @@ export default function FQPricingGraphModal({
               <thead style={{ background: '#050810' }}>
                 <tr>
                   {['Layer', 'Limit', 'Attachment', 'Structure ROL', 'Expiring implied', 'Portfolio', 'Country', 'Vs Expiring', 'Vs Country'].map((h, i) => (
-                    <th key={h} style={{ padding: '8px 10px', textAlign: i === 0 ? 'left' : 'right', fontSize: 10, fontWeight: 800, letterSpacing: '.12em', color: 'rgba(148,163,184,0.65)', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>{h}</th>
+                    <th key={h} style={{ padding: '8px 10px', textAlign: i === 0 ? 'left' : 'right', fontSize: 10, fontWeight: 800, letterSpacing: 0, color: 'rgba(148,163,184,0.65)', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -678,7 +678,7 @@ export default function FQPricingGraphModal({
             <section style={{ background: 'rgba(8,14,30,0.72)', border: `1px solid ${data.aiAnalysis.target.color}`, borderRadius: 12, overflow: 'hidden' }}>
               <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: data.aiAnalysis.target.color }}>
+                  <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: 0, textTransform: 'uppercase', color: data.aiAnalysis.target.color }}>
                     AI Suggested Deductible Pricing
                   </div>
                   <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.58)', marginTop: 2 }}>
@@ -695,7 +695,7 @@ export default function FQPricingGraphModal({
                   <thead style={{ background: '#050810' }}>
                     <tr>
                       {['Layer', 'Current Limit', 'AI Limit', 'Current Deductible', 'AI Deductible', 'Current ROL', 'AI ROL', 'AI Rate', 'AI Premium', 'Reason'].map((h, i) => (
-                        <th key={h} style={{ padding: '8px 10px', textAlign: i === 0 || i === 9 ? 'left' : 'right', fontSize: 10, fontWeight: 800, letterSpacing: '.12em', color: 'rgba(148,163,184,0.65)', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>{h}</th>
+                        <th key={h} style={{ padding: '8px 10px', textAlign: i === 0 || i === 9 ? 'left' : 'right', fontSize: 10, fontWeight: 800, letterSpacing: 0, color: 'rgba(148,163,184,0.65)', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -741,14 +741,14 @@ export default function FQPricingGraphModal({
             </section>
 
             <section style={{ background: 'rgba(8,14,30,0.72)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(226,232,240,0.86)' }}>
+              <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(226,232,240,0.86)' }}>
                 Structure Analysis
               </div>
               <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
                 {data.structureAnalysisLayers.map(layer => (
                   <div key={`structure-analysis-layer-${layer.layerNumber}`} style={{ border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, overflow: 'hidden', background: 'rgba(5,8,16,0.32)' }}>
                     <div style={{ padding: '9px 11px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                      <div style={{ fontSize: 11, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: FQ_STRUCTURE_COLORS[(layer.layerNumber - 1) % FQ_STRUCTURE_COLORS.length] }}>
+                      <div style={{ fontSize: 11, fontWeight: 850, letterSpacing: 0, textTransform: 'uppercase', color: FQ_STRUCTURE_COLORS[(layer.layerNumber - 1) % FQ_STRUCTURE_COLORS.length] }}>
                         Layer {layer.layerNumber}
                       </div>
                       <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.55)' }}>
@@ -769,7 +769,7 @@ export default function FQPricingGraphModal({
                               'Within Region Average',
                               'Within Global Average',
                             ].map((h, i) => (
-                              <th key={h} style={{ padding: '8px 10px', textAlign: i === 0 ? 'left' : 'right', fontSize: 9, fontWeight: 850, letterSpacing: '.11em', color: 'rgba(148,163,184,0.68)', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                              <th key={h} style={{ padding: '8px 10px', textAlign: i === 0 ? 'left' : 'right', fontSize: 9, fontWeight: 850, letterSpacing: 0, color: 'rgba(148,163,184,0.68)', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                                 {h}
                               </th>
                             ))}

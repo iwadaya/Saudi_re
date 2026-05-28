@@ -44,7 +44,7 @@ function SourceBadge({ source }) {
         fontWeight: 800,
         color: source === 'manual' ? 'rgba(255,255,255,0.4)' : 'rgba(0,232,184,0.75)',
         textTransform: 'uppercase',
-        letterSpacing: '.06em',
+        letterSpacing: 0,
       }}
     >
       {label}

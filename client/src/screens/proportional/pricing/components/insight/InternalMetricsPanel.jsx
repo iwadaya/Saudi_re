@@ -107,16 +107,16 @@ export function InternalMetricsPanel({ contractId, td: tdProp, yearly: yearlyPro
   const signedLinePct=(data?.contract?.header?.signed_line_pct||td.signedLinePct||0)/100;
 
   // Styles
-  const topBtn=active=>({padding:'9px 22px',border:'none',cursor:'pointer',fontSize:12,fontWeight:800,letterSpacing:'.10em',textTransform:'uppercase',background:active?'rgba(0,212,255,0.12)':'transparent',color:active?'#00d4ff':'rgba(255,255,255,0.38)',borderBottom:active?'2px solid #00d4ff':'2px solid transparent'});
-  const subBtn=active=>({padding:'6px 14px',border:'none',cursor:'pointer',fontSize:11,fontWeight:700,letterSpacing:'.06em',textTransform:'uppercase',borderRadius:6,background:active?'rgba(0,232,184,0.12)':'rgba(255,255,255,0.03)',color:active?'#00e8b8':'rgba(255,255,255,0.40)',borderBottom:active?'2px solid #00e8b8':'2px solid transparent'});
+  const topBtn=active=>({padding:'9px 22px',border:'none',cursor:'pointer',fontSize:12,fontWeight:800,letterSpacing: 0, textTransform:'uppercase',background:active?'rgba(0,212,255,0.12)':'transparent',color:active?'#00d4ff':'rgba(255,255,255,0.38)',borderBottom:active?'2px solid #00d4ff':'2px solid transparent'});
+  const subBtn=active=>({padding:'6px 14px',border:'none',cursor:'pointer',fontSize:11,fontWeight:700,letterSpacing: 0, textTransform:'uppercase',borderRadius:6,background:active?'rgba(0,232,184,0.12)':'rgba(255,255,255,0.03)',color:active?'#00e8b8':'rgba(255,255,255,0.40)',borderBottom:active?'2px solid #00e8b8':'2px solid transparent'});
   const card={background:'rgba(8,14,30,0.70)',border:'1px solid rgba(255,255,255,0.09)',borderRadius:12,overflow:'hidden'};
-  const cH={padding:'10px 16px',borderBottom:'1px solid rgba(255,255,255,0.07)',fontSize:9,fontWeight:800,letterSpacing:'.14em',textTransform:'uppercase',color:'rgba(148,163,184,0.55)',display:'flex',alignItems:'center',justifyContent:'space-between'};
-  const thS={padding:'9px 12px',fontSize:9,fontWeight:800,letterSpacing:'.12em',textTransform:'uppercase',color:'rgba(148,163,184,0.55)',borderBottom:'1px solid rgba(255,255,255,0.08)',background:'rgba(5,8,16,0.85)',whiteSpace:'nowrap'};
+  const cH={padding:'10px 16px',borderBottom:'1px solid rgba(255,255,255,0.07)',fontSize:9,fontWeight:800,letterSpacing: 0, textTransform:'uppercase',color:'rgba(148,163,184,0.55)',display:'flex',alignItems:'center',justifyContent:'space-between'};
+  const thS={padding:'9px 12px',fontSize:9,fontWeight:800,letterSpacing: 0, textTransform:'uppercase',color:'rgba(148,163,184,0.55)',borderBottom:'1px solid rgba(255,255,255,0.08)',background:'rgba(5,8,16,0.85)',whiteSpace:'nowrap'};
   const tdS={padding:'9px 12px',borderBottom:'1px solid rgba(255,255,255,0.04)',fontVariantNumeric:'tabular-nums',fontSize:12};
   const kpi=(label,value,color,sub)=>(
     <div key={label} style={{...card,padding:'12px 16px',flex:'1 1 120px'}}>
-      <div style={{fontSize:9,fontWeight:800,letterSpacing:'.14em',textTransform:'uppercase',color:'rgba(148,163,184,0.50)',marginBottom:5}}>{label}</div>
-      <div style={{fontSize:19,fontWeight:900,color:color||'rgba(226,232,240,0.9)',letterSpacing:'-.01em'}}>{value}</div>
+      <div style={{fontSize:9,fontWeight:800,letterSpacing: 0, textTransform:'uppercase',color:'rgba(148,163,184,0.50)',marginBottom:5}}>{label}</div>
+      <div style={{fontSize:19,fontWeight:900,color:color||'rgba(226,232,240,0.9)',letterSpacing: 0 }}>{value}</div>
       {sub&&<div style={{fontSize:10,color:'rgba(148,163,184,0.45)',marginTop:2}}>{sub}</div>}
     </div>
   );
@@ -195,7 +195,7 @@ export function InternalMetricsPanel({ contractId, td: tdProp, yearly: yearlyPro
                         const aER=mk(r=>{const g=cn(r.ultimate_premium);return g>0?(cn(r.commission_amt)+cn(r.brokerage_amt))/g*100:null;});
                         const aCR=aLR!=null&&aER!=null?aLR+aER:null;
                         return(<tfoot><tr style={{borderTop:'2px solid rgba(255,255,255,0.12)',background:'rgba(5,8,16,0.85)'}}>
-                          <td style={{...tdS,fontSize:9,fontWeight:800,letterSpacing:'.08em',textTransform:'uppercase',color:'rgba(148,163,184,0.50)'}}>5YR AVG</td>
+                          <td style={{...tdS,fontSize:9,fontWeight:800,letterSpacing: 0, textTransform:'uppercase',color:'rgba(148,163,184,0.50)'}}>5YR AVG</td>
                           {Array(7).fill(0).map((_,i)=><td key={i} style={{...tdS,textAlign:'right',color:'rgba(148,163,184,0.3)'}}>—</td>)}
                           <td style={{...tdS,textAlign:'right',fontWeight:800,color:ratioColor(aLR)}}>{aLR!=null?`${aLR.toFixed(1)}%`:'—'}</td>
                           <td style={{...tdS,textAlign:'right',fontWeight:800,color:'#a78bfa'}}>{aER!=null?`${aER.toFixed(1)}%`:'—'}</td>
@@ -237,7 +237,7 @@ export function InternalMetricsPanel({ contractId, td: tdProp, yearly: yearlyPro
                             <td style={{...tdS,textAlign:'right',fontWeight:600,color:'#fb923c'}}>{fmt(inc)}</td>
                             <td style={{...tdS,textAlign:'right',color:'#a78bfa'}}>{fmt(co)}</td>
                             <td style={{...tdS,textAlign:'right',fontWeight:700,color:ratioColor(lr)}}>{lr!=null?`${lr.toFixed(1)}%`:'—'}</td>
-                            <td style={tdS}><span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:10,background:'rgba(148,163,184,0.10)',color:'rgba(148,163,184,0.70)',letterSpacing:'.06em'}}>{String(r.record_type||'ACTUAL')}</span></td>
+                            <td style={tdS}><span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:10,background:'rgba(148,163,184,0.10)',color:'rgba(148,163,184,0.70)',letterSpacing: 0 }}>{String(r.record_type||'ACTUAL')}</span></td>
                           </tr>
                         );
                       })}
@@ -327,7 +327,7 @@ export function InternalMetricsPanel({ contractId, td: tdProp, yearly: yearlyPro
               {label:'Flags',value:flagCount,color:flagCount>0?'#f87171':'#4ade80'},
             ].map(k=>(
               <div key={k.label} style={{...card,padding:'10px 14px',flex:'1 1 100px'}}>
-                <div style={{fontSize:9,fontWeight:800,letterSpacing:'.12em',textTransform:'uppercase',color:'rgba(148,163,184,0.50)',marginBottom:4}}>{k.label}</div>
+                <div style={{fontSize:9,fontWeight:800,letterSpacing: 0, textTransform:'uppercase',color:'rgba(148,163,184,0.50)',marginBottom:4}}>{k.label}</div>
                 <div style={{fontSize:20,fontWeight:900,color:k.color}}>{k.value}</div>
               </div>
             ))}
@@ -365,8 +365,8 @@ export function InternalMetricsPanel({ contractId, td: tdProp, yearly: yearlyPro
                             {missingInUw&&<span title="In internal claims — NOT in UW data" style={{fontSize:10}}>🔴</span>}
                             {missingInInt&&<span title="In UW data — NOT in internal claims" style={{fontSize:10}}>🟡</span>}
                           </td>
-                          <td style={{...tdS,padding:'9px 8px'}}><span style={{fontSize:9,fontWeight:800,padding:'2px 6px',borderRadius:10,background:srcBadge.bg,color:srcBadge.c,letterSpacing:'.06em'}}>{srcBadge.t}</span></td>
-                          <td style={{...tdS,padding:'9px 8px'}}><span style={{fontSize:9,fontWeight:800,padding:'2px 6px',borderRadius:10,background:`${typeColors[l.loss_type]||'#60a5fa'}18`,color:typeColors[l.loss_type]||'#60a5fa',letterSpacing:'.06em'}}>{l.loss_type}</span></td>
+                          <td style={{...tdS,padding:'9px 8px'}}><span style={{fontSize:9,fontWeight:800,padding:'2px 6px',borderRadius:10,background:srcBadge.bg,color:srcBadge.c,letterSpacing: 0 }}>{srcBadge.t}</span></td>
+                          <td style={{...tdS,padding:'9px 8px'}}><span style={{fontSize:9,fontWeight:800,padding:'2px 6px',borderRadius:10,background:`${typeColors[l.loss_type]||'#60a5fa'}18`,color:typeColors[l.loss_type]||'#60a5fa',letterSpacing: 0 }}>{l.loss_type}</span></td>
                           <td style={{...tdS,maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={l.insured_name}>{l.insured_name||'—'}</td>
                           <td style={{...tdS,maxWidth:130,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={l.loss_name}>{l.loss_name||'—'}</td>
                           <td style={{...tdS,whiteSpace:'nowrap',color:'rgba(148,163,184,0.7)'}}>{(l.date_of_loss||'').slice(0,10)||'—'}</td>
@@ -384,7 +384,7 @@ export function InternalMetricsPanel({ contractId, td: tdProp, yearly: yearlyPro
                   </tbody>
                   {allLosses.length>0&&(
                     <tfoot><tr style={{borderTop:'2px solid rgba(255,255,255,0.12)',background:'rgba(5,8,16,0.85)'}}>
-                      <td colSpan={7} style={{...tdS,fontSize:9,fontWeight:800,letterSpacing:'.08em',textTransform:'uppercase',color:'rgba(148,163,184,0.50)'}}>TOTAL ({allLosses.length})</td>
+                      <td colSpan={7} style={{...tdS,fontSize:9,fontWeight:800,letterSpacing: 0, textTransform:'uppercase',color:'rgba(148,163,184,0.50)'}}>TOTAL ({allLosses.length})</td>
                       <td style={{...tdS,textAlign:'right',fontWeight:700}}>{fmt(allLosses.reduce((s,l)=>s+n(l.gross_amount||l.incurred),0))}</td>
                       <td style={{...tdS,textAlign:'right',fontWeight:700,color:'#f87171'}}>{fmt(allLosses.reduce((s,l)=>s+l.paid,0))}</td>
                       <td style={{...tdS,textAlign:'right',fontWeight:700,color:'#f97316'}}>{fmt(allLosses.reduce((s,l)=>s+l.os,0))}</td>

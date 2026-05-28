@@ -107,7 +107,7 @@ export default function NpBloombergHero({
               fontSize: 9, padding: '2px 7px', borderRadius: 10,
               background: 'rgba(0,212,255,0.12)',
               border: '1px solid rgba(0,212,255,0.35)',
-              color: '#00d4ff', fontWeight: 700, letterSpacing: '.04em',
+              color: '#00d4ff', fontWeight: 700, letterSpacing: 0,
             }}>
               {quoteRef}
             </span>
@@ -120,7 +120,7 @@ export default function NpBloombergHero({
           {broker  && <span>BROKER <b>{broker}</b></span>}
           <span>CCY <b>{currency}</b></span>
           <span>UW YEAR <b>{uwYear}</b></span>
-          <span style={{ color: statusColor, fontWeight: 700, letterSpacing: '.08em' }}>
+          <span style={{ color: statusColor, fontWeight: 700, letterSpacing: 0 }}>
             {(offerStatus || 'DRAFT').replace(/_/g, ' ')}
           </span>
         </div>
@@ -145,7 +145,7 @@ export default function NpBloombergHero({
         ))}
 
         <div className="bbg-row bbg-row--subhead" style={{ marginTop: 6 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', color: 'rgba(255,255,255,0.4)' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0, color: 'rgba(255,255,255,0.4)' }}>
             COST STRUCTURE
           </span>
         </div>
@@ -240,7 +240,7 @@ export default function NpBloombergHero({
         {showRisk && (
           <>
             <div className="bbg-row bbg-row--subhead" style={{ marginTop: 2 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', color: 'rgba(96,165,250,0.8)' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0, color: 'rgba(96,165,250,0.8)' }}>
                 RISK XL
               </span>
             </div>
@@ -260,7 +260,7 @@ export default function NpBloombergHero({
         {showCat && (
           <>
             <div className="bbg-row bbg-row--subhead" style={{ marginTop: showRisk ? 6 : 2 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', color: 'rgba(0,212,255,0.85)' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0, color: 'rgba(0,212,255,0.85)' }}>
                 CAT XL
               </span>
             </div>

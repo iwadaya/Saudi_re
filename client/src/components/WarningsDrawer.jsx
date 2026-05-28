@@ -45,7 +45,7 @@ export default function WarningsDrawer({ open, onClose, warnings = [], unmatched
           border-bottom: 1px solid rgba(255,255,255,0.06);
         }
         .wdr-title {
-          font-size: 13px; font-weight: 800; letter-spacing: .08em;
+          font-size: 13px; font-weight: 800; letter-spacing: 0;
           text-transform: uppercase;
         }
         .wdr-close {
@@ -56,7 +56,7 @@ export default function WarningsDrawer({ open, onClose, warnings = [], unmatched
         .wdr-body { padding: 18px 22px; overflow-y: auto; flex: 1; }
         .wdr-section { margin-bottom: 22px; }
         .wdr-section h4 {
-          font-size: 11px; font-weight: 800; letter-spacing: .12em;
+          font-size: 11px; font-weight: 800; letter-spacing: 0;
           text-transform: uppercase; color: rgba(226,232,240,0.55);
           margin: 0 0 8px 0;
         }

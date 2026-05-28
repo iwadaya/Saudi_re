@@ -97,13 +97,13 @@
     radial-gradient(120% 180% at 25% 0%, rgba(255,255,255,.10), rgba(255,255,255,0) 55%),
     linear-gradient(180deg, rgba(var(--accent-rgb),.10), rgba(10,18,32,.44));
 }
-.stat-label{ font-size: 10px; letter-spacing: .10em; opacity: .65; font-weight: 600; }
+.stat-label{ font-size: 10px; letter-spacing: 0; opacity: .65; font-weight: 600; }
 .stat-value{ margin-top: 6px; font-size: 20px; font-weight: 600; }
 .HOME_PAGE .stat-value{
   margin-top: 8px;
   font-size: 32px;
   font-weight: 650;
-  letter-spacing: .01em;
+  letter-spacing: 0;
 }
 .stat-sub{ margin-top: 6px; font-size: 12px; color: var(--muted); }
 
@@ -112,7 +112,7 @@
 .lr-arrow{ font-size: 10px; line-height: 1; }
 
 .region-head{ display:flex; justify-content:space-between; margin-bottom:10px; }
-.region-title,.region-mini{ font-size: 10px; letter-spacing: .10em; opacity: .65; }
+.region-title,.region-mini{ font-size: 10px; letter-spacing: 0; opacity: .65; }
 
 /* ── Premium by Region ─────────────────────────────────── */
 .region-row{
@@ -149,7 +149,7 @@
   font-size: 15px;
   font-weight: 800;
   color: rgba(226,232,240,0.95);
-  letter-spacing: .01em;
+  letter-spacing: 0;
 }
 .region-values{
   font-size: 13px;
@@ -178,7 +178,7 @@
   font-size: 11px;
   color: rgba(148,163,184,0.65);
   font-weight: 600;
-  letter-spacing: .04em;
+  letter-spacing: 0;
 }
 
 .renewals-list{ display:flex; flex-direction:column; gap:10px; }
@@ -257,7 +257,7 @@
 .renew-badge{
   margin-left: 8px;
   font-size: 10px;
-  letter-spacing: .08em;
+  letter-spacing: 0;
   padding: 3px 8px;
   border-radius: 999px;
   background: rgba(var(--accent-rgb),.16);
@@ -330,7 +330,7 @@
 }
 .renew-kicker{
   font-size: 10px;
-  letter-spacing: .12em;
+  letter-spacing: 0;
   opacity: .65;
 }
 .renew-title{
@@ -401,7 +401,7 @@
 .renew-label{
   display:block;
   font-size: 11px;
-  letter-spacing: .08em;
+  letter-spacing: 0;
   opacity: .75;
   margin-bottom: 6px;
 }
@@ -542,7 +542,7 @@
   color: rgba(226,232,240,.88);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: .02em;
+  letter-spacing: 0;
   cursor: pointer;
   outline: none;
   transition: border-color .12s ease, box-shadow .12s ease;
@@ -595,7 +595,7 @@
 /* Demo Login */
 .LOGIN_SCREEN{ display:flex; align-items:center; justify-content:center; min-height: calc(100vh - 40px); padding: 24px; }
 .login-card{ width: min(520px, 92vw); padding: 22px; border-radius: 18px; }
-.login-title{ font-size: 22px; font-weight: 800; letter-spacing: .4px; }
+.login-title{ font-size: 22px; font-weight: 800; letter-spacing: 0; }
 .login-sub{ margin-top: 6px; }
 .login-actions{ display:flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
 .login-actions .action-pill{ flex: 1 1 220px; }
@@ -621,13 +621,13 @@
 .approval-pill{ font-size: 12px; padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.10); }
 .approval-comment{ margin-top: 8px; font-size: 13px; opacity: .92; }
 /* =========================================================
-   HOME / FULL-WIDTH CONTAINER (OVERRIDES ALL 1280px CLAMPS)
-   Put this at the very bottom of layout.css
+   HOME / READABLE WIDE-SCREEN CONTAINER
+   Keep the home surface broad, but aligned to the shared app lane.
    ========================================================= */
 
 .container.container--full{
-  width: calc(100% - 32px) !important;  /* full width with 16px gutters */
-  max-width: none !important;           /* remove 1280 cap */
+  width: calc(100% - 2 * var(--app-gutter)) !important;
+  max-width: var(--app-max-content) !important;
   margin-left: auto !important;
   margin-right: auto !important;
 }

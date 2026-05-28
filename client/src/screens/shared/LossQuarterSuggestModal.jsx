@@ -13,7 +13,7 @@ const panel = {
   background: '#0b1220', border: '1px solid rgba(148,163,184,0.25)',
   borderRadius: 14, padding: 20, color: '#e2e8f0',
 };
-const th = { textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', padding: '6px 8px', borderBottom: '1px solid rgba(148,163,184,0.2)' };
+const th = { textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--text-muted)', padding: '6px 8px', borderBottom: '1px solid rgba(148,163,184,0.2)' };
 const td = { fontSize: 12, padding: '6px 8px', borderBottom: '1px solid rgba(148,163,184,0.08)', verticalAlign: 'top' };
 
 const CONF_COLOR = { high: '#86efac', medium: '#fbbf24', low: 'rgba(148,163,184,0.8)' };

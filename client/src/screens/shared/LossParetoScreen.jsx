@@ -1005,7 +1005,7 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
           ):(<>
             {portfolioFallback && (
               <div style={{margin:'0 0 14px',padding:'10px 16px',borderRadius:10,background:'rgba(251,191,36,0.08)',border:'1px solid rgba(251,191,36,0.30)',fontSize:12,color:'rgba(253,230,138,0.95)',lineHeight:1.5}}>
-                <b style={{letterSpacing:'.04em'}}>PORTFOLIO AVERAGE.</b>{' '}
+                <b style={{letterSpacing: 0 }}>PORTFOLIO AVERAGE.</b>{' '}
                 This treaty has no {lossType === 'cat' ? 'CAT' : 'large'} losses of its own — the curve below is fitted to the cedant's wider portfolio
                 ({lossType === 'cat' ? 'CAT' : 'large'} losses from {portfolioFallback.treatyCount} other {portfolioFallback.treatyCount === 1 ? 'treaty' : 'treaties'}). Add losses on the Loss Selection step to fit this treaty's own experience.
               </div>
@@ -1066,19 +1066,19 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
 
                     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginTop:14}}>
                       <div>
-                        <div style={{fontSize:11,fontWeight:700,letterSpacing:'.08em',textTransform:'uppercase',color:'rgba(255,255,255,.65)',marginBottom:4}}>Severity Curve</div>
+                        <div style={{fontSize:11,fontWeight:700,letterSpacing: 0, textTransform:'uppercase',color:'rgba(255,255,255,.65)',marginBottom:4}}>Severity Curve</div>
                         <div style={{fontSize:11,color:'rgba(255,255,255,.55)',marginBottom:8}}>Probability density of a single loss size, given it exceeded the threshold. Bars = empirical histogram, line = fitted {DISTS.find(d=>d.key===activeDist)?.label} PDF.</div>
                         <div className="llp-chart-wrap" style={{minHeight:300}}><SeverityChart losses={inflated} xm={xm} limit={limit} fits={fits} activeDist={activeDist}/></div>
                       </div>
                       <div>
-                        <div style={{fontSize:11,fontWeight:700,letterSpacing:'.08em',textTransform:'uppercase',color:'rgba(255,255,255,.65)',marginBottom:4}}>Frequency Curve</div>
+                        <div style={{fontSize:11,fontWeight:700,letterSpacing: 0, textTransform:'uppercase',color:'rgba(255,255,255,.65)',marginBottom:4}}>Frequency Curve</div>
                         <div style={{fontSize:11,color:'rgba(255,255,255,.55)',marginBottom:8}}>Annual count of losses ≥ threshold, modelled as Poisson(λ). Bar height = probability of exactly N events in a year.</div>
                         <div className="llp-chart-wrap" style={{minHeight:300}}><FrequencyChart lambda={freq}/></div>
                       </div>
                     </div>
 
                     <div style={{marginTop:14}}>
-                      <div style={{fontSize:11,fontWeight:700,letterSpacing:'.08em',textTransform:'uppercase',color:'rgba(255,255,255,.65)',marginBottom:4}}>Annual Exceedance Frequency (Return Period View)</div>
+                      <div style={{fontSize:11,fontWeight:700,letterSpacing: 0, textTransform:'uppercase',color:'rgba(255,255,255,.65)',marginBottom:4}}>Annual Exceedance Frequency (Return Period View)</div>
                       <div style={{fontSize:11,color:'rgba(255,255,255,.55)',marginBottom:8}}>Combines severity and frequency: how often per year a loss of a given size is exceeded. Return period = 1 / annual exceedance frequency.</div>
                       <div className="llp-chart-wrap" style={{minHeight:300}}><ReturnPeriodChart losses={inflated} alpha={alpha} xm={xm} limit={limit} fits={fits} activeDist={activeDist}/></div>
                     </div>
@@ -1143,7 +1143,7 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
                       Return Periods ({DISTS.find(d=>d.key===activeDist)?.label})
                       {lossType === 'cat' && rpSource !== 'FITTED' && (
                         <span style={{
-                          marginLeft: 8, fontSize: 10, fontWeight: 700, letterSpacing: '.06em',
+                          marginLeft: 8, fontSize: 10, fontWeight: 700, letterSpacing: 0,
                           padding: '2px 8px', borderRadius: 999,
                           background: 'rgba(var(--accent-rgb),0.14)', color: 'var(--accent)',
                           textTransform: 'uppercase',
@@ -1169,7 +1169,7 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
                         border: '1px solid var(--hairline)',
                         background: 'rgba(var(--accent-rgb),0.08)',
                         color: 'var(--accent)', cursor: 'pointer',
-                        fontSize: 11, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase',
+                        fontSize: 11, fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase',
                         whiteSpace: 'nowrap',
                       }}
                       title="Compare against a third-party CAT model"
@@ -1273,7 +1273,7 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
 
                 {/* Weight controls */}
                 <div style={{ padding: '10px 14px 4px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 11, color: 'rgba(148,163,184,0.7)', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}>Method</span>
+                  <span style={{ fontSize: 11, color: 'rgba(148,163,184,0.7)', fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase' }}>Method</span>
 
                   {/* Presets */}
                   {[
@@ -1406,7 +1406,7 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
 
                     {/* OEP input grid */}
                     <div>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(148,163,184,0.5)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(148,163,184,0.5)', letterSpacing: 0, textTransform: 'uppercase', marginBottom: 6 }}>
                         OEP Curve Input
                       </div>
                       <table className="llp-table" style={{ width: 300 }}>
@@ -1466,7 +1466,7 @@ export default function LossParetoScreen({routeKey,title,headerPill,lossType='la
                     {/* OEP layer results */}
                     {oepLayerRols.length > 0 && oepLayerRols.some(l => l.rol > 0) && (
                       <div style={{ flex: 1, minWidth: 300 }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(148,163,184,0.5)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(148,163,184,0.5)', letterSpacing: 0, textTransform: 'uppercase', marginBottom: 6 }}>
                           OEP Layer Burning Cost
                         </div>
                         <table className="llp-table" style={{ width: '100%' }}>
@@ -1565,7 +1565,7 @@ function ParameterExplanations({activeDist,fits,xm,limit,freq,uwYrs,tailN}){
       {/* Severity model */}
       <div style={{border:`1px solid ${distColor}33`,borderRadius:10,background:'rgba(8,16,40,.35)',overflow:'hidden'}}>
         <div style={{padding:'10px 14px',background:`linear-gradient(to right, ${distColor}22, transparent)`,borderBottom:`1px solid ${distColor}33`}}>
-          <div style={{fontSize:11,fontWeight:700,letterSpacing:'.08em',textTransform:'uppercase',color:distColor}}>Severity Model · {distLabel}</div>
+          <div style={{fontSize:11,fontWeight:700,letterSpacing: 0, textTransform:'uppercase',color:distColor}}>Severity Model · {distLabel}</div>
           <div style={{fontSize:11,color:'rgba(226,232,240,.65)',marginTop:2}}>How big is one loss, given it exceeds the threshold? Fit on n = {f?.n||0} tail observations.</div>
         </div>
         <table style={{width:'100%',borderCollapse:'collapse'}}>
@@ -1589,7 +1589,7 @@ function ParameterExplanations({activeDist,fits,xm,limit,freq,uwYrs,tailN}){
       {/* Frequency model */}
       <div style={{border:'1px solid rgba(34,211,238,.25)',borderRadius:10,background:'rgba(8,16,40,.35)',overflow:'hidden'}}>
         <div style={{padding:'10px 14px',background:'linear-gradient(to right, rgba(34,211,238,.14), transparent)',borderBottom:'1px solid rgba(34,211,238,.25)'}}>
-          <div style={{fontSize:11,fontWeight:700,letterSpacing:'.08em',textTransform:'uppercase',color:'#22d3ee'}}>Frequency Model · Poisson</div>
+          <div style={{fontSize:11,fontWeight:700,letterSpacing: 0, textTransform:'uppercase',color:'#22d3ee'}}>Frequency Model · Poisson</div>
           <div style={{fontSize:11,color:'rgba(226,232,240,.65)',marginTop:2}}>How often per year does a loss exceed the threshold? Independent-arrivals (Poisson) assumption.</div>
         </div>
         <table style={{width:'100%',borderCollapse:'collapse'}}>

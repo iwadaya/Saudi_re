@@ -134,7 +134,7 @@ function LocationCard({
 
     return (
       <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-        <td style={{ padding: '6px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '.08em',
+        <td style={{ padding: '6px 8px', fontSize: 10, fontWeight: 800, letterSpacing: 0,
                      textTransform: 'uppercase', color: accent }}>{label}</td>
         <td style={{ padding: '4px 4px' }}>
           <FieldCell value={fmtComma(si)} onChange={(v) => set(kind === 'PD' ? 'original_pd_si' : 'original_bi_si', v)} />
@@ -162,10 +162,10 @@ function LocationCard({
       {/* Header row: location-level fields */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.10em',
+          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0,
                          color: 'rgba(148,163,184,0.55)' }}>LOCATION {index + 1}</span>
           {isTopLocation && (
-            <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+            <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0,
                            padding: '2px 8px', borderRadius: 20,
                            background: 'rgba(35,209,139,0.10)', border: '1px solid rgba(35,209,139,0.30)',
                            color: '#23d18b' }}>TOP LOCATION</span>
@@ -207,7 +207,7 @@ function LocationCard({
             {HEADERS.map((h) => (
               <th key={h} style={{ padding: '6px 6px',
                                    textAlign: h === 'Particulars' ? 'left' : 'right',
-                                   fontSize: 9, fontWeight: 800, letterSpacing: '.10em',
+                                   fontSize: 9, fontWeight: 800, letterSpacing: 0,
                                    textTransform: 'uppercase', color: 'rgba(148,163,184,0.50)' }}>{h}</th>
             ))}
           </tr>
@@ -401,17 +401,17 @@ export default function FacLocations() {
                        border: '1px solid rgba(0,212,255,0.20)', borderRadius: 10,
                        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0,
                           textTransform: 'uppercase', color: 'rgba(0,212,255,0.55)' }}>Material Damage SAR</div>
             <div style={{ fontSize: 18, fontWeight: 900, color: '#00d4ff', marginTop: 2 }}>{fmt0(totals.pdSar)}</div>
           </div>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0,
                           textTransform: 'uppercase', color: 'rgba(251,191,36,0.55)' }}>Business Interruption SAR</div>
             <div style={{ fontSize: 18, fontWeight: 900, color: '#fbbf24', marginTop: 2 }}>{fmt0(totals.biSar)}</div>
           </div>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0,
                           textTransform: 'uppercase', color: 'rgba(35,209,139,0.55)' }}>Grand Total SAR</div>
             <div style={{ fontSize: 18, fontWeight: 900, color: '#23d18b', marginTop: 2 }}>{fmt0(totals.grand)}</div>
           </div>

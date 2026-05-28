@@ -47,7 +47,7 @@ export default function WordingAnalysisModal({ contractId, parentContractId, doc
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
-            <div id="wording-analysis-title" style={{ fontSize: 14, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text)' }}>
+            <div id="wording-analysis-title" style={{ fontSize: 14, fontWeight: 900, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--text)' }}>
               Wording Analysis
             </div>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{doc.doc_type} — {docTitle}</div>

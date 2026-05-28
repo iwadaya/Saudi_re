@@ -210,7 +210,7 @@ function CoveredProportionalSection({ coveredProps, setCoveredProps, onDirty, cu
           {/* Filter bar */}
           <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Country</span>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Country</span>
               <select className="np-mini-input np-mini-select" style={{ width: 180, textAlign: 'left' }}
                 value={filterCountry} onChange={e => setFilterCountry(e.target.value)}>
                 <option value="">All Countries</option>
@@ -218,7 +218,7 @@ function CoveredProportionalSection({ coveredProps, setCoveredProps, onDirty, cu
               </select>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Cedant</span>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Cedant</span>
               <select className="np-mini-input np-mini-select" style={{ width: 210, textAlign: 'left' }}
                 value={filterCedant} onChange={e => setFilterCedant(e.target.value)}>
                 <option value="">All Cedants</option>
@@ -246,7 +246,7 @@ function CoveredProportionalSection({ coveredProps, setCoveredProps, onDirty, cu
                 <thead>
                   <tr style={{ background: 'rgba(255,255,255,0.04)' }}>
                     {['UW Year','Cedant','Treaty Type','Country','Status',''].map(h => (
-                      <th key={h} style={{ padding: '7px 12px', textAlign: 'left', fontSize: 10, fontWeight: 700, letterSpacing: '.08em', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>{h}</th>
+                      <th key={h} style={{ padding: '7px 12px', textAlign: 'left', fontSize: 10, fontWeight: 700, letterSpacing: 0, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -261,7 +261,7 @@ function CoveredProportionalSection({ coveredProps, setCoveredProps, onDirty, cu
                       <td style={{ padding: '7px 12px', color: 'rgba(255,255,255,0.65)' }}>{p.treaty_type_name || '—'}</td>
                       <td style={{ padding: '7px 12px', color: 'rgba(255,255,255,0.45)', fontSize: 11 }}>{p.country_name || '—'}</td>
                       <td style={{ padding: '7px 12px' }}>
-                        <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 6, background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.45)', fontWeight: 700, letterSpacing: '.06em' }}>
+                        <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 6, background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.45)', fontWeight: 700, letterSpacing: 0 }}>
                           {p.uw_status || p.status || '—'}
                         </span>
                       </td>
@@ -633,7 +633,7 @@ export default function NpExpiringStructure() {
               <section className="np-struct-card glass" style={{ marginBottom: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 24, padding: '14px 18px', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <label style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>LAYERS</label>
+                    <label style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0, color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>LAYERS</label>
                     <select className="np-mini-input np-mini-select" style={{ width: 90 }} value={numLayersInput} onChange={e => handleNumLayersChange(e.target.value)}>
                       <option value="">—</option>
                       {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => <option key={n} value={n}>{n}</option>)}
@@ -645,7 +645,7 @@ export default function NpExpiringStructure() {
                     { key: 'profit_commission_pct', label: 'PROFIT COMM. %' },
                   ].map(({ key, label }) => (
                     <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <label style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>{label}</label>
+                      <label style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0, color: 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>{label}</label>
                       <PctInput
                         className="np-mini-input np-mini-input--center"
                         style={{ width: 90 }}
@@ -724,7 +724,7 @@ export default function NpExpiringStructure() {
                     {layers.length > 1 && (
                       <tfoot>
                         <tr style={{ borderTop: '2px solid rgba(0,212,255,0.45)', background: 'rgba(0,212,255,0.06)' }}>
-                          <th className="np-table-sticky cell-center" style={{ color: '#00d4ff', fontSize: 10, letterSpacing: '.08em', fontWeight: 800, background: 'rgba(0,212,255,0.08)' }}>TOTAL</th>
+                          <th className="np-table-sticky cell-center" style={{ color: '#00d4ff', fontSize: 10, letterSpacing: 0, fontWeight: 800, background: 'rgba(0,212,255,0.08)' }}>TOTAL</th>
                           <td className="np-col"><div className="np-cell-input"><input className="np-mini-input np-mini-input--center np-mini-input--readonly" readOnly value={fmtC(totals.limit)} placeholder="—" /><span className="np-sfx">{currency}</span></div></td>
                           <td className="np-col"><div className="np-cell-input"><input className="np-mini-input np-mini-input--center np-mini-input--readonly" readOnly value={layers[0]?.deductible ? fmtC(layers[0].deductible) : '—'} placeholder="—" /><span className="np-sfx">{currency}</span></div></td>
                           <td className="np-col"><div className="np-cell-input"><input className="np-mini-input np-mini-input--center np-mini-input--readonly" readOnly value={totals.aggregateLimit ? fmtC(totals.aggregateLimit) : ''} placeholder="—" /><span className="np-sfx">{currency}</span></div></td>
@@ -869,7 +869,7 @@ export default function NpExpiringStructure() {
                     <div className="glass" role="dialog" aria-modal="true" style={{ background: '#0b1220', border: '1px solid rgba(0,212,255,0.25)', borderRadius: 14, width: '92vw', maxWidth: 1000, maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.7)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                         <div>
-                          <div style={{ fontWeight: 800, fontSize: 14, letterSpacing: '.06em', color: '#e2e8f0', textTransform: 'uppercase' }}>Implied Pricing Curve</div>
+                          <div style={{ fontWeight: 800, fontSize: 14, letterSpacing: 0, color: '#e2e8f0', textTransform: 'uppercase' }}>Implied Pricing Curve</div>
                           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 3 }}>
                             Power-law fit: ROL = a × x^b &nbsp;|&nbsp; x = √((Att+Lim)×Att) / EGNPI. Requires ≥2 layers with Limit, Deductible, EGNPI and ROL.
                           </div>

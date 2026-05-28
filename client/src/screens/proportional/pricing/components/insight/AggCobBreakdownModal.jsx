@@ -57,7 +57,7 @@ export function AggCobBreakdownModal({ contractId, shareRows, contractAgg100, ot
     return { cob, contractCobAgg, otherCobAgg, contribution, countryWithContrib, perils: cc };
   }).sort((a, b) => b.contribution - a.contribution);
 
-  const thS = { padding: '9px 12px', fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap', background: 'rgba(8,14,28,0.95)', position: 'sticky', top: 0, zIndex: 3 };
+  const thS = { padding: '9px 12px', fontSize: 10, fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap', background: 'rgba(8,14,28,0.95)', position: 'sticky', top: 0, zIndex: 3 };
   const tdS = { padding: '9px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)', verticalAlign: 'middle', fontSize: 13 };
 
   return (
@@ -68,12 +68,12 @@ export function AggCobBreakdownModal({ contractId, shareRows, contractAgg100, ot
         {/* Header */}
         <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontSize: 15, color: '#fff', letterSpacing: '.02em' }}>◈ COB Aggregate Breakdown</div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#fff', letterSpacing: 0 }}>◈ COB Aggregate Breakdown</div>
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.42)', marginTop: 2 }}>Agg Contribution &amp; Country Agg split by Class of Business at each share participation</div>
           </div>
           {/* Share selector */}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.40)', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase' }}>Share</span>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.40)', fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase' }}>Share</span>
             {shareOptions.map(s => (
               <button key={s} onClick={() => setActiveShare(s)}
                 style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: `1px solid ${s === selected ? 'rgba(251,191,36,0.70)' : 'rgba(255,255,255,0.14)'}`, background: s === selected ? 'rgba(251,191,36,0.12)' : 'rgba(255,255,255,0.04)', color: s === selected ? '#fbbf24' : 'rgba(255,255,255,0.55)', transition: 'all .15s' }}>
@@ -98,7 +98,7 @@ export function AggCobBreakdownModal({ contractId, shareRows, contractAgg100, ot
                 { label: 'Other Country Contracts', value: otherCountryAgg, color: '#94a3b8' },
               ].map(({ label, value, color }) => (
                 <div key={label} style={{ flex: '1 1 200px', padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: `1px solid ${color}30` }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.10em', color: 'rgba(255,255,255,0.40)', marginBottom: 4 }}>{label}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'rgba(255,255,255,0.40)', marginBottom: 4 }}>{label}</div>
                   <div style={{ fontSize: 18, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{value != null ? fmt(value) : '—'}</div>
                 </div>
               ))}
@@ -164,7 +164,7 @@ export function AggCobBreakdownModal({ contractId, shareRows, contractAgg100, ot
               {/* Totals */}
               <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 2 }}>
                 <tr style={{ background: 'rgba(8,14,28,0.97)', borderTop: '2px solid rgba(255,255,255,0.12)' }}>
-                  <td style={{ ...tdS, fontWeight: 800, fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)' }}>Total</td>
+                  <td style={{ ...tdS, fontWeight: 800, fontSize: 11, letterSpacing: 0, textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)' }}>Total</td>
                   <td style={{ ...tdS, textAlign: 'right', color: 'rgba(167,139,250,0.85)', fontWeight: 700 }}>{fmt(contractTotal)}</td>
                   <td style={{ ...tdS, textAlign: 'right', color: 'rgba(167,139,250,0.45)', fontSize: 12 }}>100%</td>
                   <td style={{ ...tdS, textAlign: 'right', color: '#fbbf24', fontWeight: 800 }}>{aggContrib != null ? fmt(aggContrib) : '—'}</td>

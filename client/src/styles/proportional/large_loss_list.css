@@ -10,7 +10,7 @@
 .LARGE_LOSS_LIST_PAGE .ll-title{
   font-size: 20px;
   font-weight: 900;
-  letter-spacing: .2px;
+  letter-spacing: 0;
   color: rgba(241,245,249,.96);
 }
 .LARGE_LOSS_LIST_PAGE .ll-sub{
@@ -42,7 +42,7 @@
 .LARGE_LOSS_LIST_PAGE .ll-field{ display: flex; flex-direction: column; gap: 8px; }
 .LARGE_LOSS_LIST_PAGE .ll-field-label{
   font-size: 11px;
-  letter-spacing: .14em;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: rgba(148,163,184,.85);
 }
@@ -110,7 +110,7 @@
 .LARGE_LOSS_LIST_PAGE .ll-section-title{
   font-size: 14px;
   font-weight: 900;
-  letter-spacing: .2px;
+  letter-spacing: 0;
 }
 .LARGE_LOSS_LIST_PAGE .ll-section-sub{
   margin-top: 4px;
@@ -141,7 +141,7 @@
   padding: 10px 10px;
   border-bottom: 1px solid rgba(148,163,184,.14);
   font-size: 11px;
-  letter-spacing: .12em;
+  letter-spacing: 0;
   text-transform: uppercase;
   opacity: .86;
   text-align: center;
@@ -222,7 +222,7 @@
 .LARGE_LOSS_LIST_PAGE .ll-title{
   font-size: 16px;
   font-weight: 900;
-  letter-spacing: .02em;
+  letter-spacing: 0;
 }
 .LARGE_LOSS_LIST_PAGE .ll-sub{
   margin-top: 4px;
@@ -239,7 +239,7 @@
 }
 .LARGE_LOSS_LIST_PAGE .ll-field-label{
   font-size: 10px;
-  letter-spacing: .14em;
+  letter-spacing: 0;
 }
 .LARGE_LOSS_LIST_PAGE .ll-date-shell{
   padding: 7px 10px;
@@ -255,7 +255,7 @@
   padding: 9px 12px;
   font-size: 12px;
   font-weight: 850;
-  letter-spacing: .02em;
+  letter-spacing: 0;
 
   color: rgba(226,232,240,.92);
   background:
@@ -346,7 +346,7 @@
 .LARGE_LOSS_LIST_PAGE .ll-table thead th{
   padding: 9px 10px;
   font-size: 10px;
-  letter-spacing: .14em;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: rgba(226,232,240,.62);
   background: rgba(8,16,40,.78);

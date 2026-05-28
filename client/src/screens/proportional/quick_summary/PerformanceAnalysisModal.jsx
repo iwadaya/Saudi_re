@@ -225,7 +225,7 @@ export default function PerformanceAnalysisModal({ calcRows, onClose }) {
 
   // Chart style
   const chartCard = { padding: '14px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', marginBottom: 14 };
-  const chartTitle = { fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 };
+  const chartTitle = { fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0, marginBottom: 8 };
 
   return (
     <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,18,0.88)', backdropFilter: 'blur(8px)',
@@ -253,7 +253,7 @@ export default function PerformanceAnalysisModal({ calcRows, onClose }) {
                 background: tab === t.key ? 'rgba(0,232,184,0.1)' : 'transparent',
                 color: tab === t.key ? '#00e8b8' : 'rgba(255,255,255,0.45)',
                 borderBottom: tab === t.key ? '2px solid #00e8b8' : '2px solid transparent',
-                letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                letterSpacing: 0, textTransform: 'uppercase' }}>
               {t.label}
             </button>
           ))}

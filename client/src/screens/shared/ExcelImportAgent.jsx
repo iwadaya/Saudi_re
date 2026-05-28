@@ -642,16 +642,16 @@ export default function ExcelImportAgent() {
           margin-bottom: 28px;
         }
         .ia-title {
-          font-size: 22px; font-weight: 800; letter-spacing: -.02em;
+          font-size: 22px; font-weight: 800; letter-spacing: 0;
           color: #f8fafc;
         }
         .ia-subtitle {
           font-size: 11px; color: rgba(226,232,240,0.4); margin-top: 4px;
-          letter-spacing: .08em; text-transform: uppercase;
+          letter-spacing: 0; text-transform: uppercase;
         }
         .ia-badge {
           padding: 3px 12px; border-radius: 20px; font-size: 10px;
-          font-weight: 800; letter-spacing: .12em; border: 1px solid;
+          font-weight: 800; letter-spacing: 0; border: 1px solid;
         }
 
         /* drop zone */
@@ -683,7 +683,7 @@ export default function ExcelImportAgent() {
           display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
         }
         .ia-input-label {
-          font-size: 10px; font-weight: 700; letter-spacing: .1em;
+          font-size: 10px; font-weight: 700; letter-spacing: 0;
           text-transform: uppercase; color: rgba(226,232,240,0.45); white-space: nowrap;
         }
         .ia-input {
@@ -737,7 +737,7 @@ export default function ExcelImportAgent() {
         }
         .ia-table th {
           padding: 6px 10px; text-align: right;
-          font-size: 9px; font-weight: 700; letter-spacing: .09em;
+          font-size: 9px; font-weight: 700; letter-spacing: 0;
           text-transform: uppercase; color: rgba(226,232,240,0.35);
           border-bottom: 1px solid rgba(255,255,255,0.07);
         }
@@ -755,7 +755,7 @@ export default function ExcelImportAgent() {
           color: rgba(226,232,240,0.6);
         }
         .ia-profile-label {
-          font-size: 10px; font-weight: 700; letter-spacing: .1em;
+          font-size: 10px; font-weight: 700; letter-spacing: 0;
           text-transform: uppercase; color: rgba(226,232,240,0.4);
           margin-bottom: 8px;
         }
@@ -770,7 +770,7 @@ export default function ExcelImportAgent() {
         .ia-btn {
           padding: 11px 28px; border-radius: 8px; border: none; cursor: pointer;
           font-family: inherit; font-size: 12px; font-weight: 800;
-          letter-spacing: .08em; text-transform: uppercase; transition: all .18s;
+          letter-spacing: 0; text-transform: uppercase; transition: all .18s;
         }
         .ia-btn--primary {
           background: linear-gradient(135deg, #00d4ff, #0090b5);
@@ -809,7 +809,7 @@ export default function ExcelImportAgent() {
           display: flex; align-items: center; gap: 20px; font-size: 12px;
         }
         .ia-sum-stat { display: flex; flex-direction: column; gap: 2px; }
-        .ia-sum-label { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: rgba(226,232,240,0.35); }
+        .ia-sum-label { font-size: 9px; letter-spacing: 0; text-transform: uppercase; color: rgba(226,232,240,0.35); }
         .ia-sum-val { font-size: 18px; font-weight: 800; }
         .ia-sum-divider { width: 1px; background: rgba(255,255,255,0.08); align-self: stretch; }
 
@@ -826,7 +826,7 @@ export default function ExcelImportAgent() {
           text-decoration: underline; text-underline-offset: 2px;
         }
         .ia-type-badge {
-          font-size: 10px; font-weight: 800; letter-spacing: .1em;
+          font-size: 10px; font-weight: 800; letter-spacing: 0;
           padding: 3px 10px; border-radius: 6px; text-transform: uppercase;
         }
       `}</style>

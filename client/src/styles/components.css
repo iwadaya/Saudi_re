@@ -75,6 +75,14 @@ img{
 ================================ */
 h1,h2,h3{ margin: 0; }
 
+:where(h1,h2,h3,.page-title,.screen-title,.wizard-header-pill,.panel-title,.card-title){
+  text-wrap: balance;
+}
+
+:where(p,li,.subtitle,.helptext,.welcome-sub,.stat-sub,.section-subtitle,.topbar-sub){
+  text-wrap: pretty;
+}
+
 .subtitle,
 .helptext,
 .muted-2{
@@ -147,7 +155,7 @@ label{ color: rgba(226,232,240,.82); font-weight: 600; }
   padding: 9px 12px;
   font-size: 12px;
   font-weight: 650;
-  letter-spacing: .02em;
+  letter-spacing: 0;
   cursor: pointer;
   box-shadow: 0 10px 22px rgba(0,0,0,.32), 0 1px 0 rgba(255,255,255,.06) inset;
   transition: transform .12s ease, background .12s ease, border-color .12s ease, box-shadow .12s ease, filter .12s ease;
@@ -286,7 +294,7 @@ table{ border-collapse: separate; border-spacing: 0; }
 .table th,
 .data-table th{
   font-size: 11px;
-  letter-spacing: .10em;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: rgba(226,232,240,.85);
   background: rgba(8,16,40,.35);
@@ -325,13 +333,14 @@ body{
   margin:0;
   font-family: var(--font-sans);
   font-size: 14px;
+  line-height: 1.42;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   font-feature-settings: 'cv11', 'ss01', 'ss03', 'tnum', 'kern', 'liga', 'calt', 'zero', 'lnum';
   font-optical-sizing: auto;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
   background:
     radial-gradient(1200px 700px at 20% -10%, rgba(var(--accent-rgb),.18), transparent 55%),
     radial-gradient(900px 600px at 80% 10%, rgba(0,170,255,.10), transparent 60%),
@@ -393,8 +402,8 @@ button{ font-family:inherit; }
   background: linear-gradient(180deg, rgba(20,38,70,.88), rgba(18,34,62,.65));
 }
 
-.topbar-left{ display:flex; align-items:center; gap:12px; }
-.topbar-right{ display:flex; align-items:center; gap:10px; }
+.topbar-left{ display:flex; align-items:center; gap:12px; min-width: 0; }
+.topbar-right{ display:flex; align-items:center; justify-content: flex-end; gap:10px; min-width: 0; flex-wrap: wrap; }
 
 .brand-dot{
   width:34px;height:34px;border-radius: 12px;
@@ -413,8 +422,32 @@ button{ font-family:inherit; }
   font-weight:700;
 }
 
-.brand-title{ font-size: 13px; letter-spacing: .06em; font-weight: 600; }
-.topbar-title{ letter-spacing:.08em; font-size:12px; color:rgba(226,232,240,.9); }
+.brand-title{ font-size: 13px; letter-spacing: 0; font-weight: 600; }
+.topbar-title{
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0;
+  font-size:12px;
+  color:rgba(226,232,240,.9);
+}
+.topbar-sub{
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 920px){
+  .topbar{
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .topbar-right{
+    gap: 8px;
+  }
+}
 
 .topbar-btn,
 .topbar-pill{
@@ -485,7 +518,7 @@ button{ font-family:inherit; }
   background: rgba(var(--accent-rgb),.08);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: .08em;
+  letter-spacing: 0;
   color: var(--accent);
   white-space: nowrap;
 }
@@ -538,7 +571,7 @@ button{ font-family:inherit; }
 
 .crumb-text{
   font-size: 12px;
-  letter-spacing: .08em;
+  letter-spacing: 0;
   opacity: .80;
   font-weight: 600;
 }
@@ -555,7 +588,7 @@ button{ font-family:inherit; }
 }
 .panel-title{
   font-size: 11px;
-  letter-spacing: .10em;
+  letter-spacing: 0;
   opacity: .7;
   font-weight: 600;
 }
@@ -599,7 +632,7 @@ button{ font-family:inherit; }
   gap: 8px;
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.16em;
+  letter-spacing: 0;
   color: var(--text-muted);
 }
 .card-header-label{ font-weight: 500; }
@@ -609,7 +642,7 @@ button{ font-family:inherit; }
   padding: 2px 8px;
   font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.16em;
+  letter-spacing: 0;
   border: 1px solid rgba(148, 163, 184, 0.45);
   color: #e5e7eb;
   background: rgba(15, 23, 42, 0.9);
@@ -795,7 +828,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
   border: 1px solid rgba(148, 163, 184, 0.5);
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0;
   position: relative;
 }
 
@@ -812,7 +845,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
   background: none;
   border: none;
   font: inherit;
-  letter-spacing: inherit;
+  letter-spacing: 0;
 }
 
 .toggle-option.active{
@@ -882,7 +915,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
   border-radius: 10px;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: .04em;
+  letter-spacing: 0;
   border: 1px solid rgba(60,80,120,.35);
   background: rgba(7,14,26,.45);
   color: rgba(226,232,240,.75);
@@ -926,7 +959,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
 ================================ */
 .wizard-dock{
   position: fixed;
-  right: 18px;
+  right: var(--app-gutter);
   bottom: 76px;  /* above tabs-dock */
   z-index: 70;
   display: flex;
@@ -934,80 +967,14 @@ select.form-input{ cursor:pointer; appearance:auto; }
   align-items: center;
 }
 
-/* Wide screen: keep dock near content edge, not at screen edge */
-@media (min-width: 1720px) {
+/* Wide screen: keep dock near the shared content lane, not at the viewport edge. */
+@media (min-width: 1920px) {
   .wizard-dock{
-    right: calc((100vw - 1680px) / 2 + 18px);
+    right: max(var(--app-gutter), calc((100vw - var(--app-max-content)) / 2 + var(--app-gutter)));
   }
 }
 
-/* Button styles */
-.dock-btn{
-  border-radius: 12px;
-  height: 40px;
-  padding: 0 14px;
-  font-size: 13px;
-  font-weight: 650;
-  cursor: pointer;
-  border: 1px solid rgba(148,163,184,.22);
-  background: rgba(8,16,40,.55);
-  color: rgba(226,232,240,.92);
-  backdrop-filter: blur(var(--glass-blur));
-  box-shadow: 0 10px 26px rgba(0,0,0,.35);
-}
-
-.dock-btn--ghost:hover{
-  border-color: rgba(90,170,200,.35);
-  background: rgba(7,14,26,.65);
-}
-
-.dock-btn[disabled]{
-  opacity: .5;
-  cursor: not-allowed;
-}
-
-/* On very small screens, keep dock visible */
-@media (max-width: 520px){
-  .wizard-dock{
-    left: 12px;
-    right: 12px;
-    justify-content: space-between;
-  }
-}
-/* Save & Continue = green OUTLINE (not filled) */
-.wizard-dock .dock-btn--primary{
-  background: rgba(8,16,40,.55) !important;      /* dark */
-  color: rgba(226,232,240,.92) !important;      /* light text */
-  border: 1px solid rgba(var(--accent-rgb),.55) !important; /* green outline */
-  box-shadow: 0 10px 26px rgba(0,0,0,.35) !important;
-}
-
-.wizard-dock .dock-btn--primary:hover{
-  background: rgba(var(--accent-rgb),.08) !important;   /* subtle glow */
-  box-shadow: 0 0 18px rgba(var(--accent-rgb),.12) !important;
-}
-
-/* optional: keep arrow/text crisp */
-.wizard-dock .dock-btn--primary:active{
-  transform: translateY(0);
-}
-/* ================================
-   WIZARD DOCK (Back / Save & Continue)
-   Single source of truth
-   NOTE: pages that have their own scroll containers
-   MUST provide bottom padding to avoid overlap.
-================================ */
-.wizard-dock{
-  position: fixed;
-  right: 18px;
-  bottom: 76px;  /* above tabs-dock */
-  z-index: 70;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-/* ✅ Pill-style buttons (GLOBAL) */
+/* Pill-style buttons (GLOBAL) */
 .dock-btn{
   border-radius: var(--radius-pill);
   height: 40px;
@@ -1404,8 +1371,8 @@ select.form-input{ cursor:pointer; appearance:auto; }
   display:flex; align-items:center; justify-content:space-between; padding:14px 18px;
   border-bottom:1px solid rgba(255,255,255,0.06);
 }
-.card-header-label{ font-weight:700; font-size:14px; letter-spacing:0.3px; }
-.card-tag{ font-size:10px; text-transform:uppercase; letter-spacing:0.1em; padding:3px 8px;
+.card-header-label{ font-weight:700; font-size:14px; letter-spacing: 0; }
+.card-tag{ font-size:10px; text-transform:uppercase; letter-spacing: 0; padding:3px 8px;
   border-radius:20px; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.5); }
 .card-desc{ padding:8px 18px 0; font-size:12px; color:rgba(255,255,255,0.4); }
 
@@ -1414,12 +1381,12 @@ select.form-input{ cursor:pointer; appearance:auto; }
   display:flex; align-items:center; justify-content:space-between; padding:14px 18px;
   border-bottom:1px solid rgba(255,255,255,0.06);
 }
-.card-title{ font-weight:700; font-size:14px; letter-spacing:0.3px; }
+.card-title{ font-weight:700; font-size:14px; letter-spacing: 0; }
 
 /* Toggle button (Fixed/Sliding, Yes/No) */
 .toggle-btn{
   padding:5px 12px; border-radius:6px; font-size:11px; font-weight:600;
-  letter-spacing:0.5px; cursor:pointer; border:1px solid rgba(255,255,255,0.1);
+  letter-spacing: 0; cursor:pointer; border:1px solid rgba(255,255,255,0.1);
   background:rgba(255,255,255,0.04); color:rgba(255,255,255,0.45); transition:all 0.15s;
 }
 .toggle-btn:hover{ background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.7); }
@@ -1458,14 +1425,14 @@ select.form-input{ cursor:pointer; appearance:auto; }
 /* Toggle group - use the primary definition above (pill-shaped) */
 .toggle-opt{
   padding:5px 12px; border-radius:6px; font-size:11px; font-weight:600;
-  letter-spacing:0.5px; cursor:pointer; border:none;
+  letter-spacing: 0; cursor:pointer; border:none;
   background:transparent; color:rgba(255,255,255,0.45); transition:all 0.15s;
 }
 .toggle-opt.active{ background:rgba(var(--accent-rgb),0.15); color:var(--accent); }
 .toggle-opt:hover:not(.active){ background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.7); }
 
 /* Mini section title */
-.mini-title{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px;
+.mini-title{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing: 0;
   color:rgba(255,255,255,0.35); margin:4px 0; }
 
 /* Small buttons */
@@ -1509,7 +1476,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
 /* Data table */
 .data-table{ width:100%; border-collapse:collapse; font-size:13px; }
 .data-table th{ text-align:center; padding:8px 10px; font-size:11px; font-weight:600;
-  text-transform:uppercase; letter-spacing:0.06em; color:rgba(255,255,255,0.55);
+  text-transform:uppercase; letter-spacing: 0; color:rgba(255,255,255,0.55);
   border-bottom:1px solid rgba(255,255,255,0.08); }
 .data-table td{ padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.04); color:rgba(255,255,255,0.92); text-align:center; }
 .data-table tbody tr:hover{ background:rgba(255,255,255,0.025); }
@@ -1618,7 +1585,7 @@ select.fi{ cursor: pointer; appearance: auto; }
   font-size: 12px;
   font-weight: 600;
   font-family: inherit;
-  letter-spacing: 0.3px;
+  letter-spacing: 0;
   cursor: pointer;
   box-shadow: 0 0 0 4px rgba(251,146,60,0.08);
   transition: transform 0.12s, box-shadow 0.18s, filter 0.18s;
@@ -1665,7 +1632,7 @@ select.fi{ cursor: pointer; appearance: auto; }
   padding: 6px 10px;
   font-weight: 600;
   font-size: 11px;
-  letter-spacing: 0.12em;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: var(--accent);
   background: var(--surface-2);

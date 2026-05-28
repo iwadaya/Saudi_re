@@ -42,7 +42,7 @@
   border-radius: 14px;
   font-weight: 700;
   font-size: 12px;
-  letter-spacing: .02em;
+  letter-spacing: 0;
   cursor: pointer;
 }
 
@@ -58,7 +58,7 @@
 
 .dash-block-title{
   font-size: 12px;
-  letter-spacing: .08em;
+  letter-spacing: 0;
   font-weight: 800;
   opacity: .85;
   text-transform: uppercase;
@@ -135,7 +135,7 @@
 
 .dash-filter-label{
   font-size: 11px;
-  letter-spacing: .08em;
+  letter-spacing: 0;
   opacity: .7;
   font-weight: 600;
 }
@@ -205,7 +205,7 @@
 
 .dash-tile-label{
   font-size: 11px;
-  letter-spacing: .10em;
+  letter-spacing: 0;
   opacity: .65;
   font-weight: 700;
   text-transform: uppercase;
@@ -215,7 +215,7 @@
   margin-top: 8px;
   font-size: 22px;
   font-weight: 800;
-  letter-spacing: .01em;
+  letter-spacing: 0;
 }
 
 .dash-tile-sub{
