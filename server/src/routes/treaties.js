@@ -403,8 +403,17 @@ router.post("/treaties/:id/renew", asyncHandler(async (req, res) => {
   const isNp     = String(o.treaty_category || '').toUpperCase().includes('NON')
                  || (npDetailR.rows.length > 0)  // np_details row exists = NP contract
 
-  // Date calculations
-  const newInception = o.renewal_date || null;
+  // Date calculations. Roll the period forward: prefer last term's renewal
+  // date, then a caller-supplied inception, then the original inception
+  // (NOT NULL since migration 104). Guard with a 400 rather than letting a
+  // null reach the NOT NULL inception_date column and surface as a 500.
+  const newInception = dateOrNull(o.renewal_date) || dateOrNull(b.inception_date) || dateOrNull(o.inception_date);
+  if (!newInception) {
+    return res.status(400).json({
+      error: 'Cannot renew: original contract has no renewal or inception date to roll forward from',
+      code: 'VALIDATION_FAILED',
+    });
+  }
   const newRenewal   = newInception
     ? new Date(new Date(newInception).setFullYear(new Date(newInception).getFullYear() + 1)).toISOString().slice(0, 10)
     : null;

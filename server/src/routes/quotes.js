@@ -1170,11 +1170,21 @@ router.post("/quotes/:id/renew", asyncHandler(async (req, res) => {
   const creatorUserId = req.user?.userId || req.headers['x-user-id'] || null;
   const {rows:orig}=await pool.query(`SELECT * FROM public.quote WHERE quote_id=$1`,[id]);
   if(!orig.length) return res.status(404).json({error:"Quote not found"});
-  const o=orig[0];const newYear=numOrNull(b.uw_year)||(o.uw_year+1);
+  const o=orig[0];
+  // Roll the policy period forward like the contract-renew path: the new
+  // inception is last term's renewal date when present, else a caller-
+  // supplied inception, else the original inception (NOT NULL since
+  // migration 104, so this is never null). Renewal rolls to inception+1yr
+  // and the year derives from the new inception unless the caller overrides.
+  const newInception = dateOrNull(o.renewal_date) || dateOrNull(b.inception_date) || dateOrNull(o.inception_date);
+  const newRenewal = newInception
+    ? new Date(new Date(newInception).setFullYear(new Date(newInception).getFullYear() + 1)).toISOString().slice(0, 10)
+    : null;
+  const newYear = numOrNull(b.uw_year) || (newInception ? new Date(newInception).getFullYear() : o.uw_year + 1);
   const {rows}=await pool.query(
-    `INSERT INTO public.quote (cedant_id,broker_id,country_id,currency_id,treaty_type_id,uw_year,status,experience_source,parent_contract_id,created_by_user_id,assigned_to_user_id)
-     VALUES ($1,$2,$3,$4,$5,$6,'DRAFT',$7,$8,$9,$9) RETURNING *`,
-    [o.cedant_id,o.broker_id,o.country_id,o.currency_id,o.treaty_type_id,newYear,o.experience_source,id,creatorUserId]);
+    `INSERT INTO public.quote (cedant_id,broker_id,country_id,currency_id,treaty_type_id,uw_year,status,experience_source,inception_date,renewal_date,parent_contract_id,created_by_user_id,assigned_to_user_id)
+     VALUES ($1,$2,$3,$4,$5,$6,'DRAFT',$7,$8,$9,$10,$11,$11) RETURNING *`,
+    [o.cedant_id,o.broker_id,o.country_id,o.currency_id,o.treaty_type_id,newYear,o.experience_source,newInception,newRenewal,id,creatorUserId]);
   res.status(201).json({id:rows[0].quote_id,quote_id:rows[0].quote_id,is_np:true,...rows[0]});
 }));
 
@@ -1193,8 +1203,14 @@ router.post("/quotes/:id/non-prop/save", asyncHandler(async (req, res) => {
       id,
       ifUnmodifiedSince: req.headers['if-unmodified-since'],
     });
-    // Ensure parent quote row exists
-    await cl.query(`INSERT INTO public.quote (quote_id,status) VALUES ($1,'DRAFT') ON CONFLICT (quote_id) DO NOTHING`,[id]);
+    // The parent quote must already exist. A non-prop save against a missing
+    // quote is a client bug — fabricating a stub (quote_id,status) row would
+    // violate the NOT NULL identifying columns (migration 104), so 404.
+    const {rows:parentRows}=await cl.query(`SELECT 1 FROM public.quote WHERE quote_id=$1`,[id]);
+    if(!parentRows.length){
+      await cl.query("ROLLBACK");
+      return res.status(404).json({error:"Quote not found"});
+    }
 
     // ── Upsert NP details ──
     if(detail && Object.keys(detail).length>0){
