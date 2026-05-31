@@ -939,11 +939,16 @@
   table-layout: auto !important;
   min-width: 1180px;
 }
-/* Every column except the first (UW Year) and last (Cum. %) gets a uniform
-   width wide enough for the "Attritional Loss" header, so nothing truncates
-   and the table scrolls horizontally inside its shell. */
-.QUICK_SUMMARY_PAGE .qs-table--scroll th:not(:first-child):not(:last-child),
-.QUICK_SUMMARY_PAGE .qs-table--scroll td:not(:first-child):not(:last-child){
+/* Every column after the first (UW Year, which is pinned separately below)
+   gets the same uniform default width — including the last column (Cum. %).
+   This is wide enough for the "Attritional Loss" header so nothing truncates,
+   and the table scrolls horizontally inside its shell on narrow screens.
+   Crucially, because EVERY column now has a fixed default width, the auto
+   layout spreads any extra width on wide screens across all columns in
+   proportion to those defaults instead of dumping it all into the last
+   (Cum. %) column. */
+.QUICK_SUMMARY_PAGE .qs-table--scroll th:not(:first-child),
+.QUICK_SUMMARY_PAGE .qs-table--scroll td:not(:first-child){
   width: 160px !important;
   min-width: 160px !important;
 }
