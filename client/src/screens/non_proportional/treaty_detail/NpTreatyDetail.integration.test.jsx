@@ -34,6 +34,7 @@ function resetApi(overrides = {}) {
         treaty_type_name: 'Risk & Cat XL',
         uw_year: 2026,
         status: 'DRAFT',
+        inception_date: '2026-01-01',
         renewal_date: '2026-12-31',
       },
     }),
@@ -86,6 +87,47 @@ describe('NpTreatyDetail quote mode', () => {
       { class_ids: [bindIds.cobMotor, bindIds.cobProperty] },
       { quote: true },
     ]);
+  });
+
+  it('explicit quote save without inception is blocked client-side before any network call', async () => {
+    // New quote (no contractId). Seed every NOT NULL header column EXCEPT
+    // inception_date so inception is the only gap. Migration 104 made
+    // inception_date NOT NULL on quotes too, so the quote exemption is gone.
+    resetApi({ getContract: vi.fn().mockResolvedValue(null) });
+    renderBindScreen(<NpTreatyDetail />, {
+      route: '/np/treaty-detail',
+      contractId: null,
+      quoteMode: true,
+      appState: {
+        wizardMode: 'NP',
+        npTreatyDetail: {
+          cedantId: 'cedant-audit',
+          brokerId: 'broker-audit',
+          currencyId: 'SAR',
+          countryId: bindIds.country,
+          treatyTypeId: 'np-risk-cat',
+          startYear: '2026',
+          inceptionDate: '',
+        },
+      },
+    });
+
+    await screen.findByText('Country');
+
+    apiMock.saveContract.mockClear();
+    apiMock.createContract.mockClear();
+    apiMock.createQuote.mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: /go to next step/i }));
+
+    // Required-field gate surfaces the missing inception via the banner.
+    const banner = await screen.findByRole('alert');
+    expect(banner.textContent).toMatch(/Inception Date/);
+
+    // Gate throws before any network call — no create or save.
+    expect(apiMock.createQuote).not.toHaveBeenCalled();
+    expect(apiMock.createContract).not.toHaveBeenCalled();
+    expect(apiMock.saveContract).not.toHaveBeenCalled();
   });
 
   it('lets quote users edit Classes of Business from the treaty-detail modal', async () => {

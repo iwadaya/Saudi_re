@@ -177,6 +177,28 @@ describe('PropTreatyDetail integration', () => {
     expect(apiMock.createContract).not.toHaveBeenCalled();
   });
 
+  it('unmount autosave: new treaty with only a cedant does NOT throw and does NOT call the save API', async () => {
+    resetApi({ getContract: vi.fn().mockResolvedValue(null) });
+    const { unmount } = renderBindScreen(<PropTreatyDetail />, {
+      route: '/prop/treaty-detail',
+      contractId: null,
+      appState: { wizardMode: 'PROP', propTreatyDetail: { cedantId: bindIds.contract } },
+    });
+
+    await screen.findByText('Country');
+
+    apiMock.saveContract.mockClear();
+    apiMock.createContract.mockClear();
+
+    // Tearing down with an incomplete header (only a cedant) must be silent:
+    // canPersistTreatyHeader is false, so the unmount effect returns without
+    // attempting a create that the NOT NULL columns would reject.
+    expect(() => unmount()).not.toThrow();
+
+    expect(apiMock.createContract).not.toHaveBeenCalled();
+    expect(apiMock.saveContract).not.toHaveBeenCalled();
+  });
+
   it('manual renewal override on a saved treaty: hydration sets _renewalManual when renewal ≠ inception+12mo', async () => {
     // Server returns inception 2026-01-01 + renewal 2027-02-15 (NOT
     // exactly +12 months). Loaded slice should mark renewal as manual.
