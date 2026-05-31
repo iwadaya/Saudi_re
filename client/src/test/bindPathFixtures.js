@@ -274,6 +274,7 @@ export function makeBindPathApiMock(fn, overrides = {}) {
     listCedants: fn().mockResolvedValue(copy(refData.cedants)),
     getContract: fn().mockResolvedValue(copy(propContractSnapshot)),
     createContract: fn().mockResolvedValue({ contract_id: bindIds.contract, updated_at: '2026-05-01T10:00:00.000Z' }),
+    createQuote: fn().mockResolvedValue({ quote_id: bindIds.quote, contract_id: bindIds.quote, updated_at: '2026-05-01T10:00:00.000Z' }),
     saveContract: fn().mockResolvedValue({ ok: true, updated_at: '2026-05-01T10:01:00.000Z' }),
     getPricing: fn().mockResolvedValue(copy(propPricingSnapshot)),
     getPricingYearly: fn().mockResolvedValue([

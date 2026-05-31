@@ -30,9 +30,32 @@ function dateInRiyadh(value) {
 
 describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
   let harness;
+  let refs;
   const created = [];
 
-  beforeAll(async () => { harness = await bootApp(); });
+  // Seed real FK targets once. Migration 104 made cedant/broker/currency/
+  // country/treaty_type NOT NULL on contract, so every create body must
+  // carry them or the INSERT 500s. Spread `...refs` into each POST body.
+  async function seedRefs() {
+    const suffix = `${Date.now()}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+    const code = suffix.replace(/[^a-z0-9]/gi, '').slice(-10).toUpperCase();
+    const [country, currency, broker, cedant, treatyType] = await Promise.all([
+      pool.query(`INSERT INTO public.country (country_code, country_name, region) VALUES ($1,$2,'R') RETURNING country_id`, [`Z${code}`, `T Country ${suffix}`]),
+      pool.query(`INSERT INTO public.currency (currency_code, currency_name) VALUES ($1,$2) RETURNING currency_id`, [`X${code}`, `T Currency ${suffix}`]),
+      pool.query(`INSERT INTO public.brokers (broker_name) VALUES ($1) RETURNING broker_id`, [`T Broker ${suffix}`]),
+      pool.query(`INSERT INTO public.companies (company_name) VALUES ($1) RETURNING company_id`, [`T Cedant ${suffix}`]),
+      pool.query(`INSERT INTO public.treaty_type (treaty_type, category) VALUES ($1,'PROPORTIONAL') RETURNING treaty_type_id`, [`T TType ${suffix}`]),
+    ]);
+    return {
+      cedant_id: cedant.rows[0].company_id,
+      broker_id: broker.rows[0].broker_id,
+      currency_id: currency.rows[0].currency_id,
+      country_id: country.rows[0].country_id,
+      treaty_type_id: treatyType.rows[0].treaty_type_id,
+    };
+  }
+
+  beforeAll(async () => { harness = await bootApp(); refs = await seedRefs(); });
   afterAll(async () => {
     if (harness) {
       for (const id of created) {
@@ -46,7 +69,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
   it('creates → partial-saves → reads back the same values', async () => {
     // CREATE
     const createRes = await harness.fetchApp('POST', '/api/treaties', {
-      body: { uw_year: 2026, status: 'DRAFT', experience_source: 'TRIANGLE', inception_date: '2026-01-01' },
+      body: { ...refs, uw_year: 2026, status: 'DRAFT', experience_source: 'TRIANGLE', inception_date: '2026-01-01' },
     });
     expect(createRes.status).toBe(201);
     const c = await createRes.json();
@@ -102,7 +125,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
   it('list honours the status filter', async () => {
     // Create a SIGNED treaty to ensure at least one row matches
     const signed = await harness.fetchApp('POST', '/api/treaties', {
-      body: { uw_year: 2025, uw_status: 'SIGNED', inception_date: '2025-01-01' },
+      body: { ...refs, uw_year: 2025, uw_status: 'SIGNED', inception_date: '2025-01-01' },
     }).then((r) => r.json());
     created.push(signed.contract_id);
 
@@ -119,7 +142,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
 
   it('honours If-Unmodified-Since — stale timestamp → 409 STALE_WRITE', async () => {
     const c = await harness.fetchApp('POST', '/api/treaties', {
-      body: { uw_year: 2026, inception_date: '2026-01-01' },
+      body: { ...refs, uw_year: 2026, inception_date: '2026-01-01' },
     }).then((r) => r.json());
     created.push(c.contract_id);
 
@@ -141,7 +164,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
 
   it('supports two-session stale override and records STALE_WRITE_OVERRIDE', async () => {
     const c = await harness.fetchApp('POST', '/api/treaties', {
-      body: { uw_year: 2026, inception_date: '2026-01-01' },
+      body: { ...refs, uw_year: 2026, inception_date: '2026-01-01' },
     }).then((r) => r.json());
     created.push(c.contract_id);
 
@@ -199,7 +222,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
 
   it('POST with inception_date populates contract.inception_date', async () => {
     const res = await harness.fetchApp('POST', '/api/treaties', {
-      body: { uw_year: 2026, inception_date: '2026-06-01' },
+      body: { ...refs, uw_year: 2026, inception_date: '2026-06-01' },
     });
     expect(res.status).toBe(201);
     const c = await res.json();
@@ -215,7 +238,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
 
   it('saving terms.detail dates updates contract header — NOT contract_prop_details (migration 104 source-of-truth)', async () => {
     const c = await harness.fetchApp('POST', '/api/treaties', {
-      body: { uw_year: 2026, inception_date: '2026-01-01' },
+      body: { ...refs, uw_year: 2026, inception_date: '2026-01-01' },
     }).then((r) => r.json());
     created.push(c.contract_id);
 
@@ -260,5 +283,39 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
          VALUES (2026, NULL, NULL, NULL, NULL, NULL)`,
       ),
     ).rejects.toThrow(/null value in column/);
+  });
+
+  it('POST /treaties/:id/renew of a contract with NULL renewal_date does not 500 (falls back to original inception)', async () => {
+    // Seed real FK targets and a contract whose renewal_date is NULL.
+    // newInception used to be o.renewal_date || null → null → NOT NULL 500.
+    const suffix = `${Date.now()}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+    const code = suffix.replace(/[^a-z0-9]/gi, '').slice(-10).toUpperCase();
+    const [country, currency, broker, cedant, treatyType] = await Promise.all([
+      pool.query(`INSERT INTO public.country (country_code, country_name, region) VALUES ($1,$2,'R') RETURNING country_id`, [`Z${code}`, `Ren Country ${suffix}`]),
+      pool.query(`INSERT INTO public.currency (currency_code, currency_name) VALUES ($1,$2) RETURNING currency_id`, [`X${code}`, `Ren Currency ${suffix}`]),
+      pool.query(`INSERT INTO public.brokers (broker_name) VALUES ($1) RETURNING broker_id`, [`Ren Broker ${suffix}`]),
+      pool.query(`INSERT INTO public.companies (company_name) VALUES ($1) RETURNING company_id`, [`Ren Cedant ${suffix}`]),
+      pool.query(`INSERT INTO public.treaty_type (treaty_type, category) VALUES ($1,'PROPORTIONAL') RETURNING treaty_type_id`, [`Ren TType ${suffix}`]),
+    ]);
+    const { rows: seeded } = await pool.query(
+      `INSERT INTO public.contract (uw_year, status, uw_status, cedant_id, broker_id, currency_id, country_id, treaty_type_id, inception_date, renewal_date)
+       VALUES (2026, 'DRAFT', 'DRAFT', $1, $2, $3, $4, $5, '2026-03-15', NULL) RETURNING contract_id`,
+      [cedant.rows[0].company_id, broker.rows[0].broker_id, currency.rows[0].currency_id, country.rows[0].country_id, treatyType.rows[0].treaty_type_id],
+    );
+    const origId = seeded[0].contract_id;
+    created.push(origId);
+
+    const renewRes = await harness.fetchApp('POST', `/api/treaties/${origId}/renew`, { body: {} });
+    expect(renewRes.status).not.toBe(500);
+    expect(renewRes.status).toBe(201);
+    const renewed = await renewRes.json();
+    if (renewed.contract_id) created.push(renewed.contract_id);
+
+    // New row's inception falls back to the original inception (no renewal
+    // to roll from) and is never null.
+    const newId = renewed.contract_id || renewed.id;
+    const { rows: dbRows } = await pool.query(`SELECT inception_date FROM public.contract WHERE contract_id=$1`, [newId]);
+    expect(dbRows[0].inception_date).not.toBeNull();
+    expect(dateInRiyadh(dbRows[0].inception_date)).toBe('2026-03-15');
   });
 });

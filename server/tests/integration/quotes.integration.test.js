@@ -28,9 +28,32 @@ function ymd(value) {
 
 describe.skipIf(shouldSkipDb)('integration: /api/quotes end-to-end', () => {
   let harness;
+  let refs;
   const createdQuoteIds = [];
 
-  beforeAll(async () => { harness = await bootApp(); });
+  // Seed real FK targets once. Migration 104 made cedant/broker/currency/
+  // country/treaty_type NOT NULL on quote, so every create body must carry
+  // them or the INSERT 500s. Spread `...refs` into each POST body.
+  async function seedRefs() {
+    const suffix = `${Date.now()}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+    const code = suffix.replace(/[^a-z0-9]/gi, '').slice(-10).toUpperCase();
+    const [country, currency, broker, cedant, treatyType] = await Promise.all([
+      pool.query(`INSERT INTO public.country (country_code, country_name, region) VALUES ($1,$2,'R') RETURNING country_id`, [`Z${code}`, `Q Country ${suffix}`]),
+      pool.query(`INSERT INTO public.currency (currency_code, currency_name) VALUES ($1,$2) RETURNING currency_id`, [`X${code}`, `Q Currency ${suffix}`]),
+      pool.query(`INSERT INTO public.brokers (broker_name) VALUES ($1) RETURNING broker_id`, [`Q Broker ${suffix}`]),
+      pool.query(`INSERT INTO public.companies (company_name) VALUES ($1) RETURNING company_id`, [`Q Cedant ${suffix}`]),
+      pool.query(`INSERT INTO public.treaty_type (treaty_type, category) VALUES ($1,'NON_PROPORTIONAL') RETURNING treaty_type_id`, [`Q TType ${suffix}`]),
+    ]);
+    return {
+      cedant_id: cedant.rows[0].company_id,
+      broker_id: broker.rows[0].broker_id,
+      currency_id: currency.rows[0].currency_id,
+      country_id: country.rows[0].country_id,
+      treaty_type_id: treatyType.rows[0].treaty_type_id,
+    };
+  }
+
+  beforeAll(async () => { harness = await bootApp(); refs = await seedRefs(); });
 
   afterAll(async () => {
     for (const id of createdQuoteIds) {
@@ -44,6 +67,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/quotes end-to-end', () => {
     // CREATE
     const createRes = await harness.fetchApp('POST', '/api/quotes', {
       body: {
+        ...refs,
         uw_year: 2026,
         status: 'DRAFT',
         experience_source: 'TRIANGLE',
@@ -107,7 +131,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/quotes end-to-end', () => {
 
   it('honours If-Unmodified-Since with a stale timestamp (409 STALE_WRITE)', async () => {
     const created = await harness.fetchApp('POST', '/api/quotes', {
-      body: { uw_year: 2026, inception_date: '2026-01-01' },
+      body: { ...refs, uw_year: 2026, inception_date: '2026-01-01' },
     }).then((r) => r.json());
     createdQuoteIds.push(created.quote_id);
 
@@ -134,6 +158,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/quotes end-to-end', () => {
   it('round-trips NP quote final structures and records negotiation snapshots', async () => {
     const created = await harness.fetchApp('POST', '/api/quotes', {
       body: {
+        ...refs,
         uw_year: 2026,
         status: 'DRAFT',
         experience_source: 'TRIANGLE',
@@ -215,6 +240,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/quotes end-to-end', () => {
   it('round-trips NP quote historical performance rows', async () => {
     const created = await harness.fetchApp('POST', '/api/quotes', {
       body: {
+        ...refs,
         uw_year: 2026,
         status: 'DRAFT',
         contract_description: 'np quote historical performance',
@@ -262,7 +288,7 @@ describe.skipIf(shouldSkipDb)('integration: /api/quotes end-to-end', () => {
 
   it('saving terms.detail.renewal_date updates quote header — NOT quote_prop_details (migration 104 source-of-truth)', async () => {
     const created = await harness.fetchApp('POST', '/api/quotes', {
-      body: { uw_year: 2026, inception_date: '2026-01-01', renewal_date: '2026-12-31' },
+      body: { ...refs, uw_year: 2026, inception_date: '2026-01-01', renewal_date: '2026-12-31' },
     }).then((r) => r.json());
     createdQuoteIds.push(created.quote_id);
 
@@ -302,5 +328,50 @@ describe.skipIf(shouldSkipDb)('integration: /api/quotes end-to-end', () => {
          VALUES (2026, 'DRAFT', NULL, NULL, NULL, NULL, NULL, '2026-01-01')`,
       ),
     ).rejects.toThrow(/null value in column/);
+  });
+
+  it('POST /quotes/:id/renew rolls inception forward and never produces a null inception (migration 104)', async () => {
+    // Seed real FK targets so the parent quote satisfies the NOT NULL
+    // identifying columns. The renew INSERT used to omit inception_date
+    // entirely and 500 on the NOT NULL constraint.
+    const suffix = `${Date.now()}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+    const code = suffix.replace(/[^a-z0-9]/gi, '').slice(-10).toUpperCase();
+    const [country, currency, broker, cedant, treatyType] = await Promise.all([
+      pool.query(`INSERT INTO public.country (country_code, country_name, region) VALUES ($1,$2,'R') RETURNING country_id`, [`Z${code}`, `Renew Country ${suffix}`]),
+      pool.query(`INSERT INTO public.currency (currency_code, currency_name) VALUES ($1,$2) RETURNING currency_id`, [`X${code}`, `Renew Currency ${suffix}`]),
+      pool.query(`INSERT INTO public.brokers (broker_name) VALUES ($1) RETURNING broker_id`, [`Renew Broker ${suffix}`]),
+      pool.query(`INSERT INTO public.companies (company_name) VALUES ($1) RETURNING company_id`, [`Renew Cedant ${suffix}`]),
+      pool.query(`INSERT INTO public.treaty_type (treaty_type, category) VALUES ($1,'NON_PROPORTIONAL') RETURNING treaty_type_id`, [`Renew TType ${suffix}`]),
+    ]);
+    const { rows: seeded } = await pool.query(
+      `INSERT INTO public.quote (uw_year, status, cedant_id, broker_id, currency_id, country_id, treaty_type_id, inception_date, renewal_date)
+       VALUES (2026, 'DRAFT', $1, $2, $3, $4, $5, '2026-01-01', '2027-01-01') RETURNING quote_id`,
+      [cedant.rows[0].company_id, broker.rows[0].broker_id, currency.rows[0].currency_id, country.rows[0].country_id, treatyType.rows[0].treaty_type_id],
+    );
+    const origId = seeded[0].quote_id;
+    createdQuoteIds.push(origId);
+
+    const renewRes = await harness.fetchApp('POST', `/api/quotes/${origId}/renew`, { body: {} });
+    expect(renewRes.status).toBe(201);
+    const renewed = await renewRes.json();
+    createdQuoteIds.push(renewed.quote_id);
+
+    // Inception must be non-null and rolled to the original renewal date;
+    // the year derives from that new inception (2027).
+    expect(renewed.inception_date).toBeTruthy();
+    expect(ymd(renewed.inception_date)).toBe('2027-01-01');
+    expect(renewed.uw_year).toBe(2027);
+
+    const { rows: dbRows } = await pool.query(`SELECT inception_date FROM public.quote WHERE quote_id=$1`, [renewed.quote_id]);
+    expect(dbRows[0].inception_date).not.toBeNull();
+  });
+
+  it('POST /quotes/:id/non-prop/save against a missing quote_id → 404 (no stub row fabricated)', async () => {
+    const res = await harness.fetchApp('POST', '/api/quotes/00000000-0000-0000-0000-000000000000/non-prop/save', {
+      body: { detail: { number_of_layers: 1 } },
+    });
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).toMatch(/not found/i);
   });
 });

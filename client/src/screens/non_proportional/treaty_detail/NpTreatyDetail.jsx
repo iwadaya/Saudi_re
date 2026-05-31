@@ -36,6 +36,21 @@ export function addMonths(dateStr, months) {
 /** Year from an ISO date input ('YYYY-MM-DD') without timezone conversion. */
 export const yearFromDateStr = yearFromDateInput;
 
+/**
+ * True only when every column that migration 104 made NOT NULL on quote and
+ * contract is present: cedant, broker, currency, country, treaty_type,
+ * uw_year (startYear or derived from inception), and inception_date. The
+ * unmount autosave uses this to avoid POSTing a partial draft that the DB
+ * would reject — there is no valid partial-draft row without these.
+ */
+export function canPersistTreatyHeader(s = {}) {
+  const has = v => v != null && String(v).trim() !== '';
+  const uwYear = s.startYear || yearFromDateStr(s.inceptionDate);
+  return has(s.cedantId) && has(s.brokerId) && has(s.currencyId) &&
+    has(s.countryId) && has(s.treatyTypeId) && has(uwYear) &&
+    has(s.inceptionDate);
+}
+
 /* Close-on-Escape — wired by every screen-level modal in this file. */
 function useEscapeKey(enabled, onEscape) {
   useEffect(() => {
@@ -315,7 +330,6 @@ export default function NpTreatyDetail() {
     // keystrokes — saveRef.current and the unmount effect both depend on this.
     const cur = stateRef.current?.npTreatyDetail || {};
     const qm = (stateRef.current?.quoteMode || quoteMode) ? { quote: true } : undefined;
-    const isQuoteSave = !!qm;
     const hasContent = !!(cur.cedantId || cur.treatyTypeId || cur.countryId);
     if (!contractId && !cur.contractId && !hasContent) return true;
     // Surface required-field gaps via the SaveStateIndicator banner before the
@@ -327,7 +341,7 @@ export default function NpTreatyDetail() {
       if (!cur.cedantId)      missing.push('Cedant');
       if (!cur.treatyTypeId)  missing.push('Treaty Type');
       if (!cur.countryId)     missing.push('Country');
-      if (!isQuoteSave && !cur.inceptionDate) missing.push('Inception Date');
+      if (!cur.inceptionDate) missing.push('Inception Date');
       if (missing.length) throw new Error(`Required: ${missing.join(', ')}`);
     }
     let attemptedHeaderPayload = null;
@@ -460,9 +474,12 @@ export default function NpTreatyDetail() {
   useEffect(() => {
     return () => {
       const cur = stateRef.current?.npTreatyDetail;
-      const hasContent = !!(cur?.contractId || cur?.cedantId || cur?.treatyTypeId || cur?.countryId);
       if (Date.now() - lastExplicitSaveAtRef.current < 2000) return;
-      if (hasContent && saveRef.current) {
+      // Only autosave a brand-new treaty when every NOT NULL header column is
+      // present (migration 104) — otherwise the create POST is rejected by the
+      // DB. An existing row (contractId set) can always be re-saved.
+      const persistable = cur?.contractId || canPersistTreatyHeader(cur);
+      if (persistable && saveRef.current) {
         saveRef.current().catch(e => console.error('[NpTreatyDetail] unmount save failed:', e));
       }
     };
