@@ -130,6 +130,57 @@ describe('NpTreatyDetail quote mode', () => {
     expect(apiMock.saveContract).not.toHaveBeenCalled();
   });
 
+  it('shows Broker and Inception Date in quote mode and saves a quote with a non-null inception, broker, and derived uw_year', async () => {
+    // New quote (no contractId). Seed the FK identifying columns; the user
+    // supplies the inception date via the now-visible input. createQuote must
+    // fire once with non-null inception/broker and uw_year = inception year.
+    const newQuoteId = 'quote-new-0001';
+    resetApi({
+      getContract: vi.fn().mockResolvedValue(null),
+      createQuote: vi.fn().mockResolvedValue({ quote_id: newQuoteId, contract_id: newQuoteId, updated_at: '2026-05-01T10:00:00.000Z' }),
+    });
+    renderBindScreen(<NpTreatyDetail />, {
+      route: '/np/treaty-detail',
+      contractId: null,
+      quoteMode: true,
+      appState: {
+        wizardMode: 'NP',
+        npTreatyDetail: {
+          cedantId: 'cedant-audit',
+          brokerId: 'broker-audit',
+          currencyId: 'SAR',
+          countryId: bindIds.country,
+          treatyTypeId: 'np-risk-cat',
+        },
+      },
+    });
+
+    await screen.findByText('Country');
+
+    // Broker and Inception Date are now rendered in quote mode.
+    const inceptionLabel = screen.getByText('Inception Date');
+    const inceptionInput = inceptionLabel.parentElement.parentElement.querySelector('input[type="date"]');
+    expect(inceptionInput).toBeTruthy();
+    const brokerLabel = screen.getByText('Broker');
+    const brokerSelect = brokerLabel.parentElement.parentElement.querySelector('select');
+    expect(brokerSelect).toBeTruthy();
+
+    // Supply an inception date; the UW-year auto-derive effect sets startYear.
+    fireEvent.change(inceptionInput, { target: { value: '2027-03-15' } });
+
+    apiMock.createQuote.mockClear();
+    apiMock.createContract.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /go to next step/i }));
+
+    await waitFor(() => expect(apiMock.createQuote).toHaveBeenCalledTimes(1));
+    expect(apiMock.createContract).not.toHaveBeenCalled();
+    const payload = apiMock.createQuote.mock.calls[0][0];
+    expect(payload.inception_date).toBe('2027-03-15');
+    expect(payload.broker_id).toBe('broker-audit');
+    // uw_year auto-derives from the inception year (stored as a string in slice).
+    expect(Number(payload.uw_year)).toBe(2027);
+  });
+
   it('lets quote users edit Classes of Business from the treaty-detail modal', async () => {
     renderQuoteTreatyDetail();
 

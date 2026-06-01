@@ -614,13 +614,12 @@ export default function NpTreatyDetail() {
             </div>
             <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
               {/* Treaty detail card.
-                  Quote mode is intentionally minimal per spec: only Country,
-                  Cedant, Treaty Type are inputs the underwriter must fill;
-                  Classes of Business, Quote ID, Currency, Renewal, Experience Start Year and the
-                  description are shown as outputs (currency/renewal/start
-                  year remain editable so the user can override the smart
-                  defaults). Broker, Inception Date and UW Year are
-                  hidden — they aren't needed to produce a quote. */}
+                  Country, Cedant, Treaty Type, Broker, Currency and Inception
+                  Date are all required inputs (NOT NULL on quote/contract since
+                  migration 104). UW Year auto-derives from Inception and is
+                  read-only. Classes of Business, Quote/Contract ID, Renewal and
+                  Experience Start Year round out the form (renewal/start year
+                  remain editable so the user can override the smart defaults). */}
               <FR label="Country"><select className="fi" value={s.countryId || ''} onChange={e => update({ countryId: e.target.value, cedantId: '' })}>
                 <option value="">Select country…</option>{countries.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></FR>
               <FR label="Cedant Name"><select className="fi" value={s.cedantId || ''} onChange={e => update({ cedantId: e.target.value })} disabled={!s.countryId}>
@@ -636,20 +635,14 @@ export default function NpTreatyDetail() {
                   {cobText} <span style={{ float: 'right', opacity: 0.3 }}>▾</span>
                 </button>
               </FR>
-              {!quoteMode && (
-                <FR label="Broker"><select className="fi" value={s.brokerId || ''} onChange={e => update({ brokerId: e.target.value })}>
-                  <option value="">Select broker…</option>{brokers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></FR>
-              )}
+              <FR label="Broker"><select className="fi" value={s.brokerId || ''} onChange={e => update({ brokerId: e.target.value })}>
+                <option value="">Select broker…</option>{brokers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></FR>
               <FR label={quoteMode ? 'Quote ID' : 'Contract ID'}><input className="fi" value={quoteIdentifier} readOnly style={{ opacity: 0.5 }} /></FR>
               <FR label="Currency"><select className="fi" value={s.currencyId || ''} onChange={e => update({ currencyId: e.target.value })}>
                 <option value="">Select currency…</option>{currencies.map(c => <option key={c.id} value={c.id}>{c.code || c.name}</option>)}</select></FR>
-              {!quoteMode && (
-                <FR label="Treaty Inception Date"><input className="fi" type="date" value={s.inceptionDate || ''} onChange={e => update({ inceptionDate: e.target.value, _renewalManual: false })} /></FR>
-              )}
+              <FR label={quoteMode ? 'Inception Date' : 'Treaty Inception Date'}><input className="fi" type="date" value={s.inceptionDate || ''} onChange={e => update({ inceptionDate: e.target.value, _renewalManual: false })} /></FR>
               <FR label={quoteMode ? 'Renewal' : 'Treaty Renewal Date'}><input className="fi" type="date" value={s.renewalDate || ''} onChange={e => update({ renewalDate: e.target.value, _renewalManual: true })} /></FR>
-              {!quoteMode && (
-                <FR label="UW Year"><input className="fi" value={s.startYear || (yearFromDateStr(s.inceptionDate) ? String(yearFromDateStr(s.inceptionDate)) : '')} readOnly title="Auto-derived from Treaty Inception Date" style={{ opacity: 0.7 }} /></FR>
-              )}
+              <FR label="UW Year"><input className="fi" value={s.startYear || (yearFromDateStr(s.inceptionDate) ? String(yearFromDateStr(s.inceptionDate)) : '')} readOnly title="Auto-derived from Inception Date" style={{ opacity: 0.7 }} /></FR>
               <FR label="Experience Start Year">
                 <select className="fi" value={s.experienceStartYear || ''} onChange={e => update({ experienceStartYear: e.target.value })}>
                   <option value="">Select start year…</option>
