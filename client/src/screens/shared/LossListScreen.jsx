@@ -5,7 +5,6 @@ import { useAppState } from '../../context/AppContext';
 import WizardLayout from '../../components/WizardLayout';
 import { parseFlexibleNumber, dateInputValue } from '../../utils/format';
 import LossAnalysisModal from './LossAnalysisModal';
-import LossQuarterSuggestModal from './LossQuarterSuggestModal';
 
 const COLS = [
   // UW Year leads — it's the origin-year key stripping joins the triangle on.
@@ -15,7 +14,12 @@ const COLS = [
   { key: 'insuredName', label: 'Insured Name', type: 'text', w: 180 },
   { key: 'lossName',    label: 'Loss / Event',  type: 'text', w: 160 },
   { key: 'dateOfLoss',  label: 'Date of Loss',  type: 'date', w: 120 },
-  { key: 'actuarialReportedDate', label: 'Reported (Actuarial)', type: 'actuarial', w: 150, title: "Actuarial reported date — when the loss was reported / booked into the cedant's triangle. Drives which development period it is stripped from. Leave blank to default to date of loss + a quarter." },
+  // The actuarial-reported-date column and its "Map to quarters" Suggest
+  // feature were removed from the UI: losses are now stripped outside the tool,
+  // so per-loss in-tool placement is no longer entered by hand. The field still
+  // round-trips (emptyRow / load map / save payload) and a blank value falls
+  // back to the loss-date proxy server-side, so any already-saved value keeps
+  // placing its loss precisely.
   { key: 'classOfBusiness', label: 'Class',      type: 'cob',  w: 140 },
   { key: 'paid',        label: 'Paid',           type: 'num',  w: 110 },
   { key: 'os',          label: 'O/S',            type: 'num',  w: 110 },
@@ -168,8 +172,6 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
   // kept separately for the analysis modal so we don't tangle it with the
   // editable grid state.
   const [serverLosses, setServerLosses] = useState([]);
-  const [suggesting, setSuggesting] = useState(false);
-  const [suggestState, setSuggestState] = useState(null); // { suggestions, provider }
   const tableRef = useRef(null);
 
   const loadFn = lossType === 'cat' ? api.getCatLosses : api.getLargeLosses;
@@ -307,39 +309,6 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
     setDirty(true);
   };
 
-  // AI: ask the server to map each loss to the development quarter it most
-  // likely entered the triangle. Advisory — results open in a review modal.
-  const runSuggestQuarters = useCallback(async () => {
-    if (!contractId) return;
-    setSuggesting(true);
-    try {
-      const out = await api.suggestLossQuarters(contractId, quoteMode ? { quote: true } : undefined);
-      setSuggestState({ suggestions: out?.suggestions || [], provider: out?.provider || null });
-    } catch (e) {
-      const msg = e?.status === 503
-        ? 'AI is not configured on the server (set an LLM API key).'
-        : (e?.message || 'AI mapping failed');
-      setSaveMsg({ type: 'err', text: msg });
-      setTimeout(() => setSaveMsg(null), 4000);
-    } finally {
-      setSuggesting(false);
-    }
-  }, [contractId, quoteMode]);
-
-  // Apply chosen suggestions: fill the actuarial reported date on matching
-  // rows (by loss_id). The user still reviews and saves.
-  const applyQuarterSuggestions = useCallback((chosen) => {
-    const byId = new Map(chosen.map((s) => [String(s.loss_id), s.suggested_reported_date]));
-    setRows((prev) => prev.map((r) => {
-      const d = r.lossId ? byId.get(String(r.lossId)) : null;
-      return d ? { ...r, actuarialReportedDate: d } : r;
-    }));
-    setDirty(true);
-    setSuggestState(null);
-    setSaveMsg({ type: 'ok', text: `Applied ${chosen.length} suggestion${chosen.length === 1 ? '' : 's'} — review and save` });
-    setTimeout(() => setSaveMsg(null), 3000);
-  }, []);
-
   // Paste handler — auto-expands rows
   const handlePaste = useCallback((e) => {
     const text = e.clipboardData?.getData('text/plain');
@@ -453,13 +422,6 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                 style={{ opacity: serverLosses.length === 0 ? 0.5 : 1 }}>
                 📊 Loss Analysis
               </button>
-              <button className="ll-btn ll-btn--analysis"
-                onClick={runSuggestQuarters}
-                disabled={serverLosses.length === 0 || suggesting}
-                title={serverLosses.length === 0 ? 'Save losses first to map them to the triangle' : 'Use AI to suggest the development quarter each loss entered the triangle'}
-                style={{ opacity: serverLosses.length === 0 ? 0.5 : 1 }}>
-                {suggesting ? '… Mapping' : '✨ Map to quarters (AI)'}
-              </button>
               <button className="ll-btn ll-btn--load" onClick={loadData} title="Reload from server">⟳ Load</button>
               <button className="ll-btn ll-btn--clear" onClick={clear} title="Clear all rows">✕ Clear</button>
               <button className={`ll-btn ll-btn--save ${dirty ? 'll-btn--dirty' : ''}`} onClick={save} title="Save to server">💾 Save</button>
@@ -488,25 +450,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                         <td className="ll-td ll-td--num">{i + 1}</td>
                         {COLS.map((c, ci) => (
                           <td key={c.key} className="ll-td">
-                            {c.type === 'actuarial' ? (
-                              <>
-                                <input
-                                  className="ll-inp"
-                                  type="date"
-                                  value={r.actuarialReportedDate || ''}
-                                  data-row={i} data-col={ci}
-                                  onChange={e => handleChange(i, 'actuarialReportedDate', e.target.value)}
-                                  onPaste={handlePaste}
-                                  title={(!empty && !r.actuarialReportedDate)
-                                    ? 'No actuarial reported date — this loss is placed by the loss-date proxy (estimated quarter). Set a date to place it precisely.'
-                                    : 'Actuarial reported date — drives where this loss is stripped from.'}
-                                  style={(!empty && !r.actuarialReportedDate) ? { borderColor: 'rgba(251,146,60,0.6)' } : undefined}
-                                />
-                                {(!empty && !r.actuarialReportedDate) && (
-                                  <span title="Placed by loss-date proxy" style={{ marginLeft: 4, color: '#fbbf24', fontSize: 11 }}>⚠ proxy</span>
-                                )}
-                              </>
-                            ) : c.type === 'num' ? (
+                            {c.type === 'num' ? (
                               <NumCell value={r[c.key]} onChange={v => handleChange(i, c.key, v)}
                                 onPaste={handlePaste} dataRow={i} dataCol={ci} />
                             ) : c.type === 'cob' ? (
@@ -555,15 +499,6 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
               losses={serverLosses}
               lossType={lossType}
               onClose={() => setShowAnalysis(false)}
-            />
-          )}
-          {suggestState && (
-            <LossQuarterSuggestModal
-              suggestions={suggestState.suggestions}
-              serverLosses={serverLosses}
-              provider={suggestState.provider}
-              onApply={applyQuarterSuggestions}
-              onClose={() => setSuggestState(null)}
             />
           )}
         </div>
