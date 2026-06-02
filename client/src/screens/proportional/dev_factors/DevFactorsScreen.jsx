@@ -460,10 +460,12 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
 
   const [view, setView] = useState('DEV_FACTORS'); // DEV_FACTORS | LINK_RATIOS | GRAPH
   // Triangle basis is a persisted per-treaty choice: STRIPPED (the attritional
-  // basis — strip large/cat, the actuarial default) or FULL (use original data,
-  // which also folds large/cat into attritional on the summaries). It's derived
-  // from the saved strip_large_cat_losses flag and written through on toggle.
-  const stripLargeCat = appState.propTreatyDetail?.stripLargeCat !== false;
+  // basis — strip large/cat) or FULL (use original data, which also folds
+  // large/cat into attritional on the summaries). FULL is now the default —
+  // the underwriter imports pre-stripped triangles, so stripping is opt-in.
+  // The basis is derived from the saved strip_large_cat_losses flag (default
+  // false → FULL) and written through on toggle.
+  const stripLargeCat = appState.propTreatyDetail?.stripLargeCat === true;
   const basis = stripLargeCat ? 'STRIPPED' : 'FULL';
   const setBasis = (next) => {
     const strip = next === 'STRIPPED';

@@ -30,7 +30,7 @@ export default function PropNoTriangulation() {
   // Per-treaty large/CAT stripping choice (default on). On this no-triangulation
   // basis, stripping removes the year's large/CAT from incurred before
   // projecting; the projected & quick summaries fold them back accordingly.
-  const stripLargeCat = td.stripLargeCat !== false;
+  const stripLargeCat = td.stripLargeCat === true;
   const setStrip = (strip) => {
     setSlice('propTreatyDetail', { ...td, stripLargeCat: strip });
     if (contractId) api.setStripLargeCat(contractId, strip, apiOpts).catch(() => {});
