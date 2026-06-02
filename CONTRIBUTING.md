@@ -23,8 +23,6 @@ npm start             # serve client/dist via the express server
 |---|---|
 | `npm run lint`        | ESLint on the whole tree, fails on errors only |
 | `npm run lint:fix`    | Auto-fix the easy ones |
-| `npm run format`      | Prettier write |
-| `npm run format:check`| Prettier check, no writes |
 | `npm test`            | Both vitest suites (server + client) |
 | `npm run test:server` | Server suite only |
 | `npm run test:client` | Client suite only |
@@ -60,7 +58,7 @@ server/
 ## Conventions
 
 ### Code style
-- 2-space indent, single quotes, trailing commas, LF line endings (`.editorconfig` + `.prettierrc.json`).
+- 2-space indent and LF line endings (enforced by `.editorconfig`); single quotes and trailing commas by convention.
 - Prefer named exports for utilities; default exports for React components.
 - Keep React components small; if a screen exceeds ~600 lines, split by concern (see `final_pricing/` for the pattern).
 
