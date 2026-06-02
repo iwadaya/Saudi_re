@@ -43,7 +43,7 @@ function makeTrianglePage(triangleType) {
       const { rows } = await client.query(
         `SELECT origin_year, dev_months, cum_value
            FROM ${table}
-          WHERE ${fk}=$1 AND type=$2::public.triangle_type
+          WHERE ${fk}=$1 AND type=$2::public.triangle_type AND variant='MODIFIED'::public.triangle_variant
           ORDER BY origin_year, dev_months`,
         [entity.id, triangleType],
       );
@@ -57,15 +57,18 @@ function makeTrianglePage(triangleType) {
       assertEntity(entity);
       const table = entity.type === 'quote' ? 'public.quote_triangle_cells' : 'public.contract_triangle_cells';
       const fk = entity.type === 'quote' ? 'quote_id' : 'contract_id';
+      // Renewal-pack import targets the projected (MODIFIED) triangle only;
+      // scope the delete + set the variant so it never touches/collides with
+      // ACTUAL cells under the (id,type,variant,...) UNIQUE constraint.
       await client.query(
-        `DELETE FROM ${table} WHERE ${fk}=$1 AND type=$2::public.triangle_type`,
+        `DELETE FROM ${table} WHERE ${fk}=$1 AND type=$2::public.triangle_type AND variant='MODIFIED'::public.triangle_variant`,
         [entity.id, triangleType],
       );
       const cells = state?.cells || [];
       if (!cells.length) return;
       await client.query(
-        `INSERT INTO ${table} (${fk}, type, origin_year, dev_months, cum_value)
-         SELECT $1, $2::public.triangle_type, oy, dm, cv
+        `INSERT INTO ${table} (${fk}, type, variant, origin_year, dev_months, cum_value)
+         SELECT $1, $2::public.triangle_type, 'MODIFIED'::public.triangle_variant, oy, dm, cv
            FROM unnest($3::int[], $4::int[], $5::numeric[]) AS u(oy, dm, cv)`,
         [
           entity.id, triangleType,
