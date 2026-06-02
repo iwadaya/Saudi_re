@@ -69,7 +69,7 @@ describe('TriangleScreen', () => {
     ['PROP_PREMIUM_TRIANGLES', 'PREMIUM'],
     ['PROP_CLAIMS_PAID_TRIANGLES', 'CLAIMS_PAID'],
     ['PROP_OS_CLAIMS_TRIANGLES', 'CLAIMS_OS'],
-  ])('loads %s once without refetching after its own state updates', async (routeKey, triangleType) => {
+  ])('loads %s once per variant without refetching after its own state updates', async (routeKey, triangleType) => {
     render(
       <TriangleScreen
         routeKey={routeKey}
@@ -84,8 +84,11 @@ describe('TriangleScreen', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
 
-    expect(apiMock.getTriangle).toHaveBeenCalledTimes(1);
-    expect(apiMock.getTriangle).toHaveBeenCalledWith('contract-1', triangleType, undefined);
+    // Both variants (MODIFIED + ACTUAL) are fetched up front so the hidden tab
+    // is populated; no further refetches on state updates.
+    expect(apiMock.getTriangle).toHaveBeenCalledTimes(2);
+    expect(apiMock.getTriangle).toHaveBeenCalledWith('contract-1', triangleType, { variant: 'MODIFIED' });
+    expect(apiMock.getTriangle).toHaveBeenCalledWith('contract-1', triangleType, { variant: 'ACTUAL' });
   });
 
   it('loads the incurred triangle from paid and OS once each', async () => {

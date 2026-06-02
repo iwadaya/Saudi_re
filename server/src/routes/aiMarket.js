@@ -495,9 +495,11 @@ const LOSS_RATIO_FROM_TRIANGLE = `(
     FROM public.contract_triangle_cells p
     WHERE p.contract_id = c.contract_id
       AND p.type IN ('PREMIUM','CLAIMS_PAID','CLAIMS_OS')
+      AND p.variant = 'MODIFIED'::public.triangle_variant
       AND p.dev_months = (
         SELECT MAX(p2.dev_months) FROM public.contract_triangle_cells p2
         WHERE p2.contract_id = p.contract_id AND p2.type = p.type AND p2.origin_year = p.origin_year
+          AND p2.variant = 'MODIFIED'::public.triangle_variant
       )
     GROUP BY p.origin_year
   ) diag

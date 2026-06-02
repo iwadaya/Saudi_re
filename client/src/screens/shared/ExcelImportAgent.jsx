@@ -260,10 +260,15 @@ async function pushSheet(contractId, sheet, opts = {}) {
   // classIds rides along on opts as a sidecar for profile imports;
   // strip it from the apiOpts spread so it doesn't leak into the
   // underlying fetch options object the api helpers pass through.
-  const { classIds, ...apiOpts } = opts;
+  const { classIds, variant, ...apiOpts } = opts;
   switch (type) {
-    case 'triangle':
-      return api.saveTriangle(contractId, triType, { triangle: data }, apiOpts);
+    case 'triangle': {
+      // INCURRED is derived (paid + OS) and has no stored variant — never tag
+      // it. The TRIANGLE_TYPE map can't produce INCURRED today; this guards a
+      // future mapping from ever writing ACTUAL-tagged incurred rows.
+      const triOpts = String(triType).toUpperCase() === 'INCURRED' ? apiOpts : { ...apiOpts, variant };
+      return api.saveTriangle(contractId, triType, { triangle: data }, triOpts);
+    }
     case 'largeLosses':
       return api.saveLargeLosses(contractId, { losses: data }, apiOpts);
     case 'catLosses':
@@ -528,6 +533,9 @@ export default function ExcelImportAgent() {
   const [dragOver, setDragOver]       = useState(false);
   const [fileName, setFileName]       = useState('');
   const [detectedType, setDetectedType] = useState('');      // 'prop' | 'np' | 'mixed'
+  // Which variant imported triangles land in (migration 116). MODIFIED is the
+  // projected triangle (default); ACTUAL is the gross reference triangle.
+  const [triangleVariant, setTriangleVariant] = useState('MODIFIED');
   const fileRef = useRef();
   const contractInputTouched = useRef(false);
 
@@ -598,6 +606,8 @@ export default function ExcelImportAgent() {
     const baseOpts = {
       ...(appState.quoteMode ? { quote: true } : {}),
       classIds,
+      // Sidecar consumed by pushSheet for triangle saves only.
+      variant: triangleVariant,
     };
     setImporting(true);
     setResults([]);
@@ -613,7 +623,7 @@ export default function ExcelImportAgent() {
       setResults([...out]);
     }
     setImporting(false);
-  }, [appState.quoteMode, appState.npTreatyDetail, appState.propTreatyDetail, contractInput, selectedSheets, showToast]);
+  }, [appState.quoteMode, appState.npTreatyDetail, appState.propTreatyDetail, contractInput, selectedSheets, triangleVariant, showToast]);
 
   const hasFile  = sheets.length > 0;
   const allDone  = results.length > 0 && results.length === selectedSheets.length;
@@ -943,6 +953,23 @@ export default function ExcelImportAgent() {
                 );
               })}
             </div>
+
+            {/* Variant target — only when a triangle sheet is in the batch.
+                On its own row so it never displaces the action-row buttons.
+                Default MODIFIED; pick ACTUAL to import the gross triangle. */}
+            {selectedSheets.some(s => s.type === 'triangle') && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-subtle)' }}>Import triangles as</span>
+                <div role="group" aria-label="Triangle variant" style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.12)' }}>
+                  {['MODIFIED', 'ACTUAL'].map(v => { const active = triangleVariant === v; return (
+                    <button key={v} type="button" aria-pressed={active} onClick={() => setTriangleVariant(v)}
+                      style={{ padding: '4px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none', background: active ? 'var(--accent)' : 'transparent', color: active ? 'var(--accent-contrast)' : 'var(--text-subtle)' }}>
+                      {v === 'MODIFIED' ? 'Modified' : 'Actual'}
+                    </button>
+                  ); })}
+                </div>
+              </div>
+            )}
 
             {/* Import button */}
             <div className="ia-action-row">

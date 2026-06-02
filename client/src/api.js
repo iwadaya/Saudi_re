@@ -419,9 +419,23 @@ export const api = {
   },
 
   // Triangles
-  getTriangle(id, type, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.triangle(id, type) : PATHS.triangle(id, type), opts); },
+  getTriangle(id, type, opts) {
+    // `variant` (ACTUAL/MODIFIED) is optional — when absent the server defaults
+    // to MODIFIED (no client-side default). Strip it from opts so it rides the
+    // URL, not the fetch init.
+    const { variant, ...rest } = opts || {};
+    const base = isQuoteMode(rest) ? QUOTE_PATHS.triangle(id, type) : PATHS.triangle(id, type);
+    return request(variant ? `${base}?variant=${enc(variant)}` : base, rest);
+  },
   getTriangleWithExclusions(id, type, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.triangleWithExclusions(id, type) : PATHS.triangleWithExclusions(id, type), opts); },
-  saveTriangle(id, type, payload, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.triangle(id, type) : PATHS.triangle(id, type), { method: 'POST', body: payload, ...opts }); },
+  saveTriangle(id, type, payload, opts) {
+    // `variant` goes in the POST body (server reads req.body.variant); absent =
+    // MODIFIED server-side. Strip it from opts so it isn't spread into fetch init.
+    const { variant, ...rest } = opts || {};
+    const path = isQuoteMode(rest) ? QUOTE_PATHS.triangle(id, type) : PATHS.triangle(id, type);
+    const body = variant ? { ...payload, variant } : payload;
+    return request(path, { method: 'POST', body, ...rest });
+  },
 
   // Dev factors
   getDevFactors(id, type, opts) { return request(isQuoteMode(opts) ? QUOTE_PATHS.devFactors(id, type) : PATHS.devFactors(id, type), opts); },
