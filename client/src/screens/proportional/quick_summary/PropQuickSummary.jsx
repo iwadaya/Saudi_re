@@ -102,7 +102,7 @@ export function QuickSummaryEmbed({ contractId: propContractId }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lossCat, setLossCat] = useState({ large: new Map(), cat: new Map() });
-  const [stripLC, setStripLC] = useState(true);
+  const [stripLC, setStripLC] = useState(false);
 
   useEffect(() => {
     if (!contractId) return;
@@ -112,7 +112,7 @@ export function QuickSummaryEmbed({ contractId: propContractId }) {
       try {
         const contract = await api.getContract(contractId, qm).catch(() => ({}));
         const t = buildTreatyTerms(contract, appState.propTreatyDetail || {});
-        setStripLC(t.strip_large_cat !== false);
+        setStripLC(t.strip_large_cat === true);
         const { rows: standardRows } = await loadProjectedRows(contractId, qm);
         if (!standardRows || standardRows.length === 0) { setCalcRows([]); setLoading(false); return; }
         const { rows, totals: tot } = runFinancialEngine(standardRows, t);
@@ -227,7 +227,7 @@ export default function PropQuickSummary() {
      figures in both bases. */
   // When the treaty opts out of stripping, large/cat fold into attritional
   // (shown as nil); otherwise they come from the saved loss grids.
-  const stripLC = terms?.strip_large_cat !== false;
+  const stripLC = terms?.strip_large_cat === true;
   const largeAmt = yr => (stripLC ? (lossCat.large.get(Number(yr)) || 0) : 0);
   const catAmt = yr => (stripLC ? (lossCat.cat.get(Number(yr)) || 0) : 0);
   const projComp = r => deriveLossComponents({ premium: r.premium, incurredTotal: r.ultClaims, large: largeAmt(r.year), cat: catAmt(r.year) });

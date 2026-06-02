@@ -543,7 +543,7 @@ router.get("/quotes/:id", asyncHandler(async (req, res) => {
       num_lines:detail.num_lines,total_capacity:detail.total_capacity,event_limit:detail.event_limit,aal:detail.aal,
       quota_share_epi:detail.quota_share_epi,surplus_epi:detail.surplus_epi,
       brokerage_pct:detail.brokerage_pct,taxes_pct:detail.taxes_pct,loss_cap_pct:detail.loss_cap_pct,
-      strip_large_cat_losses:detail.strip_large_cat_losses??true},
+      strip_large_cat_losses:detail.strip_large_cat_losses??false},
     commissions:{mode:comm.mode||"FIXED",fixed_commission_pct:comm.fixed_commission_pct,
       fixed_commission_qs_pct:comm.fixed_commission_qs_pct,fixed_commission_surplus_pct:comm.fixed_commission_surplus_pct,
       provisional_commission_pct:comm.provisional_commission_pct,
@@ -607,7 +607,7 @@ router.put("/quotes/:id", validateBody(quotePutBodySchema), asyncHandler(async (
     // renewal_date lives on the quote (header) — the detail-table
     // renewal_date column is deprecated, no longer written here.
     await cl.query(`INSERT INTO public.quote_prop_details (quote_id,triangulations_available,qs_limit,retention_pct,retention_amt,cession_pct,cession_amt,surplus_max_retention,num_lines,total_capacity,event_limit,aal,quota_share_epi,surplus_epi,brokerage_pct,taxes_pct,loss_cap_pct,experience_start_year,strip_large_cat_losses) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) ON CONFLICT (quote_id) DO UPDATE SET triangulations_available=EXCLUDED.triangulations_available,qs_limit=EXCLUDED.qs_limit,retention_pct=EXCLUDED.retention_pct,retention_amt=EXCLUDED.retention_amt,cession_pct=EXCLUDED.cession_pct,cession_amt=EXCLUDED.cession_amt,surplus_max_retention=EXCLUDED.surplus_max_retention,num_lines=EXCLUDED.num_lines,total_capacity=EXCLUDED.total_capacity,event_limit=EXCLUDED.event_limit,aal=EXCLUDED.aal,quota_share_epi=EXCLUDED.quota_share_epi,surplus_epi=EXCLUDED.surplus_epi,brokerage_pct=EXCLUDED.brokerage_pct,taxes_pct=EXCLUDED.taxes_pct,loss_cap_pct=EXCLUDED.loss_cap_pct,experience_start_year=EXCLUDED.experience_start_year,strip_large_cat_losses=EXCLUDED.strip_large_cat_losses,updated_at=now()`,
-      [id,boolOrDefault(d.triangulations_available,true),numOrNull(d.qs_limit),numOrNull(d.retention_pct),numOrNull(d.retention_amt),numOrNull(d.cession_pct),numOrNull(d.cession_amt),numOrNull(d.surplus_max_retention),numOrNull(d.num_lines),numOrNull(d.total_capacity),numOrNull(d.event_limit),numOrNull(d.aal),numOrNull(d.quota_share_epi),numOrNull(d.surplus_epi),numOrNull(d.brokerage_pct),numOrNull(d.taxes_pct),numOrNull(d.loss_cap_pct),numOrNull(d.experience_start_year??d.experienceStartYear),boolOrDefault(d.strip_large_cat_losses??d.stripLargeCatLosses,true)]);
+      [id,boolOrDefault(d.triangulations_available,true),numOrNull(d.qs_limit),numOrNull(d.retention_pct),numOrNull(d.retention_amt),numOrNull(d.cession_pct),numOrNull(d.cession_amt),numOrNull(d.surplus_max_retention),numOrNull(d.num_lines),numOrNull(d.total_capacity),numOrNull(d.event_limit),numOrNull(d.aal),numOrNull(d.quota_share_epi),numOrNull(d.surplus_epi),numOrNull(d.brokerage_pct),numOrNull(d.taxes_pct),numOrNull(d.loss_cap_pct),numOrNull(d.experience_start_year??d.experienceStartYear),boolOrDefault(d.strip_large_cat_losses??d.stripLargeCatLosses,false)]);
   }
   if(terms.commissions) {
     const cm=terms.commissions;
@@ -732,7 +732,7 @@ router.get("/quotes/:id/triangles/:type/with-exclusions", asyncHandler(async (re
       WHERE r.quote_id = $1`, [id]
   );
   const { rows: pd } = await pool.query(`SELECT strip_large_cat_losses FROM public.quote_prop_details WHERE quote_id=$1`, [id]);
-  const stripEnabled = pd[0]?.strip_large_cat_losses !== false; // default true
+  const stripEnabled = pd[0]?.strip_large_cat_losses === true; // default false
   const field = stripEnabled ? stripFieldForType(t) : null;
   const allLosses = field ? [...largeLosses, ...catLosses] : [];
   const stripped = stripTriangleCells(cells, allLosses, field);
@@ -748,7 +748,7 @@ router.get("/quotes/:id/triangles/:type/with-exclusions", asyncHandler(async (re
 }));
 // Per-quote choice of whether large + cat losses are stripped from the triangle.
 router.put("/quotes/:id/strip-large-cat", asyncHandler(async (req, res) => {
-  const strip = req.body?.strip_large_cat_losses !== false;
+  const strip = req.body?.strip_large_cat_losses === true;
   // Upsert so the toggle persists even if Dev Factors is reached before the
   // detail screen has created the prop-details row (no silent no-op).
   await pool.query(

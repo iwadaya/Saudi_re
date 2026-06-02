@@ -107,8 +107,8 @@ export default function PropProjectedSummary() {
      which enforces Incurred = Attritional + Large + CAT with zero-floored
      components — incurred is never sourced independently of its parts. */
   // When the treaty opts out of stripping, large/cat fold into attritional
-  // (shown as nil) on both bases. Defaults to stripping.
-  const stripLC = appState.propTreatyDetail?.stripLargeCat !== false;
+  // (shown as nil) on both bases. Defaults to NOT stripping (full basis).
+  const stripLC = appState.propTreatyDetail?.stripLargeCat === true;
   const rows = results.map(r => {
     const large = stripLC ? (lossCat.large.get(Number(r.year)) || 0) : 0;
     const cat = stripLC ? (lossCat.cat.get(Number(r.year)) || 0) : 0;

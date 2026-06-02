@@ -174,7 +174,7 @@ export async function loadProjectedRows(contractId, opts) {
     // When stripping is off the server returns the full triangle as `stripped`
     // and the loadings are nil, so the result collapses to the plain full
     // projection (back-compatible).
-    const stripLC = (contract?.detail?.strip_large_cat_losses ?? true) !== false;
+    const stripLC = (contract?.detail?.strip_large_cat_losses ?? false) !== false;
     const lossCat = stripLC
       ? await loadLossCategoryByYear(contractId, opts).catch(() => ({ large: new Map(), cat: new Map() }))
       : { large: new Map(), cat: new Map() };
@@ -285,9 +285,9 @@ export async function loadProjectedRows(contractId, opts) {
   // losses from its incurred, project the remaining attritional with the same
   // loss dev factor, then add large/cat back unprojected — so downstream
   // Incurred = attritional + large + cat. Honours the per-treaty strip flag
-  // (default on). Actual incurred (actLoss) is left raw.
+  // (default off). Actual incurred (actLoss) is left raw.
   const contract = await api.getContract(contractId, opts).catch(() => ({}));
-  const stripLC = (contract?.detail?.strip_large_cat_losses ?? true) !== false;
+  const stripLC = (contract?.detail?.strip_large_cat_losses ?? false) !== false;
   const lossCat = stripLC
     ? await loadLossCategoryByYear(contractId, opts).catch(() => ({ large: new Map(), cat: new Map() }))
     : null;

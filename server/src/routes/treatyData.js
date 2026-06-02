@@ -73,7 +73,7 @@ router.get("/treaties/:id/triangles/:type/with-exclusions", asyncHandler(async (
   // Honour the per-treaty strip flag: when stripping is off, the stripped
   // variant is identical to the full triangle (no losses removed).
   const { rows: pd } = await pool.query(`SELECT strip_large_cat_losses FROM public.contract_prop_details WHERE contract_id=$1`, [id]);
-  const stripEnabled = pd[0]?.strip_large_cat_losses !== false; // default true
+  const stripEnabled = pd[0]?.strip_large_cat_losses === true; // default false
   const field = stripEnabled ? stripFieldForType(t) : null;
   const allLosses = field ? [...largeLosses, ...catLosses] : [];
   const stripped = stripTriangleCells(cells, allLosses, field);
@@ -377,7 +377,7 @@ router.get("/treaties/:id/portfolio-losses/:lossType", asyncHandler(async (req, 
 // triangle. Focused single-column update so it can be persisted from the Dev
 // Factors screen without overwriting the rest of the treaty detail.
 router.put("/treaties/:id/strip-large-cat", asyncHandler(async (req, res) => {
-  const strip = req.body?.strip_large_cat_losses !== false;
+  const strip = req.body?.strip_large_cat_losses === true;
   // Upsert so the toggle persists even if Dev Factors is reached before the
   // detail screen has created the prop-details row (no silent no-op).
   await pool.query(
