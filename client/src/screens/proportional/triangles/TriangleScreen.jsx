@@ -49,24 +49,76 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
     [appState.quoteMode],
   );
 
-  // Both variants are held independently in one state object. Switching the
-  // tab only changes which one is *rendered* (activeGrid below), so unsaved
-  // edits in the hidden variant stay in state untouched. INCURRED is derived
-  // and has no variant — it just uses the MODIFIED slot for the paid+OS sum.
+  // Both variants are held in one state object. For editable types they are
+  // independently-edited grids and switching the tab only changes which one is
+  // *rendered* (activeGrid below), so unsaved edits in the hidden variant stay
+  // untouched. For derived INCURRED nothing is edited: grids[variant] holds the
+  // read-only paid+OS sum, recomputed on tab switch by the derive effect.
   const [grids, setGrids] = useState(() => ({
     MODIFIED: years.map(() => new Array(devYears.length).fill('')),
     ACTUAL: years.map(() => new Array(devYears.length).fill('')),
   }));
-  const [loading, setLoading] = useState(false);
+  // Init to true when a contract is present so the first paint is "Loading…"
+  // rather than a flash of the empty grid before the load effect's setLoading
+  // lands (effects run after paint). One of the load effects below always
+  // clears it when contractId is truthy.
+  const [loading, setLoading] = useState(() => Boolean(contractId));
   const [dirty, setDirty] = useState({ MODIFIED: false, ACTUAL: false });
   // MODIFIED is the projected triangle the tool prices off — default-active.
   // ACTUAL is the gross reference triangle the underwriter also enters.
   const [variant, setVariant] = useState('MODIFIED');
 
+  // ── Load: editable types (PREMIUM / CLAIMS_PAID / CLAIMS_OS) ──
+  // Both variants are fetched up front and held in `grids`, so switching the
+  // tab is instant and never refetches or clears unsaved edits. `variant` is
+  // deliberately NOT a dep here.
   useEffect(() => {
-    if (!contractId) return;
+    if (!contractId || isDerived) return;
     setLoading(true);
     setDirty({ MODIFIED: false, ACTUAL: false });
+    // Index-based origin_year→row / dev_months→col mapping, shared by both
+    // variants.
+    const mapCells = (data) => {
+      const cells = data?.cells || (Array.isArray(data) ? data : []);
+      const newGrid = years.map(() => new Array(devYears.length).fill(''));
+      cells.forEach(c => { const r = years.indexOf(c.origin_year); const d = Math.round(c.dev_months / 12) - 1; if (r >= 0 && d >= 0 && d < devYears.length) newGrid[r][d] = fmtCell(c.cum_value); });
+      return newGrid;
+    };
+    Promise.all([
+      api.getTriangle(contractId, triType, { ...apiOpts, variant: 'MODIFIED' }).catch(() => ({ cells: [] })),
+      api.getTriangle(contractId, triType, { ...apiOpts, variant: 'ACTUAL' }).catch(() => ({ cells: [] })),
+    ]).then(([m, a]) => ({ MODIFIED: mapCells(m), ACTUAL: mapCells(a) }))
+      .then(setGrids).catch(e => console.warn('Load triangle:', e)).finally(() => setLoading(false));
+    // Re-run on year-window changes: triangleMeta arrives from PropTreatyDetail
+    // asynchronously and sizes the grids; without these deps the index-based
+    // mapping drops cells when startYear/numDevYears shift.
+  }, [contractId, triType, startYear, numDevYears, apiOpts, isDerived, years, devYears.length]);
+
+  // ── Reset derived grids on shape change (INCURRED only) ──
+  // The derive effect below recomputes only grids[variant], so on a shape
+  // change (contract/type/year-window) the *inactive* variant's grid would
+  // stay mapped to the stale window and show wrong data when selected. Clear
+  // BOTH here. `variant` is intentionally excluded: a pure tab switch must NOT
+  // reset — that case is a merge handled by the derive effect. The dep arrays
+  // are what tell the two refire causes apart (shape change vs tab switch).
+  useEffect(() => {
+    if (!isDerived) return;
+    setGrids({
+      MODIFIED: years.map(() => new Array(devYears.length).fill('')),
+      ACTUAL: years.map(() => new Array(devYears.length).fill('')),
+    });
+  }, [contractId, triType, startYear, numDevYears, isDerived, years, devYears.length]);
+
+  // ── Derive INCURRED for the active variant (read-only) ──
+  // INCURRED isn't stored: derive it client-side by summing the active
+  // variant's CLAIMS_PAID + CLAIMS_OS. Re-runs on tab switch (variant dep) so
+  // ACTUAL incurred = actual paid + actual OS; MODIFIED incurred = modified
+  // paid + modified OS. Writes only grids[variant] (merge, not reset). The
+  // server-side incurred-combine stays pinned to MODIFIED — this is a
+  // display-only derivation.
+  useEffect(() => {
+    if (!contractId || !isDerived) return;
+    setLoading(true);
     const buildFromCells = (cells, target) => {
       cells.forEach(c => {
         const r = years.indexOf(c.origin_year);
@@ -77,35 +129,17 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
         }
       });
     };
-    // Index-based origin_year→row / dev_months→col mapping, factored out so
-    // both variants reuse the exact same placement logic.
-    const mapCells = (data) => {
-      const cells = data?.cells || (Array.isArray(data) ? data : []);
-      const newGrid = years.map(() => new Array(devYears.length).fill(''));
-      cells.forEach(c => { const r = years.indexOf(c.origin_year); const d = Math.round(c.dev_months / 12) - 1; if (r >= 0 && d >= 0 && d < devYears.length) newGrid[r][d] = fmtCell(c.cum_value); });
-      return newGrid;
-    };
-    const loader = isDerived
-      ? Promise.all([
-          api.getTriangle(contractId, 'CLAIMS_PAID', apiOpts).catch(() => ({ cells: [] })),
-          api.getTriangle(contractId, 'CLAIMS_OS', apiOpts).catch(() => ({ cells: [] })),
-        ]).then(([p, o]) => {
-          const sumGrid = years.map(() => new Array(devYears.length).fill(null));
-          buildFromCells(p?.cells || (Array.isArray(p) ? p : []), sumGrid);
-          buildFromCells(o?.cells || (Array.isArray(o) ? o : []), sumGrid);
-          const derived = sumGrid.map(row => row.map(v => v == null ? '' : fmtCell(v)));
-          return { MODIFIED: derived, ACTUAL: years.map(() => new Array(devYears.length).fill('')) };
-        })
-      : Promise.all([
-          api.getTriangle(contractId, triType, { ...apiOpts, variant: 'MODIFIED' }).catch(() => ({ cells: [] })),
-          api.getTriangle(contractId, triType, { ...apiOpts, variant: 'ACTUAL' }).catch(() => ({ cells: [] })),
-        ]).then(([m, a]) => ({ MODIFIED: mapCells(m), ACTUAL: mapCells(a) }));
-    loader.then(setGrids).catch(e => console.warn('Load triangle:', e)).finally(() => setLoading(false));
-    // Re-run on year-window changes too: triangleMeta arrives from
-    // PropTreatyDetail asynchronously, and the grids are sized by it. Without
-    // these deps the cells get dropped by the index-based copy when
-    // startYear/numDevYears shift after the initial fetch.
-  }, [contractId, triType, startYear, numDevYears, apiOpts, isDerived, years, devYears.length]);
+    Promise.all([
+      api.getTriangle(contractId, 'CLAIMS_PAID', { ...apiOpts, variant }).catch(() => ({ cells: [] })),
+      api.getTriangle(contractId, 'CLAIMS_OS', { ...apiOpts, variant }).catch(() => ({ cells: [] })),
+    ]).then(([p, o]) => {
+      const sumGrid = years.map(() => new Array(devYears.length).fill(null));
+      buildFromCells(p?.cells || (Array.isArray(p) ? p : []), sumGrid);
+      buildFromCells(o?.cells || (Array.isArray(o) ? o : []), sumGrid);
+      const derived = sumGrid.map(row => row.map(v => v == null ? '' : fmtCell(v)));
+      setGrids(prev => ({ ...prev, [variant]: derived }));
+    }).catch(e => console.warn('Load incurred:', e)).finally(() => setLoading(false));
+  }, [contractId, triType, startYear, numDevYears, apiOpts, isDerived, years, devYears.length, variant]);
 
   // Note: the year window is owned by the load effect above (which re-runs
   // when startYear/numDevYears change). An index-based prev→current copy on
@@ -217,20 +251,19 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
           </div>
           {loading ? <div className="muted">Loading…</div> : (
             <>
-              {/* ACTUAL | MODIFIED tab — switching only changes which grid is
-                  shown; unsaved edits in the hidden variant stay in state. The
-                  • marks a variant with unsaved edits. Hidden for derived
-                  INCURRED, which has no stored variant. */}
-              {!isDerived && (
-                <div role="tablist" aria-label="Triangle variant" style={{ display: 'inline-flex', marginBottom: 12, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.12)' }}>
-                  {['MODIFIED', 'ACTUAL'].map(v => { const active = variant === v; return (
-                    <button key={v} type="button" role="tab" aria-selected={active} onClick={() => setVariant(v)}
-                      style={{ padding: '6px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', background: active ? 'var(--accent)' : 'transparent', color: active ? '#0b1220' : 'var(--text-subtle)' }}>
-                      {v === 'MODIFIED' ? 'Modified' : 'Actual'}{dirty[v] ? ' •' : ''}
-                    </button>
-                  ); })}
-                </div>
-              )}
+              {/* ACTUAL | MODIFIED tab — shown for every triangle type. For the
+                  editable types, switching only changes which grid is rendered;
+                  unsaved edits in the hidden variant stay in state and the •
+                  marks a variant with unsaved edits. For derived INCURRED it
+                  re-derives the displayed grid from that variant's paid + OS. */}
+              <div role="tablist" aria-label="Triangle variant" style={{ display: 'inline-flex', marginBottom: 12, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.12)' }}>
+                {['MODIFIED', 'ACTUAL'].map(v => { const active = variant === v; return (
+                  <button key={v} type="button" role="tab" aria-selected={active} onClick={() => setVariant(v)}
+                    style={{ padding: '6px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', background: active ? 'var(--accent)' : 'transparent', color: active ? 'var(--accent-contrast)' : 'var(--text-subtle)' }}>
+                    {v === 'MODIFIED' ? 'Modified' : 'Actual'}{!isDerived && dirty[v] ? ' •' : ''}
+                  </button>
+                ); })}
+              </div>
             <div style={{ overflowX: 'auto' }}>
               <table className="tri-table">
                 <thead><tr><th className="tri-hdr tri-yr-hdr">YEAR</th>{devYears.map(d => <th key={d} className="tri-hdr">{d}</th>)}</tr></thead>
@@ -247,7 +280,7 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
               </table>
               {isDerived && (
                 <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8, background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.20)', color: 'rgba(167,243,208,0.85)', fontSize: 12 }}>
-                  Derived view — incurred = paid + outstanding. Edit the Claims Paid and OS Claims triangles to update these values.
+                  Read-only derived view — {variant === 'ACTUAL' ? 'Actual' : 'Modified'} incurred = {variant === 'ACTUAL' ? 'Actual' : 'Modified'} paid + outstanding. Edit the Claims Paid and OS Claims triangles (on their own tabs) to change these values.
                 </div>
               )}
               {!isDerived && (dirty.MODIFIED || dirty.ACTUAL) && (
