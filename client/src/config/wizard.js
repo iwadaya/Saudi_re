@@ -148,11 +148,6 @@ export const STEP_LABELS = {
   FAC_SUMMARY: 'Summary & Approval',
 };
 
-// Header pill prefix based on quote mode
-export function getNpPillPrefix(quoteMode) {
-  return quoteMode ? 'NP-QUOTE TREATY' : 'NON-PROPORTIONAL TREATY';
-}
-
 // Route key → URL path mapping
 export const ROUTE_PATHS = {
   HOME: '/',
@@ -216,11 +211,6 @@ export const ROUTE_PATHS = {
   FAC_DOCUMENTS: '/fac/risk/documents',
   FAC_SUMMARY: '/fac/risk/summary',
 };
-
-// Reverse lookup: path → routeKey
-export const PATH_TO_ROUTE = Object.fromEntries(
-  Object.entries(ROUTE_PATHS).map(([k, v]) => [v, k])
-);
 
 // Get wizard navigation for a given route key and mode
 export function getWizardNav(routeKey, { quoteMode = false, triangulationsEnabled = true, npCatDisabled = false, npRiskDisabled = false, npStopLoss = false } = {}) {
@@ -315,30 +305,6 @@ export const FAC_WIZARD_ORDER = [
   'FAC_PRICING',
   'FAC_SUMMARY',
 ];
-
-export const FAC_STEP_LABELS = {
-  FAC_RISK_DETAIL:        'Risk Detail',
-  FAC_DOCUMENTS:          'Documents',
-  FAC_LOCATIONS:          'Locations & SI',
-  FAC_COPE:               'COPE Assessment',
-  FAC_COVERAGE_STRUCTURE: 'Placement Structure',
-  FAC_DEDUCTIBLES:        'Deductibles & Terms',
-  FAC_LOSS_HISTORY:       'Loss History',
-  FAC_PRICING:            'Pricing',
-  FAC_SUMMARY:            'Summary & Approval',
-};
-
-export const FAC_ROUTES = {
-  FAC_RISK_DETAIL:        '/fac/risk/detail',
-  FAC_LOCATIONS:          '/fac/risk/locations',
-  FAC_COPE:               '/fac/risk/cope',
-  FAC_COVERAGE_STRUCTURE: '/fac/risk/structure',
-  FAC_DEDUCTIBLES:        '/fac/risk/deductibles',
-  FAC_LOSS_HISTORY:       '/fac/risk/losses',
-  FAC_PRICING:            '/fac/risk/pricing',
-  FAC_DOCUMENTS:          '/fac/risk/documents',
-  FAC_SUMMARY:            '/fac/risk/summary',
-};
 
 export const FAC_TAB_GROUPS = [
   { label: 'Submission',  keys: ['FAC_RISK_DETAIL', 'FAC_DOCUMENTS', 'FAC_LOCATIONS'] },

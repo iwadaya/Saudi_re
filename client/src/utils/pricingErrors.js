@@ -1,11 +1,4 @@
-function parseErrorBody(error) {
-  const body = error?.body ?? error?.response?.data ?? error?.data;
-  if (!body) return null;
-  if (typeof body === 'string') {
-    try { return JSON.parse(body); } catch { return { error: body }; }
-  }
-  return body;
-}
+import { parseErrorBody } from './errorBody.js';
 
 export function getPricingDriftPayload(error) {
   const body = parseErrorBody(error) || {};

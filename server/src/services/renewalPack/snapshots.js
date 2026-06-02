@@ -166,5 +166,3 @@ export async function cleanupExpiredSnapshots(client) {
   );
   return rowCount || 0;
 }
-
-export const RETENTION_DAYS_EXPORTED = RETENTION_DAYS;

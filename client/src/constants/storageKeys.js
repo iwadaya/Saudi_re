@@ -1,6 +1,10 @@
 // src/constants/storageKeys.js
-// Single source of truth for every localStorage key the client uses.
-// Adding or renaming a key? Do it here and only here.
+// Canonical keys for the "active entity" selection (contract / quote / fac
+// risk) shared across every wizard via hooks/useContractId. Defined here so
+// the IDs are never repeated across screens.
+//
+// Keys that only one module reads stay with that module (e.g. the session
+// key in utils/auth.js, the theme key in utils/theme.js).
 
 export const ACTIVE_CONTRACT_ID = 'ACTIVE_CONTRACT_ID_V1';
 export const ACTIVE_QUOTE_ID    = 'ACTIVE_QUOTE_ID_V1';

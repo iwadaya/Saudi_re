@@ -22,9 +22,6 @@ export const money = z.preprocess((v) => {
   return Number.isFinite(n) ? n : undefined;
 }, z.number().nonnegative().optional());
 
-/** Optional money — null/undefined/'' → undefined. */
-export const optionalMoney = money;
-
 /** Percentage stored as a number 0..100 (NOT a fraction). */
 export const pct100 = z.preprocess((v) => {
   if (v === null || v === undefined || v === '') return undefined;

@@ -1,19 +1,15 @@
 // src/utils/format.js — Shared formatting utilities
 
-export function esc(str) {
-  return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
 export function fmtNum(n, opts = {}) {
   const v = Number(n);
-  if (!Number.isFinite(v)) return '–';
+  if (!Number.isFinite(v)) return '—';
   const { decimals = 0 } = opts;
   return v.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
 export function fmtPct(n, decimals = 2) {
   const v = Number(n);
-  if (!Number.isFinite(v)) return '–';
+  if (!Number.isFinite(v)) return '—';
   return `${(v * 100).toFixed(decimals)}%`;
 }
 
@@ -41,13 +37,6 @@ export function formatNumber(v) {
   const n = parseFloat(String(v).replace(/,/g, ''));
   if (isNaN(n)) return '';
   return n.toLocaleString('en-GB');
-}
-
-export function formatNumberFixed(v, decimals) {
-  if (v === '' || v === null || v === undefined) return '';
-  const n = Number(String(v).replace(/,/g, ''));
-  if (!Number.isFinite(n)) return '';
-  return n.toLocaleString('en-GB', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
 export function sanitizeNumber(v) {

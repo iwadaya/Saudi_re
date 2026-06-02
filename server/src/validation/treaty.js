@@ -14,13 +14,11 @@
 import { z } from 'zod';
 import {
   optionalUuid, money, pct100, pctOpen, uwYear, isoDate, boolish, contractStatus,
+  uwWorkflowStatus as uwWorkflowStatusEnum,
 } from './common.js';
 
-/** Uw workflow status — separate from the generic contract status. */
-const uwWorkflowStatus = z.enum([
-  'DRAFT', 'AWAITING_APPROVAL', 'APPROVED', 'AWAITING_SIGNED_LINE',
-  'SIGNED', 'NTU', 'DECLINED',
-]).optional();
+/** Uw workflow status — optional at the save layer; enum shared via common.js. */
+const uwWorkflowStatus = uwWorkflowStatusEnum.optional();
 
 /** Header slice — identical to quote's plus uw_status. */
 export const treatyHeaderSchema = z.object({
