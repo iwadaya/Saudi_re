@@ -258,6 +258,11 @@ export async function loadProjectedRows(contractId, opts) {
         year: y,
         ultPrem: pP?.ultimate || 0,
         ultLoss,
+        // Bare attritional projected ultimate — the stripped-triangle
+        // projection before any large/CAT add-back. Exposed independent of the
+        // strip flag for Quick Summary's projected total (attritional + actual
+        // large + actual cat).
+        ultAttritional: aP?.ultimate || 0,
         ultPaid: dP?.ultimate || 0,
         ultIncurred: ultLoss,
         actPrem: pP?.latest || 0,
@@ -292,17 +297,22 @@ export async function loadProjectedRows(contractId, opts) {
     ? await loadLossCategoryByYear(contractId, opts).catch(() => ({ large: new Map(), cat: new Map() }))
     : null;
   const applyStrip = (projRows) => {
-    if (!stripLC || !lossCat) return projRows;
+    // Every returned row must carry ultAttritional (the bare attritional
+    // projection) so downstream (Quick Summary) never sees it undefined. With
+    // stripping off or no loss-cat data nothing is subtracted, so ultLoss already
+    // IS the attritional projection.
+    if (!stripLC || !lossCat) return projRows.map(r => ({ ...r, ultAttritional: r.ultLoss }));
     return projRows.map(r => {
       const large = lossCat.large.get(Number(r.year)) || 0;
       const cat = lossCat.cat.get(Number(r.year)) || 0;
-      if (large + cat <= 0) return r;
+      // No large/CAT this year → ultLoss is already pure attritional.
+      if (large + cat <= 0) return { ...r, ultAttritional: r.ultLoss };
       const incurred = r.actLoss || 0;
       const cdf = Number.isFinite(r.devFactor) && r.devFactor > 0
         ? r.devFactor
         : (incurred > 0 ? (r.ultLoss || 0) / incurred : 1);
       const ultAttritional = Math.max(0, incurred - large - cat) * cdf;
-      return { ...r, ultLoss: ultAttritional + large + cat };
+      return { ...r, ultLoss: ultAttritional + large + cat, ultAttritional };
     });
   };
 
