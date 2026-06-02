@@ -311,7 +311,7 @@ export default function PropPricing() {
           .catch(() => ({ large: new Map(), cat: new Map() }));
         const totalLarge = [...lossCat.large.values()].reduce((a, b) => a + b, 0);
         const totalCat = [...lossCat.cat.values()].reduce((a, b) => a + b, 0);
-        const stripLC = (det.strip_large_cat_losses ?? td.stripLargeCat ?? true) !== false;
+        const stripLC = (det.strip_large_cat_losses ?? td.stripLargeCat ?? false) !== false;
         // Attritional on each basis via the shared loss-component model.
         // Actuarial uses projected totals; actual uses unprojected (raw) totals.
         const projComp = deriveLossComponents({ premium: totProjPrem, incurredTotal: totProjLoss, large: stripLC ? totalLarge : 0, cat: stripLC ? totalCat : 0 });

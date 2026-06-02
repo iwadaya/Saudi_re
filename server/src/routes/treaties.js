@@ -130,7 +130,7 @@ router.get("/treaties/:id", asyncHandler(async (req, res) => {
       total_capacity:detail.total_capacity,event_limit:detail.event_limit,aal:detail.aal,
       quota_share_epi:detail.quota_share_epi,surplus_epi:detail.surplus_epi,
       brokerage_pct:detail.brokerage_pct,taxes_pct:detail.taxes_pct,loss_cap_pct:detail.loss_cap_pct,
-      strip_large_cat_losses:detail.strip_large_cat_losses??true},
+      strip_large_cat_losses:detail.strip_large_cat_losses??false},
     commissions:{mode:comm.mode||"FIXED",fixed_commission_pct:comm.fixed_commission_pct,
       fixed_commission_qs_pct:comm.fixed_commission_qs_pct,
       fixed_commission_surplus_pct:comm.fixed_commission_surplus_pct,
@@ -225,7 +225,7 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
          numOrNull(d.quota_share_epi??d.quotaShareEpi),numOrNull(d.surplus_epi??d.surplusEpi),
          numOrNull(d.brokerage_pct??d.brokeragePct),numOrNull(d.taxes_pct??d.taxesPct),numOrNull(d.loss_cap_pct??d.lossCapPct),
          numOrNull(d.experience_start_year??d.experienceStartYear),
-         boolOrDefault(d.strip_large_cat_losses??d.stripLargeCatLosses,true)]);
+         boolOrDefault(d.strip_large_cat_losses??d.stripLargeCatLosses,false)]);
     }
 
     // ── Commissions (only if commissions section provided) ──

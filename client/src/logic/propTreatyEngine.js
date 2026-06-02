@@ -159,8 +159,8 @@ export function buildTreatyTerms(contract, td = {}) {
     taxes_pct: det.taxes_pct ?? td.taxesPct ?? 0,
     loss_cap_pct: det.loss_cap_pct ?? td.lossCapPct ?? 0,
     // When false, large/cat losses are NOT stripped — the summaries fold all
-    // losses into attritional and show large/cat as nil. Defaults to true.
-    strip_large_cat: (det.strip_large_cat_losses ?? td.stripLargeCat ?? true) !== false,
+    // losses into attritional and show large/cat as nil. Defaults to false.
+    strip_large_cat: (det.strip_large_cat_losses ?? td.stripLargeCat ?? false) !== false,
     aal: det.aal ?? td.aal ?? 0,
     lp_enabled: lp.enabled ?? td.lossPartEnabled ?? false,
     lp_min_loss_ratio_pct: lp.min_loss_ratio_pct ?? td.minLossRatioPct ?? 0,
