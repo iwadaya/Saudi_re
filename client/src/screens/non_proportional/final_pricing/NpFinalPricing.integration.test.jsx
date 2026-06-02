@@ -246,4 +246,55 @@ describe('NpFinalPricing integration', () => {
     expect(apiMock.getRiskProfile).toHaveBeenCalled();
     expect(container).toBeTruthy();
   });
+
+  it('per-structure Save & Calc saves the quote then runs the engine for that structure', async () => {
+    resetApi({
+      getLargeLosses: vi.fn().mockResolvedValue({
+        losses: [
+          { uw_year: 2024, incurred: 400000, os: 0, is_selected: true, class_of_business: 'Motor' },
+        ],
+      }),
+      getCatLosses: vi.fn().mockResolvedValue({ losses: [] }),
+      getLossSelectionLatest: vi.fn(() => Promise.resolve({ snapshot: { observation_years: 1 } })),
+      getNpEgnpiYear: vi.fn().mockResolvedValue([{ uw_year: 2024, egnpi: 800000 }]),
+      getRiskProfile: vi.fn().mockResolvedValue({
+        profile: { pml_percentage: 100, selected_curve: 'Y3', gross_loss_ratio: 100 },
+        bands: [{ no_of_risks: 1, total_sum_insured: 1000000 }],
+      }),
+      getCrestaData: vi.fn().mockResolvedValue([]),
+    });
+    renderScreen({ quoteMode: true });
+
+    expect(await screen.findByText(/Quote Pricing/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /\+ Add Structure/i }));
+    const structure = await screen.findByText(/Structure 1/i).then((node) => node.closest('section'));
+    const cells = structure.querySelectorAll('input.bm-cell');
+    fireEvent.change(cells[0], { target: { value: '750000' } });
+    fireEvent.change(cells[1], { target: { value: '100000' } });
+    await waitFor(() => {
+      const priced = screen.getByText(/Structure 1/i).closest('section').querySelectorAll('input.bm-cell');
+      expect(priced[2].value).toMatch(/%$/);
+    });
+
+    // Per-structure button lives in the structure header (not the topbar).
+    const saveCalc = Array.from(structure.querySelectorAll('button'))
+      .find((button) => /Save & Calc/i.test(button.textContent || ''));
+    expect(saveCalc).toBeTruthy();
+    fireEvent.click(saveCalc);
+
+    // (a) persists via the existing save() path, then (b) runs the engine
+    await waitFor(() => expect(apiMock.saveNonPropTreaty).toHaveBeenCalled());
+    await waitFor(() => expect(apiMock.getLargeLosses).toHaveBeenCalled());
+
+    // burn (col 2) + exposure (col 4) populate from the engine result.
+    // Anchor on the exact card title — the success toast also contains
+    // "Structure 1", so an unanchored match finds two elements.
+    const structureSection = () => screen.getByText(/^Structure 1$/i).closest('section');
+    await waitFor(() => {
+      const refreshed = structureSection().querySelectorAll('input.bm-cell');
+      expect(refreshed[2].value).toMatch(/^40/);
+      expect(refreshed[4].value).toMatch(/%$/);
+      expect(refreshed[4].value).not.toBe('');
+    });
+  });
 });

@@ -578,6 +578,7 @@ export default function NpFinalPricing() {
   const [loading, setLoading] = useState(false);
   const [calcEngineRunning, setCalcEngineRunning] = useState(false);
   const [calcEngineError, setCalcEngineError]   = useState('');
+  const [runningStructures, setRunningStructures] = useState({}); // {sIdx: true} — per-structure quote calc (independent of the global run)
   const [offerStatus, setOfferStatus] = useState('');
   const [showDeclineModal, setShowDeclineModal] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
@@ -751,12 +752,23 @@ export default function NpFinalPricing() {
     }));
   }, [quoteCurve]);
 
-  const runQuoteCalcEngine = useCallback(async () => {
+  const runQuoteCalcEngine = useCallback(async (structureIndex = null) => {
     if (!contractId || !clientStructures.length) return;
+    // structureIndex omitted (or non-integer, e.g. a click event) → run
+    // all structures, preserving the global button's behaviour.
+    const targetAll = !Number.isInteger(structureIndex);
+    // Resolve the target's stable identity up front so an in-flight calc
+    // can't merge into the wrong structure if the list is removed/reordered
+    // mid-run. Match the build loop on this scope; id-less structures fall
+    // back to their positional scope (str-<idx>).
+    const targetScope = targetAll
+      ? null
+      : (clientStructures[structureIndex]?.id || `str-${structureIndex}`);
     const pricingLayers = [];
     const refs = [];
     clientStructures.forEach((structure, sIdx) => {
       const scope = structure.id || `str-${sIdx}`;
+      if (!targetAll && scope !== targetScope) return;
       (structure.layers || []).forEach((layer, lIdx) => {
         const classOfBusinessIds = selectedCobs
           .filter((cob) => !!getCobFlags(scope, cob.id, structure.layers)[lIdx])
@@ -776,7 +788,8 @@ export default function NpFinalPricing() {
     });
     if (!pricingLayers.length) return;
 
-    setCalcEngineRunning(true);
+    if (targetAll) setCalcEngineRunning(true);
+    else setRunningStructures((p) => ({ ...p, [structureIndex]: true }));
     setCalcEngineError('');
     try {
       const results = await calcLayerPricing(
@@ -806,7 +819,8 @@ export default function NpFinalPricing() {
       console.error('[NP Quote Calc Engine]', e);
       setCalcEngineError('Quote calculation failed: ' + (e.message || 'unknown error'));
     } finally {
-      setCalcEngineRunning(false);
+      if (targetAll) setCalcEngineRunning(false);
+      else setRunningStructures((p) => { const n = { ...p }; delete n[structureIndex]; return n; });
     }
   }, [
     contractId,
@@ -2485,10 +2499,10 @@ export default function NpFinalPricing() {
                     <div className="bm-topbar-right">
                       <button
                         className="bm-pill"
-                        onClick={runQuoteCalcEngine}
+                        onClick={() => runQuoteCalcEngine()}
                         disabled={calcEngineRunning || !clientStructures.length}
                         style={{ borderColor: 'rgba(56,189,248,0.45)', color: '#38bdf8', background: 'rgba(56,189,248,0.08)' }}
-                        title="Calculate quote structure pure burn, Pareto, and exposure with the NP actuarial engine"
+                        title="Recalculate all quote structures: pure burn, Pareto, and exposure with the NP actuarial engine"
                       >
                         {calcEngineRunning ? 'Calculating...' : 'Run Actuarial Engine'}
                       </button>
@@ -2780,6 +2794,22 @@ export default function NpFinalPricing() {
                                 Send for Approval
                               </label>
                             </div>
+                            <button
+                              className="bbg-ib bbg-ib--cyan"
+                              style={quoteInsightButtonStyle}
+                              disabled={saveState.status === 'saving' || !!runningStructures[sIdx]}
+                              title="Save the quote, then run the actuarial engine for this structure (risk + cat burn / Pareto / exposure)"
+                              onClick={async () => {
+                                const ok = await save();
+                                if (!ok) { showToast?.('Save failed'); return; }
+                                await runQuoteCalcEngine(sIdx);
+                                showToast?.(`Structure ${sIdx + 1} saved & calculated`);
+                              }}
+                            >
+                              {runningStructures[sIdx] ? 'Calculating…'
+                                : saveState.status === 'saving' ? 'Saving…'
+                                : '💾 Save & Calc'}
+                            </button>
                             <button
                               className="bbg-ib bbg-ib--green"
                               style={quoteInsightButtonStyle}
