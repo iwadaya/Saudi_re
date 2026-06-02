@@ -152,10 +152,13 @@ router.post('/quotes/:id/amend', asyncHandler(async (req, res) => {
       );
     }
 
-    // Copy triangle cells — column names match the live quote_triangle_cells schema
+    // Copy triangle cells — column names match the live quote_triangle_cells schema.
+    // Carry `variant` (migration 116) through so ACTUAL and MODIFIED each clone
+    // to themselves; omitting it would collapse both into MODIFIED and violate
+    // the (quote_id,type,variant,origin_year,dev_months) UNIQUE constraint.
     await cl.query(
-      `INSERT INTO public.quote_triangle_cells (quote_id,type,origin_year,dev_months,cum_value)
-       SELECT $2,type,origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1`,
+      `INSERT INTO public.quote_triangle_cells (quote_id,type,variant,origin_year,dev_months,cum_value)
+       SELECT $2,type,variant,origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1`,
       [id, newQuoteId]
     );
 

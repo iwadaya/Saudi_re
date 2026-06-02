@@ -24,6 +24,16 @@ import { randomUUID } from 'node:crypto';
 
 const router = Router();
 
+// Triangle variant (migration 116). Reads/writes default to MODIFIED so all
+// pre-variant behaviour is unchanged unless ACTUAL is explicitly requested.
+// Returns null for an explicitly-invalid value so the caller can 400.
+const TRIANGLE_VARIANTS = new Set(['ACTUAL', 'MODIFIED']);
+function resolveVariant(raw) {
+  if (raw == null || raw === '') return 'MODIFIED';
+  const v = String(raw).toUpperCase();
+  return TRIANGLE_VARIANTS.has(v) ? v : null;
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function arr(v) {
@@ -685,12 +695,14 @@ router.delete("/quotes/:id", asyncHandler(async (req, res) => {
 
 // Triangles
 router.get("/quotes/:id/triangles/:type", asyncHandler(async (req, res) => {
+  const variant = resolveVariant(req.query.variant);
+  if (!variant) return res.status(400).json({ error: 'Invalid triangle variant', code: 'VALIDATION_FAILED' });
   const { rows } = await pool.query(
     `SELECT cell_id,origin_year,dev_months,cum_value
        FROM public.quote_triangle_cells
-      WHERE quote_id=$1 AND type=$2::public.triangle_type
+      WHERE quote_id=$1 AND type=$2::public.triangle_type AND variant=$3::public.triangle_variant
       ORDER BY origin_year,dev_months`,
-    [req.params.id, req.params.type.toUpperCase()]
+    [req.params.id, req.params.type.toUpperCase(), variant]
   );
   res.json({ cells: rows });
 }));
@@ -708,13 +720,13 @@ router.get("/quotes/:id/triangles/:type/with-exclusions", asyncHandler(async (re
   let cells;
   if (t === 'INCURRED') {
     const [{ rows: paidCells }, { rows: osCells }] = await Promise.all([
-      pool.query(`SELECT origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type='CLAIMS_PAID'::public.triangle_type ORDER BY origin_year,dev_months`, [id]),
-      pool.query(`SELECT origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type='CLAIMS_OS'::public.triangle_type ORDER BY origin_year,dev_months`, [id]),
+      pool.query(`SELECT origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type='CLAIMS_PAID'::public.triangle_type AND variant='MODIFIED'::public.triangle_variant ORDER BY origin_year,dev_months`, [id]),
+      pool.query(`SELECT origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type='CLAIMS_OS'::public.triangle_type AND variant='MODIFIED'::public.triangle_variant ORDER BY origin_year,dev_months`, [id]),
     ]);
     cells = combineIncurredCells(paidCells, osCells);
   } else {
     const { rows } = await pool.query(
-      `SELECT cell_id,origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type=$2::public.triangle_type ORDER BY origin_year,dev_months`,
+      `SELECT cell_id,origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type=$2::public.triangle_type AND variant='MODIFIED'::public.triangle_variant ORDER BY origin_year,dev_months`,
       [id, t]
     );
     cells = rows;
@@ -790,6 +802,8 @@ router.post("/quotes/:id/triangles/:type", asyncHandler(async (req, res) => {
   // Same defence as the treaty route — normalise the body shape, then
   // validate per-cell, then drop anything outside the quote's upper
   // triangle.
+  const variant = resolveVariant(req.body?.variant);
+  if (!variant) return res.status(400).json({ error: 'Invalid triangle variant', code: 'VALIDATION_FAILED' });
   const rawCells = normalizeTriangleRequest(req.body);
   const cellsParse = triangleCellsSchema.safeParse(rawCells);
   if (!cellsParse.success) {
@@ -803,17 +817,19 @@ router.post("/quotes/:id/triangles/:type", asyncHandler(async (req, res) => {
   const cl = await pool.connect();
   try {
     await cl.query("BEGIN");
+    // Scope the delete to this variant — saving one variant must never wipe
+    // the other's cells.
     await cl.query(
-      `DELETE FROM public.quote_triangle_cells WHERE quote_id=$1 AND type=$2::public.triangle_type`,
-      [id, t]
+      `DELETE FROM public.quote_triangle_cells WHERE quote_id=$1 AND type=$2::public.triangle_type AND variant=$3::public.triangle_variant`,
+      [id, t, variant]
     );
     if (cells.length) {
       await cl.query(
-        `INSERT INTO public.quote_triangle_cells (quote_id, type, origin_year, dev_months, cum_value)
-         SELECT $1, $2::public.triangle_type, oy, dm, cv
-           FROM unnest($3::int[], $4::int[], $5::numeric[]) AS u(oy, dm, cv)`,
+        `INSERT INTO public.quote_triangle_cells (quote_id, type, variant, origin_year, dev_months, cum_value)
+         SELECT $1, $2::public.triangle_type, $3::public.triangle_variant, oy, dm, cv
+           FROM unnest($4::int[], $5::int[], $6::numeric[]) AS u(oy, dm, cv)`,
         [
-          id, t,
+          id, t, variant,
           cells.map(c => c.origin_year),
           cells.map(c => c.dev_months),
           cells.map(c => numOrNull(c.cum_value) ?? 0),
@@ -826,7 +842,7 @@ router.post("/quotes/:id/triangles/:type", asyncHandler(async (req, res) => {
     await logAudit(pool, {
       entityType: 'QUOTE', entityId: id, eventType: 'TRIANGLE_SAVED',
       actor: req.body?._actor || req.user?.displayName || 'SYSTEM',
-      payload: { triangle_type: t, saved: cells.length, dropped: rawCells.length - cells.length },
+      payload: { triangle_type: t, variant, saved: cells.length, dropped: rawCells.length - cells.length },
     });
     res.json({ ok: true, saved: cells.length, dropped: rawCells.length - cells.length });
   } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }
@@ -852,7 +868,7 @@ router.get("/quotes/:id/dev-factors/:type/staleness", asyncHandler(async (req, r
   const [triRes, dfRes] = await Promise.all([
     pool.query(
       `SELECT MAX(updated_at) AS ts FROM public.quote_triangle_cells
-        WHERE quote_id=$1 AND type = ANY($2::public.triangle_type[])`,
+        WHERE quote_id=$1 AND type = ANY($2::public.triangle_type[]) AND variant='MODIFIED'::public.triangle_variant`,
       [id, sourceTypes]
     ),
     pool.query(
@@ -1727,7 +1743,7 @@ router.post("/quotes/:id/losses/suggest-quarters", asyncHandler(async (req, res)
   const { rows: incurredCells } = await pool.query(
     `SELECT origin_year, dev_months, SUM(cum_value) AS cum_value
        FROM public.quote_triangle_cells
-      WHERE quote_id=$1 AND type IN ('CLAIMS_PAID','CLAIMS_OS')
+      WHERE quote_id=$1 AND type IN ('CLAIMS_PAID','CLAIMS_OS') AND variant='MODIFIED'::public.triangle_variant
       GROUP BY origin_year, dev_months
       ORDER BY origin_year, dev_months`, [id]
   );
