@@ -110,9 +110,40 @@ describe('TriangleScreen', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
 
+    // Derived from the active variant (MODIFIED by default), paid + OS once each.
     expect(apiMock.getTriangle).toHaveBeenCalledTimes(2);
-    expect(apiMock.getTriangle).toHaveBeenCalledWith('contract-1', 'CLAIMS_PAID', undefined);
-    expect(apiMock.getTriangle).toHaveBeenCalledWith('contract-1', 'CLAIMS_OS', undefined);
+    expect(apiMock.getTriangle).toHaveBeenCalledWith('contract-1', 'CLAIMS_PAID', { variant: 'MODIFIED' });
+    expect(apiMock.getTriangle).toHaveBeenCalledWith('contract-1', 'CLAIMS_OS', { variant: 'MODIFIED' });
+  });
+
+  it('re-derives the incurred triangle from the selected variant on tab switch', async () => {
+    apiMock.getTriangle.mockImplementation((_id, type) => Promise.resolve({
+      cells: [{ origin_year: 2021, dev_months: 12, cum_value: type === 'CLAIMS_PAID' ? 700 : 300 }],
+    }));
+
+    render(
+      <TriangleScreen
+        routeKey="PROP_INCURRED_CLAIMS_TRIANGLES"
+        title="Incurred Claims Triangle"
+        headerPill="PROPORTIONAL TREATY: INCURRED CLAIMS TRIANGLE"
+      />,
+    );
+
+    // Initial load derives from the MODIFIED variant's paid + OS.
+    expect(await screen.findByText('1,000')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText(/Loading/i)).not.toBeInTheDocument());
+    expect(apiMock.getTriangle).toHaveBeenCalledWith('contract-1', 'CLAIMS_PAID', { variant: 'MODIFIED' });
+    expect(apiMock.getTriangle).toHaveBeenCalledWith('contract-1', 'CLAIMS_OS', { variant: 'MODIFIED' });
+
+    // Switching to the ACTUAL tab re-derives from the ACTUAL paid + OS — this
+    // is what proves per-variant re-derivation, not just the default load.
+    apiMock.getTriangle.mockClear();
+    fireEvent.click(screen.getByRole('tab', { name: 'Actual' }));
+
+    await waitFor(() => {
+      expect(apiMock.getTriangle).toHaveBeenCalledWith('contract-1', 'CLAIMS_PAID', { variant: 'ACTUAL' });
+      expect(apiMock.getTriangle).toHaveBeenCalledWith('contract-1', 'CLAIMS_OS', { variant: 'ACTUAL' });
+    });
   });
 
   describe('paste safety', () => {
