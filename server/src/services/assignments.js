@@ -60,7 +60,7 @@ export async function allocate({ entityType, entityId, requestingUserId, comment
   if (!rows.length) throw Object.assign(new Error('Not found'),{status:404});
   const currentOwnerId=rows[0].assigned_to_user_id;
   const status=(rows[0].uw_status||'DRAFT').toUpperCase();
-  if (!'DRAFT'.includes(status) && status!=='DRAFT') {
+  if (status !== 'DRAFT') {
     throw Object.assign(new Error(`Cannot allocate: item is ${status}. Only DRAFT items can be reallocated.`),{status:403});
   }
   if (currentOwnerId===requestingUserId) return { allocated:false, message:'Already assigned to you' };
