@@ -8,7 +8,7 @@
 //
 // Surface intentionally matches only what the call-sites need:
 //   • readWorkbook(arrayBuffer) → [{name, rows: AoA}]
-//   • createWorkbook() → { appendSheet(name, aoa), writeFile(filename) }
+//   • createWorkbook() → { appendSheet(name, aoa), writeBuffer(), writeFile(filename) }
 
 let excelJsPromise;
 function loadExcelJs() {

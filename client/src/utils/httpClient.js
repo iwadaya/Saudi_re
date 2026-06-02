@@ -53,9 +53,10 @@ function shouldRetry(method, error, attempt, maxAttempts, allowedMethods) {
 }
 
 /**
- * Generate a short, URL-safe unique ID for X-Request-Id. We avoid
- * crypto.randomUUID() for the tiny chance it's missing in odd browser
- * surfaces; a 16-char alphabet-hex id is plenty for request correlation.
+ * Generate a URL-safe unique ID for X-Request-Id. Prefers
+ * crypto.randomUUID(); falls back to a base36 timestamp+random string on
+ * the rare surface where it's missing. Either form is plenty for request
+ * correlation.
  */
 function makeRequestId() {
   try {
