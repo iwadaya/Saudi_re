@@ -54,7 +54,7 @@ export function runFinancialEngine(standardRows, terms) {
 
     return {
       year: row.year,
-      premium: row.ultPrem, ultClaims: cappedUltLoss, comm, profitComm: pc, brokerage: brok, taxes, lpc,
+      premium: row.ultPrem, ultClaims: cappedUltLoss, ultAttritional: row.ultAttritional, comm, profitComm: pc, brokerage: brok, taxes, lpc,
       result, cumResult, cumResultPct: cumPremProj > 0 ? (cumResult / cumPremProj) * 100 : 0,
       actPremium: row.actPrem, actClaims: cappedActLoss, actComm, actPC, actBrokerage: actBrok, actTaxes, actLPC,
       actResult, actCumResult, actCumResultPct: cumPremAct > 0 ? (actCumResult / cumPremAct) * 100 : 0,
@@ -92,6 +92,24 @@ function calcStats(rows) {
   return { mean, median, min: Math.min(...lrs), max: Math.max(...lrs), stdDev, skewness, kurtosis, var95, var99, cv, iqr, n };
 }
 
+/* Dev-time guard: a realised large/CAT loss tagged to a UW year with no
+   matching projected row would be silently dropped from the projected total
+   (the Map lookup returns 0). Warn so the data issue is visible; never
+   fabricate rows. */
+function warnOrphanLossYears(rows, lossCat) {
+  if (!import.meta.env?.DEV) return;
+  const have = new Set((rows || []).map(r => Number(r.year)));
+  const orphans = new Set();
+  for (const y of lossCat.large.keys()) if (!have.has(Number(y))) orphans.add(Number(y));
+  for (const y of lossCat.cat.keys()) if (!have.has(Number(y))) orphans.add(Number(y));
+  if (orphans.size) {
+    console.warn(
+      `[Quick Summary] Large/CAT loss UW year(s) ${[...orphans].sort((a, b) => a - b).join(', ')} `
+      + 'have no matching projected row — those losses are excluded from the projected total.',
+    );
+  }
+}
+
 /* Embeddable version for use in modals (no WizardLayout) */
 export function QuickSummaryEmbed({ contractId: propContractId }) {
   const fallbackId = useContractId();
@@ -102,7 +120,6 @@ export function QuickSummaryEmbed({ contractId: propContractId }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lossCat, setLossCat] = useState({ large: new Map(), cat: new Map() });
-  const [stripLC, setStripLC] = useState(false);
 
   useEffect(() => {
     if (!contractId) return;
@@ -112,12 +129,19 @@ export function QuickSummaryEmbed({ contractId: propContractId }) {
       try {
         const contract = await api.getContract(contractId, qm).catch(() => ({}));
         const t = buildTreatyTerms(contract, appState.propTreatyDetail || {});
-        setStripLC(t.strip_large_cat === true);
         const { rows: standardRows } = await loadProjectedRows(contractId, qm);
         if (!standardRows || standardRows.length === 0) { setCalcRows([]); setLoading(false); return; }
-        const { rows, totals: tot } = runFinancialEngine(standardRows, t);
+        const lc = await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() }));
+        setLossCat(lc);
+        warnOrphanLossYears(standardRows, lc);
+        // Projected total per UW year = developed attritional + actual large +
+        // actual cat; feed it so the cap/result/LR terms see the add-back.
+        const engineInput = standardRows.map(r => ({
+          ...r,
+          ultLoss: (r.ultAttritional || 0) + (lc.large.get(Number(r.year)) || 0) + (lc.cat.get(Number(r.year)) || 0),
+        }));
+        const { rows, totals: tot } = runFinancialEngine(engineInput, t);
         setCalcRows(rows); setTotals(tot);
-        setLossCat(await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() })));
       } catch (e) { console.error('Quick Summary Embed Load Failed', e); setError(e.message); }
       setLoading(false);
     })();
@@ -130,10 +154,11 @@ export function QuickSummaryEmbed({ contractId: propContractId }) {
   const TD = ({ v, pct, neg, pos }) => (
     <td className={neg ? 'qs-val--neg' : pos ? 'qs-val--pos' : ''}><div className="qs-td qs-td--num">{pct ? fp(v) : fmt(v)}</div></td>
   );
-  const largeAmt = yr => (stripLC ? (lossCat.large.get(Number(yr)) || 0) : 0);
-  const catAmt = yr => (stripLC ? (lossCat.cat.get(Number(yr)) || 0) : 0);
-  const projComp = r => deriveLossComponents({ premium: r.premium, incurredTotal: r.ultClaims, large: largeAmt(r.year), cat: catAmt(r.year) });
-  const actComp = r => deriveLossComponents({ premium: r.actPremium, incurredTotal: r.actClaims, large: largeAmt(r.year), cat: catAmt(r.year) });
+  // Strip flag parked — large/cat are always the realised loss-list amounts.
+  const largeAmt = yr => lossCat.large.get(Number(yr)) || 0;
+  const catAmt = yr => lossCat.cat.get(Number(yr)) || 0;
+  const projComp = r => deriveLossComponents({ premium: r.premium, incurredTotal: (r.ultAttritional || 0) + largeAmt(r.year) + catAmt(r.year), large: largeAmt(r.year), cat: catAmt(r.year) });
+  const actComp = r => deriveLossComponents({ premium: r.actPremium, incurredTotal: r.actClaims, large: 0, cat: 0 });
   const sumComp = (fn, key) => calcRows.reduce((a, r) => a + fn(r)[key], 0);
   const ultLR = totals.premium > 0 ? (totals.ultClaims / totals.premium * 100) : 0;
   const actLR = totals.actPremium > 0 ? (totals.actClaims / totals.actPremium * 100) : 0;
@@ -210,9 +235,18 @@ export default function PropQuickSummary() {
         setProjSource(source || '');
 
         if (!standardRows || standardRows.length === 0) { setCalcRows([]); setLoading(false); return; }
-        const { rows, totals: tot } = runFinancialEngine(standardRows, t);
+        /* Realised large/CAT per UW year (loss lists; no Pareto/modelling),
+           loaded before pricing: the projected total is developed attritional +
+           actual large + actual cat, and the loss cap must see that full total. */
+        const lc = await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() }));
+        setLossCat(lc);
+        warnOrphanLossYears(standardRows, lc);
+        const engineInput = standardRows.map(r => ({
+          ...r,
+          ultLoss: (r.ultAttritional || 0) + (lc.large.get(Number(r.year)) || 0) + (lc.cat.get(Number(r.year)) || 0),
+        }));
+        const { rows, totals: tot } = runFinancialEngine(engineInput, t);
         setCalcRows(rows); setTotals(tot);
-        setLossCat(await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() })));
       } catch (e) { console.error('Quick Summary Load Failed', e); setError(e.message); }
       setLoading(false);
     })();
@@ -220,18 +254,18 @@ export default function PropQuickSummary() {
 
   const stats = calcStats(calcRows);
 
-  /* Loss components per UW year. Projected basis uses the projected (capped)
-     claims; actual basis uses the unprojected (capped) incurred. Both route
-     through deriveLossComponents so attritional/large/cat are zero-floored and
-     claims = attritional + large + cat. Large/CAT are the same raw saved
-     figures in both bases. */
-  // When the treaty opts out of stripping, large/cat fold into attritional
-  // (shown as nil); otherwise they come from the saved loss grids.
-  const stripLC = terms?.strip_large_cat === true;
-  const largeAmt = yr => (stripLC ? (lossCat.large.get(Number(yr)) || 0) : 0);
-  const catAmt = yr => (stripLC ? (lossCat.cat.get(Number(yr)) || 0) : 0);
-  const projComp = r => deriveLossComponents({ premium: r.premium, incurredTotal: r.ultClaims, large: largeAmt(r.year), cat: catAmt(r.year) });
-  const actComp = r => deriveLossComponents({ premium: r.actPremium, incurredTotal: r.actClaims, large: largeAmt(r.year), cat: catAmt(r.year) });
+  /* Per-UW-year loss components.
+     PROJECTED: total = developed attritional + actual large + actual cat;
+     deriveLossComponents recovers attritional = ultAttritional (from
+     loadProjectedRows, flag-independent), large/cat = realised amounts.
+     ACTUAL: full last-diagonal incurred with large/cat = 0 (large/CAT have
+     already occurred and sit inside the realised triangle).
+     Strip flag is parked — never consulted. Year lookups coerce Number(r.year)
+     to match the Number-keyed loss Maps. */
+  const largeAmt = yr => lossCat.large.get(Number(yr)) || 0;
+  const catAmt = yr => lossCat.cat.get(Number(yr)) || 0;
+  const projComp = r => deriveLossComponents({ premium: r.premium, incurredTotal: (r.ultAttritional || 0) + largeAmt(r.year) + catAmt(r.year), large: largeAmt(r.year), cat: catAmt(r.year) });
+  const actComp = r => deriveLossComponents({ premium: r.actPremium, incurredTotal: r.actClaims, large: 0, cat: 0 });
   const sumComp = (fn, key) => calcRows.reduce((a, r) => a + fn(r)[key], 0);
 
   const TD = ({ v, pct, neg, pos }) => (
