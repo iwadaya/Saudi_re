@@ -26,11 +26,11 @@ import PctInput from '../../../../components/PctInput';
 export default function PropOfferModal({
   show, onClose, offerStatus, offerLine, setOfferLine,
   offerComment, setOfferComment, offerApprover, setOfferApprover,
-  returnReason, setReturnReason, signedLinePct, setSignedLinePct: _setSignedLinePct,
+  returnReason, setReturnReason, signedLinePct, setSignedLinePct,
   approvalTrail, isCU, actorName, isTerminal,
   marginAct, marginUw, crAct, crUw, epi, limit, eventLimit,
   fxInverse, safeCcy, money, aiCalc,
-  onSubmitForApproval, onMarkApproved, onMarkSigned: _onMarkSigned, onMarkNTU: _onMarkNTU, onReturnToUW,
+  onSubmitForApproval, onMarkApproved, onMarkSigned, onMarkNTU, onReturnToUW,
   onDecline, onRecall,
   eligibleApprovers,
   // Quote → signed/bind is disabled in this build. When true, the
@@ -281,6 +281,13 @@ export default function PropOfferModal({
             {(isCU||isTerminal||offerStatus==='AWAITING_APPROVAL'||offerStatus==='AWAITING_SIGNED_LINE')&&<div className="off-footer-left"/>}
             <div style={{display:'flex',gap:8,flexShrink:0}}>
               <button className="bbg-btn" onClick={onClose}>Close</button>
+              {!isCU&&!isTerminal&&!isQuote&&offerStatus==='AWAITING_SIGNED_LINE'&&(<>
+                <span style={{fontSize:11,color:'rgba(255,255,255,0.45)',alignSelf:'center'}}>Signed line</span>
+                <PctInput value={signedLinePct} onChange={v=>setSignedLinePct(v)} placeholder="0.0%" style={{width:90}}/>
+                <button className="bbg-btn bbg-btn--offer" onClick={onMarkSigned}>✍ Mark Signed</button>
+                <button className="bbg-btn" style={{borderColor:'rgba(249,115,22,0.45)',color:'#fb923c'}}
+                  onClick={()=>{if(window.confirm('Mark this treaty NTU (Not Taken Up)? This is final.'))onMarkNTU();}}>🚫 NTU</button>
+              </>)}
               {!isCU&&!isTerminal&&offerStatus==='DRAFT'&&(
                 <button className="bbg-btn bbg-btn--offer" onClick={onSubmitForApproval}>Submit for Approval →</button>
               )}
