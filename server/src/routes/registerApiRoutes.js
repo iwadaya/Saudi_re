@@ -17,6 +17,7 @@ import clientEventsRouter from './clientEvents.js';
 import workbenchRouter from './workbench.js';
 import peerStructuresRouter from './peerStructures.js';
 import renewalPackImportRouter from './renewalPackImport.js';
+import renewalPackRouter from './renewalPack.js';
 import ldfBlendingRouter from './ldfBlending.js';
 
 const routers = [
@@ -39,6 +40,7 @@ const routers = [
   workbenchRouter,
   peerStructuresRouter,
   renewalPackImportRouter,
+  renewalPackRouter,
   ldfBlendingRouter,
 ];
 

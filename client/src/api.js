@@ -486,6 +486,12 @@ export const api = {
   deleteDocument(docId, opts) { return request(PATHS.deleteDocument(docId), { method: 'DELETE', ...opts }); },
   getDocumentDownloadUrl(docId) { return `${API_BASE}${PATHS.documentDownload(docId)}`; },
   getDocumentViewUrl(docId) { return `${API_BASE}${PATHS.documentView(docId)}`; },
+  // Fetched as a blob (not an <a href>) because auth rides in headers.
+  async getRenewalPackBlob() {
+    const res = await fetch(`${API_BASE}/api/renewal-pack/export`, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error(`Renewal pack export failed (${res.status})`);
+    return res.blob();
+  },
   getWordingChecklist(id, opts) {
     return request(isQuoteMode(opts) ? QUOTE_PATHS.quoteWordingChecklist(id) : PATHS.wordingChecklist(id), opts);
   },

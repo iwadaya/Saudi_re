@@ -448,6 +448,7 @@ export default function HomeScreen() {
   const [renewalCandidate, setRenewalCandidate] = useState(null);
   const [renewBusy, setRenewBusy] = useState(false);
   const [renewError, setRenewError] = useState('');
+  const [packBusy, setPackBusy] = useState(false);
   // Profile viewer state
   const viewingUser = useViewingUser(); // synced from Topbar dropdown
   const [allocMsg, setAllocMsg]     = useState('');
@@ -600,10 +601,31 @@ export default function HomeScreen() {
     });
   }, [data?.region_premiums]);
 
+  const downloadRenewalPack = async () => {
+    if (packBusy) return;
+    setPackBusy(true);
+    try {
+      const blob = await api.getRenewalPackBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `renewal-pack-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Renewal pack export failed: ' + (e?.message || 'Server error'));
+    } finally {
+      setPackBusy(false);
+    }
+  };
+
   return (
     <div className="app-shell grid-bg HOME_PAGE">
       <Topbar title="MODELLING TOOL" subtitle="Reinsurance treaty pricing & modelling workspace" actions={<>
         <button className="topbar-pill" onClick={() => navigate('/dashboard')}>Dashboard</button>
+        <button className="topbar-pill" onClick={downloadRenewalPack} disabled={packBusy}>
+          {packBusy ? 'Building…' : 'Renewal Pack'}
+        </button>
         <button className="topbar-pill" onClick={() => navigate('/benchmark')}>⚡ Quick Benchmark</button>
         <button className="topbar-pill" onClick={() => navigate('/workbench')}>Workbench</button>
         <button className="topbar-pill" onClick={() => {
