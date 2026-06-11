@@ -784,6 +784,11 @@ export default function PropPricing() {
       showToast('Cannot mark signed: enter a non-zero signed line %.');
       return;
     }
+    const w = parseFloat(String(offerLine || '').replace(/%/g, '').trim());
+    if (Number.isFinite(w) && n > w) {
+      showToast(`Signed line (${n}%) cannot exceed the written line (${w}%).`);
+      return;
+    }
     try {
       await api.markOfferSigned(cid, { signed_line_pct: signedLinePct, _actor: actorName });
       setOfferStatusState('SIGNED');

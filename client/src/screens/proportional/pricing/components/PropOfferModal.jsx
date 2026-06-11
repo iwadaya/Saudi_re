@@ -281,13 +281,21 @@ export default function PropOfferModal({
             {(isCU||isTerminal||offerStatus==='AWAITING_APPROVAL'||offerStatus==='AWAITING_SIGNED_LINE')&&<div className="off-footer-left"/>}
             <div style={{display:'flex',gap:8,flexShrink:0}}>
               <button className="bbg-btn" onClick={onClose}>Close</button>
-              {!isCU&&!isTerminal&&!isQuote&&offerStatus==='AWAITING_SIGNED_LINE'&&(<>
-                <span style={{fontSize:11,color:'rgba(255,255,255,0.45)',alignSelf:'center'}}>Signed line</span>
-                <PctInput value={signedLinePct} onChange={v=>setSignedLinePct(v)} placeholder="0.0%" style={{width:90}}/>
-                <button className="bbg-btn bbg-btn--offer" onClick={onMarkSigned}>✍ Mark Signed</button>
-                <button className="bbg-btn" style={{borderColor:'rgba(249,115,22,0.45)',color:'#fb923c'}}
-                  onClick={()=>{if(window.confirm('Mark this treaty NTU (Not Taken Up)? This is final.'))onMarkNTU();}}>🚫 NTU</button>
-              </>)}
+              {!isCU&&!isTerminal&&!isQuote&&offerStatus==='AWAITING_SIGNED_LINE'&&(()=>{
+                const w = parseFloat(String(offerLine||'').replace(/%/g,'').trim());
+                const s = parseFloat(String(signedLinePct||'').replace(/%/g,'').trim());
+                const over = Number.isFinite(w) && Number.isFinite(s) && s > w;
+                return (<>
+                  <span style={{fontSize:11,color:'rgba(255,255,255,0.45)',alignSelf:'center'}}>Signed line</span>
+                  <PctInput value={signedLinePct} onChange={v=>setSignedLinePct(v)} placeholder="0.0%"
+                    style={{width:90,...(over?{borderColor:'#f87171'}:{})}}/>
+                  {over && <span style={{fontSize:11,color:'#f87171',alignSelf:'center'}}>≤ written {w}%</span>}
+                  <button className="bbg-btn bbg-btn--offer" disabled={over}
+                    style={over?{opacity:0.5,cursor:'not-allowed'}:{}} onClick={onMarkSigned}>✍ Mark Signed</button>
+                  <button className="bbg-btn" style={{borderColor:'rgba(249,115,22,0.45)',color:'#fb923c'}}
+                    onClick={()=>{if(window.confirm('Mark this treaty NTU (Not Taken Up)? This is final.'))onMarkNTU();}}>🚫 NTU</button>
+                </>);
+              })()}
               {!isCU&&!isTerminal&&offerStatus==='DRAFT'&&(
                 <button className="bbg-btn bbg-btn--offer" onClick={onSubmitForApproval}>Submit for Approval →</button>
               )}
