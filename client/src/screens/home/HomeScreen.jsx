@@ -543,9 +543,14 @@ export default function HomeScreen() {
     // Submitted/approved/signed quotes should open at final pricing, not treaty detail
     const ADVANCED_STATUSES = ['AWAITING_APPROVAL','AWAITING_SIGNED_LINE','SIGNED','NTU','DECLINED','APPROVED'];
     const itemStatus = String(item.status || '').toUpperCase();
-    const goToFinal = item.isQuote && ADVANCED_STATUSES.includes(itemStatus);
-    if (goToFinal) {
+    const isAdvanced = ADVANCED_STATUSES.includes(itemStatus);
+    if (item.isQuote && isAdvanced) {
       navigate('/np/final-quote', { state: { contractId: item.id } });
+    } else if (isAdvanced) {
+      // Contract past approval (e.g. AWAITING_SIGNED_LINE) → go straight to the
+      // pricing screen where the Sign/NTU offer modal auto-opens. Mirrors the
+      // ApprovalsScreen open() routing.
+      navigate(isNp ? '/np/final-pricing' : '/prop/pricing', { state: { contractId: item.id } });
     } else {
       navigate(isNp ? '/np/treaty-detail' : '/prop/treaty-detail', { state: { contractId: item.id } });
     }
