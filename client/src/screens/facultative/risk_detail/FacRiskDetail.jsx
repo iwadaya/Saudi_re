@@ -3,7 +3,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../../../api';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
+import AsyncBoundary from '../../../components/AsyncBoundary';
 import { useScreenSave } from '../../../hooks/useScreenSave';
+import { useResource } from '../../../hooks/useResource';
 import { useFacRiskId } from '../../../hooks/useContractId';
 
 const ROUTE_KEY = 'FAC_RISK_DETAIL';
@@ -353,34 +355,31 @@ export default function FacRiskDetail() {
   // Per-COB SI values: keyed by fac_cob_id
   const [cobSiValues, setCobSiValues] = useState({});
 
-  const [allCedants, setAllCedants] = useState([]);
-  const [brokers, setBrokers] = useState([]);
-  const [countries, setCountries] = useState([]);
-  const [currencies, setCurrencies] = useState([]);
-  const [facClasses, setFacClasses] = useState([]);
-  // Reference lists for the Summary Sheet additions. Cached in api.js via
+  // Reference lists (pickers + Summary Sheet additions). Cached in api.ts via
   // CACHEABLE_PATHS so navigating into / out of the wizard doesn't refetch.
-  const [occupancies, setOccupancies] = useState([]);
-  const [natcatRates, setNatcatRates] = useState([]);
-  const [scoringTables, setScoringTables] = useState(null);
-
-  useEffect(() => {
-    Promise.all([
-      api.listCedants(), api.listBrokers(),
-      api.getRefListItems('country'), api.getRefListItems('currency'),
-      api.facListClasses(),
-      api.facGetOccupancies(), api.facGetNatcatRates(), api.facGetScoringTables(),
-    ]).then(([c, b, co, cu, fc, occ, nc, st]) => {
-      setAllCedants(Array.isArray(c) ? c : c?.rows || []);
-      setBrokers(Array.isArray(b) ? b : b?.rows || []);
-      setCountries(Array.isArray(co) ? co : co?.items || []);
-      setCurrencies(Array.isArray(cu) ? cu : cu?.items || []);
-      setFacClasses(fc || []);
-      setOccupancies(occ?.occupancies || []);
-      setNatcatRates(nc?.rates || []);
-      setScoringTables(st || null);
-    }).catch(console.error);
-  }, []);
+  // One useResource over a Promise.all replaces the hand-rolled effect; a
+  // failure here must NOT blank the screen — the old catch logged and carried
+  // on with empty lists, so we consume `data || fallback` below and keep this
+  // resource OUTSIDE the AsyncBoundary that guards the risk load.
+  const refLists = useResource(
+    (signal) => Promise.all([
+      api.listCedants({ signal }), api.listBrokers({ signal }),
+      api.getRefListItems('country', { signal }), api.getRefListItems('currency', { signal }),
+      api.facListClasses({ signal }),
+      api.facGetOccupancies({ signal }), api.facGetNatcatRates({ signal }), api.facGetScoringTables({ signal }),
+    ]),
+    [],
+    { reportLabel: 'risk detail reference lists' },
+  );
+  const [rawCedants, rawBrokers, rawCountries, rawCurrencies, rawClasses, rawOccupancies, rawNatcat, rawScoring] = refLists.data || [];
+  const allCedants = useMemo(() => (Array.isArray(rawCedants) ? rawCedants : rawCedants?.rows || []), [rawCedants]);
+  const brokers = useMemo(() => (Array.isArray(rawBrokers) ? rawBrokers : rawBrokers?.rows || []), [rawBrokers]);
+  const countries = useMemo(() => (Array.isArray(rawCountries) ? rawCountries : rawCountries?.items || []), [rawCountries]);
+  const currencies = useMemo(() => (Array.isArray(rawCurrencies) ? rawCurrencies : rawCurrencies?.items || []), [rawCurrencies]);
+  const facClasses = useMemo(() => rawClasses || [], [rawClasses]);
+  const occupancies = useMemo(() => rawOccupancies?.occupancies || [], [rawOccupancies]);
+  const natcatRates = useMemo(() => rawNatcat?.rates || [], [rawNatcat]);
+  const scoringTables = rawScoring || null;
 
   const regions = useMemo(
     () => (scoringTables?.territorial_capacity || []).map((t) => t.region),
@@ -497,7 +496,7 @@ export default function FacRiskDetail() {
     [],
   );
 
-  const { save, markDirty, loadedRef: loaded } = useScreenSave({
+  const { save, markDirty, loadedRef: loaded, loading, loadError, refetch } = useScreenSave({
     entityId: riskId || '',
     load: api.facGetRisk,
     save: saveRisk,
@@ -604,6 +603,10 @@ export default function FacRiskDetail() {
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Risk Detail" headerPill={f.fac_ref || 'FACULTATIVE'} onBeforeNext={save} onBeforeBack={save}>
       <div className="wizard-form" style={{ maxWidth: 740, margin: '0 auto', padding: '8px 0 40px' }}>
+        {/* Primary risk load rides useScreenSave→useResource; the boundary
+            owns its loading / error / retry states. Reference lists stay
+            outside on purpose — see the refLists comment above. */}
+        <AsyncBoundary loading={loading} error={loadError} onRetry={refetch} label="risk detail">
 
         {f.fac_ref && <div style={{ fontSize: 12, color: '#00d4ff', fontFamily: 'var(--font-mono)', fontWeight: 700, marginBottom: 20 }}>{f.fac_ref}</div>}
 
@@ -817,6 +820,7 @@ export default function FacRiskDetail() {
         <RelatedTreatiesSection riskId={riskId}
                                 hasCedant={Boolean(f.cedant_id)}
                                 hasCob={Boolean(f.fac_cob_id)} />
+        </AsyncBoundary>
       </div>
     </WizardLayout>
   );
