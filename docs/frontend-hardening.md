@@ -66,9 +66,9 @@ baseline) — each must be decomposed, then have its disable removed:
 
 | File | LOC at baseline | Status |
 |---|---|---|
-| `non_proportional/final_pricing/NpFinalPricing.jsx` | 4,131 | TODO(hardening): split |
-| `non_proportional/structure/NpStructure.jsx` | 1,710 | TODO(hardening): split |
-| `shared/LossParetoScreen.jsx` | 1,634 | TODO(hardening): split |
+| `non_proportional/final_pricing/NpFinalPricing.jsx` | 4,131 | **DONE** — 320-line orchestrator + typed reducer (Phase 4.1) |
+| `non_proportional/structure/NpStructure.jsx` | 1,710 | **DONE** — 180-line orchestrator + typed reducer (Phase 4.2) |
+| `shared/LossParetoScreen.jsx` | 1,634 | **DONE** — 201-line orchestrator + typed reducer (Phase 4.2) |
 
 Files pinned at the 1,500 hard cap (between 800 and 1,500 at baseline) are
 listed in `OVERSIZED_SCREENS_LEGACY` in `eslint.config.js`; shrink one below
