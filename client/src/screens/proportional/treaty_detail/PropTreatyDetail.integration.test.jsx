@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import PropTreatyDetail from './PropTreatyDetail.jsx';
 import { renderBindScreen, makeHttpError } from '../../../test/bindPathTestUtils.jsx';
-import { bindIds, makeBindPathApiMock } from '../../../test/bindPathFixtures.js';
+import { bindIds, makeBindPathApiMock, propContractSnapshot } from '../../../test/bindPathFixtures.js';
 
 const { apiMock } = vi.hoisted(() => ({ apiMock: {} }));
 
@@ -44,6 +44,51 @@ beforeEach(() => {
 });
 
 describe('PropTreatyDetail integration', () => {
+  // ── Phase-2.2 migration: the contract-bundle load rides useResource +
+  // AsyncBoundary, so the loading→loaded and loading→error transitions are
+  // part of the screen's contract (mirrors NpHistoricalPerformance.test.jsx).
+  it('transitions loading → loaded: boundary status shows while the bundle is in flight, then the hydrated form appears', async () => {
+    let resolveLoad;
+    resetApi({
+      getContract: vi.fn(() => new Promise((resolve) => { resolveLoad = resolve; })),
+    });
+    renderScreen();
+
+    // Boundary shows while the fetch is in flight; the form stays hidden
+    // but the WizardLayout chrome (header pill) stays mounted throughout.
+    const status = screen.getByText(/loading treaty detail/i);
+    expect(status).toHaveAttribute('role', 'status');
+    expect(screen.queryByText('Retention %')).not.toBeInTheDocument();
+    expect(screen.getByText('PROPORTIONAL TREATY: TREATY DETAIL')).toBeInTheDocument();
+
+    resolveLoad(JSON.parse(JSON.stringify(propContractSnapshot)));
+
+    await waitFor(() => expect(screen.queryByText(/loading treaty detail/i)).not.toBeInTheDocument());
+    // Hydration landed in the slice before loading flipped off.
+    expect(screen.getByText('Retention %')).toBeInTheDocument();
+    await waitFor(() => expect(inputFor('Retention %')).toHaveValue('50%'));
+  });
+
+  it('transitions loading → error and recovers via Retry', async () => {
+    resetApi({
+      getContract: vi.fn()
+        .mockRejectedValueOnce(makeHttpError({ status: 500, message: 'API GET → 500: bundle down' }))
+        .mockResolvedValueOnce(JSON.parse(JSON.stringify(propContractSnapshot))),
+    });
+    renderScreen();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/could not load this section/i);
+    expect(screen.queryByText('Retention %')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(apiMock.getContract).toHaveBeenCalledTimes(2);
+    // Recovery hydrates the form exactly like a first-time load.
+    await waitFor(() => expect(inputFor('Retention %')).toHaveValue('50%'));
+  });
+
   it('loads treaty details, recalculates cession from retention, and saves', async () => {
     renderScreen();
 
