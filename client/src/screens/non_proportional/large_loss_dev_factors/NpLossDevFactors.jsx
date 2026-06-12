@@ -335,10 +335,10 @@ export default function NpLossDevFactors({ routeKey, title, headerPill, lossType
           <div style={{ margin: '12px 0 10px' }}>
             <div className="toggle-group" style={{ display: 'inline-flex' }}>
               {[['FACTORS', '📊 Dev Factors'], ['DETAIL', '📋 Loss Detail']].map(([key, label]) => (
-                <span key={key} className={`toggle-option${view === key ? ' active' : ''}`}
+                <button type="button" key={key} className={`toggle-option${view === key ? ' active' : ''}`}
                   onClick={() => setView(key)} style={{ fontSize: 12, padding: '8px 16px' }}>
                   {label}
-                </span>
+                </button>
               ))}
             </div>
           </div>

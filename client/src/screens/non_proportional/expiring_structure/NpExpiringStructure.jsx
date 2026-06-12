@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useId, useRef, useMemo } from 'react';
 import { api } from '../../../api';
 import { useContractId } from '../../../hooks/useContractId';
 import { useAppState } from '../../../context/AppContext';
@@ -374,6 +374,7 @@ export default function NpExpiringStructure() {
   const [layers, setLayers] = useState([]);
   const [terms, setTerms] = useState({ brokerage_pct: '', no_claims_bonus_pct: '', profit_commission_pct: '' });
   const [numLayersInput, setNumLayersInput] = useState('');
+  const numLayersSelectId = useId();
   const [coveredProps, setCoveredProps] = useState([]);
   const [loading, setLoading] = useState(false);
   const [autoPopMsg, setAutoPopMsg] = useState('');
@@ -633,8 +634,8 @@ export default function NpExpiringStructure() {
               <section className="np-struct-card glass" style={{ marginBottom: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 24, padding: '14px 18px', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <label style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>LAYERS</label>
-                    <select className="np-mini-input np-mini-select" style={{ width: 90 }} value={numLayersInput} onChange={e => handleNumLayersChange(e.target.value)}>
+                    <label htmlFor={numLayersSelectId} style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>LAYERS</label>
+                    <select id={numLayersSelectId} className="np-mini-input np-mini-select" style={{ width: 90 }} value={numLayersInput} onChange={e => handleNumLayersChange(e.target.value)}>
                       <option value="">—</option>
                       {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => <option key={n} value={n}>{n}</option>)}
                     </select>
@@ -864,6 +865,7 @@ export default function NpExpiringStructure() {
                 return (
                   <div
                     className="modal-backdrop"
+                    role="presentation"
                     style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.65)' }}
                     onClick={e => { if (e.target === e.currentTarget) setShowCurveModal(false); }}>
                     <div className="glass" role="dialog" aria-modal="true" style={{ background: '#0b1220', border: '1px solid rgba(0,212,255,0.25)', borderRadius: 14, width: '92vw', maxWidth: 1000, maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.7)' }}>

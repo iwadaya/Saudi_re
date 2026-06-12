@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useId, useRef, useMemo, useCallback } from 'react';
 import {
   toNum,
   emptyLayer,
@@ -14,6 +14,7 @@ export function QuoteStructureSection({
   structIdx, currency, cobOptions, reinstatementOptions, onDirty, initialData, mode,
 }) {
   const { structRefsMap } = useAppState();
+  const layersCountSelectId = useId();
   const [layersCount, setLayersCount] = useState('');
   const [layers, setLayers]           = useState([]);
   const [cobRows, setCobRows]         = useState([]);
@@ -172,8 +173,8 @@ export function QuoteStructureSection({
             {coverLabel}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <label className="qss-field-label">NUMBER OF LAYERS</label>
-            <select className="np-mini-input np-mini-select" style={{ width: 80 }}
+            <label className="qss-field-label" htmlFor={layersCountSelectId}>NUMBER OF LAYERS</label>
+            <select id={layersCountSelectId} className="np-mini-input np-mini-select" style={{ width: 80 }}
               value={layersCount} onChange={e => handleLayersCountChange(e.target.value)}>
               <option value="">—</option>
               {Array.from({ length: 20 }, (_, i) => <option key={i+1} value={i+1}>{i+1}</option>)}
