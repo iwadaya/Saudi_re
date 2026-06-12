@@ -11,17 +11,17 @@ Counts cover `client/src/screens/**` source files (`*.test.*` excluded),
 measured by `scripts/frontend-budget.mjs`. Update this table at the end of
 every phase. The goal is monotonic improvement — no regression on any row.
 
-| Metric | Plan baseline (2026-06) | Phase 0 | Phase 1 | Phase 2 | Phase 3 |
+| Metric | Plan baseline (2026-06) | Phase 0 | Phase 2 | Phase 3 | Phases 4–6 (final) |
 |---|---|---|---|---|---|
-| Screen source files | 157 | 122 | 122 | 122 | 122 |
-| Inline `style={{}}` (gated) | 3,256 | 3,293 | 3,293 | 3,292 | **2,821** |
-| Files > 800 LOC (gated) | 15 | 15 | 15 | 15 | 15 |
-| `onClick` on div/span/td/tr (gated) | 86 | 116 | 116 | 116 | **104** |
-| `console.*` (gated) | 82 | 78 | 78 | 77 | 77 |
-| `useState` calls (info) | 715 | 650 | 650 | 637 | 637 |
-| `setLoading` calls (info) | 139 | 80 | 80 | **73** | 73 |
-| TypeScript / typecheck coverage | 0 | 0 | api.ts + types/pricing.ts + @ts-check core math + 1 screen | unchanged | unchanged |
-| Raw `fetch()` in screens | 0 | 0 (keep at 0) | 0 | 0 | 0 |
+| Inline `style={{}}` (gated) | 3,256 | 3,293 | 3,292 | 2,821 | **2,821** |
+| Files > 800 LOC (gated) | 15 | 15 | 15 | 15 | **12** |
+| `onClick` on div/span/td/tr (gated) | 86 | 116 | 116 | 104 | **78** |
+| `console.*` (gated) | 82 | 78 | 77 | 77 | **77** |
+| `useState` calls (info) | 715 | 650 | 637 | 637 | **551** |
+| `setLoading` calls (info) | 139 | 80 | 73 | 73 | **68** |
+| jsx-a11y findings | — | — | — | 255 (baseline) | **0 — gated in main lint** |
+| Client tests | 533 | 533 | 577 | 577 | **614** + global coverage gate (45 lines / 35 branches) |
+| Raw `fetch()` in screens | 0 | 0 | 0 | 0 | 0 |
 
 > The plan-baseline column came from one-line greps over all `.jsx` files
 > (tests included). Phase 0 onward uses `scripts/frontend-budget.mjs`, which
@@ -172,6 +172,37 @@ onKeyDown for row clicks), and wrap labelled controls in the `ui/`
   where golden-master tests will protect the pricing math while the
   render tree is being rebuilt — restyling 1,600–4,100-line monoliths
   twice is waste. Budget re-baselined after each landing.
+- **Phase 4 (god components)** — all three >1,500-LOC giants decomposed,
+  golden-master first, byte-identical expectations pre/post:
+  NpFinalPricing 4,132→320, NpStructure 1,712→180, LossParetoScreen
+  1,635→201. Typed reducers + hooks per screen; zero raw useState in the
+  orchestrators; all max-lines disables removed; filesOver800Loc 15→12.
+- **Phase 5 (accessibility)** — jsx-a11y driven from 255 findings to ZERO
+  and folded into the main `--max-warnings=0` lint for screens +
+  components. Patterns: real buttons (or role/tabIndex/Enter-Space),
+  role="presentation" backdrops, htmlFor/useId labels.
+- **Phase 6 (money-path coverage)** — golden masters for NpFinalPricing,
+  NpStructure, LossParetoScreen (via Phase 4), PropPricing (incl.
+  stale-write + drift assertions), FacPricing (dual-engine rates);
+  useResource at 97% branches; global coverage ratchet (45% lines / 35%
+  branches) enforced via `npm run verify` (`test:client:coverage`).
+  Three genuine money-path bugs surfaced and pinned (see findings
+  tables): FacPricing silent save-skip + refetch loop, window.showToast
+  TypeError, PropPricing empty EPI split in Excel export.
+
+### Remaining backlog (next sessions)
+
+- Decompose the four 1,000–1,255-line screens still in
+  `OVERSIZED_SCREENS_LEGACY`: PropPricing, NpStopLossPricing,
+  DevFactorsScreen, FacDocuments (+ wire its pending-undo at ~line 324).
+  PropPricing and FacPricing already carry golden masters; give
+  NpStopLossPricing and DevFactorsScreen theirs first.
+- Fix the three pinned money-path bugs above (adjust golden-master
+  expectations deliberately in the same change).
+- Raise the global coverage ratchet as suites grow; revisit the
+  shared-screens bundle-budget overage (chunk should shrink as the
+  remaining decompositions land).
+
 - **Phase 1.2 (type safety: screens — partial by design)** —
   `NpStopLossPricing.jsx` is fully strict under `@ts-check` (the pattern
   proof), plus typed `AppContext` (JSDoc `AppState`/`AppContextValue`) which

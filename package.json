@@ -19,6 +19,7 @@
     "test": "npm run test:server && npm run test:client",
     "test:server": "vitest run --config server/vitest.config.js",
     "test:client": "vitest run --config client/vitest.config.js",
+    "test:client:coverage": "vitest run --config client/vitest.config.js --coverage",
     "test:watch": "vitest --config server/vitest.config.js",
     "loadtest": "k6 run load-test/k6/portfolio.js",
     "loadtest:10vu": "k6 run load-test/k6/smoke-10vu.js",
@@ -29,7 +30,7 @@
     "cluster:stop": "pm2 stop ecosystem.config.cjs",
     "cluster:status": "pm2 status",
     "cluster:logs": "pm2 logs universe",
-    "verify": "npm run lint && npm run typecheck && npm run budget:frontend && npm test"
+    "verify": "npm run lint && npm run typecheck && npm run budget:frontend && npm run test:server && npm run test:client:coverage"
   },
   "engines": {
     "node": ">=20.18.0"
