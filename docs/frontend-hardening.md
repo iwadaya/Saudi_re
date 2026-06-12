@@ -98,6 +98,22 @@ listed in `OVERSIZED_SCREENS_LEGACY` in `eslint.config.js`; shrink one below
 | `npPricingEngine.js` `calcParetoROL` (raw-fit branch) | `years` could be assigned the raw `observation_years` string and flow into division | Coerce with `cn()` |
 | `client/src/test/bundleBudget.test.js` | Latent pre-existing failure: `shared-screens` chunk is 229 KiB vs the test's 200 KiB budget. The test self-skips when `client/dist` is absent, which is why CI never sees it — building locally before `npm test` will fail. Verified pre-existing on the base branch (chunk sizes byte-identical before/after the api.ts conversion). | Track for Phase 4 (decomposition should shave the chunk); do not raise the budget |
 
+## Accessibility audit (Phase 5 groundwork)
+
+`npm run lint:a11y` runs eslint-plugin-jsx-a11y (recommended set) over
+screens + components via the standalone `eslint.a11y.config.js`. It is
+NOT a CI gate yet — the main lint runs at `--max-warnings=0`, so these
+rules join `eslint.config.js` as errors only when the count hits zero.
+
+Baseline (2026-06, post Phase 3.2): **255 problems** —
+106 `click-events-have-key-events` + 105 `no-static-element-interactions`
+(the same clickable-div sites the budget's `onClickNonInteractive`
+ratchet counts), 32 `label-has-associated-control`, 3
+`no-noninteractive-element-interactions`. Fix pattern: replace with the
+`ui/` `<Button>` (or add role="button" + tabIndex + Enter/Space
+onKeyDown for row clicks), and wrap labelled controls in the `ui/`
+`<Field>`.
+
 ## Phase log
 
 - **Phase 0 (guardrails)** — screens lint ratchet (`no-console`,
