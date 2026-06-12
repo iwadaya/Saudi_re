@@ -70,6 +70,15 @@ baseline) — each must be decomposed, then have its disable removed:
 | `non_proportional/structure/NpStructure.jsx` | 1,710 | **DONE** — 180-line orchestrator + typed reducer (Phase 4.2) |
 | `shared/LossParetoScreen.jsx` | 1,634 | **DONE** — 201-line orchestrator + typed reducer (Phase 4.2) |
 
+Phase 4.2 (optional tier) also decomposed, golden-master first:
+`PropPricing.jsx` 1,161→281, `NpStopLossPricing.jsx` 1,155→91,
+`DevFactorsScreen.jsx` 1,242→255, `FacDocuments.jsx` 1,051→99 (with the
+pending fac-recommendation undo wired). Their `OVERSIZED_SCREENS_LEGACY`
+entries are removed; the remaining listed files (PropTreatyDetail,
+ExcelImportAgent, NpExcessDevFactors, NpExpiringStructure,
+LossSelectionScreen, FacRiskDetail, FQPricingGraphModal) are 800–1,100
+LOC and stay pinned at the 1,500 cap until someone shrinks them.
+
 Files pinned at the 1,500 hard cap (between 800 and 1,500 at baseline) are
 listed in `OVERSIZED_SCREENS_LEGACY` in `eslint.config.js`; shrink one below
 800 and delete its entry.
@@ -192,16 +201,14 @@ onKeyDown for row clicks), and wrap labelled controls in the `ui/`
 
 ### Remaining backlog (next sessions)
 
-- Decompose the four 1,000–1,255-line screens still in
-  `OVERSIZED_SCREENS_LEGACY`: PropPricing, NpStopLossPricing,
-  DevFactorsScreen, FacDocuments (+ wire its pending-undo at ~line 324).
-  PropPricing and FacPricing already carry golden masters; give
-  NpStopLossPricing and DevFactorsScreen theirs first.
-- Fix the three pinned money-path bugs above (adjust golden-master
-  expectations deliberately in the same change).
+- ~~Decompose the four optional-tier screens~~ **done** (golden-master
+  first; FacDocuments undo wired — note: no server unaccept endpoint
+  exists, so undo restores values but the recommendation row stays
+  ACCEPTED in the DB; an unaccept endpoint would complete it).
+- ~~Fix the six pinned money-path findings~~ **done**.
 - Raise the global coverage ratchet as suites grow; revisit the
-  shared-screens bundle-budget overage (chunk should shrink as the
-  remaining decompositions land).
+  shared-screens bundle-budget overage; the seven remaining 800–1,100
+  LOC legacy files can be shrunk opportunistically.
 
 - **Phase 1.2 (type safety: screens — partial by design)** —
   `NpStopLossPricing.jsx` is fully strict under `@ts-check` (the pattern

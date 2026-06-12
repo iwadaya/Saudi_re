@@ -19,10 +19,6 @@ import jsxA11y from 'eslint-plugin-jsx-a11y';
 // applies again. Files already past 1,500 carry a file-level
 // `/* eslint-disable max-lines */` annotated with TODO(hardening) instead.
 const OVERSIZED_SCREENS_LEGACY = [
-  'client/src/screens/proportional/dev_factors/DevFactorsScreen.jsx',
-  'client/src/screens/facultative/documents/FacDocuments.jsx',
-  'client/src/screens/proportional/pricing/PropPricing.jsx',
-  'client/src/screens/non_proportional/stop_loss_pricing/NpStopLossPricing.jsx',
   'client/src/screens/proportional/treaty_detail/PropTreatyDetail.jsx',
   'client/src/screens/facultative/pricing/FacPricing.jsx',
   'client/src/screens/shared/ExcelImportAgent.jsx',
