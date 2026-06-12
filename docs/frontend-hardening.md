@@ -114,6 +114,14 @@ ratchet counts), 32 `label-has-associated-control`, 3
 onKeyDown for row clicks), and wrap labelled controls in the `ui/`
 `<Field>`.
 
+### Findings from Phase-6 golden-master work (PropPricing)
+
+| Where | Finding | Status |
+|---|---|---|
+| `PropPricing.jsx` ~1004 | Excel export passes `epiSplit: (getC()?.epi_split \|\| [])` — `getC()` with no args always returns `''`, so the exported EPI split is always empty; likely meant `contract.epi_split \|\| td.epiSplit` | Open — fix in the PropPricing Phase-4 decomposition |
+| `PropPricing.jsx` share grid | `downside_amt` auto-fills one effect-cycle after the component grid settles; a save clicked in that window persists a downside figure computed from an empty downside column | Open — fix in the decomposition |
+| `client/src/test/bindPathFixtures.js` | `makeBindPathApiMock` lacks `getCountry`, so the market-average branch silently dies under default mocks and is never exercised | Open — add to the shared fixture |
+
 ## Phase log
 
 - **Phase 0 (guardrails)** — screens lint ratchet (`no-console`,
