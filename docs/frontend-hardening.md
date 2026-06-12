@@ -111,3 +111,13 @@ listed in `OVERSIZED_SCREENS_LEGACY` in `eslint.config.js`; shrink one below
   endpoints, canonical pricing interfaces in `types/pricing.ts`, `@ts-check`
   on `shared/pricingMath.js` + `npPricingEngine.js`. Bundle verified
   size-identical pre/post conversion.
+- **Phase 1.2 (type safety: screens — partial by design)** —
+  `NpStopLossPricing.jsx` is fully strict under `@ts-check` (the pattern
+  proof), plus typed `AppContext` (JSDoc `AppState`/`AppContextValue`) which
+  removes the `never`-typed context errors from every screen. Strict error
+  counts measured for the rest: PropPricing 209, FacPricing 164,
+  NpFinalPricing 739. Decision: those three get their types as part of the
+  Phase 4 decomposition (typed reducer + hooks per the plan) instead of
+  JSDoc-annotating monoliths that Phase 4 immediately rewrites. The
+  `priceStopLoss` JSDoc contract was corrected to `number|null` for the LR
+  inputs (the screen has always passed null; the engine guards).
