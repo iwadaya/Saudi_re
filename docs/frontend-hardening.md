@@ -13,15 +13,15 @@ every phase. The goal is monotonic improvement — no regression on any row.
 
 | Metric | Plan baseline (2026-06) | Phase 0 | Phase 1 | Phase 2 | Phase 3 |
 |---|---|---|---|---|---|
-| Screen source files | 157 | 122 | — | — | — |
-| Inline `style={{}}` (gated) | 3,256 | 3,293 | — | — | — |
-| Files > 800 LOC (gated) | 15 | 15 | — | — | — |
-| `onClick` on div/span/td/tr (gated) | 86 | 116 | — | — | — |
-| `console.*` (gated) | 82 | 78 | — | — | — |
-| `useState` calls (info) | 715 | 650 | — | — | — |
-| `setLoading` calls (info) | 139 | 80 | — | — | — |
-| TypeScript / typecheck coverage | 0 | 0 | api.ts + types/pricing.ts + @ts-check core math | — | — |
-| Raw `fetch()` in screens | 0 | 0 (keep at 0) | 0 | — | — |
+| Screen source files | 157 | 122 | 122 | 122 | 122 |
+| Inline `style={{}}` (gated) | 3,256 | 3,293 | 3,293 | 3,292 | **2,821** |
+| Files > 800 LOC (gated) | 15 | 15 | 15 | 15 | 15 |
+| `onClick` on div/span/td/tr (gated) | 86 | 116 | 116 | 116 | **104** |
+| `console.*` (gated) | 82 | 78 | 78 | 77 | 77 |
+| `useState` calls (info) | 715 | 650 | 650 | 637 | 637 |
+| `setLoading` calls (info) | 139 | 80 | 80 | **73** | 73 |
+| TypeScript / typecheck coverage | 0 | 0 | api.ts + types/pricing.ts + @ts-check core math + 1 screen | unchanged | unchanged |
+| Raw `fetch()` in screens | 0 | 0 (keep at 0) | 0 | 0 | 0 |
 
 > The plan-baseline column came from one-line greps over all `.jsx` files
 > (tests included). Phase 0 onward uses `scripts/frontend-budget.mjs`, which
@@ -111,6 +111,35 @@ listed in `OVERSIZED_SCREENS_LEGACY` in `eslint.config.js`; shrink one below
   endpoints, canonical pricing interfaces in `types/pricing.ts`, `@ts-check`
   on `shared/pricingMath.js` + `npPricingEngine.js`. Bundle verified
   size-identical pre/post conversion.
+- **Phase 2.1 (async primitive)** — `hooks/useResource.ts` (abort-safe,
+  supersession-safe, errorReporter-wired, STALE_WRITE/PRICING_DRIFT
+  normalized via `describeResourceError`) + `components/AsyncBoundary.jsx`
+  with 19 tests and a 90% coverage gate. `useScreenSave`'s load path was
+  rebuilt on it (same hydrate ordering; reloads keyed on entityId +
+  explicit `reloadDeps` so unstable callback identities can't cause
+  fetch-render loops).
+- **Phase 2.2 (six screens migrated)** — NpHistoricalPerformance,
+  ProfileScreen, FacRiskDetail, LossSelectionScreen, DevFactorsScreen,
+  PropTreatyDetail. Each: primary fetch on useResource/useScreenSave with
+  AsyncBoundary + Retry, transition tests (loading→loaded,
+  loading→error→recover), zero local setLoading/try-catch left on the
+  primary path, optimistic-lock/stale-write flows byte-identical.
+  Deliberate behavior change everywhere: load failures now surface with
+  the shared alert + Retry and are reported, instead of being silently
+  swallowed into blank tables/forms.
+- **Phase 3.1 (ui primitives)** — token-bound Button/Input/NumberInput/
+  Field/Card/Modal/Table/Badge/Callout under `components/ui/` with a11y
+  contract tests (modal focus trap/restore/Esc, field label+error
+  wiring); ui.css consumes only `var(--*)` tokens.
+- **Phase 3.2 (hotspot codemod, 4 of 6 files)** — FacDocuments 117→2,
+  AggDrilldownModal 162→8, InternalMetricsPanel 100→0,
+  InDepthPortfolioModal 100→1 inline styles; −12 non-interactive
+  onClicks; hand-rolled modals replaced by the Modal primitive (focus
+  trap/Esc/restore gained). NpFinalPricing (252) and LossParetoScreen
+  (117) were deliberately deferred to their Phase-4 decompositions,
+  where golden-master tests will protect the pricing math while the
+  render tree is being rebuilt — restyling 1,600–4,100-line monoliths
+  twice is waste. Budget re-baselined after each landing.
 - **Phase 1.2 (type safety: screens — partial by design)** —
   `NpStopLossPricing.jsx` is fully strict under `@ts-check` (the pattern
   proof), plus typed `AppContext` (JSDoc `AppState`/`AppContextValue`) which
