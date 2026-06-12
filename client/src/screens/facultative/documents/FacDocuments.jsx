@@ -919,6 +919,7 @@ export default function FacDocuments() {
         {/* Upload zone */}
         <div
           className={`facdoc-dropzone${draggingOver ? ' facdoc-dropzone--active' : ''}`}
+          role="presentation"
           onDragOver={(e) => { e.preventDefault(); setDraggingOver(true); }}
           onDragLeave={() => setDraggingOver(false)}
           onDrop={onDrop}

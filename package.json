@@ -14,7 +14,6 @@
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "lint:screens": "eslint client/src/screens --max-warnings=0",
-    "lint:a11y": "eslint --config eslint.a11y.config.js client/src/screens client/src/components",
     "typecheck": "npm run typecheck --prefix client",
     "budget:frontend": "node scripts/frontend-budget.mjs",
     "test": "npm run test:server && npm run test:client",

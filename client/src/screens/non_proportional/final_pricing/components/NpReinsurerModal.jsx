@@ -34,6 +34,7 @@ export default function NpReinsurerModal({ open, onClose, layers, leadSetup, upd
   return (
     <div
       className="screen-modal-backdrop"
+      role="presentation"
       style={{ display: 'flex' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >

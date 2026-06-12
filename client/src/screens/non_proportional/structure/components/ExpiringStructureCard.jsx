@@ -38,9 +38,9 @@ export default function ExpiringStructureCard({
               Override
             </button>
           )}
-          <label style={{ fontSize: 12, color: 'rgba(226,232,240,0.45)', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 12, color: 'rgba(226,232,240,0.45)', whiteSpace: 'nowrap' }}>
             Layers
-          </label>
+          </span>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(226,232,240,0.75)', minWidth: 24, textAlign: 'center' }}>
             {expiringLayerCount || '—'}
           </span>

@@ -121,6 +121,7 @@ export default function ExpiringCurveModal({ expiringLayerCount, expiringLayers,
   return (
     <div
       className="modal-backdrop"
+      role="presentation"
       style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.65)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="glass" role="dialog" aria-modal="true" style={{ background: 'var(--glass-bg, #0d1117)', border: '1px solid rgba(0,212,255,0.25)', borderRadius: 12, width: '92vw', maxWidth: 1000, maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

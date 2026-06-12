@@ -10,7 +10,7 @@ import { ReturnPeriodChart, SeverityChart, FrequencyChart } from './ParetoCharts
 
 export default function FreqSevModal({ lossType, activeDist, onSelectDist, fits, xm, limit, alpha, freq, uwYrs, inflated, onClose }) {
   return (
-    <div className="llp-modal-backdrop is-open" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+    <div className="llp-modal-backdrop is-open" role="presentation" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div className="llp-modal glass" style={{width:'min(1100px,96vw)',maxHeight:'92vh',display:'flex',flexDirection:'column'}}>
         <div className="llp-modal-head">
           <div className="llp-modal-title">Frequency–Severity Analysis · {lossType==='cat'?'Cat':'Large'} Losses</div>

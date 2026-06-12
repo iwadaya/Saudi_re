@@ -911,8 +911,8 @@ export default function PropPricing() {
 
           {/* ═══ QUICK SUMMARY MODAL ═══ */}
           {showQuickSummary && (
-            <div className="bbg-modal-overlay" onClick={() => setShowQuickSummary(false)}>
-              <div className="bbg-modal-full" onClick={e => e.stopPropagation()}>
+            <div className="bbg-modal-overlay" role="presentation" onClick={e => { if (e.target === e.currentTarget) setShowQuickSummary(false); }}>
+              <div className="bbg-modal-full">
                 <div className="bbg-modal-head">
                   <span className="bbg-modal-title">Quick Summary</span>
                   <button className="bbg-modal-close" onClick={() => setShowQuickSummary(false)}>×</button>
@@ -1028,7 +1028,7 @@ export default function PropPricing() {
 
           {/* ═══ DECLINE MODAL ═══ */}
           {showDecline && (
-            <div className="bbg-modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setShowDecline(false); }}>
+            <div className="bbg-modal-backdrop" role="presentation" onClick={e => { if (e.target === e.currentTarget) setShowDecline(false); }}>
               <div className="bbg-modal">
                 <div className="bbg-modal-head"><span className="bbg-modal-title">Decline Treaty</span><button className="bbg-modal-x" onClick={() => setShowDecline(false)}>✕</button></div>
                 <div className="bbg-modal-body">
@@ -1045,7 +1045,7 @@ export default function PropPricing() {
 
           {/* ═══ MANDATE BLOCK MODAL ═══ */}
           {showMandateBlock && mandateCheck && (
-            <div className="bbg-modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setShowMandateBlock(false); }}>
+            <div className="bbg-modal-backdrop" role="presentation" onClick={e => { if (e.target === e.currentTarget) setShowMandateBlock(false); }}>
               <div className="bbg-modal" style={{ maxWidth: 520 }}>
                 <div className="bbg-modal-head">
                   <span className="bbg-modal-title">⚠ Mandate Restriction</span>
@@ -1117,7 +1117,7 @@ export default function PropPricing() {
 
           {/* ═══ INSIGHT MODAL ═══ */}
           {insightOpen && (
-            <div className="bbg-modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setInsightOpen(false); }}>
+            <div className="bbg-modal-backdrop" role="presentation" onClick={e => { if (e.target === e.currentTarget) setInsightOpen(false); }}>
               <div className="bbg-modal bbg-modal--fullscreen">
                 <div className="bbg-modal-head">
                   <span className="bbg-modal-title">{INSIGHT_BUTTONS.find(b => b.key === insightKey)?.label || insightKey}</span>

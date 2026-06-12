@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, useId } from 'react';
 import { api } from '../../../api';
 import { useContractId } from '../../../hooks/useContractId';
 import { useResource } from '../../../hooks/useResource';
@@ -489,6 +489,8 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   const [chosenBase, setChosenBase] = useState('ACTUAL');
   const [chosenLdfs, setChosenLdfs] = useState([]);
   const [chosenCdfs, setChosenCdfs] = useState([]);
+  const ielrInputId = useId();
+  const achievedPremiumInputId = useId();
   const [ielr, setIelr] = useState('0.65');
   const [premiums, setPremiums] = useState([]);
   // Premium-flavoured BF inputs — used when devType === 'PREMIUM'.
@@ -891,20 +893,22 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '0 0 12px', padding: '10px 14px', borderRadius: 12, background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.30)' }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#bae6fd', letterSpacing: '.04em' }}>Triangle basis</span>
               <div className="toggle-group" style={{ boxShadow: '0 0 0 1px rgba(148,163,184,0.18)' }}>
-                <span
+                <button
+                  type="button"
                   className={`toggle-option${basis === 'FULL' ? ' active' : ''}`}
                   onClick={() => setBasis('FULL')}
                   style={basis === 'FULL'
                     ? { background: 'linear-gradient(135deg,#f59e0b,#f97316)', color: '#1a1206', fontWeight: 800, boxShadow: '0 0 16px rgba(249,115,22,0.65)', textShadow: 'none' }
                     : { color: '#fbbf24', fontWeight: 700 }}
-                >Full</span>
-                <span
+                >Full</button>
+                <button
+                  type="button"
                   className={`toggle-option${basis === 'STRIPPED' ? ' active' : ''}`}
                   onClick={() => setBasis('STRIPPED')}
                   style={basis === 'STRIPPED'
                     ? { background: 'linear-gradient(135deg,#10b981,#06b6d4)', color: '#042f2a', fontWeight: 800, boxShadow: '0 0 16px rgba(16,185,129,0.65)', textShadow: 'none' }
                     : { color: '#5eead4', fontWeight: 700 }}
-                >Stripped of Large/Cat Losses</span>
+                >Stripped of Large/Cat Losses</button>
               </div>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                 Stripped is the attritional basis — recommended. Saved per treaty: choosing Full uses
@@ -948,8 +952,8 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
               <div className="df-method">
                 <div className="df-method-label">Projection</div>
                 <div className="toggle-group df-method-toggle">
-                  <span className={`toggle-option${projMethod === 'CHAIN' ? ' active' : ''}`} onClick={() => { setProjMethod('CHAIN'); setDirty(true); }}>Chain Ladder</span>
-                  <span className={`toggle-option${projMethod === 'BF' ? ' active' : ''}`} onClick={() => { setProjMethod('BF'); setDirty(true); }}>Bornhuetter-Ferguson</span>
+                  <button type="button" className={`toggle-option${projMethod === 'CHAIN' ? ' active' : ''}`} onClick={() => { setProjMethod('CHAIN'); setDirty(true); }}>Chain Ladder</button>
+                  <button type="button" className={`toggle-option${projMethod === 'BF' ? ' active' : ''}`} onClick={() => { setProjMethod('BF'); setDirty(true); }}>Bornhuetter-Ferguson</button>
                 </div>
               </div>
             </div>
@@ -1043,8 +1047,8 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
           {/* BF IELR (loss BF) */}
           {projMethod === 'BF' && !isPremium && (
             <div style={{ display: 'flex', gap: 16, alignItems: 'center', margin: '12px 0', padding: '10px 16px', borderRadius: 14, background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.2)' }}>
-              <label style={{ fontSize: 12, color: 'rgba(253,186,116,0.9)', fontWeight: 600 }}>Initial Expected Loss Ratio (IELR)</label>
-              <input className="fi" type="number" min="0" max="2" step="0.01" value={ielr} onChange={e => { setIelr(e.target.value); setDirty(true); }} style={{ width: 100, textAlign: 'center', borderColor: 'rgba(249,115,22,0.4)' }} />
+              <label style={{ fontSize: 12, color: 'rgba(253,186,116,0.9)', fontWeight: 600 }} htmlFor={ielrInputId}>Initial Expected Loss Ratio (IELR)</label>
+              <input id={ielrInputId} className="fi" type="number" min="0" max="2" step="0.01" value={ielr} onChange={e => { setIelr(e.target.value); setDirty(true); }} style={{ width: 100, textAlign: 'center', borderColor: 'rgba(249,115,22,0.4)' }} />
               <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{(Number(ielr) * 100 || 0).toFixed(0)}%</span>
             </div>
           )}
@@ -1052,8 +1056,9 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
           {/* BF % Achieved Premium (premium BF) */}
           {projMethod === 'BF' && isPremium && (
             <div style={{ display: 'flex', gap: 16, alignItems: 'center', margin: '12px 0', padding: '10px 16px', borderRadius: 14, background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.20)', flexWrap: 'wrap' }}>
-              <label style={{ fontSize: 12, color: 'rgba(199,210,254,0.9)', fontWeight: 600 }}>% Achieved Premium</label>
+              <label style={{ fontSize: 12, color: 'rgba(199,210,254,0.9)', fontWeight: 600 }} htmlFor={achievedPremiumInputId}>% Achieved Premium</label>
               <input
+                id={achievedPremiumInputId}
                 className="fi"
                 type="number"
                 min="0"
@@ -1090,7 +1095,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
           <div style={{ marginBottom: 14, marginTop: 8 }}>
             <div className="toggle-group" style={{ display: 'inline-flex' }}>
               {[['DEV_FACTORS', '📊 Development Factors'], ['LINK_RATIOS', '🔗 Link Ratios'], ['GRAPH', '📈 Comparison Graph']].map(([key, label]) => (
-                <span key={key} className={`toggle-option${view === key ? ' active' : ''}`} onClick={() => setView(key)} style={{ fontSize: 12, padding: '8px 16px' }}>{label}</span>
+                <button type="button" key={key} className={`toggle-option${view === key ? ' active' : ''}`} onClick={() => setView(key)} style={{ fontSize: 12, padding: '8px 16px' }}>{label}</button>
               ))}
             </div>
           </div>
@@ -1111,9 +1116,9 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                 <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Average</span>
                 <div className="toggle-group">
                   {['weighted', 'simple', 'last3', 'last5'].map(m => (
-                    <span key={m} className={`toggle-option${avgMethod === m ? ' active' : ''}`} onClick={() => { setAvgMethod(m); setDirty(true); }}>
+                    <button type="button" key={m} className={`toggle-option${avgMethod === m ? ' active' : ''}`} onClick={() => { setAvgMethod(m); setDirty(true); }}>
                       {m === 'weighted' ? 'Weighted' : m === 'simple' ? 'Simple' : m === 'last3' ? 'Last 3' : 'Last 5'}
-                    </span>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1155,9 +1160,9 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                   <div className="df-chosen-left">
                     <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>Chosen factors base</div>
                     <div className="toggle-group df-chosen-toggle">
-                      <span className={`toggle-option${chosenBase === 'ACTUAL' ? ' active' : ''}`} onClick={() => switchBase('ACTUAL')}>ACTUAL</span>
-                      <span className={`toggle-option${chosenBase === 'PARAM' ? ' active' : ''}`} onClick={() => switchBase('PARAM')}>PARAMETRIZED</span>
-                      <span className={`toggle-option${chosenBase === 'LINK_RATIO' ? ' active' : ''}`} onClick={() => {/* read-only — set from Link Ratios tab */}} style={chosenBase === 'LINK_RATIO' ? {} : { opacity: 0.35 }}>LINK RATIOS</span>
+                      <button type="button" className={`toggle-option${chosenBase === 'ACTUAL' ? ' active' : ''}`} onClick={() => switchBase('ACTUAL')}>ACTUAL</button>
+                      <button type="button" className={`toggle-option${chosenBase === 'PARAM' ? ' active' : ''}`} onClick={() => switchBase('PARAM')}>PARAMETRIZED</button>
+                      <button type="button" className={`toggle-option${chosenBase === 'LINK_RATIO' ? ' active' : ''}`} onClick={() => {/* read-only — set from Link Ratios tab */}} style={chosenBase === 'LINK_RATIO' ? {} : { opacity: 0.35 }}>LINK RATIOS</button>
                     </div>
                   </div>
                   <div className="df-chosen-right">
@@ -1204,6 +1209,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
           </AsyncBoundary>
           {showStrippedModal && (
             <div
+              role="presentation"
               onClick={e => { if (e.target === e.currentTarget) setShowStrippedModal(false); }}
               style={{ position: 'fixed', inset: 0, zIndex: 120000, background: 'rgba(2,6,23,0.72)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
             >
