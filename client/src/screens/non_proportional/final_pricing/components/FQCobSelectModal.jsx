@@ -10,7 +10,7 @@ export default function FQCobSelectModal({ selected, cobList, onSave, onClose })
     setSel(n);
   };
   return (
-    <div className="bm-modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="bm-modal-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="bm-modal" style={{ width: '100vw', maxWidth: '100vw', height: '100dvh', maxHeight: '100dvh', borderRadius: 0, display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto' }}>
         <div className="bm-modal-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>Select Lines of Business</span>

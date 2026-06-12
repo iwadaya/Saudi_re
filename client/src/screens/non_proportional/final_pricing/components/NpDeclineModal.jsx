@@ -19,7 +19,7 @@ export default function NpDeclineModal({ pricing, open, contractId, quoteMode, s
   if (!open) return null;
   return (
 
-                <div className="screen-modal-backdrop" style={{ display: 'flex' }} onClick={e => { if (e.target === e.currentTarget) setShowDeclineModal(false); }}>
+                <div className="screen-modal-backdrop" role="presentation" style={{ display: 'flex' }} onClick={e => { if (e.target === e.currentTarget) setShowDeclineModal(false); }}>
                   <div className="screen-modal" role="dialog">
                     <div className="screen-modal-header">
                       <div className="screen-modal-title">Decline Treaty</div>

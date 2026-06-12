@@ -42,6 +42,11 @@ export default defineConfig({
       ],
       reporter: ['text', 'html'],
       thresholds: {
+        // Global ratchet floor (Phase 6): full-suite coverage measured
+        // 45.79% lines / 35.34% branches when the gate landed. Raise
+        // these as coverage grows — never lower them.
+        lines: 45,
+        branches: 35,
         // Phase-2 async primitive: must stay near-fully covered including
         // the error / stale / cancel-on-unmount paths.
         'client/src/hooks/useResource.ts': { lines: 90, branches: 90 },

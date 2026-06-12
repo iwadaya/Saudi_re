@@ -105,7 +105,7 @@ export default function NpOfferModal({
                 const totalLinePrem  = layerData.reduce((s, r) => s + r.linePrem, 0);
 
                 return (
-                  <div className="bbg-modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setShowOfferModal(false); }}>
+                  <div className="bbg-modal-backdrop" role="presentation" onClick={e => { if (e.target === e.currentTarget) setShowOfferModal(false); }}>
                     <div className="bbg-modal bbg-modal--fullscreen off-modal">
 
                       {/* ── HEADER ── */}

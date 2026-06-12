@@ -29,7 +29,7 @@ export default function NpInsightModal({ pricing, open, contractId, isQuote, cur
   if (!open) return null;
   return (
 
-                <div className="bbg-modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setInsightOpen(false); }}>
+                <div className="bbg-modal-backdrop" role="presentation" onClick={e => { if (e.target === e.currentTarget) setInsightOpen(false); }}>
                   <div className={`bbg-modal ${['LARGE_LOSSES','CAT_LOSSES','AGGREGATES','CEDANT','RISK_PROFILE','MKT_ANALYSIS','CHECKLIST'].includes(insightKey) ? 'bbg-modal--fullscreen' : 'bbg-modal--wide'}`}>
                     <div className="bbg-modal-head">
                       <span className="bbg-modal-title">

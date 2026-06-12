@@ -8,7 +8,7 @@
 // out, no logic changes. All state arrives through the `pricing`
 // reducer surface (hooks/useNpPricingState.ts).
 
-import React from 'react';
+import React, { useId } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
 import { toN } from '../formatters.js';
 import { FQ_STRUCTURE_COLORS } from '../fqHelpers.js';
@@ -56,6 +56,7 @@ export default function FQQuotePricingPanel({
   runQuoteCalcEngine,
   showToast,
 }) {
+  const numExpLayersSelectId = useId();
   const {
     snap, offerStatus, calcEngineRunning, saveState, runningStructures,
     selectedCobs, cobList, showCobModal, setShowCobModal, setSelectedCobs,
@@ -134,13 +135,13 @@ export default function FQQuotePricingPanel({
                     </div>
                     <div className="bm-meta-grid">
                       <div className="bm-field">
-                        <label className="bm-label">Cedant</label>
+                        <span className="bm-label">Cedant</span>
                         <div className="bm-input" style={{ background: 'rgba(255,255,255,0.02)' }}>
                           {snap.cedant && snap.cedant !== '–' ? snap.cedant : '—'}
                         </div>
                       </div>
                       <div className="bm-field">
-                        <label className="bm-label">Class of Business</label>
+                        <span className="bm-label">Class of Business</span>
                         <button className="bm-input bm-input--btn" onClick={() => setShowCobModal(true)} type="button">
                           <span style={{ color: selectedCobs.length ? 'rgba(226,232,240,0.90)' : 'rgba(255,255,255,0.30)' }}>
                             {selectedCobs.length ? selectedCobs.map((c) => c.name).join(', ') : '— Select COB —'}
@@ -149,13 +150,13 @@ export default function FQQuotePricingPanel({
                         </button>
                       </div>
                       <div className="bm-field">
-                        <label className="bm-label">Currency</label>
+                        <span className="bm-label">Currency</span>
                         <div className="bm-input" style={{ background: 'rgba(255,255,255,0.02)' }}>
                           {currency || '—'}
                         </div>
                       </div>
                       <div className="bm-field">
-                        <label className="bm-label">Country</label>
+                        <span className="bm-label">Country</span>
                         <div className="bm-input" style={{ background: 'rgba(255,255,255,0.02)' }}>
                           {npDetail.countryName || npDetail.country || '—'}
                         </div>
@@ -189,8 +190,9 @@ export default function FQQuotePricingPanel({
                         >
                           Analysis
                         </button>
-                        <label className="bm-label" style={{ margin: 0 }}>Number of Layers</label>
+                        <label className="bm-label" style={{ margin: 0 }} htmlFor={numExpLayersSelectId}>Number of Layers</label>
                         <select
+                          id={numExpLayersSelectId}
                           className="bm-input"
                           style={{ width: 90 }}
                           value={numExpLayers}

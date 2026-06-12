@@ -287,7 +287,7 @@ export default function FQBenchmarkModal({
   };
 
   return (
-    <div className="bm-modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="bm-modal-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="bm-modal" style={{ width: '100vw', maxWidth: '100vw', height: '100dvh', maxHeight: '100dvh', borderRadius: 0, display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)' }}>
         {/* Header */}
         <div className="bm-modal-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>

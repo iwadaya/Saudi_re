@@ -10,6 +10,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
 
 // Screen files that already exceeded the 800-line budget when the hardening
 // baseline was taken (see docs/frontend-hardening.md). They may not grow past
@@ -143,6 +144,21 @@ export default [
     files: OVERSIZED_SCREENS_LEGACY,
     rules: {
       'max-lines': ['error', { max: 1500, skipBlankLines: false, skipComments: false }],
+    },
+  },
+
+  // ─── Accessibility (Phase 5 — driven to zero, now gated) ──────────
+  // The screens + components layers are keyboard/screen-reader clean;
+  // jsx-a11y recommended keeps them that way. Patterns in use: real
+  // <button> (or role="button" + tabIndex + Enter/Space onKeyDown) for
+  // every click target, role="presentation" for pointer-only backdrop
+  // dismissal, htmlFor/useId label association.
+  {
+    files: ['client/src/screens/**/*.{js,jsx}', 'client/src/components/**/*.{js,jsx}'],
+    ignores: ['**/*.test.{js,jsx}'],
+    plugins: { 'jsx-a11y': jsxA11y },
+    rules: {
+      ...jsxA11y.configs.recommended.rules,
     },
   },
 

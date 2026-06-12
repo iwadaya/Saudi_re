@@ -12,7 +12,11 @@ export default function OepCard({ showOep, onToggle, oepRows, onSetOepRow, oepLa
       <div
         className="llp-card-head"
         style={{ cursor: 'pointer' }}
+        role="button"
+        tabIndex={0}
+        aria-expanded={showOep}
         onClick={() => onToggle()}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
       >
         <div>
           <div className="llp-card-title">

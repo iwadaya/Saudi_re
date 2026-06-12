@@ -8,6 +8,7 @@
 //
 // The layer cascade + recalc behaviour is pinned literal-by-literal in
 // goldenMaster.test.jsx — keep it green when touching anything here.
+import { useId } from 'react';
 import WizardLayout from '../../../components/WizardLayout';
 import { useNpStructureState } from './hooks/useNpStructureState';
 import { QuoteStructureSection } from './QuoteStructureSection';
@@ -24,6 +25,7 @@ import ExpiringCoveredPropsCard from './components/ExpiringCoveredPropsCard';
 const ROUTE_KEY = 'NP_STRUCTURE';
 
 export default function NpStructure() {
+  const structuresCountSelectId = useId();
   const {
     // store state
     layers, cobRows, cobOptions, savedQuoteStructures, loading,
@@ -60,10 +62,11 @@ export default function NpStructure() {
               {quoteMode && (
                 <section className="np-struct-card glass" style={{ marginBottom: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 18px' }}>
-                    <label style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>
+                    <label style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }} htmlFor={structuresCountSelectId}>
                       Structures to Quote
                     </label>
                     <select
+                      id={structuresCountSelectId}
                       className="fi"
                       style={{ width: 120 }}
                       value={String(structuresCount)}

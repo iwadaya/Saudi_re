@@ -4,7 +4,7 @@
   "metrics": {
     "inlineStyles": 2821,
     "filesOver800Loc": 12,
-    "onClickNonInteractive": 88,
+    "onClickNonInteractive": 78,
     "consoleCalls": 77,
     "useStateCalls": 551,
     "setLoadingCalls": 68
