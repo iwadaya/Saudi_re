@@ -262,8 +262,8 @@ export default function PropNoTriangulation() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#bae6fd' }}>Large / CAT losses</span>
                   <div className="toggle-group">
-                    <span className={`toggle-option${stripLargeCat ? ' active' : ''}`} onClick={() => setStrip(true)}>Strip from incurred</span>
-                    <span className={`toggle-option${!stripLargeCat ? ' active' : ''}`} onClick={() => setStrip(false)}>Keep in incurred</span>
+                    <button type="button" className={`toggle-option${stripLargeCat ? ' active' : ''}`} onClick={() => setStrip(true)}>Strip from incurred</button>
+                    <button type="button" className={`toggle-option${!stripLargeCat ? ' active' : ''}`} onClick={() => setStrip(false)}>Keep in incurred</button>
                   </div>
                   <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
                     Saved per treaty. Strip removes large/CAT from incurred before projecting and adds them back unprojected; Keep projects the full incurred and folds everything into attritional.

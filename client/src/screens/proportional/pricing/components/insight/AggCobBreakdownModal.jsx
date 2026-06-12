@@ -61,7 +61,7 @@ export function AggCobBreakdownModal({ contractId, shareRows, contractAgg100, ot
   const tdS = { padding: '9px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)', verticalAlign: 'middle', fontSize: 13 };
 
   return (
-    <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(3,7,18,0.80)', backdropFilter: 'blur(6px)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+    <div className="modal-backdrop" role="presentation" style={{ position: 'fixed', inset: 0, background: 'rgba(3,7,18,0.80)', backdropFilter: 'blur(6px)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="glass" role="dialog" aria-modal="true" style={{ width: 'calc(100vw - 24px)', height: 'calc(100vh - 24px)', background: 'linear-gradient(180deg,#0c1628,#060c18)', border: '1px solid rgba(251,191,36,0.20)', borderRadius: 16, boxShadow: '0 28px 60px rgba(0,0,0,0.65)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 

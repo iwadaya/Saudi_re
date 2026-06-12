@@ -19,7 +19,7 @@
 // Layout: three columns — Fitted (read-only) | Third-Party (editable)
 // | Blend (computed). Bottom row: source picker + weight slider + Apply.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 
 // Log-RP interpolation: returns the interpolated TP loss at any RP.
 // Exceedance probabilities are spaced log-linearly, so interpolate on
@@ -80,6 +80,7 @@ export default function RpComparisonModal({
 }) {
   // Local drafts so Cancel discards. Sync from props each time the
   // modal opens to pick up parent-state edits.
+  const tpSourceFieldId = useId();
   const [tpRows, setTpRows] = useState(initialTpRows);
   const [tpSource, setTpSource] = useState(initialTpSource);
   const [rpSource, setRpSource] = useState(initialRpSource);
@@ -137,6 +138,8 @@ export default function RpComparisonModal({
   return (
     <div
       className="modal-backdrop"
+      // Backdrop dismissal is pointer-only; keyboard users close via Esc or the ✕ button.
+      role="presentation"
       style={{
         position: 'fixed', inset: 0, zIndex: 9000,
         background: 'rgba(0,0,0,0.72)',
@@ -180,10 +183,11 @@ export default function RpComparisonModal({
 
         {/* Third-party source label */}
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-          <label style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+          <label htmlFor={tpSourceFieldId} style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--muted)' }}>
             Third-party source
           </label>
           <input
+            id={tpSourceFieldId}
             type="text" value={tpSource}
             onChange={(e) => setTpSource(e.target.value)}
             placeholder="e.g. Aon Catalyst 2026, Karen Clark RDS, Verisk Touchstone…"

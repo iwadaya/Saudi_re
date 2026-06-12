@@ -21,6 +21,8 @@ export default function WordingAnalysisModal({ contractId, parentContractId, doc
   return (
     <div
       className="modal-backdrop"
+      // Backdrop dismissal is pointer-only; keyboard users close via Esc or the ✕ button.
+      role="presentation"
       style={{
         position: 'fixed', inset: 0, zIndex: 9000,
         background: 'rgba(0,0,0,0.72)',

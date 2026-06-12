@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, useId } from 'react';
 import { api } from '../../api';
 import { useContractId } from '../../hooks/useContractId';
 import { useResource } from '../../hooks/useResource';
@@ -375,6 +375,9 @@ export default function ProfileScreen({ routeKey, title, headerPill, profileType
     return w;
   }, [pmlPct, selectedCurve, customB, autoCurvePreview, cVal, curveImpliedC, grossLossRatio]);
 
+  // Stable per-instance prefix so the exposure-panel labels associate with their controls.
+  const expId = useId();
+
   // Build exposure panel JSX inline (not as a nested component — avoids remount/cursor loss)
   const exposurePanelJsx = !isClaims && showExposure ? (
       <div className="pf-exposure-panel glass" style={{ marginTop: 16 }}>
@@ -412,20 +415,20 @@ export default function ProfileScreen({ routeKey, title, headerPill, profileType
         {/* Parameters row */}
         <div className="pf-exp-params">
           <div className="pf-exp-field">
-            <label className="pf-exp-label">Severity Rate (C)</label>
-            <BlurInput className="pf-exp-input" placeholder="e.g. 0.035"
+            <label className="pf-exp-label" htmlFor={`${expId}-severity`}>Severity Rate (C)</label>
+            <BlurInput id={`${expId}-severity`} className="pf-exp-input" placeholder="e.g. 0.035"
               value={cValue} onCommit={v => { setCValue(v); setDirty(true); }} />
             <div className="pf-exp-hint">Expected loss ÷ SI. Audit benchmark — compared to curve-implied rate.</div>
           </div>
           <div className="pf-exp-field">
-            <label className="pf-exp-label">PML Factor</label>
-            <BlurInput className="pf-exp-input" placeholder="100" suffix="%"
+            <label className="pf-exp-label" htmlFor={`${expId}-pml`}>PML Factor</label>
+            <BlurInput id={`${expId}-pml`} className="pf-exp-input" placeholder="100" suffix="%"
               value={pmlPct} onCommit={v => { setPmlPct(v); setDirty(true); }} />
             <div className="pf-exp-hint">Probable Maximum Loss as % of SI</div>
           </div>
           <div className="pf-exp-field">
-            <label className="pf-exp-label">Curve</label>
-            <select className="pf-exp-select" value={selectedCurve} onChange={e => { setSelectedCurve(e.target.value); setDirty(true); }}>
+            <label className="pf-exp-label" htmlFor={`${expId}-curve`}>Curve</label>
+            <select id={`${expId}-curve`} className="pf-exp-select" value={selectedCurve} onChange={e => { setSelectedCurve(e.target.value); setDirty(true); }}>
               {SWISS_RE_CURVES.map(c => <option key={c.name} value={c.name.split(' ')[0]}>{c.name} — {c.desc}</option>)}
               {dbCurves.map(c => <option key={`db-${c.curve_name || c}`} value={`DB:${c.curve_name || c}`}>DB: {c.curve_name || c}</option>)}
               <option value="Custom">Custom (b, g)</option>
@@ -437,15 +440,15 @@ export default function ProfileScreen({ routeKey, title, headerPill, profileType
           </div>
           {selectedCurve === 'Custom' && (
               <div className="pf-exp-field">
-                <label className="pf-exp-label">c (concentration)</label>
-                <BlurInput className="pf-exp-input pf-exp-input--sm" placeholder="e.g. 3.0"
+                <label className="pf-exp-label" htmlFor={`${expId}-concentration`}>c (concentration)</label>
+                <BlurInput id={`${expId}-concentration`} className="pf-exp-input pf-exp-input--sm" placeholder="e.g. 3.0"
                   value={customB} onCommit={v => { setCustomB(v); setDirty(true); }} />
                 <div className="pf-exp-hint">MBBEFD shape parameter (0 = uniform, 5 ≈ industrial).</div>
               </div>
           )}
           <div className="pf-exp-field">
-            <label className="pf-exp-label">Gross Loss Ratio</label>
-            <BlurInput className="pf-exp-input" placeholder="100" suffix="%"
+            <label className="pf-exp-label" htmlFor={`${expId}-glr`}>Gross Loss Ratio</label>
+            <BlurInput id={`${expId}-glr`} className="pf-exp-input" placeholder="100" suffix="%"
               value={grossLossRatio} onCommit={v => { setGrossLossRatio(v); setDirty(true); }} />
             <div className="pf-exp-hint">Step 8: cedant avg claims burden % (Swiss Re p.22)</div>
           </div>
@@ -720,7 +723,7 @@ function NumInput({ value, onChange, onPaste }) {
 /* BlurInput — edits in local state, commits to parent on blur/Enter.
    Prevents parent re-render on every keystroke so cursor stays put.
    Optional suffix (e.g. "%") shown when not focused. */
-function BlurInput({ value, onCommit, className, placeholder, suffix }) {
+function BlurInput({ value, onCommit, className, placeholder, suffix, id }) {
   const [local, setLocal] = React.useState(value);
   const [focused, setFocused] = React.useState(false);
   React.useEffect(() => { if (!focused) setLocal(value); }, [value, focused]);
@@ -728,7 +731,7 @@ function BlurInput({ value, onCommit, className, placeholder, suffix }) {
   const display = !focused && suffix && local ? `${local}${suffix}` : local;
   const title = suffix === '%' ? 'Enter a number — % is added automatically.' : undefined;
   return (
-    <input className={className} type="text" placeholder={placeholder} title={title}
+    <input id={id} className={className} type="text" placeholder={placeholder} title={title}
       value={focused ? local : (display || '')}
       onFocus={() => { setFocused(true); setLocal(String(value ?? '')); }}
       onChange={e => setLocal(e.target.value)}

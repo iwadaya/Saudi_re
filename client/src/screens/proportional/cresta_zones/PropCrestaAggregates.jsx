@@ -677,7 +677,7 @@ export default function PropCrestaAggregates({ embedded = false, routeKeyOverrid
           </div>
 
           {showDistModal && (
-            <div className="ca-modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setShowDistModal(false); }}>
+            <div className="ca-modal-backdrop" role="presentation" onClick={e => { if (e.target === e.currentTarget) setShowDistModal(false); }}>
               <div className="ca-modal">
                 <div className="ca-modal-head">
                   <div className="ca-modal-title">Occupancy Distribution{activeCob ? ` — ${activeCob.name}` : ''}</div>

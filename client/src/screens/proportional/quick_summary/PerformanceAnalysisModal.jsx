@@ -228,7 +228,7 @@ export default function PerformanceAnalysisModal({ calcRows, onClose }) {
   const chartTitle = { fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 };
 
   return (
-    <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,18,0.88)', backdropFilter: 'blur(8px)',
+    <div className="modal-backdrop" role="presentation" style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,18,0.88)', backdropFilter: 'blur(8px)',
       zIndex: 4500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="glass" role="dialog" aria-modal="true" style={{ width: 'calc(100vw - 20px)', maxWidth: 900, height: 'calc(100vh - 40px)',
