@@ -13,6 +13,8 @@
     "install:all": "npm install && npm install --prefix client && npm install --prefix server",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
+    "lint:screens": "eslint client/src/screens --max-warnings=0",
+    "budget:frontend": "node scripts/frontend-budget.mjs",
     "test": "npm run test:server && npm run test:client",
     "test:server": "vitest run --config server/vitest.config.js",
     "test:client": "vitest run --config client/vitest.config.js",
@@ -26,7 +28,7 @@
     "cluster:stop": "pm2 stop ecosystem.config.cjs",
     "cluster:status": "pm2 status",
     "cluster:logs": "pm2 logs universe",
-    "verify": "npm run lint && npm test"
+    "verify": "npm run lint && npm run budget:frontend && npm test"
   },
   "engines": {
     "node": ">=20.18.0"

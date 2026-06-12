@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- TODO(hardening): split — tracked in docs/frontend-hardening.md */
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { api } from '../../../api';
 import { useContractId } from '../../../hooks/useContractId';
@@ -454,7 +455,7 @@ export default function NpStructure() {
         : (Array.isArray(exp.terms?.coveredProps) ? exp.terms.coveredProps : []);
       setExpiringCoveredProps(expCp.length > 0 ? expCp : [emptyCoveredProp()]);
     }).catch(() => {});
-  }, [contractId, getNumLayers, applyTreatyModeCovers, fullRecalc, recalcFinancialsOnly, quoteMode, setSlice, expiringRecalc, npDetail.expiringNumberOfLayers, npDetail.expiring_number_of_layers]);
+  }, [contractId, getNumLayers, applyTreatyModeCovers, fullRecalc, recalcFinancialsOnly, quoteMode, setSlice, replaceSlice, expiringRecalc, npDetail.expiringNumberOfLayers, npDetail.expiring_number_of_layers]);
 
   /* ── Re-sync layers when treaty detail deductible or numberOfLayers changes ──
      When the user edits these fields on Treaty Detail and navigates back to Structure,

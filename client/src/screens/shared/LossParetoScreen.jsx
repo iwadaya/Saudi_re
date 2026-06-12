@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- TODO(hardening): split — tracked in docs/frontend-hardening.md */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import WizardLayout from '../../components/WizardLayout';
 import { useContractId } from '../../hooks/useContractId';

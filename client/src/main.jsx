@@ -9,9 +9,11 @@ import { installGlobalErrorReporter } from './utils/errorReporter';
 // DevTools don't see pages of debug output. Errors and warnings still surface.
 if (!import.meta.env.DEV) {
   const noop = () => {};
+  /* eslint-disable no-console -- intentional: reassigning the muted methods */
   console.log = noop;
   console.debug = noop;
   console.info = noop;
+  /* eslint-enable no-console */
 }
 
 // Apply the persisted theme before React mounts so there's no flash

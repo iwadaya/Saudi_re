@@ -327,12 +327,6 @@ export default function PropPricing() {
           const savedXm    = cn(snap.pareto_xm);
           const savedYears = cn(snap.observation_years);
           const savedN     = cn(snap.selected_count);
-          console.log('[LARGE LOSS LOAD] snap fields:', {
-            savedAlpha, savedXm, savedYears, savedN, treatyCapacity, effEpi,
-            primaryGuard: savedAlpha > 1 && savedXm > 0 && savedYears > 0
-                          && savedN > 0 && treatyCapacity > savedXm && effEpi > 0,
-          });
-
           if (savedAlpha > 1 && savedXm > 0 && savedYears > 0 && savedN > 0
               && treatyCapacity > savedXm && effEpi > 0) {
             // Primary path: use saved Pareto fit from snapshot.
@@ -361,7 +355,6 @@ export default function PropPricing() {
               }
             }
           }
-          console.log('[LARGE LOSS LOAD] result:', largeLossLoad);
         } catch (e) { console.error('Large loss load calc failed:', e); }
 
         let catLoad = 0;
@@ -372,13 +365,6 @@ export default function PropPricing() {
           const savedXm    = cn(snap.pareto_xm);
           const savedYears = cn(snap.observation_years);
           const savedN     = cn(snap.selected_count);
-          console.log('[CAT LOAD] snap fields:', {
-            savedAlpha, savedXm, savedYears, savedN, catCap, treatyEventLimit,
-            treatyCapacity, effEpi,
-            primaryGuard: savedAlpha > 1 && savedXm > 0 && savedYears > 0
-                          && savedN > 0 && catCap > savedXm && effEpi > 0,
-          });
-
           if (savedAlpha > 1 && savedXm > 0 && savedYears > 0 && savedN > 0
               && catCap > savedXm && effEpi > 0) {
             // Primary path: saved Pareto fit, layer up to event limit (or 3× treaty limit).
@@ -407,7 +393,6 @@ export default function PropPricing() {
               }
             }
           }
-          console.log('[CAT LOAD] result:', catLoad);
         } catch (e) { console.error('Cat load calc failed:', e); }
 
         let exposureLR = 0;
@@ -487,7 +472,7 @@ export default function PropPricing() {
         });
       } catch (e) { console.error('Auto-calc pricing failed:', e); }
     })();
-  }, [appState.quoteMode, cid, loading, yearly.length, td.quotaShareEpi, td.surplusEpi, td.fixedCommissionQSPct, td.fixedCommissionSurplusPct, td.brokeragePct, td.taxesPct, td.provisionalCommissionPct, td.commissionMode, td.stripLargeCat, td.totalCapacity, td.qsLimit, td.eventLimit, contract.detail?.total_capacity, contract.detail?.qs_limit, contract.detail?.event_limit, contract.detail?.brokerage_pct, contract.detail?.taxes_pct, contract.commissions?.fixed_commission_qs_pct, contract.commissions?.fixed_commission_surplus_pct, worstLR.lr, contract.header?.country_id, td.countryId, contract, td.country_id, yearly, uwUserEdited]);
+  }, [appState.quoteMode, cid, loading, yearly.length, td.treatyTypeId, td.quotaShareEpi, td.surplusEpi, td.fixedCommissionQSPct, td.fixedCommissionSurplusPct, td.brokeragePct, td.taxesPct, td.provisionalCommissionPct, td.commissionMode, td.stripLargeCat, td.totalCapacity, td.qsLimit, td.eventLimit, contract.detail?.total_capacity, contract.detail?.qs_limit, contract.detail?.event_limit, contract.detail?.brokerage_pct, contract.detail?.taxes_pct, contract.commissions?.fixed_commission_qs_pct, contract.commissions?.fixed_commission_surplus_pct, worstLR.lr, contract.header?.country_id, td.countryId, contract, td.country_id, yearly, uwUserEdited]);
 
   // ── Component helpers ─────────────────────────────────────────────────────
   const getC = useCallback((row, col) => components[row]?.[col] || '', [components]);
