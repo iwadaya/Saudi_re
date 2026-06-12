@@ -5,6 +5,7 @@ import { useAppState } from '../../../context/AppContext';
 import { useContractId } from '../../../hooks/useContractId';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import WizardLayout from '../../../components/WizardLayout';
+import AsyncBoundary from '../../../components/AsyncBoundary';
 import { toN } from '../../../utils/format';
 
 const ROUTE_KEY = 'NP_HISTORICAL_PERFORMANCE';
@@ -72,13 +73,14 @@ export default function NpHistoricalPerformance() {
     api.getNpHistoricalPerformance(id, apiOpts)
   ), [apiOpts]);
 
-  const { save, markDirty, loadedRef } = useScreenSave({
+  const { save, markDirty, loadedRef, loading, loadError, refetch } = useScreenSave({
     entityId: contractId || '',
     load: loadHistoricalPerformance,
     save: persist,
     currentState: () => computedRows,
     onLoaded: hydrate,
     errorLabel: 'Historical performance',
+    reloadDeps: [apiOpts],
   });
 
   // Sync rows when yearRange changes (only after the initial hydrate)
@@ -203,6 +205,7 @@ export default function NpHistoricalPerformance() {
         </div>
 
         {/* ── Main table ── */}
+        <AsyncBoundary loading={loading} error={loadError} onRetry={refetch} label="historical performance">
         <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900, tableLayout: 'fixed' }}>
             <colgroup>
@@ -263,6 +266,7 @@ export default function NpHistoricalPerformance() {
             )}
           </table>
         </div>
+        </AsyncBoundary>
 
         {/* ── Moving Averages Modal ── */}
         {showMA && (

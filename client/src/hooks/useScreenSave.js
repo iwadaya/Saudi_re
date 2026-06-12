@@ -22,7 +22,8 @@
 //   • The "skip save if not dirty" optimisation is never forgotten
 //   • Fixing a bug in the pattern fixes it everywhere
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { useResource } from './useResource';
 
 /**
  * @template T
@@ -34,6 +35,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *                                                the screen can hydrate its local state.
  * @property {string} [errorLabel]    Short label used in the alert when save fails.
  *                                     e.g. "Coverage structure" → "Coverage structure save failed".
+ * @property {ReadonlyArray<unknown>} [reloadDeps]  Extra values that should trigger a
+ *                                     re-load when they change (entityId always does).
  * @property {T} [initialState]       Optional; if provided, save() reads from here instead
  *                                     of a caller-supplied snapshot.
  */
@@ -44,39 +47,46 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * (async () => true | false). Callers only provide `load`, `save`, and
  * a way to extract the current state when save is called.
  *
+ * The load half is built on useResource (Phase 2), so every screen gets
+ * the same abort-on-change/unmount semantics plus `loading` / `loadError`
+ * / `refetch` to feed an <AsyncBoundary>.
+ *
  * @template T
  * @param {UseScreenSaveOptions<T> & {
  *   currentState: () => T
  * }} opts
  */
 export function useScreenSave(opts) {
-  const { entityId, load, save: saveImpl, currentState, onLoaded, errorLabel = 'Screen' } = opts;
+  const { entityId, load, save: saveImpl, currentState, onLoaded, errorLabel = 'Screen', reloadDeps = [] } = opts;
 
   const loaded = useRef(false);
   const dirty  = useRef(false);
-  const [loadError, setLoadError] = useState(null);
 
-  // ── Load on mount / when entityId changes ────────────────────────
+  // ── Load on mount / when entityId (or a reloadDep) changes ───────
+  // Hydration happens inside the fetcher so the ordering matches the
+  // old hand-rolled effect exactly: onLoaded → loaded=true → dirty=false,
+  // all before `loading` flips off, and never for a superseded request.
+  // The fetcher always sees the caller's LATEST load/onLoaded, but their
+  // identities deliberately don't trigger re-fetches — an inline closure
+  // must not cause a fetch-render loop.
+  const resource = useResource(
+    async (signal) => {
+      loaded.current = false;
+      const data = await load(entityId);
+      if (signal.aborted) return data; // superseded/unmounted — don't hydrate
+      if (onLoaded && data != null) onLoaded(data);
+      loaded.current = true;
+      dirty.current = false;
+      return data;
+    },
+    [entityId, ...reloadDeps],
+    { enabled: !!entityId, reportLabel: `${errorLabel} load` },
+  );
+  const loadError = resource.error;
+
   useEffect(() => {
-    if (!entityId) return;
-    let cancelled = false;
-    loaded.current = false;
-    setLoadError(null);
-    (async () => {
-      try {
-        const data = await load(entityId);
-        if (cancelled) return;
-        if (onLoaded && data != null) onLoaded(data);
-        loaded.current = true;
-        dirty.current = false;
-      } catch (err) {
-        if (cancelled) return;
-        console.error(`[${errorLabel}] load failed:`, err);
-        setLoadError(err);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [entityId, errorLabel, load, onLoaded]);
+    if (loadError) console.error(`[${errorLabel}] load failed:`, loadError);
+  }, [loadError, errorLabel]);
 
   /** Call whenever the user edits a field. Cheap — just flips a ref. */
   const markDirty = useCallback(() => { dirty.current = true; }, []);
@@ -107,6 +117,10 @@ export function useScreenSave(opts) {
     loadedRef: loaded,
     dirtyRef: dirty,
     loadError,
+    /** True while the persisted state is being (re)fetched. */
+    loading: resource.loading,
+    /** Re-run the load (e.g. after a stale-write refresh choice). */
+    refetch: resource.refetch,
   };
 }
 

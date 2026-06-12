@@ -584,6 +584,7 @@ export default function NpStopLossPricing() {
     currentState,
     onLoaded,
     errorLabel: 'Stop loss pricing',
+    reloadDeps: [apiOpts],
   });
   markDirtyRef.current = markDirty;
 
