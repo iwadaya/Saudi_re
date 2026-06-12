@@ -309,6 +309,13 @@
   font-size: 11px;
   color: #23d18b;
 }
+/* Session-scoped undo (Phase 4.2): the value was restored; the rec row
+   itself stays ACCEPTED server-side, so this marker carries the state. */
+.facdoc-applied-row--undone { color: rgba(148, 163, 184, 0.85); }
+.facdoc-undo-error {
+  font-size: 10px;
+  color: #f87171;
+}
 
 /* ── Analysis drawer (Modal primitive reshaped to the side drawer) ──── */
 .ui-modal.facdoc-drawer {
