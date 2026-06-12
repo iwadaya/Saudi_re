@@ -1,861 +1,52 @@
-import { useState, useEffect, useRef, useCallback, useMemo, useId } from 'react';
-import { api } from '../../../api';
-import { useContractId } from '../../../hooks/useContractId';
-import { useResource } from '../../../hooks/useResource';
-import { useAppState } from '../../../context/AppContext';
+// DevFactorsScreen.jsx — Dev Factors screen orchestrator (Phase 4.2).
+//
+// All state, the three useResource loads (triangles primary with
+// hydration-inside-fetcher, savedTick-keyed staleness, saved-factors +
+// pricing-pattern side-load with its quote-mode 404 tolerance), the factor
+// pipeline (chain ladder / BF / Munich) and save() live in
+// hooks/useDevFactorsState.ts; pure calc helpers and shared types in
+// state/devFactorsCalcs.ts. This file only routes between the three views
+// (Dev Factors / Link Ratios / Comparison Graph) and wires the
+// presentational islands in components/.
+//
+// The selection maths and both save payloads are pinned literal-by-literal
+// in goldenMaster.test.jsx — keep it green when touching anything here.
 import WizardLayout from '../../../components/WizardLayout';
 import AsyncBoundary from '../../../components/AsyncBoundary';
-import {
-  buildMatrixFromCells, calculateAgeToAgeFactors, calculatePattern,
-  calculateCdfs, fitExponentialCdfs, deriveLdfsFromCdfs,
-} from '../../../logic/chainLadder';
-import { calculateBF, calculateBFPremium } from '../../../logic/bornhuetterFerguson';
-import { calculateMunichChainLadder } from '../../../logic/munichChainLadder';
-import { formatWithCommas as fmtN } from '../../../utils/format';
-
-const TYPE_MAP = {
-  PROP_PREMIUM_DEV_FACTORS: 'PREMIUM',
-  PROP_PAID_CLAIMS_DEV_FACTORS: 'CLAIMS_PAID',
-  PROP_OS_CLAIMS_DEV_FACTORS: 'CLAIMS_OS',
-  PROP_INCURRED_DEV_FACTORS: 'INCURRED',
-};
-const TRIANGLE_SOURCE = {
-  PROP_PREMIUM_DEV_FACTORS: ['PREMIUM'],
-  PROP_PAID_CLAIMS_DEV_FACTORS: ['CLAIMS_PAID'],
-  PROP_OS_CLAIMS_DEV_FACTORS: ['CLAIMS_OS'],
-  // Incurred is served as a single combined type — the server builds the full
-  // (paid + OS) triangle and strips the incurred amount directly from it. See
-  // combineIncurredCells in server/src/lib/triangleStripping.js.
-  PROP_INCURRED_DEV_FACTORS: ['INCURRED'],
-};
-
-const fmt4   = n => (n == null || !Number.isFinite(Number(n))) ? '' : Number(n).toFixed(4);
-const fmtPct = n => (n == null || !Number.isFinite(Number(n))) ? '' : (Number(n) * 100).toFixed(1) + '%';
-
-function sameNumberArray(a = [], b = []) {
-  return a.length === b.length && a.every((value, index) => Object.is(value, b[index]));
-}
-
-function serializeChosenSource(source) {
-  return source === 'LINK_RATIO' ? 'SELECTED' : source;
-}
-
-/* ═══════════════ Factor Table ═══════════════ */
-// `fullLdfs`/`fullCdfs`, when supplied, add a greyed-out reference row showing
-// what each factor would have been on the full (unstripped) triangle — the
-// "conservative" basis including large/cat events. When the table is editable
-// we also amber-flag any selected LDF that exceeds its full-basis counterpart,
-// which is unusual (stripping losses normally lowers factors) and worth a check.
-const OVER_FULL_EPS = 1e-4;
-function FactorTable({ pattern, cdfs, editable, onChange, sectionClass, fullLdfs, fullCdfs }) {
-  const N = pattern?.length || 0;
-  if (!N) return <div className="muted" style={{ padding: 12 }}>No factors calculated yet.</div>;
-  const headers = Array.from({ length: N }, (_, i) => `${i + 1}–${i + 2}`);
-  const hasConservative = Array.isArray(fullLdfs) && fullLdfs.length > 0;
-  const refStyle = { color: 'var(--text-muted)', opacity: 0.7 };
-  return (
-    <div className={`df-card ${sectionClass || ''}`}>
-      <div className="df-scrollX">
-        <table className="df-table">
-          <thead><tr>
-            <th className="df-h df-h--sticky">Factor</th>
-            {headers.map(h => <th key={h} className="df-h">{h}</th>)}
-          </tr></thead>
-          <tbody>
-            <tr>
-              <td className="df-r df-r--sticky">Link Ratio (LDF)</td>
-              {(pattern || []).map((v, i) => {
-                const overFull = editable && hasConservative
-                  && Number.isFinite(Number(v)) && Number.isFinite(Number(fullLdfs[i]))
-                  && Number(v) > Number(fullLdfs[i]) + OVER_FULL_EPS;
-                return (
-                  <td
-                    key={i}
-                    className="df-c"
-                    title={overFull ? 'Selected factor exceeds the full-triangle factor — please verify.' : undefined}
-                    style={overFull ? { background: 'rgba(251,146,60,0.16)' } : undefined}
-                  >{editable
-                    ? <input
-                        className="df-input"
-                        value={fmt4(v)}
-                        onChange={e => onChange?.('ldf', i, e.target.value)}
-                        style={overFull ? { borderColor: 'rgba(251,146,60,0.8)', color: '#fbbf24' } : undefined}
-                      />
-                    : <div className="df-val">{fmt4(v)}</div>}</td>
-                );
-              })}
-            </tr>
-            <tr>
-              <td className="df-r df-r--sticky">Cumulative (CDF)</td>
-              {(cdfs || []).slice(0, N).map((v, i) => (
-                <td key={i} className="df-c">{editable
-                  ? <input className="df-input" value={fmt4(v)} onChange={e => onChange?.('cdf', i, e.target.value)} />
-                  : <div className="df-val">{fmt4(v)}</div>}</td>
-              ))}
-            </tr>
-            {hasConservative && (<>
-              <tr title="What this factor would be on the full (unstripped) triangle — reference only.">
-                <td className="df-r df-r--sticky" style={refStyle}>Incl. L/C — LDF (ref)</td>
-                {Array.from({ length: N }, (_, i) => (
-                  <td key={i} className="df-c"><div className="df-val" style={refStyle}>{fmt4(fullLdfs[i])}</div></td>
-                ))}
-              </tr>
-              <tr title="Cumulative factor on the full (unstripped) triangle — reference only.">
-                <td className="df-r df-r--sticky" style={refStyle}>Incl. L/C — CDF (ref)</td>
-                {Array.from({ length: N }, (_, i) => (
-                  <td key={i} className="df-c"><div className="df-val" style={refStyle}>{fmt4((fullCdfs || [])[i])}</div></td>
-                ))}
-              </tr>
-            </>)}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-/* ═══════════════ BF Projections Table ═══════════════ */
-function BFProjectionsTable({ bfResults }) {
-  if (!bfResults?.length) return null;
-  return (
-    <div className="df-section">
-      <div className="df-section-head">
-        <div className="df-section-title">Bornhuetter-Ferguson Projections</div>
-        <div className="df-section-sub">Ultimate = Actual + (A Priori × % Unreported)</div>
-      </div>
-      <div className="df-card"><div className="df-scrollX">
-        <table className="df-table">
-          <thead><tr>
-            <th className="df-h df-h--sticky">Year</th><th className="df-h">Latest</th><th className="df-h">CDF</th>
-            <th className="df-h">Premium</th><th className="df-h">IELR</th><th className="df-h">A Priori Ult.</th>
-            <th className="df-h">% Unreported</th><th className="df-h">BF IBNR</th><th className="df-h">BF Ultimate</th><th className="df-h">Loss Ratio</th>
-          </tr></thead>
-          <tbody>{bfResults.map(r => (
-            <tr key={r.year}>
-              <td className="df-r df-r--sticky">{r.year}</td>
-              <td className="df-c"><div className="df-val">{fmtN(r.latest)}</div></td>
-              <td className="df-c"><div className="df-val">{fmt4(r.cdf)}</div></td>
-              <td className="df-c"><div className="df-val">{fmtN(r.premium)}</div></td>
-              <td className="df-c"><div className="df-val">{fmtPct(r.ielr)}</div></td>
-              <td className="df-c"><div className="df-val">{fmtN(r.aPrioriUltimate)}</div></td>
-              <td className="df-c"><div className="df-val">{fmtPct(r.percentUnreported)}</div></td>
-              <td className="df-c"><div className="df-val">{fmtN(r.expectedIbnr)}</div></td>
-              <td className="df-c"><div className="df-val" style={{ fontWeight: 700 }}>{fmtN(r.ultimate)}</div></td>
-              <td className="df-c"><div className="df-val">{fmtPct(r.lossRatio)}</div></td>
-            </tr>
-          ))}</tbody>
-        </table>
-      </div></div>
-    </div>
-  );
-}
-
-/* ═══════════════ BF Premium Projections Table ═══════════════ */
-function BFPremiumProjectionsTable({ bfResults, epiPerYear, onEpiChange }) {
-  if (!bfResults?.length) return null;
-  return (
-    <div className="df-section">
-      <div className="df-section-head">
-        <div className="df-section-title">Bornhuetter-Ferguson Projections (Premium)</div>
-        <div className="df-section-sub">Ultimate Premium = Current + (EPI × % Achieved × % Unachieved)</div>
-      </div>
-      <div className="df-card"><div className="df-scrollX">
-        <table className="df-table">
-          <thead><tr>
-            <th className="df-h df-h--sticky">Year</th>
-            <th className="df-h">Current Premium</th>
-            <th className="df-h">CDF</th>
-            <th className="df-h">EPI</th>
-            <th className="df-h">% Achieved</th>
-            <th className="df-h">A Priori Ult.</th>
-            <th className="df-h">% Unachieved</th>
-            <th className="df-h">BF Unearned Premium</th>
-            <th className="df-h">BF Ultimate Premium</th>
-            <th className="df-h">Achieved Ratio</th>
-          </tr></thead>
-          <tbody>{bfResults.map((r, i) => (
-            <tr key={r.year}>
-              <td className="df-r df-r--sticky">{r.year}</td>
-              <td className="df-c"><div className="df-val">{fmtN(r.latest)}</div></td>
-              <td className="df-c"><div className="df-val">{fmt4(r.cdf)}</div></td>
-              <td className="df-c">
-                <input
-                  className="df-input"
-                  type="text"
-                  value={epiPerYear?.[i] ?? ''}
-                  onChange={(e) => onEpiChange?.(i, e.target.value)}
-                  placeholder="0"
-                />
-              </td>
-              <td className="df-c"><div className="df-val">{fmtPct(r.percentAchieved)}</div></td>
-              <td className="df-c"><div className="df-val">{fmtN(r.aPrioriUltimate)}</div></td>
-              <td className="df-c"><div className="df-val">{fmtPct(r.percentUnachieved)}</div></td>
-              <td className="df-c"><div className="df-val">{fmtN(r.bfUnearned)}</div></td>
-              <td className="df-c"><div className="df-val" style={{ fontWeight: 700 }}>{fmtN(r.ultimate)}</div></td>
-              <td className="df-c"><div className="df-val">{fmtPct(r.achievedRatio)}</div></td>
-            </tr>
-          ))}</tbody>
-        </table>
-      </div></div>
-    </div>
-  );
-}
-
-/* ═══════════════ Munich Chain Ladder Projections Table ═══════════════ */
-function MclProjectionsTable({ mcl }) {
-  if (!mcl?.projections?.length) return null;
-  return (
-    <div className="df-section">
-      <div className="df-section-head">
-        <div className="df-section-title">Munich Chain Ladder Projections</div>
-        <div className="df-section-sub">
-          Cell-by-cell link ratios adjusted by current P/I (λ_P = {mcl.lambdaP == null ? '—' : mcl.lambdaP.toFixed(4)},
-          λ_I = {mcl.lambdaI == null ? '—' : mcl.lambdaI.toFixed(4)})
-        </div>
-      </div>
-      <div className="df-card"><div className="df-scrollX">
-        <table className="df-table">
-          <thead><tr>
-            <th className="df-h df-h--sticky">Year</th>
-            <th className="df-h">Latest Paid</th>
-            <th className="df-h">Latest Incurred</th>
-            <th className="df-h">MCL Ult. Paid</th>
-            <th className="df-h">MCL Ult. Incurred</th>
-            <th className="df-h">IBNR (Paid)</th>
-            <th className="df-h">IBNR (Incurred)</th>
-            <th className="df-h">Gap (I − P)</th>
-          </tr></thead>
-          <tbody>{mcl.projections.map(p => (
-            <tr key={p.year}>
-              <td className="df-r df-r--sticky">{p.year}</td>
-              <td className="df-c"><div className="df-val">{fmtN(p.latestPaid)}</div></td>
-              <td className="df-c"><div className="df-val">{fmtN(p.latestIncurred)}</div></td>
-              <td className="df-c"><div className="df-val" style={{ fontWeight: 700 }}>{fmtN(p.ultimatePaid)}</div></td>
-              <td className="df-c"><div className="df-val" style={{ fontWeight: 700 }}>{fmtN(p.ultimateIncurred)}</div></td>
-              <td className="df-c"><div className="df-val">{fmtN(p.ibnrPaid)}</div></td>
-              <td className="df-c"><div className="df-val">{fmtN(p.ibnrIncurred)}</div></td>
-              <td className="df-c"><div className="df-val">{fmtN(p.ultimateIncurred - p.ultimatePaid)}</div></td>
-            </tr>
-          ))}</tbody>
-        </table>
-      </div></div>
-      {mcl.warnings?.length > 0 && (
-        <div style={{ marginTop: 8, fontSize: 11, color: '#fbbf24' }}>
-          {mcl.warnings.map((w, i) => <div key={i}>⚠ {w}</div>)}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ═══════════════ Link Ratio View with outlier exclusion ═══════════════ */
-const AVG_METHOD_LABEL = { weighted: 'Weighted', simple: 'Simple', last3: 'Last 3', last5: 'Last 5' };
-function LinkRatioView({ matrix, years, numDevYears, excluded, setExcluded, onPatternChange, method = 'weighted' }) {
-  // Rules-of-hooks: every hook must run on every render. The old
-  // layout had `if (!matrix) return …` before the useEffect below,
-  // which made the hook order conditional — lint error. Compute the
-  // filtered pattern unconditionally (empty arrays when matrix is
-  // missing), run the hook, then branch at render time.
-  const factors = useMemo(() => matrix ? calculateAgeToAgeFactors(matrix) : null, [matrix]);
-  const N = numDevYears - 1;
-  const devHeaders = Array.from({ length: N }, (_, i) => `${i + 1}–${i + 2}`);
-  const inTriangle = useCallback((r, c) => r + c < N, [N]);
-
-  const toggle = (r, c) => {
-    const key = `${r}:${c}`;
-    setExcluded(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s; });
-  };
-
-  // Single source of truth: the same calculatePattern used by the Dev Factors
-  // view, so the link-ratio recalculation honours the selected averaging method
-  // (weighted / simple / last3 / last5) as well as the excluded cells.
-  const { filteredPattern, filteredCdfs } = useMemo(() => {
-    if (!matrix || !factors) return { filteredPattern: [], filteredCdfs: [] };
-    const { pattern } = calculatePattern(matrix, factors, method, { excluded });
-    const cdfs = calculateCdfs(pattern, 1.0).slice(0, pattern.length);
-    return { filteredPattern: pattern, filteredCdfs: cdfs };
-  }, [excluded, factors, matrix, method]);
-
-  // Notify parent of filtered pattern — hook now runs unconditionally
-  useEffect(() => { onPatternChange?.(filteredPattern, filteredCdfs); }, [filteredCdfs, filteredPattern, onPatternChange]);
-
-  if (!matrix) return <div className="muted" style={{ padding: 12 }}>No triangle data. Enter data in triangle screens first.</div>;
-
-  return (
-    <div>
-      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 8 }}>Click any link ratio to exclude/include it from weighted average. Excluded cells shown in red strikethrough.</div>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="tri-table">
-          <thead><tr><th className="tri-hdr" style={{ minWidth: 52 }}>Year</th>{devHeaders.map(h => <th key={h} className="tri-hdr">{h}</th>)}</tr></thead>
-          <tbody>
-            {years.map((yr, r) => (
-              <tr key={yr}>
-                <td className="tri-yr">{yr}</td>
-                {Array.from({ length: N }, (_, c) => {
-                  const f = inTriangle(r, c) ? factors[r]?.[c] : null;
-                  const isExcl = excluded.has(`${r}:${c}`);
-                  return (
-                    <td key={c} className={f == null ? 'tri-off' : 'tri-cell'} onClick={() => f != null && toggle(r, c)} style={{ cursor: f != null ? 'pointer' : 'default' }}>
-                      {f != null && <div className="tri-inp" style={{ textDecoration: isExcl ? 'line-through' : 'none', opacity: isExcl ? 0.35 : 1, color: isExcl ? '#f87171' : 'rgba(226,232,240,0.88)' }}>{fmt4(f)}</div>}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-            <tr style={{ borderTop: '2px solid rgba(var(--accent-rgb),0.3)' }}>
-              <td className="tri-yr" style={{ color: 'var(--accent)' }}>{AVG_METHOD_LABEL[method] || 'Weighted'}</td>
-              {filteredPattern.map((v, c) => <td key={c} className="tri-cell"><div className="tri-inp" style={{ fontWeight: 700, color: 'var(--accent)' }}>{fmt4(v)}</div></td>)}
-            </tr>
-            <tr>
-              <td className="tri-yr" style={{ color: 'rgba(255,255,255,0.5)' }}>CDF</td>
-              {filteredCdfs.map((v, c) => <td key={c} className="tri-cell"><div className="tri-inp" style={{ color: 'rgba(255,255,255,0.6)' }}>{fmt4(v)}</div></td>)}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-/* ═══════════════ Comparison Graph (SVG) ═══════════════ */
-function ComparisonGraph({ pattern, paramCdfs, benchmarks }) {
-  const N = pattern?.length || 0;
-  if (!N) return <div className="muted" style={{ padding: 12 }}>No data for graph.</div>;
-  const paramLdfs = deriveLdfsFromCdfs(paramCdfs || []);
-  const devLabels = Array.from({ length: N }, (_, i) => `${i + 1}–${i + 2}`);
-
-  const series = [
-    { name: 'Actual (Weighted)', data: pattern, color: '#22c55e' },
-    { name: 'Parametrized', data: paramLdfs, color: '#3b82f6' },
-    { name: 'Country Average', data: (benchmarks?.country || []).slice(0, N).map(b => b.ldf), color: '#f59e0b' },
-    { name: 'Region Average', data: (benchmarks?.region || []).slice(0, N).map(b => b.ldf), color: '#a855f7' },
-    { name: 'All Countries', data: (benchmarks?.all || []).slice(0, N).map(b => b.ldf), color: '#ef4444' },
-  ].filter(s => s.data.some(v => v != null && v !== 0));
-
-  const W = 1200, H = 640, PAD = { t: 40, r: 30, b: 50, l: 65 };
-  const plotW = W - PAD.l - PAD.r, plotH = H - PAD.t - PAD.b;
-  const allVals = series.flatMap(s => s.data.filter(v => v != null));
-  if (!allVals.length) return <div className="muted" style={{ padding: 12 }}>No data for graph.</div>;
-  const minV = Math.min(...allVals) * 0.98, maxV = Math.max(...allVals) * 1.02;
-  const range = maxV - minV || 0.01;
-  const scaleX = i => PAD.l + (i / (N - 1 || 1)) * plotW;
-  const scaleY = v => PAD.t + plotH - ((v - minV) / range) * plotH;
-  const gridLines = 8;
-
-  return (
-    <div style={{ width: '100%' }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.90)', marginBottom: 12 }}>Development Factor Comparison</div>
-      <div style={{ width: '100%', aspectRatio: `${W} / ${H}`, minHeight: 400, maxHeight: 'calc(100vh - 260px)' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="crisp-grid" style={{ width: '100%', height: '100%', background: 'rgba(2,6,23,0.35)', borderRadius: 16, border: '1px solid rgba(255,255,255,0.08)', fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums' }}>
-          {/* Grid lines */}
-          {Array.from({ length: gridLines + 1 }, (_, i) => { const v = minV + (range * i) / gridLines; const y = scaleY(v); return (
-            <g key={`g${i}`}>
-              <line x1={PAD.l} y1={y} x2={W - PAD.r} y2={y} stroke="rgba(255,255,255,0.06)" strokeDasharray={i === 0 || i === gridLines ? "0" : "4 4"} shapeRendering="crispEdges" vectorEffect="non-scaling-stroke" />
-              <text x={PAD.l - 10} y={y + 4} textAnchor="end" fill="rgba(255,255,255,0.55)" fontSize={11} fontWeight={500}>{v.toFixed(3)}</text>
-            </g>
-          ); })}
-          {/* Vertical grid + labels */}
-          {devLabels.map((l, i) => (
-            <g key={`x${i}`}>
-              <line x1={scaleX(i)} y1={PAD.t} x2={scaleX(i)} y2={H - PAD.b} stroke="rgba(255,255,255,0.04)" shapeRendering="crispEdges" vectorEffect="non-scaling-stroke" />
-              <text x={scaleX(i)} y={H - 14} textAnchor="middle" fill="rgba(255,255,255,0.60)" fontSize={11} fontWeight={500}>{l}</text>
-            </g>
-          ))}
-          {/* Lines */}
-          {series.map(s => {
-            const pts = s.data.map((v, i) => v != null ? `${scaleX(i)},${scaleY(v)}` : null).filter(Boolean);
-            return pts.length >= 2 ? <polyline key={s.name} points={pts.join(' ')} fill="none" stroke={s.color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" /> : null;
-          })}
-          {/* Data points */}
-          {series.map(s => s.data.map((v, i) => v != null ? (
-            <g key={`${s.name}-${i}`}>
-              <circle cx={scaleX(i)} cy={scaleY(v)} r={5} fill={s.color} opacity={0.2} />
-              <circle cx={scaleX(i)} cy={scaleY(v)} r={3.5} fill={s.color} />
-            </g>
-          ) : null))}
-        </svg>
-      </div>
-      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 14, padding: '10px 0' }}>
-        {series.map(s => (
-          <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>
-            <div style={{ width: 12, height: 12, borderRadius: 4, background: s.color, boxShadow: `0 0 8px ${s.color}40` }} />{s.name}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* Build the full chain-ladder calc bundle (matrix → factors → pattern →
-   cdfs → projections) from a {type: cells[]} map. Pulled out of the
-   component so it can run once for the displayed basis and once for the
-   full (unstripped) basis that feeds the conservative reference column. */
-function buildCalcs(triCells, { triSources, startYear, numDevYears, avgMethod, years, excluded }) {
-  // Every screen now has a single triangle source — including Incurred, which
-  // the server returns as a combined (paid + OS) triangle already stripped of
-  // the incurred loss amount when applicable.
-  const d = buildMatrixFromCells(triCells[triSources[0]] || [], startYear, numDevYears);
-  if (!d) return null;
-  const matrix = d.matrix;
-  const factors = calculateAgeToAgeFactors(matrix);
-  const { pattern, warnings: patternWarnings } = calculatePattern(matrix, factors, avgMethod, { excluded });
-  const cdfs = calculateCdfs(pattern, 1.0);
-  const paramCdfs = fitExponentialCdfs(cdfs);
-  const paramLdfs = deriveLdfsFromCdfs(paramCdfs);
-  const clProjections = years.map((yr, r) => {
-    let latestVal = 0, latestCol = -1;
-    for (let c = matrix[r].length - 1; c >= 0; c--) if (matrix[r][c] != null) { latestVal = matrix[r][c]; latestCol = c; break; }
-    const cdf = latestCol >= 0 ? (cdfs[latestCol] || 1.0) : 1.0;
-    return { year: yr, latest: latestVal, cdf, ultimate: latestVal * cdf, ibnr: latestVal * cdf - latestVal };
-  });
-  return { matrix, factors, pattern, patternWarnings, cdfs, paramLdfs, paramCdfs, clProjections };
-}
-
-/* Read-only cumulative triangle grid (years × dev months). */
-function TriangleGrid({ matrix, years, numDevYears }) {
-  if (!matrix) return <div className="muted" style={{ padding: 12 }}>No triangle data.</div>;
-  const cols = Array.from({ length: numDevYears }, (_, i) => (i + 1) * 12);
-  const fmtCell = v => (v == null ? '' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 }));
-  return (
-    <div style={{ overflowX: 'auto' }}>
-      <table className="tri-table">
-        <thead><tr><th className="tri-hdr" style={{ minWidth: 60 }}>Year</th>{cols.map(c => <th key={c} className="tri-hdr">{c}</th>)}</tr></thead>
-        <tbody>
-          {years.map((yr, r) => (
-            <tr key={yr}>
-              <td className="tri-yr">{yr}</td>
-              {cols.map((c, ci) => {
-                const v = matrix[r]?.[ci];
-                return <td key={ci} className={v == null ? 'tri-off' : 'tri-cell'}>{v != null && <div className="tri-inp">{fmtCell(v)}</div>}</td>;
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
+import { useDevFactorsState } from './hooks/useDevFactorsState';
+import { AVG_METHOD_LABEL } from './state/devFactorsCalcs';
+import FactorTable from './components/FactorTable';
+import LinkRatioView from './components/LinkRatioView';
+import ComparisonGraph from './components/ComparisonGraph';
+import StrippedTriangleModal from './components/StrippedTriangleModal';
+import { BasisToggleBar, MetaToolbar, ViewToggle, AvgMethodToggle } from './components/TogglesToolbar';
+import { BfIelrBar, BfPremiumAchievedBar, BFProjectionsTable, BFPremiumProjectionsTable } from './components/BfPanels';
+import { MunichToggleCard, MclProjectionsTable } from './components/MclPanels';
 
 /* ═══════════════════════════════════════════
    MAIN DevFactorsScreen
    ═══════════════════════════════════════════ */
 export default function DevFactorsScreen({ routeKey, title, headerPill }) {
-  const contractId = useContractId();
-  const { state: appState, setSlice } = useAppState();
-  const devType = TYPE_MAP[routeKey] || 'PREMIUM';
-  const triSources = useMemo(() => TRIANGLE_SOURCE[routeKey] || ['PREMIUM'], [routeKey]);
-  const isIncurred = devType === 'INCURRED';
-  const isPremium = devType === 'PREMIUM';
-
-  const meta = appState.triangleMeta || {};
-  const startYear = meta.startYear ?? null;
-  const inceptionYear = meta.inceptionYear || meta.renewalYear || new Date().getFullYear();
-  const numDevYears = Math.max(1, Math.min(60, inceptionYear - startYear));
-  const years = useMemo(() => Array.from({ length: numDevYears }, (_, i) => startYear + i), [numDevYears, startYear]);
-  // Quote-mode opts thread through every triangle/dev-factor API call
-  // so the wizard can edit a quote's factors without hitting the
-  // contract path (which would FK-fail under migration 057).
-  const apiOpts = useMemo(
-    () => (appState.quoteMode ? { quote: true } : undefined),
-    [appState.quoteMode],
-  );
-
-  const [view, setView] = useState('DEV_FACTORS'); // DEV_FACTORS | LINK_RATIOS | GRAPH
-  // Triangle basis is a persisted per-treaty choice: STRIPPED (the attritional
-  // basis — strip large/cat) or FULL (use original data, which also folds
-  // large/cat into attritional on the summaries). FULL is now the default —
-  // the underwriter imports pre-stripped triangles, so stripping is opt-in.
-  // The basis is derived from the saved strip_large_cat_losses flag (default
-  // false → FULL) and written through on toggle.
-  const stripLargeCat = appState.propTreatyDetail?.stripLargeCat === true;
-  const basis = stripLargeCat ? 'STRIPPED' : 'FULL';
-  const setBasis = (next) => {
-    const strip = next === 'STRIPPED';
-    setSlice('propTreatyDetail', { ...(appState.propTreatyDetail || {}), stripLargeCat: strip });
-    api.setStripLargeCat(contractId, strip, apiOpts).catch(() => {});
-  };
-  // Per-type { full: cells[], stripped: cells[] } from the with-exclusions
-  // endpoint. Both variants are always fetched so the conservative
-  // (full-basis) reference column is available regardless of the basis shown.
-  const [triData, setTriData] = useState({});
-  // Munich Chain Ladder needs the paid and OS legs separately (full only — MCL
-  // does not use stripped data). The Incurred screen now sources a single
-  // combined INCURRED triangle, so fetch paid + OS here just for MCL.
-  const [mclCells, setMclCells] = useState({ CLAIMS_PAID: [], CLAIMS_OS: [] });
-  const [exclusions, setExclusions] = useState({ largeLossCount: 0, catLossCount: 0, applies: false, proxyPlaced: 0 });
-  const [lossWarningDismissed, setLossWarningDismissed] = useState(false);
-  const [projMethod, setProjMethod] = useState('CHAIN');
-  const [avgMethod, setAvgMethod] = useState('weighted');
-  const [chosenBase, setChosenBase] = useState('ACTUAL');
-  const [chosenLdfs, setChosenLdfs] = useState([]);
-  const [chosenCdfs, setChosenCdfs] = useState([]);
-  const ielrInputId = useId();
-  const achievedPremiumInputId = useId();
-  const [ielr, setIelr] = useState('0.65');
-  const [premiums, setPremiums] = useState([]);
-  // Premium-flavoured BF inputs — used when devType === 'PREMIUM'.
-  // EPI is the client's start-of-year premium estimate, % Achieved is the
-  // ratio of actual to estimated premium (default 100 %).
-  const [epiPerYear, setEpiPerYear] = useState([]);
-  const [percentAchieved, setPercentAchieved] = useState('1.00');
-  const [dirty, setDirty] = useState(false);
-  const [excluded, setExcluded] = useState(new Set());
-  const [benchmarks, setBenchmarks] = useState(null);
-  const [useMunich, setUseMunich] = useState(false);
-  const [showMunichHelp, setShowMunichHelp] = useState(false);
-  const [showStrippedModal, setShowStrippedModal] = useState(false);
-  const [savedTick, setSavedTick] = useState(0);
-  // Both paid + OS triangles are required for Munich Chain Ladder, so on
-  // screens that already source both (Incurred Dev Factors) the toggle
-  // does meaningful work. On Premium / Paid-only / OS-only screens we
-  // still surface the checkbox so the underwriter can see it exists,
-  // but mark it disabled and point them at the right screen.
-  const munichAvailable = isIncurred;
-
-  /* Clear position-keyed exclusions when the year range changes.
-   * Excluded ratios are stored as "row:col" strings, so when startYear or
-   * numDevYears shifts the same key reinterprets to a totally different
-   * cell — the table keeps a strikethrough on a cell the user never
-   * clicked. Drop them whenever the year window moves. The first render
-   * is skipped so loaded saved exclusions survive their initial hydration. */
-  const yearWindowKeyRef = useRef(null);
-  useEffect(() => {
-    const key = `${startYear}:${numDevYears}`;
-    if (yearWindowKeyRef.current === null) { yearWindowKeyRef.current = key; return; }
-    if (yearWindowKeyRef.current !== key) {
-      yearWindowKeyRef.current = key;
-      setExcluded(new Set());
-    }
-  }, [startYear, numDevYears]);
-
-  /* Load triangle cells — both full + stripped variants for every source.
-     This is the screen's PRIMARY load (it gates the factor tables below), so
-     it rides useResource: in-flight requests abort when the contract/type
-     changes or the screen unmounts, failures surface in the <AsyncBoundary>
-     with a Retry, and hydration happens inside the fetcher — triData /
-     exclusions are set before `loading` flips off, exactly like the old
-     .then(setTriData).finally(setLoading(false)) ordering. */
-  const triangles = useResource(
-    async (signal) => {
-      const results = await Promise.all(triSources.map(t =>
-        api.getTriangleWithExclusions(contractId, t, { ...apiOpts, signal })
-          .then(d => [t, {
-            full: d?.full?.cells || [],
-            stripped: d?.stripped?.cells || [],
-            excl: d?.exclusions || null,
-          }])
-      ));
-      const map = {};
-      let excl = { largeLossCount: 0, catLossCount: 0, applies: false, proxyPlaced: 0 };
-      results.forEach(([t, data]) => {
-        map[t] = { full: data.full, stripped: data.stripped };
-        // Loss counts are contract-wide (identical across types); fold to be safe.
-        if (data.excl) {
-          excl = {
-            largeLossCount: Math.max(excl.largeLossCount, data.excl.largeLossCount || 0),
-            catLossCount: Math.max(excl.catLossCount, data.excl.catLossCount || 0),
-            applies: excl.applies || !!data.excl.applies,
-            proxyPlaced: Math.max(excl.proxyPlaced, data.excl.proxyPlaced || 0),
-          };
-        }
-      });
-      if (signal.aborted) return map; // superseded/unmounted — don't hydrate
-      setTriData(map);
-      setExclusions(excl);
-      return map;
-    },
-    [contractId, apiOpts, triSources],
-    { enabled: !!contractId, reportLabel: 'dev factor triangles' },
-  );
-
-  /* Load the paid + OS legs (full only) for Munich Chain Ladder. Only the
-     Incurred screen offers MCL, and it no longer fetches paid/OS via the
-     combined INCURRED source, so pull them separately here. */
-  useEffect(() => {
-    if (!contractId || !isIncurred) return;
-    const pickCells = d => d?.cells || (Array.isArray(d) ? d : []);
-    Promise.all([
-      api.getTriangle(contractId, 'CLAIMS_PAID', apiOpts).then(pickCells).catch(() => []),
-      api.getTriangle(contractId, 'CLAIMS_OS', apiOpts).then(pickCells).catch(() => []),
-    ]).then(([paid, os]) => setMclCells({ CLAIMS_PAID: paid, CLAIMS_OS: os }));
-  }, [contractId, isIncurred, apiOpts]);
-
-  // Cells for the basis currently shown, and always-full cells for the
-  // conservative reference. `calcs` reads triCells so it recomputes when
-  // the basis toggles.
-  const triCells = useMemo(() => {
-    const map = {};
-    for (const t of triSources) {
-      const d = triData[t];
-      map[t] = d ? (basis === 'STRIPPED' ? d.stripped : d.full) : [];
-    }
-    return map;
-  }, [triData, triSources, basis]);
-  const fullTriCells = useMemo(() => {
-    const map = {};
-    for (const t of triSources) map[t] = triData[t]?.full || [];
-    return map;
-  }, [triData, triSources]);
-  // Always-stripped cells (large + cat removed), used by the comparison modal
-  // regardless of the basis currently shown on screen.
-  const strippedTriCells = useMemo(() => {
-    const map = {};
-    for (const t of triSources) map[t] = triData[t]?.stripped || [];
-    return map;
-  }, [triData, triSources]);
-
-  /* Load premium data for BF */
-  useEffect(() => {
-    if (!contractId) return;
-    api.getTriangle(contractId, 'PREMIUM', apiOpts).then(d => {
-      const cells = d?.cells || (Array.isArray(d) ? d : []);
-      const prems = years.map(yr => { const latest = cells.filter(c => c.origin_year === yr).sort((a, b) => b.dev_months - a.dev_months)[0]; return latest ? Number(latest.cum_value) || 0 : 0; });
-      setPremiums(prems);
-    }).catch(() => {});
-  }, [contractId, startYear, numDevYears, apiOpts, years]);
-
-  /* Load benchmarks */
-  useEffect(() => {
-    const countryId = appState.propTreatyDetail?.countryId;
-    if (!countryId) return;
-    api.getBenchmarks(countryId, devType).then(setBenchmarks).catch(() => {});
-  }, [appState.propTreatyDetail?.countryId, devType]);
-
-  /* Staleness + never-saved: were the source triangles saved after these
-     factors, and have any factors been saved for this type at all?
-     useResource replaces the old hand-rolled cancelled flag; `savedTick` in
-     the deps re-fetches after a successful save so the banner reflects
-     server ground truth rather than an optimistic local clear. A failed
-     fetch keeps the previous data (banner state), matching the old
-     swallow-and-keep behaviour. */
-  const stalenessRes = useResource(
-    (signal) => api.getDevFactorStaleness(contractId, devType, { ...apiOpts, signal })
-      // Wrap so `data` is non-null once ANY response has arrived — the
-      // derived flags below must stay at their pre-fetch defaults (false)
-      // until then, exactly like the old setState-on-success effect.
-      .then(d => ({ d })),
-    [contractId, devType, apiOpts, savedTick],
-    { enabled: !!contractId, reportLabel: 'dev factor staleness' },
-  );
-  // True when the source triangle has been saved more recently than these
-  // factors — the underwriter should re-review.
-  const stale = !!stalenessRes.data?.d?.stale;
-  // True when no factors have ever been saved for this type — the projected
-  // summary / pricing then rest on placeholder curves until a selection is saved.
-  const factorsNeverSaved = !!stalenessRes.data && !stalenessRes.data.d?.factorsSavedAt;
-
-  /* Build matrix + calculations for the displayed basis, plus the full
-     (unstripped) basis used for the conservative reference column. */
-  const calcParams = useMemo(
-    () => ({ triSources, startYear, numDevYears, avgMethod, years, excluded }),
-    [triSources, startYear, numDevYears, avgMethod, years, excluded],
-  );
-  const calcs = useMemo(() => buildCalcs(triCells, calcParams), [triCells, calcParams]);
-  const fullCalcs = useMemo(() => buildCalcs(fullTriCells, calcParams), [fullTriCells, calcParams]);
-  const strippedCalcs = useMemo(() => buildCalcs(strippedTriCells, calcParams), [strippedTriCells, calcParams]);
-
-  const bfResults = useMemo(() => {
-    if (!calcs?.clProjections || projMethod !== 'BF' || isPremium) return null;
-    return calculateBF(calcs.clProjections, premiums, Number(ielr) || 0);
-  }, [calcs, projMethod, premiums, ielr, isPremium]);
-
-  /* Munich Chain Ladder — needs both the paid and incurred (paid + OS)
-     matrices, with the paid leg separate. Uses the full paid/OS legs fetched
-     into `mclCells` (MCL never runs on stripped data). */
-  const mclResult = useMemo(() => {
-    if (!useMunich || projMethod !== 'CHAIN' || !munichAvailable) return null;
-    const paidObj = buildMatrixFromCells(mclCells['CLAIMS_PAID'] || [], startYear, numDevYears);
-    const osObj   = buildMatrixFromCells(mclCells['CLAIMS_OS']   || [], startYear, numDevYears);
-    if (!paidObj || !osObj) return null;
-    const incurred = paidObj.matrix.map((row, r) =>
-      row.map((v, c) => {
-        const p = v, o = osObj.matrix[r]?.[c];
-        return (p == null && o == null) ? null : (p ?? 0) + (o ?? 0);
-      }),
-    );
-    return calculateMunichChainLadder({ paid: paidObj.matrix, incurred, years });
-  }, [useMunich, projMethod, munichAvailable, mclCells, startYear, numDevYears, years]);
-
-  // Comma-tolerant numeric parse for the EPI input cells.
-  const parseNum = (v) => {
-    if (v == null || v === '') return 0;
-    const n = Number(String(v).replace(/[\s,]/g, ''));
-    return Number.isFinite(n) ? n : 0;
-  };
-
-  // Keep epiPerYear in sync with the year window. When the window
-  // shifts, pad/trim so input cells line up with displayed years.
-  useEffect(() => {
-    if (!isPremium) return;
-    setEpiPerYear((prev) => {
-      if (prev.length === years.length) return prev;
-      const next = years.map((_, i) => prev[i] ?? '');
-      return next;
-    });
-  }, [isPremium, years, years.length]);
-
-  // Auto-suggest % achieved from observed premium vs EPI across past
-  // years that have both an EPI and a current premium > 0. The user
-  // can still override via the input — we only seed when the field is
-  // still at the 1.00 default.
-  const suggestedPercentAchieved = useMemo(() => {
-    if (!isPremium) return null;
-    const ratios = [];
-    for (let i = 0; i < years.length; i++) {
-      const epi = parseNum(epiPerYear[i]);
-      const cur = premiums[i] || 0;
-      if (epi > 0 && cur > 0) ratios.push(cur / epi);
-    }
-    if (!ratios.length) return null;
-    return ratios.reduce((a, b) => a + b, 0) / ratios.length;
-  }, [isPremium, years.length, epiPerYear, premiums]);
-
-  const clProjections = calcs?.clProjections;
-  const bfPremiumResults = useMemo(() => {
-    if (!clProjections || projMethod !== 'BF' || !isPremium) return null;
-    const epis = years.map((_, i) => parseNum(epiPerYear[i]));
-    const pa = Number(percentAchieved);
-    return calculateBFPremium(clProjections, epis, Number.isFinite(pa) ? pa : 1);
-  }, [clProjections, projMethod, isPremium, years, percentAchieved, epiPerYear]);
-
-  /* Init chosen — only seed from computed factors when chosenLdfs is
-     genuinely empty. The prior `length !== src.ldfs.length` test fired on
-     a length mismatch too, which silently overwrote saved underwriter
-     overrides whenever the year window had shifted between sessions
-     (saved with N=8 → reopened with N=10). Explicit base toggles still
-     re-seed via switchBase below, so we only need to populate on the
-     initial empty render. */
-  useEffect(() => {
-    if (!calcs) return;
-    if (chosenLdfs.length > 0) return;
-    const src = chosenBase === 'PARAM' ? { ldfs: calcs.paramLdfs, cdfs: calcs.paramCdfs } : { ldfs: calcs.pattern, cdfs: calcs.cdfs };
-    if (!src.ldfs?.length) return;
-    setChosenLdfs(src.ldfs.map(v => v));
-    setChosenCdfs((src.cdfs || []).slice(0, src.ldfs.length).map(v => v));
-  }, [calcs, chosenBase, chosenLdfs.length]);
-
-  /* Load saved factors + pricing pattern (excluded ratios + settings).
-     Rides useResource so a superseded response can never hydrate over a
-     newer contract/type's state. Each call keeps its own failure tolerance
-     (resolve to null) on purpose: a missing pricing pattern is normal in
-     quote mode (the endpoint is contract-only) and neither load should
-     block the screen — the factor tables still render from triangle data. */
-  useResource(
-    async (signal) => {
-      const [factorsData, patternData] = await Promise.all([
-        api.getDevFactors(contractId, devType, { ...apiOpts, signal }).catch(() => null),
-        api.getPricingPattern(contractId, devType).catch(() => null),
-      ]);
-      if (signal.aborted) return { factorsData, patternData }; // superseded/unmounted — don't hydrate
-      const factors = factorsData?.factors || (Array.isArray(factorsData) ? factorsData : []);
-      if (factors.length > 0) { setChosenLdfs(factors.map(f => f.chosen_ldf ?? f.selected_ldf ?? null)); setChosenCdfs(factors.map(f => f.chosen_cdf ?? f.selected_cdf ?? null)); }
-      // chosenBase stays at its initial 'ACTUAL' — the toggle is reset on every
-      // page-land so the underwriter always starts from a known baseline.
-      if (patternData) {
-        const sf = patternData.selected_factors || {};
-        if (Array.isArray(sf.excluded_ratios) && sf.excluded_ratios.length > 0) {
-          // Position-keyed ("r:c") exclusions are only valid for the year
-          // window they were saved under. If the user has since shifted the
-          // start year or the number of dev years, those keys would silently
-          // strike through different cells. Drop them in that case.
-          const currentKey = `${startYear}:${numDevYears}`;
-          if (!sf.excluded_for_year_window || sf.excluded_for_year_window === currentKey) {
-            setExcluded(new Set(sf.excluded_ratios));
-          }
-        }
-        if (sf.proj_method) setProjMethod(sf.proj_method);
-        // Intentionally do not restore sf.chosen_base — the toggle always
-        // re-defaults to ACTUAL on page land. Saved chosenLdfs still load above.
-        if (typeof sf.use_munich === 'boolean') setUseMunich(sf.use_munich);
-        if (patternData.selection_method) setAvgMethod(patternData.selection_method.toLowerCase());
-        if (patternData.bf_ielr != null && Number(patternData.bf_ielr) > 0) setIelr(String(patternData.bf_ielr));
-        if (sf.bf_percent_achieved != null) setPercentAchieved(String(sf.bf_percent_achieved));
-        if (Array.isArray(sf.bf_epi_per_year) && sf.bf_epi_per_year.length > 0) {
-          setEpiPerYear(sf.bf_epi_per_year.map(v => v == null ? '' : String(v)));
-        }
-      }
-      return { factorsData, patternData };
-    },
-    [contractId, devType, apiOpts, startYear, numDevYears],
-    { enabled: !!contractId, reportLabel: 'saved dev factors' },
-  );
-
-  const handleChosenChange = (type, idx, val) => {
-    const n = val === '' ? null : Number(val);
-    if (type === 'ldf') setChosenLdfs(prev => { const a = [...prev]; a[idx] = Number.isFinite(n) ? n : prev[idx]; return a; });
-    else setChosenCdfs(prev => { const a = [...prev]; a[idx] = Number.isFinite(n) ? n : prev[idx]; return a; });
-    setDirty(true);
-  };
-
-  const switchBase = (base) => {
-    if (base === 'LINK_RATIO') return; // Link ratio base is set only from the Link Ratios tab
-    setChosenBase(base);
-    if (!calcs) return;
-    const src = base === 'PARAM' ? { ldfs: calcs.paramLdfs, cdfs: calcs.paramCdfs } : { ldfs: calcs.pattern, cdfs: calcs.cdfs };
-    setChosenLdfs((src.ldfs || []).map(v => v)); setChosenCdfs((src.cdfs || []).slice(0, src.ldfs?.length || 0).map(v => v)); setDirty(true);
-  };
-
-  const handleLinkRatioExcludedChange = useCallback((value) => {
-    setExcluded(value);
-    setDirty(true);
-  }, []);
-
-  const applyLinkRatioPattern = useCallback((filteredLdfs, filteredCdfs) => {
-    setChosenLdfs(prev => sameNumberArray(prev, filteredLdfs) ? prev : filteredLdfs.map(v => v));
-    setChosenCdfs(prev => sameNumberArray(prev, filteredCdfs) ? prev : filteredCdfs.map(v => v));
-    setChosenBase(prev => prev === 'LINK_RATIO' ? prev : 'LINK_RATIO');
-    setDirty(true);
-  }, []);
-
-  const save = useCallback(async () => {
-    if (!contractId) return false;
-    /* Skip the server round-trip when the user hasn't actually edited
-       anything on this screen — otherwise every Back/Next click rewrites
-       contract_dev_factor + contract_pricing_patterns and stamps an audit
-       row, even when the on-screen factors are unchanged from the saved
-       values. Mirrors the same dirty-gate TriangleScreen and useScreenSave
-       use. Exception: when no factors have ever been saved for this type,
-       persist the currently-displayed selection on the way out so the
-       underwriter doesn't have to click Save explicitly. */
-    if (!dirty && !(factorsNeverSaved && chosenLdfs.length > 0)) return true;
-    const N = chosenLdfs.length;
-    const factors = Array.from({ length: N }, (_, i) => ({
-      dev_month: (i + 1) * 12, actual_ldf: calcs?.pattern?.[i] ?? null, actual_cdf: calcs?.cdfs?.[i] ?? null,
-      parametrized_ldf: calcs?.paramLdfs?.[i] ?? null, parametrized_cdf: calcs?.paramCdfs?.[i] ?? null,
-      chosen_source: serializeChosenSource(chosenBase), chosen_ldf: chosenLdfs[i] ?? null, chosen_cdf: chosenCdfs[i] ?? null,
-      selected_ldf: chosenLdfs[i] ?? null, selected_cdf: chosenCdfs[i] ?? null,
-    }));
-    await api.saveDevFactors(contractId, devType, { factors, method: avgMethod, tail_factor: 1.0, basis: basis === 'STRIPPED' ? 'stripped' : 'full' }, apiOpts);
-    // Pricing-pattern is contract-only on the server. In quote mode we
-    // skip it rather than 404 — the dev factors themselves still save.
-    if (!appState.quoteMode) {
-      await api.savePricingPattern(contractId, devType, {
-        selection_method: avgMethod.toUpperCase(), tail_factor: 1.0, bf_ielr: Number(ielr) || 0,
-        selected_factors: {
-          chosen_ldfs: chosenLdfs, chosen_cdfs: chosenCdfs, chosen_base: chosenBase,
-          proj_method: projMethod, excluded_ratios: [...excluded],
-          use_munich: !!useMunich,
-          // Year window the position-keyed exclusions are valid for.
-          excluded_for_year_window: `${startYear}:${numDevYears}`,
-          ...(isPremium ? {
-            bf_percent_achieved: Number(percentAchieved) || 1,
-            bf_epi_per_year: years.map((_, i) => parseNum(epiPerYear[i])),
-          } : {}),
-        },
-      });
-    }
-    setDirty(false);
-    setSavedTick(t => t + 1); // re-fetch staleness from the DB (ground truth)
-    return true;
-  }, [contractId, dirty, factorsNeverSaved, chosenLdfs, devType, avgMethod, apiOpts, appState.quoteMode, calcs?.pattern, calcs?.cdfs, calcs?.paramLdfs, calcs?.paramCdfs, chosenBase, chosenCdfs, ielr, projMethod, excluded, useMunich, startYear, numDevYears, isPremium, percentAchieved, years, epiPerYear, basis]);
-
-  const hasData = calcs && calcs.pattern?.length > 0;
-  const totalLossCount = (exclusions.largeLossCount || 0) + (exclusions.catLossCount || 0);
-  const stripApplies = !isPremium && exclusions.applies;
-  const showStrippedBanner = stripApplies && basis === 'STRIPPED' && totalLossCount > 0;
-  // Surface the "no losses identified" nudge only when this is a claims
-  // screen that actually has triangle data to price against.
-  const showZeroLossWarning = !lossWarningDismissed && !isPremium && hasData && totalLossCount === 0;
+  const {
+    isIncurred, isPremium,
+    startYear, inceptionYear, numDevYears, years,
+    stripLargeCat, basis, setBasis,
+    view, setView,
+    projMethod, selectProjMethod,
+    avgMethod, selectAvgMethod,
+    triangles, exclusions, stale,
+    calcs, fullCalcs, strippedCalcs, hasData, benchmarks,
+    chosenBase, chosenLdfs, chosenCdfs, handleChosenChange, switchBase,
+    excluded, handleLinkRatioExcludedChange, applyLinkRatioPattern,
+    ielr, changeIelr, ielrInputId, bfResults,
+    percentAchieved, changePercentAchieved, achievedPremiumInputId,
+    epiPerYear, changeEpi, suggestedPercentAchieved, applySuggestedPercentAchieved,
+    bfPremiumResults,
+    munichAvailable, useMunich, toggleMunich, showMunichHelp, toggleMunichHelp, mclResult,
+    showZeroLossWarning, dismissLossWarning, showStrippedBanner,
+    showStrippedModal, setShowStrippedModal,
+    dirty, save,
+  } = useDevFactorsState(routeKey);
 
   // triangleMeta not yet loaded (e.g. just after a hard reset, before
   // PropTreatyDetail re-fetches the contract). Avoid rendering with a bogus year range.
@@ -883,50 +74,19 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                   </button>
                 </div>
               </div>
-              <button type="button" aria-label="Dismiss warning" onClick={() => setLossWarningDismissed(true)} style={{ background: 'none', border: 'none', color: '#fbbf24', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+              <button type="button" aria-label="Dismiss warning" onClick={dismissLossWarning} style={{ background: 'none', border: 'none', color: '#fbbf24', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
             </div>
           )}
 
           {/* Triangle basis toggle — persisted per treaty. Claims screens only;
               premium isn't reduced by losses. */}
           {!isPremium && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '0 0 12px', padding: '10px 14px', borderRadius: 12, background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.30)' }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#bae6fd', letterSpacing: '.04em' }}>Triangle basis</span>
-              <div className="toggle-group" style={{ boxShadow: '0 0 0 1px rgba(148,163,184,0.18)' }}>
-                <button
-                  type="button"
-                  className={`toggle-option${basis === 'FULL' ? ' active' : ''}`}
-                  onClick={() => setBasis('FULL')}
-                  style={basis === 'FULL'
-                    ? { background: 'linear-gradient(135deg,#f59e0b,#f97316)', color: '#1a1206', fontWeight: 800, boxShadow: '0 0 16px rgba(249,115,22,0.65)', textShadow: 'none' }
-                    : { color: '#fbbf24', fontWeight: 700 }}
-                >Full</button>
-                <button
-                  type="button"
-                  className={`toggle-option${basis === 'STRIPPED' ? ' active' : ''}`}
-                  onClick={() => setBasis('STRIPPED')}
-                  style={basis === 'STRIPPED'
-                    ? { background: 'linear-gradient(135deg,#10b981,#06b6d4)', color: '#042f2a', fontWeight: 800, boxShadow: '0 0 16px rgba(16,185,129,0.65)', textShadow: 'none' }
-                    : { color: '#5eead4', fontWeight: 700 }}
-                >Stripped of Large/Cat Losses</button>
-              </div>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                Stripped is the attritional basis — recommended. Saved per treaty: choosing Full uses
-                the original triangle and folds large/cat into attritional (shown as nil) on the summaries.
-              </span>
-              {isIncurred && (
-                <button
-                  type="button"
-                  onClick={() => setShowStrippedModal(true)}
-                  style={{
-                    marginLeft: 'auto', fontSize: 11, fontWeight: 700, letterSpacing: '.04em',
-                    padding: '7px 14px', borderRadius: 8, cursor: 'pointer',
-                    border: '1px solid rgba(16,185,129,0.45)', color: '#6ee7b7',
-                    background: 'rgba(16,185,129,0.10)', whiteSpace: 'nowrap',
-                  }}
-                >▦ Stripped Incurred Triangle</button>
-              )}
-            </div>
+            <BasisToggleBar
+              basis={basis}
+              onSetBasis={setBasis}
+              isIncurred={isIncurred}
+              onShowStrippedModal={() => setShowStrippedModal(true)}
+            />
           )}
 
           {/* Stripped-mode info banner */}
@@ -941,164 +101,46 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
             </div>
           )}
 
-          {/* Meta bar */}
-          <div className="df-toprow">
-            <div className="df-controls">
-              <div className="df-mini"><div className="df-mini-label">Start Year</div><div className="df-mini-value">{startYear}</div></div>
-              <div className="df-mini"><div className="df-mini-label">Inception Year</div><div className="df-mini-value">{inceptionYear}</div></div>
-              <div className="df-mini"><div className="df-mini-label">Dev Years</div><div className="df-mini-value">{numDevYears}</div></div>
-            </div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <div className="df-method">
-                <div className="df-method-label">Projection</div>
-                <div className="toggle-group df-method-toggle">
-                  <button type="button" className={`toggle-option${projMethod === 'CHAIN' ? ' active' : ''}`} onClick={() => { setProjMethod('CHAIN'); setDirty(true); }}>Chain Ladder</button>
-                  <button type="button" className={`toggle-option${projMethod === 'BF' ? ' active' : ''}`} onClick={() => { setProjMethod('BF'); setDirty(true); }}>Bornhuetter-Ferguson</button>
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Meta bar + projection method */}
+          <MetaToolbar
+            startYear={startYear}
+            inceptionYear={inceptionYear}
+            numDevYears={numDevYears}
+            projMethod={projMethod}
+            onSelectProjMethod={selectProjMethod}
+          />
 
           {/* Munich Chain Ladder toggle — only meaningful while Chain Ladder
               is the active projection method. */}
           {projMethod === 'CHAIN' && (
-            <div
-              style={{
-                display: 'flex', flexDirection: 'column', gap: 6,
-                margin: '8px 0 12px', padding: '10px 14px', borderRadius: 12,
-                background: 'rgba(56,189,248,0.06)',
-                border: '1px solid rgba(56,189,248,0.20)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <label
-                  title={munichAvailable
-                    ? 'Run the Munich Chain Ladder using paid + incurred (paid + OS) triangles.'
-                    : 'Munich Chain Ladder needs both Paid and OS Claims triangles. Open the Incurred Development Factors screen to use it.'}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    cursor: munichAvailable ? 'pointer' : 'not-allowed',
-                    opacity: munichAvailable ? 1 : 0.55,
-                    fontSize: 13, color: '#bae6fd', fontWeight: 600,
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    disabled={!munichAvailable}
-                    checked={!!useMunich && munichAvailable}
-                    onChange={(e) => { setUseMunich(e.target.checked); setDirty(true); }}
-                  />
-                  Use Munich Chain Ladder
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setShowMunichHelp(s => !s)}
-                  style={{
-                    fontSize: 11, padding: '3px 10px', borderRadius: 6,
-                    cursor: 'pointer', border: '1px solid rgba(56,189,248,0.35)',
-                    background: 'rgba(56,189,248,0.08)', color: '#bae6fd',
-                  }}
-                >
-                  {showMunichHelp ? 'Hide info' : 'When to use this?'}
-                </button>
-                {!munichAvailable && (
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
-                    Available on the Incurred Development Factors screen.
-                  </span>
-                )}
-              </div>
-              {showMunichHelp && (
-                <div style={{ fontSize: 12, lineHeight: 1.55, color: 'rgba(226,232,240,0.85)' }}>
-                  <b style={{ color: '#bae6fd' }}>What it does.</b>{' '}
-                  Munich Chain Ladder (Quarg & Mack, 2004) extends the standard chain ladder by
-                  using the correlation between paid/incurred (P/I) ratios and the link ratios.
-                  Each step's link ratio is adjusted upward when paid is currently below the
-                  P/I average for the column, and downward when paid is above — and symmetrically
-                  for incurred. The two correlation slopes λ_P and λ_I are estimated once from
-                  Pearson residuals on the historical triangle.
-                  <br /><br />
-                  <b style={{ color: '#bae6fd' }}>When to use it.</b>{' '}
-                  Reach for MCL when:
-                  <ul style={{ margin: '4px 0 4px 18px' }}>
-                    <li>The paid-only and incurred-only chain-ladder ultimates persistently disagree.</li>
-                    <li>You have enough history (≥ 3 origin years × ≥ 3 dev periods) for residuals to be meaningful.</li>
-                    <li>The book has a stable case-reserving philosophy — MCL assumes the P/I relationship is informative.</li>
-                  </ul>
-                  <b style={{ color: '#bae6fd' }}>When to avoid it.</b>{' '}
-                  Skip MCL on very thin triangles, on lines where case reserves swing wildly
-                  (the residual correlation becomes noise rather than signal), or when paid and
-                  incurred ultimates already agree — vanilla CL is simpler and as accurate.
-                  {mclResult && (
-                    <>
-                      <br /><br />
-                      <b style={{ color: '#bae6fd' }}>This triangle:</b>{' '}
-                      λ_P = {mclResult.lambdaP == null ? '—' : mclResult.lambdaP.toFixed(4)},
-                      {' '}λ_I = {mclResult.lambdaI == null ? '—' : mclResult.lambdaI.toFixed(4)}.
-                      {mclResult.warnings?.length > 0 && (
-                        <span style={{ color: '#fbbf24' }}> {mclResult.warnings.join(' ')}</span>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
+            <MunichToggleCard
+              munichAvailable={munichAvailable}
+              useMunich={useMunich}
+              onToggleMunich={toggleMunich}
+              showMunichHelp={showMunichHelp}
+              onToggleHelp={toggleMunichHelp}
+              mclResult={mclResult}
+            />
           )}
 
           {/* BF IELR (loss BF) */}
           {projMethod === 'BF' && !isPremium && (
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center', margin: '12px 0', padding: '10px 16px', borderRadius: 14, background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.2)' }}>
-              <label style={{ fontSize: 12, color: 'rgba(253,186,116,0.9)', fontWeight: 600 }} htmlFor={ielrInputId}>Initial Expected Loss Ratio (IELR)</label>
-              <input id={ielrInputId} className="fi" type="number" min="0" max="2" step="0.01" value={ielr} onChange={e => { setIelr(e.target.value); setDirty(true); }} style={{ width: 100, textAlign: 'center', borderColor: 'rgba(249,115,22,0.4)' }} />
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{(Number(ielr) * 100 || 0).toFixed(0)}%</span>
-            </div>
+            <BfIelrBar inputId={ielrInputId} ielr={ielr} onIelrChange={changeIelr} />
           )}
 
           {/* BF % Achieved Premium (premium BF) */}
           {projMethod === 'BF' && isPremium && (
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center', margin: '12px 0', padding: '10px 16px', borderRadius: 14, background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.20)', flexWrap: 'wrap' }}>
-              <label style={{ fontSize: 12, color: 'rgba(199,210,254,0.9)', fontWeight: 600 }} htmlFor={achievedPremiumInputId}>% Achieved Premium</label>
-              <input
-                id={achievedPremiumInputId}
-                className="fi"
-                type="number"
-                min="0"
-                max="3"
-                step="0.01"
-                value={percentAchieved}
-                onChange={(e) => { setPercentAchieved(e.target.value); setDirty(true); }}
-                style={{ width: 100, textAlign: 'center', borderColor: 'rgba(99,102,241,0.4)' }}
-              />
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
-                {(Number(percentAchieved) * 100 || 0).toFixed(0)}%
-              </span>
-              {suggestedPercentAchieved != null && (
-                <button
-                  type="button"
-                  onClick={() => { setPercentAchieved(suggestedPercentAchieved.toFixed(4)); setDirty(true); }}
-                  style={{
-                    marginLeft: 'auto', fontSize: 11, padding: '4px 10px', borderRadius: 6,
-                    cursor: 'pointer', border: '1px solid rgba(99,102,241,0.4)',
-                    background: 'rgba(99,102,241,0.10)', color: '#c7d2fe',
-                  }}
-                  title="Average of (current premium ÷ EPI) across years where both are positive"
-                >
-                  Use observed avg ({(suggestedPercentAchieved * 100).toFixed(1)}%)
-                </button>
-              )}
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', flexBasis: '100%' }}>
-                Average over past years; default 100 %. &gt;100 % means past premium overachieved budget, &lt;100 % means underachieved.
-              </span>
-            </div>
+            <BfPremiumAchievedBar
+              inputId={achievedPremiumInputId}
+              percentAchieved={percentAchieved}
+              onPercentAchievedChange={changePercentAchieved}
+              suggestedPercentAchieved={suggestedPercentAchieved}
+              onApplySuggested={applySuggestedPercentAchieved}
+            />
           )}
 
           {/* ── VIEW TOGGLE ── */}
-          <div style={{ marginBottom: 14, marginTop: 8 }}>
-            <div className="toggle-group" style={{ display: 'inline-flex' }}>
-              {[['DEV_FACTORS', '📊 Development Factors'], ['LINK_RATIOS', '🔗 Link Ratios'], ['GRAPH', '📈 Comparison Graph']].map(([key, label]) => (
-                <button type="button" key={key} className={`toggle-option${view === key ? ' active' : ''}`} onClick={() => setView(key)} style={{ fontSize: 12, padding: '8px 16px' }}>{label}</button>
-              ))}
-            </div>
-          </div>
+          <ViewToggle view={view} onSetView={setView} />
 
           {/* Primary content region — loading / error (with Retry) states come
               from the triangle resource; chrome above stays interactive. */}
@@ -1112,16 +154,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
             {/* ═══ DEV FACTORS VIEW ═══ */}
             {view === 'DEV_FACTORS' && (<>
               {/* Average method */}
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Average</span>
-                <div className="toggle-group">
-                  {['weighted', 'simple', 'last3', 'last5'].map(m => (
-                    <button type="button" key={m} className={`toggle-option${avgMethod === m ? ' active' : ''}`} onClick={() => { setAvgMethod(m); setDirty(true); }}>
-                      {m === 'weighted' ? 'Weighted' : m === 'simple' ? 'Simple' : m === 'last3' ? 'Last 3' : 'Last 5'}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <AvgMethodToggle avgMethod={avgMethod} onSelectAvgMethod={selectAvgMethod} />
 
               {/* Actual */}
               <div className="df-section">
@@ -1146,10 +179,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                 <BFPremiumProjectionsTable
                   bfResults={bfPremiumResults}
                   epiPerYear={epiPerYear}
-                  onEpiChange={(i, v) => {
-                    setEpiPerYear((prev) => { const a = [...prev]; a[i] = v; return a; });
-                    setDirty(true);
-                  }}
+                  onEpiChange={changeEpi}
                 />
               )}
 
@@ -1208,31 +238,15 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
           </>)}
           </AsyncBoundary>
           {showStrippedModal && (
-            <div
-              role="presentation"
-              onClick={e => { if (e.target === e.currentTarget) setShowStrippedModal(false); }}
-              style={{ position: 'fixed', inset: 0, zIndex: 120000, background: 'rgba(2,6,23,0.72)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-            >
-              <div role="dialog" aria-modal="true" className="glass" style={{ width: 'min(1100px,97vw)', maxHeight: '88vh', overflow: 'auto', borderRadius: 16, border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(8,16,40,0.97)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid rgba(148,163,184,0.14)' }}>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: '0.03em', color: '#e2e8f0' }}>Incurred Triangle — Stripped of Large/CAT</div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
-                      {stripLargeCat
-                        ? `Cumulative incurred (Paid + OS) with ${exclusions.largeLossCount} large and ${exclusions.catLossCount} CAT loss${(exclusions.largeLossCount + exclusions.catLossCount) === 1 ? '' : 'es'} removed — the attritional basis used for dev-factor selection.`
-                        : 'Stripping is OFF — development factors are calculated on the full triangle. The attritional view below shows what stripping would remove, for reference only.'}
-                    </div>
-                  </div>
-                  <button onClick={() => setShowStrippedModal(false)} style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid rgba(148,163,184,0.25)', background: 'transparent', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 14 }}>✕</button>
-                </div>
-                <div style={{ padding: 20 }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: '#fbbf24', marginBottom: 8 }}>FULL (ORIGINAL — BEFORE STRIPPING)</div>
-                  <TriangleGrid matrix={fullCalcs?.matrix} years={years} numDevYears={numDevYears} />
-                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: '#6ee7b7', margin: '20px 0 8px' }}>{stripLargeCat ? 'STRIPPED (ATTRITIONAL)' : 'ATTRITIONAL BASIS (reference — not active)'}</div>
-                  <TriangleGrid matrix={strippedCalcs?.matrix} years={years} numDevYears={numDevYears} />
-                </div>
-              </div>
-            </div>
+            <StrippedTriangleModal
+              onClose={() => setShowStrippedModal(false)}
+              stripLargeCat={stripLargeCat}
+              exclusions={exclusions}
+              fullMatrix={fullCalcs?.matrix}
+              strippedMatrix={strippedCalcs?.matrix}
+              years={years}
+              numDevYears={numDevYears}
+            />
           )}
         </div>
       )}
