@@ -1,0 +1,25 @@
+{
+  // Incremental TypeScript adoption (docs/frontend-hardening.md, Phase 1).
+  // - .ts/.tsx files are fully strict-checked.
+  // - .js/.jsx files are included but NOT checked unless they opt in with
+  //   a leading `// @ts-check` (checkJs is off). Core pricing math opts in.
+  // - noEmit: Vite owns transpilation; tsc is a pure type gate.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "types": ["vite/client"]
+  },
+  "include": ["src", "../shared/**/*.js"]
+}

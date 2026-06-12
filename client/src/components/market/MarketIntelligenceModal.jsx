@@ -14,7 +14,7 @@
 // generate-report call (web_search loops) shows progress prose.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, HttpError } from '../../api.js';
+import { api, HttpError } from '../../api';
 import { useGlobalToast } from '../../hooks/useToast.js';
 
 // REPORT_VIEWED audit debounce. Tracks (report_id, contract_id) pairs

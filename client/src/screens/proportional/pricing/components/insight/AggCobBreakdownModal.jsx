@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../../../../api.js';
+import { api } from '../../../../../api';
 import { toN as cn } from '../../../../../utils/format.js';
 
 export function AggCobBreakdownModal({ contractId, shareRows, contractAgg100, otherCountryAgg, onClose }) {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api } from '../../api.js';
+import { api } from '../../api';
 import { useGlobalToast } from '../../hooks/useToast.js';
 
 function statusTone(status) {

@@ -25,7 +25,7 @@ class FakeHttpError extends Error {
   constructor(status, body) { super(`HTTP ${status}`); this.status = status; this.body = body; }
 }
 
-vi.mock('../../api.js', () => ({
+vi.mock('../../api', () => ({
   api: apiMock,
   HttpError: FakeHttpError,
 }));

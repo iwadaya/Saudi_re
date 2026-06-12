@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * npPricingEngine.js
  * ─────────────────────────────────────────────────────────────────
@@ -22,6 +23,25 @@
 
 import { toN } from './format.js';
 
+/**
+ * @typedef {import('../types/pricing').LossLike} LossLike
+ * @typedef {import('../types/pricing').LossSelectionSnapshot} LossSelectionSnapshot
+ * @typedef {import('../types/pricing').RiskProfileHeader} RiskProfileHeader
+ * @typedef {import('../types/pricing').ProfilePoint} ProfilePoint
+ *
+ * One COB's risk profile as consumed by the MBBEFD exposure rating.
+ * @typedef {{ profile: RiskProfileHeader, bands: ProfilePoint[] }} RiskProfileInput
+ *
+ * Common result of one pricing method for one layer (rates are decimals).
+ * @typedef {{ rol: number, prAttach?: number, prExhaust?: number, [extra: string]: unknown }} MethodResult
+ *
+ * UI-shaped layer rows fed in by the screens (formatted strings allowed —
+ * every numeric field goes through cn() before math).
+ * @typedef {{ deductible?: unknown, limit?: unknown, egnpi?: unknown,
+ *             risk?: unknown, cat?: unknown, riskCover?: unknown, catCover?: unknown,
+ *             classOfBusinessIds?: unknown, class_of_business_ids?: unknown }} EngineLayer
+ */
+
 // Re-export the shared primitives so callers can pull everything from
 // one module. The shared versions are covered by their own test suite
 // and are the authority when the implementations below need to change.
@@ -36,18 +56,30 @@ export {
 
 // ── Maths helpers ─────────────────────────────────────────────────
 
-/** Safe number parse */
+/**
+ * Safe number parse
+ * @param {unknown} v
+ * @returns {number}
+ */
 export function cn(v) {
   return toN(v);
 }
 
-/** Format as ROL % string, 4dp */
+/**
+ * Format as ROL % string, 4dp
+ * @param {number} v
+ * @returns {string}
+ */
 export function fmtRol(v) {
   if (!v || !Number.isFinite(v) || v <= 0) return '';
   return (v * 100).toFixed(2) + '%';
 }
 
-/** Format as rate % string, 4dp */
+/**
+ * Format as rate % string, 4dp
+ * @param {number} v
+ * @returns {string}
+ */
 export function fmtPct(v) {
   if (!v || !Number.isFinite(v) || v <= 0) return '';
   return (v * 100).toFixed(2) + '%';
@@ -55,6 +87,11 @@ export function fmtPct(v) {
 
 // ── MBBEFD (Swiss Re exposure curve) ──────────────────────────────
 // G(d,c) = log(1 + (e^c - 1)*d) / c   where d = damage ratio ∈ [0,1]
+/**
+ * @param {number} d damage ratio ∈ [0,1]
+ * @param {number} c curve parameter
+ * @returns {number}
+ */
 export function mbbefdG(d, c) {
   if (d <= 0) return 0;
   if (d >= 1) return 1;
@@ -62,13 +99,20 @@ export function mbbefdG(d, c) {
   return Math.log(1 + (Math.exp(c) - 1) * d) / c;
 }
 // Swiss Re Y-curve mapping
-export const SWISS_RE_C = { Y1: 0, Y2: 1.5, Y3: 3.0, Y4: 5.0 };
+export const SWISS_RE_C = /** @type {Record<string, number>} */ ({ Y1: 0, Y2: 1.5, Y3: 3.0, Y4: 5.0 });
 
 /**
  * MBBEFD Limited Expected Value (LEV) for a layer [D, D+L] on a single risk of SI
  * with PML% and curve parameter c.
  *
  * E[min(max(X-D,0), L)] ≈ SI × PML_pct × [G(min((D+L)/PML,1),c) - G(min(D/PML,1),c)]
+ *
+ * @param {number} si
+ * @param {number} pmlPct
+ * @param {number} cValue
+ * @param {number} deductible
+ * @param {number} limit
+ * @returns {number}
  */
 export function mbbefdLayerLEV(si, pmlPct, cValue, deductible, limit) {
   if (si <= 0 || limit <= 0) return 0;
@@ -83,6 +127,10 @@ export function mbbefdLayerLEV(si, pmlPct, cValue, deductible, limit) {
 /**
  * MLE fit of Pareto(α, xm) to a loss array.
  * Uses only losses ≥ xm (threshold).
+ *
+ * @param {number[]} losses
+ * @param {number} xm
+ * @returns {{ alpha: number, n: number }}
  */
 export function fitPareto(losses, xm) {
   const v = (losses || []).filter(l => l >= xm);
@@ -96,6 +144,11 @@ export function fitPareto(losses, xm) {
 /**
  * Pareto quantile: the loss at exceedance probability p
  * (i.e. 1-in-(1/p) event).
+ *
+ * @param {number} p
+ * @param {number} alpha
+ * @param {number} xm
+ * @returns {number}
  */
 export function paretoQ(p, alpha, xm) {
   if (!(p > 0 && p < 1) || !(alpha > 0) || !(xm > 0)) return 0;
@@ -112,6 +165,11 @@ export function paretoQ(p, alpha, xm) {
  *   E[min(X, c)] = xm * (1 + ln(c/xm))                               for α=1
  *
  * Only valid for X ≥ xm; losses below xm are handled separately.
+ *
+ * @param {number} alpha
+ * @param {number} xm
+ * @param {number} cap
+ * @returns {number}
  */
 export function paretoLEV(alpha, xm, cap) {
   if (cap <= 0 || alpha <= 0 || xm <= 0) return 0;
@@ -128,6 +186,14 @@ export function paretoLEV(alpha, xm, cap) {
  * Accounts for the frequency of large losses relative to total exposure years.
  *
  * E[layer cost per risk-year] = (n / years) * (LEV(D+L) - LEV(D))
+ *
+ * @param {number} alpha
+ * @param {number} xm
+ * @param {number} deductible
+ * @param {number} limit
+ * @param {number} n     count of fitted tail losses
+ * @param {number} years total observation window (zero-loss years included)
+ * @returns {number}
  */
 export function paretoLayerExpectedLoss(alpha, xm, deductible, limit, n, years) {
   if (alpha <= 0 || years <= 0 || n <= 0) return 0;
@@ -139,6 +205,10 @@ export function paretoLayerExpectedLoss(alpha, xm, deductible, limit, n, years) 
 
 /**
  * Probability of attachment: P(X > D) for a Pareto tail
+ * @param {number} alpha
+ * @param {number} xm
+ * @param {number} deductible
+ * @returns {number}
  */
 export function paretoAttachment(alpha, xm, deductible) {
   if (alpha <= 0 || xm <= 0 || deductible <= xm) return 1;
@@ -147,6 +217,11 @@ export function paretoAttachment(alpha, xm, deductible) {
 
 /**
  * Probability of exhaustion: P(X > D+L) for a Pareto tail
+ * @param {number} alpha
+ * @param {number} xm
+ * @param {number} deductible
+ * @param {number} limit
+ * @returns {number}
  */
 export function paretoExhaustion(alpha, xm, deductible, limit) {
   return paretoAttachment(alpha, xm, deductible + limit);
@@ -166,13 +241,13 @@ export function paretoExhaustion(alpha, xm, deductible, limit) {
  *      → average loss cost as % of EGNPI.
  *   6. ROL = avgAnnualLayerLoss / limit  (true Rate-on-Line).
  *
- * @param {Array}  losses      - Array of {uw_year, incurred, inflated_incurred, inflation_factor, is_selected}
+ * @param {LossLike[]} losses     - Array of {uw_year, incurred, inflated_incurred, inflation_factor, is_selected}
  * @param {number} deductible  - Layer attachment (same currency as losses)
  * @param {number} limit       - Layer width
  * @param {number} egnpi       - Current-year EGNPI (fallback when no per-year data)
  * @param {number} obsYears    - Number of observation years (covers zero-loss years)
- * @param {Object} egnpiByYear - Map of { year: egnpi } from NpPremiumsTable (optional)
- * @returns {{ rol, avgLossCost, avgAnnualLayerLoss, avgEgnpi, years }}
+ * @param {Record<string|number, unknown>} [egnpiByYear] - Map of { year: egnpi } from NpPremiumsTable (optional)
+ * @returns {{ rol: number, avgAnnualLayerLoss: number, avgLossCost?: number, avgEgnpi?: number, totalLayerLoss?: number, years?: number }}
  */
 export function calcPureBurningCost(losses, deductible, limit, egnpi, obsYears, egnpiByYear) {
   if (!losses?.length || limit <= 0) return { rol: 0, avgAnnualLayerLoss: 0 };
@@ -188,10 +263,10 @@ export function calcPureBurningCost(losses, deductible, limit, egnpi, obsYears, 
   if (!withValues.length) return { rol: 0, avgAnnualLayerLoss: 0 };
 
   // Step 2–3: apply deductible, cap at limit, sum by year
-  const byYear = {};
+  const byYear = /** @type {Record<string, number>} */ ({});
   for (const { year, loss } of withValues) {
     const layerHit = Math.max(0, Math.min(loss - deductible, limit));
-    byYear[year] = (byYear[year] || 0) + layerHit;
+    byYear[String(year)] = (byYear[String(year)] || 0) + layerHit;
   }
 
   const totalLayerLoss = Object.values(byYear).reduce((s, v) => s + v, 0);
@@ -265,20 +340,23 @@ export function calcPureBurningCost(losses, deductible, limit, egnpi, obsYears, 
  *
  * Returns ROL as a fraction of EGNPI.
  *
- * @param {Array}  losses     - same as above
+ * @param {LossLike[]} losses     - same as above
  * @param {number} deductible
  * @param {number} limit
  * @param {number} egnpi
- * @param {object} savedParams - Optional saved {pareto_xm, pareto_alpha, observation_years}
+ * @param {LossSelectionSnapshot} [savedParams] - Optional saved {pareto_xm, pareto_alpha, observation_years}
  *                               from the loss selection screen (takes precedence if present)
+ * @returns {{ rol: number, alpha: number, xm: number, prAttach: number, prExhaust: number, expLayerLoss?: number }}
  */
 export function calcParetoROL(losses, deductible, limit, egnpi, savedParams) {
   if (limit <= 0 || egnpi <= 0) return { rol: 0, alpha: 0, xm: 0, prAttach: 0, prExhaust: 0 };
 
   let alpha, xm, n, years;
 
-  // Prefer saved fitted params from loss selection screen
-  if (savedParams?.pareto_alpha > 0 && savedParams?.pareto_xm > 0) {
+  // Prefer saved fitted params from loss selection screen.
+  // (NUMERIC columns arrive as strings — coerce before comparing, otherwise
+  // '"5" > 0' style coercion comparisons hide formatting bugs.)
+  if (savedParams && cn(savedParams.pareto_alpha) > 0 && cn(savedParams.pareto_xm) > 0) {
     alpha = cn(savedParams.pareto_alpha);
     xm    = cn(savedParams.pareto_xm);
     n     = cn(savedParams.selected_count) || 10;
@@ -295,7 +373,7 @@ export function calcParetoROL(losses, deductible, limit, egnpi, savedParams) {
     const fit = fitPareto(vals, xm);
     alpha = fit.alpha;
     n     = fit.n;
-    years = savedParams?.observation_years || Math.max(5, new Set(selected.map(l => l.uw_year)).size);
+    years = cn(savedParams?.observation_years) || Math.max(5, new Set(selected.map(l => l.uw_year)).size);
   }
 
   if (alpha <= 0) return { rol: 0, alpha: 0, xm: 0, prAttach: 0, prExhaust: 0 };
@@ -325,6 +403,8 @@ const BAND_CURVE_THRESHOLDS = [
 /**
  * Select the appropriate Swiss Re Y-curve for a band based on its mean SI/MPL.
  * Implements Swiss Re brochure Step 4 (p.20): choose curve per band by risk size.
+ * @param {number} avgSI
+ * @returns {string}
  */
 export function autoCurveForBand(avgSI) {
   for (const { maxSI, curve } of BAND_CURVE_THRESHOLDS) {
@@ -346,12 +426,13 @@ export function autoCurveForBand(avgSI) {
  *   (expressed as a %) before computing ROL. If not provided, defaults to 100%
  *   (no adjustment) to preserve backward compatibility.
  *
- * @param {Array}  profiles   - [{profile: {c_value, pml_percentage, selected_curve,
+ * @param {RiskProfileInput[]} profiles - [{profile: {c_value, pml_percentage, selected_curve,
  *                                          custom_b, gross_loss_ratio},
  *                                bands: [{from_amt, to_amt, no_of_risks, total_sum_insured}]}]
  * @param {number} deductible
  * @param {number} limit
  * @param {number} egnpi
+ * @returns {{ rol: number, totalExpLoss: number, totalSI?: number }}
  */
 export function calcRiskExposureRating(profiles, deductible, limit, egnpi) {
   if (!profiles?.length || limit <= 0 || egnpi <= 0) {
@@ -413,20 +494,21 @@ export function calcRiskExposureRating(profiles, deductible, limit, egnpi) {
  * In practice: if we have saved return-period points from the cat loss screen,
  * we use those directly (preferred). Otherwise we derive from CRESTA exposure.
  *
- * @param {Array}  crestaRows  - [{eq_agg, ws_agg, flood_agg, srcc_agg, others_agg}]
+ * @param {Array<Record<string, unknown>>} crestaRows - [{eq_agg, ws_agg, flood_agg, srcc_agg, others_agg}]
  * @param {number} deductible
  * @param {number} limit
  * @param {number} egnpi
- * @param {object} catSnap     - saved loss-selection snapshot {return_period_key_points, ...}
- * @param {Array}  catLosses   - raw cat loss events [{incurred, uw_year, is_selected}]
- * @param {number} obsYears
+ * @param {LossSelectionSnapshot} [catSnap] - saved loss-selection snapshot {return_period_key_points, ...}
+ * @param {LossLike[]} [catLosses] - raw cat loss events [{incurred, uw_year, is_selected}]
+ * @param {number} [obsYears]
+ * @returns {MethodResult & { method?: string }}
  */
 export function calcCatExposureRating(crestaRows, deductible, limit, egnpi, catSnap, catLosses, obsYears) {
   if (limit <= 0 || egnpi <= 0) return { rol: 0, totalExposure: 0 };
 
   // ── Method 1: saved return-period curve (most accurate) ──────────
   if (catSnap?.return_period_key_points) {
-    const kp = catSnap.return_period_key_points;
+    const kp = /** @type {Record<string, unknown>} */ (catSnap.return_period_key_points);
     // Use OEP (Occurrence Exceedance Probability) curve points
     // Layer expected loss ≈ sum_i { P(loss_i) × layer_hit_i }
     // Simplified: use RP10 and RP50 anchor points
@@ -467,7 +549,7 @@ export function calcCatExposureRating(crestaRows, deductible, limit, egnpi, catS
   }
 
   // ── Method 2: Pareto fit on cat losses ───────────────────────────
-  if (catLosses?.length >= 3) {
+  if ((catLosses?.length || 0) >= 3 && catLosses) {
     const selected = catLosses.filter(l => l.is_selected !== false);
     const vals = selected.map(l => cn(l.inflated_incurred) || cn(l.incurred) + cn(l.os)).filter(v => v > 0);
     if (vals.length >= 3) {
@@ -507,7 +589,12 @@ export function calcCatExposureRating(crestaRows, deductible, limit, egnpi, catS
   return { rol: 0, method: 'none' };
 }
 
-/** Interpolate exceedance probability from OEP curve points */
+/**
+ * Interpolate exceedance probability from OEP curve points
+ * @param {{ rp: number, loss: number }[]} points
+ * @param {number} loss
+ * @returns {number}
+ */
 function interpOEP(points, loss) {
   if (!points?.length || loss <= 0) return 0;
   if (loss <= points[0].loss) return 1 / points[0].rp;
@@ -546,9 +633,11 @@ function interpOEP(points, loss) {
  * `class_of_business` list. Each token is a lowercased name / code
  * that a loss row might carry in its `class_of_business` column.
  * Exposed so filterLossesForLayer can be unit-tested in isolation.
+ * @param {unknown} cobList
+ * @returns {Record<string, Set<string>>}
  */
 export function buildCobTokenMap(cobList) {
-  const map = {};
+  const map = /** @type {Record<string, Set<string>>} */ ({});
   for (const c of (Array.isArray(cobList) ? cobList : [])) {
     const id = String(c?.class_of_business_id || c?.id || '').trim();
     if (!id) continue;
@@ -571,9 +660,10 @@ export function buildCobTokenMap(cobList) {
  *     can't exclude without info; safer to include than silently drop
  *     burn-cost signal)
  *
- * @param {Array<object>} losses
+ * @param {LossLike[]} losses
  * @param {Array<string>} layerCobIds
  * @param {Record<string, Set<string>>} cobIdToTokens  from buildCobTokenMap
+ * @returns {LossLike[]}
  */
 export function filterLossesForLayer(losses, layerCobIds, cobIdToTokens) {
   if (!Array.isArray(losses) || !losses.length) return losses || [];
@@ -591,11 +681,24 @@ export function filterLossesForLayer(losses, layerCobIds, cobIdToTokens) {
   });
 }
 
+/**
+ * @param {import('../api').Api} api
+ * @param {string} contractId
+ * @param {EngineLayer[]} layers
+ * @param {{ estGnpi?: unknown }} npDetail
+ * @param {string} mode  'RISK' | 'CAT' | 'BOTH'
+ * @param {boolean} [quoteMode]
+ */
 export async function calcLayerPricing(api, contractId, layers, npDetail, mode, quoteMode) {
   const qm = quoteMode ? { quote: true } : undefined;
 
   const needRisk = mode !== 'CAT';
   const needCat  = mode !== 'RISK';
+
+  /** @type {Partial<import('../types/pricing').LossReportBundle>} */
+  const emptyLossBundle = {};
+  /** @type {Partial<import('../types/pricing').LossSelectionBundle>} */
+  const emptySelection = {};
 
   const [
     largeLossData,
@@ -606,10 +709,10 @@ export async function calcLayerPricing(api, contractId, layers, npDetail, mode, 
     egnpiYearData,
     cobList,
   ] = await Promise.all([
-    needRisk ? api.getLargeLosses(contractId, qm).catch(() => ({})) : Promise.resolve({}),
-    needCat  ? api.getCatLosses(contractId, qm).catch(() => ({}))   : Promise.resolve({}),
-    needRisk ? api.getLossSelectionLatest(contractId, 'large', qm).catch(() => ({})) : Promise.resolve({}),
-    needCat  ? api.getLossSelectionLatest(contractId, 'cat', qm).catch(() => ({}))   : Promise.resolve({}),
+    needRisk ? api.getLargeLosses(contractId, qm).catch(() => emptyLossBundle) : Promise.resolve(emptyLossBundle),
+    needCat  ? api.getCatLosses(contractId, qm).catch(() => emptyLossBundle)   : Promise.resolve(emptyLossBundle),
+    needRisk ? api.getLossSelectionLatest(contractId, 'large', qm).catch(() => emptySelection) : Promise.resolve(emptySelection),
+    needCat  ? api.getLossSelectionLatest(contractId, 'cat', qm).catch(() => emptySelection)   : Promise.resolve(emptySelection),
     needCat  ? api.getCrestaData(contractId, qm).catch(() => [])                     : Promise.resolve([]),
     api.getNpEgnpiYear(contractId, qm).catch(() => []),
     // Reference list so we can resolve layer class-of-business UUIDs
@@ -619,17 +722,21 @@ export async function calcLayerPricing(api, contractId, layers, npDetail, mode, 
 
   const largeLosses    = largeLossData?.losses || (Array.isArray(largeLossData) ? largeLossData : []);
   const catLosses      = catLossData?.losses   || (Array.isArray(catLossData)   ? catLossData   : []);
-  const llSavedParams  = llSnap?.snapshot  || {};
-  const catSavedParams = catSnap?.snapshot || {};
-  const crestaRows     = Array.isArray(crestaData) ? crestaData : (crestaData?.rows || []);
+  const llSavedParams  = llSnap?.snapshot  || /** @type {LossSelectionSnapshot} */ ({});
+  const catSavedParams = catSnap?.snapshot || /** @type {LossSelectionSnapshot} */ ({});
+  const crestaRows     = Array.isArray(crestaData)
+    ? /** @type {Array<Record<string, unknown>>} */ (crestaData)
+    : (/** @type {{ rows?: Array<Record<string, unknown>> }} */ (crestaData)?.rows || []);
 
   // Build id → token map once per pricing run so every layer can
   // cheap-filter its losses without re-walking the COB catalog.
   const cobIdToTokens = buildCobTokenMap(cobList);
 
   // Build per-year EGNPI map { year(number) -> egnpi(number) } for Clark-aligned burn cost
-  const egnpiRows = Array.isArray(egnpiYearData) ? egnpiYearData : (egnpiYearData?.rows || []);
-  const egnpiByYear = {};
+  const egnpiRows = Array.isArray(egnpiYearData)
+    ? egnpiYearData
+    : (/** @type {{ rows?: import('../types/pricing').EgnpiYearRow[] }} */ (egnpiYearData)?.rows || []);
+  const egnpiByYear = /** @type {Record<number, number>} */ ({});
   for (const r of egnpiRows) {
     const y = Number(r.uw_year ?? r.uwYear);
     const v = cn(r.egnpi);
@@ -656,7 +763,7 @@ export async function calcLayerPricing(api, contractId, layers, npDetail, mode, 
     : [];
 
 
-  const riskProfileMap = {}; // cobId -> { profile, bands }
+  const riskProfileMap = /** @type {Record<string, RiskProfileInput>} */ ({}); // cobId -> { profile, bands }
   if (needRisk && allCobIds.length) {
     const profileResults = await Promise.all(
       allCobIds.map(cobId =>
@@ -672,24 +779,37 @@ export async function calcLayerPricing(api, contractId, layers, npDetail, mode, 
 
   // For layers with no COBs defined, fall back to fetching all contract-level COBs
   // (covers prop-style treaties or missing layer-COB linkage)
+  /** @type {RiskProfileInput[]} */
   let fallbackProfiles = [];
   if (needRisk && allCobIds.length === 0) {
     try {
       const cobsRes = await api.getContractCobs(contractId, qm).catch(() => []);
-      const cobList = (cobsRes?.rows || cobsRes || [])
+      const cobRows = Array.isArray(cobsRes)
+        ? cobsRes
+        : (/** @type {{ rows?: import('../types/pricing').CobLinkRow[] }} */ (cobsRes)?.rows || []);
+      const cobIdList = cobRows
         .map(x => String(x.cob_id || x.id || x.class_of_business_id))
         .filter(Boolean);
       fallbackProfiles = await Promise.all(
-        cobList.map(cobId =>
+        cobIdList.map(cobId =>
           api.getRiskProfile(contractId, cobId, qm)
             .then(r => ({ cobId, profile: r?.profile || {}, bands: r?.bands || [] }))
             .catch(() => null)
         )
-      ).then(rs => rs.filter(Boolean));
+      ).then(rs => rs.filter(r => r !== null));
     } catch (_) {}
   }
 
   // ── Price one peril component for a layer ────────────────────────
+  /**
+   * @param {number} deductible
+   * @param {number} limit
+   * @param {number} egnpi
+   * @param {LossLike[]} losses
+   * @param {LossSelectionSnapshot} savedParams
+   * @param {(d: number, lim: number, eg: number) => MethodResult} exposureFn
+   * @param {number} obsYears
+   */
   function priceComponent(deductible, limit, egnpi, losses, savedParams, exposureFn, obsYears) {
     if (limit <= 0 || egnpi <= 0) return null;
     // Pass per-year EGNPI map for Clark-aligned burn cost (year-matched denominator)

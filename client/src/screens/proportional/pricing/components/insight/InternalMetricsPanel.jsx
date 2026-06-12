@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { api } from '../../../../../api.js';
+import { api } from '../../../../../api';
 import { useAppState } from '../../../../../context/AppContext.jsx';
 import { cn } from './_shared.jsx';
 
