@@ -656,9 +656,20 @@ export default function PropPricing() {
       market_value: getC(name, 'market'), actual_stats_value: getC(name, 'actual'),
       exposure_value: getC(name, 'exposure'), comment: getC(name, 'comment'),
     }));
+    // downside_amt is normally written into the grid by the auto-fill
+    // effect, which lands one render after the component grid settles — a
+    // save in that window would persist a stale figure. Recompute it here
+    // from the live components (same formula as the effect) so the saved
+    // 100% scenario always matches the displayed table.
+    const crDownsideNow = calcCR('downside');
+    const downsideAmtNow = epi > 0 ? -Math.abs((crDownsideNow - 1) * epi) : 0;
     const payload = {
       contract_id: cid, components: compArr, leads,
-      share_scenarios: shareRows.map(label => ({ share_label: label, ...(shareGrid[label] || {}) })),
+      share_scenarios: shareRows.map(label => {
+        const row = { share_label: label, ...(shareGrid[label] || {}) };
+        if (label === '100%') row.downside_amt = String(Math.round(downsideAmtNow));
+        return row;
+      }),
       comment,
       outputs: {
         status: offerStatus, offer_line: offerLine, offer_comment: offerComment,
@@ -1001,7 +1012,7 @@ export default function PropPricing() {
                       isQuote: !!appState.quoteMode,
                       components,
                       yearly,
-                      epiSplit: (getC()?.epi_split || []),
+                      epiSplit: (contract.epi_split || td.epiSplit || []),
                       shareRows,
                       shareGrid,
                       leads: leads && (leads.lead_reinsurer || leads.expiring_reinsurer)

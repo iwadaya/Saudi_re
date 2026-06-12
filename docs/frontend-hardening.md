@@ -118,17 +118,17 @@ onKeyDown for row clicks), and wrap labelled controls in the `ui/`
 
 | Where | Finding | Status |
 |---|---|---|
-| `FacPricing.jsx:545-573` | **Money-path data loss**: the risk/pricing load effect depends on `f` and resets `dirty` on completion, so any manual section edit re-triggers the fetch and the reset makes wizard-Next silently skip `facSavePricing` while still advancing; with a persisted pricing row the same effect is an infinite refetch loop | Open — fix in the FacPricing decomposition (golden master pins current behavior) |
-| `FacPricing.jsx:822` | `window.showToast` is never assigned anywhere in the client (the app uses `useGlobalToast`), so the save-failure path throws TypeError; navigation still blocks but with the wrong message | Open |
-| `FacPricing.jsx` primary load | `.catch(console.error)` swallows load failures; screen renders an empty-but-normal-looking form (pre-AsyncBoundary pattern) | Open — migrate like FacRiskDetail |
+| `FacPricing.jsx:545-573` | **Money-path data loss**: the risk/pricing load effect depends on `f` and resets `dirty` on completion, so any manual section edit re-triggers the fetch and the reset makes wizard-Next silently skip `facSavePricing` while still advancing; with a persisted pricing row the same effect is an infinite refetch loop | **Fixed** — load is one-shot per risk (hydrates over `F_DEFAULTS`, deps `[riskId]`, useResource); golden master flipped to assert edits save on Next |
+| `FacPricing.jsx:822` | `window.showToast` is never assigned anywhere in the client (the app uses `useGlobalToast`), so the save-failure path throws TypeError; navigation still blocks but with the wrong message | **Fixed** — save failures toast via `useGlobalToast` and return false |
+| `FacPricing.jsx` primary load | `.catch(console.error)` swallows load failures; screen renders an empty-but-normal-looking form (pre-AsyncBoundary pattern) | **Fixed** — AsyncBoundary with Retry on the primary load |
 
 ### Findings from Phase-6 golden-master work (PropPricing)
 
 | Where | Finding | Status |
 |---|---|---|
-| `PropPricing.jsx` ~1004 | Excel export passes `epiSplit: (getC()?.epi_split \|\| [])` — `getC()` with no args always returns `''`, so the exported EPI split is always empty; likely meant `contract.epi_split \|\| td.epiSplit` | Open — fix in the PropPricing Phase-4 decomposition |
-| `PropPricing.jsx` share grid | `downside_amt` auto-fills one effect-cycle after the component grid settles; a save clicked in that window persists a downside figure computed from an empty downside column | Open — fix in the decomposition |
-| `client/src/test/bindPathFixtures.js` | `makeBindPathApiMock` lacks `getCountry`, so the market-average branch silently dies under default mocks and is never exercised | Open — add to the shared fixture |
+| `PropPricing.jsx` ~1004 | Excel export passes `epiSplit: (getC()?.epi_split \|\| [])` — `getC()` with no args always returns `''`, so the exported EPI split is always empty | **Fixed** — export reads `contract.epi_split \|\| td.epiSplit` (same source as the hero) |
+| `PropPricing.jsx` share grid | `downside_amt` auto-fills one effect-cycle after the component grid settles; a save clicked in that window persists a downside figure computed from an empty downside column | **Fixed** — save recomputes the 100% scenario's `downside_amt` from live components at save time (same formula as the auto-fill) |
+| `client/src/test/bindPathFixtures.js` | `makeBindPathApiMock` lacks `getCountry`, so the market-average branch silently dies under default mocks and is never exercised | **Fixed** — `getCountry` added to the shared fixture |
 
 ## Phase log
 

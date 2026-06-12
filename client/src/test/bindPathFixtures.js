@@ -296,6 +296,10 @@ export function makeBindPathApiMock(fn, overrides = {}) {
     getContractCobs: fn().mockResolvedValue(copy(refData.cobs)),
     getRiskProfile: fn().mockResolvedValue({ bands: [] }),
     getMarketAverage: fn().mockResolvedValue({}),
+    // Without this, `api.getCountry` is undefined in PropPricing's
+    // market-average branch — the TypeError is swallowed by the outer
+    // try/catch and the branch silently never runs under the harness.
+    getCountry: fn().mockResolvedValue({}),
     getCrestaData: fn().mockResolvedValue([]),
     getNpEgnpiYear: fn().mockResolvedValue([]),
     getCountryAggregates: fn().mockResolvedValue({ total_agg: 0, zones: [] }),
