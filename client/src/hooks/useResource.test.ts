@@ -214,4 +214,26 @@ describe('describeResourceError', () => {
     expect(describeResourceError(new Error('boom'))?.kind).toBe('unknown');
     expect(describeResourceError('string failure')).toEqual({ kind: 'unknown', message: 'string failure' });
   });
+
+  it('substitutes generic messages when error messages are empty', () => {
+    const blankHttp = Object.assign(new Error(''), { status: 503 });
+    expect(describeResourceError(blankHttp)).toEqual({
+      kind: 'http', status: 503, message: 'Request failed (503)',
+    });
+    expect(describeResourceError(new Error(''))).toEqual({
+      kind: 'unknown', message: 'Something went wrong',
+    });
+  });
+});
+
+describe('useResource error reporting', () => {
+  it('stringifies non-Error rejections for the reporter', async () => {
+    const fetcher = vi.fn().mockRejectedValue('plain string failure');
+    const { result } = renderHook(() => useResource(fetcher, [], { reportLabel: 'x' }));
+    await waitFor(() => expect(result.current.error).toBe('plain string failure'));
+    expect(reportError).toHaveBeenCalledWith('other', 'plain string failure', {
+      source: 'useResource',
+      label: 'x',
+    });
+  });
 });
