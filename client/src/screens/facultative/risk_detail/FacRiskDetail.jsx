@@ -76,7 +76,12 @@ function SectionCobChecklist({ sectionIndex, selected, facClasses, classesByCate
             return cls ? (
               <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, background: 'rgba(0,212,255,0.10)', border: '1px solid rgba(0,212,255,0.25)', color: '#00d4ff', fontSize: 10, fontWeight: 700 }}>
                 {cls.class_name}
-                <span style={{ cursor: 'pointer', opacity: 0.6, fontSize: 12, lineHeight: 1 }} onClick={() => toggle(id)}>×</span>
+                <span role="button" tabIndex={0} aria-label={`Remove ${cls.class_name}`}
+                  style={{ cursor: 'pointer', opacity: 0.6, fontSize: 12, lineHeight: 1 }}
+                  onClick={() => toggle(id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(id); }
+                  }}>×</span>
               </span>
             ) : null;
           })}
@@ -240,7 +245,11 @@ function RelatedTreatiesSection({ riskId, hasCedant, hasCob }) {
                       </span>
                     )}
                     <div style={{ flex: 1 }} />
-                    <span onClick={() => onUnlink(l)}
+                    <span role="button" tabIndex={0}
+                          onClick={() => onUnlink(l)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onUnlink(l); }
+                          }}
                           style={{ cursor: 'pointer', color: '#f87171', fontSize: 11, fontWeight: 600 }}>
                       Unlink
                     </span>

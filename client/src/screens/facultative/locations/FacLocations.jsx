@@ -172,7 +172,12 @@ function LocationCard({
           )}
         </div>
         {canRemove && (
-          <span style={{ cursor: 'pointer', color: '#f87171', fontSize: 16 }} onClick={() => onRemove(index)}>×</span>
+          <span role="button" tabIndex={0} aria-label={`Remove location ${index + 1}`}
+                style={{ cursor: 'pointer', color: '#f87171', fontSize: 16 }}
+                onClick={() => onRemove(index)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRemove(index); }
+                }}>×</span>
         )}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 12 }}>

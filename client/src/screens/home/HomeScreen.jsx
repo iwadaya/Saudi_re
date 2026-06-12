@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useId, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 import { getUserDisplayName, getSession, canAccessApprovals } from '../../utils/auth';
@@ -178,7 +178,13 @@ function DraftRow({ item, onOpen, onAllocate, canAllocate, viewingOther }) {
 
   return (
     <div className="draft-row" style={{ cursor:'default' }}>
-      <div style={{ flex:1, minWidth:0, cursor: viewingOther ? 'default' : 'pointer' }} onClick={() => !viewingOther && onOpen(item)}>
+      <div style={{ flex:1, minWidth:0, cursor: viewingOther ? 'default' : 'pointer' }}
+        role="button" tabIndex={viewingOther ? -1 : 0}
+        onClick={() => !viewingOther && onOpen(item)}
+        onKeyDown={(e) => {
+          if (viewingOther) return;
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(item); }
+        }}>
         <div style={{ display:'flex', alignItems:'center', gap:6 }}>
           <div className="draft-title" style={{ color: '#f8fafc', fontWeight: 600 }}>{item.cedantName || 'Untitled'}</div>
           {item.isQuote && (
@@ -210,7 +216,14 @@ function DraftRow({ item, onOpen, onAllocate, canAllocate, viewingOther }) {
             + Allocate
           </button>
         )}
-        {!viewingOther && <div className="draft-open" onClick={() => onOpen(item)} style={{ cursor:'pointer' }}>Open →</div>}
+        {!viewingOther && (
+          <div className="draft-open" role="button" tabIndex={0}
+            onClick={() => onOpen(item)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(item); }
+            }}
+            style={{ cursor:'pointer' }}>Open →</div>
+        )}
       </div>
     </div>
   );
@@ -282,6 +295,7 @@ function FilteredPanel({ title, badge, items, loading, emptyMsg, onOpen, badgeSt
 
 /* ── Renewal Wizard Modal ── */
 function RenewalModal({ open, onClose, onRenew }) {
+  const fid = useId(); // prefix for the wizard field ids (label ↔ control)
   const [countries, setCountries] = useState([]);
   const [cedants, setCedants] = useState([]);
   const [contracts, setContracts] = useState([]);
@@ -338,7 +352,9 @@ function RenewalModal({ open, onClose, onRenew }) {
   if (!open) return null;
   return (
     <div className="renew-modal is-ready">
-      <div className="renew-backdrop" onClick={safeClose} />
+      {/* Backdrop dismissal is a pointer-only convenience; keyboard users
+          close via Escape (useEscapeKey above) or the labelled ✕ button. */}
+      <div className="renew-backdrop" role="presentation" onClick={safeClose} />
       <div className="renew-panel glass" role="dialog" aria-modal="true">
         <div className="renew-head"><div><div className="renew-kicker">RENEWAL WIZARD</div><div className="renew-title">Renew Treaty</div></div><button className="renew-x" onClick={safeClose} aria-label="Close" disabled={busy}>✕</button></div>
         <div className="renew-steps">
@@ -348,14 +364,14 @@ function RenewalModal({ open, onClose, onRenew }) {
         </div>
         <div className="renew-body">
           {error && <div className="renew-alert">{error}</div>}
-          <div className="renew-field"><label className="renew-label">1) Select Country</label><div className="renew-control">
-            <select className="renew-select" value={selCountry} onChange={e => handleCountry(e.target.value)} disabled={busy}>
+          <div className="renew-field"><label className="renew-label" htmlFor={`${fid}-country`}>1) Select Country</label><div className="renew-control">
+            <select id={`${fid}-country`} className="renew-select" value={selCountry} onChange={e => handleCountry(e.target.value)} disabled={busy}>
               <option value="">Select Country...</option>{countries.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div></div>
-          <div className="renew-field"><label className="renew-label">2) Select Cedant</label><div className="renew-control">
-            <select className="renew-select" value={selCedant} onChange={e => handleCedant(e.target.value)} disabled={!selCountry || busy}>
+          <div className="renew-field"><label className="renew-label" htmlFor={`${fid}-cedant`}>2) Select Cedant</label><div className="renew-control">
+            <select id={`${fid}-cedant`} className="renew-select" value={selCedant} onChange={e => handleCedant(e.target.value)} disabled={!selCountry || busy}>
               <option value="">Select Cedant...</option>{cedants.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div></div>
-          <div className="renew-field"><label className="renew-label">3) Select Contract</label><div className="renew-control">
-            <select className="renew-select" value={selContract} onChange={e => setSelContract(e.target.value)} disabled={!selCedant || busy}>
+          <div className="renew-field"><label className="renew-label" htmlFor={`${fid}-contract`}>3) Select Contract</label><div className="renew-control">
+            <select id={`${fid}-contract`} className="renew-select" value={selContract} onChange={e => setSelContract(e.target.value)} disabled={!selCedant || busy}>
               <option value="">Select Contract to Renew...</option>
               {contracts.map(c => {
                 const status = c.uw_status || c.status || '';
@@ -386,7 +402,9 @@ function RenewalConfirmModal({ candidate, busy, error, onConfirm, onCancel }) {
     : '—';
   return (
     <div className="renew-modal is-ready">
-      <div className="renew-backdrop" onClick={busy ? undefined : onCancel} />
+      {/* Backdrop dismissal is a pointer-only convenience; keyboard users
+          close via Escape (useEscapeKey above) or the labelled ✕ button. */}
+      <div className="renew-backdrop" role="presentation" onClick={busy ? undefined : onCancel} />
       <div className="renew-panel glass" role="dialog" aria-modal="true" style={{ maxWidth: 460 }}>
         <div className="renew-head">
           <div>

@@ -212,7 +212,7 @@ function CobSelectModal({ selected, classList, onSave, onClose }) {
   const toggle = id => { const n = new Set(sel); if (n.has(id)) n.delete(id); else n.add(id); setSel(n); };
   useEscapeKey(true, onClose);
   return (
-    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="modal-backdrop" role="presentation" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal glass" role="dialog" aria-modal="true" aria-labelledby="cob-select-title" style={{ maxWidth: 500 }}>
         <div className="modal-title" id="cob-select-title">
           <span>Select Lines of Business</span>
@@ -247,7 +247,7 @@ function SlidingScaleModal({ table, provisional, onSave, onClose }) {
   const removeRow = i => setRows(rows.filter((_, j) => j !== i));
   useEscapeKey(true, onClose);
   return (
-    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="modal-backdrop" role="presentation" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal glass" role="dialog" aria-modal="true" aria-labelledby="sliding-scale-title" style={{ width: 'min(680px, 94vw)', maxHeight: '88vh' }}>
         <div className="modal-title" id="sliding-scale-title" style={{ color: '#f97316' }}>
           <span>Sliding Scale Commission Table</span>
@@ -296,7 +296,7 @@ function EpiSplitModal({ split, classIds, classList, qsEpi, surplusEpi, onSave, 
   const updateRow = (i, val) => { const c = [...rows]; c[i] = { ...c[i], premium: stripNonNumeric(val) }; setRows(c); };
   useEscapeKey(true, onClose);
   return (
-    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="modal-backdrop" role="presentation" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal glass" role="dialog" aria-modal="true" aria-labelledby="epi-split-title" style={{ width: 'min(680px, 94vw)', maxHeight: '88vh' }}>
         <div className="modal-title" id="epi-split-title" style={{ color: '#f97316' }}>
           <span>EPI Split by Line of Business</span>
@@ -1039,7 +1039,7 @@ export default function PropTreatyDetail() {
           onClose={() => setShowEpiSplit(false)} />}
         {/* ── LP Slides Modal ── */}
         {showLpSlides && (
-          <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          <div className="modal-backdrop" role="presentation" style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onClick={e => { if (e.target === e.currentTarget) setShowLpSlides(false); }}>
             <div className="glass" role="dialog" aria-modal="true" aria-labelledby="lp-slides-title"
               style={{ width: 460, borderRadius: 16, border: '1px solid rgba(255,255,255,0.12)', padding: 24 }}>

@@ -58,7 +58,7 @@ export default function PropOfferModal({
   const overLimit   = lineLimit>uwMaxLimitCcy;
 
   return (
-    <div className="bbg-modal-backdrop" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+    <div className="bbg-modal-backdrop" role="presentation" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div className="bbg-modal bbg-modal--fullscreen off-modal">
         <div className="bbg-modal-head" style={{flexShrink:0}}>
           <span className="bbg-modal-title">

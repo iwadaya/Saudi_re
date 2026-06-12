@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useId, useMemo, useRef } from 'react';
 import { api } from '../../../api';
 import { useContractId } from '../../../hooks/useContractId';
 import { useAppState } from '../../../context/AppContext';
@@ -299,6 +299,7 @@ export default function NpExcessDevFactors() {
   const [chosenBase, setChosenBase]   = useState('ACTUAL');
   const [tailFactor, setTailFactor]   = useState('1.0');
   const [ielr, setIelr]               = useState('0.65');
+  const ielrInputId = useId();
   const [chosenLdfs, setChosenLdfs]   = useState([]);
   const [chosenCdfs, setChosenCdfs]   = useState([]);
   const [excluded, setExcluded]       = useState(new Set());
@@ -718,8 +719,8 @@ export default function NpExcessDevFactors() {
               <div className="df-method">
                 <div className="df-method-label">Data Mode</div>
                 <div className="toggle-group df-method-toggle">
-                  <span className={`toggle-option${dataMode === 'DIRECT' ? ' active' : ''}`} onClick={() => setDataMode('DIRECT')}>Direct Entry</span>
-                  <span className={`toggle-option${dataMode === 'TRIANGLE' ? ' active' : ''}`} onClick={() => setDataMode('TRIANGLE')}>Triangle</span>
+                  <button type="button" className={`toggle-option${dataMode === 'DIRECT' ? ' active' : ''}`} onClick={() => setDataMode('DIRECT')}>Direct Entry</button>
+                  <button type="button" className={`toggle-option${dataMode === 'TRIANGLE' ? ' active' : ''}`} onClick={() => setDataMode('TRIANGLE')}>Triangle</button>
                 </div>
               </div>
               {/* Projection method (TRIANGLE mode only) */}
@@ -727,8 +728,8 @@ export default function NpExcessDevFactors() {
                 <div className="df-method">
                   <div className="df-method-label">Projection</div>
                   <div className="toggle-group df-method-toggle">
-                    <span className={`toggle-option${projMethod === 'CHAIN' ? ' active' : ''}`} onClick={() => setProjMethod('CHAIN')}>Chain Ladder</span>
-                    <span className={`toggle-option${projMethod === 'BF' ? ' active' : ''}`} onClick={() => setProjMethod('BF')}>BF</span>
+                    <button type="button" className={`toggle-option${projMethod === 'CHAIN' ? ' active' : ''}`} onClick={() => setProjMethod('CHAIN')}>Chain Ladder</button>
+                    <button type="button" className={`toggle-option${projMethod === 'BF' ? ' active' : ''}`} onClick={() => setProjMethod('BF')}>BF</button>
                   </div>
                 </div>
               )}
@@ -738,8 +739,8 @@ export default function NpExcessDevFactors() {
           {/* BF IELR */}
           {dataMode === 'TRIANGLE' && projMethod === 'BF' && (
             <div style={{ display: 'flex', gap: 16, alignItems: 'center', margin: '12px 0', padding: '10px 16px', borderRadius: 14, background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.2)' }}>
-              <label style={{ fontSize: 12, color: 'rgba(253,186,116,0.9)', fontWeight: 600 }}>Initial Expected XS Loss Ratio (IELR)</label>
-              <input type="number" min="0" max="2" step="0.01" value={ielr}
+              <label htmlFor={ielrInputId} style={{ fontSize: 12, color: 'rgba(253,186,116,0.9)', fontWeight: 600 }}>Initial Expected XS Loss Ratio (IELR)</label>
+              <input id={ielrInputId} type="number" min="0" max="2" step="0.01" value={ielr}
                 onChange={e => setIelr(e.target.value)}
                 style={{ width: 100, textAlign: 'center', background: 'rgba(8,16,40,0.4)', border: '1px solid rgba(249,115,22,0.4)', borderRadius: 6, color: 'rgba(226,232,240,0.9)', fontSize: 13, padding: '4px 8px' }} />
               <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{(Number(ielr) * 100 || 0).toFixed(0)}%</span>
@@ -754,10 +755,10 @@ export default function NpExcessDevFactors() {
                 ['LINK_RATIOS', '🔗 Link Ratios'],
                 ['SUMMARY',     '📋 Ultimate Summary'],
               ].map(([key, label]) => (
-                <span key={key} className={`toggle-option${view === key ? ' active' : ''}`}
+                <button type="button" key={key} className={`toggle-option${view === key ? ' active' : ''}`}
                   onClick={() => setView(key)} style={{ fontSize: 12, padding: '8px 16px' }}>
                   {label}
-                </span>
+                </button>
               ))}
             </div>
             {/* Save button + status */}
@@ -822,10 +823,10 @@ export default function NpExcessDevFactors() {
                   <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Average</span>
                   <div className="toggle-group">
                     {['weighted', 'simple', 'last3', 'last5'].map(m => (
-                      <span key={m} className={`toggle-option${avgMethod === m ? ' active' : ''}`}
+                      <button type="button" key={m} className={`toggle-option${avgMethod === m ? ' active' : ''}`}
                         onClick={() => setAvgMethod(m)}>
                         {m === 'weighted' ? 'Weighted' : m === 'simple' ? 'Simple' : m === 'last3' ? 'Last 3' : 'Last 5'}
-                      </span>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -864,10 +865,10 @@ export default function NpExcessDevFactors() {
                     <div className="df-chosen-left">
                       <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>Base</div>
                       <div className="toggle-group df-chosen-toggle">
-                        <span className={`toggle-option${chosenBase === 'ACTUAL' ? ' active' : ''}`} onClick={() => switchBase('ACTUAL')}>
+                        <button type="button" className={`toggle-option${chosenBase === 'ACTUAL' ? ' active' : ''}`} onClick={() => switchBase('ACTUAL')}>
                           {dataMode === 'DIRECT' ? 'INPUT' : 'ACTUAL'}
-                        </span>
-                        <span className={`toggle-option${chosenBase === 'PARAM' ? ' active' : ''}`} onClick={() => switchBase('PARAM')}>PARAM</span>
+                        </button>
+                        <button type="button" className={`toggle-option${chosenBase === 'PARAM' ? ' active' : ''}`} onClick={() => switchBase('PARAM')}>PARAM</button>
                         <span className={`toggle-option${chosenBase === 'LINK_RATIO' ? ' active' : ''}`}
                           style={chosenBase === 'LINK_RATIO' ? {} : { opacity: 0.35 }}>LINK RATIOS</span>
                       </div>

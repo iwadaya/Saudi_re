@@ -195,7 +195,12 @@ export default function ApprovalsScreen() {
             {loadingServer && pending.length === 0 && <div className="muted" style={{fontSize:13}}>Loading…</div>}
             {!loadingServer && pending.length === 0 && <div className="muted">No pending approvals.</div>}
             {pending.map(x => (
-              <div key={x.contractId} className="approval-row" onClick={() => open(x)}
+              <div key={x.contractId} className="approval-row" role="button" tabIndex={0}
+                onClick={() => open(x)}
+                onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(x); }
+                }}
                 style={{ cursor: 'pointer', borderLeft: '3px solid rgba(251,191,36,0.50)', paddingLeft: 12 }}>
                 <div className="approval-main">
                   <div style={{ display:'flex', alignItems:'center', gap:6 }}>
@@ -248,8 +253,13 @@ export default function ApprovalsScreen() {
             {loadingServer && decided.length === 0 && <div className="muted" style={{fontSize:13}}>Loading…</div>}
             {!loadingServer && decided.length === 0 && <div className="muted">No decisions yet.</div>}
             {decided.slice(0, 20).map(x => (
-              <div key={x.contractId} className="approval-row approval-row--decided"
-                onClick={() => open(x)} style={{ cursor: 'pointer', borderLeft: `3px solid ${statusColor(x.status)}50`, paddingLeft: 12 }}>
+              <div key={x.contractId} className="approval-row approval-row--decided" role="button" tabIndex={0}
+                onClick={() => open(x)}
+                onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(x); }
+                }}
+                style={{ cursor: 'pointer', borderLeft: `3px solid ${statusColor(x.status)}50`, paddingLeft: 12 }}>
                 <div className="approval-main">
                   <div className="approval-title" style={{ fontWeight: 700, fontSize: 14 }}>{x.title}</div>
                   <div className="approval-meta muted" style={{ marginTop: 3 }}>
@@ -268,13 +278,19 @@ export default function ApprovalsScreen() {
       {declineTarget && (
         <div
           className="modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="approval-decline-title"
+          // Backdrop dismissal is a pointer-only convenience; keyboard users
+          // close via the labelled ✕ button in the dialog header.
+          role="presentation"
           style={{ position:'fixed', inset:0, background:'rgba(2,6,23,0.72)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}
-          onClick={() => setDeclineTarget(null)}
+          onClick={(e) => { if (e.target === e.currentTarget) setDeclineTarget(null); }}
         >
-          <div className="panel glass" style={{ width:'min(460px, calc(100vw - 32px))', padding:18 }} onClick={e => e.stopPropagation()}>
+          <div
+            className="panel glass"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="approval-decline-title"
+            style={{ width:'min(460px, calc(100vw - 32px))', padding:18 }}
+          >
             <div className="modal-title" style={{ padding:0, marginBottom:8, borderBottom:0 }}>
               <span id="approval-decline-title" className="panel-title">Decline Offer</span>
               <button type="button" className="modal-close" onClick={() => setDeclineTarget(null)} aria-label="Close">✕</button>

@@ -65,7 +65,11 @@ function CobCell({ value, cobOptions, onChange, onPaste, dataRow, dataCol }) {
         tabIndex={-1}
       />
       <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
         onClick={() => { setOpen(o => !o); inputRef.current?.focus(); }}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o); inputRef.current?.focus(); } }}
         style={{
           display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer',
           padding: '4px 6px', borderRadius: 4, fontSize: 12, minHeight: 28,
@@ -96,7 +100,10 @@ function CobCell({ value, cobOptions, onChange, onPaste, dataRow, dataCol }) {
           ) : (
             <>
               <div
+                role="button"
+                tabIndex={0}
                 onClick={() => { onChange(''); setOpen(false); }}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(''); setOpen(false); } }}
                 style={{ padding: '7px 12px', fontSize: 12, color: 'rgba(255,255,255,0.4)', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.08)' }}
               >
                 — Clear —
@@ -104,7 +111,10 @@ function CobCell({ value, cobOptions, onChange, onPaste, dataRow, dataCol }) {
               {cobOptions.map(c => (
                 <div
                   key={c.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => { onChange(c.name); setOpen(false); }}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(c.name); setOpen(false); } }}
                   style={{
                     padding: '7px 12px', fontSize: 12, cursor: 'pointer',
                     background: value === c.name ? 'rgba(0,232,184,0.12)' : 'transparent',

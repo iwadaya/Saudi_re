@@ -245,8 +245,8 @@ export default function PropProjectedSummary() {
         <div className="ps-card-head">
           <div className="ps-card-head-left"><div className="ps-card-title">{title}</div><div className="ps-card-sub">{subtitle}</div></div>
           {showToggle && <div className="ps-card-head-right"><div className="ps-metric-toggle"><div className="toggle-group">
-            <div className={`toggle-option ${topMetric === 'PREMIUM' ? 'active' : ''}`} onClick={() => setTopMetric('PREMIUM')}>Premium</div>
-            <div className={`toggle-option ${topMetric === 'LOSSES' ? 'active' : ''}`} onClick={() => setTopMetric('LOSSES')}>Losses</div>
+            <button type="button" className={`toggle-option ${topMetric === 'PREMIUM' ? 'active' : ''}`} onClick={() => setTopMetric('PREMIUM')}>Premium</button>
+            <button type="button" className={`toggle-option ${topMetric === 'LOSSES' ? 'active' : ''}`} onClick={() => setTopMetric('LOSSES')}>Losses</button>
           </div></div></div>}
         </div>
         <div className="ps-legend">
@@ -521,6 +521,8 @@ export default function PropProjectedSummary() {
           )}
           {showLossModal && (
             <div
+              // Backdrop dismissal is pointer-only; keyboard users close via the ✕ button.
+              role="presentation"
               onClick={e => { if (e.target === e.currentTarget) setShowLossModal(false); }}
               style={{ position: 'fixed', inset: 0, zIndex: 120000, background: 'rgba(2,6,23,0.72)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
             >

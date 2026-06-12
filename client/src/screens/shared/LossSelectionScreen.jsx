@@ -566,7 +566,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
 
               {/* ── INFLATION MODAL ── */}
               {showInflModal && (
-                <div className="ls-modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setShowInflModal(false); }}>
+                <div className="ls-modal-backdrop" role="presentation" onClick={e => { if (e.target === e.currentTarget) setShowInflModal(false); }}>
                   <div className="ls-modal">
                     <div className="ls-modal-head"><div className="ls-modal-title">Inflation Adjustment{countryName ? ` — ${countryName}` : ''}</div><button className="ls-modal-x" onClick={() => setShowInflModal(false)}>✕</button></div>
                     <div className="ls-modal-body">
@@ -626,7 +626,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
 
               {/* ── LOSS LOADING MODAL ── */}
               {showLoadingModal && (
-                <div className="ls-modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setShowLoadingModal(false); }}>
+                <div className="ls-modal-backdrop" role="presentation" onClick={e => { if (e.target === e.currentTarget) setShowLoadingModal(false); }}>
                   <div className="ls-modal" style={{ maxWidth: 760 }}>
                     <div className="ls-modal-head">
                       <div className="ls-modal-title">
@@ -738,7 +738,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
 
               {/* ── GROWTH MODAL (Cat only) ── */}
               {showGrowthModal && lossType === 'cat' && (
-                <div className="ls-modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setShowGrowthModal(false); }}>
+                <div className="ls-modal-backdrop" role="presentation" onClick={e => { if (e.target === e.currentTarget) setShowGrowthModal(false); }}>
                   <div className="ls-modal">
                     <div className="ls-modal-head"><div className="ls-modal-title">Growth in Portfolio</div><button className="ls-modal-x" onClick={() => setShowGrowthModal(false)}>✕</button></div>
                     <div className="ls-modal-body">
@@ -830,7 +830,7 @@ function YearlyAggregatesModal({ selected, onClose, lossType }) {
   const label = lossType === 'cat' ? 'Cat' : 'Large';
 
   return (
-    <div className="ls-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="ls-modal-backdrop" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="ls-modal">
         <div className="ls-modal-head">
           <div className="ls-modal-title">{label} Loss · Yearly Aggregates</div>

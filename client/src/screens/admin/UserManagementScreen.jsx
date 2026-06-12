@@ -1,6 +1,6 @@
 // src/screens/admin/UserManagementScreen.jsx
 // User & mandate management — accessible to CE and CU only
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { ROLE_LABELS, isAtLeast } from '../../utils/auth';
 import { api } from '../../api';
 import Topbar from '../../components/Topbar';
@@ -49,6 +49,7 @@ function UserRow({ user, onEdit, onMandate }) {
 }
 
 function MandateModal({ user, onClose, onSave }) {
+  const fieldId = useId();
   const [form, setForm] = useState({
     treaty_limit_usd:      user.treaty_limit_usd ?? '',
     single_risk_limit_usd: user.single_risk_limit_usd ?? '',
@@ -86,7 +87,7 @@ function MandateModal({ user, onClose, onSave }) {
   );
 
   return (
-    <div className="modal-backdrop" style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.65)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}
+    <div className="modal-backdrop" role="presentation" style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.65)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="glass" role="dialog" aria-modal="true" style={{ width:'100%', maxWidth:480, borderRadius:16, padding:24, border:'1px solid rgba(255,255,255,.12)', maxHeight:'85vh', overflowY:'auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
@@ -101,8 +102,8 @@ function MandateModal({ user, onClose, onSave }) {
         {fi('Single Risk Limit (USD)', 'single_risk_limit_usd', { type:'number', placeholder:'Leave blank = use treaty limit' })}
 
         <div style={{ marginBottom:14 }}>
-          <label style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>Treaty Type Scope</label>
-          <select className="form-input" value={form.treaty_type_scope} onChange={e => set('treaty_type_scope', e.target.value)} style={{ width:'100%' }}>
+          <label htmlFor={`${fieldId}-scope`} style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>Treaty Type Scope</label>
+          <select id={`${fieldId}-scope`} className="form-input" value={form.treaty_type_scope} onChange={e => set('treaty_type_scope', e.target.value)} style={{ width:'100%' }}>
             <option value="BOTH">Both Proportional & Non-Proportional</option>
             <option value="PROP_ONLY">Proportional Only</option>
             <option value="NP_ONLY">Non-Proportional Only</option>
@@ -110,8 +111,8 @@ function MandateModal({ user, onClose, onSave }) {
         </div>
 
         <div style={{ marginBottom:14 }}>
-          <label style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>Approvals Required</label>
-          <select className="form-input" value={form.approvals_required} onChange={e => set('approvals_required', e.target.value)} style={{ width:'100%' }}>
+          <label htmlFor={`${fieldId}-approvals`} style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>Approvals Required</label>
+          <select id={`${fieldId}-approvals`} className="form-input" value={form.approvals_required} onChange={e => set('approvals_required', e.target.value)} style={{ width:'100%' }}>
             <option value={1}>1 — Single approval</option>
             <option value={2}>2 — Dual approval</option>
             <option value={3}>3 — Triple approval</option>
@@ -164,7 +165,7 @@ function AddUserModal({ roles, onClose, onSave }) {
   );
 
   return (
-    <div className="modal-backdrop" style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.65)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}
+    <div className="modal-backdrop" role="presentation" style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.65)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="glass" role="dialog" aria-modal="true" style={{ width:'100%', maxWidth:460, borderRadius:16, padding:24, border:'1px solid rgba(255,255,255,.12)' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>

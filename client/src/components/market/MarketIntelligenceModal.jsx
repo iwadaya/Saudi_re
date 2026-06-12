@@ -312,6 +312,9 @@ export default function MarketIntelligenceModal({
   return (
     <div
       className="bbg-modal-backdrop"
+      // Backdrop dismissal is a pointer-only convenience; keyboard users
+      // close via Escape (handled above) or the labelled ✕ button.
+      role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}
       style={{ zIndex: 1400 }}
     >
@@ -1152,6 +1155,9 @@ function SectionSources({ report, rowRefs, highlightedIdx }) {
 function ConfirmStageDialog({ warnings, onCancel, onConfirm }) {
   return (
     <div
+      // Backdrop dismissal is a pointer-only convenience; keyboard users
+      // cancel via the labelled Cancel button below.
+      role="presentation"
       style={{
         position: 'fixed', inset: 0, zIndex: 1500,
         background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',

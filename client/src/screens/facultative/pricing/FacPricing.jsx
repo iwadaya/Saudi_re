@@ -246,7 +246,11 @@ function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange }) {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: collapsed ? 0 : 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
-             onClick={() => setCollapsed((c) => !c)}>
+             role="button" tabIndex={0} aria-expanded={!collapsed}
+             onClick={() => setCollapsed((c) => !c)}
+             onKeyDown={(e) => {
+               if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCollapsed((c) => !c); }
+             }}>
           <span style={{ fontSize: 13, color: 'rgba(168,85,247,0.80)' }}>{collapsed ? '▶' : '▼'}</span>
           <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em',
                          textTransform: 'uppercase', color: 'rgba(168,85,247,0.80)' }}>
@@ -491,6 +495,11 @@ export default function FacPricing() {
     setEng((prev) => ({ ...prev, [key]: val }));
     dirty.current = true;
   }, []);
+  const removeExtraCover = (i) => {
+    const next = [...eng.extra_cover_loadings];
+    next.splice(i, 1);
+    setEngField('extra_cover_loadings', next);
+  };
 
   // Reference catalogues — every engine input flows through these.
   const [occupancies, setOccupancies]     = useState([]);
@@ -884,11 +893,11 @@ export default function FacPricing() {
                            setEngField('extra_cover_loadings', next);
                          }}
                          placeholder="0..1" style={{ width: 100, fontSize: 12, textAlign: 'right' }} />
-                  <span style={{ cursor: 'pointer', color: '#f87171', fontSize: 14 }}
-                        onClick={() => {
-                          const next = [...eng.extra_cover_loadings];
-                          next.splice(i, 1);
-                          setEngField('extra_cover_loadings', next);
+                  <span role="button" tabIndex={0} aria-label={`Remove cover loading ${ext.label || i + 1}`}
+                        style={{ cursor: 'pointer', color: '#f87171', fontSize: 14 }}
+                        onClick={() => removeExtraCover(i)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); removeExtraCover(i); }
                         }}>×</span>
                 </div>
               ))}
@@ -952,7 +961,12 @@ export default function FacPricing() {
                 {customExtensions.map(ext => (
                   <div key={ext.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <div style={{ flex: 1 }}>{extCheckbox(ext, '#fbbf24')}</div>
-                    <span onClick={() => removeCustomExtension(ext.id)} style={{ cursor: 'pointer', color: 'rgba(248,113,113,0.50)', fontSize: 13, padding: '0 4px' }} title="Remove">✕</span>
+                    <span role="button" tabIndex={0} aria-label={`Remove ${ext.label || 'custom extension'}`}
+                      onClick={() => removeCustomExtension(ext.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); removeCustomExtension(ext.id); }
+                      }}
+                      style={{ cursor: 'pointer', color: 'rgba(248,113,113,0.50)', fontSize: 13, padding: '0 4px' }} title="Remove">✕</span>
                   </div>
                 ))}
               </div>

@@ -228,6 +228,11 @@ export default function FacHomeScreen() {
                   </td></tr>
                 )}
                 {risks.map((r) => {
+                  const deleteDraft = async (e) => {
+                    e.stopPropagation();
+                    if (!confirm(`Delete ${r.fac_ref || 'this draft'}?`)) return;
+                    try { await api.facDeleteRisk(r.fac_risk_id); load(); } catch (err) { console.error(err); }
+                  };
                   const sc = STATUS_COLORS[r.status] || STATUS_COLORS.DRAFT;
                   const typePill = r.placement_type === 'NON_PROPORTIONAL'
                     ? { label: 'XL', bg: 'rgba(14,165,233,0.10)', border: 'rgba(14,165,233,0.30)', color: '#0ea5e9' }
@@ -260,11 +265,12 @@ export default function FacHomeScreen() {
                       </td>
                       <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                         {r.status === 'DRAFT' && (
-                          <span title="Delete draft" onClick={async (e) => {
-                            e.stopPropagation();
-                            if (!confirm(`Delete ${r.fac_ref || 'this draft'}?`)) return;
-                            try { await api.facDeleteRisk(r.fac_risk_id); load(); } catch (err) { console.error(err); }
-                          }} style={{ cursor: 'pointer', color: 'rgba(248,113,113,0.50)', fontSize: 14, marginRight: 8, transition: 'color .15s' }}
+                          <span title="Delete draft" role="button" tabIndex={0} aria-label="Delete draft"
+                            onClick={deleteDraft}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); deleteDraft(e); }
+                            }}
+                            style={{ cursor: 'pointer', color: 'rgba(248,113,113,0.50)', fontSize: 14, marginRight: 8, transition: 'color .15s' }}
                             onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
                             onMouseLeave={e => e.currentTarget.style.color = 'rgba(248,113,113,0.50)'}>✕</span>
                         )}
@@ -281,7 +287,7 @@ export default function FacHomeScreen() {
 
       {/* Renew Modal */}
       {showRenewModal && (
-        <div className="modal-backdrop" style={{
+        <div className="modal-backdrop" role="presentation" style={{
           position: 'fixed', inset: 0, zIndex: 1000,
           background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
         }} onClick={e => e.target === e.currentTarget && setShowRenewModal(false)}>
@@ -300,7 +306,15 @@ export default function FacHomeScreen() {
               <div style={{ padding: 20, textAlign: 'center', color: 'rgba(148,163,184,0.40)', fontSize: 12 }}>No bound risks available to renew</div>
             ) : (
               risks.filter(r => r.status === 'BOUND').map(r => (
-                <div key={r.fac_risk_id} onClick={() => { setShowRenewModal(false); handleRenew(r.fac_risk_id); }}
+                <div key={r.fac_risk_id} role="button" tabIndex={0}
+                  onClick={() => { setShowRenewModal(false); handleRenew(r.fac_risk_id); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setShowRenewModal(false);
+                      handleRenew(r.fac_risk_id);
+                    }
+                  }}
                   style={{
                     padding: '12px 16px', borderRadius: 10, cursor: 'pointer', marginBottom: 6,
                     border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(8,14,30,0.60)',

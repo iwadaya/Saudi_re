@@ -832,6 +832,11 @@ export default function ExcelImportAgent() {
         @keyframes ia-spin { to { transform: rotate(360deg); } }
 
         .ia-select-all {
+          /* Reset <button> defaults so the rule below fully styles the
+             rendered control (kept tabbable + keyboard-activatable). */
+          background: none; border: none; padding: 0;
+          font-family: inherit; font-weight: inherit;
+          line-height: inherit; letter-spacing: inherit;
           font-size: 11px; color: rgba(0,212,255,0.8); cursor: pointer;
           text-decoration: underline; text-underline-offset: 2px;
         }
@@ -861,10 +866,13 @@ export default function ExcelImportAgent() {
         {/* Drop zone */}
         <div
           className={`ia-drop${dragOver ? ' over' : ''}`}
+          role="button"
+          tabIndex={0}
           onDragOver={e => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={onDrop}
           onClick={() => fileRef.current?.click()}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click(); } }}
         >
           <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={onFileChange} />
           <div className="ia-drop-icon">📊</div>
@@ -894,7 +902,8 @@ export default function ExcelImportAgent() {
                 </div>
               </div>
               <div style={{ flex: 1 }} />
-              <span
+              <button
+                type="button"
                 className="ia-select-all"
                 onClick={() => {
                   const allSelected = selectedSheets.length === sheets.length;
@@ -903,7 +912,7 @@ export default function ExcelImportAgent() {
                 }}
               >
                 {selectedSheets.length === sheets.length ? 'Deselect all' : 'Select all'}
-              </span>
+              </button>
             </div>
 
             {/* Contract ID */}
@@ -928,13 +937,31 @@ export default function ExcelImportAgent() {
                 const rows = countRows(sheet);
                 return (
                   <div key={sheet.sheetName} className="ia-sheet-row">
-                    <div className="ia-sheet-head" onClick={() => setExpanded(isOpen ? null : sheet.sheetName)}>
+                    <div
+                      className="ia-sheet-head"
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isOpen}
+                      onClick={() => setExpanded(isOpen ? null : sheet.sheetName)}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(isOpen ? null : sheet.sheetName); } }}
+                    >
                       {/* checkbox */}
                       <div
                         className={`ia-sheet-check${isChecked ? ' checked' : ''}`}
+                        role="checkbox"
+                        aria-checked={isChecked}
+                        aria-label={`Include sheet ${sheet.sheetName}`}
+                        tabIndex={0}
                         onClick={e => {
                           e.stopPropagation();
                           setSelected(prev => ({ ...prev, [sheet.sheetName]: !prev[sheet.sheetName] }));
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setSelected(prev => ({ ...prev, [sheet.sheetName]: !prev[sheet.sheetName] }));
+                          }
                         }}
                       >
                         {isChecked && '✓'}

@@ -57,7 +57,9 @@ function Badge({ status, label }) {
 function Section({ title, badge, children, expanded, onToggle }) {
   return (
     <div style={{ marginBottom:8, borderRadius:8, border:'1px solid rgba(255,255,255,0.08)', overflow:'hidden' }}>
-      <div onClick={onToggle} style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+      <div role="button" tabIndex={0} aria-expanded={expanded} onClick={onToggle}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+        style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
         padding:'8px 12px', cursor:'pointer', background: expanded ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)' }}>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <span style={{ fontSize:10, fontWeight:700, color:'rgba(255,255,255,0.6)', textTransform:'uppercase', letterSpacing:'0.05em' }}>{title}</span>

@@ -326,7 +326,7 @@ export default function PropQuickSummary() {
     if (!modal) return null;
     const isAnalysis = modal === 'analysis';
     return (
-      <div className="qs-modal-backdrop is-open" onClick={e => { if (e.target === e.currentTarget) setModal(null); }}>
+      <div className="qs-modal-backdrop is-open" role="presentation" onClick={e => { if (e.target === e.currentTarget) setModal(null); }}>
         <div className={`qs-modal glass ${isAnalysis ? 'qs-modal--compact' : ''}`} role="dialog">
           <div className="qs-modal-head">
             <div className="qs-modal-title">{isAnalysis ? 'Portfolio Analysis' : 'Portfolio Stats'}</div>

@@ -92,7 +92,7 @@ function CobSelectModal({ selected, classList, onSave, onClose }) {
   const toggle = id => { const n = new Set(sel); if (n.has(id)) n.delete(id); else n.add(id); setSel(n); };
   useEscapeKey(true, onClose);
   return (
-    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="modal-backdrop" role="presentation" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal glass" role="dialog" aria-modal="true" aria-labelledby="np-cob-select-title" style={{ maxWidth: 500 }}>
         <div className="modal-title" id="np-cob-select-title">
           <span>Select Lines of Business</span>

@@ -76,6 +76,9 @@ export default function Modal({
   return (
     <div
       className="ui-modal-backdrop"
+      // Backdrop dismissal is a pointer-only convenience; keyboard users
+      // close via Esc (handled above) or the labelled close button.
+      role="presentation"
       onMouseDown={(e) => {
         if (closeOnBackdrop && e.target === e.currentTarget) onClose?.();
       }}

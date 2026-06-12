@@ -574,6 +574,7 @@ function RateChangesModal({ years, uwRows, rateChangeRows, onChange, onClose }) 
   return (
     <div
       className="modal-backdrop"
+      role="presentation"
       style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >

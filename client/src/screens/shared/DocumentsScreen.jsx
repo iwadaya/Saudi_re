@@ -328,7 +328,8 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
           </div>
 
           {/* Dropzone */}
-          <div style={dropzone} onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)} onDrop={handleDrop}>
+          {/* Drag-and-drop is a pointer-only convenience — keyboard users attach via the "+ Select Files" / browse buttons below. */}
+          <div style={dropzone} role="presentation" onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)} onDrop={handleDrop}>
             <div style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
               <div style={{ width:50, height:50, borderRadius:16, display:'grid', placeItems:'center', border:'1px solid rgba(var(--accent-rgb), 0.35)', background:'radial-gradient(circle at 30% 30%, rgba(var(--accent-rgb), 0.35), var(--surface-muted))', boxShadow:'0 0 26px rgba(var(--accent-rgb), 0.18)', flexShrink:0 }}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
@@ -336,7 +337,11 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
               <div>
                 <div style={{ fontWeight:800, fontSize:13, color:'var(--text)' }}>
                   Drag & drop files here <span style={{ opacity:0.65 }}>or</span>{' '}
-                  <span style={{ color:'var(--accent)', fontWeight:900, cursor:'pointer' }} onClick={()=>fileRef.current?.click()}>browse</span>
+                  <span
+                    role="button" tabIndex={0} style={{ color:'var(--accent)', fontWeight:900, cursor:'pointer' }}
+                    onClick={()=>fileRef.current?.click()}
+                    onKeyDown={e=>{ if (e.key==='Enter'||e.key===' ') { e.preventDefault(); fileRef.current?.click(); } }}
+                  >browse</span>
                 </div>
                 <div style={{ marginTop:4, color:'var(--muted-2)', fontSize:12 }}>Attach treaties, slips, wordings, accounts and bordereaux.</div>
                 <div style={{ marginTop:4, color:'var(--muted-2)', fontSize:12 }}>PDF, XLSX, DOCX, CSV up to 50MB each.</div>
@@ -423,7 +428,11 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
                     return (
                       <tr key={docId} style={{ borderBottom:'1px solid var(--hairline)', background: isWording ? 'rgba(var(--accent-rgb), 0.03)' : 'transparent' }}>
                         <td style={{ padding:'10px 4px', fontWeight:700, color:'var(--text)' }}>
-                          <span style={{ cursor:'pointer', textDecoration:'underline', textDecorationColor:'var(--stroke-soft)' }} onClick={()=>openPreview(d)}>
+                          <span
+                            role="button" tabIndex={0} style={{ cursor:'pointer', textDecoration:'underline', textDecorationColor:'var(--stroke-soft)' }}
+                            onClick={()=>openPreview(d)}
+                            onKeyDown={e=>{ if (e.key==='Enter'||e.key===' ') { e.preventDefault(); openPreview(d); } }}
+                          >
                             {d.file_name||d.name||'–'}
                           </span>
                           {d.description && <div style={{ marginTop:2, fontSize:11, color:'var(--muted-2)', fontWeight:400 }}>{d.description}</div>}
@@ -509,7 +518,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
 
           {/* Preview Modal — non-slip viewable docs only; slips open in a new tab */}
           {preview && (
-            <div className="modal-backdrop" style={{ position:'fixed', inset:0, zIndex:9999, background:'rgba(0,0,0,0.85)', display:'flex', flexDirection:'column', alignItems:'stretch', justifyContent:'stretch' }}
+            <div className="modal-backdrop" role="presentation" style={{ position:'fixed', inset:0, zIndex:9999, background:'rgba(0,0,0,0.85)', display:'flex', flexDirection:'column', alignItems:'stretch', justifyContent:'stretch' }}
               onClick={e=>{if(e.target===e.currentTarget)setPreview(null);}}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 20px', background:'var(--surface-elevated)', borderBottom:'1px solid var(--hairline-strong)' }}>
                 <div style={{ color:'var(--text)', fontWeight:800, fontSize:14 }}>{preview.name}</div>

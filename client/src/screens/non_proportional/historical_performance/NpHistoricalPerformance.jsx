@@ -1,5 +1,5 @@
 // src/screens/non_proportional/historical_performance/NpHistoricalPerformance.jsx
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useId, useMemo } from 'react';
 import api from '../../../api';
 import { useAppState } from '../../../context/AppContext';
 import { useContractId } from '../../../hooks/useContractId';
@@ -29,6 +29,7 @@ export default function NpHistoricalPerformance() {
   const [rows, setRows] = useState([]);
   const [showMA, setShowMA] = useState(false);
   const [maWindow, setMaWindow] = useState(3);
+  const maWindowSelectId = useId();
 
   const yearRange = useMemo(() => {
     const years = [];
@@ -270,7 +271,7 @@ export default function NpHistoricalPerformance() {
 
         {/* ── Moving Averages Modal ── */}
         {showMA && (
-          <div className="modal-backdrop" style={{
+          <div className="modal-backdrop" role="presentation" style={{
             position: 'fixed', inset: 0, zIndex: 1000,
             background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center',
           }} onClick={e => e.target === e.currentTarget && setShowMA(false)}>
@@ -285,8 +286,8 @@ export default function NpHistoricalPerformance() {
                   <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.50)', marginTop: 2 }}>Rolling window analysis of underwriting performance</div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <label style={{ fontSize: 11, color: 'rgba(148,163,184,0.60)' }}>Window:</label>
-                  <select value={maWindow} onChange={e => setMaWindow(Number(e.target.value))} style={{
+                  <label htmlFor={maWindowSelectId} style={{ fontSize: 11, color: 'rgba(148,163,184,0.60)' }}>Window:</label>
+                  <select id={maWindowSelectId} value={maWindow} onChange={e => setMaWindow(Number(e.target.value))} style={{
                     background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)',
                     borderRadius: 6, color: '#00d4ff', padding: '4px 8px', fontSize: 12, outline: 'none',
                   }}>

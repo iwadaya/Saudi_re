@@ -66,9 +66,9 @@ baseline) — each must be decomposed, then have its disable removed:
 
 | File | LOC at baseline | Status |
 |---|---|---|
-| `non_proportional/final_pricing/NpFinalPricing.jsx` | 4,131 | TODO(hardening): split |
-| `non_proportional/structure/NpStructure.jsx` | 1,710 | TODO(hardening): split |
-| `shared/LossParetoScreen.jsx` | 1,634 | TODO(hardening): split |
+| `non_proportional/final_pricing/NpFinalPricing.jsx` | 4,131 | **DONE** — 320-line orchestrator + typed reducer (Phase 4.1) |
+| `non_proportional/structure/NpStructure.jsx` | 1,710 | **DONE** — 180-line orchestrator + typed reducer (Phase 4.2) |
+| `shared/LossParetoScreen.jsx` | 1,634 | **DONE** — 201-line orchestrator + typed reducer (Phase 4.2) |
 
 Files pinned at the 1,500 hard cap (between 800 and 1,500 at baseline) are
 listed in `OVERSIZED_SCREENS_LEGACY` in `eslint.config.js`; shrink one below
@@ -113,6 +113,22 @@ ratchet counts), 32 `label-has-associated-control`, 3
 `ui/` `<Button>` (or add role="button" + tabIndex + Enter/Space
 onKeyDown for row clicks), and wrap labelled controls in the `ui/`
 `<Field>`.
+
+### Findings from Phase-6 golden-master work (FacPricing)
+
+| Where | Finding | Status |
+|---|---|---|
+| `FacPricing.jsx:545-573` | **Money-path data loss**: the risk/pricing load effect depends on `f` and resets `dirty` on completion, so any manual section edit re-triggers the fetch and the reset makes wizard-Next silently skip `facSavePricing` while still advancing; with a persisted pricing row the same effect is an infinite refetch loop | Open — fix in the FacPricing decomposition (golden master pins current behavior) |
+| `FacPricing.jsx:822` | `window.showToast` is never assigned anywhere in the client (the app uses `useGlobalToast`), so the save-failure path throws TypeError; navigation still blocks but with the wrong message | Open |
+| `FacPricing.jsx` primary load | `.catch(console.error)` swallows load failures; screen renders an empty-but-normal-looking form (pre-AsyncBoundary pattern) | Open — migrate like FacRiskDetail |
+
+### Findings from Phase-6 golden-master work (PropPricing)
+
+| Where | Finding | Status |
+|---|---|---|
+| `PropPricing.jsx` ~1004 | Excel export passes `epiSplit: (getC()?.epi_split \|\| [])` — `getC()` with no args always returns `''`, so the exported EPI split is always empty; likely meant `contract.epi_split \|\| td.epiSplit` | Open — fix in the PropPricing Phase-4 decomposition |
+| `PropPricing.jsx` share grid | `downside_amt` auto-fills one effect-cycle after the component grid settles; a save clicked in that window persists a downside figure computed from an empty downside column | Open — fix in the decomposition |
+| `client/src/test/bindPathFixtures.js` | `makeBindPathApiMock` lacks `getCountry`, so the market-average branch silently dies under default mocks and is never exercised | Open — add to the shared fixture |
 
 ## Phase log
 
