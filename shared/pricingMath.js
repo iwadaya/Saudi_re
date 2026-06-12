@@ -1,3 +1,4 @@
+// @ts-check
 // shared/pricingMath.js
 // Pure math primitives that both the client's pricing engine and the
 // server's would-be validation layer depend on. Lives here (not in
@@ -185,7 +186,7 @@ export function deriveComponentTotal(pureBurn, pareto, exposure, weightBurn, wei
   // parse to 10 / 1250 instead of NaN. Number(v) without stripping
   // returns NaN for any string with a % or comma, silently zeroing
   // every input and making Total ROL always read 0%.
-  const toN = (v) => {
+  const toN = (/** @type {unknown} */ v) => {
     const n = parseFloat(String(v ?? '').replace(/[^\d.-]/g, ''));
     return Number.isFinite(n) ? n : 0;
   };
@@ -260,6 +261,12 @@ export function normalCdf(x, mean = 0, std = 1) {
   return 0.5 * (1 + erf((x - mean) / (std * Math.SQRT2)));
 }
 
+/**
+ * @param {number} x
+ * @param {number} [mean]
+ * @param {number} [std]
+ * @returns {number}
+ */
 export function normalPdf(x, mean = 0, std = 1) {
   if (!Number.isFinite(x) || !Number.isFinite(mean) || !Number.isFinite(std) || std <= 0) return 0;
   const z = (x - mean) / std;

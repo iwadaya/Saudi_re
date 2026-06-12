@@ -423,9 +423,9 @@ function resolveAttachmentAndLimit(args, warnings) {
  * @param {Object} args
  * @param {number} [args.attachment]            Absolute attachment.
  * @param {number} [args.limit]                 Absolute limit.
- * @param {number} [args.attachmentLossRatio]   Stop Loss form: % of EPI.
- * @param {number} [args.limitLossRatio]        Stop Loss form: % of EPI.
- * @param {number} [args.epi]                   Required when LR inputs used.
+ * @param {number|null} [args.attachmentLossRatio]   Stop Loss form: % of EPI.
+ * @param {number|null} [args.limitLossRatio]        Stop Loss form: % of EPI.
+ * @param {number|null} [args.epi]                   Required when LR inputs used.
  * @param {{year, aggregate}[]} [args.yearlyAggregates]  Burning cost input.
  * @param {{lambda: number}}    [args.frequency]         Exposure / MC input.
  * @param {SeverityInput}       [args.severity]          Exposure / MC input.

@@ -1,13 +1,36 @@
 // eslint.config.js — flat config (ESLint 9+).
-// Intentionally lenient: catches real bugs (undefined vars, stale imports,
-// broken hooks) without fighting the team's existing code style. Run:
+// Baseline is intentionally lenient (catches real bugs without fighting the
+// team's style); the screens layer carries stricter "ratchet" rules so the
+// frontend-hardening effort (docs/frontend-hardening.md) can't regress. Run:
 //   npm run lint
 //   npm run lint:fix
+//   npm run lint:screens
 
 import js from '@eslint/js';
 import globals from 'globals';
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
+
+// Screen files that already exceeded the 800-line budget when the hardening
+// baseline was taken (see docs/frontend-hardening.md). They may not grow past
+// 1,500 lines; brand-new screens must stay under 800. When a file on this list
+// is decomposed below 800 LOC, delete its entry so the stricter default
+// applies again. Files already past 1,500 carry a file-level
+// `/* eslint-disable max-lines */` annotated with TODO(hardening) instead.
+const OVERSIZED_SCREENS_LEGACY = [
+  'client/src/screens/proportional/dev_factors/DevFactorsScreen.jsx',
+  'client/src/screens/facultative/documents/FacDocuments.jsx',
+  'client/src/screens/proportional/pricing/PropPricing.jsx',
+  'client/src/screens/non_proportional/stop_loss_pricing/NpStopLossPricing.jsx',
+  'client/src/screens/proportional/treaty_detail/PropTreatyDetail.jsx',
+  'client/src/screens/facultative/pricing/FacPricing.jsx',
+  'client/src/screens/shared/ExcelImportAgent.jsx',
+  'client/src/screens/non_proportional/excess_dev_factors/NpExcessDevFactors.jsx',
+  'client/src/screens/non_proportional/expiring_structure/NpExpiringStructure.jsx',
+  'client/src/screens/shared/LossSelectionScreen.jsx',
+  'client/src/screens/facultative/risk_detail/FacRiskDetail.jsx',
+  'client/src/screens/non_proportional/final_pricing/components/FQPricingGraphModal.jsx',
+];
 
 export default [
   {
@@ -51,8 +74,10 @@ export default [
       'prefer-const': ['warn', { destructuring: 'all' }],
       'no-empty': ['warn', { allowEmptyCatch: true }],
 
-      // Don't fight intentional patterns
-      'no-console': 'off',
+      // Debug logging must not ship; warn/error stay available for the
+      // exceptional paths that errorReporter/logger mirror. CLI surfaces
+      // where console IS the product get a targeted override below.
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
       'no-constant-condition': ['warn', { checkLoops: false }],
       'no-prototype-builtins': 'off',
       'no-useless-escape': 'warn',
@@ -95,6 +120,53 @@ export default [
       // Hooks — most valuable rule, especially for stale-closure bugs
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
+    },
+  },
+
+  // ─── Screens layer ratchet (docs/frontend-hardening.md) ────────────
+  // Stricter rules for client/src/screens/** so hardening gains lock in.
+  {
+    files: ['client/src/screens/**/*.{js,jsx}'],
+    ignores: ['client/src/screens/**/*.test.{js,jsx}'],
+    rules: {
+      // A console call in a screen is either dead debug noise or an error
+      // that belongs in the toast/errorReporter path.
+      'no-console': ['error', { allow: ['warn', 'error'] }],
+      // New screens stay under 800 lines ("warn" is effectively an error in
+      // CI because lint runs with --max-warnings=0).
+      'max-lines': ['warn', { max: 800, skipBlankLines: false, skipComments: false }],
+      // Stale-closure bugs in pricing screens are silent money bugs.
+      'react-hooks/exhaustive-deps': 'error',
+    },
+  },
+  {
+    files: OVERSIZED_SCREENS_LEGACY,
+    rules: {
+      'max-lines': ['error', { max: 1500, skipBlankLines: false, skipComments: false }],
+    },
+  },
+
+  // ─── CLI / tooling surfaces where console IS the output channel ────
+  {
+    files: [
+      'scripts/**',
+      'server/scripts/**', // ops CLIs (fixture generation, cleanup)
+      'test/**', // standalone actuarial verification CLIs
+      'server/src/lib/logger.js', // console.log is the log transport itself
+      'server/src/observability/**', // startup/shutdown notices
+      'server/src/db/seeds/**', // seed CLIs report progress to the operator
+    ],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+
+  // ─── Tests + test harness ──────────────────────────────────────────
+  {
+    files: ['**/*.test.{js,jsx}', 'client/src/test/**'],
+    rules: {
+      'no-console': 'off',
+      'max-lines': 'off',
     },
   },
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import LossSelectionScreen from './LossSelectionScreen.jsx';
 
 const { apiMock, appStateMock, contractIdRef } = vi.hoisted(() => ({
@@ -56,5 +56,59 @@ describe('LossSelectionScreen loss-selection staleness banner', () => {
     // Wait for the staleness fetch to resolve (component renders the KPI label).
     expect(await screen.findByText('Selected')).toBeInTheDocument();
     expect(screen.queryByText(/Losses have been added or edited/i)).toBeNull();
+  });
+});
+
+// Phase-2 migration: the primary load (losses + latest snapshot) rides
+// useResource with an AsyncBoundary, so the loading→loaded and
+// loading→error transitions are part of the screen's contract.
+describe('LossSelectionScreen primary load (useResource + AsyncBoundary)', () => {
+  it('transitions loading → loaded and hydrates the merged loss table', async () => {
+    let resolveLosses;
+    apiMock.getLargeLosses.mockReturnValue(
+      new Promise((resolve) => { resolveLosses = resolve; }),
+    );
+
+    render(<LossSelectionScreen routeKey="X" title="T" headerPill="P" lossType="large" embedded />);
+
+    // boundary shows while losses + snapshot are in flight…
+    expect(screen.getByRole('status')).toHaveTextContent(/loading loss selection/i);
+    // …and the hydrated content is not rendered yet.
+    expect(screen.queryByText('Selected')).toBeNull();
+
+    resolveLosses({
+      losses: [{
+        loss_id: 'L-1', insured_name: 'Acme Factory', loss_name: 'Fire',
+        date_of_loss: '2019-05-01', paid: 600000, os: 400000,
+        incurred: 1000000, inflation_factor: 1.1,
+      }],
+    });
+
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+    // hydrated row: uw_year parsed from date_of_loss, factor editable,
+    // inflated incurred derived (1,000,000 × 1.1 — also in the KPI strip)
+    expect(screen.getByText('Acme Factory')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('1.1')).toBeInTheDocument();
+    expect(screen.getAllByText('1,100,000').length).toBeGreaterThan(0);
+  });
+
+  it('transitions loading → error and recovers via Retry', async () => {
+    apiMock.getLargeLosses
+      .mockRejectedValueOnce(Object.assign(new Error('API GET → 500: down'), { status: 500 }))
+      .mockResolvedValueOnce({ losses: [] });
+
+    render(<LossSelectionScreen routeKey="X" title="T" headerPill="P" lossType="large" embedded />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/could not load/i);
+    expect(screen.queryByText('Selected')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(apiMock.getLargeLosses).toHaveBeenCalledTimes(2);
+    // recovered: hydrated content (KPI strip + empty-table row) is back
+    expect(screen.getByText('Selected')).toBeInTheDocument();
+    expect(screen.getByText(/No losses found/i)).toBeInTheDocument();
   });
 });

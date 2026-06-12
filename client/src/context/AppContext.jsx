@@ -2,7 +2,42 @@
 import React, { createContext, useContext, useReducer, useCallback, useRef } from 'react';
 import { getSession } from '../utils/auth';
 
-const AppContext = createContext(null);
+/**
+ * Shape of the central app state. Wizard screens read/write loosely-typed
+ * slices (formatted strings live alongside numbers until save), so slice
+ * contents stay `unknown`-valued records — coerce with cn()/toN() at use.
+ *
+ * @typedef {{
+ *   user: Record<string, unknown> | null,
+ *   settings: { autosave: boolean },
+ *   wizardMode: 'PROP' | 'NP' | 'FAC' | (string & {}),
+ *   quoteMode: boolean,
+ *   propTreatyDetail: Record<string, any>,
+ *   npTreatyDetail: Record<string, any>,
+ *   facRiskDetail: Record<string, any>,
+ *   triangleMeta: { source: string, startYear: number | null, inceptionYear: number | null, renewalYear: number | null, version: number },
+ *   trianglePages: Record<string, any>,
+ *   treatyDocuments: { saved: boolean, files: unknown[], filters: Record<string, unknown> },
+ *   pricing: Record<string, any>,
+ *   propLargeLossList: Record<string, any>,
+ *   propCatLossList: Record<string, any>,
+ *   nonPropLargeLossList: Record<string, any>,
+ *   nonPropCatLossList: Record<string, any>,
+ *   npStructureLayers: Array<Record<string, any>>,
+ * } & Record<string, any>} AppState
+ *
+ * @typedef {{
+ *   state: AppState,
+ *   dispatch: import('react').Dispatch<{ type: string, payload?: unknown }>,
+ *   set: (payload: Partial<AppState>) => void,
+ *   setSlice: (key: string, value: Record<string, unknown>) => void,
+ *   replaceSlice: (key: string, value: unknown) => void,
+ *   resetFlow: (opts?: { quote?: boolean, mode?: string }) => void,
+ *   structRefsMap: import('react').MutableRefObject<Record<string, unknown>>,
+ * }} AppContextValue
+ */
+
+const AppContext = createContext(/** @type {AppContextValue | null} */ (null));
 
 const initialState = {
   user: null, // populated from getSession() on mount

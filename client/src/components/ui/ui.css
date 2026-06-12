@@ -1,0 +1,253 @@
+/* client/src/components/ui/ui.css — design-system primitives.
+   Every color / radius / shadow / font comes from tokens.css (and is
+   therefore re-skinned by themes.css). Hard-coded values are limited to
+   structural spacing within a component. If a style you need has no
+   token, add the token first — never inline a hex here. */
+
+/* ── Button ─────────────────────────────────────────────────────────── */
+.ui-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  border-radius: var(--radius, 14px);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease, opacity .15s ease;
+  white-space: nowrap;
+}
+.ui-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus);
+}
+.ui-btn:disabled,
+.ui-btn[aria-busy="true"] {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+/* sizes */
+.ui-btn--sm { font-size: 11px; padding: 5px 12px; min-height: 28px; }
+.ui-btn--md { font-size: 13px; padding: 8px 16px; min-height: 36px; }
+.ui-btn--lg { font-size: 14px; padding: 11px 22px; min-height: 44px; }
+
+/* variants */
+.ui-btn--primary {
+  background: linear-gradient(180deg, var(--g1, var(--accent)), var(--g2, var(--accent2)));
+  color: var(--accent-contrast);
+  border-color: rgba(var(--accent-rgb), .55);
+}
+.ui-btn--primary:hover:not(:disabled) { filter: brightness(1.06); }
+
+.ui-btn--secondary {
+  background: var(--control-bg);
+  color: var(--text);
+  border-color: var(--stroke-soft);
+}
+.ui-btn--secondary:hover:not(:disabled) { background: var(--control-hover); }
+
+.ui-btn--ghost {
+  background: transparent;
+  color: var(--muted);
+  border-color: transparent;
+}
+.ui-btn--ghost:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+
+.ui-btn--danger {
+  background: rgba(var(--accent-rose-rgb), .14);
+  color: var(--accent-rose);
+  border-color: rgba(var(--accent-rose-rgb), .45);
+}
+.ui-btn--danger:hover:not(:disabled) { background: rgba(var(--accent-rose-rgb), .22); }
+
+.ui-btn__spinner {
+  width: 1em;
+  height: 1em;
+  border-radius: var(--radius-pill);
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: ui-spin .7s linear infinite;
+}
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+
+/* ── Input ──────────────────────────────────────────────────────────── */
+.ui-input {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--text);
+  background: var(--control-bg);
+  border: 1px solid var(--stroke-soft);
+  border-radius: calc(var(--radius, 14px) - 6px);
+  padding: 8px 12px;
+  min-height: 36px;
+  width: 100%;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.ui-input::placeholder { color: var(--text-subtle); }
+.ui-input:focus-visible {
+  border-color: rgba(var(--accent-rgb), .55);
+  box-shadow: 0 0 0 3px var(--focus);
+}
+.ui-input[aria-invalid="true"] {
+  border-color: rgba(var(--accent-rose-rgb), .6);
+}
+.ui-input:disabled { opacity: .55; cursor: not-allowed; }
+.ui-input--number { font-variant-numeric: tabular-nums; text-align: right; }
+
+/* ── Field ──────────────────────────────────────────────────────────── */
+.ui-field { display: flex; flex-direction: column; gap: 5px; }
+.ui-field__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+.ui-field__hint { font-size: 11px; color: var(--text-subtle); }
+.ui-field__error { font-size: 11px; color: var(--accent-rose); }
+
+/* ── Card ───────────────────────────────────────────────────────────── */
+.ui-card {
+  background: var(--panel-bg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow2);
+  padding: 18px 22px;
+}
+.ui-card__title {
+  margin: 0 0 12px;
+  font-size: var(--num-section-fs, 14px);
+  font-weight: 800;
+  color: var(--text-strong);
+}
+
+/* ── Modal ──────────────────────────────────────────────────────────── */
+.ui-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--surface-muted);
+  backdrop-filter: blur(calc(var(--glass-blur) / 2));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.ui-modal {
+  background: var(--panel-bg-strong);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-high);
+  width: min(640px, 100%);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ui-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--hairline);
+}
+.ui-modal__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-strong);
+}
+.ui-modal__body { padding: 18px 20px; overflow-y: auto; }
+.ui-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* ── Table ──────────────────────────────────────────────────────────── */
+.ui-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+}
+.ui-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+}
+.ui-table th {
+  background: var(--table-head-bg);
+  color: var(--num-th-color);
+  font-size: var(--num-th-fs, 11px);
+  font-weight: 800;
+  letter-spacing: var(--num-th-letter-spacing, .08em);
+  text-transform: uppercase;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hairline-strong);
+  white-space: nowrap;
+}
+.ui-table td {
+  padding: 8px 12px;
+  font-size: var(--num-cell-fs, 12px);
+  color: var(--text);
+  border-bottom: 1px solid var(--hairline);
+  font-variant-numeric: tabular-nums;
+}
+.ui-table tbody tr:nth-child(even) td { background: var(--table-row-alt); }
+.ui-table tbody tr:hover td { background: var(--table-row-hover); }
+
+/* ── Badge ──────────────────────────────────────────────────────────── */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border: 1px solid var(--stroke-soft);
+  color: var(--muted);
+  background: var(--surface-hover);
+}
+.ui-badge--success { color: var(--accent); border-color: rgba(var(--accent-rgb), .45); background: rgba(var(--accent-rgb), .10); }
+.ui-badge--info    { color: var(--accent-blue); border-color: rgba(var(--accent-blue-rgb), .45); background: rgba(var(--accent-blue-rgb), .10); }
+.ui-badge--warn    { color: var(--accent-amber); border-color: rgba(var(--accent-amber-rgb), .45); background: rgba(var(--accent-amber-rgb), .10); }
+.ui-badge--danger  { color: var(--accent-rose); border-color: rgba(var(--accent-rose-rgb), .45); background: rgba(var(--accent-rose-rgb), .10); }
+
+/* ── Callout — note/tip/warn/danger (manuals' visual language) ──────── */
+.ui-callout {
+  display: flex;
+  gap: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--stroke-soft);
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--surface-2);
+}
+.ui-callout__title {
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  margin: 0 0 4px;
+}
+.ui-callout--note   { border-left: 3px solid var(--accent-blue); }
+.ui-callout--note .ui-callout__title { color: var(--accent-blue); }
+.ui-callout--tip    { border-left: 3px solid var(--accent); }
+.ui-callout--tip .ui-callout__title { color: var(--accent); }
+.ui-callout--warn   { border-left: 3px solid var(--accent-amber); background: rgba(var(--accent-amber-rgb), .06); }
+.ui-callout--warn .ui-callout__title { color: var(--accent-amber); }
+.ui-callout--danger { border-left: 3px solid var(--accent-rose); background: rgba(var(--accent-rose-rgb), .06); }
+.ui-callout--danger .ui-callout__title { color: var(--accent-rose); }

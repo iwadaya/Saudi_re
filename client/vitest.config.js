@@ -29,19 +29,22 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['client/src/test/setup.js'],
-    include: ['client/src/**/*.test.{js,jsx}'],
+    include: ['client/src/**/*.test.{js,jsx,ts,tsx}'],
     css: false,
     coverage: {
       provider: 'v8',
-      include: ['client/src/**/*.{js,jsx}'],
+      include: ['client/src/**/*.{js,jsx,ts,tsx}'],
       exclude: [
-        'client/src/**/*.test.{js,jsx}',
+        'client/src/**/*.test.{js,jsx,ts,tsx}',
         'client/src/test/**',
         'client/src/main.jsx',
         'client/src/types/**',
       ],
       reporter: ['text', 'html'],
       thresholds: {
+        // Phase-2 async primitive: must stay near-fully covered including
+        // the error / stale / cancel-on-unmount paths.
+        'client/src/hooks/useResource.ts': { lines: 90, branches: 90 },
         'client/src/screens/non_proportional/final_pricing/NpFinalPricing.jsx': { lines: 70 },
         'client/src/screens/proportional/pricing/PropPricing.jsx': { lines: 70 },
         // Lowered from 70 → 56 to match the actual current baseline.

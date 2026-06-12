@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { api } from '../../api';
 import { useContractId } from '../../hooks/useContractId';
+import { useResource } from '../../hooks/useResource';
 import WizardLayout from '../../components/WizardLayout';
+import AsyncBoundary from '../../components/AsyncBoundary';
 import { sanitizeNumber, fmtOrEm as fmt, toN as cn } from '../../utils/format';
 
 function emptyBand() { return { min: '', max: '', policies: '', sumInsured: '', premiums: '', claimsPaid: '' }; }
@@ -66,7 +68,6 @@ export default function ProfileScreen({ routeKey, title, headerPill, profileType
   const [activeCobId, setActiveCobId] = useState(null);
   const [bands, setBands] = useState(() => Array.from({ length: 7 }, emptyBand));
   const [dirty, setDirty] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [saveMsg, setSaveMsg] = useState(null);
   const tableRef = useRef(null);
   const bandsRef = useRef(bands);
@@ -121,23 +122,26 @@ export default function ProfileScreen({ routeKey, title, headerPill, profileType
     }).catch(() => {});
   }, [contractId, quoteMode]);
 
-  // Load bands + c_value/pml for active COB
-  useEffect(() => {
-    if (!contractId || !activeCobId) return;
-    let cancelled = false;
-    setLoading(true);
-    // Reset to defaults first so prior COB's values don't leak into the new one (C5)
-    setBands(Array.from({ length: 7 }, emptyBand));
-    if (!isClaims) {
-      setCValue('');
-      setPmlPct('100');
-      setSelectedCurve('Y3');
-      setCustomB('');
-      setCustomG('');
-      setGrossLossRatio('100');
-    }
-    getFn(contractId, activeCobId, quoteMode ? { quote: true } : undefined).then(data => {
-      if (cancelled) return; // ignore stale response (C6)
+  // Load bands + c_value/pml for active COB (Phase 2.2: useResource owns the
+  // loading / error / abort-on-deps-change semantics). Hydration runs inside
+  // the fetcher so ordering matches the old hand-rolled effect exactly —
+  // reset → fetch → hydrate bands → hydrate profile → dirty=false, all before
+  // `loading` flips off, and never for a superseded request. getFn / isClaims
+  // both derive from profileType, which is in deps.
+  const profileResource = useResource(
+    async (signal) => {
+      // Reset to defaults first so prior COB's values don't leak into the new one (C5)
+      setBands(Array.from({ length: 7 }, emptyBand));
+      if (!isClaims) {
+        setCValue('');
+        setPmlPct('100');
+        setSelectedCurve('Y3');
+        setCustomB('');
+        setCustomG('');
+        setGrossLossRatio('100');
+      }
+      const data = await getFn(contractId, activeCobId, quoteMode ? { quote: true, signal } : { signal });
+      if (signal.aborted) return data; // ignore stale response (C6) — don't hydrate
       const b = data?.bands || [];
       if (b.length > 0) setBands(b.map(x => ({
         min: x.from_amt ?? x.min ?? '', max: x.to_amt ?? x.max ?? '',
@@ -159,9 +163,11 @@ export default function ProfileScreen({ routeKey, title, headerPill, profileType
       }
 
       setDirty(false);
-    }).catch(() => {}).finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [contractId, activeCobId, isClaims, getFn, quoteMode]);
+      return data;
+    },
+    [contractId, activeCobId, profileType, quoteMode],
+    { enabled: !!(contractId && activeCobId), reportLabel: 'profile' },
+  );
 
   const updateBand = (idx, field, val) => {
     setBands(prev => { const n = [...prev]; n[idx] = { ...n[idx], [field]: val }; return n; });
@@ -626,7 +632,8 @@ export default function ProfileScreen({ routeKey, title, headerPill, profileType
             </div>
           </div>
 
-          {loading ? <div className="pf-loading">Loading...</div> : (
+          <AsyncBoundary loading={profileResource.loading} error={profileResource.error}
+            onRetry={profileResource.refetch} label="profile">
             <div className="pf-table-wrap" onPaste={handlePaste} ref={tableRef}>
               <table className="pf-table">
                 <thead><tr>
@@ -676,7 +683,7 @@ export default function ProfileScreen({ routeKey, title, headerPill, profileType
               </table>
               <div className="pf-hint">Paste from Excel to auto-detect rows ({isClaims ? '6 columns: Min, Max, Count, Total Sum Insured, Premium, Incurred Claims' : '5 columns: Min, Max, Policies, Sum Insured, Premiums'}). Delete rows with ✕.</div>
             </div>
-          )}
+          </AsyncBoundary>
 
           {/* Exposure Rating Panel */}
           {exposurePanelJsx}

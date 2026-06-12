@@ -8,12 +8,18 @@
 //      /api/ai/fac/analyse-document
 //   4. poll /risks/:id/analyses every 2s until the row leaves RUNNING
 //      (max 60s, then show a "still running" hint).
+//
+// Styling lives in the co-located FacDocuments.css (Phase 3.2 of the
+// frontend-hardening effort); interactive chrome uses the ui/ design-
+// system primitives (Button, Badge, Table, Modal).
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../../../api';
 import WizardLayout from '../../../components/WizardLayout';
 import { useFacRiskId } from '../../../hooks/useContractId';
 import { invalidateFacPendingRecsCache } from '../../../components/FacPendingRecsBanner';
+import { Badge, Button, Modal, Table } from '../../../components/ui';
+import './FacDocuments.css';
 
 const ROUTE_KEY = 'FAC_DOCUMENTS';
 const MAX_BYTES = 20 * 1024 * 1024;     // 20 MB
@@ -31,11 +37,12 @@ const AI_KINDS = [
 ];
 const AI_KIND_LABELS = Object.fromEntries(AI_KINDS);
 
-const STATUS_PALETTE = {
-  PENDING:   { bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.30)', fg: 'rgba(226,232,240,0.80)' },
-  RUNNING:   { bg: 'rgba(0,212,255,0.10)',   border: 'rgba(0,212,255,0.40)',   fg: '#00d4ff' },
-  SUCCEEDED: { bg: 'rgba(35,209,139,0.10)',  border: 'rgba(35,209,139,0.40)',  fg: '#23d18b' },
-  FAILED:    { bg: 'rgba(248,113,113,0.10)', border: 'rgba(248,113,113,0.40)', fg: '#f87171' },
+// Analysis status → ui Badge tone.
+const STATUS_TONES = {
+  PENDING:   'neutral',
+  RUNNING:   'info',
+  SUCCEEDED: 'success',
+  FAILED:    'danger',
 };
 
 function fmtBytes(n) {
@@ -48,15 +55,10 @@ function fmtBytes(n) {
 
 function StatusChip({ status }) {
   if (!status) return null;
-  const p = STATUS_PALETTE[status] || STATUS_PALETTE.PENDING;
   return (
-    <span style={{
-      display: 'inline-block', padding: '2px 8px', borderRadius: 20,
-      fontSize: 10, fontWeight: 800, letterSpacing: '.08em',
-      background: p.bg, border: `1px solid ${p.border}`, color: p.fg,
-    }}>
+    <Badge tone={STATUS_TONES[status] || 'neutral'}>
       {status === 'RUNNING' ? 'Analysing…' : status}
-    </span>
+    </Badge>
   );
 }
 
@@ -145,189 +147,127 @@ function RecommendationCard({ rec, factorOptions, onAccept, onReject, busy, just
   }
 
   return (
-    <div style={{ padding: '12px 14px', borderRadius: 10,
-                   background: justApplied ? 'rgba(35,209,139,0.07)' : 'rgba(8,14,30,0.55)',
-                   border: justApplied ? '1px solid rgba(35,209,139,0.40)' : '1px solid rgba(255,255,255,0.06)',
-                   marginBottom: 8, transition: 'background 0.6s, border-color 0.6s' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                     marginBottom: 6 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 800,
-                          letterSpacing: '.10em', background: 'rgba(168,85,247,0.10)',
-                          border: '1px solid rgba(168,85,247,0.30)', color: '#a855f7' }}>
-            {rec.target_screen}
-          </span>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(226,232,240,0.85)',
-                          fontFamily: 'var(--font-mono)' }}>{rec.target_field}</span>
+    <div className={`facdoc-rec${justApplied ? ' facdoc-rec--applied' : ''}`}>
+      <div className="facdoc-rec-head">
+        <div className="facdoc-rec-tags">
+          <Badge className="facdoc-badge--screen">{rec.target_screen}</Badge>
+          <span className="facdoc-rec-field">{rec.target_field}</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div style={{ width: 64, height: 6, borderRadius: 3,
-                          background: 'rgba(148,163,184,0.10)', overflow: 'hidden' }}>
-            <div style={{ width: `${confPct ?? 0}%`, height: '100%', background: color }} />
+        <div className="facdoc-conf">
+          <div className="facdoc-conf-track">
+            <div className="facdoc-conf-fill" style={{ width: `${confPct ?? 0}%`, background: color }} />
           </div>
-          <span style={{ fontSize: 10, fontWeight: 800, color }}>
+          <span className="facdoc-conf-pct" style={{ color }}>
             {confPct == null ? '—' : `${confPct}%`}
           </span>
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 8,
-                     alignItems: 'center', marginBottom: 8, fontSize: 11 }}>
-        <div style={{ padding: '6px 10px', borderRadius: 6,
-                       background: 'rgba(148,163,184,0.05)',
-                       border: '1px solid rgba(148,163,184,0.15)',
-                       color: 'rgba(226,232,240,0.65)',
-                       fontFamily: 'var(--font-mono)', wordBreak: 'break-word' }}>
+      <div className="facdoc-diff">
+        <div className="facdoc-val facdoc-val--old">
           {rec.current_value === null || rec.current_value === undefined
-            ? <span style={{ color: 'rgba(148,163,184,0.40)' }}>—</span>
+            ? <span className="facdoc-val-null">—</span>
             : jsonPreview(rec.current_value)}
         </div>
-        <div style={{ color: 'rgba(35,209,139,0.65)', fontSize: 14, fontWeight: 700 }}>→</div>
-        <div style={{ padding: '6px 10px', borderRadius: 6,
-                       background: 'rgba(35,209,139,0.05)',
-                       border: '1px solid rgba(35,209,139,0.20)',
-                       color: '#e2e8f0',
-                       fontFamily: 'var(--font-mono)', wordBreak: 'break-word' }}>
+        <div className="facdoc-diff-arrow">→</div>
+        <div className="facdoc-val facdoc-val--new">
           {jsonPreview(rec.suggested_value)}
         </div>
       </div>
-      <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.70)', fontStyle: 'italic',
-                     lineHeight: 1.4, marginBottom: editing || rejectingOpen ? 8 : 0 }}>
+      <div className={`facdoc-rationale${editing || rejectingOpen ? ' facdoc-rationale--spaced' : ''}`}>
         “{rec.rationale}”
       </div>
 
       {editing && (
-        <div style={{ marginTop: 8, padding: '8px 10px',
-                       background: 'rgba(0,212,255,0.04)',
-                       border: '1px solid rgba(0,212,255,0.25)', borderRadius: 6 }}>
-          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                         textTransform: 'uppercase', color: 'rgba(0,212,255,0.65)', marginBottom: 6 }}>
+        <div className="facdoc-editor">
+          <div className="facdoc-editor-label">
             Override value · {inputKind.toLowerCase()}
           </div>
           {inputKind === 'FACTOR_OPTION' && (() => {
             const code = rec.target_field.replace(/^factor\./, '');
             const opts = factorOptions?.[code] || [];
             return (
-              <select className="fi" value={editedValue}
-                      onChange={(e) => setEditedValue(e.target.value)}
-                      style={{ width: '100%', fontSize: 12 }}>
+              <select className="fi facdoc-editor-field" value={editedValue}
+                      onChange={(e) => setEditedValue(e.target.value)}>
                 {opts.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
             );
           })()}
           {inputKind === 'DATE' && (
-            <input className="fi" type="date" value={editedValue || ''}
-                   onChange={(e) => setEditedValue(e.target.value)}
-                   style={{ width: '100%', fontSize: 12 }} />
+            <input className="fi facdoc-editor-field" type="date" value={editedValue || ''}
+                   onChange={(e) => setEditedValue(e.target.value)} />
           )}
           {(inputKind === 'NUMERIC' || inputKind === 'INT') && (
-            <input className="fi" type="number" value={editedValue}
-                   onChange={(e) => setEditedValue(e.target.value)}
-                   style={{ width: '100%', fontSize: 12 }} />
+            <input className="fi facdoc-editor-field" type="number" value={editedValue}
+                   onChange={(e) => setEditedValue(e.target.value)} />
           )}
           {(inputKind === 'LOCATION_ARRAY' || inputKind === 'LOSS_APPEND') && (
-            <textarea className="fi" rows={5} value={editedValue}
-                      onChange={(e) => setEditedValue(e.target.value)}
-                      style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: 11 }} />
+            <textarea className="fi facdoc-editor-json" rows={5} value={editedValue}
+                      onChange={(e) => setEditedValue(e.target.value)} />
           )}
           {inputKind === 'CLAUSE_TOGGLE' && (
-            <select className="fi" value={editedValue === 'false' ? 'false' : 'true'}
-                    onChange={(e) => setEditedValue(e.target.value)}
-                    style={{ width: '100%', fontSize: 12 }}>
+            <select className="fi facdoc-editor-field" value={editedValue === 'false' ? 'false' : 'true'}
+                    onChange={(e) => setEditedValue(e.target.value)}>
               <option value="true">Checked</option>
               <option value="false">Unchecked</option>
             </select>
           )}
           {inputKind === 'TEXT' && (
-            <input className="fi" value={editedValue}
-                   onChange={(e) => setEditedValue(e.target.value)}
-                   style={{ width: '100%', fontSize: 12 }} />
+            <input className="fi facdoc-editor-field" value={editedValue}
+                   onChange={(e) => setEditedValue(e.target.value)} />
           )}
-          <div style={{ marginTop: 8, display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-            <button onClick={() => setEditing(false)}
-                    style={{ appearance: 'none', border: '1px solid rgba(148,163,184,0.20)',
-                              background: 'transparent', color: 'rgba(226,232,240,0.80)',
-                              borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>
+          <div className="facdoc-actions--end">
+            <Button size="sm" className="facdoc-btn--cancel" onClick={() => setEditing(false)}>
               Cancel
-            </button>
-            <button disabled={busy}
-                    onClick={() => onAccept(rec, parseFromEditor(editedValue))}
-                    style={{ appearance: 'none', border: '1px solid rgba(35,209,139,0.40)',
-                              background: 'rgba(35,209,139,0.10)', color: '#23d18b',
-                              borderRadius: 6, padding: '4px 12px', fontSize: 11, fontWeight: 700,
-                              cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1 }}>
+            </Button>
+            <Button size="sm" className="facdoc-btn--accept" disabled={busy}
+                    onClick={() => onAccept(rec, parseFromEditor(editedValue))}>
               Confirm override
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {rejectingOpen && (
-        <div style={{ marginTop: 8, padding: '8px 10px',
-                       background: 'rgba(248,113,113,0.04)',
-                       border: '1px solid rgba(248,113,113,0.25)', borderRadius: 6 }}>
-          <textarea className="fi" rows={3} value={rejectReason}
+        <div className="facdoc-reject">
+          <textarea className="fi facdoc-reject-input" rows={3} value={rejectReason}
                     onChange={(e) => setRejectReason(e.target.value)}
-                    placeholder="Optional reason…"
-                    style={{ width: '100%', fontSize: 12, resize: 'vertical' }} />
-          <div style={{ marginTop: 8, display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-            <button onClick={() => setRejectingOpen(false)}
-                    style={{ appearance: 'none', border: '1px solid rgba(148,163,184,0.20)',
-                              background: 'transparent', color: 'rgba(226,232,240,0.80)',
-                              borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>
+                    placeholder="Optional reason…" />
+          <div className="facdoc-actions--end">
+            <Button size="sm" className="facdoc-btn--cancel" onClick={() => setRejectingOpen(false)}>
               Cancel
-            </button>
-            <button disabled={busy}
-                    onClick={() => onReject(rec, rejectReason)}
-                    style={{ appearance: 'none', border: '1px solid rgba(248,113,113,0.40)',
-                              background: 'rgba(248,113,113,0.10)', color: '#f87171',
-                              borderRadius: 6, padding: '4px 12px', fontSize: 11, fontWeight: 700,
-                              cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1 }}>
+            </Button>
+            <Button size="sm" className="facdoc-btn--reject-confirm" disabled={busy}
+                    onClick={() => onReject(rec, rejectReason)}>
               Confirm reject
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {!editing && !rejectingOpen && isPending && !justApplied && (
-        <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button onClick={() => onAccept(rec, undefined)} disabled={busy}
-                  style={{ appearance: 'none', border: '1px solid rgba(35,209,139,0.40)',
-                            background: 'rgba(35,209,139,0.10)', color: '#23d18b',
-                            borderRadius: 6, padding: '4px 12px', fontSize: 11, fontWeight: 700,
-                            cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1 }}>
+        <div className="facdoc-actions">
+          <Button size="sm" className="facdoc-btn--accept" disabled={busy}
+                  onClick={() => onAccept(rec, undefined)}>
             Accept
-          </button>
-          <button onClick={() => { setEditedValue(formatForEditor(rec.suggested_value)); setEditing(true); }}
-                  disabled={busy}
-                  style={{ appearance: 'none', border: '1px solid rgba(0,212,255,0.40)',
-                            background: 'rgba(0,212,255,0.08)', color: '#00d4ff',
-                            borderRadius: 6, padding: '4px 12px', fontSize: 11, fontWeight: 700,
-                            cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1 }}>
+          </Button>
+          <Button size="sm" className="facdoc-btn--edit" disabled={busy}
+                  onClick={() => { setEditedValue(formatForEditor(rec.suggested_value)); setEditing(true); }}>
             Edit & Accept
-          </button>
-          <button onClick={() => { setRejectReason(''); setRejectingOpen(true); }}
-                  disabled={busy}
-                  style={{ appearance: 'none', border: '1px solid rgba(248,113,113,0.40)',
-                            background: 'rgba(248,113,113,0.08)', color: '#f87171',
-                            borderRadius: 6, padding: '4px 12px', fontSize: 11, fontWeight: 700,
-                            cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1 }}>
+          </Button>
+          <Button size="sm" className="facdoc-btn--reject" disabled={busy}
+                  onClick={() => { setRejectReason(''); setRejectingOpen(true); }}>
             Reject
-          </button>
+          </Button>
         </div>
       )}
 
       {justApplied && (
-        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8,
-                       fontSize: 11, color: '#23d18b' }}>
+        <div className="facdoc-applied-row">
           <span>✓ Accepted just now</span>
-          <button disabled
-                  title="Undo a recommendation acceptance — TODO: post a reversing change"
-                  style={{ appearance: 'none', border: '1px dashed rgba(35,209,139,0.30)',
-                            background: 'transparent', color: 'rgba(35,209,139,0.55)',
-                            borderRadius: 6, padding: '2px 10px', fontSize: 10,
-                            cursor: 'not-allowed', opacity: 0.65 }}>
+          <Button size="sm" className="facdoc-btn--undo" disabled
+                  title="Undo a recommendation acceptance — TODO: post a reversing change">
             Undo
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -346,7 +286,10 @@ const SCREEN_ROUTES = {
   FAC_DEDUCTIBLES:  'deductibles',
 };
 
-// Side drawer rendered when openAnalysisId is set.
+// Side drawer rendered when openAnalysisId is set. The Modal primitive
+// supplies the backdrop, Esc-to-close, focus trap and aria-modal
+// wiring; FacDocuments.css reshapes the panel into the right-hand
+// drawer this screen has always used.
 function AnalysisDrawer({ analysisId, riskId, onClose }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -498,14 +441,6 @@ function AnalysisDrawer({ analysisId, riskId, onClose }) {
     await reload();
   }, [data, reload, riskId]);
 
-  // Close on Esc — installed once per open.
-  useEffect(() => {
-    if (!analysisId) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [analysisId, onClose]);
-
   if (!analysisId) return null;
 
   const analysis = data?.analysis;
@@ -526,204 +461,168 @@ function AnalysisDrawer({ analysisId, riskId, onClose }) {
   };
 
   return (
-    <>
-      {/* Outside-click backdrop */}
-      <div onClick={onClose} style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 800,
-      }} />
-      {/* Drawer */}
-      <aside onClick={(e) => e.stopPropagation()} style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0, width: 520,
-        background: '#0a1422', borderLeft: '1px solid rgba(255,255,255,0.08)',
-        zIndex: 900, overflowY: 'auto',
-      }}>
-        {loading || !analysis ? (
-          <div style={{ padding: 30, textAlign: 'center', color: 'rgba(148,163,184,0.45)' }}>
-            Loading analysis…
+    <Modal open onClose={onClose} className="facdoc-drawer">
+      {loading || !analysis ? (
+        <div className="facdoc-drawer-loading">
+          Loading analysis…
+        </div>
+      ) : (
+        <div>
+          {/* Header */}
+          <div className="facdoc-drawer-head">
+            <div className="facdoc-drawer-head-row">
+              <span className="facdoc-drawer-eyebrow">
+                AI Analysis
+              </span>
+              <Button variant="ghost" size="sm" className="facdoc-drawer-close"
+                      aria-label="Close analysis" onClick={onClose}>×</Button>
+            </div>
+            <div className="facdoc-drawer-title">
+              {analysis.document_filename || 'Untitled document'}
+            </div>
+            <div className="facdoc-drawer-meta">
+              <Badge className="facdoc-badge--kind">
+                {AI_KIND_LABELS[analysis.analysis_kind] || analysis.analysis_kind}
+              </Badge>
+              <StatusChip status={analysis.status} />
+              <span className="facdoc-drawer-when">
+                {analysis.completed_at
+                  ? `analysed ${new Date(analysis.completed_at).toLocaleString()}`
+                  : analysis.started_at
+                    ? `started ${new Date(analysis.started_at).toLocaleString()}`
+                    : ''}
+              </span>
+            </div>
           </div>
-        ) : (
-          <div>
-            {/* Header */}
-            <div style={{ padding: '18px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                             marginBottom: 8 }}>
-                <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.14em',
-                                textTransform: 'uppercase', color: 'rgba(0,212,255,0.55)' }}>
-                  AI Analysis
-                </span>
-                <span onClick={onClose} style={{ cursor: 'pointer', color: 'rgba(148,163,184,0.65)',
-                                                   fontSize: 18 }}>×</span>
-              </div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: '#e2e8f0' }}>
-                {analysis.document_filename || 'Untitled document'}
-              </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6,
-                             flexWrap: 'wrap' }}>
-                <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700,
-                                background: 'rgba(0,212,255,0.08)', border: '1px solid rgba(0,212,255,0.20)',
-                                color: '#00d4ff' }}>
-                  {AI_KIND_LABELS[analysis.analysis_kind] || analysis.analysis_kind}
-                </span>
-                <StatusChip status={analysis.status} />
-                <span style={{ fontSize: 10, color: 'rgba(148,163,184,0.45)' }}>
-                  {analysis.completed_at
-                    ? `analysed ${new Date(analysis.completed_at).toLocaleString()}`
-                    : analysis.started_at
-                      ? `started ${new Date(analysis.started_at).toLocaleString()}`
-                      : ''}
-                </span>
-              </div>
-            </div>
 
-            {/* Summary */}
-            <div style={{ padding: '16px 20px' }}>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                             textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)',
-                             marginBottom: 6 }}>Summary</div>
-              <div style={{ fontSize: 12, lineHeight: 1.6, color: 'rgba(226,232,240,0.85)' }}>
-                {analysis.summary || <span style={{ color: 'rgba(148,163,184,0.40)' }}>
-                  No summary — analysis may have failed.
-                </span>}
-              </div>
-              {analysis.status === 'FAILED' && analysis.error && (
-                <div style={{ marginTop: 10, padding: '8px 12px', fontSize: 11,
-                               background: 'rgba(248,113,113,0.08)',
-                               border: '1px solid rgba(248,113,113,0.25)',
-                               color: '#f87171', borderRadius: 6 }}>
-                  {analysis.error}
-                </div>
-              )}
+          {/* Summary */}
+          <div className="facdoc-summary">
+            <div className="facdoc-section-label">Summary</div>
+            <div className="facdoc-summary-text">
+              {analysis.summary || <span className="facdoc-muted-note">
+                No summary — analysis may have failed.
+              </span>}
             </div>
-
-            {/* Extracted JSON (collapsible) */}
-            <div style={{ padding: '6px 20px 14px' }}>
-              <div onClick={() => setExtractedOpen((v) => !v)}
-                   style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-                            fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
-                            textTransform: 'uppercase', color: 'rgba(148,163,184,0.55)',
-                            marginBottom: 6 }}>
-                <span>{extractedOpen ? '▾' : '▸'}</span>
-                <span>Raw extracted fields</span>
-              </div>
-              {extractedOpen && (
-                <pre style={{ margin: 0, padding: '10px 12px', borderRadius: 6,
-                                background: 'rgba(5,8,16,0.55)', fontSize: 10,
-                                color: 'rgba(226,232,240,0.80)', overflowX: 'auto',
-                                maxHeight: 280 }}>
-                  {jsonPreview(analysis.extracted || {})}
-                </pre>
-              )}
-            </div>
-
-            {/* Applied-pill — links to the affected screen. */}
-            {appliedPill && (
-              <div style={{ margin: '4px 20px 8px', display: 'inline-flex' }}>
-                <div style={{ padding: '4px 12px', borderRadius: 20, fontSize: 11,
-                                background: 'rgba(35,209,139,0.10)',
-                                border: '1px solid rgba(35,209,139,0.30)',
-                                color: '#23d18b' }}>
-                  {appliedPill.bulk
-                    ? `${appliedPill.bulk} changes applied · ${appliedPill.screen}`
-                    : `1 change applied · ${appliedPill.screen}`}
-                  {' '}
-                  <a href={`/fac/${analysis.fac_risk_id}/${SCREEN_ROUTES[appliedPill.screen] || ''}`}
-                     style={{ color: '#23d18b', textDecoration: 'underline', marginLeft: 4 }}>
-                    open →
-                  </a>
-                </div>
+            {analysis.status === 'FAILED' && analysis.error && (
+              <div className="facdoc-analysis-error">
+                {analysis.error}
               </div>
             )}
-
-            {/* Bulk action */}
-            {(() => {
-              const hi = grouped.PENDING.filter((r) => Number(r.confidence) >= 0.85);
-              if (hi.length === 0) return null;
-              return (
-                <div style={{ padding: '0 20px 8px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <button onClick={onAcceptHighConfidence} disabled={!!bulkProgress}
-                          style={{ appearance: 'none', border: '1px solid rgba(35,209,139,0.40)',
-                                    background: 'rgba(35,209,139,0.08)', color: '#23d18b',
-                                    borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 700,
-                                    cursor: bulkProgress ? 'not-allowed' : 'pointer',
-                                    opacity: bulkProgress ? 0.5 : 1 }}>
-                    Accept all ≥ 85% confidence ({hi.length})
-                  </button>
-                  {bulkProgress && (
-                    <span style={{ fontSize: 11, color: 'rgba(148,163,184,0.65)' }}>
-                      {bulkProgress.done} / {bulkProgress.total} done
-                    </span>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Recommendations */}
-            <div style={{ padding: '6px 20px 30px' }}>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                             textTransform: 'uppercase', color: 'rgba(148,163,184,0.55)',
-                             marginBottom: 8 }}>
-                Recommendations ({recs.length})
-              </div>
-              {recs.length === 0 ? (
-                <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.40)' }}>
-                  The model returned no actionable suggestions for this document.
-                </div>
-              ) : null}
-
-              {/* PENDING — open by default */}
-              <RecGroup title="Pending" status="PENDING" groups={groupByScreen(grouped.PENDING)}
-                        startCollapsed={false}
-                        cardProps={{ factorOptions, onAccept, onReject, busyRecs, justApplied }} />
-              {grouped.ACCEPTED.length > 0 && (
-                <RecGroup title="Accepted" status="ACCEPTED" groups={groupByScreen(grouped.ACCEPTED)}
-                          startCollapsed={Boolean(groupCollapseRef.current.ACCEPTED)}
-                          cardProps={{ factorOptions, onAccept, onReject, busyRecs, justApplied }} />
-              )}
-              {grouped.SUPERSEDED.length > 0 && (
-                <RecGroup title="Superseded" status="SUPERSEDED" groups={groupByScreen(grouped.SUPERSEDED)}
-                          startCollapsed
-                          cardProps={{ factorOptions, onAccept, onReject, busyRecs, justApplied }} />
-              )}
-              {grouped.REJECTED.length > 0 && (
-                <RecGroup title="Rejected" status="REJECTED" groups={groupByScreen(grouped.REJECTED)}
-                          startCollapsed={Boolean(groupCollapseRef.current.REJECTED)}
-                          cardProps={{ factorOptions, onAccept, onReject, busyRecs, justApplied }} />
-              )}
-            </div>
           </div>
-        )}
-      </aside>
-    </>
+
+          {/* Extracted JSON (collapsible) */}
+          <div className="facdoc-extracted">
+            <button type="button" className="facdoc-disclosure"
+                    aria-expanded={extractedOpen}
+                    onClick={() => setExtractedOpen((v) => !v)}>
+              <span>{extractedOpen ? '▾' : '▸'}</span>
+              <span>Raw extracted fields</span>
+            </button>
+            {extractedOpen && (
+              <pre className="facdoc-extracted-pre">
+                {jsonPreview(analysis.extracted || {})}
+              </pre>
+            )}
+          </div>
+
+          {/* Applied-pill — links to the affected screen. */}
+          {appliedPill && (
+            <div className="facdoc-applied-wrap">
+              <div className="facdoc-applied-pill">
+                {appliedPill.bulk
+                  ? `${appliedPill.bulk} changes applied · ${appliedPill.screen}`
+                  : `1 change applied · ${appliedPill.screen}`}
+                {' '}
+                <a href={`/fac/${analysis.fac_risk_id}/${SCREEN_ROUTES[appliedPill.screen] || ''}`}
+                   className="facdoc-applied-link">
+                  open →
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* Bulk action */}
+          {(() => {
+            const hi = grouped.PENDING.filter((r) => Number(r.confidence) >= 0.85);
+            if (hi.length === 0) return null;
+            return (
+              <div className="facdoc-bulk">
+                <Button size="sm" className="facdoc-btn--bulk-accept"
+                        disabled={!!bulkProgress} onClick={onAcceptHighConfidence}>
+                  Accept all ≥ 85% confidence ({hi.length})
+                </Button>
+                {bulkProgress && (
+                  <span className="facdoc-bulk-progress">
+                    {bulkProgress.done} / {bulkProgress.total} done
+                  </span>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Recommendations */}
+          <div className="facdoc-recs">
+            <div className="facdoc-section-label facdoc-section-label--recs">
+              Recommendations ({recs.length})
+            </div>
+            {recs.length === 0 ? (
+              <div className="facdoc-empty-recs">
+                The model returned no actionable suggestions for this document.
+              </div>
+            ) : null}
+
+            {/* PENDING — open by default */}
+            <RecGroup title="Pending" status="PENDING" groups={groupByScreen(grouped.PENDING)}
+                      startCollapsed={false}
+                      cardProps={{ factorOptions, onAccept, onReject, busyRecs, justApplied }} />
+            {grouped.ACCEPTED.length > 0 && (
+              <RecGroup title="Accepted" status="ACCEPTED" groups={groupByScreen(grouped.ACCEPTED)}
+                        startCollapsed={Boolean(groupCollapseRef.current.ACCEPTED)}
+                        cardProps={{ factorOptions, onAccept, onReject, busyRecs, justApplied }} />
+            )}
+            {grouped.SUPERSEDED.length > 0 && (
+              <RecGroup title="Superseded" status="SUPERSEDED" groups={groupByScreen(grouped.SUPERSEDED)}
+                        startCollapsed
+                        cardProps={{ factorOptions, onAccept, onReject, busyRecs, justApplied }} />
+            )}
+            {grouped.REJECTED.length > 0 && (
+              <RecGroup title="Rejected" status="REJECTED" groups={groupByScreen(grouped.REJECTED)}
+                        startCollapsed={Boolean(groupCollapseRef.current.REJECTED)}
+                        cardProps={{ factorOptions, onAccept, onReject, busyRecs, justApplied }} />
+            )}
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }
 
 // Collapsible status group containing per-screen sub-groups.
+const REC_GROUP_TOGGLE_CLASS = {
+  PENDING:    'facdoc-group-toggle--pending',
+  ACCEPTED:   'facdoc-group-toggle--accepted',
+  REJECTED:   'facdoc-group-toggle--rejected',
+  SUPERSEDED: 'facdoc-group-toggle--superseded',
+};
+
 function RecGroup({ title, status, groups, startCollapsed = false, cardProps = {} }) {
   const [collapsed, setCollapsed] = useState(startCollapsed);
-  const STATUS_TONE = {
-    PENDING:   { color: '#00d4ff' },
-    ACCEPTED:  { color: '#23d18b' },
-    REJECTED:  { color: '#f87171' },
-    SUPERSEDED:{ color: 'rgba(148,163,184,0.60)' },
-  };
-  const tone = STATUS_TONE[status] || STATUS_TONE.PENDING;
+  const toneClass = REC_GROUP_TOGGLE_CLASS[status] || REC_GROUP_TOGGLE_CLASS.PENDING;
   const totalCount = groups.reduce((s, [, r]) => s + r.length, 0);
   if (totalCount === 0) return null;
   const { factorOptions, onAccept, onReject, busyRecs, justApplied } = cardProps;
   return (
-    <div style={{ marginBottom: 14 }}>
-      <div onClick={() => setCollapsed((v) => !v)}
-           style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-                    fontSize: 10, fontWeight: 800, letterSpacing: '.10em',
-                    textTransform: 'uppercase', color: tone.color, marginBottom: 6 }}>
+    <div className="facdoc-group">
+      <button type="button" aria-expanded={!collapsed}
+              className={`facdoc-disclosure facdoc-disclosure--group ${toneClass}`}
+              onClick={() => setCollapsed((v) => !v)}>
         <span>{collapsed ? '▸' : '▾'}</span>
         <span>{title}</span>
-        <span style={{ color: 'rgba(148,163,184,0.45)', fontWeight: 700 }}>· {totalCount}</span>
-      </div>
+        <span className="facdoc-group-count">· {totalCount}</span>
+      </button>
       {!collapsed && groups.map(([screen, list]) => (
-        <div key={screen} style={{ marginBottom: 8 }}>
-          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                         color: 'rgba(148,163,184,0.45)', marginBottom: 4 }}>
+        <div key={screen} className="facdoc-group-screen">
+          <div className="facdoc-screen-label">
             {screen}
           </div>
           {list.map((rec) => (
@@ -742,55 +641,42 @@ function RecGroup({ title, status, groups, startCollapsed = false, cardProps = {
 function DocStatusCell({ analysis, onOpen, onRetry, reanalysing }) {
   if (reanalysing) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ width: 10, height: 10, borderRadius: 5,
-                       border: '2px solid rgba(0,212,255,0.30)',
-                       borderTopColor: '#00d4ff', display: 'inline-block',
-                       animation: 'spin 0.9s linear infinite' }} />
-        <span style={{ fontSize: 11, color: '#00d4ff' }}>Analysing…</span>
+      <div className="facdoc-status-cell">
+        <span className="facdoc-spinner" />
+        <span className="facdoc-status-running">Analysing…</span>
       </div>
     );
   }
   if (!analysis) {
-    return <span style={{ fontSize: 11, color: 'rgba(148,163,184,0.35)' }}>—</span>;
+    return <span className="facdoc-status-none">—</span>;
   }
   if (analysis.status === 'RUNNING' || analysis.status === 'PENDING') {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ width: 10, height: 10, borderRadius: 5,
-                       border: '2px solid rgba(0,212,255,0.30)',
-                       borderTopColor: '#00d4ff', display: 'inline-block',
-                       animation: 'spin 0.9s linear infinite' }} />
-        <span style={{ fontSize: 11, color: '#00d4ff' }}>Analysing…</span>
+      <div className="facdoc-status-cell">
+        <span className="facdoc-spinner" />
+        <span className="facdoc-status-running">Analysing…</span>
       </div>
     );
   }
   if (analysis.status === 'SUCCEEDED') {
     return (
-      <span onClick={onOpen} style={{ cursor: 'pointer', fontSize: 11, fontWeight: 700,
-                                       color: '#23d18b' }}>
+      <button type="button" className="facdoc-linkbtn facdoc-status-ok" onClick={onOpen}>
         Succeeded — {analysis.recommendation_count ?? 0} recommendation{analysis.recommendation_count === 1 ? '' : 's'}
         {analysis.pending_count ? (
-          <span style={{ marginLeft: 6, fontSize: 10, color: 'rgba(35,209,139,0.55)' }}>
+          <span className="facdoc-status-pending-count">
             ({analysis.pending_count} pending)
           </span>
         ) : null}
-      </span>
+      </button>
     );
   }
   if (analysis.status === 'FAILED') {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#f87171' }}
-              title={analysis.error || ''}>
+      <div className="facdoc-status-cell">
+        <span className="facdoc-status-failed" title={analysis.error || ''}>
           Failed{analysis.error ? ` — ${String(analysis.error).slice(0, 70)}${analysis.error.length > 70 ? '…' : ''}` : ''}
         </span>
-        <button onClick={onRetry} style={{
-          appearance: 'none', border: '1px solid rgba(248,113,113,0.30)',
-          background: 'rgba(248,113,113,0.05)', color: '#f87171',
-          borderRadius: 6, padding: '2px 8px', fontSize: 10, fontWeight: 700,
-          cursor: 'pointer',
-        }}>Retry</button>
+        <Button size="sm" className="facdoc-btn--retry" onClick={onRetry}>Retry</Button>
       </div>
     );
   }
@@ -1024,87 +910,66 @@ export default function FacDocuments() {
 
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Documents" headerPill="FACULTATIVE">
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '8px 0 40px' }}>
-        <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.55)', marginBottom: 16 }}>
+      <div className="facdoc-page">
+        <div className="facdoc-intro">
           Upload placement slips, surveys, bordereaux, COPE reports and wordings.
           The AI runner extracts data and proposes edits on each downstream screen.
         </div>
 
         {/* Upload zone */}
         <div
+          className={`facdoc-dropzone${draggingOver ? ' facdoc-dropzone--active' : ''}`}
           onDragOver={(e) => { e.preventDefault(); setDraggingOver(true); }}
           onDragLeave={() => setDraggingOver(false)}
           onDrop={onDrop}
-          style={{
-            padding: 18, borderRadius: 14,
-            border: `2px dashed ${draggingOver ? '#00d4ff' : 'rgba(148,163,184,0.30)'}`,
-            background: draggingOver ? 'rgba(0,212,255,0.05)' : 'rgba(8,14,30,0.50)',
-            marginBottom: 18, transition: 'border-color .12s, background .12s',
-          }}
         >
           {!pendingFile ? (
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(226,232,240,0.85)' }}>
+            <div className="facdoc-dropzone-idle">
+              <div className="facdoc-dropzone-title">
                 Drag &amp; drop a document, or pick a file
               </div>
-              <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.45)', marginTop: 4 }}>
+              <div className="facdoc-dropzone-hint">
                 Up to 20 MB · PDFs preferred · the AI analyser uses the file kind you pick
               </div>
-              <input ref={fileInputRef} type="file" style={{ display: 'none' }}
+              <input ref={fileInputRef} type="file" className="facdoc-file-input"
                      onChange={(e) => onPickFile(e.target.files?.[0])} />
-              <button onClick={() => fileInputRef.current?.click()} style={{
-                marginTop: 10, appearance: 'none', border: '1px solid rgba(0,212,255,0.30)',
-                background: 'rgba(0,212,255,0.10)', color: '#00d4ff',
-                borderRadius: 8, padding: '8px 18px', fontSize: 12, fontWeight: 700,
-                cursor: 'pointer',
-              }}>Choose file</button>
+              <Button className="facdoc-btn--choose"
+                      onClick={() => fileInputRef.current?.click()}>Choose file</Button>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px 160px', gap: 12, alignItems: 'end' }}>
+            <div className="facdoc-upload-row">
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(226,232,240,0.85)' }}>{pendingFile.name}</div>
-                <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.45)', marginTop: 2 }}>
+                <div className="facdoc-upload-name">{pendingFile.name}</div>
+                <div className="facdoc-upload-meta">
                   {fmtBytes(pendingFile.size)} · {pendingFile.type || 'application/octet-stream'}
                 </div>
-                <span style={{ display: 'inline-block', marginTop: 8, fontSize: 11, color: '#f87171',
-                                cursor: 'pointer' }}
-                       onClick={() => setPendingFile(null)}>
+                <button type="button" className="facdoc-linkbtn facdoc-link-remove"
+                        onClick={() => setPendingFile(null)}>
                   remove
-                </span>
+                </button>
               </div>
               <div>
-                <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.45)', marginBottom: 4 }}>Document kind</div>
+                <div className="facdoc-kind-label">Document kind</div>
                 <select className="fi" value={pendingKind} onChange={(e) => setPendingKind(e.target.value)}>
                   {AI_KINDS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
                 </select>
               </div>
-              <button onClick={onUploadAndAnalyse} disabled={uploading} style={{
-                appearance: 'none', border: 'none',
-                background: 'linear-gradient(135deg, #23d18b, #0aa36a)', color: '#08140e',
-                borderRadius: 8, padding: '10px 16px', fontSize: 12, fontWeight: 800,
-                cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.5 : 1,
-              }}>{uploading ? 'Uploading…' : 'Upload & analyse'}</button>
+              <Button variant="primary" className="facdoc-btn--upload" disabled={uploading}
+                      onClick={onUploadAndAnalyse}>
+                {uploading ? 'Uploading…' : 'Upload & analyse'}
+              </Button>
             </div>
           )}
         </div>
 
         {/* Toast */}
         {toast && (
-          <div style={{
-            padding: '8px 14px', marginBottom: 12, fontSize: 12,
-            background: toast.kind === 'error' ? 'rgba(248,113,113,0.08)' : 'rgba(35,209,139,0.08)',
-            border: `1px solid ${toast.kind === 'error' ? 'rgba(248,113,113,0.30)' : 'rgba(35,209,139,0.30)'}`,
-            color: toast.kind === 'error' ? '#f87171' : '#23d18b',
-            borderRadius: 8,
-          }}>{toast.text}</div>
+          <div className={`facdoc-toast ${toast.kind === 'error' ? 'facdoc-toast--error' : 'facdoc-toast--ok'}`}>
+            {toast.text}
+          </div>
         )}
         {stalePollHint && (
-          <div style={{
-            padding: '8px 14px', marginBottom: 12, fontSize: 12,
-            background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.30)',
-            color: '#fbbf24', borderRadius: 8,
-          }}>
+          <div className="facdoc-toast facdoc-toast--warn">
             Analysis is still running — the model is taking longer than usual.
             Refresh in a minute to pick up the result.
           </div>
@@ -1112,20 +977,17 @@ export default function FacDocuments() {
 
         {/* Documents list */}
         {loading ? (
-          <div style={{ padding: 30, textAlign: 'center', color: 'rgba(148,163,184,0.40)', fontSize: 12 }}>Loading…</div>
+          <div className="facdoc-list-loading">Loading…</div>
         ) : docs.length === 0 ? (
-          <div style={{ padding: 30, textAlign: 'center', color: 'rgba(148,163,184,0.30)', fontSize: 12 }}>
+          <div className="facdoc-list-empty">
             No documents attached yet.
           </div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <Table>
             <thead>
-              <tr style={{ background: 'rgba(5,8,16,0.6)' }}>
+              <tr>
                 {['Filename', 'Kind', 'Size', 'Uploaded by', 'Status', 'Actions'].map((h) => (
-                  <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 9, fontWeight: 800,
-                                       letterSpacing: '.12em', textTransform: 'uppercase',
-                                       color: 'rgba(148,163,184,0.50)',
-                                       borderBottom: '1px solid rgba(255,255,255,0.08)' }}>{h}</th>
+                  <th key={h}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1135,53 +997,49 @@ export default function FacDocuments() {
                 const analysis = latestAnalysisByDoc.get(d.document_id);
                 const reanalysing = reAnalyseBusyRef.current === d.document_id;
                 return (
-                  <tr key={d.document_id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                    <td style={{ padding: '10px 12px' }}>
-                      <div style={{ fontWeight: 600, color: 'rgba(226,232,240,0.85)' }}>{d.file_name || '—'}</div>
-                      <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.40)', marginTop: 2 }}>
+                  <tr key={d.document_id}>
+                    <td>
+                      <div className="facdoc-doc-name">{d.file_name || '—'}</div>
+                      <div className="facdoc-doc-date">
                         {d.uploaded_at || d.created_at
                           ? new Date(d.uploaded_at || d.created_at).toLocaleString()
                           : '—'}
                       </div>
                     </td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700,
-                                     background: 'rgba(0,212,255,0.08)', border: '1px solid rgba(0,212,255,0.20)',
-                                     color: '#00d4ff' }}>
+                    <td>
+                      <Badge className="facdoc-badge--kind">
                         {AI_KIND_LABELS[kind] || kind}
-                      </span>
+                      </Badge>
                     </td>
-                    <td style={{ padding: '10px 12px', color: 'rgba(148,163,184,0.55)' }}>
+                    <td className="facdoc-td-dim">
                       {fmtBytes(d.byte_size || d.file_size)}
                     </td>
-                    <td style={{ padding: '10px 12px', fontSize: 11, color: 'rgba(148,163,184,0.65)' }}>
+                    <td className="facdoc-td-user">
                       {d.uploaded_by_user_id ? d.uploaded_by_user_id.slice(0, 8) : (d.uploaded_by || '—')}
                     </td>
-                    <td style={{ padding: '10px 12px' }}>
+                    <td>
                       <DocStatusCell analysis={analysis} onOpen={() => setOpenAnalysisId(analysis?.analysis_id || null)}
                                      onRetry={() => onReAnalyse(d.document_id, kind)} reanalysing={reanalysing} />
                     </td>
-                    <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                      <span style={{ cursor: analysis?.status === 'SUCCEEDED' ? 'pointer' : 'not-allowed',
-                                      color: analysis?.status === 'SUCCEEDED' ? '#00d4ff' : 'rgba(148,163,184,0.30)',
-                                      fontSize: 11, fontWeight: 600, marginRight: 12 }}
-                             onClick={() => analysis?.status === 'SUCCEEDED' && setOpenAnalysisId(analysis.analysis_id)}>
+                    <td className="facdoc-td-actions">
+                      <button type="button" className="facdoc-linkbtn facdoc-link-view"
+                              disabled={analysis?.status !== 'SUCCEEDED'}
+                              onClick={() => analysis?.status === 'SUCCEEDED' && setOpenAnalysisId(analysis.analysis_id)}>
                         View
-                      </span>
-                      <span style={{ cursor: reanalysing ? 'not-allowed' : 'pointer',
-                                      color: reanalysing ? 'rgba(148,163,184,0.30)' : '#fbbf24',
-                                      fontSize: 11, fontWeight: 600, marginRight: 12 }}
-                             onClick={() => !reanalysing && onReAnalyse(d.document_id, kind)}>
+                      </button>
+                      <button type="button" className="facdoc-linkbtn facdoc-link-reanalyse"
+                              disabled={reanalysing}
+                              onClick={() => !reanalysing && onReAnalyse(d.document_id, kind)}>
                         {reanalysing ? 'Re-analysing…' : 'Re-analyse'}
-                      </span>
-                      <span style={{ cursor: 'pointer', color: '#f87171', fontSize: 11, fontWeight: 600 }}
-                             onClick={() => handleDelete(d.document_id)}>Delete</span>
+                      </button>
+                      <button type="button" className="facdoc-linkbtn facdoc-link-delete"
+                              onClick={() => handleDelete(d.document_id)}>Delete</button>
                     </td>
                   </tr>
                 );
               })}
             </tbody>
-          </table>
+          </Table>
         )}
       </div>
 

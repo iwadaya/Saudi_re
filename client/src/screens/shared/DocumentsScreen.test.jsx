@@ -26,7 +26,7 @@ class FakeHttpError extends Error {
   constructor(status, body) { super(`HTTP ${status}`); this.status = status; this.body = body; }
 }
 
-vi.mock('../../api.js', () => ({ api: apiMock, HttpError: FakeHttpError }));
+vi.mock('../../api', () => ({ api: apiMock, HttpError: FakeHttpError }));
 vi.mock('../../api', () => ({ api: apiMock, HttpError: FakeHttpError }));
 
 // Stable toast — see MarketIntelligenceModal.test.jsx for the why.

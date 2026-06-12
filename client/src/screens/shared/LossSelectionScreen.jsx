@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import WizardLayout from '../../components/WizardLayout';
+import AsyncBoundary from '../../components/AsyncBoundary';
 import PctInput from '../../components/PctInput';
 import { useContractId } from '../../hooks/useContractId';
 import { useAppState } from '../../context/AppContext';
+import { useResource } from '../../hooks/useResource';
 import { api } from '../../api';
 import { fmtOrEm as fmt, toN as cn } from '../../utils/format';
 
@@ -14,7 +16,6 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
   const [losses, setLosses] = useState([]);
   const [threshold, setThreshold] = useState('');
   const [thresholdFocused, setThresholdFocused] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [dirty, setDirty] = useState(false);
   const [saveMsg, setSaveMsg] = useState(null);
   // Loss-selection staleness: true when large/cat losses were edited after the
@@ -87,23 +88,35 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
     }).catch(() => setInflData([]));
   }, [countryId]);
 
-  // Load losses + snapshot in parallel, then merge inflation factors from snapshot items
-  useEffect(() => {
-    if (!contractId) { setLoading(false); setLosses([]); return; }
-    setLoading(true);
-    setLosses([]);
-    setThreshold('');
-    setLoadings([]);
-    setInflMode('table');
-    setDirty(false);
+  // Load losses + snapshot in parallel (the screen's primary fetch), then
+  // merge inflation factors from snapshot items. Runs on useResource
+  // (Phase 2): in-flight requests abort when contract/loss-type/quote-mode
+  // change or the screen unmounts, and a loss-list failure surfaces through
+  // the AsyncBoundary below (alert + Retry) instead of silently rendering
+  // an empty table. Hydration happens inside the fetcher so the ordering
+  // matches the old hand-rolled effect exactly — reset, fetch, merge,
+  // setLosses — and a superseded request never hydrates.
+  const { loading, error: loadError, refetch } = useResource(
+    async (signal) => {
+      // Clean slate for the incoming contract/loss-type (and for Retry),
+      // exactly as the old effect reset before each load.
+      setLosses([]);
+      setThreshold('');
+      setLoadings([]);
+      setInflMode('table');
+      setDirty(false);
 
-    const fetchFn = lossType === 'cat' ? api.getCatLosses : api.getLargeLosses;
-    const qm = appState.quoteMode ? { quote: true } : undefined;
+      const fetchFn = lossType === 'cat' ? api.getCatLosses : api.getLargeLosses;
+      const qm = appState.quoteMode ? { quote: true } : undefined;
 
-    Promise.all([
-      fetchFn(contractId, qm).catch(() => ({ losses: [] })),
-      api.getLossSelectionLatest(contractId, lossType, qm).catch(() => null),
-    ]).then(([lossData, snapData]) => {
+      // The loss list must succeed — its failure now propagates to the
+      // boundary. A snapshot miss stays non-fatal exactly as before:
+      // null just means there are no saved assumptions to restore.
+      const [lossData, snapData] = await Promise.all([
+        fetchFn(contractId, { ...qm, signal }),
+        api.getLossSelectionLatest(contractId, lossType, { ...qm, signal }).catch(() => null),
+      ]);
+      if (signal.aborted) return null; // superseded/unmounted — don't hydrate
       // ── Restore assumptions from snapshot ──────────────────────
       const snap = snapData?.snapshot;
       const snapItems = Array.isArray(snapData?.items) ? snapData.items : [];
@@ -176,8 +189,11 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
       });
 
       setLosses(parsed);
-    }).catch(() => {}).finally(() => setLoading(false));
-  }, [appState.quoteMode, contractId, lossType]);
+      return parsed;
+    },
+    [appState.quoteMode, contractId, lossType],
+    { enabled: !!contractId, reportLabel: 'loss selection' },
+  );
 
   // Load premium by year for growth modal (cat only). Three data
   // sources in priority order — the right one depends on the
@@ -421,7 +437,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
               Losses have been added or edited since the last selection was saved — review and re-save your selection.
             </div>
           )}
-          {loading ? <div className="ls-loading">Loading...</div> : (
+          <AsyncBoundary loading={loading} error={loadError} onRetry={refetch} label="loss selection">
             <>
               {/* KPI Strip */}
               <div className="ls-kpis">
@@ -771,7 +787,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
                 </div>
               )}
             </>
-          )}
+          </AsyncBoundary>
         </div>
   );
 

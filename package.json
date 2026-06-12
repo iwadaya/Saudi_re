@@ -13,6 +13,10 @@
     "install:all": "npm install && npm install --prefix client && npm install --prefix server",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
+    "lint:screens": "eslint client/src/screens --max-warnings=0",
+    "lint:a11y": "eslint --config eslint.a11y.config.js client/src/screens client/src/components",
+    "typecheck": "npm run typecheck --prefix client",
+    "budget:frontend": "node scripts/frontend-budget.mjs",
     "test": "npm run test:server && npm run test:client",
     "test:server": "vitest run --config server/vitest.config.js",
     "test:client": "vitest run --config client/vitest.config.js",
@@ -26,7 +30,7 @@
     "cluster:stop": "pm2 stop ecosystem.config.cjs",
     "cluster:status": "pm2 status",
     "cluster:logs": "pm2 logs universe",
-    "verify": "npm run lint && npm test"
+    "verify": "npm run lint && npm run typecheck && npm run budget:frontend && npm test"
   },
   "engines": {
     "node": ">=20.18.0"
@@ -39,6 +43,7 @@
     "@vitest/ui": "^4.1.6",
     "concurrently": "^9.1.0",
     "eslint": "^9.17.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^5.1.0",
     "globals": "^15.14.0",

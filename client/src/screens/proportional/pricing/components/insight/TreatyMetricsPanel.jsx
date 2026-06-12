@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { api } from '../../../../../api.js';
+import { api } from '../../../../../api';
 import { cn, MetricBars, ViewTabs } from './_shared.jsx';
 
 export function TreatyMetricsPanel({ shareGrid, contract, td, epi, limit, yearly, contractId }) {

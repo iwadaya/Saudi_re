@@ -95,6 +95,7 @@ export function isAtLeast(level) { return getHierarchyLevel() <= level; }
 export function canAccessApprovals() { return APPROVALS_ROLES.has(getSession()?.roleCode); }
 export function canOverrideBelow() { return getSession()?.canOverrideBelow === true; }
 
+/** @returns {Record<string, string>} auth headers for every API request */
 export function getAuthHeaders() {
   const s = getSession();
   if (!s) return { 'x-user-role': 'TUW', 'x-user-name': 'User', 'x-user-id': '' };

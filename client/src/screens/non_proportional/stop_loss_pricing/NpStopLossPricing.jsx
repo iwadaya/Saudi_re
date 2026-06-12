@@ -1,3 +1,4 @@
+// @ts-check
 // src/screens/non_proportional/stop_loss_pricing/NpStopLossPricing.jsx
 //
 // Live pricing screen for Stop Loss treaties — aggregate-loss covers
@@ -36,12 +37,19 @@ const SLICE_KEY = 'npStopLossInputs';
 
 const DEFAULT_YEARS = 10;
 
+/**
+ * @typedef {{ attachmentLossRatio?: unknown, limitLossRatio?: unknown, epi?: unknown }} LayerCoverInput
+ * @typedef {{ year: number, aggregate: unknown }} YearAggregateRow
+ * @typedef {ReturnType<typeof priceStopLoss>} StopLossResult
+ * @typedef {Parameters<typeof priceStopLoss>[0]} StopLossArgs
+ */
+
 const DEFAULT_INPUTS = {
   // Layer cover (attach LR / limit LR / EPI per layer) lives in
   // `layers` and is owned by the Structure page; this screen only
   // edits the engine inputs below.
-  layers: [],
-  yearlyAggregates: [], // [{year, aggregate}] — raw losses ($) per year
+  layers: /** @type {LayerCoverInput[]} */ ([]),
+  yearlyAggregates: /** @type {YearAggregateRow[]} */ ([]), // [{year, aggregate}] — raw losses ($) per year
   freqLambda: '',
   severityType: 'lognormal',
   sevMean: '',
@@ -60,14 +68,16 @@ const DEFAULT_INPUTS = {
 // computeOnLevelFactors lives in shared/onLevel.js so the client and
 // any future server-side validation work off the same arithmetic.
 
+/** @param {unknown} v @returns {number | null} */
 const toN = (v) => {
   if (v === '' || v == null) return null;
   const n = parseFloat(String(v).replace(/[^0-9.\-eE]/g, ''));
   return Number.isFinite(n) ? n : null;
 };
 
+/** @param {unknown} v @returns {string} */
 const fmtMoney = (v) => {
-  if (!Number.isFinite(v)) return '—';
+  if (typeof v !== 'number' || !Number.isFinite(v)) return '—';
   const abs = Math.abs(v);
   if (abs >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
   if (abs >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
@@ -75,8 +85,10 @@ const fmtMoney = (v) => {
   return v.toFixed(0);
 };
 
-const fmtMoneyFull = (v) => (Number.isFinite(v) ? Math.round(v).toLocaleString('en-US') : '—');
-const fmtPct = (v, dp = 3) => (Number.isFinite(v) ? `${(v * 100).toFixed(dp)}%` : '—');
+/** @param {unknown} v @returns {string} */
+const fmtMoneyFull = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v).toLocaleString('en-US') : '—');
+/** @param {unknown} v @param {number} [dp] @returns {string} */
+const fmtPct = (v, dp = 3) => (typeof v === 'number' && Number.isFinite(v) ? `${(v * 100).toFixed(dp)}%` : '—');
 
 // ── Styling primitives — match the dark/glass look used elsewhere ───────────
 
@@ -91,7 +103,7 @@ const COLORS = {
   rowOdd: '#0a1125',
 };
 
-const styles = {
+const styles = /** @satisfies {Record<string, import('react').CSSProperties | ((color: string) => import('react').CSSProperties)>} */ ({
   shell: { maxWidth: 1180, margin: '0 auto', padding: '8px 0 48px' },
   section: {
     background: 'rgba(255,255,255,0.02)',
@@ -207,9 +219,10 @@ const styles = {
     color: 'rgba(148,163,184,0.55)',
     marginTop: 4,
   },
-};
+});
 
 // Field row helper — label above a single input/select control.
+/** @param {{ label: import('react').ReactNode, hint?: import('react').ReactNode, children?: import('react').ReactNode, span?: number }} props */
 function Field({ label, hint, children, span = 1 }) {
   return (
     <div style={{ gridColumn: `span ${span}` }}>
@@ -232,13 +245,13 @@ export default function NpStopLossPricing() {
     [appState.quoteMode],
   );
   const inputs = useMemo(
-    () => ({ ...DEFAULT_INPUTS, ...(appState[SLICE_KEY] || {}) }),
+    () => /** @type {typeof DEFAULT_INPUTS} */ ({ ...DEFAULT_INPUTS, ...(appState[SLICE_KEY] || {}) }),
     [appState],
   );
 
   // markDirtyRef + inputsRef declared up here so setInput can close
   // over them safely. inputsRef.current is kept in sync below.
-  const markDirtyRef = useRef(null);
+  const markDirtyRef = useRef(/** @type {null | (() => void)} */ (null));
   const inputsRef = useRef(inputs);
   inputsRef.current = inputs;
   // Live snapshot of the raw slice (without DEFAULT_INPUTS merged in)
@@ -264,7 +277,7 @@ export default function NpStopLossPricing() {
 
   const yearlyRows = useMemo(() => {
     const saved = inputs.yearlyAggregates || [];
-    const savedMap = new Map(saved.map((r) => [r.year, r.aggregate]));
+    const savedMap = new Map(saved.map((r) => /** @type {[number, unknown]} */ ([r.year, r.aggregate])));
     return yearRange.map((year) => ({
       year,
       aggregate: savedMap.has(year) ? savedMap.get(year) : '',
@@ -272,7 +285,7 @@ export default function NpStopLossPricing() {
   }, [yearRange, inputs.yearlyAggregates]);
 
   const setInput = useCallback(
-    (patch) => {
+    (/** @type {Record<string, unknown>} */ patch) => {
       // The Pricing screen only edits engine inputs (frequency,
       // severity, MC, weights, loading, yearly aggregates). Layer
       // cover fields (attachmentLossRatio / limitLossRatio / epi)
@@ -293,7 +306,9 @@ export default function NpStopLossPricing() {
       try {
         const rows = await api.getNpEgnpiYear(contractId, apiOpts);
         if (cancelled) return;
-        const list = Array.isArray(rows) ? rows : (rows?.rows || rows?.years || []);
+        // Legacy server builds wrapped the rows in {rows} / {years}.
+        const loose = /** @type {{ rows?: Array<Record<string, unknown>>, years?: Array<Record<string, unknown>> }} */ (/** @type {unknown} */ (rows));
+        const list = Array.isArray(rows) ? rows : (loose?.rows || loose?.years || []);
         const premiums = new Map();
         const rateChanges = new Map();
         for (const r of list) {
@@ -315,15 +330,15 @@ export default function NpStopLossPricing() {
 
   // ── Server persistence via useScreenSave ──
   const loadStopLoss = useCallback(
-    (id) => api.getNpStopLossPricing(id, apiOpts),
+    (/** @type {string} */ id) => api.getNpStopLossPricing(id, apiOpts),
     [apiOpts],
   );
   const persist = useCallback(
-    (id, payload) => api.saveNpStopLossPricing(id, payload, apiOpts),
+    (/** @type {string} */ id, /** @type {unknown} */ payload) => api.saveNpStopLossPricing(id, payload, apiOpts),
     [apiOpts],
   );
   const onLoaded = useCallback(
-    (data) => {
+    (/** @type {Partial<import('../../../types/pricing').StopLossPricingBundle> | null | undefined} */ data) => {
       // Server returns { inputs, outputs, updated_at }. Two concerns:
       //
       //   1. The Structure page writes layer fields into this same
@@ -346,7 +361,7 @@ export default function NpStopLossPricing() {
         }];
       }
       const current = sliceRef.current || {};
-      const merged = { ...DEFAULT_INPUTS, ...incoming };
+      const merged = /** @type {Record<string, unknown>} */ ({ ...DEFAULT_INPUTS, ...incoming });
       for (const k of Object.keys(current)) {
         const v = current[k];
         const hasValue = v !== undefined
@@ -361,7 +376,7 @@ export default function NpStopLossPricing() {
   );
 
   const setYearAggregate = useCallback(
-    (year, raw) => {
+    (/** @type {number} */ year, /** @type {string} */ raw) => {
       const next = yearlyRows.map((r) =>
         r.year === year ? { year, aggregate: raw } : { year: r.year, aggregate: r.aggregate },
       );
@@ -376,7 +391,7 @@ export default function NpStopLossPricing() {
   // values than remaining years is truncated; single-cell pastes still
   // strip non-numeric characters (so "1,250,000" pastes as 1250000).
   const handleAggregatePaste = useCallback(
-    (e, startIdx) => {
+    (/** @type {import('react').ClipboardEvent<HTMLInputElement>} */ e, /** @type {number} */ startIdx) => {
       const text = e.clipboardData?.getData('text/plain');
       if (!text) return;
       // Excel column copy uses CRLF or LF between cells; we tolerate
@@ -456,7 +471,7 @@ export default function NpStopLossPricing() {
   //    Per-layer args extend this with attach / limit / epi and a
   //    layer-specific normalised yearlyAggregates array.
   const sharedEngineArgs = useMemo(() => {
-    const args = {
+    const args = /** @type {StopLossArgs} */ ({
       loading: toN(inputs.loading) ?? 0,
       weights: {
         burningCost: toN(inputs.weightBurningCost) ?? 0,
@@ -465,7 +480,7 @@ export default function NpStopLossPricing() {
       },
       useMonteCarlo: !!inputs.useMonteCarlo,
       monteCarlo: { nTrials: toN(inputs.mcTrials) ?? 10_000, seed: toN(inputs.mcSeed) ?? 1 },
-    };
+    });
     const lambda = toN(inputs.freqLambda);
     if (lambda !== null) {
       args.frequency = { lambda };
@@ -488,7 +503,7 @@ export default function NpStopLossPricing() {
   // the right currency space when EPI differs per layer.
   const layerEngineArgs = useMemo(() => {
     return layers.map((l) => {
-      const args = { ...sharedEngineArgs };
+      const args = /** @type {StopLossArgs} */ ({ ...sharedEngineArgs });
       args.attachmentLossRatio = toN(l.attachmentLossRatio);
       args.limitLossRatio = toN(l.limitLossRatio);
       args.epi = toN(l.epi);
@@ -496,7 +511,7 @@ export default function NpStopLossPricing() {
       if (epi != null && epi > 0) {
         const usable = burningCostRows.filter((r) => r.lossRatio != null);
         if (usable.length > 0) {
-          args.yearlyAggregates = usable.map((r) => ({ year: r.year, aggregate: r.lossRatio * epi }));
+          args.yearlyAggregates = usable.map((r) => ({ year: r.year, aggregate: (r.lossRatio ?? 0) * epi }));
         }
       }
       return args;
@@ -556,7 +571,9 @@ export default function NpStopLossPricing() {
   }), [result, layerResults]);
 
   const currentState = useCallback(
-    () => ({ inputs: inputsRef.current, outputs: outputsSnapshot }),
+    () => /** @type {Partial<import('../../../types/pricing').StopLossPricingBundle>} */ (
+      { inputs: inputsRef.current, outputs: outputsSnapshot }
+    ),
     [outputsSnapshot],
   );
 
@@ -567,6 +584,7 @@ export default function NpStopLossPricing() {
     currentState,
     onLoaded,
     errorLabel: 'Stop loss pricing',
+    reloadDeps: [apiOpts],
   });
   markDirtyRef.current = markDirty;
 
@@ -700,7 +718,7 @@ export default function NpStopLossPricing() {
                       <td style={styles.td}>
                         <input
                           style={{ ...styles.input, maxWidth: 220, margin: '0 auto', textAlign: 'center' }}
-                          value={r.aggregateRaw}
+                          value={String(r.aggregateRaw ?? '')}
                           onChange={(e) => setYearAggregate(r.year, e.target.value)}
                           onPaste={(e) => handleAggregatePaste(e, i)}
                           placeholder="0"
@@ -1000,6 +1018,7 @@ export default function NpStopLossPricing() {
 
 // ── Per-method summary blocks ───────────────────────────────────────────────
 
+/** @param {{ result: import('../../../logic/stopLossPricing').BurningCostResult | null }} props */
 function BurningCostSummary({ result }) {
   if (!result || result.nYears === 0) {
     return (
@@ -1029,6 +1048,7 @@ function BurningCostSummary({ result }) {
   );
 }
 
+/** @param {{ result: import('../../../logic/stopLossPricing').ExposureRatingResult | null, limit: number }} props */
 function ExposureRatingSummary({ result, limit }) {
   if (!result) {
     return (
@@ -1071,6 +1091,7 @@ function ExposureRatingSummary({ result, limit }) {
   );
 }
 
+/** @param {{ result: import('../../../logic/stopLossPricing').MonteCarloResult | null, limit: number }} props */
 function MonteCarloSummary({ result, limit }) {
   if (!result) {
     return (

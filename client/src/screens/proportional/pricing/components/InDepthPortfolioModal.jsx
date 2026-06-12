@@ -5,6 +5,8 @@
 // Tab 3: Snapshot history trends
 import { useState, useMemo } from 'react';
 import { COMPONENT_ROWS } from './propPricingConstants';
+import { Badge, Callout, Modal } from '../../../../components/ui';
+import './InDepthPortfolioModal.css';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const rawNum   = v => { if (v == null || v === '') return null; const n = Number(String(v).replace(/,/g,'').replace(/%/g,'')); return Number.isFinite(n) ? n : null; };
@@ -12,17 +14,20 @@ const toDisplay = v => { const n = rawNum(v); if (n == null) return null; return
 const fmt1    = v => v != null ? v.toFixed(2) + '%' : '—';
 const diff    = (a, b) => { if (a == null || b == null) return null; return a - b; };
 const diffFmt = v => { if (v == null) return '—'; return (v >= 0 ? '+' : '') + v.toFixed(2) + '%'; };
+// Color value for SVG fills (GapBar); diffClass mirrors it for text via CSS.
 const diffColor = v => { if (v == null) return 'rgba(255,255,255,0.35)'; return v > 2 ? '#f87171' : v > 0 ? '#fbbf24' : v < -2 ? '#4ade80' : '#60a5fa'; };
+const diffClass = v => { if (v == null) return 'idc-dim'; return v > 2 ? 'idc-red' : v > 0 ? 'idc-amber' : v < -2 ? 'idc-green' : 'idc-blue'; };
+const cx = (...xs) => xs.filter(Boolean).join(' ');
 
 // Which components are "loss" (higher = worse) vs "margin" (higher = better)
 const IS_COST = new Set(['Attritional Loss Ratio','Large Loss Loading','Cat Loss Loading','Commissions','Brokerage','Taxes','Maximum Commissions (Reinsurer)']);
 
 const COLS = [
-  { key: 'actuarial', label: 'Actuarial\n(Engine)',  color: '#60a5fa', short: 'Act.Eng.' },
-  { key: 'actual',    label: 'Actual\nStats',        color: '#4ade80', short: 'Actual'   },
-  { key: 'exposure',  label: 'Exposure\nRating',     color: '#a78bfa', short: 'Exposure' },
-  { key: 'market',    label: 'Market\nAverage',      color: '#fbbf24', short: 'Market'   },
-  { key: 'uw',        label: 'UW\nOverride',         color: '#00e8b8', short: 'UW'       },
+  { key: 'actuarial', label: 'Actuarial\n(Engine)',  color: '#60a5fa', cls: 'idc-blue',   short: 'Act.Eng.' },
+  { key: 'actual',    label: 'Actual\nStats',        color: '#4ade80', cls: 'idc-green',  short: 'Actual'   },
+  { key: 'exposure',  label: 'Exposure\nRating',     color: '#a78bfa', cls: 'idc-violet', short: 'Exposure' },
+  { key: 'market',    label: 'Market\nAverage',      color: '#fbbf24', cls: 'idc-amber',  short: 'Market'   },
+  { key: 'uw',        label: 'UW\nOverride',         color: '#00e8b8', cls: 'idc-teal',   short: 'UW'       },
 ];
 
 const TABS = [
@@ -50,7 +55,7 @@ function GroupedBarChart({ rows, highlight }) {
   const yTicks = 5;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="crisp-grid" style={{ width: '100%', height: 'auto', fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums' }}>
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="crisp-grid indepth-chart">
       {Array.from({ length: yTicks + 1 }, (_, i) => {
         const v = (maxV / yTicks) * i;
         const y = PAD.t + yScale(v);
@@ -83,7 +88,7 @@ function GroupedBarChart({ rows, highlight }) {
             })}
             <text x={gX + (COLS.length * (barW + barGap)) / 2} y={H - PAD.b + 16}
               textAnchor="middle" fontSize={10} fill={isHL ? '#fff' : 'rgba(255,255,255,0.70)'}
-              style={{ fontWeight: isHL ? 700 : 500 }}>
+              fontWeight={isHL ? 700 : 500}>
               {row.name.replace(' Loss Ratio', ' LR').replace(' Loading', ' Ldg').replace(' Commissions (Reinsurer)', ' Comm')}
             </text>
           </g>
@@ -101,7 +106,7 @@ function GapBar({ value, maxAbs, color }) {
   const w = scale(value || 0);
   const isPos = value >= 0;
   return (
-    <svg width={W} height={16} style={{ overflow: 'visible' }}>
+    <svg width={W} height={16} className="indepth-gapbar">
       <line x1={center} y1={0} x2={center} y2={16} stroke="rgba(255,255,255,0.30)" strokeWidth={1} shapeRendering="crispEdges" vectorEffect="non-scaling-stroke" />
       {value !== 0 && value != null && (
         <rect
@@ -157,7 +162,7 @@ export default function InDepthPortfolioModal({ getC, snapshots, onClose }) {
     return { rows: scored, overall };
   }, [rowData]);
 
-  const scoreColor = s => s >= 80 ? '#4ade80' : s >= 60 ? '#fbbf24' : '#f87171';
+  const scoreGrade = s => s >= 80 ? 'good' : s >= 60 ? 'warn' : 'bad';
 
   const maxGap = useMemo(() => {
     const all = gapData.flatMap(r => [Math.abs(r.vsActuarial||0), Math.abs(r.vsActual||0), Math.abs(r.vsMarket||0)]);
@@ -178,304 +183,278 @@ export default function InDepthPortfolioModal({ getC, snapshots, onClose }) {
     });
   }, [snapshots]);
 
-  const S = { // shared styles
-    card:  { padding: '14px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', marginBottom: 14 },
-    title: { fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 },
-    th:    { padding: '8px 12px', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em',
-             borderBottom: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap', background: 'rgba(6,12,24,0.95)', position: 'sticky', top: 0 },
-    td:    { padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: 12, verticalAlign: 'middle' },
-  };
-
   return (
-    <div className="modal-backdrop" style={{ position:'fixed', inset:0, background:'rgba(2,6,18,0.9)', backdropFilter:'blur(8px)',
-      zIndex:4200, display:'flex', alignItems:'center', justifyContent:'center' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="glass" role="dialog" aria-modal="true" style={{ width:'calc(100vw - 20px)', maxWidth:1100, height:'calc(100vh - 24px)',
-        background:'linear-gradient(160deg,#0c1628,#060e1c)',
-        border:'1px solid rgba(96,165,250,0.22)', borderRadius:16,
-        boxShadow:'0 32px 80px rgba(0,0,0,0.75)', display:'flex', flexDirection:'column', overflow:'hidden' }}>
-
-        {/* ── Header ── */}
-        <div style={{ padding:'14px 20px', borderBottom:'1px solid rgba(255,255,255,0.08)', display:'flex', alignItems:'center', gap:14, flexShrink:0 }}>
-          <div style={{ flex:1 }}>
-            <div style={{ fontWeight:800, fontSize:15, color:'#fff' }}>🔬 In-Depth Portfolio Analysis</div>
-            <div style={{ fontSize:11, color:'rgba(255,255,255,0.35)', marginTop:2 }}>
-              Actuarial engine · Actual stats · Exposure rating · Market average · UW override — side by side
-            </div>
-          </div>
-          {/* Overall score */}
-          <div style={{ textAlign:'center', padding:'6px 14px', borderRadius:8, background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }}>
-            <div style={{ fontSize:9, color:'rgba(255,255,255,0.4)', textTransform:'uppercase', marginBottom:2 }}>Actuarial Adherence</div>
-            <div style={{ fontSize:22, fontWeight:900, color: scoreColor(scores.overall) }}>{scores.overall}/100</div>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close" style={{ background:'none', border:'none', color:'rgba(255,255,255,0.4)', fontSize:20, cursor:'pointer', padding:'2px 8px' }}>✕</button>
-        </div>
-
-        {/* ── Tabs ── */}
-        <div style={{ display:'flex', borderBottom:'1px solid rgba(255,255,255,0.08)', flexShrink:0 }}>
-          {TABS.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              style={{ padding:'10px 20px', fontSize:12, fontWeight:700, border:'none', cursor:'pointer',
-                background: tab===t.key ? 'rgba(96,165,250,0.10)' : 'transparent',
-                color: tab===t.key ? '#60a5fa' : 'rgba(255,255,255,0.45)',
-                borderBottom: tab===t.key ? '2px solid #60a5fa' : '2px solid transparent',
-                letterSpacing:'0.04em', textTransform:'uppercase' }}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* ── Content ── */}
-        <div style={{ flex:1, overflow:'auto', padding:'16px 20px' }}>
-
-          {/* ═══ TAB 1: VISUAL COMPARISON ═══ */}
-          {tab === 'compare' && (<>
-            {/* Legend */}
-            <div style={{ display:'flex', gap:14, marginBottom:12, flexWrap:'wrap' }}>
-              {COLS.map(c => (
-                <div key={c.key} style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'rgba(255,255,255,0.6)' }}>
-                  <div style={{ width:10, height:10, borderRadius:2, background:c.color }} />{c.short}
-                </div>
-              ))}
-            </div>
-
-            <div style={S.card}>
-              <div style={S.title}>Component Comparison — All Columns (click row to highlight)</div>
-              <GroupedBarChart rows={rowData} highlight={highlight} />
-            </div>
-
-            {/* Numeric comparison table */}
-            <div style={S.card}>
-              <div style={S.title}>Numeric Comparison Table</div>
-              <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                <thead>
-                  <tr>
-                    <th style={{...S.th, textAlign:'left', width:200}}>Component</th>
-                    {COLS.map(c => <th key={c.key} style={{...S.th, textAlign:'right', color:c.color}}>{c.short}</th>)}
-                    <th style={{...S.th, textAlign:'right'}}>UW vs Actuarial</th>
-                    <th style={{...S.th, textAlign:'right'}}>UW vs Market</th>
-                    <th style={{...S.th, textAlign:'right'}}>Signal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rowData.map((r, i) => {
-                    const uwVal  = r.uw ?? r.actuarial;
-                    const vsAct  = diff(uwVal, r.actuarial);
-                    const vsMkt  = diff(uwVal, r.market);
-                    const isCost = IS_COST.has(r.name);
-                    // Signal: for cost rows, UW > actuarial is aggressive (red); for Result, UW > actuarial is good (green)
-                    const signalVal = isCost ? -(vsAct ?? 0) : (vsAct ?? 0);
-                    const signal = signalVal > 2 ? { t:'✓ Conservative', c:'#4ade80' }
-                      : signalVal < -2 ? { t:'⚠ Aggressive', c:'#f87171' }
-                      : { t:'≈ In Line', c:'#60a5fa' };
-                    return (
-                      <tr key={i}
-                        onClick={() => setHL(highlight === r.name ? null : r.name)}
-                        style={{ background: highlight===r.name ? 'rgba(96,165,250,0.07)' : i%2===0 ? 'transparent' : 'rgba(255,255,255,0.02)', cursor:'pointer' }}>
-                        <td style={{...S.td, fontWeight:600, color: highlight===r.name ? '#60a5fa' : 'rgba(255,255,255,0.85)'}}>{r.name}</td>
-                        {COLS.map(c => (
-                          <td key={c.key} style={{...S.td, textAlign:'right', color: r[c.key] != null ? c.color : 'rgba(255,255,255,0.2)', fontWeight: c.key==='uw'?700:400}}>
-                            {r[c.key] != null ? fmt1(r[c.key]) : '—'}
-                          </td>
-                        ))}
-                        <td style={{...S.td, textAlign:'right', color:diffColor(isCost ? -(vsAct??0) : (vsAct??0)), fontWeight:600}}>{diffFmt(vsAct)}</td>
-                        <td style={{...S.td, textAlign:'right', color:diffColor(isCost ? -(vsMkt??0) : (vsMkt??0)), fontWeight:600}}>{diffFmt(vsMkt)}</td>
-                        <td style={{...S.td, textAlign:'right'}}>
-                          <span style={{ fontSize:10, fontWeight:700, color:signal.c, background:`${signal.c}18`, padding:'2px 8px', borderRadius:10 }}>{signal.t}</span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </>)}
-
-          {/* ═══ TAB 2: GAP ANALYSIS ═══ */}
-          {tab === 'gaps' && (<>
-            <div style={{ ...S.card }}>
-              <div style={S.title}>UW Override vs Actuarial, Actual Stats & Market Average</div>
-              <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', marginBottom:14 }}>
-                Bars show how far the UW override deviates from each benchmark. <span style={{color:'#4ade80'}}>Green = conservative</span>, <span style={{color:'#f87171'}}>Red = aggressive</span>.
-              </div>
-              <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                <thead>
-                  <tr>
-                    <th style={{...S.th, textAlign:'left', width:200}}>Component</th>
-                    <th style={{...S.th, textAlign:'right'}}>UW</th>
-                    <th style={{...S.th, textAlign:'right'}}>Actuarial</th>
-                    <th style={{...S.th}}>vs Actuarial</th>
-                    <th style={{...S.th, textAlign:'right'}}>Actual Stats</th>
-                    <th style={{...S.th}}>vs Actual</th>
-                    <th style={{...S.th, textAlign:'right'}}>Market Avg</th>
-                    <th style={{...S.th}}>vs Market</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {gapData.map((r, i) => {
-                    const sign = r.isCost ? -1 : 1;
-                    return (
-                      <tr key={i} style={{ background: i%2===0?'transparent':'rgba(255,255,255,0.02)' }}>
-                        <td style={{...S.td, fontWeight:600, color:'rgba(255,255,255,0.85)'}}>{r.name}</td>
-                        <td style={{...S.td, textAlign:'right', color:'#00e8b8', fontWeight:700}}>{r.uw != null ? fmt1(r.uw) : '—'}</td>
-                        <td style={{...S.td, textAlign:'right', color:'#60a5fa'}}>{r.actuarial != null ? fmt1(r.actuarial) : '—'}</td>
-                        <td style={{...S.td}}>
-                          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                            <GapBar value={r.vsActuarial} maxAbs={maxGap} color={diffColor(sign*(r.vsActuarial??0))} />
-                            <span style={{ fontSize:11, fontWeight:600, color:diffColor(sign*(r.vsActuarial??0)), width:52, textAlign:'right' }}>{diffFmt(r.vsActuarial)}</span>
-                          </div>
-                        </td>
-                        <td style={{...S.td, textAlign:'right', color:'#4ade80'}}>{r.actual != null ? fmt1(r.actual) : '—'}</td>
-                        <td style={{...S.td}}>
-                          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                            <GapBar value={r.vsActual} maxAbs={maxGap} color={diffColor(sign*(r.vsActual??0))} />
-                            <span style={{ fontSize:11, fontWeight:600, color:diffColor(sign*(r.vsActual??0)), width:52, textAlign:'right' }}>{diffFmt(r.vsActual)}</span>
-                          </div>
-                        </td>
-                        <td style={{...S.td, textAlign:'right', color:'#fbbf24'}}>{r.market != null ? fmt1(r.market) : '—'}</td>
-                        <td style={{...S.td}}>
-                          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                            <GapBar value={r.vsMarket} maxAbs={maxGap} color={diffColor(sign*(r.vsMarket??0))} />
-                            <span style={{ fontSize:11, fontWeight:600, color:diffColor(sign*(r.vsMarket??0)), width:52, textAlign:'right' }}>{diffFmt(r.vsMarket)}</span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Insight cards */}
-            <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-              {gapData.filter(r => r.vsActuarial != null && Math.abs(r.vsActuarial) > 2).map((r, i) => {
-                const sign = r.isCost ? -1 : 1;
-                const isAggressive = sign * r.vsActuarial < -2;
-                return (
-                  <div key={i} style={{ flex:'1 1 200px', padding:'10px 14px', borderRadius:9,
-                    background: isAggressive ? 'rgba(248,113,113,0.08)' : 'rgba(74,222,128,0.08)',
-                    border: `1px solid ${isAggressive ? 'rgba(248,113,113,0.25)' : 'rgba(74,222,128,0.25)'}` }}>
-                    <div style={{ fontSize:10, fontWeight:700, color: isAggressive?'#f87171':'#4ade80', textTransform:'uppercase', marginBottom:4 }}>
-                      {isAggressive ? '⚠ Aggressive' : '✓ Conservative'}
-                    </div>
-                    <div style={{ fontSize:12, fontWeight:700, color:'rgba(255,255,255,0.85)', marginBottom:2 }}>{r.name}</div>
-                    <div style={{ fontSize:11, color:'rgba(255,255,255,0.5)' }}>
-                      UW: {fmt1(r.uw??0)} vs Actuarial: {fmt1(r.actuarial??0)} ({diffFmt(r.vsActuarial)})
-                    </div>
-                  </div>
-                );
-              })}
-              {gapData.every(r => r.vsActuarial == null || Math.abs(r.vsActuarial) <= 2) && (
-                <div style={{ fontSize:12, color:'#4ade80', padding:'10px 14px', background:'rgba(74,222,128,0.06)', borderRadius:9, border:'1px solid rgba(74,222,128,0.2)' }}>
-                  ✓ All UW overrides are within 2% of actuarial pricing — no material deviations.
-                </div>
-              )}
-            </div>
-          </>)}
-
-          {/* ═══ TAB 3: ADEQUACY SCORE ═══ */}
-          {tab === 'radar' && (<>
-            <div style={{ ...S.card }}>
-              <div style={S.title}>Actuarial Adherence by Component</div>
-              <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', marginBottom:16 }}>
-                Score 0–100: how closely the UW override tracks the actuarial engine. 100 = exact match. Penalty increases with deviation size.
-              </div>
-              <div style={{ display:'flex', flexWrap:'wrap', gap:12, marginBottom:16 }}>
-                <div style={{ padding:'14px 20px', borderRadius:10, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.1)', textAlign:'center', minWidth:130 }}>
-                  <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', textTransform:'uppercase', marginBottom:4 }}>Overall Score</div>
-                  <div style={{ fontSize:36, fontWeight:900, color:scoreColor(scores.overall) }}>{scores.overall}</div>
-                  <div style={{ fontSize:10, color:'rgba(255,255,255,0.3)', marginTop:2 }}>/ 100</div>
-                  <div style={{ fontSize:11, fontWeight:700, marginTop:6, color:scoreColor(scores.overall) }}>
-                    {scores.overall >= 80 ? 'Strong Adherence' : scores.overall >= 60 ? 'Moderate Deviation' : 'High Deviation'}
-                  </div>
-                </div>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:10, flex:1 }}>
-                  {scores.rows.map((r, i) => (
-                    <div key={i} style={{ padding:'10px 14px', borderRadius:9, flex:'1 1 150px',
-                      background:'rgba(255,255,255,0.04)', border:`1px solid ${scoreColor(r.score)}30` }}>
-                      <div style={{ fontSize:9, color:'rgba(255,255,255,0.4)', textTransform:'uppercase', marginBottom:4, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{r.name}</div>
-                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                        <div style={{ flex:1, height:6, borderRadius:3, background:'rgba(255,255,255,0.08)' }}>
-                          <div style={{ height:'100%', borderRadius:3, width:`${r.score}%`, background:scoreColor(r.score), transition:'width 0.4s' }} />
-                        </div>
-                        <span style={{ fontSize:13, fontWeight:800, color:scoreColor(r.score), width:32, textAlign:'right' }}>{r.score}</span>
-                      </div>
-                      {r.actuarial != null && (
-                        <div style={{ fontSize:10, color:'rgba(255,255,255,0.35)', marginTop:5, display:'flex', justifyContent:'space-between' }}>
-                          <span>UW: {fmt1(r.uwVal??0)}</span>
-                          <span>Act: {fmt1(r.actuarial)}</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              {/* Interpretation */}
-              <div style={{ padding:'12px 14px', borderRadius:9, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', fontSize:11, color:'rgba(255,255,255,0.5)', lineHeight:1.7 }}>
-                <b style={{color:'rgba(255,255,255,0.7)'}}>How to read this:</b> A score below 60 on any cost component (loss ratio, commissions) means your UW override diverges significantly from the actuarial engine.
-                On loss components, a lower UW than actuarial is aggressive (under-pricing risk); on margin/result components, a higher UW is more conservative.
-                Deviations beyond 5% from actuarial indicate a meaningful judgement overlay — ensure these are documented with rationale.
-              </div>
-            </div>
-          </>)}
-
-          {/* ═══ TAB 4: SNAPSHOT TRENDS ═══ */}
-          {tab === 'history' && (<>
-            {snapTrends.length === 0 ? (
-              <div style={{ textAlign:'center', padding:40, color:'rgba(255,255,255,0.35)', fontSize:13 }}>
-                No snapshots saved yet. Use the 📸 Save Snapshot button on the component pricing table to track pricing iterations.
-              </div>
-            ) : (<>
-              <div style={S.card}>
-                <div style={S.title}>Pricing Evolution Across Snapshots</div>
-                <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                  <thead>
-                    <tr>
-                      <th style={{...S.th, textAlign:'left'}}>Snapshot</th>
-                      <th style={{...S.th, textAlign:'right'}}>Attritional LR</th>
-                      <th style={{...S.th, textAlign:'right'}}>Commissions</th>
-                      <th style={{...S.th, textAlign:'right'}}>Result</th>
-                      <th style={{...S.th, textAlign:'right'}}>LR Δ</th>
-                      <th style={{...S.th, textAlign:'right'}}>Result Δ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {snapTrends.map((r, i) => {
-                      const prevLR  = i > 0 ? snapTrends[i-1].lossRatio  : null;
-                      const prevRes = i > 0 ? snapTrends[i-1].result     : null;
-                      const dLR  = diff(r.lossRatio, prevLR);
-                      const dRes = diff(r.result, prevRes);
-                      return (
-                        <tr key={i} style={{ background: i%2===0?'transparent':'rgba(255,255,255,0.02)' }}>
-                          <td style={{...S.td, fontWeight:600, color:'rgba(255,255,255,0.85)'}}>{r.label}</td>
-                          <td style={{...S.td, textAlign:'right', color:'#f87171'}}>{r.lossRatio != null ? fmt1(r.lossRatio) : '—'}</td>
-                          <td style={{...S.td, textAlign:'right', color:'#60a5fa'}}>{r.commission != null ? fmt1(r.commission) : '—'}</td>
-                          <td style={{...S.td, textAlign:'right', color: r.result >= 0 ? '#4ade80' : '#f87171', fontWeight:700}}>{r.result != null ? fmt1(r.result) : '—'}</td>
-                          <td style={{...S.td, textAlign:'right', color:diffColor(-(dLR??0))}}>{i===0?'Base':diffFmt(dLR)}</td>
-                          <td style={{...S.td, textAlign:'right', color:diffColor(dRes??0)}}>{i===0?'Base':diffFmt(dRes)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {/* Key insight from trend */}
-              {snapTrends.length >= 2 && (() => {
-                const first = snapTrends[0], last = snapTrends[snapTrends.length-1];
-                const lrMove = diff(last.lossRatio, first.lossRatio);
-                const resMove = diff(last.result, first.result);
-                return (
-                  <div style={{ padding:'12px 16px', borderRadius:9, background:'rgba(96,165,250,0.07)', border:'1px solid rgba(96,165,250,0.2)', fontSize:12, color:'rgba(255,255,255,0.7)', lineHeight:1.7 }}>
-                    <b style={{color:'#60a5fa'}}>Trend insight:</b> Across {snapTrends.length} snapshots, the attritional loss ratio moved {diffFmt(lrMove)} and the underwriting result moved {diffFmt(resMove)}.
-                    {resMove > 0 ? ' Pricing has improved through iterations.' : resMove < 0 ? ' Pricing has tightened — review whether loss loadings are adequate.' : ' Pricing has remained stable.'}
-                  </div>
-                );
-              })()}
-            </>)}
-          </>)}
-
-        </div>
+    <Modal
+      open
+      onClose={onClose}
+      className="indepth-modal"
+      title={(<>
+        <span className="indepth-head__main">
+          🔬 In-Depth Portfolio Analysis
+          <span className="indepth-head__sub">
+            Actuarial engine · Actual stats · Exposure rating · Market average · UW override — side by side
+          </span>
+        </span>
+        <span className="indepth-head__score">
+          <span className="indepth-head__score-label">Actuarial Adherence</span>
+          <span className={`indepth-head__score-value is-${scoreGrade(scores.overall)}`}>{scores.overall}/100</span>
+        </span>
+      </>)}
+    >
+      {/* ── Tabs ── */}
+      <div className="indepth-tabs">
+        {TABS.map(t => (
+          <button key={t.key} type="button" onClick={() => setTab(t.key)}
+            className={cx('indepth-tab', tab === t.key && 'is-active')}>
+            {t.label}
+          </button>
+        ))}
       </div>
-    </div>
+
+      {/* ── Content ── */}
+      <div className="indepth-content">
+
+        {/* ═══ TAB 1: VISUAL COMPARISON ═══ */}
+        {tab === 'compare' && (<>
+          {/* Legend */}
+          <div className="indepth-legend">
+            {COLS.map(c => (
+              <div key={c.key} className="indepth-legend__item">
+                <div className={cx('indepth-swatch', c.cls)} />{c.short}
+              </div>
+            ))}
+          </div>
+
+          <div className="indepth-card">
+            <div className="indepth-card__title">Component Comparison — All Columns (click row to highlight)</div>
+            <GroupedBarChart rows={rowData} highlight={highlight} />
+          </div>
+
+          {/* Numeric comparison table */}
+          <div className="indepth-card">
+            <div className="indepth-card__title">Numeric Comparison Table</div>
+            <table className="indepth-table indepth-table--click">
+              <thead>
+                <tr>
+                  <th className="ta-l w200">Component</th>
+                  {COLS.map(c => <th key={c.key} className={cx('ta-r', c.cls)}>{c.short}</th>)}
+                  <th className="ta-r">UW vs Actuarial</th>
+                  <th className="ta-r">UW vs Market</th>
+                  <th className="ta-r">Signal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rowData.map((r, i) => {
+                  const uwVal  = r.uw ?? r.actuarial;
+                  const vsAct  = diff(uwVal, r.actuarial);
+                  const vsMkt  = diff(uwVal, r.market);
+                  const isCost = IS_COST.has(r.name);
+                  // Signal: for cost rows, UW > actuarial is aggressive (red); for Result, UW > actuarial is good (green)
+                  const signalVal = isCost ? -(vsAct ?? 0) : (vsAct ?? 0);
+                  const signal = signalVal > 2 ? { t:'✓ Conservative', tone:'success' }
+                    : signalVal < -2 ? { t:'⚠ Aggressive', tone:'danger' }
+                    : { t:'≈ In Line', tone:'info' };
+                  return (
+                    <tr key={i}
+                      onClick={() => setHL(highlight === r.name ? null : r.name)}
+                      className={highlight === r.name ? 'is-hl' : undefined}>
+                      <td className={cx('fw6', highlight === r.name ? 'idc-blue' : 'c-text')}>{r.name}</td>
+                      {COLS.map(c => (
+                        <td key={c.key} className={cx('ta-r', r[c.key] != null ? c.cls : 'idc-empty', c.key === 'uw' && 'fw7')}>
+                          {r[c.key] != null ? fmt1(r[c.key]) : '—'}
+                        </td>
+                      ))}
+                      <td className={cx('ta-r', 'fw6', diffClass(isCost ? -(vsAct??0) : (vsAct??0)))}>{diffFmt(vsAct)}</td>
+                      <td className={cx('ta-r', 'fw6', diffClass(isCost ? -(vsMkt??0) : (vsMkt??0)))}>{diffFmt(vsMkt)}</td>
+                      <td className="ta-r"><Badge tone={signal.tone}>{signal.t}</Badge></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>)}
+
+        {/* ═══ TAB 2: GAP ANALYSIS ═══ */}
+        {tab === 'gaps' && (<>
+          <div className="indepth-card">
+            <div className="indepth-card__title">UW Override vs Actuarial, Actual Stats & Market Average</div>
+            <div className="indepth-note">
+              Bars show how far the UW override deviates from each benchmark. <span className="idc-green">Green = conservative</span>, <span className="idc-red">Red = aggressive</span>.
+            </div>
+            <table className="indepth-table">
+              <thead>
+                <tr>
+                  <th className="ta-l w200">Component</th>
+                  <th className="ta-r">UW</th>
+                  <th className="ta-r">Actuarial</th>
+                  <th>vs Actuarial</th>
+                  <th className="ta-r">Actual Stats</th>
+                  <th>vs Actual</th>
+                  <th className="ta-r">Market Avg</th>
+                  <th>vs Market</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gapData.map((r, i) => {
+                  const sign = r.isCost ? -1 : 1;
+                  return (
+                    <tr key={i}>
+                      <td className="fw6 c-text">{r.name}</td>
+                      <td className="ta-r fw7 idc-teal">{r.uw != null ? fmt1(r.uw) : '—'}</td>
+                      <td className="ta-r idc-blue">{r.actuarial != null ? fmt1(r.actuarial) : '—'}</td>
+                      <td>
+                        <div className="indepth-gapcell">
+                          <GapBar value={r.vsActuarial} maxAbs={maxGap} color={diffColor(sign*(r.vsActuarial??0))} />
+                          <span className={cx('indepth-gapval', diffClass(sign*(r.vsActuarial??0)))}>{diffFmt(r.vsActuarial)}</span>
+                        </div>
+                      </td>
+                      <td className="ta-r idc-green">{r.actual != null ? fmt1(r.actual) : '—'}</td>
+                      <td>
+                        <div className="indepth-gapcell">
+                          <GapBar value={r.vsActual} maxAbs={maxGap} color={diffColor(sign*(r.vsActual??0))} />
+                          <span className={cx('indepth-gapval', diffClass(sign*(r.vsActual??0)))}>{diffFmt(r.vsActual)}</span>
+                        </div>
+                      </td>
+                      <td className="ta-r idc-amber">{r.market != null ? fmt1(r.market) : '—'}</td>
+                      <td>
+                        <div className="indepth-gapcell">
+                          <GapBar value={r.vsMarket} maxAbs={maxGap} color={diffColor(sign*(r.vsMarket??0))} />
+                          <span className={cx('indepth-gapval', diffClass(sign*(r.vsMarket??0)))}>{diffFmt(r.vsMarket)}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Insight cards */}
+          <div className="indepth-cards">
+            {gapData.filter(r => r.vsActuarial != null && Math.abs(r.vsActuarial) > 2).map((r, i) => {
+              const sign = r.isCost ? -1 : 1;
+              const isAggressive = sign * r.vsActuarial < -2;
+              return (
+                <Callout key={i} variant={isAggressive ? 'danger' : 'tip'}
+                  title={isAggressive ? '⚠ Aggressive' : '✓ Conservative'}
+                  className="indepth-insight">
+                  <div className="indepth-insight__name">{r.name}</div>
+                  <div className="indepth-insight__detail">
+                    UW: {fmt1(r.uw??0)} vs Actuarial: {fmt1(r.actuarial??0)} ({diffFmt(r.vsActuarial)})
+                  </div>
+                </Callout>
+              );
+            })}
+            {gapData.every(r => r.vsActuarial == null || Math.abs(r.vsActuarial) <= 2) && (
+              <div className="indepth-allclear">
+                ✓ All UW overrides are within 2% of actuarial pricing — no material deviations.
+              </div>
+            )}
+          </div>
+        </>)}
+
+        {/* ═══ TAB 3: ADEQUACY SCORE ═══ */}
+        {tab === 'radar' && (<>
+          <div className="indepth-card">
+            <div className="indepth-card__title">Actuarial Adherence by Component</div>
+            <div className="indepth-note indepth-note--lg">
+              Score 0–100: how closely the UW override tracks the actuarial engine. 100 = exact match. Penalty increases with deviation size.
+            </div>
+            <div className="indepth-scores">
+              <div className="indepth-overall">
+                <div className="indepth-overall__label">Overall Score</div>
+                <div className={`indepth-overall__value is-${scoreGrade(scores.overall)}`}>{scores.overall}</div>
+                <div className="indepth-overall__denom">/ 100</div>
+                <div className={`indepth-overall__verdict is-${scoreGrade(scores.overall)}`}>
+                  {scores.overall >= 80 ? 'Strong Adherence' : scores.overall >= 60 ? 'Moderate Deviation' : 'High Deviation'}
+                </div>
+              </div>
+              <div className="indepth-scorelist">
+                {scores.rows.map((r, i) => (
+                  <div key={i} className={`indepth-scorecard is-${scoreGrade(r.score)}`}>
+                    <div className="indepth-scorecard__name">{r.name}</div>
+                    <div className="indepth-scorebar-row">
+                      <div className="indepth-scorebar">
+                        <div className="indepth-scorebar__fill" style={{ width: `${r.score}%` }} />
+                      </div>
+                      <span className="indepth-scoreval">{r.score}</span>
+                    </div>
+                    {r.actuarial != null && (
+                      <div className="indepth-scorecard__foot">
+                        <span>UW: {fmt1(r.uwVal??0)}</span>
+                        <span>Act: {fmt1(r.actuarial)}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Interpretation */}
+            <Callout variant="note" title="How to read this:" className="indepth-howto">
+              A score below 60 on any cost component (loss ratio, commissions) means your UW override diverges significantly from the actuarial engine.
+              On loss components, a lower UW than actuarial is aggressive (under-pricing risk); on margin/result components, a higher UW is more conservative.
+              Deviations beyond 5% from actuarial indicate a meaningful judgement overlay — ensure these are documented with rationale.
+            </Callout>
+          </div>
+        </>)}
+
+        {/* ═══ TAB 4: SNAPSHOT TRENDS ═══ */}
+        {tab === 'history' && (<>
+          {snapTrends.length === 0 ? (
+            <div className="indepth-empty">
+              No snapshots saved yet. Use the 📸 Save Snapshot button on the component pricing table to track pricing iterations.
+            </div>
+          ) : (<>
+            <div className="indepth-card">
+              <div className="indepth-card__title">Pricing Evolution Across Snapshots</div>
+              <table className="indepth-table">
+                <thead>
+                  <tr>
+                    <th className="ta-l">Snapshot</th>
+                    <th className="ta-r">Attritional LR</th>
+                    <th className="ta-r">Commissions</th>
+                    <th className="ta-r">Result</th>
+                    <th className="ta-r">LR Δ</th>
+                    <th className="ta-r">Result Δ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {snapTrends.map((r, i) => {
+                    const prevLR  = i > 0 ? snapTrends[i-1].lossRatio  : null;
+                    const prevRes = i > 0 ? snapTrends[i-1].result     : null;
+                    const dLR  = diff(r.lossRatio, prevLR);
+                    const dRes = diff(r.result, prevRes);
+                    return (
+                      <tr key={i}>
+                        <td className="fw6 c-text">{r.label}</td>
+                        <td className="ta-r idc-red">{r.lossRatio != null ? fmt1(r.lossRatio) : '—'}</td>
+                        <td className="ta-r idc-blue">{r.commission != null ? fmt1(r.commission) : '—'}</td>
+                        <td className={cx('ta-r', 'fw7', r.result >= 0 ? 'idc-green' : 'idc-red')}>{r.result != null ? fmt1(r.result) : '—'}</td>
+                        <td className={cx('ta-r', diffClass(-(dLR??0)))}>{i===0?'Base':diffFmt(dLR)}</td>
+                        <td className={cx('ta-r', diffClass(dRes??0))}>{i===0?'Base':diffFmt(dRes)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {/* Key insight from trend */}
+            {snapTrends.length >= 2 && (() => {
+              const first = snapTrends[0], last = snapTrends[snapTrends.length-1];
+              const lrMove = diff(last.lossRatio, first.lossRatio);
+              const resMove = diff(last.result, first.result);
+              return (
+                <Callout variant="note" title="Trend insight:">
+                  Across {snapTrends.length} snapshots, the attritional loss ratio moved {diffFmt(lrMove)} and the underwriting result moved {diffFmt(resMove)}.
+                  {resMove > 0 ? ' Pricing has improved through iterations.' : resMove < 0 ? ' Pricing has tightened — review whether loss loadings are adequate.' : ' Pricing has remained stable.'}
+                </Callout>
+              );
+            })()}
+          </>)}
+        </>)}
+
+      </div>
+    </Modal>
   );
 }

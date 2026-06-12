@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { api } from '../../../api';
 import { useContractId } from '../../../hooks/useContractId';
+import { useResource } from '../../../hooks/useResource';
 import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
+import AsyncBoundary from '../../../components/AsyncBoundary';
 import {
   buildMatrixFromCells, calculateAgeToAgeFactors, calculatePattern,
   calculateCdfs, fitExponentialCdfs, deriveLdfsFromCdfs,
@@ -494,21 +496,12 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   // ratio of actual to estimated premium (default 100 %).
   const [epiPerYear, setEpiPerYear] = useState([]);
   const [percentAchieved, setPercentAchieved] = useState('1.00');
-  const [loading, setLoading] = useState(true);
   const [dirty, setDirty] = useState(false);
   const [excluded, setExcluded] = useState(new Set());
   const [benchmarks, setBenchmarks] = useState(null);
   const [useMunich, setUseMunich] = useState(false);
   const [showMunichHelp, setShowMunichHelp] = useState(false);
   const [showStrippedModal, setShowStrippedModal] = useState(false);
-  // True when the source triangle has been saved more recently than these
-  // factors — the underwriter should re-review. Re-fetched from the DB on
-  // mount and whenever `savedTick` bumps (after a successful save), so the
-  // banner reflects server ground truth rather than an optimistic local clear.
-  const [stale, setStale] = useState(false);
-  // True when no factors have ever been saved for this type — the projected
-  // summary / pricing then rest on placeholder curves until a selection is saved.
-  const [factorsNeverSaved, setFactorsNeverSaved] = useState(false);
   const [savedTick, setSavedTick] = useState(0);
   // Both paid + OS triangles are required for Munich Chain Ladder, so on
   // screens that already source both (Incurred Dev Factors) the toggle
@@ -533,19 +526,23 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
     }
   }, [startYear, numDevYears]);
 
-  /* Load triangle cells — both full + stripped variants for every source. */
-  useEffect(() => {
-    if (!contractId) { setLoading(false); return; }
-    setLoading(true);
-    Promise.all(triSources.map(t =>
-      api.getTriangleWithExclusions(contractId, t, apiOpts)
-        .then(d => [t, {
-          full: d?.full?.cells || [],
-          stripped: d?.stripped?.cells || [],
-          excl: d?.exclusions || null,
-        }])
-        .catch(() => [t, { full: [], stripped: [], excl: null }])
-    )).then(results => {
+  /* Load triangle cells — both full + stripped variants for every source.
+     This is the screen's PRIMARY load (it gates the factor tables below), so
+     it rides useResource: in-flight requests abort when the contract/type
+     changes or the screen unmounts, failures surface in the <AsyncBoundary>
+     with a Retry, and hydration happens inside the fetcher — triData /
+     exclusions are set before `loading` flips off, exactly like the old
+     .then(setTriData).finally(setLoading(false)) ordering. */
+  const triangles = useResource(
+    async (signal) => {
+      const results = await Promise.all(triSources.map(t =>
+        api.getTriangleWithExclusions(contractId, t, { ...apiOpts, signal })
+          .then(d => [t, {
+            full: d?.full?.cells || [],
+            stripped: d?.stripped?.cells || [],
+            excl: d?.exclusions || null,
+          }])
+      ));
       const map = {};
       let excl = { largeLossCount: 0, catLossCount: 0, applies: false, proxyPlaced: 0 };
       results.forEach(([t, data]) => {
@@ -560,10 +557,14 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
           };
         }
       });
+      if (signal.aborted) return map; // superseded/unmounted — don't hydrate
       setTriData(map);
       setExclusions(excl);
-    }).finally(() => setLoading(false));
-  }, [contractId, apiOpts, triSources]);
+      return map;
+    },
+    [contractId, apiOpts, triSources],
+    { enabled: !!contractId, reportLabel: 'dev factor triangles' },
+  );
 
   /* Load the paid + OS legs (full only) for Munich Chain Ladder. Only the
      Incurred screen offers MCL, and it no longer fetches paid/OS via the
@@ -619,19 +620,27 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   }, [appState.propTreatyDetail?.countryId, devType]);
 
   /* Staleness + never-saved: were the source triangles saved after these
-     factors, and have any factors been saved for this type at all? */
-  useEffect(() => {
-    if (!contractId) return;
-    let cancelled = false;
-    api.getDevFactorStaleness(contractId, devType, apiOpts)
-      .then(d => {
-        if (cancelled) return;
-        setStale(!!d?.stale);
-        setFactorsNeverSaved(!d?.factorsSavedAt);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [contractId, devType, apiOpts, savedTick]);
+     factors, and have any factors been saved for this type at all?
+     useResource replaces the old hand-rolled cancelled flag; `savedTick` in
+     the deps re-fetches after a successful save so the banner reflects
+     server ground truth rather than an optimistic local clear. A failed
+     fetch keeps the previous data (banner state), matching the old
+     swallow-and-keep behaviour. */
+  const stalenessRes = useResource(
+    (signal) => api.getDevFactorStaleness(contractId, devType, { ...apiOpts, signal })
+      // Wrap so `data` is non-null once ANY response has arrived — the
+      // derived flags below must stay at their pre-fetch defaults (false)
+      // until then, exactly like the old setState-on-success effect.
+      .then(d => ({ d })),
+    [contractId, devType, apiOpts, savedTick],
+    { enabled: !!contractId, reportLabel: 'dev factor staleness' },
+  );
+  // True when the source triangle has been saved more recently than these
+  // factors — the underwriter should re-review.
+  const stale = !!stalenessRes.data?.d?.stale;
+  // True when no factors have ever been saved for this type — the projected
+  // summary / pricing then rest on placeholder curves until a selection is saved.
+  const factorsNeverSaved = !!stalenessRes.data && !stalenessRes.data.d?.factorsSavedAt;
 
   /* Build matrix + calculations for the displayed basis, plus the full
      (unstripped) basis used for the conservative reference column. */
@@ -723,41 +732,51 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
     setChosenCdfs((src.cdfs || []).slice(0, src.ldfs.length).map(v => v));
   }, [calcs, chosenBase, chosenLdfs.length]);
 
-  /* Load saved factors */
-  useEffect(() => {
-    if (!contractId) return;
-    api.getDevFactors(contractId, devType, apiOpts).then(data => {
-      const factors = data?.factors || (Array.isArray(data) ? data : []);
+  /* Load saved factors + pricing pattern (excluded ratios + settings).
+     Rides useResource so a superseded response can never hydrate over a
+     newer contract/type's state. Each call keeps its own failure tolerance
+     (resolve to null) on purpose: a missing pricing pattern is normal in
+     quote mode (the endpoint is contract-only) and neither load should
+     block the screen — the factor tables still render from triangle data. */
+  useResource(
+    async (signal) => {
+      const [factorsData, patternData] = await Promise.all([
+        api.getDevFactors(contractId, devType, { ...apiOpts, signal }).catch(() => null),
+        api.getPricingPattern(contractId, devType).catch(() => null),
+      ]);
+      if (signal.aborted) return { factorsData, patternData }; // superseded/unmounted — don't hydrate
+      const factors = factorsData?.factors || (Array.isArray(factorsData) ? factorsData : []);
       if (factors.length > 0) { setChosenLdfs(factors.map(f => f.chosen_ldf ?? f.selected_ldf ?? null)); setChosenCdfs(factors.map(f => f.chosen_cdf ?? f.selected_cdf ?? null)); }
       // chosenBase stays at its initial 'ACTUAL' — the toggle is reset on every
       // page-land so the underwriter always starts from a known baseline.
-    }).catch(() => {});
-    /* Also load pricing pattern to restore excluded ratios + settings */
-    api.getPricingPattern(contractId, devType).then(data => {
-      if (!data) return;
-      const sf = data.selected_factors || {};
-      if (Array.isArray(sf.excluded_ratios) && sf.excluded_ratios.length > 0) {
-        // Position-keyed ("r:c") exclusions are only valid for the year
-        // window they were saved under. If the user has since shifted the
-        // start year or the number of dev years, those keys would silently
-        // strike through different cells. Drop them in that case.
-        const currentKey = `${startYear}:${numDevYears}`;
-        if (!sf.excluded_for_year_window || sf.excluded_for_year_window === currentKey) {
-          setExcluded(new Set(sf.excluded_ratios));
+      if (patternData) {
+        const sf = patternData.selected_factors || {};
+        if (Array.isArray(sf.excluded_ratios) && sf.excluded_ratios.length > 0) {
+          // Position-keyed ("r:c") exclusions are only valid for the year
+          // window they were saved under. If the user has since shifted the
+          // start year or the number of dev years, those keys would silently
+          // strike through different cells. Drop them in that case.
+          const currentKey = `${startYear}:${numDevYears}`;
+          if (!sf.excluded_for_year_window || sf.excluded_for_year_window === currentKey) {
+            setExcluded(new Set(sf.excluded_ratios));
+          }
+        }
+        if (sf.proj_method) setProjMethod(sf.proj_method);
+        // Intentionally do not restore sf.chosen_base — the toggle always
+        // re-defaults to ACTUAL on page land. Saved chosenLdfs still load above.
+        if (typeof sf.use_munich === 'boolean') setUseMunich(sf.use_munich);
+        if (patternData.selection_method) setAvgMethod(patternData.selection_method.toLowerCase());
+        if (patternData.bf_ielr != null && Number(patternData.bf_ielr) > 0) setIelr(String(patternData.bf_ielr));
+        if (sf.bf_percent_achieved != null) setPercentAchieved(String(sf.bf_percent_achieved));
+        if (Array.isArray(sf.bf_epi_per_year) && sf.bf_epi_per_year.length > 0) {
+          setEpiPerYear(sf.bf_epi_per_year.map(v => v == null ? '' : String(v)));
         }
       }
-      if (sf.proj_method) setProjMethod(sf.proj_method);
-      // Intentionally do not restore sf.chosen_base — the toggle always
-      // re-defaults to ACTUAL on page land. Saved chosenLdfs still load above.
-      if (typeof sf.use_munich === 'boolean') setUseMunich(sf.use_munich);
-      if (data.selection_method) setAvgMethod(data.selection_method.toLowerCase());
-      if (data.bf_ielr != null && Number(data.bf_ielr) > 0) setIelr(String(data.bf_ielr));
-      if (sf.bf_percent_achieved != null) setPercentAchieved(String(sf.bf_percent_achieved));
-      if (Array.isArray(sf.bf_epi_per_year) && sf.bf_epi_per_year.length > 0) {
-        setEpiPerYear(sf.bf_epi_per_year.map(v => v == null ? '' : String(v)));
-      }
-    }).catch(() => {});
-  }, [contractId, devType, apiOpts, startYear, numDevYears]);
+      return { factorsData, patternData };
+    },
+    [contractId, devType, apiOpts, startYear, numDevYears],
+    { enabled: !!contractId, reportLabel: 'saved dev factors' },
+  );
 
   const handleChosenChange = (type, idx, val) => {
     const n = val === '' ? null : Number(val);
@@ -1076,7 +1095,10 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
             </div>
           </div>
 
-          {loading ? <div className="muted" style={{ padding: 16 }}>Loading triangle data…</div> : !hasData ? (
+          {/* Primary content region — loading / error (with Retry) states come
+              from the triangle resource; chrome above stays interactive. */}
+          <AsyncBoundary loading={triangles.loading} error={triangles.error} onRetry={triangles.refetch} label="triangle data">
+          {!hasData ? (
             <div className="df-card df-card--notice" style={{ marginTop: 14 }}>
               <div className="df-note">No triangle data found. Enter data in the triangle screens first, then return here.</div>
             </div>
@@ -1179,6 +1201,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
             )}
 
           </>)}
+          </AsyncBoundary>
           {showStrippedModal && (
             <div
               onClick={e => { if (e.target === e.currentTarget) setShowStrippedModal(false); }}

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- TODO(hardening): split — tracked in docs/frontend-hardening.md */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../api';

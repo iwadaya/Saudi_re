@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { api } from '../../../../../api.js';
+import { api } from '../../../../../api';
 import { MetricBars, ViewTabs } from './_shared.jsx';
 
 const num = v => { const x = Number(String(v ?? '').replace(/,/g, '').trim()); return Number.isFinite(x) ? x : 0; };

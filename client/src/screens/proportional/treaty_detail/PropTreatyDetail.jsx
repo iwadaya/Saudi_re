@@ -3,7 +3,9 @@ import { useLocation } from 'react-router-dom';
 import { api } from '../../../api';
 import { useAppState } from '../../../context/AppContext';
 import { useContractId, setActiveContractId } from '../../../hooks/useContractId';
+import { useResource } from '../../../hooks/useResource';
 import WizardLayout from '../../../components/WizardLayout';
+import AsyncBoundary from '../../../components/AsyncBoundary';
 import PctInput from '../../../components/PctInput';
 import SlipIngestButton from '../../../components/SlipIngestButton';
 import ImportedFromPackBanner from '../../../components/ImportedFromPackBanner';
@@ -538,31 +540,36 @@ export default function PropTreatyDetail() {
     }
   }, [s.startYear, s.experienceStartYear, s.inceptionDate, setSlice]);
 
-  /* load existing treaty — fires when contractId changes or loaded toggles.
-     Reads s._loadedFromServer / s.contractId and appState.quoteMode
-     deliberately stale so it doesn't re-fetch on every keystroke. */
-  useEffect(() => {
-    if (!contractId) return;
-    /* When the resolved contractId points at a different contract than the
-       one currently loaded (e.g. user picked a different treaty from Home —
-       same /prop/treaty-detail route, so this component does NOT remount and
-       `loaded` survives), drop the loaded flag so the fetch path below runs
-       again for the new contract. Without this the form keeps rendering the
-       previous contract's slice (or, post-resetFlow, a blank slice). */
-    if (loaded && String(s.contractId || '') !== String(contractId)) {
+  /* ── Primary fetch: the contract bundle rides useResource (Phase 2.2).
+     In-flight loads are aborted when contractId / quoteMode change or the
+     screen unmounts, and failures surface through the AsyncBoundary around
+     the form below (with Retry) instead of being swallowed. Hydration runs
+     inside the fetcher — slice patch → renewal-override detection →
+     active-id sync → loaded=true — so the ordering matches the old
+     hand-rolled effect exactly and never runs for a superseded request.
+
+     The fetch is skipped (`enabled` false) when the slice already holds
+     this contract's data: hydrated from the server earlier (navigated back
+     via a tab) or already loaded by this mount (`loaded` — e.g. the save
+     path just created the contract). Mirrors the old effect's
+     `if (loaded) return` + `_loadedFromServer` shortcuts; a contract switch
+     from Home changes `contractId` away from `s.contractId`, re-arming the
+     fetch exactly like the old "drop the loaded flag" reset did. */
+  const bundleInSlice = String(s.contractId || '') === String(contractId) &&
+    (loaded || !!s._loadedFromServer);
+  const {
+    loading: bundleLoading,
+    error: bundleError,
+    refetch: refetchBundle,
+  } = useResource(
+    async (signal) => {
       setLoaded(false);
-      return;
-    }
-    if (loaded) return;
-    /* If propTreatyDetail already has data for this contract (e.g. navigated back via tab),
-       skip re-fetching from server and just mark as loaded */
-    if (s._loadedFromServer && String(s.contractId) === String(contractId)) {
-      setLoaded(true);
-      return;
-    }
-    const qm = appState.quoteMode ? { quote: true } : undefined;
-    api.getContract(contractId, qm).then(data => {
-      if (!data) { setLoaded(true); return; }
+      const data = await api.getContract(contractId, {
+        ...(appState.quoteMode ? { quote: true } : {}),
+        signal,
+      });
+      if (signal.aborted) return data; /* superseded/unmounted — don't hydrate */
+      if (!data) { setLoaded(true); return data; }
       const h = data.header || {}, d = data.detail || {}, cm = data.commissions || {};
       const lp = data.lossParticipation || data.loss_participation || {};
       update({
@@ -613,8 +620,21 @@ export default function PropTreatyDetail() {
       }
       setActiveContractId(data.contract_id || contractId);
       setLoaded(true);
-    }).catch(() => setLoaded(true));
-  }, [appState.quoteMode, contractId, loaded, s._loadedFromServer, s.contractId, update]);
+      return data;
+    },
+    [contractId, appState.quoteMode],
+    { enabled: !!contractId && !bundleInSlice, reportLabel: 'treaty detail' },
+  );
+
+  /* If propTreatyDetail already has data for this contract (e.g. navigated
+     back via tab), the resource above stays disabled — just flip the
+     hydration flag so the auto-calc effects arm, exactly like the old
+     `_loadedFromServer` shortcut did. */
+  useEffect(() => {
+    if (!loaded && contractId && s._loadedFromServer && String(s.contractId) === String(contractId)) {
+      setLoaded(true);
+    }
+  }, [loaded, contractId, s._loadedFromServer, s.contractId]);
 
   /* save */
   const saveRef = React.useRef(null);
@@ -812,7 +832,11 @@ export default function PropTreatyDetail() {
           </div>
         )}
 
-        {/* ── 2×2 Grid — equal-sized cards ── */}
+        {/* ── 2×2 Grid — equal-sized cards. The grid + its modals are the
+            primary async region: hidden behind the boundary until the
+            contract bundle hydrates, replaced by an error + Retry panel
+            when the load fails. Chrome above stays mounted throughout. ── */}
+        <AsyncBoundary loading={bundleLoading} error={bundleError} onRetry={refetchBundle} label="treaty detail">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
 
           {/* ═══ CONTRACT DETAILS ═══ */}
@@ -1061,6 +1085,7 @@ export default function PropTreatyDetail() {
         {showCobModal && <CobSelectModal selected={s.classIds || []} classList={classes}
           onSave={ids => { update({ classIds: ids, primaryClassOfBusinessId: ids[0] || null }); setShowCobModal(false); }}
           onClose={() => setShowCobModal(false)} />}
+        </AsyncBoundary>
       </>)}
     </WizardLayout>
   );
