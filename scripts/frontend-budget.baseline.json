@@ -5,7 +5,7 @@
     "inlineStyles": 2821,
     "filesOver800Loc": 12,
     "onClickNonInteractive": 78,
-    "consoleCalls": 77,
+    "consoleCalls": 76,
     "useStateCalls": 551,
     "setLoadingCalls": 68
   }

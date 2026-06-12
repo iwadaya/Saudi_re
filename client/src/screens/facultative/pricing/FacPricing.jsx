@@ -2,14 +2,31 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import api from '../../../api';
 import WizardLayout from '../../../components/WizardLayout';
+import AsyncBoundary from '../../../components/AsyncBoundary';
 import PctInput from '../../../components/PctInput';
 import { useFacRiskId } from '../../../hooks/useContractId';
 import { useScreenSave } from '../../../hooks/useScreenSave';
+import { useResource } from '../../../hooks/useResource';
+import { useGlobalToast } from '../../../hooks/useToast';
 import { computeScoreAndDecision, computeFacQuote } from '../../../logic/facPropertyPricing';
 
 const ENGINE_VERSION = '1.0.0';
 
 const ROUTE_KEY = 'FAC_PRICING';
+
+// Canonical shape of the manual dual-engine pricing fields. Hydration
+// merges the persisted row over THESE defaults (never over live state),
+// so loading is a one-shot per risk and user edits can't re-trigger it.
+const F_DEFAULTS = {
+  market_rate_per_mille: '', market_premium: '', market_source: '',
+  actuarial_method: '', actuarial_rate_per_mille: '', actuarial_premium: '',
+  expected_loss_ratio: '', loss_cost: '', loading_pct: '',
+  market_weight_pct: '50', actuarial_weight_pct: '50',
+  blended_rate_per_mille: '', blended_premium: '',
+  final_rate_per_mille: '', final_premium: '',
+  uw_adjustment_pct: '0', uw_adjustment_reason: '',
+  burning_cost_ratio: '', avg_loss_years: '5',
+};
 const numOrNull = v => { const c = String(v ?? '').replace(/,/g,'').trim(); if (!c) return null; const n = Number(c); return Number.isFinite(n) ? n : null; };
 const cleanNum = v => { if (v == null || v === '') return ''; const n = Number(v); if (!Number.isFinite(n)) return String(v); return n === Math.floor(n) ? String(Math.floor(n)) : String(n); };
 const fmtN = v => { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—'; };
@@ -456,6 +473,7 @@ function EngineReadout({ output, premiums, totalLocSar }) {
 
 export default function FacPricing() {
   const riskId = useFacRiskId();
+  const showToast = useGlobalToast();
   const loaded = useRef(false);
   const dirty = useRef(false);
   const [risk, setRisk] = useState(null);
@@ -465,16 +483,7 @@ export default function FacPricing() {
   const [newExtLabel, setNewExtLabel] = useState('');
   const [newExtLoading, setNewExtLoading] = useState('');
 
-  const [f, setF] = useState({
-    market_rate_per_mille: '', market_premium: '', market_source: '',
-    actuarial_method: '', actuarial_rate_per_mille: '', actuarial_premium: '',
-    expected_loss_ratio: '', loss_cost: '', loading_pct: '',
-    market_weight_pct: '50', actuarial_weight_pct: '50',
-    blended_rate_per_mille: '', blended_premium: '',
-    final_rate_per_mille: '', final_premium: '',
-    uw_adjustment_pct: '0', uw_adjustment_reason: '',
-    burning_cost_ratio: '', avg_loss_years: '5',
-  });
+  const [f, setF] = useState(F_DEFAULTS);
 
   // ── Engine inputs (computeFacQuote) ──────────────────────────────
   // The five user-controlled fields below feed straight into the engine
@@ -541,36 +550,48 @@ export default function FacPricing() {
     api.facGetLocations(riskId).then((rows) => setLocations(rows || [])).catch(console.error);
   }, [riskId]);
 
-  // Load risk + pricing + fac classes
-  useEffect(() => {
-    if (!riskId) return;
-    loaded.current = false;
-    Promise.all([api.facGetRisk(riskId), api.facGetPricing(riskId), api.facListClasses()])
-      .then(([r, p, fc]) => {
-        setRisk(r);
-        setFacClasses(fc || []);
-        if (p) {
-          const o = {};
-          for (const k of Object.keys(f)) o[k] = cleanNum(p[k]) || (typeof f[k] === 'string' ? (p[k] || '') : f[k]);
-          setF(o);
-          // Rehydrate extension selections from ui_state JSONB
-          const ui = p.ui_state || {};
-          if (Array.isArray(ui.selectedExtensions)) setSelectedExtensions(new Set(ui.selectedExtensions));
-          if (Array.isArray(ui.customExtensions))   setCustomExtensions(ui.customExtensions);
-          // Rehydrate engine inputs from the persisted pricing row.
-          setEng((prev) => ({
-            ...prev,
-            indemnity_months:   p.indemnity_months   != null ? String(p.indemnity_months)   : prev.indemnity_months,
-            commission_pct:     p.commission_pct     != null ? String(p.commission_pct)     : prev.commission_pct,
-            margin_pct:         p.margin_pct         != null ? String(p.margin_pct)         : prev.margin_pct,
-            other_expenses_pct: p.other_expenses_pct != null ? String(p.other_expenses_pct) : prev.other_expenses_pct,
-            market_rate_pm:     p.market_rate_pm     != null ? String(p.market_rate_pm)     : prev.market_rate_pm,
-            extra_cover_loadings: Array.isArray(p.extra_cover_loadings) ? p.extra_cover_loadings : prev.extra_cover_loadings,
-          }));
-        }
-        loaded.current = true; dirty.current = false;
-      }).catch(console.error);
-  }, [f, riskId]);
+  // Load risk + pricing + fac classes — one shot per risk. Hydration runs
+  // inside the fetcher (useResource owns loading/error/abort), merging the
+  // persisted row over F_DEFAULTS so a user edit can never re-trigger the
+  // load (the old [f, riskId] dependency silently wiped the dirty flag on
+  // every edit and refetch-looped on persisted rows — see
+  // docs/frontend-hardening.md, FacPricing findings).
+  const pricingLoad = useResource(
+    async (signal) => {
+      loaded.current = false;
+      const [r, p, fc] = await Promise.all([
+        api.facGetRisk(riskId, { signal }),
+        api.facGetPricing(riskId, { signal }),
+        api.facListClasses({ signal }),
+      ]);
+      if (signal.aborted) return { r, p, fc };
+      setRisk(r);
+      setFacClasses(fc || []);
+      if (p) {
+        const o = {};
+        for (const k of Object.keys(F_DEFAULTS)) o[k] = cleanNum(p[k]) || (typeof F_DEFAULTS[k] === 'string' ? (p[k] || '') : F_DEFAULTS[k]);
+        setF(o);
+        // Rehydrate extension selections from ui_state JSONB
+        const ui = p.ui_state || {};
+        if (Array.isArray(ui.selectedExtensions)) setSelectedExtensions(new Set(ui.selectedExtensions));
+        if (Array.isArray(ui.customExtensions))   setCustomExtensions(ui.customExtensions);
+        // Rehydrate engine inputs from the persisted pricing row.
+        setEng((prev) => ({
+          ...prev,
+          indemnity_months:   p.indemnity_months   != null ? String(p.indemnity_months)   : prev.indemnity_months,
+          commission_pct:     p.commission_pct     != null ? String(p.commission_pct)     : prev.commission_pct,
+          margin_pct:         p.margin_pct         != null ? String(p.margin_pct)         : prev.margin_pct,
+          other_expenses_pct: p.other_expenses_pct != null ? String(p.other_expenses_pct) : prev.other_expenses_pct,
+          market_rate_pm:     p.market_rate_pm     != null ? String(p.market_rate_pm)     : prev.market_rate_pm,
+          extra_cover_loadings: Array.isArray(p.extra_cover_loadings) ? p.extra_cover_loadings : prev.extra_cover_loadings,
+        }));
+      }
+      loaded.current = true; dirty.current = false;
+      return { r, p, fc };
+    },
+    [riskId],
+    { enabled: !!riskId, reportLabel: 'fac pricing' },
+  );
 
   const set = (k, v) => { setF(prev => ({ ...prev, [k]: v })); dirty.current = true; };
   const tsi = numOrNull(risk?.total_sum_insured) || 0;
@@ -819,10 +840,10 @@ export default function FacPricing() {
       return uwOk;
     } catch (e) {
       console.error('[FacPricing] save failed:', e);
-      window.showToast('Pricing save failed: ' + (e?.message || 'Server error'));
+      showToast('Pricing save failed: ' + (e?.message || 'Server error'));
       return false;
     }
-  }, [riskId, f, selectedExtensions, customExtensions, eng, engineOutput, enginePremiums]);
+  }, [riskId, f, selectedExtensions, customExtensions, eng, engineOutput, enginePremiums, showToast]);
 
   const extCheckbox = (ext, catColor) => {
     const checked = selectedExtensions.has(ext.id);
@@ -844,6 +865,7 @@ export default function FacPricing() {
 
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Pricing" headerPill="FACULTATIVE" onBeforeNext={save} onBeforeBack={save}>
+      <AsyncBoundary loading={pricingLoad.loading} error={pricingLoad.error} onRetry={pricingLoad.refetch} label="fac pricing">
       <div style={{ maxWidth: 800, margin: '0 auto', padding: '8px 0 40px' }}>
         {tsi > 0 && (
           <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.45)', marginBottom: 8 }}>
@@ -1059,6 +1081,7 @@ export default function FacPricing() {
           </div>
         </Sec>
       </div>
+      </AsyncBoundary>
     </WizardLayout>
   );
 }

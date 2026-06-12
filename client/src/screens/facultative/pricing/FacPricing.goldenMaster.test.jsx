@@ -22,24 +22,13 @@
 // 1.45‰ → 725,000; blend 60/40 → 1.33‰ / 665,000; final = 1.33 × 1.10 (UW
 // adj) × 1.23 (extensions 15+8) = 1.7995‰ / 899,745.
 //
-// ── Findings pinned here as CURRENT behaviour (no source changes allowed) ──
-// F1. The risk/pricing load effect depends on `f` and resets
-//     loaded/dirty inside its .then. Editing ANY manual pricing field
-//     (section ①–④ / `f` state) re-triggers the fetch and the completion
-//     resets dirty=false (and, when a pricing row exists, re-hydrates `f`
-//     over the user's edit). Net effect: wizard Next after a manual edit
-//     SILENTLY SKIPS facSavePricing and still advances — manual dual-engine
-//     edits are unsaveable through wizard navigation (data loss).
-//     With a persisted pricing row this same effect is an infinite
-//     refetch loop (setF(new object) → effect re-runs → fetch → setF …).
-// F2. The save failure path calls window.showToast(), which is never
-//     assigned anywhere in the client (the app's toast system is
-//     useGlobalToast) — so a failed facSavePricing throws TypeError out of
-//     save(); WizardLayout blocks navigation but shows the TypeError
-//     message, not the intended "Pricing save failed" toast.
-// F3. A primary-load failure (facGetRisk reject) is swallowed by
-//     .catch(console.error): no AsyncBoundary/alert, the screen silently
-//     renders empty (unlike the migrated FacRiskDetail / NP screens).
+// ── Findings F1–F3 (originally pinned here as bugs) are FIXED ──
+// F1. The load is one-shot per risk (hydrates over F_DEFAULTS, deps
+//     [riskId]) — manual edits no longer re-trigger it or lose dirty;
+//     wizard Next saves them (asserted below).
+// F2. Save failures toast via useGlobalToast and return false (blocked
+//     navigation), no window.showToast TypeError.
+// F3. Primary-load failures surface through AsyncBoundary with Retry.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 
@@ -67,6 +56,10 @@ const apiMock = vi.hoisted(() => ({
 vi.mock('../../../api', () => ({ __esModule: true, default: apiMock, api: apiMock }));
 // This fac screen resolves its entity via useFacRiskId (not useContractId).
 vi.mock('../../../hooks/useContractId', () => ({ useFacRiskId: () => 'R-1' }));
+
+// Save failures surface through the app-wide toast (Phase-5 fix of F2).
+const toastMock = vi.hoisted(() => vi.fn());
+vi.mock('../../../hooks/useToast', () => ({ useGlobalToast: () => toastMock }));
 // Fake WizardLayout exposes onBeforeNext so the save lifecycle is testable;
 // `wiz` records whether the save resolved (true/false) or threw.
 const wiz = vi.hoisted(() => ({ next: undefined, error: undefined }));
@@ -284,8 +277,8 @@ describe('FacPricing golden master', () => {
       expect(screen.getByText('72.00')).toBeInTheDocument();
     }, { timeout: 3000 });
 
-    expect(apiMock.facGetRisk).toHaveBeenCalledWith('R-1');
-    expect(apiMock.facGetPricing).toHaveBeenCalledWith('R-1');
+    expect(apiMock.facGetRisk).toHaveBeenCalledWith('R-1', expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(apiMock.facGetPricing).toHaveBeenCalledWith('R-1', expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(apiMock.facGetUwFactors).toHaveBeenCalledWith('R-1');
     expect(apiMock.facGetLocations).toHaveBeenCalledWith('R-1');
 
@@ -476,7 +469,7 @@ describe('FacPricing save lifecycle', () => {
     expect(apiMock.facSavePricing).toHaveBeenCalledTimes(1);
   });
 
-  it('FINDING F1: manual pricing-field edits are dropped by wizard Next (refetch resets dirty)', async () => {
+  it('F1 FIXED: manual pricing-field edits survive and are saved by wizard Next', async () => {
     render(<FacPricing />);
     await waitFor(() => {
       expect(screen.getAllByText('500,000,000').length).toBeGreaterThan(0);
@@ -488,20 +481,22 @@ describe('FacPricing save lifecycle', () => {
       screen.getByPlaceholderText('e.g. Market benchmark 2026, Broker indication'),
       { target: { value: 'Direct cedant quote' } },
     );
-    // The edit itself re-triggers the primary load (effect depends on `f`)…
-    expect(apiMock.facGetRisk).toHaveBeenCalledTimes(2);
+    // The edit must NOT re-trigger the primary load (load is one-shot per
+    // risk now — the old [f] dependency caused refetch loops + dirty wipes).
+    expect(apiMock.facGetRisk).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole('button', { name: 'WIZ-NEXT' }));
     await waitFor(() => expect(wiz.next).toBe(true));
 
-    // …whose completion resets dirty, so Next "succeeds" WITHOUT saving:
-    // the edit is visible on screen but was never sent to the server.
-    expect(apiMock.facSavePricing).not.toHaveBeenCalled();
-    expect(apiMock.facUpdateRisk).not.toHaveBeenCalled();
+    // The edit rides the save payload to the server.
+    expect(apiMock.facSavePricing).toHaveBeenCalledTimes(1);
+    expect(apiMock.facSavePricing.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ market_source: 'Direct cedant quote' }),
+    );
     expect(screen.getByDisplayValue('Direct cedant quote')).toBeInTheDocument();
   });
 
-  it('FINDING F2: save failure crashes on window.showToast, then blocks navigation once a toast fn exists', async () => {
+  it('F2 FIXED: save failure toasts via the global toast and blocks navigation', async () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       apiMock.facSavePricing.mockRejectedValue(
@@ -515,23 +510,15 @@ describe('FacPricing save lifecycle', () => {
       // Dirty the screen via an engine input (survives the F1 reset).
       fireEvent.change(screen.getByDisplayValue('0.20'), { target: { value: '0.25' } });
 
-      // 1) As shipped, window.showToast is undefined ⇒ the catch block itself
-      //    throws TypeError out of save() (WizardLayout would show that
-      //    TypeError message instead of the intended toast).
-      fireEvent.click(screen.getByRole('button', { name: 'WIZ-NEXT' }));
-      await waitFor(() => expect(wiz.error).toBeInstanceOf(TypeError));
-      expect(wiz.error.message).toMatch(/showToast is not a function/);
-      expect(apiMock.facSavePricing).toHaveBeenCalledTimes(1);
-
-      // 2) With a toast fn present, the intended contract holds: toast the
-      //    message, return false so the wizard blocks navigation.
-      window.showToast = vi.fn();
+      // The failure toasts through the app-wide ToastProvider hook (no
+      // window.showToast — that global never existed) and save() returns
+      // false so the wizard blocks navigation.
       fireEvent.click(screen.getByRole('button', { name: 'WIZ-NEXT' }));
       await waitFor(() => expect(wiz.next).toBe(false));
-      expect(window.showToast).toHaveBeenCalledWith('Pricing save failed: API PUT → 500: db down');
-      expect(apiMock.facSavePricing).toHaveBeenCalledTimes(2);
+      expect(wiz.error).toBeUndefined();
+      expect(toastMock).toHaveBeenCalledWith('Pricing save failed: API PUT → 500: db down');
+      expect(apiMock.facSavePricing).toHaveBeenCalledTimes(1);
     } finally {
-      delete window.showToast;
       errSpy.mockRestore();
     }
   });
@@ -587,32 +574,23 @@ describe('FacPricing extensions & extra covers', () => {
 });
 
 describe('FacPricing error path', () => {
-  it('FINDING F3: primary load failure degrades silently — no alert, empty screen, console.error only', async () => {
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      const boom = Object.assign(new Error('API GET → 500: down'), { status: 500 });
-      apiMock.facGetRisk.mockRejectedValue(boom);
+  it('F3 FIXED: primary load failure surfaces an alert with Retry, which recovers', async () => {
+    const boom = Object.assign(new Error('API GET → 500: down'), { status: 500 });
+    apiMock.facGetRisk.mockRejectedValueOnce(boom);
 
-      render(<FacPricing />);
+    render(<FacPricing />);
 
-      await waitFor(() => {
-        expect(errSpy.mock.calls.some((args) => args.includes(boom))).toBe(true);
-      });
+    // AsyncBoundary surfaces the failure instead of painting an
+    // empty-but-normal-looking form (the old silent degrade).
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/could not load/i);
+    expect(screen.queryByText('① Market Rate Pricing')).toBeNull();
 
-      // Current contract: NO error surface at all (no AsyncBoundary/alert,
-      // no retry) — unlike FacRiskDetail / the migrated NP screens.
-      expect(screen.queryByRole('alert')).toBeNull();
-      // The skeleton renders with nothing in it: no TSI header line and the
-      // engine sits in its waiting state forever.
-      expect(screen.queryByText(/Total Sum Insured/)).toBeNull();
-      expect(screen.getByText(/Engine waiting for reference data/)).toBeInTheDocument();
-      // Sections still paint (the screen looks "fine" to the user).
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(apiMock.facGetRisk).toHaveBeenCalledTimes(2);
+    await waitFor(() => {
       expect(screen.getByText('① Market Rate Pricing')).toBeInTheDocument();
-      expect(screen.getByText('④ Final UW Rate')).toBeInTheDocument();
-      // Reference data did load, so the factor catalogue renders regardless.
-      expect(screen.getByText('Construction Class')).toBeInTheDocument();
-    } finally {
-      errSpy.mockRestore();
-    }
+    });
   });
 });
