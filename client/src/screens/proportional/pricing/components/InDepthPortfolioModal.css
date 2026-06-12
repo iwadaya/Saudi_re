@@ -1,0 +1,270 @@
+/* InDepthPortfolioModal.css — co-located styles for the in-depth portfolio
+   modal (Phase 3.2: migrated from inline style={{}} hotspots onto the ui
+   Modal primitive). Values are carried verbatim from the previous inline
+   styles; var(--*) tokens are used where an exact token match exists. */
+
+/* The hand-rolled shell used .modal-backdrop, which modal-safety.css lifts
+   to the top of the stack. Keep that stacking (and the original darker,
+   blurrier veil) for the primitive's backdrop. */
+.ui-modal-backdrop:has(> .indepth-modal) {
+  z-index: var(--modal-stack, 120000);
+  background: rgba(2, 6, 18, 0.9);
+  backdrop-filter: blur(8px);
+}
+
+.ui-modal.indepth-modal {
+  width: calc(100vw - 20px);
+  max-width: 1100px;
+  height: calc(100vh - 24px);
+  max-height: calc(100vh - 40px);
+  background: linear-gradient(160deg, #0c1628, #060e1c);
+  border: 1px solid rgba(96, 165, 250, 0.22);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.75);
+}
+
+/* ── Header: title block + adherence score share the title row ──────── */
+.indepth-modal .ui-modal__title {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.indepth-head__main { flex: 1; min-width: 0; }
+.indepth-head__sub {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.35);
+  margin-top: 2px;
+}
+.indepth-head__score {
+  display: block;
+  text-align: center;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.indepth-head__score-label {
+  display: block;
+  font-size: 9px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.indepth-head__score-value { display: block; font-size: 22px; font-weight: 900; }
+
+/* ── Body hosts its own tab bar + scrolling content ─────────────────── */
+.indepth-modal .ui-modal__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.indepth-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+.indepth-tab {
+  padding: 10px 20px;
+  font-size: 12px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  border-bottom: 2px solid transparent;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.indepth-tab.is-active {
+  background: rgba(96, 165, 250, 0.10);
+  color: #60a5fa;
+  border-bottom-color: #60a5fa;
+}
+
+.indepth-content { flex: 1; overflow: auto; padding: 16px 20px; }
+
+/* ── Cards / notes ──────────────────────────────────────────────────── */
+.indepth-card {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 14px;
+}
+.indepth-card__title {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+.indepth-note { font-size: 11px; color: rgba(255, 255, 255, 0.4); margin-bottom: 14px; }
+.indepth-note--lg { margin-bottom: 16px; }
+
+/* ── Tables (sticky headers, so not the ui Table wrapper) ───────────── */
+.indepth-table { width: 100%; border-collapse: collapse; }
+.indepth-table th {
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+  background: rgba(6, 12, 24, 0.95);
+  position: sticky;
+  top: 0;
+}
+.indepth-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: var(--num-cell-fs, 12px);
+  vertical-align: middle;
+}
+.indepth-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+.indepth-table--click tbody tr { cursor: pointer; }
+.indepth-table tbody tr.is-hl { background: rgba(96, 165, 250, 0.07); }
+.indepth-table .ta-l { text-align: left; }
+.indepth-table .ta-r { text-align: right; }
+.indepth-table .w200 { width: 200px; }
+.indepth-table .fw6 { font-weight: 600; }
+.indepth-table .fw7 { font-weight: 700; }
+
+/* ── Legend ─────────────────────────────────────────────────────────── */
+.indepth-legend { display: flex; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+.indepth-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+}
+.indepth-swatch { width: 10px; height: 10px; border-radius: 2px; background: currentColor; }
+
+/* ── Chart SVGs ─────────────────────────────────────────────────────── */
+.indepth-chart {
+  width: 100%;
+  height: auto;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.indepth-gapbar { overflow: visible; }
+.indepth-gapcell { display: flex; align-items: center; gap: 8px; }
+.indepth-gapval { font-size: 11px; font-weight: 600; width: 52px; text-align: right; }
+
+/* ── Gap insight cards ──────────────────────────────────────────────── */
+.indepth-cards { display: flex; gap: 10px; flex-wrap: wrap; }
+.ui-callout.indepth-insight { flex: 1 1 200px; }
+.indepth-insight__name {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 2px;
+}
+.indepth-insight__detail { font-size: 11px; color: rgba(255, 255, 255, 0.5); }
+.indepth-allclear {
+  font-size: 12px;
+  color: #4ade80;
+  padding: 10px 14px;
+  background: rgba(74, 222, 128, 0.06);
+  border-radius: 9px;
+  border: 1px solid rgba(74, 222, 128, 0.2);
+}
+
+/* ── Adequacy score tab ─────────────────────────────────────────────── */
+.indepth-scores { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.indepth-overall {
+  padding: 14px 20px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+  min-width: 130px;
+}
+.indepth-overall__label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.indepth-overall__value { font-size: 36px; font-weight: 900; }
+.indepth-overall__denom { font-size: 10px; color: rgba(255, 255, 255, 0.3); margin-top: 2px; }
+.indepth-overall__verdict { font-size: 11px; font-weight: 700; margin-top: 6px; }
+
+.indepth-scorelist { display: flex; flex-wrap: wrap; gap: 10px; flex: 1; }
+.indepth-scorecard {
+  padding: 10px 14px;
+  border-radius: 9px;
+  flex: 1 1 150px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent;
+}
+.indepth-scorecard__name {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.indepth-scorebar-row { display: flex; align-items: center; gap: 8px; }
+.indepth-scorebar { flex: 1; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); }
+.indepth-scorebar__fill { height: 100%; border-radius: 3px; transition: width 0.4s; }
+.indepth-scoreval { font-size: 13px; font-weight: 800; width: 32px; text-align: right; }
+.indepth-scorecard__foot {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  margin-top: 5px;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* score grades (same 80/60 thresholds as before) */
+.indepth-scorecard.is-good { border-color: #4ade8030; }
+.indepth-scorecard.is-warn { border-color: #fbbf2430; }
+.indepth-scorecard.is-bad  { border-color: #f8717130; }
+.indepth-scorecard.is-good .indepth-scorebar__fill { background: #4ade80; }
+.indepth-scorecard.is-warn .indepth-scorebar__fill { background: var(--accent-amber, #fbbf24); }
+.indepth-scorecard.is-bad  .indepth-scorebar__fill { background: #f87171; }
+.indepth-scorecard.is-good .indepth-scoreval,
+.indepth-overall__value.is-good,
+.indepth-overall__verdict.is-good,
+.indepth-head__score-value.is-good { color: #4ade80; }
+.indepth-scorecard.is-warn .indepth-scoreval,
+.indepth-overall__value.is-warn,
+.indepth-overall__verdict.is-warn,
+.indepth-head__score-value.is-warn { color: var(--accent-amber, #fbbf24); }
+.indepth-scorecard.is-bad .indepth-scoreval,
+.indepth-overall__value.is-bad,
+.indepth-overall__verdict.is-bad,
+.indepth-head__score-value.is-bad { color: #f87171; }
+
+/* ── History tab ────────────────────────────────────────────────────── */
+.indepth-empty {
+  text-align: center;
+  padding: 40px;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 13px;
+}
+
+/* ── Data-color utilities (values carried from the old inline styles) ─ */
+.indepth-modal .idc-blue { color: #60a5fa; }
+.indepth-modal .idc-green { color: #4ade80; }
+.indepth-modal .idc-violet { color: #a78bfa; }
+.indepth-modal .idc-amber { color: var(--accent-amber, #fbbf24); }
+.indepth-modal .idc-teal { color: #00e8b8; }
+.indepth-modal .idc-red { color: #f87171; }
+.indepth-modal .idc-dim { color: rgba(255, 255, 255, 0.35); }
+.indepth-modal .idc-empty { color: rgba(255, 255, 255, 0.2); }
+.indepth-modal .c-text { color: rgba(255, 255, 255, 0.85); }

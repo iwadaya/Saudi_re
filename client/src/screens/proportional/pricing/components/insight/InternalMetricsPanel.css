@@ -1,0 +1,218 @@
+/* InternalMetricsPanel.css — co-located styles for the Internal Metrics
+   insight panel (Phase 3.2: migrated from inline style={{}} hotspots).
+   Values are carried verbatim from the previous inline styles; var(--*)
+   tokens are used where an exact token match exists (accent-amber). */
+
+/* ── Layout ─────────────────────────────────────────────────────────── */
+.imp-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 0;
+}
+.imp-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+.imp-pane--claims { padding-top: 14px; }
+.imp-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.imp-scroll { flex: 1; overflow-y: auto; }
+
+/* ── Tabs ───────────────────────────────────────────────────────────── */
+.imp-toptabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+  flex-shrink: 0;
+  padding: 0 4px;
+}
+.imp-toptab {
+  padding: 9px 22px;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.38);
+  border-bottom: 2px solid transparent;
+}
+.imp-toptab.is-active {
+  background: rgba(0, 212, 255, 0.12);
+  color: #00d4ff;
+  border-bottom-color: #00d4ff;
+}
+.imp-flagchip { margin-left: 7px; }
+
+.imp-subtabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 4px 0;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 14px;
+}
+.imp-subtab {
+  padding: 6px 14px;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.40);
+  border-bottom: 2px solid transparent;
+}
+.imp-subtab.is-active {
+  background: rgba(0, 232, 184, 0.12);
+  color: #00e8b8;
+  border-bottom-color: #00e8b8;
+}
+
+/* ── Card + KPI tiles ───────────────────────────────────────────────── */
+.imp-card {
+  background: rgba(8, 14, 30, 0.70);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.imp-card__head {
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.imp-card__meta { font-size: 11px; color: rgba(148, 163, 184, 0.4); }
+.imp-card__meta--sm { font-size: 10px; }
+.imp-card__foot {
+  padding: 8px 14px;
+  font-size: 10px;
+  color: rgba(148, 163, 184, 0.40);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.imp-kpis { display: flex; gap: 10px; flex-wrap: wrap; }
+.imp-kpis--claims { margin-bottom: 12px; flex-shrink: 0; }
+.imp-kpi { padding: 12px 16px; flex: 1 1 120px; }
+.imp-kpi--sm { padding: 10px 14px; flex: 1 1 100px; }
+.imp-kpi__label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.50);
+  margin-bottom: 5px;
+}
+.imp-kpi--sm .imp-kpi__label { letter-spacing: .12em; margin-bottom: 4px; }
+.imp-kpi__value {
+  font-size: 19px;
+  font-weight: 900;
+  color: rgba(226, 232, 240, 0.9);
+  letter-spacing: -.01em;
+}
+.imp-kpi--sm .imp-kpi__value { font-size: 20px; letter-spacing: normal; }
+.imp-kpi__sub { font-size: 10px; color: rgba(148, 163, 184, 0.45); margin-top: 2px; }
+
+/* ── Table add-ons (on top of the ui Table primitive) ───────────────── */
+.imp-tablewrap { border: none; border-radius: 0; }
+.imp-table .ta-r { text-align: right; }
+.imp-table .fw5 { font-weight: 500; }
+.imp-table .fw6 { font-weight: 600; }
+.imp-table .fw7 { font-weight: 700; }
+.imp-table .fw8 { font-weight: 800; }
+
+.imp-table tfoot tr.imp-total td {
+  border-top: 2px solid rgba(255, 255, 255, 0.12);
+  background: rgba(5, 8, 16, 0.85);
+}
+.imp-table .imp-total__label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: var(--num-th-letter-spacing, .08em);
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.50);
+}
+
+/* Flagged-row tints must beat the ui-table even-row striping. */
+.imp-table.ui-table tbody tr.row-result td { background: rgba(74, 222, 128, 0.04); }
+.imp-table.ui-table tbody tr.row-flag-uw td { background: rgba(248, 113, 113, 0.06); }
+.imp-table.ui-table tbody tr.row-flag-int td { background: rgba(var(--accent-amber-rgb), 0.04); }
+
+.imp-table .imp-flagcell { width: 24px; text-align: center; padding: 8px 6px; }
+.imp-flagdot { font-size: 10px; }
+.imp-table .imp-chipcell { padding: 8px; }
+.imp-clip {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.imp-clip--sm { max-width: 130px; }
+.imp-table .imp-date { white-space: nowrap; color: rgba(148, 163, 184, 0.7); }
+.imp-table .imp-cob { font-size: 11px; color: rgba(148, 163, 184, 0.6); }
+.imp-table .imp-share { color: rgba(148, 163, 184, 0.55); font-size: 11px; }
+.imp-table .imp-empty {
+  padding: 24px;
+  text-align: center;
+  color: rgba(148, 163, 184, 0.4);
+  font-size: 12px;
+}
+
+/* ── Notes / legends / loading ──────────────────────────────────────── */
+.imp-renewal-note { font-size: 12px; color: rgba(148, 163, 184, 0.55); margin-bottom: 4px; }
+.imp-legends { display: flex; gap: 10px; margin-bottom: 10px; flex-shrink: 0; flex-wrap: wrap; }
+.imp-legend {
+  font-size: 10px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: rgba(226, 232, 240, 0.75);
+  font-weight: 600;
+}
+.imp-legend--uw {
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+}
+.imp-legend--int {
+  background: rgba(var(--accent-amber-rgb), 0.10);
+  border: 1px solid rgba(var(--accent-amber-rgb), 0.35);
+}
+.imp-loading { padding: 16px; color: rgba(148, 163, 184, 0.5); font-size: 13px; }
+
+/* CASH_CALL keeps its distinct orange (existing value) on the Badge chip. */
+.ui-badge.imp-badge-cashcall {
+  color: #f97316;
+  border-color: rgba(249, 115, 22, 0.45);
+  background: rgba(249, 115, 22, 0.10);
+}
+
+/* ── Data-color utilities (values carried from the old inline styles) ── */
+.imp-root .c-pos { color: #4ade80; }
+.imp-root .c-neg { color: #f87171; }
+.imp-root .c-amber { color: var(--accent-amber, #fbbf24); }
+.imp-root .c-orange { color: #f97316; }
+.imp-root .c-orange2 { color: #fb923c; }
+.imp-root .c-violet { color: #a78bfa; }
+.imp-root .c-indigo { color: #818cf8; }
+.imp-root .c-cyan { color: #00d4ff; }
+.imp-root .c-blue { color: #60a5fa; }
+.imp-root .c-dim { color: rgba(148, 163, 184, 0.3); }
+.imp-root .c-s35 { color: rgba(148, 163, 184, 0.35); }
+.imp-root .c-w35 { color: rgba(255, 255, 255, 0.35); }
+.imp-root .c-w40 { color: rgba(255, 255, 255, 0.4); }
+.imp-root .c-text { color: rgba(226, 232, 240, 0.85); }
