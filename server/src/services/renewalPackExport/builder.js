@@ -1,7 +1,9 @@
 // server/src/services/renewalPackExport/builder.js
-// Builds the portfolio renewal pack as an ExcelJS Workbook (all amounts in USD).
+// Builds the portfolio renewal pack as an ExcelJS Workbook (all amounts in USD),
+// styled with the Universe theme (cover sheet, title bars, zebra tables).
 
 import ExcelJS from 'exceljs';
+import { UT, titleBar, headerRow, zebra, totalRow, finishSheet, coverSheet } from './theme.js';
 
 const APPLY_SIGNED_SHARE = true; // scale SI/premium/agg by signed_line_pct (NOT counts)
 const RISK_BANDS_USD = [0, 1e6, 2.5e6, 5e6, 10e6, 25e6, 50e6, 100e6, 250e6, 500e6, 1e9, Infinity];
@@ -16,9 +18,21 @@ const TRIANGLE_TYPES = [
   { type: 'CLAIMS_PAID', sheet: 'Paid Claims Triangle' },
   { type: 'CLAIMS_OS', sheet: 'OS Claims Triangle' },
 ];
+const TRIANGLE_SUBTITLE = 'All amounts USD · UW year × development period';
 
 export async function buildRenewalPackWorkbook(pool) {
   const workbook = new ExcelJS.Workbook();
+  coverSheet(workbook, [
+    { name: 'Premium Triangle', desc: 'Aggregate written premium by UW year × development' },
+    { name: 'Paid Claims Triangle', desc: 'Aggregate paid claims' },
+    { name: 'OS Claims Triangle', desc: 'Aggregate outstanding claims' },
+    { name: 'Incurred Triangle', desc: 'Paid + outstanding' },
+    { name: 'Large Losses', desc: 'Large-loss register with country' },
+    { name: 'Cat Losses', desc: 'Catastrophe-loss register with country' },
+    { name: 'Risk Profile', desc: 'Banded sum-insured profile, signed contracts' },
+    { name: 'Claims Profile', desc: 'Banded claims experience, signed contracts' },
+    { name: 'Aggregates by Country', desc: 'Peril aggregates (EQ/WS/Flood/SRCC/Others)' },
+  ], { date: new Date().toISOString().slice(0, 10) });
   await addTriangleSheets(workbook, pool);
   await addLossSheet(workbook, pool, 'Large Losses', 'contract_large_losses', 'contract_large_loss_report');
   await addLossSheet(workbook, pool, 'Cat Losses', 'contract_cat_losses', 'contract_cat_loss_report');
@@ -34,19 +48,24 @@ const num = (v) => (v == null ? 0 : Number(v));
 const numOrNull = (v) => (v == null ? null : Number(v));
 const devLabel = (d) => (d % 12 === 0 ? 'DY ' + d / 12 : d + 'm');
 
-function writeNoData(ws) {
-  ws.getCell('A1').value = 'No data';
+function writeNoData(ws, title, subtitle) {
+  const hdr = titleBar(ws, 6, title, subtitle);
+  const cell = ws.getCell(hdr, 1);
+  cell.value = 'No data available';
+  cell.font = { name: UT.font, size: 10, italic: true, color: { argb: UT.inkSoft } };
+  ws.views = [{ showGridLines: false }];
 }
 
-function finishSheet(ws, headers, { freezeCols = 1, moneyCols = [], pctCols = [], dateCols = [] } = {}) {
-  ws.getRow(1).font = { bold: true };
-  ws.views = [{ state: 'frozen', xSplit: freezeCols, ySplit: 1 }];
-  for (const i of moneyCols) ws.getColumn(i).numFmt = '#,##0';
-  for (const i of pctCols) ws.getColumn(i).numFmt = '0.00%';
-  for (const i of dateCols) ws.getColumn(i).numFmt = 'yyyy-mm-dd';
-  headers.forEach((h, i) => {
-    ws.getColumn(i + 1).width = Math.max(12, String(h).length + 2);
-  });
+function applyFormats(ws, firstRow, lastRow, fmtByCol) {
+  for (let rr = firstRow; rr <= lastRow; rr++) {
+    for (const [col, fmt] of Object.entries(fmtByCol)) {
+      ws.getCell(rr, Number(col)).numFmt = fmt;
+    }
+  }
+}
+
+function setWidths(ws, widths) {
+  widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 }
 
 function bandIndexFor(usd) {
@@ -82,7 +101,7 @@ async function addTriangleSheets(workbook, pool) {
       maxY = Number(rows[0].max_y);
     }
   } catch {
-    // null bounds → every triangle tab falls back to "No data"
+    // null bounds → every triangle tab falls back to "No data available"
   }
 
   const grids = {}; // type → Map('year|dev' → USD value), or null when the query failed
@@ -139,21 +158,35 @@ async function addTriangleSheets(workbook, pool) {
 
 function writeTriangle(ws, grid, minY, maxY, devCols) {
   if (!grid || minY == null || devCols.length === 0) {
-    writeNoData(ws);
+    writeNoData(ws, ws.name, TRIANGLE_SUBTITLE);
     return;
   }
-  const headers = ['UW Year', ...devCols.map(devLabel)];
-  ws.addRow(headers);
+  const ncols = devCols.length + 1;
+  const hdr = titleBar(ws, ncols, ws.name, TRIANGLE_SUBTITLE);
+  ws.getRow(hdr).values = ['UW Year', ...devCols.map(devLabel)];
+  headerRow(ws, hdr, ncols);
+
+  const firstData = hdr + 1;
+  let rowIdx = firstData;
   for (let y = minY; y <= maxY; y++) {
-    ws.addRow([y, ...devCols.map((d) => grid.get(`${y}|${d}`) ?? null)]);
+    ws.getRow(rowIdx).values = [y, ...devCols.map((d) => grid.get(`${y}|${d}`) ?? null)];
+    rowIdx++;
   }
-  finishSheet(ws, headers, { moneyCols: devCols.map((_, i) => i + 2) });
+  const lastData = rowIdx - 1;
+  zebra(ws, firstData, lastData, ncols);
+
+  const fmtByCol = {};
+  for (let c = 2; c <= ncols; c++) fmtByCol[c] = UT.fmtMoney;
+  applyFormats(ws, firstData, lastData, fmtByCol);
+  setWidths(ws, [12, ...devCols.map(() => 14)]);
+  finishSheet(ws, hdr, 1);
 }
 
 // ---------- large / cat losses ----------
 
 async function addLossSheet(workbook, pool, sheetName, lossTable, reportTable) {
   const ws = workbook.addWorksheet(sheetName);
+  const subtitle = 'All amounts USD';
   let rows;
   try {
     ({ rows } = await pool.query(
@@ -171,19 +204,25 @@ async function addLossSheet(workbook, pool, sheetName, lossTable, reportTable) {
        ORDER BY ll.date_of_loss NULLS LAST`
     ));
   } catch {
-    writeNoData(ws);
+    writeNoData(ws, sheetName, subtitle);
     return;
   }
   if (!rows.length) {
-    writeNoData(ws);
+    writeNoData(ws, sheetName, subtitle);
     return;
   }
 
   const headers = ['UW Year', 'Insured', 'Loss Name', 'Date of Loss', 'Class of Business',
     'Paid (USD)', 'OS (USD)', 'Incurred (USD)', 'Selected', 'Country'];
-  ws.addRow(headers);
+  const ncols = headers.length;
+  const hdr = titleBar(ws, ncols, sheetName, subtitle);
+  ws.getRow(hdr).values = headers;
+  headerRow(ws, hdr, ncols);
+
+  const firstData = hdr + 1;
+  let rowIdx = firstData;
   for (const r of rows) {
-    ws.addRow([
+    ws.getRow(rowIdx).values = [
       numOrNull(r.uw_year),
       r.insured_name ?? null,
       r.loss_name ?? null,
@@ -194,15 +233,24 @@ async function addLossSheet(workbook, pool, sheetName, lossTable, reportTable) {
       numOrNull(r.incurred_usd),
       r.is_selected ?? null,
       r.country_name ?? null,
-    ]);
+    ];
+    rowIdx++;
   }
-  finishSheet(ws, headers, { moneyCols: [6, 7, 8], dateCols: [4] });
+  const lastData = rowIdx - 1;
+  zebra(ws, firstData, lastData, ncols);
+  applyFormats(ws, firstData, lastData, { 4: UT.fmtDate, 6: UT.fmtMoney, 7: UT.fmtMoney, 8: UT.fmtMoney });
+  for (let rr = firstData; rr <= lastData; rr++) {
+    ws.getCell(rr, 9).alignment = { horizontal: 'center' };
+  }
+  setWidths(ws, [14, 26, 26, 14, 14, 14, 14, 14, 14, 18]);
+  finishSheet(ws, hdr, 1);
 }
 
 // ---------- risk profile ----------
 
 async function addRiskProfileSheet(workbook, pool) {
   const ws = workbook.addWorksheet('Risk Profile');
+  const subtitle = 'Signed contracts · USD · share-adjusted exposure & premium';
   let rows;
   try {
     ({ rows } = await pool.query(
@@ -217,11 +265,11 @@ async function addRiskProfileSheet(workbook, pool) {
        WHERE c.uw_status = 'SIGNED'`
     ));
   } catch {
-    writeNoData(ws);
+    writeNoData(ws, 'Risk Profile', subtitle);
     return;
   }
   if (!rows.length) {
-    writeNoData(ws);
+    writeNoData(ws, 'Risk Profile', subtitle);
     return;
   }
 
@@ -241,12 +289,18 @@ async function addRiskProfileSheet(workbook, pool) {
 
   const headers = ['Lower Band', 'Upper Band', '# Contracts', '# Risks',
     'Total Sum Insured (USD)', 'Total Premium (USD)', 'Rate'];
-  ws.addRow(headers);
+  const ncols = headers.length;
+  const hdr = titleBar(ws, ncols, 'Risk Profile', subtitle);
+  ws.getRow(hdr).values = headers;
+  headerRow(ws, hdr, ncols);
+
+  const firstData = hdr + 1;
+  let rowIdx = firstData;
   let tRisks = 0;
   let tTsi = 0;
   let tPremium = 0;
   for (const band of bands) {
-    ws.addRow([
+    ws.getRow(rowIdx).values = [
       band.lo,
       Number.isFinite(band.hi) ? band.hi : null,
       band.contracts.size,
@@ -254,20 +308,32 @@ async function addRiskProfileSheet(workbook, pool) {
       band.tsi,
       band.premium,
       band.tsi !== 0 ? band.premium / band.tsi : null,
-    ]);
+    ];
+    rowIdx++;
     tRisks += band.risks;
     tTsi += band.tsi;
     tPremium += band.premium;
   }
-  ws.addRow(['TOTAL', null, allContracts.size, tRisks, tTsi, tPremium,
-    tTsi !== 0 ? tPremium / tTsi : null]).font = { bold: true };
-  finishSheet(ws, headers, { freezeCols: 2, moneyCols: [1, 2, 5, 6], pctCols: [7] });
+  const lastData = rowIdx - 1;
+  zebra(ws, firstData, lastData, ncols);
+
+  ws.getRow(rowIdx).values = ['TOTAL', null, allContracts.size, tRisks, tTsi, tPremium,
+    tTsi !== 0 ? tPremium / tTsi : null];
+  totalRow(ws, rowIdx, ncols);
+
+  applyFormats(ws, firstData, rowIdx, {
+    1: UT.fmtInt, 2: UT.fmtInt, 3: UT.fmtInt, 4: UT.fmtInt,
+    5: UT.fmtMoney, 6: UT.fmtMoney, 7: UT.fmtPct,
+  });
+  setWidths(ws, [16, 16, 12, 12, 18, 18, 12]);
+  finishSheet(ws, hdr, 2);
 }
 
 // ---------- claims profile ----------
 
 async function addClaimsProfileSheet(workbook, pool) {
   const ws = workbook.addWorksheet('Claims Profile');
+  const subtitle = 'Signed contracts · USD · share-adjusted';
   let rows;
   try {
     ({ rows } = await pool.query(
@@ -282,11 +348,11 @@ async function addClaimsProfileSheet(workbook, pool) {
        WHERE c.uw_status = 'SIGNED'`
     ));
   } catch {
-    writeNoData(ws);
+    writeNoData(ws, 'Claims Profile', subtitle);
     return;
   }
   if (!rows.length) {
-    writeNoData(ws);
+    writeNoData(ws, 'Claims Profile', subtitle);
     return;
   }
 
@@ -304,13 +370,19 @@ async function addClaimsProfileSheet(workbook, pool) {
 
   const headers = ['Lower Band', 'Upper Band', '# Claims', '# Risks',
     'Incurred (USD)', 'Total Sum Insured (USD)', 'Loss Rate'];
-  ws.addRow(headers);
+  const ncols = headers.length;
+  const hdr = titleBar(ws, ncols, 'Claims Profile', subtitle);
+  ws.getRow(hdr).values = headers;
+  headerRow(ws, hdr, ncols);
+
+  const firstData = hdr + 1;
+  let rowIdx = firstData;
   let tClaims = 0;
   let tRisks = 0;
   let tIncurred = 0;
   let tTsi = 0;
   for (const band of bands) {
-    ws.addRow([
+    ws.getRow(rowIdx).values = [
       band.lo,
       Number.isFinite(band.hi) ? band.hi : null,
       band.claims,
@@ -318,21 +390,33 @@ async function addClaimsProfileSheet(workbook, pool) {
       band.incurred,
       band.tsi,
       band.tsi !== 0 ? band.incurred / band.tsi : null,
-    ]);
+    ];
+    rowIdx++;
     tClaims += band.claims;
     tRisks += band.risks;
     tIncurred += band.incurred;
     tTsi += band.tsi;
   }
-  ws.addRow(['TOTAL', null, tClaims, tRisks, tIncurred, tTsi,
-    tTsi !== 0 ? tIncurred / tTsi : null]).font = { bold: true };
-  finishSheet(ws, headers, { freezeCols: 2, moneyCols: [1, 2, 5, 6], pctCols: [7] });
+  const lastData = rowIdx - 1;
+  zebra(ws, firstData, lastData, ncols);
+
+  ws.getRow(rowIdx).values = ['TOTAL', null, tClaims, tRisks, tIncurred, tTsi,
+    tTsi !== 0 ? tIncurred / tTsi : null];
+  totalRow(ws, rowIdx, ncols);
+
+  applyFormats(ws, firstData, rowIdx, {
+    1: UT.fmtInt, 2: UT.fmtInt, 3: UT.fmtInt, 4: UT.fmtInt,
+    5: UT.fmtMoney, 6: UT.fmtMoney, 7: UT.fmtPct,
+  });
+  setWidths(ws, [16, 16, 12, 12, 18, 18, 12]);
+  finishSheet(ws, hdr, 2);
 }
 
 // ---------- cresta aggregates ----------
 
 async function addCountryAggregatesSheet(workbook, pool) {
   const ws = workbook.addWorksheet('Aggregates by Country');
+  const subtitle = 'Signed contracts · USD · share-adjusted aggregate exposure';
   let rows;
   try {
     ({ rows } = await pool.query(
@@ -353,24 +437,40 @@ async function addCountryAggregatesSheet(workbook, pool) {
       [APPLY_SIGNED_SHARE]
     ));
   } catch {
-    writeNoData(ws);
+    writeNoData(ws, 'Aggregates by Country', subtitle);
     return;
   }
   if (!rows.length) {
-    writeNoData(ws);
+    writeNoData(ws, 'Aggregates by Country', subtitle);
     return;
   }
 
   const headers = ['Country', 'EQ', 'WS', 'Flood', 'SRCC', 'Others', 'Total'];
-  ws.addRow(headers);
+  const ncols = headers.length;
+  const hdr = titleBar(ws, ncols, 'Aggregates by Country', subtitle);
+  ws.getRow(hdr).values = headers;
+  headerRow(ws, hdr, ncols);
+
+  const firstData = hdr + 1;
+  let rowIdx = firstData;
   const totals = [0, 0, 0, 0, 0, 0];
   for (const r of rows) {
     const vals = [num(r.eq), num(r.ws), num(r.flood), num(r.srcc), num(r.others)];
     const total = vals.reduce((a, b) => a + b, 0);
-    ws.addRow([r.country_name ?? null, ...vals, total]);
+    ws.getRow(rowIdx).values = [r.country_name ?? null, ...vals, total];
+    rowIdx++;
     vals.forEach((v, i) => { totals[i] += v; });
     totals[5] += total;
   }
-  ws.addRow(['TOTAL', ...totals]).font = { bold: true };
-  finishSheet(ws, headers, { moneyCols: [2, 3, 4, 5, 6, 7] });
+  const lastData = rowIdx - 1;
+  zebra(ws, firstData, lastData, ncols);
+
+  ws.getRow(rowIdx).values = ['TOTAL', ...totals];
+  totalRow(ws, rowIdx, ncols);
+
+  applyFormats(ws, firstData, rowIdx, {
+    2: UT.fmtMoney, 3: UT.fmtMoney, 4: UT.fmtMoney, 5: UT.fmtMoney, 6: UT.fmtMoney, 7: UT.fmtMoney,
+  });
+  setWidths(ws, [22, 16, 16, 16, 16, 16, 16]);
+  finishSheet(ws, hdr, 1);
 }
