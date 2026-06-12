@@ -20,9 +20,9 @@ const { apiMock, appStateMock, contractIdRef } = vi.hoisted(() => ({
   contractIdRef: { current: 'contract-1' },
 }));
 
-vi.mock('../../../api', () => ({ api: apiMock }));
+vi.mock('../../../api', () => ({ __esModule: true, default: apiMock, api: apiMock }));
 vi.mock('../../../hooks/useContractId', () => ({ useContractId: () => contractIdRef.current }));
-vi.mock('../../../context/AppContext', () => ({ useAppState: () => ({ state: appStateMock }) }));
+vi.mock('../../../context/AppContext', () => ({ useAppState: () => ({ state: appStateMock, setSlice: vi.fn(), replaceSlice: vi.fn() }) }));
 vi.mock('../../../components/WizardLayout', () => ({
   default: ({ children }) => (
     <section>
@@ -53,7 +53,90 @@ beforeEach(() => {
   apiMock.savePricingPattern.mockResolvedValue({ ok: true });
 });
 
+// 2021–2025 cumulative premium triangle: weighted 12–24 LDF =
+// (120+132+108+96)/(100+110+90+80) = 1.2000 — asserted after hydration.
+const TRI_CELLS = [
+  { origin_year: 2021, dev_months: 12, cum_value: 100 },
+  { origin_year: 2021, dev_months: 24, cum_value: 120 },
+  { origin_year: 2021, dev_months: 36, cum_value: 144 },
+  { origin_year: 2021, dev_months: 48, cum_value: 160 },
+  { origin_year: 2021, dev_months: 60, cum_value: 176 },
+  { origin_year: 2022, dev_months: 12, cum_value: 110 },
+  { origin_year: 2022, dev_months: 24, cum_value: 132 },
+  { origin_year: 2022, dev_months: 36, cum_value: 150 },
+  { origin_year: 2022, dev_months: 48, cum_value: 170 },
+  { origin_year: 2023, dev_months: 12, cum_value: 90 },
+  { origin_year: 2023, dev_months: 24, cum_value: 108 },
+  { origin_year: 2023, dev_months: 36, cum_value: 126 },
+  { origin_year: 2024, dev_months: 12, cum_value: 80 },
+  { origin_year: 2024, dev_months: 24, cum_value: 96 },
+  { origin_year: 2025, dev_months: 12, cum_value: 70 },
+];
+
 describe('DevFactorsScreen', () => {
+  // Phase-2.2 migration: the primary triangle load rides useResource behind an
+  // AsyncBoundary, so the loading→loaded and loading→error transitions are
+  // part of the screen's contract.
+  it('transitions loading → loaded and hydrates the factor tables', async () => {
+    let resolveLoad;
+    apiMock.getTriangleWithExclusions.mockReturnValue(
+      new Promise((resolve) => { resolveLoad = resolve; }),
+    );
+
+    render(
+      <DevFactorsScreen
+        routeKey="PROP_PREMIUM_DEV_FACTORS"
+        title="Premium Development Factors"
+        headerPill="PROPORTIONAL TREATY: PREMIUM DEVELOPMENT FACTORS"
+      />,
+    );
+
+    // Boundary shows while the fetch is in flight; the content region is held back.
+    expect(screen.getByRole('status')).toHaveTextContent(/loading triangle data/i);
+    expect(screen.queryByText(/Actual Development Factors/i)).toBeNull();
+
+    resolveLoad({
+      full: { cells: TRI_CELLS }, stripped: { cells: TRI_CELLS },
+      exclusions: { largeLossCount: 0, catLossCount: 0, applies: false },
+    });
+
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+    expect(screen.getByText(/Actual Development Factors/i)).toBeInTheDocument();
+    expect(screen.getByText(/Underwriter Chosen Factors/i)).toBeInTheDocument();
+    // Hydrated data: the weighted 12–24 LDF renders in the read-only Actual
+    // table and seeds the editable Underwriter Chosen inputs (one effect
+    // pass after the boundary clears, hence findAll).
+    expect(screen.getAllByText('1.2000').length).toBeGreaterThan(0);
+    expect((await screen.findAllByDisplayValue('1.2000')).length).toBeGreaterThan(0);
+  });
+
+  it('transitions loading → error with a Retry that refetches and recovers', async () => {
+    apiMock.getTriangleWithExclusions
+      .mockRejectedValueOnce(Object.assign(new Error('API GET → 500: down'), { status: 500 }))
+      .mockResolvedValueOnce({
+        full: { cells: TRI_CELLS }, stripped: { cells: TRI_CELLS },
+        exclusions: { largeLossCount: 0, catLossCount: 0, applies: false },
+      });
+
+    render(
+      <DevFactorsScreen
+        routeKey="PROP_PREMIUM_DEV_FACTORS"
+        title="Premium Development Factors"
+        headerPill="PROPORTIONAL TREATY: PREMIUM DEVELOPMENT FACTORS"
+      />,
+    );
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/could not load/i);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(apiMock.getTriangleWithExclusions).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText(/Actual Development Factors/i)).toBeInTheDocument();
+    expect(screen.getAllByText('1.2000').length).toBeGreaterThan(0);
+  });
+
   it('renders the empty premium dev-factor state without triangle data', async () => {
     render(
       <DevFactorsScreen
