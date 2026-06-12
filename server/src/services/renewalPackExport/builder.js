@@ -23,6 +23,7 @@ const TRIANGLE_SUBTITLE = 'All amounts USD · UW year × development period';
 export async function buildRenewalPackWorkbook(pool) {
   const workbook = new ExcelJS.Workbook();
   coverSheet(workbook, [
+    { name: 'Contract Register', desc: 'All treaties with structure detail — one row per NP layer' },
     { name: 'Premium Triangle', desc: 'Aggregate written premium by UW year × development' },
     { name: 'Paid Claims Triangle', desc: 'Aggregate paid claims' },
     { name: 'OS Claims Triangle', desc: 'Aggregate outstanding claims' },
@@ -33,6 +34,7 @@ export async function buildRenewalPackWorkbook(pool) {
     { name: 'Claims Profile', desc: 'Banded claims experience, signed contracts' },
     { name: 'Aggregates by Country', desc: 'Peril aggregates (EQ/WS/Flood/SRCC/Others)' },
   ], { date: new Date().toISOString().slice(0, 10) });
+  await addContractRegisterSheet(workbook, pool);
   await addTriangleSheets(workbook, pool);
   await addLossSheet(workbook, pool, 'Large Losses', 'contract_large_losses', 'contract_large_loss_report');
   await addLossSheet(workbook, pool, 'Cat Losses', 'contract_cat_losses', 'contract_cat_loss_report');
@@ -81,6 +83,101 @@ function makeBands(initAccumulators) {
     hi: RISK_BANDS_USD[i + 1],
     ...initAccumulators(),
   }));
+}
+
+// ---------- contract register ----------
+
+async function addContractRegisterSheet(workbook, pool) {
+  const ws = workbook.addWorksheet('Contract Register');
+  const subtitle = 'All contracts · USD · 100% treaty terms · one row per NP layer';
+  let rows;
+  try {
+    ({ rows } = await pool.query(
+      `SELECT c.uw_year, ced.company_name AS cedant, co.country_name, tt.treaty_type,
+              cob.class_of_business AS cob_name, c.uw_status, cur.currency_code,
+              COALESCE(c.signed_line_pct,100) AS slp,
+              (COALESCE(tt.category,'') ILIKE '%NP%' OR COALESCE(tt.category,'') ILIKE '%NON%') AS is_np,
+              nl.layer_number, nl.layer_limit, nl.attachment, nl.num_reinstatements,
+              nl.mdp, nl.earned_premium,
+              pd.total_capacity, pd.cession_pct, pd.quota_share_epi, pd.surplus_epi,
+              COALESCE(fx.rate_to_usd,1.0) AS r
+       FROM public.contract c
+       LEFT JOIN public.companies ced ON ced.company_id = c.cedant_id
+       LEFT JOIN public.country co ON co.country_id = c.country_id
+       LEFT JOIN public.treaty_type tt ON tt.treaty_type_id = c.treaty_type_id
+       LEFT JOIN public.class_of_business cob ON cob.class_of_business_id = c.primary_class_of_business_id
+       LEFT JOIN public.contract_prop_details pd ON pd.contract_id = c.contract_id
+       LEFT JOIN public.contract_np_layers nl ON nl.contract_id = c.contract_id
+         AND (COALESCE(tt.category,'') ILIKE '%NP%' OR COALESCE(tt.category,'') ILIKE '%NON%')
+       LEFT JOIN public.currency cur ON cur.currency_id = c.currency_id
+       LEFT JOIN ${FX} ON fx.currency_code = cur.currency_code
+       ORDER BY c.uw_year DESC, ced.company_name NULLS LAST, tt.treaty_type, nl.layer_number`
+    ));
+  } catch {
+    writeNoData(ws, 'Contract Register', subtitle);
+    return;
+  }
+  if (!rows.length) {
+    writeNoData(ws, 'Contract Register', subtitle);
+    return;
+  }
+
+  const headers = ['UW Year', 'Cedant', 'Country', 'Treaty Type', 'Class', 'Status', 'Ccy',
+    'Signed %', 'Layer', 'Limit (USD)', 'Attachment (USD)', 'Cession %', 'Reinst.', 'Premium (USD)'];
+  const ncols = headers.length;
+  const hdr = titleBar(ws, ncols, 'Contract Register', subtitle);
+  ws.getRow(hdr).values = headers;
+  headerRow(ws, hdr, ncols);
+
+  const firstData = hdr + 1;
+  let rowIdx = firstData;
+  for (const r of rows) {
+    const rate = Number(r.r);
+    let limit;
+    let attachment = null;
+    let cession = null;
+    let reinst = null;
+    let premium;
+    if (r.is_np) {
+      limit = numOrNull(r.layer_limit);
+      attachment = numOrNull(r.attachment);
+      reinst = numOrNull(r.num_reinstatements);
+      premium = numOrNull(r.mdp ?? r.earned_premium);
+    } else {
+      limit = numOrNull(r.total_capacity);
+      cession = r.cession_pct == null ? null : Number(r.cession_pct) / 100;
+      premium = (r.quota_share_epi == null && r.surplus_epi == null)
+        ? null
+        : num(r.quota_share_epi) + num(r.surplus_epi);
+    }
+    ws.getRow(rowIdx).values = [
+      numOrNull(r.uw_year),
+      r.cedant ?? null,
+      r.country_name ?? null,
+      r.treaty_type ?? null,
+      r.cob_name ?? null,
+      r.uw_status ?? null,
+      r.currency_code ?? null,
+      r.slp == null ? null : Number(r.slp) / 100,
+      r.is_np ? numOrNull(r.layer_number) : null,
+      limit == null ? null : limit * rate,
+      attachment == null ? null : attachment * rate,
+      cession,
+      reinst,
+      premium == null ? null : premium * rate,
+    ];
+    rowIdx++;
+  }
+  const lastData = rowIdx - 1;
+  zebra(ws, firstData, lastData, ncols);
+  applyFormats(ws, firstData, lastData, {
+    8: UT.fmtPct, 10: UT.fmtMoney, 11: UT.fmtMoney, 12: UT.fmtPct, 14: UT.fmtMoney,
+  });
+  for (let rr = firstData; rr <= lastData; rr++) {
+    for (const c of [6, 7, 9, 13]) ws.getCell(rr, c).alignment = { horizontal: 'center' };
+  }
+  setWidths(ws, [10, 26, 18, 18, 18, 12, 8, 10, 8, 16, 16, 10, 8, 16]);
+  finishSheet(ws, hdr, 2);
 }
 
 // ---------- triangles ----------
