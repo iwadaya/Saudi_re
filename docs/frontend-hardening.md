@@ -114,6 +114,14 @@ ratchet counts), 32 `label-has-associated-control`, 3
 onKeyDown for row clicks), and wrap labelled controls in the `ui/`
 `<Field>`.
 
+### Findings from Phase-6 golden-master work (FacPricing)
+
+| Where | Finding | Status |
+|---|---|---|
+| `FacPricing.jsx:545-573` | **Money-path data loss**: the risk/pricing load effect depends on `f` and resets `dirty` on completion, so any manual section edit re-triggers the fetch and the reset makes wizard-Next silently skip `facSavePricing` while still advancing; with a persisted pricing row the same effect is an infinite refetch loop | Open — fix in the FacPricing decomposition (golden master pins current behavior) |
+| `FacPricing.jsx:822` | `window.showToast` is never assigned anywhere in the client (the app uses `useGlobalToast`), so the save-failure path throws TypeError; navigation still blocks but with the wrong message | Open |
+| `FacPricing.jsx` primary load | `.catch(console.error)` swallows load failures; screen renders an empty-but-normal-looking form (pre-AsyncBoundary pattern) | Open — migrate like FacRiskDetail |
+
 ### Findings from Phase-6 golden-master work (PropPricing)
 
 | Where | Finding | Status |
