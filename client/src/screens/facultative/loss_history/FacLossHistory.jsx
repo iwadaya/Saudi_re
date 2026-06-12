@@ -162,7 +162,11 @@ export default function FacLossHistory() {
 
         {rows.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'rgba(148,163,184,0.35)', fontSize: 12, background: 'rgba(8,14,30,0.50)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
-            No losses recorded. <span style={{ color: '#23d18b', cursor: 'pointer' }} onClick={addRow}>Add a loss record →</span>
+            No losses recorded. <span role="button" tabIndex={0} style={{ color: '#23d18b', cursor: 'pointer' }}
+              onClick={addRow}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addRow(); }
+              }}>Add a loss record →</span>
             <div style={{ marginTop: 8, fontSize: 11, color: 'rgba(148,163,184,0.25)' }}>A clean loss history is positive for pricing.</div>
           </div>
         ) : (
@@ -187,7 +191,12 @@ export default function FacLossHistory() {
                     <td style={{ padding: '4px 4px', width: 110 }}><input className="fi" type="text" inputMode="numeric" value={fmtComma(r.fgu_outstanding)} onChange={e => setRow(i, 'fgu_outstanding', stripDigits(e.target.value))} style={{ textAlign: 'right', fontSize: 12 }} /></td>
                     <td style={{ padding: '6px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: incurred ? '#fbbf24' : 'rgba(148,163,184,0.35)', width: 110 }}>{incurred ? incurred.toLocaleString('en-US') : '—'}</td>
                     <td style={{ padding: '4px 4px', width: 140 }}><input className="fi" value={r.mitigation_measures || ''} onChange={e => setRow(i, 'mitigation_measures', e.target.value)} placeholder="Actions taken" style={{ fontSize: 11 }} /></td>
-                    <td style={{ padding: '4px 4px', width: 28 }}><span style={{ cursor: 'pointer', color: '#f87171', fontSize: 16 }} onClick={() => removeRow(i)}>×</span></td>
+                    <td style={{ padding: '4px 4px', width: 28 }}><span role="button" tabIndex={0} aria-label="Remove loss record"
+                      style={{ cursor: 'pointer', color: '#f87171', fontSize: 16 }}
+                      onClick={() => removeRow(i)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); removeRow(i); }
+                      }}>×</span></td>
                   </tr>
                 );
               })}

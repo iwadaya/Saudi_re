@@ -9,7 +9,7 @@
  * Rate     = Premium / EGNPI
  * Wtd ROL  = SUMPRODUCT(ROL, Limit) / SUM(Limit)
  */
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 import { formatWithCommas, sanitizeNumber } from '../../utils/format';
@@ -88,7 +88,7 @@ function emptyNew(i){ return {id:i,limit:'',attachment:'',egnpi:''}; }
 
 // ── Formatted number cell with paste support ─────────────────────────────────
 // Strips commas on focus, re-formats on blur. Accepts paste from Excel.
-function NumCell({ value, onChange, placeholder = '—', className = 'bm-cell', style, 'data-row': row, 'data-col': col, onPaste }) {
+function NumCell({ value, onChange, placeholder = '—', className = 'bm-cell', style, id, 'data-row': row, 'data-col': col, onPaste }) {
   const [editing, setEditing] = React.useState(false);
   const [raw, setRaw] = React.useState('');
   const display = React.useMemo(() => {
@@ -99,6 +99,7 @@ function NumCell({ value, onChange, placeholder = '—', className = 'bm-cell', 
   }, [value]);
   return (
     <input
+      id={id}
       className={className}
       style={style}
       value={editing ? raw : display}
@@ -143,7 +144,9 @@ function CobSelectModal({selected,cobList,onSave,onClose}){
   const [sel,setSel]=useState(new Set(selected||[]));
   const toggle=id=>{const n=new Set(sel);n.has(id)?n.delete(id):n.add(id);setSel(n);};
   return (
-    <div className="bm-modal-backdrop" onClick={e=>e.target===e.currentTarget&&onClose()}>
+    // Backdrop dismissal is a pointer-only convenience; keyboard users
+    // close via the labelled ✕ button in the modal title bar.
+    <div className="bm-modal-backdrop" role="presentation" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="bm-modal">
         <div className="bm-modal-title">
           <span>Select Lines of Business</span>
@@ -242,6 +245,7 @@ function PricingCurve({expCalc,structCalcs,a,b,r2}){
 // ── Main ─────────────────────────────────────────────────────────────────────
 export default function QuickBenchmark(){
   const navigate=useNavigate();
+  const fid=useId(); // prefix for the Treaty Details field ids (label ↔ control)
 
   // Ref data
   const [countries,setCountries]=useState([]);
@@ -453,23 +457,23 @@ export default function QuickBenchmark(){
           </div>
           <div className="bm-meta-grid">
             <div className="bm-field">
-              <label className="bm-label">Country</label>
-              <select className="bm-input" value={meta.countryId} onChange={e=>updateMeta('countryId',e.target.value)}>
+              <label className="bm-label" htmlFor={`${fid}-country`}>Country</label>
+              <select id={`${fid}-country`} className="bm-input" value={meta.countryId} onChange={e=>updateMeta('countryId',e.target.value)}>
                 <option value="">— Select country —</option>
                 {countries.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div className="bm-field">
-              <label className="bm-label">Cedant</label>
-              <select className="bm-input" value={meta.cedantId} onChange={e=>updateMeta('cedantId',e.target.value)}
+              <label className="bm-label" htmlFor={`${fid}-cedant`}>Cedant</label>
+              <select id={`${fid}-cedant`} className="bm-input" value={meta.cedantId} onChange={e=>updateMeta('cedantId',e.target.value)}
                 disabled={!meta.countryId}>
                 <option value="">{meta.countryId?'— Select cedant —':'Select country first'}</option>
                 {cedants.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div className="bm-field">
-              <label className="bm-label">Class of Business</label>
-              <button className="bm-input bm-input--btn" onClick={()=>setShowCobModal(true)}>
+              <label className="bm-label" htmlFor={`${fid}-cob`}>Class of Business</label>
+              <button id={`${fid}-cob`} className="bm-input bm-input--btn" onClick={()=>setShowCobModal(true)}>
                 <span style={{color:selectedCobs.length?'rgba(226,232,240,0.90)':'rgba(255,255,255,0.30)'}}>
                   {selectedCobs.length ? selectedCobs.map(c=>c.name).join(', ') : '— Select COB —'}
                 </span>
@@ -477,27 +481,27 @@ export default function QuickBenchmark(){
               </button>
             </div>
             <div className="bm-field">
-              <label className="bm-label">Treaty Type</label>
-              <select className="bm-input" value={meta.treatyType} onChange={e=>updateMeta('treatyType',e.target.value)}>
+              <label className="bm-label" htmlFor={`${fid}-treaty-type`}>Treaty Type</label>
+              <select id={`${fid}-treaty-type`} className="bm-input" value={meta.treatyType} onChange={e=>updateMeta('treatyType',e.target.value)}>
                 {treatyTypes.map(t=><option key={t}>{t}</option>)}
               </select>
             </div>
             <div className="bm-field">
-              <label className="bm-label">EGNPI (100%)</label>
+              <label className="bm-label" htmlFor={`${fid}-egnpi`}>EGNPI (100%)</label>
               <div className="bm-input-row">
-                <NumCell className="bm-input" value={meta.egnpi}
+                <NumCell id={`${fid}-egnpi`} className="bm-input" value={meta.egnpi}
                   onChange={v=>updateMeta('egnpi',v)} placeholder="e.g. 50,000,000"/>
                 <button className="bm-apply-btn" onClick={applyEgnpi} title="Apply to all layers">↓ All</button>
               </div>
             </div>
             <div className="bm-field">
-              <label className="bm-label">UW Year</label>
-              <input className="bm-input" value={meta.uwYear}
+              <label className="bm-label" htmlFor={`${fid}-uw-year`}>UW Year</label>
+              <input id={`${fid}-uw-year`} className="bm-input" value={meta.uwYear}
                 onChange={e=>updateMeta('uwYear',e.target.value)} placeholder={String(new Date().getFullYear())}/>
             </div>
             <div className="bm-field">
-              <label className="bm-label">Structures to Benchmark</label>
-              <select className="bm-input" value={numStr} onChange={e=>setNumStr(Number(e.target.value))}>
+              <label className="bm-label" htmlFor={`${fid}-num-structures`}>Structures to Benchmark</label>
+              <select id={`${fid}-num-structures`} className="bm-input" value={numStr} onChange={e=>setNumStr(Number(e.target.value))}>
                 {[1,2,3,4,5].map(n=><option key={n} value={n}>{n} structure{n>1?'s':''}</option>)}
               </select>
             </div>

@@ -503,10 +503,14 @@ export default function FacSummary() {
 
         {/* ── Decline modal ── */}
         {declineModal.open && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+          <div
+               // Backdrop dismissal is a pointer-only convenience; keyboard
+               // users cancel via the labelled Cancel button below.
+               role="presentation"
+               style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
                          zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-               onClick={() => setDeclineModal({ open: false, reason: '', error: '' })}>
-            <div onClick={(e) => e.stopPropagation()}
+               onClick={(e) => { if (e.target === e.currentTarget) setDeclineModal({ open: false, reason: '', error: '' }); }}>
+            <div role="dialog" aria-modal="true"
                  style={{ width: 480, padding: 22, background: '#0f1729',
                           border: '1px solid rgba(248,113,113,0.30)', borderRadius: 12 }}>
               <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.10em',
