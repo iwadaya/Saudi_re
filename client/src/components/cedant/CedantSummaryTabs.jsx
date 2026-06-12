@@ -14,7 +14,7 @@
 // mode='NP' the current-contract injection reads totals from the `layers` prop
 // instead of the contract header in AppState.
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { api, HttpError } from '../../api';
 import { useAppState } from '../../context/AppContext';
 import { useGlobalToast } from '../../hooks/useToast';
@@ -301,13 +301,15 @@ function TabBar({ active, onChange }) {
 }
 
 function YearFilterSelect({ value, onChange, options }) {
+  const selectId = useId();
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-      <label style={{
+      <label htmlFor={selectId} style={{
         fontSize: 11, color: 'rgba(255,255,255,0.45)', letterSpacing: '.08em',
         textTransform: 'uppercase', fontWeight: 700, whiteSpace: 'nowrap',
       }}>UW Year</label>
       <select
+        id={selectId}
         className="bbg-select"
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -1746,6 +1748,8 @@ function StagingSection({ stagedRows, impact, currency, contractsById, onUnstage
 }
 
 function sortValue(row, key, contractsById) {
+  // contractsById exposed to enable future enrichment (currently unused)
+  void contractsById;
   switch (key) {
     case 'label': return String(row.contract_label || '');
     case 'treaty_type': return String(row.treaty_type || '');
@@ -1756,9 +1760,6 @@ function sortValue(row, key, contractsById) {
     case 'warnings': return Array.isArray(row.compliance_warnings) ? row.compliance_warnings.length : 0;
     default: return 0;
   }
-  // contractsById exposed to enable future enrichment (currently unused)
-  // eslint-disable-next-line no-unreachable
-  void contractsById;
 }
 
 function thSortStyle({ align = 'left', width }) {
@@ -1852,15 +1853,17 @@ function PortfolioImpactPanel({ impact, currency }) {
 function Modal({ title, onClose, children, footer, width = 520 }) {
   return (
     <div
-      role="dialog" aria-modal="true"
-      onClick={onClose}
+      // Backdrop dismissal is a pointer-only convenience; keyboard users
+      // close via the labelled footer buttons (every usage passes some).
+      role="presentation"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
         position: 'fixed', inset: 0, zIndex: 1000,
         background: 'rgba(0,0,0,0.55)', display: 'flex',
         alignItems: 'center', justifyContent: 'center',
       }}
     >
-      <div onClick={e => e.stopPropagation()} style={{
+      <div role="dialog" aria-modal="true" style={{
         background: '#0f1a2e', border: '1px solid rgba(255,255,255,0.15)',
         borderRadius: 12, width, maxWidth: 'calc(100vw - 40px)',
         maxHeight: 'calc(100vh - 40px)', display: 'flex', flexDirection: 'column',

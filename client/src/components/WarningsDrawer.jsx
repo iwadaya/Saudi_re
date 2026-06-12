@@ -78,7 +78,9 @@ export default function WarningsDrawer({ open, onClose, warnings = [], unmatched
           padding: 14px 0;
         }
       `}</style>
-      <div className="wdr-backdrop" onClick={onClose} />
+      {/* Backdrop dismissal is a pointer-only convenience; keyboard users
+          close via the labelled ✕ button in the drawer header. */}
+      <div className="wdr-backdrop" role="presentation" onClick={onClose} />
       <aside className="wdr-panel" role="dialog" aria-modal="true" aria-labelledby="wdr-title">
         <div className="wdr-head">
           <span className="wdr-title" id="wdr-title">Import warnings</span>

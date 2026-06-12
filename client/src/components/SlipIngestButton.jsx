@@ -368,8 +368,9 @@ export default function SlipIngestButton({
         )}
         {label}
         {status === 'done' && (
+          // Decorative ×: the parent button's own onClick already resets when
+          // status is 'done', so clicks here just bubble to it.
           <span
-            onClick={e => { e.stopPropagation(); reset(); }}
             style={{ marginLeft: 2, opacity: 0.5, cursor: 'pointer', fontSize: 13 }}
             title="Upload another slip"
           >×</span>

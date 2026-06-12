@@ -42,7 +42,9 @@ export default function RestoreImportConfirm({ open, onConfirm, onCancel, busy =
         .ric-btn--primary:hover:not(:disabled) { filter: brightness(1.06); }
         .ric-btn--primary:disabled { opacity: 0.5; cursor: default; }
       `}</style>
-      <div className="ric-overlay" onClick={(e) => { if (e.target.classList.contains('ric-overlay') && !busy) onCancel?.(); }}>
+      {/* Backdrop dismissal is a pointer-only convenience; keyboard users
+          cancel via the labelled Cancel button below. */}
+      <div className="ric-overlay" role="presentation" onClick={(e) => { if (e.target.classList.contains('ric-overlay') && !busy) onCancel?.(); }}>
         <div className="ric-panel" role="dialog" aria-modal="true" aria-labelledby="ric-title">
           <div className="ric-title" id="ric-title">Restore previous state?</div>
           <div className="ric-msg">

@@ -137,8 +137,12 @@ export default function FacPendingRecsBanner({ routeKey }) {
   };
 
   return (
-    <div role="status" aria-live="polite"
+    <div role="button" tabIndex={0} aria-live="polite"
          onClick={goToDocs}
+         onKeyDown={(e) => {
+           if (e.target !== e.currentTarget) return;
+           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goToDocs(); }
+         }}
          style={{
            margin: '6px 0 10px', padding: '8px 14px',
            display: 'flex', alignItems: 'center', gap: 10,
@@ -163,10 +167,11 @@ export default function FacPendingRecsBanner({ routeKey }) {
         {' — '}
         <span style={{ color: '#a855f7', fontWeight: 700 }}>Review</span>
       </span>
-      <span onClick={dismiss}
-            style={{ cursor: 'pointer', color: 'rgba(148,163,184,0.55)', fontSize: 14, padding: '0 4px' }}
-            title="Dismiss for this session"
-            aria-label="Dismiss banner">×</span>
+      <button type="button" onClick={dismiss}
+              style={{ background: 'none', border: 'none', fontFamily: 'inherit', lineHeight: 'inherit',
+                       cursor: 'pointer', color: 'rgba(148,163,184,0.55)', fontSize: 14, padding: '0 4px' }}
+              title="Dismiss for this session"
+              aria-label="Dismiss banner">×</button>
     </div>
   );
 }
