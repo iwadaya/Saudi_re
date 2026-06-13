@@ -476,13 +476,19 @@ export function useNpPricingState({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [histMarginValKey, layers.length, npDetail.brokeragePct, npDetail.taxesPct]);
 
+  // Defensive: a non-array pricing slice (e.g. a stale/partial wire payload)
+  // must never reach an unconditional `.map` in NpFinalPricing and white-screen
+  // the render. asArr returns the SAME reference when v is already an array, so
+  // the happy path allocates nothing and the golden master stays byte-identical.
+  const asArr = <T,>(v: T[]): T[] => (Array.isArray(v) ? v : []);
+
   return {
     // raw state
-    layers, leadSetup, localStructureLayers, treatyMetrics, cobUwLimits, expiringEgnpi,
-    expLayers, numExpLayers, clientStructures, quoteStructures, approvedStructures,
-    quotePricing, quoteCobUwLimits, cobToggles, cobManual, selectedCobs, cobList,
+    layers: asArr(layers), leadSetup: asArr(leadSetup), localStructureLayers: asArr(localStructureLayers), treatyMetrics, cobUwLimits: asArr(cobUwLimits), expiringEgnpi,
+    expLayers: asArr(expLayers), numExpLayers, clientStructures: asArr(clientStructures), quoteStructures: asArr(quoteStructures), approvedStructures: asArr(approvedStructures),
+    quotePricing, quoteCobUwLimits, cobToggles, cobManual, selectedCobs: asArr(selectedCobs), cobList: asArr(cobList),
     offerStatus, offerApprover, offerComment, returnReason, declineReason,
-    layerWrittenLines, signedLinePcts, approvalTrail, eligibleApprovers,
+    layerWrittenLines, signedLinePcts, approvalTrail: asArr(approvalTrail), eligibleApprovers: asArr(eligibleApprovers),
     showDeclineModal: modals.showDeclineModal,
     showOfferModal: modals.showOfferModal,
     showReinsurerModal: modals.showReinsurerModal,
@@ -496,7 +502,7 @@ export function useNpPricingState({
     pricingAnalysisModal: modals.pricingAnalysisModal,
     saveState, lastUpdatedAt,
     loading, calcEngineRunning, calcEngineError, runningStructures, progLimView,
-    reinsurers, portfolioTreaties, portfolioExportRows,
+    reinsurers: asArr(reinsurers), portfolioTreaties: asArr(portfolioTreaties), portfolioExportRows: asArr(portfolioExportRows),
     cedantProgLimit, contractAgg100, otherCountryAgg,
     // derived
     quoteCurve, snap, techRatioAvg,
