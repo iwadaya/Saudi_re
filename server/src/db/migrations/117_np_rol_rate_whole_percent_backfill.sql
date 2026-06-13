@@ -1,0 +1,52 @@
+-- 117_np_rol_rate_whole_percent_backfill.sql
+-- Canonicalize contract_np_layers.rol / .rate to WHOLE-PERCENT (e.g. 4.5 = 4.5%).
+--
+-- Background — the column was mixed convention:
+--   • App write paths (nonProp.js:152, quotes.js:1282 / :325-326) persist whatever
+--     the NP form submits; numOrNull/pctNum strip %/commas but do NOT rescale, so
+--     user-entered values land as WHOLE-PERCENT (e.g. 4.5).
+--   • The 1000-contract seed (seed_1000_test_contracts.js:261,271) instead generated
+--     FRACTIONS (between(0.02,0.18)).
+-- Every consumer that does arithmetic on these columns assumes WHOLE-PERCENT:
+--     server/src/routes/lookups.js:192        rate/100.0 * egnpi  (cedant premium metric)
+--     client fqQuoteMath.js / pricingHelpers   egnpi*rate/100, limit*rol/100
+--     client NpExpiringStructure.jsx:721       renders `${l.rol}%` directly
+-- so WHOLE-PERCENT is the canonical convention. The only consumer that assumed a
+-- fraction was the portfolio export, now switched from a per-row heuristic to
+-- pctWhole (client/src/screens/home/exportPortfolio.js). (OepCard's ROL is an
+-- actuarial burning cost = annualLoss/limit, a computed fraction unrelated to this
+-- column, and is intentionally left unchanged.)
+--
+-- This migration brings the seed/fraction rows UP to whole-percent so the column is
+-- uniform. Only rows in (0,1) are rescaled; whole-percent rows (>= 1) are left
+-- untouched — which also makes the migration IDEMPOTENT: a second run finds nothing
+-- in (0,1) to change (given the verified pre-check below).
+--
+-- Other NP-layer tables (quote_np_layers, *_expiring_layers,
+-- quote_np_final_structure_layer) are only ever written from app form input, i.e.
+-- already whole-percent, so they are not seeded with fractions and need no backfill.
+--
+-- ── STAGING PRE-CHECK — run manually on staging BEFORE relying on the predicate ──
+-- A genuine whole-percent ROL below 1% (e.g. 0.5 = half a percent on a remote high
+-- layer, the realistic reinstatement-heavy low-frequency case) also sits in (0,1)
+-- and must NOT be rescaled. Inspect the band first:
+--
+--   SELECT count(*) FILTER (WHERE rol  > 0 AND rol  < 1) AS rol_subone,
+--          count(*) FILTER (WHERE rate > 0 AND rate < 1) AS rate_subone,
+--          min(rol)  FILTER (WHERE rol  > 0), max(rol),
+--          min(rate) FILTER (WHERE rate > 0), max(rate)
+--   FROM public.contract_np_layers;
+--
+--   SELECT contract_id, layer_number, rol, rate
+--   FROM public.contract_np_layers
+--   WHERE (rol > 0 AND rol < 1) OR (rate > 0 AND rate < 1)
+--   ORDER BY rol;
+--
+-- If any sub-1 row is a genuine sub-1% whole-percent value, exclude it explicitly
+-- (add `AND contract_id <> '...'`) BEFORE applying. After the backfill, confirm
+-- max(rol) < 100 and max(rate) < 100 (i.e. both well under 1.0 only if rescaled
+-- twice — a sanity guard) and that the export renders correctly.
+-- ────────────────────────────────────────────────────────────────────────────────
+
+UPDATE public.contract_np_layers SET rol  = rol  * 100 WHERE rol  > 0 AND rol  < 1;
+UPDATE public.contract_np_layers SET rate = rate * 100 WHERE rate > 0 AND rate < 1;

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useId, useMemo, useRef } from 
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 import { getUserDisplayName, getSession, canAccessApprovals } from '../../utils/auth';
-import { formatDate, todayIso } from '../../utils/format';
+import { formatDate } from '../../utils/format';
 import { useAppState } from '../../context/AppContext';
 import Topbar, { useViewingUser, setViewingUser } from '../../components/Topbar';
 import {
@@ -10,77 +10,7 @@ import {
   setActiveQuoteId,
   clearActiveContractId,
 } from '../../hooks/useContractId';
-
-// ── Portfolio export ──────────────────────────────────────────────────────
-async function exportPortfolioToExcel() {
-  const { createWorkbook } = await import('../../utils/excel');
-  const { prop, np } = await api.getPortfolioExport();
-
-  const fmtN = v => v != null && v !== '' ? Number(v) : null;
-  const fmtPct = v => v != null && v !== '' ? Number(v) : null;
-  const wb = await createWorkbook();
-
-  // ── Sheet 1: Proportional ────────────────────────────────────────────
-  const propHeaders = [
-    'Contract ID','Cedant','Country','Treaty Type','UW Year','Status','COB',
-    'Currency','FX → SAR',
-    'Limit 100%','Premium 100%','Commission %','Written Line %','Signed Line %',
-    'Attritional Loss Ratio','Large Loss Loading','Cat Loss Loading','Combined Ratio',
-    'Underwriter','Approver',
-  ];
-  const propRows = (prop || []).map(r => [
-    r.contract_id, r.cedant, r.country, r.treaty_type,
-    fmtN(r.uw_year), r.status, r.cob,
-    r.currency_code || '', fmtN(r.fx_to_sar),
-    fmtN(r.limit_100), fmtN(r.premium_100), fmtPct(r.commission_pct),
-    fmtPct(r.written_line_pct), fmtPct(r.signed_line_pct),
-    fmtPct(r.attritional_ratio), fmtPct(r.large_loss_load),
-    fmtPct(r.cat_loss_load), fmtPct(r.combined_ratio),
-    r.underwriter_name || '', r.approver_name || '',
-  ]);
-  stylePortfolioSheet(wb.appendSheet('Proportional', [propHeaders, ...propRows]), propHeaders.length);
-
-  // ── Sheet 2: Non-Proportional (per layer) ───────────────────────────
-  const npHeaders = [
-    'Contract ID','Cedant','Country','Treaty Type','UW Year','Status','COB',
-    'Currency','FX → SAR',
-    'Layer #','Attachment','Limit (Layer)','EGNPI 100%',
-    'Premium (Layer)','ROL %','Rate %','Brokerage %',
-    'Written Line %','Signed Line %',
-    'Attritional Loss Ratio','Large Loss Loading','Cat Loss Loading','Combined Ratio',
-    'Underwriter','Approver',
-  ];
-  const npRows = (np || []).map(r => [
-    r.contract_id, r.cedant, r.country, r.treaty_type,
-    fmtN(r.uw_year), r.status, r.cob,
-    r.currency_code || '', fmtN(r.fx_to_sar),
-    fmtN(r.layer_number), fmtN(r.attachment), fmtN(r.limit_layer),
-    fmtN(r.egnpi_100), fmtN(r.premium_100),
-    fmtPct(r.rol_pct), fmtPct(r.rate_pct), fmtPct(r.commission_pct),
-    fmtPct(r.written_line_pct), fmtPct(r.signed_line_pct),
-    fmtPct(r.attritional_ratio), fmtPct(r.large_loss_load),
-    fmtPct(r.cat_loss_load), fmtPct(r.combined_ratio),
-    r.underwriter_name || '', r.approver_name || '',
-  ]);
-  stylePortfolioSheet(wb.appendSheet('Non-Proportional', [npHeaders, ...npRows]), npHeaders.length);
-
-  // Download
-  const date = todayIso();
-  await wb.writeFile(`TheUniverse_Portfolio_${date}.xlsx`);
-}
-
-function stylePortfolioSheet(ws, nCols) {
-  // Column widths (index 1-based on ExcelJS)
-  ws.columns = Array.from({ length: nCols }, (_, i) => {
-    if (i === 0) return { width: 38 }; // contract ID
-    if (i === 1) return { width: 24 }; // cedant
-    if (i === 2) return { width: 16 }; // country
-    if (i === 6) return { width: 30 }; // COB
-    return { width: 18 };
-  });
-  // Freeze header row
-  ws.views = [{ state: 'frozen', ySplit: 1 }];
-}
+import { exportPortfolioToExcel } from './exportPortfolio';
 
 /* ── workflow normalisation ── */
 const WF = {
