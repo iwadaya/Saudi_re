@@ -42,6 +42,9 @@ describe('LoginScreen people dropdown', () => {
     const select = await screen.findByLabelText('Underwriter');
     expect(within(select).getByRole('option', { name: 'Grace Hopper' })).toBeInTheDocument();
     expect(within(select).getByRole('option', { name: 'Ada Lovelace' })).toBeInTheDocument();
+    // No title / limit / badge anywhere on the screen — people by name only.
+    expect(screen.queryByText('Treaty Limit')).toBeNull();
+    expect(screen.queryByText('Chief Underwriter')).toBeNull();
   });
 
   it('logs in as the selected user and stores their real name (not the role title)', async () => {

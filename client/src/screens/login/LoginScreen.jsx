@@ -2,27 +2,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  getSession, setSession, ROLE_LABELS, canAccessApprovals,
+  getSession, setSession, canAccessApprovals,
   createTestSession,
 } from '../../utils/auth';
 import { api } from '../../api';
 import ThemeSwitcher from '../../components/ThemeSwitcher';
 
-const ROLE_COLORS = {
-  CE:  { bg: 'rgba(167,139,250,0.15)', border: 'rgba(167,139,250,0.40)', text: '#a78bfa' },
-  CU:  { bg: 'rgba(251,191,36,0.13)',  border: 'rgba(251,191,36,0.40)',  text: '#fbbf24' },
-  TD:  { bg: 'rgba(96,165,250,0.13)',  border: 'rgba(96,165,250,0.40)',  text: '#60a5fa' },
-  TM:  { bg: 'rgba(45,212,191,0.13)',  border: 'rgba(45,212,191,0.40)',  text: '#2dd4bf' },
-  TUW: { bg: 'rgba(35,209,139,0.13)', border: 'rgba(35,209,139,0.40)', text: '#23d18b' },
-};
-
-function fmtLimit(usd) {
-  if (usd === null || usd === undefined) return 'Unlimited';
-  const n = Number(usd);
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(0)}M`;
-  return `$${n.toLocaleString()}`;
-}
-
+// Login shows people by name only — nothing role-related. Titles live on the
+// user record (set via the Add-user Title select) and drive routing/mandate
+// silently after login from the server's session response.
 const DEMO_FALLBACK = [
   { user_id:'00000000-0000-0000-0000-000000000001', username:'cuo',         display_name:'Chief Underwriting Officer', email:'cuo@universe3.app', role_code:'CU',  office:'Riyadh', treaty_limit_usd:null,     approvals_required:1 },
   { user_id:'00000000-0000-0000-0000-000000000002', username:'underwriter', display_name:'Underwriter',                email:'uw@universe3.app',  role_code:'TUW', office:'Riyadh', treaty_limit_usd:10000000, approvals_required:2 },
@@ -232,8 +220,6 @@ export default function LoginScreen() {
   };
 
   const sel = selectedUser;
-  const rc  = sel?.role_code;
-  const c   = ROLE_COLORS[rc] || ROLE_COLORS.TUW;
 
   return (
     <div className="LOGIN_SCREEN" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', position: 'relative' }}>
@@ -267,22 +253,6 @@ export default function LoginScreen() {
               </select>
             )}
           </div>
-
-          {sel && (
-            <div style={{ padding: '10px 12px', borderRadius: 8, marginBottom: 16, background: c.bg, border: `1px solid ${c.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{ROLE_LABELS[rc] || rc}</div>
-              <div style={{ display: 'flex', gap: 14 }}>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 9, color: 'rgba(255,255,255,.30)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Treaty Limit</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.80)' }}>{fmtLimit(sel.treaty_limit_usd ?? sel.authority_limit_usd)}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 9, color: 'rgba(255,255,255,.30)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Approvals</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.80)' }}>{sel.approvals_required ?? 1}×</div>
-                </div>
-              </div>
-            </div>
-          )}
 
           <form onSubmit={handleLogin} aria-label="Sign in">
             <div style={{ marginBottom: 16 }}>
