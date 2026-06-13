@@ -9,8 +9,17 @@
 import { Router } from "express";
 import { asyncHandler } from "../helpers.js";
 import { selfAssign, reassign, allocate, getAssignmentHistory, listContractsWithOwnership, listViewableUsers } from "../services/assignments.js";
+import { getEditPermission } from "../services/permissions.js";
 
 const router = Router();
+
+// ─── Edit permission (client uses this to lock the editor UI) ────────────────
+router.get("/contracts/:id/edit-permission", asyncHandler(async (req, res) => {
+  res.json(await getEditPermission(req, "CONTRACT", req.params.id));
+}));
+router.get("/quotes/:id/edit-permission", asyncHandler(async (req, res) => {
+  res.json(await getEditPermission(req, "QUOTE", req.params.id));
+}));
 
 // ─── Self-assign ─────────────────────────────────────────────────
 // Anyone can claim an unassigned contract for themselves.

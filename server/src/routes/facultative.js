@@ -16,9 +16,14 @@ import {
   facTreatyLinkCreateSchema,
 } from '../validation/facultative.js';
 import { applyRecommendation } from '../lib/facRecommendationApply.js';
-import { assertCanEdit } from '../services/permissions.js';
+import { assertCanEdit, getEditPermission } from '../services/permissions.js';
 
 const router = Router();
+
+// Edit permission for the fac-risk editor lock (read-only; never 403s).
+router.get('/fac/risks/:id/edit-permission', asyncHandler(async (req, res) => {
+  res.json(await getEditPermission(req, 'FAC_RISK', req.params.id));
+}));
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOOKUPS — fac classes of business + market rates

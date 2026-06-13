@@ -732,6 +732,9 @@ export const api = {
   reassignContract(contractId: string, payload: { reassigned_by?: string; new_owner_id: string; comment?: string }, opts?: RequestOpts): Promise<unknown> { return request(`/api/contracts/${enc(contractId)}/reassign`, { method: 'POST', body: payload, ...opts }); },
   reassignQuote(quoteId: string, payload: { reassigned_by?: string; new_owner_id: string; comment?: string }, opts?: RequestOpts): Promise<unknown> { return request(`/api/quotes/${enc(quoteId)}/reassign`, { method: 'POST', body: payload, ...opts }); },
   getAssignmentHistory(contractId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/contracts/${enc(contractId)}/assignment-history`, opts); },
+  getEditPermission(contractId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/contracts/${enc(contractId)}/edit-permission`, opts); },
+  getQuoteEditPermission(quoteId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/quotes/${enc(quoteId)}/edit-permission`, opts); },
+  getFacEditPermission(riskId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(riskId)}/edit-permission`, opts); },
   getContractsAll(params: { scope?: string; assigned_to?: string; status?: string; uw_year?: string | number; limit?: number } = {}, opts?: RequestOpts): Promise<unknown> {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) { if (v != null && v !== '') qs.set(k, String(v)); }

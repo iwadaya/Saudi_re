@@ -65,6 +65,20 @@ async function loadOwnership(entityType, entityId) {
 }
 
 /**
+ * Non-throwing edit-permission lookup for the client to lock its editor UI.
+ * Reads stay open, so this never 403s — it just reports whether the requester
+ * may edit. Returns { found, canEdit, isOwner, assignedToUserId, assignedToName, reason }.
+ */
+export async function getEditPermission(req, entityType, entityId) {
+  const own = await loadOwnership(entityType, entityId);
+  if (!own) return { found: false, canEdit: false, isOwner: false, assignedToUserId: null, assignedToName: null, reason: 'NOT_FOUND' };
+  const requesterId = req?.user?.userId || req?.headers?.['x-user-id'] || null;
+  const assignedToUserId = own.assigned_to_user_id || null;
+  const perm = computeEditPermission({ requesterId, assignedToUserId });
+  return { found: true, ...perm, assignedToUserId, assignedToName: own.assigned_to_name || null };
+}
+
+/**
  * Route guard for MUTATING endpoints. Throws 403 READ_ONLY whenever the
  * requester is not the current assignee — regardless of seniority. CREATE
  * endpoints are exempt (the creator becomes the assignee via assignOnCreation),
