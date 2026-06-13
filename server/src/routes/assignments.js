@@ -98,12 +98,17 @@ router.get("/quotes/:id/assignment-history", asyncHandler(async (req, res) => {
 // ─── View all contracts (home screen "view others" button) ───────
 // Filterable by: assigned_to, status, uw_year
 router.get("/contracts/all", asyncHandler(async (req, res) => {
-  const { assigned_to, status, uw_year, limit } = req.query;
+  const { assigned_to, status, uw_year, limit, scope } = req.query;
+  const requesterId = req.user?.userId || req.headers['x-user-id'] || null;
+  const requesterLevel = req.user?.hierarchyLevel ?? (req.headers['x-user-level'] != null ? Number(req.headers['x-user-level']) : null);
   const rows = await listContractsWithOwnership({
     assignedTo: assigned_to,
     status,
     uwYear: uw_year,
     limit: limit ? Number(limit) : 200,
+    scope: scope === 'all' ? 'all' : 'mine',
+    requesterId,
+    requesterLevel,
   });
   res.json(rows);
 }));
@@ -145,7 +150,11 @@ router.get("/users/viewable", asyncHandler(async (req, res) => {
 router.get("/contracts/by-user/:userId", asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { status } = req.query;
-  const rows = await listContractsWithOwnership({ assignedTo: userId, status, limit: 100 });
+  const requesterId = req.user?.userId || req.headers['x-user-id'] || null;
+  const requesterLevel = req.user?.hierarchyLevel ?? (req.headers['x-user-level'] != null ? Number(req.headers['x-user-level']) : null);
+  // scope:'all' — we're explicitly viewing one user's work; keep their rows but
+  // annotate canEdit for the viewer.
+  const rows = await listContractsWithOwnership({ assignedTo: userId, status, limit: 100, scope: 'all', requesterId, requesterLevel });
   res.json(rows);
 }));
 

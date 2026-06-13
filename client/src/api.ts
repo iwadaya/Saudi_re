@@ -729,6 +729,15 @@ export const api = {
   getUserContracts(userId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/contracts/by-user/${enc(userId)}`, opts); },
   allocateContract(contractId: string, comment?: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/contracts/${enc(contractId)}/allocate`, { method: 'POST', body: { comment }, ...opts }); },
   allocateQuote(quoteId: string, comment?: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/quotes/${enc(quoteId)}/allocate`, { method: 'POST', body: { comment }, ...opts }); },
+  reassignContract(contractId: string, payload: { reassigned_by?: string; new_owner_id: string; comment?: string }, opts?: RequestOpts): Promise<unknown> { return request(`/api/contracts/${enc(contractId)}/reassign`, { method: 'POST', body: payload, ...opts }); },
+  reassignQuote(quoteId: string, payload: { reassigned_by?: string; new_owner_id: string; comment?: string }, opts?: RequestOpts): Promise<unknown> { return request(`/api/quotes/${enc(quoteId)}/reassign`, { method: 'POST', body: payload, ...opts }); },
+  getAssignmentHistory(contractId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/contracts/${enc(contractId)}/assignment-history`, opts); },
+  getContractsAll(params: { scope?: string; assigned_to?: string; status?: string; uw_year?: string | number; limit?: number } = {}, opts?: RequestOpts): Promise<unknown> {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) { if (v != null && v !== '') qs.set(k, String(v)); }
+    const q = qs.toString();
+    return request(`/api/contracts/all${q ? `?${q}` : ''}`, opts);
+  },
   getHomeSummaryFor(userId?: string, opts?: RequestOpts): Promise<unknown> { return request(userId ? `/api/home/summary?user_id=${enc(userId)}` : '/api/home/summary', opts); },
   getPortfolioExport(opts?: RequestOpts): Promise<unknown> { return request('/api/home/portfolio-export', opts); },
   getRoles(opts?: RequestOpts): Promise<unknown> { return request(PATHS.authRoles, opts); },

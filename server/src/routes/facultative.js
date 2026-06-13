@@ -16,6 +16,7 @@ import {
   facTreatyLinkCreateSchema,
 } from '../validation/facultative.js';
 import { applyRecommendation } from '../lib/facRecommendationApply.js';
+import { assertCanEdit } from '../services/permissions.js';
 
 const router = Router();
 
@@ -168,6 +169,7 @@ router.post('/fac/risks', validateBody(facRiskSaveSchema), asyncHandler(async (r
 // UPDATE risk
 router.put('/fac/risks/:id', validateBody(facRiskSaveSchema), asyncHandler(async (req, res) => {
   const { id } = req.params;
+  await assertCanEdit(req, 'FAC_RISK', id);
   const b = req.body;
   const { rows } = await pool.query(`
     UPDATE public.fac_risk SET
@@ -404,6 +406,7 @@ router.get('/fac/risks/:id/pricing', asyncHandler(async (req, res) => {
 
 router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHandler(async (req, res) => {
   const riskId = req.params.id;
+  await assertCanEdit(req, 'FAC_RISK', riskId);
   const b = req.body;
   // ui_state is JSONB for UI-only data (selected extensions, custom extensions)
   // that doesn't warrant its own typed columns.
