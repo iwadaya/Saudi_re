@@ -74,6 +74,9 @@ export async function createWorkbook() {
   const ExcelJS = await loadExcelJs();
   const wb = new ExcelJS.Workbook();
   return {
+    // Direct handle to the underlying ExcelJS workbook, for call-sites that
+    // need to add a themed cover sheet or control sheet order.
+    workbook: wb,
     // Returns the underlying ExcelJS worksheet so callers can apply styling
     // (column widths, freeze panes, etc.) — see HomeScreen portfolio export.
     appendSheet(name, aoa) {
