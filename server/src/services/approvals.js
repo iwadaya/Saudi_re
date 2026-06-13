@@ -13,9 +13,77 @@ import { pool } from '../db/pool.js';
 import { logger } from '../lib/logger.js';
 import { logAudit } from './audit.js';
 
-const LEVEL = { CE:1, CU:2, TD:3, TM:4, TUW:5, UW:5 };
-const ROLE_NAME = { CE:'Chief Executive', CU:'Chief Underwriter', TD:'Treaty Director', TM:'Treaty Manager', TUW:'Treaty Underwriter' };
+const LEVEL = { CE:1, CU:2, CA:2, TD:3, UM:3, TM:4, TUW:5, UW:5, AN:6 };
+const ROLE_NAME = { CE:'Chief Executive', CU:'Chief Underwriter', CA:'Chief Actuary', TD:'Treaty Director', UM:'Underwriting Manager', TM:'Treaty Manager', TUW:'Treaty Underwriter', UW:'Underwriter', AN:'Analyst' };
 const FINAL_AUTH = new Set([1,2]); // CE, CU have override power
+
+// ── Mandate limit basis ──────────────────────────────────────────────────────
+// The gated amount is WRITTEN-LINE EXPOSURE by default: the reinsurer's
+// written-line share of the 100% programme limit being placed. A title may
+// override its basis (e.g. a premium-income mandate) via uw_role.limit_basis.
+export const LIMIT_BASIS = Object.freeze({
+  SIGNED_EXPOSURE: 'SIGNED_EXPOSURE', // (writtenLinePct/100) * programLimit100Usd  [default]
+  EPI: 'EPI',                         // gated on premium income, not exposure
+  EXPOSURE_100PCT: 'EXPOSURE_100PCT', // gated on the full 100% limit regardless of line
+});
+
+// ── Normal routing legs (mirrors migration 118 approval_route seed) ──────────
+// Used as the in-memory default when no DB-backed route is supplied. AN is a
+// capture that always hands to the Underwriter first; the Underwriter then
+// escalates on its own written line.
+export const DEFAULT_APPROVAL_ROUTE = Object.freeze({
+  AN: ['UW'],
+  UW: ['CU'],
+  UM: ['CU'],
+  CU: ['CA', 'CE'],
+  CA: ['CU', 'CE'],
+  CE: [],
+});
+
+const CAPTURE_ROLES = new Set(['AN']);
+
+/** An Analyst submission is a capture: it routes to the Underwriter, who owns
+ *  the escalation decision on submit-to-bind. */
+export function isCaptureSubmission(roleCode) {
+  return CAPTURE_ROLES.has(String(roleCode || '').toUpperCase());
+}
+
+/** The normal next-leg approver role codes for an originator (no breach). */
+export function normalRoute(roleCode, routes = DEFAULT_APPROVAL_ROUTE) {
+  return routes[String(roleCode || '').toUpperCase()] || [];
+}
+
+/**
+ * The gated USD amount for a submission. Default basis SIGNED_EXPOSURE caps the
+ * reinsurer's written-line share of the 100% limit; EPI / EXPOSURE_100PCT honor
+ * a title-level override.
+ *
+ * @param {{ writtenLinePct?: number, programLimit100Usd?: number,
+ *           limitBasis?: string, epiUsd?: number|null }} args
+ * @returns {number} exposure USD (0 when inputs are missing/non-numeric)
+ */
+export function computeWrittenExposure({ writtenLinePct, programLimit100Usd, limitBasis = LIMIT_BASIS.SIGNED_EXPOSURE, epiUsd = null } = {}) {
+  const pct  = Number(writtenLinePct);
+  const base = Number(programLimit100Usd);
+  const signed = (Number.isFinite(pct) && Number.isFinite(base)) ? (pct / 100) * base : 0;
+  switch (limitBasis) {
+    case LIMIT_BASIS.EPI:
+      return epiUsd != null && Number.isFinite(Number(epiUsd)) ? Number(epiUsd) : signed;
+    case LIMIT_BASIS.EXPOSURE_100PCT:
+      return Number.isFinite(base) ? base : 0;
+    case LIMIT_BASIS.SIGNED_EXPOSURE:
+    default:
+      return signed;
+  }
+}
+
+/** Coerce a mandate's excluded-COB list, tolerating the legacy
+ *  user_mandate.restricted_cob_ids column name. */
+function excludedCobs(mandate) {
+  if (Array.isArray(mandate?.excluded_cob_ids)) return mandate.excluded_cob_ids;
+  if (Array.isArray(mandate?.restricted_cob_ids)) return mandate.restricted_cob_ids;
+  return [];
+}
 
 const DEMO_USER_MANDATES = {
   '00000000-0000-0000-0000-000000000001': { user_id:'00000000-0000-0000-0000-000000000001', username:'cuo',         display_name:'Chief Underwriting Officer', role_code:'CU', role_name:'Chief Underwriter',   hierarchy_level:2, authority_limit_usd:null,     treaty_type_scope:'BOTH', is_active:true },
@@ -48,94 +116,176 @@ export async function getUserMandate(userId) {
   return DEMO_USER_MANDATES[String(userId)] || null;
 }
 
-export async function getEligibleApprovers({ submitterUserId, breachType }) {
-  // Determine submitter level — fall back to TUW (5) if not found in mandate view
-  const submitter = await getUserMandate(submitterUserId).catch(()=>null);
-  const submitterLevel = submitter?.hierarchy_level || 5;
+/**
+ * Sort comparator: NEAREST-SUFFICIENT first.
+ * Ascending effective_limit_usd with null (unlimited) last; tie-break ascending
+ * hierarchy_level. So the picker surfaces the lowest title that clears the gate,
+ * then higher fallbacks, with the unlimited CE as the last resort.
+ */
+function nearestSufficient(a, b) {
+  const la = a.effective_limit_usd, lb = b.effective_limit_usd;
+  const aUnlimited = la == null, bUnlimited = lb == null;
+  if (aUnlimited && bUnlimited) return (a.hierarchy_level || 0) - (b.hierarchy_level || 0);
+  if (aUnlimited) return 1;   // unlimited sorts last
+  if (bUnlimited) return -1;
+  if (Number(la) !== Number(lb)) return Number(la) - Number(lb);
+  return (a.hierarchy_level || 0) - (b.hierarchy_level || 0);
+}
 
-  const minLevel=1;
-  let maxLevel;
-  if (!breachType||breachType==='NONE') { maxLevel=4; }         // any TM or above
-  else if (breachType==='LIMIT') { maxLevel=Math.min(submitterLevel-1,4); }
-  else { maxLevel=2; }  // CLASS or BOTH: CU or CE only
+/**
+ * Eligible approvers for a (possibly breaching) submission.
+ *
+ * On ANY breach (or when called for normal escalation), returns the titles
+ * where ALL of the following hold, ordered nearest-sufficient:
+ *   • effective_limit_usd >= writtenExposureUsd   (null/unlimited always qualifies)
+ *   • none of cobIds appear in that title's excluded_cob_ids   ("including cob")
+ *   • can_approve === true
+ *   • user_id !== submitter                       (four-eyes)
+ *
+ * @param {{
+ *   submitter?: object, submitterUserId?: string,
+ *   cobIds?: Array<string>,
+ *   writtenLinePct?: number, programLimit100Usd?: number, writtenExposureUsd?: number,
+ *   epiUsd?: number, candidates?: Array<object>,
+ * }} params  `candidates` may be injected (unit tests / pre-fetched); otherwise
+ *            they are loaded from the DB. Legacy callers pass
+ *            `{ submitterUserId, breachType, epiUsd }` and still get a list.
+ */
+export async function getEligibleApprovers(params = {}) {
+  const {
+    submitter, submitterUserId, cobIds = [], candidates,
+    writtenLinePct, programLimit100Usd, writtenExposureUsd: weIn, epiUsd,
+  } = params;
 
-  // Helper to safely parse UUID - returns null if invalid
-  const safeUuid = (id) => {
-    if (!id) return null;
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))) return id;
-    return null;
-  };
-  const safeId = safeUuid(submitterUserId);
+  const submitterId = (submitter && submitter.user_id) || submitterUserId || null;
+  const limitBasis = (submitter && submitter.limit_basis) || LIMIT_BASIS.SIGNED_EXPOSURE;
 
-  // Try via v_user_mandate first (full hierarchy info)
+  let writtenExposureUsd = weIn;
+  if (writtenExposureUsd == null) {
+    writtenExposureUsd = (writtenLinePct != null || programLimit100Usd != null)
+      ? computeWrittenExposure({ writtenLinePct, programLimit100Usd, limitBasis, epiUsd })
+      : (Number(epiUsd) || 0);
+  }
+
+  const candidatePool = Array.isArray(candidates) ? candidates : await fetchApproverCandidates();
+  const cobSet = new Set((cobIds || []).map(String));
+
+  const eligible = candidatePool.filter((c) => {
+    if (c.can_approve === false) return false;                                  // can_approve gate
+    if (submitterId && String(c.user_id) === String(submitterId)) return false; // four-eyes
+    const lim = c.effective_limit_usd;
+    if (lim != null && Number(lim) < Number(writtenExposureUsd)) return false;   // limit gate (null = unlimited)
+    const excl = excludedCobs(c);
+    if (excl.some((x) => cobSet.has(String(x)))) return false;                    // "including cob" gate
+    return true;
+  });
+
+  eligible.sort(nearestSufficient);
+  return eligible;
+}
+
+/**
+ * Load the pool of possible approver titles from the DB and map them to the
+ * candidate shape getEligibleApprovers expects. Best-effort: returns the demo
+ * roster when the DB is unavailable so the picker is never empty in dev.
+ */
+export async function fetchApproverCandidates() {
+  const mapRow = (r) => ({
+    user_id: r.user_id,
+    display_name: r.display_name,
+    email: r.email,
+    office: r.office,
+    role_code: r.role_code,
+    role_name: r.role_name,
+    hierarchy_level: r.hierarchy_level,
+    effective_limit_usd: r.effective_limit_usd ?? null,
+    excluded_cob_ids: Array.isArray(r.restricted_cob_ids) ? r.restricted_cob_ids
+      : (Array.isArray(r.excluded_cob_ids) ? r.excluded_cob_ids : []),
+    can_approve: r.can_approve ?? true,
+  });
+
   try {
     const { rows } = await pool.query(
-      `SELECT u.user_id,u.display_name,u.email,u.office,r.role_code,r.role_name,r.hierarchy_level
+      `SELECT u.user_id, u.display_name, u.email, u.office,
+              r.role_code, r.role_name, r.hierarchy_level,
+              m.effective_limit_usd, m.restricted_cob_ids
        FROM public.v_user_mandate m
        JOIN public.uw_user u ON u.user_id=m.user_id
        JOIN public.uw_role r ON r.role_code=m.role_code
-       WHERE u.is_active=true AND m.hierarchy_level BETWEEN $1 AND $2
-       ORDER BY m.hierarchy_level,u.display_name`,
-      [minLevel, maxLevel]
+       WHERE u.is_active=true`
     );
-    // Filter out submitter client-side to avoid UUID type issues
-    const filtered = safeId ? rows.filter(r => r.user_id !== safeId) : rows;
-    if (filtered.length > 0) return filtered;
+    if (rows.length) return rows.map(mapRow);
   } catch (e) {
-    logger.warn('getEligibleApprovers via v_user_mandate failed, falling back', { error: e.message });
+    logger.warn('fetchApproverCandidates via v_user_mandate failed, falling back', { error: e.message });
   }
-
-  // Fallback: query uw_user + uw_role directly (works even without mandate rows)
   try {
     const { rows } = await pool.query(
-      `SELECT u.user_id,u.display_name,u.email,u.office,r.role_code,r.role_name,r.hierarchy_level
+      `SELECT u.user_id, u.display_name, u.email, u.office,
+              r.role_code, r.role_name, r.hierarchy_level,
+              r.authority_limit_usd AS effective_limit_usd
        FROM public.uw_user u
        JOIN public.uw_role r ON r.role_id=u.role_id
-       WHERE u.is_active=true AND r.hierarchy_level BETWEEN $1 AND $2
-       ORDER BY r.hierarchy_level,u.display_name`,
-      [minLevel, maxLevel]
+       WHERE u.is_active=true`
     );
-    const filtered = safeId ? rows.filter(r => r.user_id !== safeId) : rows;
-    // If DB users exist, return them
-    if (filtered.length > 0) return filtered;
+    if (rows.length) return rows.map(mapRow);
   } catch (e) {
-    logger.warn('getEligibleApprovers fallback failed', { error: e.message });
+    logger.warn('fetchApproverCandidates fallback failed', { error: e.message });
   }
-
-  // Final fallback: demo users (used when uw_user table is empty / not yet seeded)
-  const DEMO_APPROVERS = [
-    { user_id: '00000000-0000-0000-0000-000000000001', display_name: 'Chief Underwriting Officer', email: 'cuo@universe3.app', office: 'Riyadh', role_code: 'CU', role_name: 'Chief Underwriter', hierarchy_level: 2 },
-    { user_id: '00000000-0000-0000-0000-000000000003', display_name: 'Chief Executive',             email: 'ce@universe3.app',  office: 'Riyadh', role_code: 'CE', role_name: 'Chief Executive',     hierarchy_level: 1 },
-    { user_id: '00000000-0000-0000-0000-000000000004', display_name: 'Treaty Director',             email: 'td@universe3.app',  office: 'Riyadh', role_code: 'TD', role_name: 'Treaty Director',     hierarchy_level: 3 },
-    { user_id: '00000000-0000-0000-0000-000000000005', display_name: 'Treaty Manager',              email: 'tm@universe3.app',  office: 'Riyadh', role_code: 'TM', role_name: 'Treaty Manager',      hierarchy_level: 4 },
+  // Demo roster — used only when uw_user is not yet seeded.
+  return [
+    { user_id: '00000000-0000-0000-0000-000000000003', display_name: 'Chief Executive',            email: 'ce@universe3.app',  office: 'Riyadh', role_code: 'CE', role_name: 'Chief Executive',    hierarchy_level: 1, effective_limit_usd: null,     excluded_cob_ids: [], can_approve: true },
+    { user_id: '00000000-0000-0000-0000-000000000001', display_name: 'Chief Underwriting Officer', email: 'cuo@universe3.app', office: 'Riyadh', role_code: 'CU', role_name: 'Chief Underwriter',  hierarchy_level: 2, effective_limit_usd: null,     excluded_cob_ids: [], can_approve: true },
+    { user_id: '00000000-0000-0000-0000-000000000004', display_name: 'Treaty Director',            email: 'td@universe3.app',  office: 'Riyadh', role_code: 'TD', role_name: 'Treaty Director',    hierarchy_level: 3, effective_limit_usd: 50000000, excluded_cob_ids: [], can_approve: true },
+    { user_id: '00000000-0000-0000-0000-000000000005', display_name: 'Treaty Manager',             email: 'tm@universe3.app',  office: 'Riyadh', role_code: 'TM', role_name: 'Treaty Manager',     hierarchy_level: 4, effective_limit_usd: 25000000, excluded_cob_ids: [], can_approve: true },
   ];
-  const demoFiltered = DEMO_APPROVERS.filter(a =>
-    a.hierarchy_level >= minLevel &&
-    a.hierarchy_level <= (maxLevel ?? 99) &&
-    a.user_id !== submitterUserId
-  );
-  return demoFiltered;
 }
 
-export async function detectBreach(submitterUserId, { epiUsd, cobIds=[], isNp=false }) {
-  const mandate = await getUserMandate(submitterUserId);
-  if (!mandate) return { type:'NONE', reasons:[] };
-  const reasons=[]; let limitBreach=false, classBreach=false;
-  if (epiUsd && mandate.effective_limit_usd!==null && Number(epiUsd)>Number(mandate.effective_limit_usd)) {
-    limitBreach=true;
-    reasons.push(`EPI USD${(epiUsd/1e6).toFixed(1)}M exceeds your authority USD${(mandate.effective_limit_usd/1e6).toFixed(1)}M`);
+/**
+ * Detect whether a submission breaches the submitter's own mandate.
+ *
+ *   • LIMIT  — written-line exposure (computeWrittenExposure) exceeds the
+ *              submitter's effective_limit_usd (null = unlimited).
+ *   • CLASS  — any cobId appears in the submitter's excluded_cob_ids
+ *              (or an NP submission under a PROP_ONLY mandate).
+ *
+ * The written line must NOT breach the mandate; if it does, the breach drives
+ * escalation (getEligibleApprovers).
+ *
+ * @param {object|string} submitter  Resolved mandate object (preferred) or a
+ *                                    user_id string (resolved via getUserMandate).
+ * @param {{ writtenLinePct?: number, programLimit100Usd?: number,
+ *           cobIds?: Array<string>, isNp?: boolean, epiUsd?: number }} opts
+ * @returns {{ type:'NONE'|'LIMIT'|'CLASS'|'BOTH', reasons:string[],
+ *             writtenExposureUsd:number, limitBreach:boolean, classBreach:boolean }}
+ */
+export async function detectBreach(submitter, opts = {}) {
+  // Back-compat: a user_id string resolves to its mandate.
+  const mandate = typeof submitter === 'string' ? await getUserMandate(submitter) : submitter;
+  if (!mandate) return { type: 'NONE', reasons: [], writtenExposureUsd: 0, limitBreach: false, classBreach: false };
+
+  const { writtenLinePct, programLimit100Usd, cobIds = [], isNp = false, epiUsd } = opts;
+  const limitBasis = mandate.limit_basis || LIMIT_BASIS.SIGNED_EXPOSURE;
+  const writtenExposureUsd = (writtenLinePct != null || programLimit100Usd != null)
+    ? computeWrittenExposure({ writtenLinePct, programLimit100Usd, limitBasis, epiUsd })
+    : (Number(epiUsd) || 0); // legacy callers supply epiUsd directly
+
+  const reasons = [];
+  let limitBreach = false, classBreach = false;
+
+  const limit = mandate.effective_limit_usd;
+  if (limit != null && writtenExposureUsd > Number(limit)) {
+    limitBreach = true;
+    reasons.push(`Written-line exposure USD${(writtenExposureUsd / 1e6).toFixed(1)}M exceeds your authority USD${(Number(limit) / 1e6).toFixed(1)}M`);
   }
-  if (isNp && mandate.treaty_type_scope==='PROP_ONLY') { classBreach=true; reasons.push('Your mandate covers proportional treaties only'); }
-  if (cobIds.length) {
-    const { rows } = await pool.query(
-      `SELECT c.min_hierarchy_level,cb.class_name FROM public.cob_authority_requirement c
-       JOIN public.class_of_business cb ON cb.class_of_business_id=c.class_of_business_id
-       WHERE c.class_of_business_id=ANY($1::uuid[]) AND c.min_hierarchy_level<$2`,[cobIds,mandate.hierarchy_level]
-    );
-    for (const r of rows) { classBreach=true; reasons.push(`Class "${r.class_name}" requires higher authority`); }
+
+  const excludedSet = new Set(excludedCobs(mandate).map(String));
+  for (const cob of (cobIds || [])) {
+    if (excludedSet.has(String(cob))) { classBreach = true; reasons.push(`Class "${cob}" is excluded from your mandate`); }
   }
-  const type=limitBreach&&classBreach?'BOTH':limitBreach?'LIMIT':classBreach?'CLASS':'NONE';
-  return { type, reasons };
+  if (isNp && mandate.treaty_type_scope === 'PROP_ONLY') { classBreach = true; reasons.push('Your mandate covers proportional treaties only'); }
+
+  const type = limitBreach && classBreach ? 'BOTH' : limitBreach ? 'LIMIT' : classBreach ? 'CLASS' : 'NONE';
+  return { type, reasons, writtenExposureUsd, limitBreach, classBreach };
 }
 
 export function getRequiredApproverRole(submitterLevel, breachType) {
@@ -160,15 +310,58 @@ export async function getArbiterOptions(_contractId, _quoteId) {
   return rows;
 }
 
-export async function submitForApproval({ contractId, quoteId, submittedByUserId, submittedByName, submittedByRole, epiUsd, cobIds, isNp, peer1UserId, breachType, writtenLinePct, comment }) {
-  let resolvedBreachType=breachType;
-  if (!resolvedBreachType) {
-    const b=await detectBreach(submittedByUserId,{epiUsd,cobIds,isNp});
-    resolvedBreachType=b.type;
+/**
+ * Decide how a submission routes. Pure given `submitter` (+ optional injected
+ * `candidates`/`routes`) — exercised directly by the unit tests and reused by
+ * submitForApproval. Three outcomes:
+ *   • CAPTURE        — Analyst: hands to {UW}; no breach/escalation yet.
+ *   • WITHIN_MANDATE — no breach: normal next leg (e.g. UW→CU).
+ *   • ESCALATE       — any breach: nearest-sufficient eligible titles.
+ *
+ * @returns {Promise<{ kind:string, breach:object, writtenExposureUsd:number,
+ *                     routeRoleCodes:string[]|null, approverOptions:object[] }>}
+ */
+export async function planSubmission({
+  submitter, submittedByRole,
+  writtenLinePct, programLimit100Usd, epiUsd,
+  cobIds = [], isNp = false,
+  candidates, routes = DEFAULT_APPROVAL_ROUTE,
+}) {
+  const roleCode = (submitter && submitter.role_code) || submittedByRole;
+
+  if (isCaptureSubmission(roleCode)) {
+    return { kind: 'CAPTURE', breach: { type: 'NONE', reasons: [] }, writtenExposureUsd: 0, routeRoleCodes: normalRoute('AN', routes), approverOptions: [] };
   }
+
+  const breach = await detectBreach(submitter, { writtenLinePct, programLimit100Usd, cobIds, isNp, epiUsd });
+  const { writtenExposureUsd } = breach;
+
+  if (breach.type === 'NONE') {
+    const routeRoleCodes = normalRoute(roleCode, routes);
+    const all = await getEligibleApprovers({ submitter, writtenExposureUsd, cobIds, candidates });
+    const routeSet = new Set(routeRoleCodes.map(String));
+    return { kind: 'WITHIN_MANDATE', breach, writtenExposureUsd, routeRoleCodes, approverOptions: all.filter((c) => routeSet.has(String(c.role_code))) };
+  }
+
+  const approverOptions = await getEligibleApprovers({ submitter, writtenExposureUsd, cobIds, candidates });
+  return { kind: 'ESCALATE', breach, writtenExposureUsd, routeRoleCodes: null, approverOptions };
+}
+
+export async function submitForApproval({ contractId, quoteId, submittedByUserId, submittedByName, submittedByRole, epiUsd, cobIds, isNp, peer1UserId, breachType, writtenLinePct, programLimit100Usd, comment }) {
   const submitter=await getUserMandate(submittedByUserId);
+
+  // Plan the route: capture (Analyst→UW), within-mandate, or breach-escalation.
+  // Best-effort — a planning failure must not block the submit.
+  let plan=null;
+  try {
+    plan=await planSubmission({ submitter, submittedByRole, writtenLinePct, programLimit100Usd, epiUsd, cobIds, isNp });
+  } catch (e) { logger.warn('planSubmission failed, falling back to legacy routing', { error: e.message }); }
+
+  const resolvedBreachType=breachType || plan?.breach?.type || 'NONE';
   const submitterLevel=submitter?.hierarchy_level||5;
-  const requiredRole=getRequiredApproverRole(submitterLevel,resolvedBreachType);
+  // Analyst capture hands to the Underwriter; everyone else uses the breach-tier role.
+  const requiredRole=plan?.kind==='CAPTURE' ? 'UW' : getRequiredApproverRole(submitterLevel,resolvedBreachType);
+  const approverOptions=Array.isArray(plan?.approverOptions)?plan.approverOptions:[];
 
   if (peer1UserId) {
     // getUserMandate now has fallbacks — only hard-fail if truly unknown
@@ -181,18 +374,18 @@ export async function submitForApproval({ contractId, quoteId, submittedByUserId
       throw Object.assign(new Error('Cannot approve own submission'), {status:403});
   }
 
-  // Upsert offer
+  // Upsert offer — approver_options carries the ordered nearest-sufficient list.
   const res=await pool.query(
-    `INSERT INTO public.contract_offer (contract_id,quote_id,status,breach_type,approval_step,submitted_by_id,submitted_at,written_line_pct,epi_usd,next_approver_id,next_approver_role,peer1_user_id)
-     VALUES ($1,$2,'AWAITING_APPROVAL',$3,1,$4,now(),$5,$6,$7,$8,$9)
+    `INSERT INTO public.contract_offer (contract_id,quote_id,status,breach_type,approval_step,submitted_by_id,submitted_at,written_line_pct,epi_usd,next_approver_id,next_approver_role,peer1_user_id,approver_options)
+     VALUES ($1,$2,'AWAITING_APPROVAL',$3,1,$4,now(),$5,$6,$7,$8,$9,$10)
      ON CONFLICT (contract_id) DO UPDATE SET
        status='AWAITING_APPROVAL',breach_type=$3,approval_step=1,submitted_by_id=$4,submitted_at=now(),
-       written_line_pct=$5,epi_usd=$6,next_approver_id=$7,next_approver_role=$8,peer1_user_id=$9,
+       written_line_pct=$5,epi_usd=$6,next_approver_id=$7,next_approver_role=$8,peer1_user_id=$9,approver_options=$10,
        peer1_decision=NULL,peer1_comment=NULL,peer1_at=NULL,peer2_user_id=NULL,peer2_decision=NULL,
        peer2_at=NULL,arbiter_required=false,arbiter_user_id=NULL,arbiter_decision=NULL,updated_at=now()
      RETURNING offer_id`,
     [contractId||null,quoteId||null,resolvedBreachType,submittedByUserId,writtenLinePct||null,
-     epiUsd||null,peer1UserId||null,requiredRole,peer1UserId||null]
+     epiUsd||null,peer1UserId||null,requiredRole,peer1UserId||null,JSON.stringify(approverOptions)]
   );
 
   if (contractId) await pool.query(`UPDATE public.contract SET uw_status='AWAITING_APPROVAL',status='AWAITING_APPROVAL',updated_at=now() WHERE contract_id=$1`,[contractId]);
