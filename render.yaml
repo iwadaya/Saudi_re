@@ -19,9 +19,12 @@ services:
         value: "https://modelling-tool.onrender.com"
       - key: SESSION_TTL_HOURS
         value: "8"
-      # Open (login-screen) self-registration is a dev/test convenience only.
+      # Open (login-screen) self-registration. Enabled on this testing
+      # deployment so the login "Add user" utility works (this build also
+      # ships the no-password "Enter without password" test access). Set to
+      # "false" to lock self-registration down to authenticated CU/CE creates.
       - key: ALLOW_OPEN_REGISTRATION
-        value: "false"
+        value: "true"
       - key: DATABASE_URL
         sync: false
       - key: SESSION_SECRET
