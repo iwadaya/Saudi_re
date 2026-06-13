@@ -4,6 +4,7 @@
 // Production: swap DEMO_HASH check for bcrypt.compare(password, user.password_hash)
 
 import { Router } from 'express';
+import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { pool } from '../db/pool.js';
 import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
@@ -13,6 +14,38 @@ const router = Router();
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 const DEMO_PASSWORD = 'demo2026';
+
+// Password hashing with the Node stdlib (no new dependency). Format:
+//   scrypt$<saltHex>$<hashHex>
+// Demo/seeded accounts keep the legacy 'DEMO_HASH_2026' sentinel and log in
+// with DEMO_PASSWORD; real accounts created through the Add-user flow get a
+// scrypt hash and are verified against it.
+export function hashPassword(plain) {
+  const salt = randomBytes(16).toString('hex');
+  const hash = scryptSync(String(plain), salt, 64).toString('hex');
+  return `scrypt$${salt}$${hash}`;
+}
+
+export function verifyPassword(plain, stored) {
+  if (typeof stored !== 'string' || !stored.startsWith('scrypt$')) return false;
+  const [, saltHex, hashHex] = stored.split('$');
+  if (!saltHex || !hashHex) return false;
+  const expected = Buffer.from(hashHex, 'hex');
+  let actual;
+  try { actual = scryptSync(String(plain), saltHex, 64); } catch { return false; }
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+// Open (login-screen) registration is allowed only when explicitly enabled —
+// default ON in dev/test, OFF in production unless the env says otherwise.
+// render.yaml pins ALLOW_OPEN_REGISTRATION=false for the prod service.
+function openRegistrationEnabled() {
+  const flag = process.env.ALLOW_OPEN_REGISTRATION;
+  if (flag === 'true') return true;
+  if (flag === 'false') return false;
+  return process.env.NODE_ENV !== 'production';
+}
+
 
 // Static fallback — used when DB tables aren't ready yet (before migrations run)
 const DEMO_USERS_FALLBACK = [
@@ -116,14 +149,14 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
 
   // Password check.
   //
-  // Demo mode: every seeded user has password_hash='DEMO_HASH_2026' and
-  // logs in with DEMO_PASSWORD. This is intentional for the testing
-  // build — bcrypt is not yet wired up — and is checked uniformly for
-  // every account so it is obvious we are not silently bypassing a
-  // real-hash branch. When real auth lands, replace this block with
-  // `await bcrypt.compare(password, user.password_hash)` and remove
-  // the DEMO_HASH_2026 seed in the user-create path.
-  const passwordOk = password === DEMO_PASSWORD;
+  // Two accepted credentials:
+  //   • Demo/seeded accounts (password_hash='DEMO_HASH_2026') log in with
+  //     DEMO_PASSWORD — kept so the testing build's seeded users keep working.
+  //   • Real accounts created via the Add-user flow carry a scrypt hash
+  //     ('scrypt$...') and are verified against it.
+  const storedHash = user.password_hash;
+  const passwordOk = password === DEMO_PASSWORD
+    || (typeof storedHash === 'string' && storedHash.startsWith('scrypt$') && verifyPassword(password, storedHash));
 
   if (!passwordOk) {
     // Increment failed attempts (fire-and-forget)
@@ -185,7 +218,7 @@ router.get('/auth/users', asyncHandler(async (req, res) => {
        JOIN public.uw_role r ON r.role_id = u.role_id
        LEFT JOIN public.user_mandate m ON m.user_id = u.user_id
        WHERE u.is_active = true
-       ORDER BY r.hierarchy_level, u.display_name`
+       ORDER BY u.display_name`
     );
     if (rows.length) return res.json(rows);
     // No users yet — return static demo fallback
@@ -207,31 +240,97 @@ router.get('/auth/roles', asyncHandler(async (req, res) => {
 }));
 
 // ── POST /api/auth/users — create new user ────────────────────────────────
+// Accepts two payload shapes:
+//   • Add-user form (login screen): first_name, surname, title (role_code) OR
+//     role_id, password, confirm_password. Composes display_name, derives
+//     username/email, and stores a real scrypt password hash.
+//   • Legacy admin form: username, display_name, email, role_id (DEMO hash).
 router.post('/auth/users', asyncHandler(async (req, res) => {
   const b = req.body || {};
-  const { username, display_name, email, role_id, office, phone, company_id } = b;
+  const isFormPayload = b.first_name != null || b.surname != null || b.password != null;
 
-  if (!username || !display_name || !email || !role_id) {
-    return res.status(400).json({ error: 'username, display_name, email and role_id are required.' });
+  // ── Caller gate ──
+  // Authenticated creates still require Chief Underwriter / Chief Executive
+  // (hierarchy_level <= 2). With no caller it's an open (login-screen) create,
+  // allowed only when test registration is enabled.
+  const callerUserId = req.headers['x-user-id'];
+  if (callerUserId) {
+    const { rows: callerRows } = await pool.query(
+      `SELECT r.hierarchy_level FROM public.uw_user u JOIN public.uw_role r ON r.role_id = u.role_id WHERE u.user_id = $1`,
+      [callerUserId]
+    );
+    if (!callerRows.length || callerRows[0].hierarchy_level > 2) {
+      return res.status(403).json({ error: 'Only Chief Underwriter or Chief Executive can create users.' });
+    }
+  } else if (!openRegistrationEnabled()) {
+    return res.status(403).json({ error: 'Open registration is disabled.' });
   }
 
-  // Check caller has authority to create users (hierarchy_level <= 2)
-  const callerUserId = req.headers['x-user-id'];
-  const { rows: callerRows } = await pool.query(
-    `SELECT r.hierarchy_level FROM public.uw_user u JOIN public.uw_role r ON r.role_id = u.role_id WHERE u.user_id = $1`,
-    [callerUserId]
-  );
-  if (!callerRows.length || callerRows[0].hierarchy_level > 2) {
-    return res.status(403).json({ error: 'Only Chief Underwriter or Chief Executive can create users.' });
+  let displayName, finalUsername, finalEmail, roleId, passwordHash;
+
+  if (isFormPayload) {
+    const first = String(b.first_name || '').trim();
+    const last  = String(b.surname || '').trim();
+    const password = b.password;
+    const roleCode = b.title || b.role_code || null;
+    roleId = b.role_id || null;
+
+    // Validate
+    if (!first || !last) return res.status(400).json({ error: 'first_name and surname are required.' });
+    if (!roleId && !roleCode) return res.status(400).json({ error: 'A role (title) is required.' });
+    if (!password) return res.status(400).json({ error: 'password is required.' });
+    if (password !== b.confirm_password) return res.status(400).json({ error: 'Passwords do not match' });
+    if (String(password).length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+
+    // Resolve role_id from title/role_code when not supplied directly.
+    if (!roleId) {
+      const { rows: roleRows } = await pool.query(
+        `SELECT role_id FROM public.uw_role WHERE role_code = $1 LIMIT 1`, [roleCode]
+      );
+      if (!roleRows.length) return res.status(400).json({ error: `Unknown role/title "${roleCode}".` });
+      roleId = roleRows[0].role_id;
+    }
+
+    displayName = `${first} ${last}`;
+
+    // Username: supplied, else first.surname deduped with a numeric suffix.
+    if (b.username) {
+      finalUsername = String(b.username).trim().toLowerCase();
+    } else {
+      const base = `${first}.${last}`.toLowerCase().replace(/[^a-z0-9.]+/g, '');
+      finalUsername = base;
+      let n = 1;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { rows: dup } = await pool.query(
+          `SELECT 1 FROM public.uw_user WHERE username = $1 LIMIT 1`, [finalUsername]
+        );
+        if (!dup.length) break;
+        n += 1;
+        finalUsername = `${base}${n}`;
+      }
+    }
+    finalEmail = b.email ? String(b.email).trim().toLowerCase() : `${finalUsername}@universe3.app`;
+    passwordHash = hashPassword(password);
+  } else {
+    // Legacy admin payload.
+    const { username, display_name, email, role_id } = b;
+    if (!username || !display_name || !email || !role_id) {
+      return res.status(400).json({ error: 'username, display_name, email and role_id are required.' });
+    }
+    displayName = display_name.trim();
+    finalUsername = username.trim();
+    finalEmail = email.trim().toLowerCase();
+    roleId = role_id;
+    passwordHash = 'DEMO_HASH_2026';
   }
 
   const { rows } = await pool.query(
     `INSERT INTO public.uw_user
        (username, display_name, email, role_id, office, phone, company_id, password_hash)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, 'DEMO_HASH_2026')
-     RETURNING user_id, username, display_name, email, role_id, office, created_at`,
-    [username.trim(), display_name.trim(), email.trim().toLowerCase(),
-     role_id, office || 'Riyadh', phone || null, company_id || null]
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING user_id, username, display_name, email, role_id, office, password_hash, created_at`,
+    [finalUsername, displayName, finalEmail, roleId, b.office || 'Riyadh', b.phone || null, b.company_id || null, passwordHash]
   );
 
   // Create default mandate
@@ -243,8 +342,8 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
 
   await logAudit(pool, {
     entityType: 'USER', entityId: rows[0].user_id,
-    eventType: 'USER_CREATED', actor: req.headers['x-user-name'] || 'ADMIN',
-    payload: { username, role_id },
+    eventType: 'USER_CREATED', actor: req.headers['x-user-name'] || (callerUserId ? 'ADMIN' : 'SELF_REGISTRATION'),
+    payload: { username: finalUsername, role_id: roleId, open_registration: !callerUserId },
   }).catch(() => {});
 
   res.status(201).json(rows[0]);

@@ -19,6 +19,9 @@ services:
         value: "https://modelling-tool.onrender.com"
       - key: SESSION_TTL_HOURS
         value: "8"
+      # Open (login-screen) self-registration is a dev/test convenience only.
+      - key: ALLOW_OPEN_REGISTRATION
+        value: "false"
       - key: DATABASE_URL
         sync: false
       - key: SESSION_SECRET

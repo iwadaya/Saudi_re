@@ -2,49 +2,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  getSession, setSession, ROLE_LABELS, canAccessApprovals,
+  getSession, setSession, canAccessApprovals,
   createTestSession,
 } from '../../utils/auth';
 import { api } from '../../api';
 import ThemeSwitcher from '../../components/ThemeSwitcher';
 
-const ROLE_COLORS = {
-  CE:  { bg: 'rgba(167,139,250,0.15)', border: 'rgba(167,139,250,0.40)', text: '#a78bfa' },
-  CU:  { bg: 'rgba(251,191,36,0.13)',  border: 'rgba(251,191,36,0.40)',  text: '#fbbf24' },
-  TD:  { bg: 'rgba(96,165,250,0.13)',  border: 'rgba(96,165,250,0.40)',  text: '#60a5fa' },
-  TM:  { bg: 'rgba(45,212,191,0.13)',  border: 'rgba(45,212,191,0.40)',  text: '#2dd4bf' },
-  TUW: { bg: 'rgba(35,209,139,0.13)', border: 'rgba(35,209,139,0.40)', text: '#23d18b' },
-};
-
-const LOGIN_ROLE_ORDER = ['CU', 'TUW'];
-const LOGIN_ROLE_CODES = new Set(LOGIN_ROLE_ORDER);
-
-function RoleBadge({ code }) {
-  const c = ROLE_COLORS[code] || ROLE_COLORS.TUW;
-  return (
-    <span style={{
-      display: 'inline-block', padding: '2px 8px', borderRadius: 20,
-      fontSize: 10, fontWeight: 700, letterSpacing: '.04em',
-      background: c.bg, border: `1px solid ${c.border}`, color: c.text,
-    }}>{code}</span>
-  );
-}
-
-function fmtLimit(usd) {
-  if (usd === null || usd === undefined) return 'Unlimited';
-  const n = Number(usd);
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(0)}M`;
-  return `$${n.toLocaleString()}`;
-}
-
+// Login shows people by name only — nothing role-related. Titles live on the
+// user record (set via the Add-user Title select) and drive routing/mandate
+// silently after login from the server's session response.
 const DEMO_FALLBACK = [
-  { user_id:'00000000-0000-0000-0000-000000000001', username:'cuo',         email:'cuo@universe3.app', role_code:'CU',  office:'Riyadh', treaty_limit_usd:null,     approvals_required:1 },
-  { user_id:'00000000-0000-0000-0000-000000000002', username:'underwriter', email:'uw@universe3.app',  role_code:'TUW', office:'Riyadh', treaty_limit_usd:10000000, approvals_required:2 },
+  { user_id:'00000000-0000-0000-0000-000000000001', username:'cuo',         display_name:'Chief Underwriting Officer', email:'cuo@universe3.app', role_code:'CU',  office:'Riyadh', treaty_limit_usd:null,     approvals_required:1 },
+  { user_id:'00000000-0000-0000-0000-000000000002', username:'underwriter', display_name:'Underwriter',                email:'uw@universe3.app',  role_code:'TUW', office:'Riyadh', treaty_limit_usd:10000000, approvals_required:2 },
 ];
-
-function titleFor(u) {
-  return ROLE_LABELS[u?.role_code] || 'User';
-}
 
 // ── Test Access Panel ─────────────────────────────────────────────────────────
 function TestAccessPanel({ onLogin }) {
@@ -106,6 +76,84 @@ function TestAccessPanel({ onLogin }) {
   );
 }
 
+// ── Add User Panel (test utility) ───────────────────────────────────────────
+// Creates a real person + scrypt password through POST /auth/users. Styled as a
+// dashed-accent test panel so it reads as a dev/QA convenience, not production UI.
+function AddUserPanel({ onCreated, onCancel }) {
+  const [roles, setRoles] = useState([]);
+  const [firstName, setFirstName] = useState('');
+  const [surname, setSurname] = useState('');
+  const [roleId, setRoleId] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.getRoles()
+      .then(data => { const list = Array.isArray(data) ? data : []; setRoles(list); if (list[0]) setRoleId(list[0].role_id); })
+      .catch(() => setRoles([]));
+  }, []);
+
+  const trimmed = { first: firstName.trim(), last: surname.trim() };
+  const mismatch = !!password && !!confirm && password !== confirm;
+  const canSave = trimmed.first && trimmed.last && roleId && password.length >= 6 && password === confirm && !saving;
+  // One alert slot: a server error wins, else the mismatch hint.
+  const msg = error || (mismatch ? 'Passwords do not match' : '');
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setSaving(true); setError('');
+    try {
+      const created = await api.createUser({
+        first_name: trimmed.first,
+        surname: trimmed.last,
+        role_id: roleId,
+        password,
+        confirm_password: confirm,
+      });
+      onCreated(created);
+    } catch (err) {
+      setError(err?.message || 'Could not create user.');
+      setSaving(false);
+    }
+  };
+
+  // .form-input already provides display:block + width:100%, so the fields
+  // carry no inline sizing — only the dashed test-panel container, the title,
+  // and the column gap do.
+  return (
+    <div style={{ marginTop: 12, padding: '16px', borderRadius: 12, background: 'rgba(35,209,139,0.07)', border: '1px dashed rgba(35,209,139,0.40)' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(35,209,139,0.8)', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 10 }}>
+        Add User — Test Utility
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <input className="form-input" placeholder="First name" aria-label="First name"
+          value={firstName} onChange={e => { setFirstName(e.target.value); setError(''); }} />
+        <input className="form-input" placeholder="Surname" aria-label="Surname"
+          value={surname} onChange={e => { setSurname(e.target.value); setError(''); }} />
+        <select className="form-input" aria-label="Title"
+          value={roleId} onChange={e => setRoleId(e.target.value)}>
+          {roles.map(r => <option key={r.role_id} value={r.role_id}>{r.role_name}</option>)}
+        </select>
+        <input className="form-input" type="password" placeholder="Password" aria-label="Password"
+          autoComplete="new-password"
+          value={password} onChange={e => { setPassword(e.target.value); setError(''); }} />
+        <input className="form-input" type="password" placeholder="Confirm password" aria-label="Confirm password"
+          autoComplete="new-password"
+          value={confirm} onChange={e => { setConfirm(e.target.value); setError(''); }} />
+        {msg && <div role="alert" style={{ fontSize: 12, color: '#f87171' }}>{msg}</div>}
+        <button type="button" className="action-pill action-pill--primary" onClick={handleSave}
+          disabled={!canSave}
+          style={{ minHeight: 38, fontWeight: 700, opacity: canSave ? 1 : 0.45 }}>
+          {saving ? 'Saving…' : 'Save user'}
+        </button>
+        <button type="button" className="action-pill" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Login Screen ─────────────────────────────────────────────────────────
 export default function LoginScreen() {
   const navigate = useNavigate();
@@ -117,33 +165,29 @@ export default function LoginScreen() {
   const [error, setError]               = useState('');
   const [showPw, setShowPw]             = useState(false);
   const [showTestPanel, setShowTestPanel] = useState(false);
+  const [showAddUser, setShowAddUser]   = useState(false);
+  const [addUserSuccess, setAddUserSuccess] = useState('');
 
   // Already authenticated — skip login
   useEffect(() => {
     if (getSession()) navigate(canAccessApprovals() ? '/approvals' : '/select', { replace: true });
   }, [navigate]);
 
+  // Load ALL active users for the people dropdown. Demo fallback covers the
+  // network-failure / empty case only — no role filtering or dedupe.
+  const loadUsers = (selectUserId) => api.getUsers({ headers: { 'x-user-role': 'CU', 'x-user-id': 'system', 'x-user-name': 'System' } })
+    .then(data => {
+      const list = Array.isArray(data) && data.length ? data : DEMO_FALLBACK;
+      setUsers(list);
+      const picked = (selectUserId && list.find(u => u.user_id === selectUserId)) || list[0] || null;
+      setSelectedUser(picked);
+      return list;
+    })
+    .catch(() => { setUsers(DEMO_FALLBACK); setSelectedUser(DEMO_FALLBACK[0]); return DEMO_FALLBACK; });
+
   useEffect(() => {
-    api.getUsers({ headers: { 'x-user-role': 'CU', 'x-user-id': 'system', 'x-user-name': 'System' } })
-      .then(data => {
-        const rawList = Array.isArray(data) ? data.filter(u => LOGIN_ROLE_CODES.has(u?.role_code)) : [];
-        const seen = new Map();
-        for (const u of rawList) {
-          if (!seen.has(u.role_code)) seen.set(u.role_code, u);
-        }
-        const list = Array.from(seen.values()).sort(
-          (a, b) => LOGIN_ROLE_ORDER.indexOf(a.role_code) - LOGIN_ROLE_ORDER.indexOf(b.role_code)
-        );
-        if (!list.length) {
-          setUsers(DEMO_FALLBACK);
-          setSelectedUser(DEMO_FALLBACK[0]);
-          return;
-        }
-        setUsers(list);
-        if (list.length) setSelectedUser(list[0]);
-      })
-      .catch(() => { setUsers(DEMO_FALLBACK); setSelectedUser(DEMO_FALLBACK[0]); })
-      .finally(() => setLoadingUsers(false));
+    loadUsers().finally(() => setLoadingUsers(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleLogin = async (e) => {
@@ -155,8 +199,8 @@ export default function LoginScreen() {
         username: selectedUser.username || selectedUser.email,
         password,
       });
-      const roleTitle = ROLE_LABELS[session.roleCode] || session.displayName || 'User';
-      setSession({ ...session, displayName: roleTitle });
+      // Use the person's real name, not the role title.
+      setSession({ ...session, displayName: selectedUser.display_name || session.displayName });
       navigate(canAccessApprovals() ? '/approvals' : '/select');
     } catch (err) {
       setError(err.message || 'Login failed.');
@@ -168,9 +212,14 @@ export default function LoginScreen() {
     navigate('/select');
   };
 
+  const handleUserCreated = async (created) => {
+    setShowAddUser(false);
+    setError('');
+    await loadUsers(created?.user_id);
+    setAddUserSuccess(`Added ${created?.display_name || 'user'} — select them and sign in.`);
+  };
+
   const sel = selectedUser;
-  const rc  = sel?.role_code;
-  const c   = ROLE_COLORS[rc] || ROLE_COLORS.TUW;
 
   return (
     <div className="LOGIN_SCREEN" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', position: 'relative' }}>
@@ -187,55 +236,23 @@ export default function LoginScreen() {
 
         <div className="glass" style={{ borderRadius: 16, padding: 24, border: '1px solid rgba(255,255,255,.10)' }}>
           <div style={{ marginBottom: 18 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.40)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 8 }}>Select User</div>
+            <label htmlFor="login-user" style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.40)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 8 }}>Underwriter</label>
             {loadingUsers ? (
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,.35)', padding: '10px 0' }} aria-live="polite">Loading users…</div>
             ) : (
-              <div role="radiogroup" aria-label="Select role" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {users.map(u => {
-                  const urc = u.role_code;
-                  const uc  = ROLE_COLORS[urc] || ROLE_COLORS.TUW;
-                  const isSel = sel?.user_id === u.user_id || sel?.email === u.email;
-                  return (
-                    <button key={u.user_id || u.email}
-                      type="button"
-                      role="radio"
-                      aria-checked={isSel}
-                      aria-label={`Select ${titleFor(u)}`}
-                      onClick={() => { setSelectedUser(u); setError(''); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: isSel ? `1px solid ${uc.border}` : '1px solid rgba(255,255,255,.08)', background: isSel ? uc.bg : 'rgba(255,255,255,.03)', cursor: 'pointer', textAlign: 'left', transition: 'all .12s', width: '100%' }}>
-                      <div style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, background: isSel ? uc.border : 'rgba(255,255,255,.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: isSel ? uc.text : 'rgba(255,255,255,.45)' }}>
-                        {titleFor(u).split(' ').filter(p=>p).map(p => p[0]).join('').slice(0,2).toUpperCase()}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: isSel ? 'rgba(255,255,255,.92)' : 'rgba(255,255,255,.65)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titleFor(u)}</div>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
-                        <RoleBadge code={urc} />
-                        <div style={{ fontSize: 9, color: 'rgba(255,255,255,.28)' }}>{fmtLimit(u.treaty_limit_usd)}</div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              <select
+                id="login-user"
+                className="form-input"
+                aria-label="Underwriter"
+                value={sel?.user_id || ''}
+                onChange={e => { setSelectedUser(users.find(u => u.user_id === e.target.value) || null); setError(''); }}
+              >
+                {users.map(u => (
+                  <option key={u.user_id || u.email} value={u.user_id}>{u.display_name}</option>
+                ))}
+              </select>
             )}
           </div>
-
-          {sel && (
-            <div style={{ padding: '10px 12px', borderRadius: 8, marginBottom: 16, background: c.bg, border: `1px solid ${c.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{ROLE_LABELS[rc] || rc}</div>
-              <div style={{ display: 'flex', gap: 14 }}>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 9, color: 'rgba(255,255,255,.30)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Treaty Limit</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.80)' }}>{fmtLimit(sel.treaty_limit_usd ?? sel.authority_limit_usd)}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 9, color: 'rgba(255,255,255,.30)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Approvals</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.80)' }}>{sel.approvals_required ?? 1}×</div>
-                </div>
-              </div>
-            </div>
-          )}
 
           <form onSubmit={handleLogin} aria-label="Sign in">
             <div style={{ marginBottom: 16 }}>
@@ -272,6 +289,24 @@ export default function LoginScreen() {
               {loading ? 'Signing in…' : <>Sign In <span aria-hidden="true">→</span></>}
             </button>
           </form>
+
+          {/* ── Add user (test utility) ─────────────────────────────────── */}
+          <div style={{ marginTop: 16, borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 14 }}>
+            {addUserSuccess && !showAddUser && (
+              <div role="status" style={{ fontSize: 11, color: 'rgba(35,209,139,0.85)', marginBottom: 10 }}>{addUserSuccess}</div>
+            )}
+            {!showAddUser ? (
+              <button
+                type="button"
+                onClick={() => { setShowAddUser(true); setAddUserSuccess(''); }}
+                style={{ width: '100%', background: 'none', border: '1px dashed rgba(35,209,139,0.30)', borderRadius: 8, padding: '9px 12px', color: 'rgba(35,209,139,0.65)', fontSize: 12, fontWeight: 600, cursor: 'pointer', letterSpacing: '.03em', transition: 'all .15s' }}
+              >
+                + Add user (test)
+              </button>
+            ) : (
+              <AddUserPanel onCreated={handleUserCreated} onCancel={() => setShowAddUser(false)} />
+            )}
+          </div>
 
           {/* ── Test Access ─────────────────────────────────────────────── */}
           <div style={{ marginTop: 16, borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 14 }}>
