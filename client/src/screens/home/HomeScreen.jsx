@@ -51,7 +51,6 @@ async function exportPortfolioToExcel() {
     const ncols = cfg.headers.length;
     const ws = book.addWorksheet(cfg.tab);
     const hdr = titleBar(ws, ncols, cfg.title, cfg.subtitle); // → 4
-
     if (!cfg.rows.length) {
       const cell = ws.getCell(hdr + 1, 1);
       cell.value = 'No data available';
@@ -59,7 +58,6 @@ async function exportPortfolioToExcel() {
       finishSheet(ws, hdr, cfg.freezeCols);
       return ws;
     }
-
     ws.getRow(hdr).values = cfg.headers;
     headerRow(ws, hdr, ncols);
 
