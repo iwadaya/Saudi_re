@@ -35,21 +35,17 @@ export async function getOwnerLevel(ownerUserId) {
 }
 
 /**
- * Pure edit-permission rule.
- *   canEdit when: requester IS the owner, OR the item is unassigned
- *   (claim-to-edit), OR the requester is AT/ABOVE the owner
- *   (requesterLevel <= ownerLevel; lower number = higher authority).
+ * Pure edit-permission rule: editing is allowed ONLY for the current assignee.
+ * Hierarchy level does NOT grant edit rights — it only governs who may
+ * allocate/reassign (see assignments.js). An unassigned treaty is read-only
+ * until someone claims it (self-assign/allocate sets assigned_to_user_id and
+ * thereby grants edit).
  *
- * @returns {{ canEdit: boolean, isOwner: boolean, reason: string }}
+ * @returns {{ canEdit: boolean, isOwner: boolean, reason: string|null }}
  */
-export function computeEditPermission({ requesterId, requesterLevel, assignedToUserId, ownerLevel }) {
-  const isOwner = !!requesterId && requesterId === assignedToUserId;
-  if (isOwner) return { canEdit: true, isOwner: true, reason: 'OWNER' };
-  if (assignedToUserId == null) return { canEdit: true, isOwner: false, reason: 'UNASSIGNED' };
-  if (ownerLevel != null && requesterLevel != null && Number(requesterLevel) <= Number(ownerLevel)) {
-    return { canEdit: true, isOwner: false, reason: 'AT_OR_ABOVE_OWNER' };
-  }
-  return { canEdit: false, isOwner: false, reason: 'READ_ONLY_NOT_OWNER' };
+export function computeEditPermission({ requesterId, assignedToUserId }) {
+  const canEdit = !!requesterId && requesterId === assignedToUserId;
+  return { canEdit, isOwner: canEdit, reason: canEdit ? null : 'READ_ONLY_NOT_ASSIGNEE' };
 }
 
 /** Load assigned_to + the owner's hierarchy level (and display name) for an entity. */
@@ -68,35 +64,24 @@ async function loadOwnership(entityType, entityId) {
   return rows[0] || null;
 }
 
-/** Resolve the requester's id + hierarchy level from the request. */
-async function resolveRequester(req) {
-  const requesterId = req?.user?.userId || req?.headers?.['x-user-id'] || null;
-  let requesterLevel = req?.user?.hierarchyLevel;
-  if (requesterLevel == null) {
-    const hdr = req?.headers?.['x-user-level'];
-    if (hdr != null && hdr !== '') requesterLevel = Number(hdr);
-    else requesterLevel = await getHierarchyLevel(requesterId);
-  }
-  return { requesterId, requesterLevel };
-}
-
 /**
- * Route guard for MUTATING endpoints. Throws 403 READ_ONLY when the requester
- * may not edit the entity; returns the permission object otherwise. CREATE
- * endpoints are exempt (the creator becomes owner via assignOnCreation).
+ * Route guard for MUTATING endpoints. Throws 403 READ_ONLY whenever the
+ * requester is not the current assignee — regardless of seniority. CREATE
+ * endpoints are exempt (the creator becomes the assignee via assignOnCreation),
+ * and seniors change ownership through the allocate/reassign endpoints, not by
+ * editing directly.
  */
 export async function assertCanEdit(req, entityType, entityId) {
   const own = await loadOwnership(entityType, entityId);
   if (!own) throw Object.assign(new Error('Not found'), { status: 404 });
 
-  const { requesterId, requesterLevel } = await resolveRequester(req);
+  const requesterId = req?.user?.userId || req?.headers?.['x-user-id'] || null;
   const assignedToUserId = own.assigned_to_user_id || null;
-  const ownerLevel = own.owner_level ?? null;
 
-  const perm = computeEditPermission({ requesterId, requesterLevel, assignedToUserId, ownerLevel });
+  const perm = computeEditPermission({ requesterId, assignedToUserId });
   if (!perm.canEdit) {
     throw Object.assign(
-      new Error('This treaty is read-only. Ask the owner to allocate it, or claim it if unassigned.'),
+      new Error('This treaty is read-only. Claim it (if unassigned) or have it allocated to you to edit.'),
       { status: 403, code: 'READ_ONLY' }
     );
   }

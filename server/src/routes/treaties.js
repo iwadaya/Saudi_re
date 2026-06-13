@@ -9,7 +9,7 @@ import { validateBody } from "../lib/validate.js";
 import { treatyPutBodySchema } from "../validation/treaty.js";
 import { logger } from "../lib/logger.js";
 import { buildBatchInsert } from "../db/batchInsert.js";
-import { assertCanEdit, computeEditPermission, getHierarchyLevel } from "../services/permissions.js";
+import { assertCanEdit, computeEditPermission } from "../services/permissions.js";
 import { getAssignmentHistory } from "../services/assignments.js";
 const router = Router();
 
@@ -107,16 +107,10 @@ router.get("/treaties/:id", asyncHandler(async (req, res) => {
   ]);
   const detail=detailR.rows[0]||{};const comm=commR.rows[0]||{};const lp=lpR.rows[0]||{};
   // Ownership / edit-permission for the requester (reads stay open; this just
-  // tells the client whether to lock the editor).
+  // tells the client whether to lock the editor). Edit = current assignee only.
   const requesterId = req.user?.userId || req.headers['x-user-id'] || null;
   const assignedToUserId = contract.assigned_to_user_id || null;
-  let requesterLevel = req.user?.hierarchyLevel;
-  if (requesterLevel == null) {
-    const hdr = req.headers['x-user-level'];
-    requesterLevel = (hdr != null && hdr !== '') ? Number(hdr) : (requesterId ? await getHierarchyLevel(requesterId) : null);
-  }
-  const ownerLevel = assignedToUserId ? await getHierarchyLevel(assignedToUserId) : null;
-  const perm = computeEditPermission({ requesterId, requesterLevel, assignedToUserId, ownerLevel });
+  const perm = computeEditPermission({ requesterId, assignedToUserId });
   const ownerHistory = await getAssignmentHistory('CONTRACT', id);
   let assignedToName = null;
   if (assignedToUserId) {

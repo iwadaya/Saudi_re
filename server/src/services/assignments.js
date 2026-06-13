@@ -149,10 +149,10 @@ export async function listContractsWithOwnership({ assignedTo, status, uwYear, l
       LEFT JOIN public.uw_role ar ON ar.role_id=au.role_id
       ${whereSql} ORDER BY c.updated_at DESC LIMIT $${i}`,params);
     return rows.map((r) => {
+      // Edit = current assignee only (hierarchy governs allocate/reassign, not edit).
       const { canEdit, isOwner } = computeEditPermission({
-        requesterId, requesterLevel,
+        requesterId,
         assignedToUserId: r.assigned_to_user_id || null,
-        ownerLevel: r.ownerLevel ?? null,
       });
       return {
         ...r,
