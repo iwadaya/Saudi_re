@@ -11,6 +11,7 @@
 import { pool } from '../db/pool.js';
 import { logger } from '../lib/logger.js';
 import { logAudit } from './audit.js';
+import { computeEditPermission } from './permissions.js';
 
 function entityTable(t) {
   if (t==='CONTRACT') return 'public.contract';
@@ -23,7 +24,7 @@ function entityIdCol(t) {
   throw Object.assign(new Error(`Invalid entity type: ${t}`),{status:400});
 }
 
-async function getHierarchyLevel(userId) {
+export async function getHierarchyLevel(userId) {
   try {
     const { rows } = await pool.query(
       `SELECT r.hierarchy_level FROM public.uw_user u JOIN public.uw_role r ON r.role_id=u.role_id WHERE u.user_id=$1`,
@@ -119,21 +120,27 @@ export async function getAssignmentHistory(entityType, entityId) {
   } catch { return []; }
 }
 
-export async function listContractsWithOwnership({ assignedTo, status, uwYear, limit=200 }={}) {
+export async function listContractsWithOwnership({ assignedTo, status, uwYear, limit=200, requesterId=null, requesterLevel=null, scope='mine' }={}) {
   const params=[]; const where=[]; let i=1;
   if (assignedTo) { where.push(`c.assigned_to_user_id=$${i++}`); params.push(assignedTo); }
   if (status)     { where.push(`c.uw_status=$${i++}`); params.push(status); }
   if (uwYear)     { where.push(`c.uw_year=$${i++}`); params.push(Number(uwYear)); }
+  // scope='mine' (default): my work + anything unclaimed. scope='all': everyone
+  // (rows still carry per-row canEdit so the client can lock other people's work).
+  if (scope !== 'all' && requesterId) {
+    where.push(`(c.assigned_to_user_id=$${i} OR c.created_by_user_id=$${i} OR c.assigned_to_user_id IS NULL)`);
+    params.push(requesterId); i++;
+  }
   params.push(limit);
   const whereSql=where.length?`WHERE ${where.join(' AND ')}`:''
   try {
     const { rows } = await pool.query(`
       SELECT c.contract_id AS id,'CONTRACT' AS record_type,
         c.uw_year AS "uwYear",c.status,c.uw_status AS "uwStatus",c.updated_at AS "updatedAt",
-        c.assigned_to_user_id,
+        c.assigned_to_user_id,c.created_by_user_id,
         co.company_name AS "cedantName",tt.treaty_type AS "treatyType",tt.category AS "treatyCategory",
         cnt.country_name AS country,
-        au.display_name AS "assignedToName",ar.role_code AS "assignedToRole"
+        au.display_name AS "assignedToName",ar.role_code AS "assignedToRole",ar.hierarchy_level AS "ownerLevel"
       FROM public.contract c
       LEFT JOIN public.companies co ON c.cedant_id=co.company_id
       LEFT JOIN public.treaty_type tt ON c.treaty_type_id=tt.treaty_type_id
@@ -141,7 +148,19 @@ export async function listContractsWithOwnership({ assignedTo, status, uwYear, l
       LEFT JOIN public.uw_user au ON au.user_id=c.assigned_to_user_id
       LEFT JOIN public.uw_role ar ON ar.role_id=au.role_id
       ${whereSql} ORDER BY c.updated_at DESC LIMIT $${i}`,params);
-    return rows;
+    return rows.map((r) => {
+      const { canEdit, isOwner } = computeEditPermission({
+        requesterId, requesterLevel,
+        assignedToUserId: r.assigned_to_user_id || null,
+        ownerLevel: r.ownerLevel ?? null,
+      });
+      return {
+        ...r,
+        assignedToUserId: r.assigned_to_user_id || null,
+        isOwner,
+        canEdit,
+      };
+    });
   } catch { return []; }
 }
 

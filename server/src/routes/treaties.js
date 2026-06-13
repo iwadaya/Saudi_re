@@ -9,6 +9,8 @@ import { validateBody } from "../lib/validate.js";
 import { treatyPutBodySchema } from "../validation/treaty.js";
 import { logger } from "../lib/logger.js";
 import { buildBatchInsert } from "../db/batchInsert.js";
+import { assertCanEdit, computeEditPermission, getHierarchyLevel } from "../services/permissions.js";
+import { getAssignmentHistory } from "../services/assignments.js";
 const router = Router();
 
 
@@ -104,7 +106,27 @@ router.get("/treaties/:id", asyncHandler(async (req, res) => {
     pool.query(`SELECT class_of_business_id,limit_amount,basis FROM public.contract_underwriting_limit WHERE contract_id=$1`,[id]),
   ]);
   const detail=detailR.rows[0]||{};const comm=commR.rows[0]||{};const lp=lpR.rows[0]||{};
+  // Ownership / edit-permission for the requester (reads stay open; this just
+  // tells the client whether to lock the editor).
+  const requesterId = req.user?.userId || req.headers['x-user-id'] || null;
+  const assignedToUserId = contract.assigned_to_user_id || null;
+  let requesterLevel = req.user?.hierarchyLevel;
+  if (requesterLevel == null) {
+    const hdr = req.headers['x-user-level'];
+    requesterLevel = (hdr != null && hdr !== '') ? Number(hdr) : (requesterId ? await getHierarchyLevel(requesterId) : null);
+  }
+  const ownerLevel = assignedToUserId ? await getHierarchyLevel(assignedToUserId) : null;
+  const perm = computeEditPermission({ requesterId, requesterLevel, assignedToUserId, ownerLevel });
+  const ownerHistory = await getAssignmentHistory('CONTRACT', id);
+  let assignedToName = null;
+  if (assignedToUserId) {
+    const { rows: nameRows } = await pool.query(`SELECT display_name FROM public.uw_user WHERE user_id=$1`, [assignedToUserId]);
+    assignedToName = nameRows[0]?.display_name || null;
+  }
   res.json({
+    ownership:{ canEdit:perm.canEdit, isOwner:perm.isOwner, reason:perm.reason,
+      assignedToUserId, assignedToName, ownerHistoryCount:ownerHistory.length },
+    canEdit:perm.canEdit, isOwner:perm.isOwner,
     contract_id:contract.contract_id,
     updated_at:contract.updated_at,
     created_at:contract.created_at,
@@ -152,6 +174,7 @@ router.get("/treaties/:id", asyncHandler(async (req, res) => {
 // will NOT wipe COBs, commissions, details, loss participation, etc.
 router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(async (req, res) => {
   const {id}=req.params;const {terms={},save_mode="MANUAL"}=req.body;
+  await assertCanEdit(req, 'CONTRACT', id);
   const client=await pool.connect();
   try{
     const ifUnmodifiedSince = req.headers['if-unmodified-since'];
@@ -523,6 +546,7 @@ router.post("/treaties/:id/renew", asyncHandler(async (req, res) => {
 
 // ── DELETE /api/treaties/:id ──
 router.delete("/treaties/:id", asyncHandler(async (req, res) => {
+  await assertCanEdit(req, 'CONTRACT', req.params.id);
   const {rowCount}=await pool.query(`DELETE FROM public.contract WHERE contract_id=$1`,[req.params.id]);
   if(!rowCount) return res.status(404).json({error:"Contract not found"});
   await logAudit(pool,{entityType:"CONTRACT",entityId:req.params.id,eventType:"DELETED",actor:"SYSTEM"});

@@ -16,6 +16,7 @@ import { quotePutBodySchema } from '../validation/quote.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { storeUploadedFile } from '../lib/uploadStorage.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
+import { assertCanEdit } from '../services/permissions.js';
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
 import { verifyNpPricingOutputs, summariseDrifts, isStrictMode, pricingDriftStats } from '../lib/pricingVerifier.js';
 import { getWordingChecklist, runWordingChecklistAi, saveWordingChecklist } from '../services/wordingChecklist.js';
@@ -578,7 +579,9 @@ router.get("/quotes/:id", asyncHandler(async (req, res) => {
 // coerce known fields and leave unknown ones alone while schemas are
 // still being tightened; see validation/quote.js).
 router.put("/quotes/:id", validateBody(quotePutBodySchema), asyncHandler(async (req, res) => {
-  const {id}=req.params;const {terms={}}=req.body;const cl=await pool.connect();
+  const {id}=req.params;const {terms={}}=req.body;
+  await assertCanEdit(req, 'QUOTE', id);
+  const cl=await pool.connect();
   try{
   const ifUnmodifiedSince = req.headers['if-unmodified-since'];
   const staleWriteOverride = optimisticLockOverrideRequested(ifUnmodifiedSince);
@@ -1368,6 +1371,7 @@ router.put("/quotes/:id/np/egnpi-year", asyncHandler(async (req, res) => {
 // NP pricing save
 router.put("/quotes/:id/np-pricing", asyncHandler(async (req, res) => {
   const {id}=req.params;
+  await assertCanEdit(req, 'QUOTE', id);
   const {inputs, layer_inputs=[], outputs=[], layer_margins=[]} = req.body;
 
   // Mirror contract NP pricing verification for quote-mode pricing.
@@ -1482,6 +1486,7 @@ router.post("/quotes/:id/decline", asyncHandler(async (req, res) => {
 }));
 router.post("/quotes/:id/offer/submit-for-approval", asyncHandler(async (req, res) => {
   const { id } = req.params;
+  await assertCanEdit(req, 'QUOTE', id);
   const { comment, written_line_pct, line_pct, _actor } = req.body;
   const approver = req.body.approver || req.body.peer1_user_id || null; // client sends peer1_user_id
   // Parse line_pct: may be JSON per-layer map (NP) or plain number (PROP)

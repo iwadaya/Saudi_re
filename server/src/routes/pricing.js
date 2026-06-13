@@ -41,16 +41,27 @@ import {
   deleteComponentSnapshotController,
 } from '../modules/pricing/controllers/pricingController.js';
 
+import { assertCanEdit } from '../services/permissions.js';
+
 const router = Router();
+
+// Edit-lock middleware: gate a contract mutation on ownership before the
+// controller runs. `idFrom` extracts the contract id from the request.
+const lockContract = (idFrom) => asyncHandler(async (req, _res, next) => {
+  const id = idFrom(req);
+  if (id) await assertCanEdit(req, 'CONTRACT', id);
+  next();
+});
+const contractIdFromBody = (req) => req.body?.contractId || req.body?.contract_id || null;
 
 router.get('/treaties/:id/pricing', asyncHandler(getTreatyPricingController));
 router.get('/treaties/:id/pricing-outputs', asyncHandler(getPricingOutputsController));
 router.put('/treaties/:id/pricing-outputs', validateBody(pricingOutputsPutSchema), asyncHandler(putPricingOutputsController));
 router.get('/treaties/:id/pricing-yearly', asyncHandler(getPricingYearlyController));
 router.put('/treaties/:id/pricing-yearly', validateBody(pricingYearlyPutSchema), asyncHandler(putPricingYearlyController));
-router.post('/pricing/save', validateBody(compositePricingSaveSchema), asyncHandler(saveCompositePricingController));
+router.post('/pricing/save', validateBody(compositePricingSaveSchema), lockContract(contractIdFromBody), asyncHandler(saveCompositePricingController));
 
-router.post('/straight-stats/save', validateBody(straightStatsSaveSchema), asyncHandler(saveStraightStatsController));
+router.post('/straight-stats/save', validateBody(straightStatsSaveSchema), lockContract(contractIdFromBody), asyncHandler(saveStraightStatsController));
 router.get('/straight-stats/load/:id', asyncHandler(loadStraightStatsController));
 
 // Offer/approval endpoints work for both prop and NP treaties, but
@@ -62,7 +73,7 @@ router.get('/straight-stats/load/:id', asyncHandler(loadStraightStatsController)
 router.get('/treaties/:id/offer', asyncHandler(getOfferController));
 router.post('/treaties/:id/offer', loadTreatyCategory, assertBodyCategoryMatches, asyncHandler(saveOfferController));
 router.post('/treaties/:id/decline', loadTreatyCategory, assertBodyCategoryMatches, asyncHandler(declineTreatyController));
-router.post('/treaties/:id/offer/submit-for-approval', loadTreatyCategory, assertBodyCategoryMatches, asyncHandler(submitForApprovalController));
+router.post('/treaties/:id/offer/submit-for-approval', lockContract((req) => req.params.id), loadTreatyCategory, assertBodyCategoryMatches, asyncHandler(submitForApprovalController));
 router.post('/treaties/:id/offer/peer-decision', loadTreatyCategory, assertBodyCategoryMatches, asyncHandler(peerDecisionController));
 router.post('/treaties/:id/offer/arbiter-decision', loadTreatyCategory, assertBodyCategoryMatches, asyncHandler(arbiterDecisionController));
 router.get('/treaties/:id/offer/approval-state', asyncHandler(approvalStateController));
