@@ -12,6 +12,7 @@ import {
 } from '../../hooks/useContractId';
 import { exportPortfolioToExcel } from './exportPortfolio';
 import { EveryonePanel } from './HomeOwnership';
+import { useViewAllTreaties } from '../../utils/prefs';
 
 /* ── workflow normalisation ── */
 const WF = {
@@ -382,9 +383,11 @@ export default function HomeScreen() {
   const { resetFlow } = useAppState();
   const session = getSession();
   const myLevel  = session?.hierarchyLevel || 5;
-  // Mine / Everyone scope. At/above Underwriting Manager (level <= 3) defaults to
-  // 'Everyone' (seniors see all work); analysts/underwriters default to 'Mine'.
-  const [scope, setScope] = useState(() => (myLevel <= 3 ? 'all' : 'mine'));
+  // Treaty scope is driven by the per-user "View treaties" preference in
+  // Settings (Topbar), not a control on this screen. viewAll=true → everyone's
+  // treaties (scope='all', non-owned rows render read-only); false → mine.
+  const [viewAll] = useViewAllTreaties();
+  const scope = viewAll ? 'all' : 'mine';
 
   const [data, setData] = useState({ drafts: [], submitted: [], renewals: [], quotes: [], region_premiums: [], stats: {} });
   const [loading, setLoading] = useState(false);
@@ -633,15 +636,6 @@ export default function HomeScreen() {
             <div className="region-row">{regions.map(r => <RegionBar key={r.name} {...r} />)}</div>
           </section>
           <div className="panel-col">
-            <section className="panel glass">
-              <div className="own-bar">
-                <div className="own-seg" role="tablist" aria-label="Treaty scope">
-                  <button type="button" role="tab" aria-selected={scope === 'mine'} className={scope === 'mine' ? 'is-active' : ''} onClick={() => setScope('mine')}>Mine</button>
-                  <button type="button" role="tab" aria-selected={scope === 'all'} className={scope === 'all' ? 'is-active' : ''} onClick={() => setScope('all')}>Everyone</button>
-                </div>
-              </div>
-            </section>
-
             {scope === 'all' ? (
               <EveryonePanel onOpen={openItem} />
             ) : (

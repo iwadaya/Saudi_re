@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearSession, getSession, ROLE_LABELS, canAccessApprovals, isAtLeast } from '../utils/auth';
+import { useViewAllTreaties } from '../utils/prefs';
 import { api } from '../api';
 import ThemeSwitcher from './ThemeSwitcher';
 
@@ -48,6 +49,7 @@ export default function Topbar({ title, subtitle, actions }) {
 
   const [open, setOpen]         = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [viewAll, setViewAll]   = useViewAllTreaties();
   const [teamUsers, setTeamUsers] = useState([]);
   const [viewingUser, setVU]    = useState(viewingUserStore.user);
   const ref = useRef(null);
@@ -132,6 +134,22 @@ export default function Topbar({ title, subtitle, actions }) {
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                   <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Theme</div>
                   <ThemeSwitcher />
+                </div>
+              )}
+
+              {/* View treaties — display preference only; edit rights are
+                  always enforced server-side regardless of this toggle. */}
+              {session && (
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>View treaties</div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={viewAll} onChange={(e) => setViewAll(e.target.checked)}
+                      style={{ width: 14, height: 14, accentColor: 'var(--accent)', cursor: 'pointer', flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.80)' }}>Show everyone&apos;s treaties (read-only)</span>
+                  </label>
+                  <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', marginTop: 4, lineHeight: 1.4 }}>
+                    You can view others&apos; treaties but can only edit ones assigned to you.
+                  </div>
                 </div>
               )}
 
