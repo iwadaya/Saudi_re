@@ -9,8 +9,26 @@ import { pool } from '../db/pool.js';
 import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { logAudit } from '../services/audit.js';
+import { signAuthToken } from '../lib/authToken.js';
+import { requireMinLevel } from '../middleware/requestContext.js';
 
 const router = Router();
+
+// Public auth endpoints (no identity needed): login, the login-screen lookups,
+// and user creation (which self-gates open-registration vs authenticated CU/CE).
+// Everything else under /auth (e.g. /auth/me, mandates) requires a real
+// identity — authenticate() has already run and set req.user.
+const PUBLIC_AUTH = new Set([
+  'POST /auth/login',
+  'GET /auth/users',
+  'GET /auth/roles',
+  'POST /auth/users',
+]);
+router.use((req, res, next) => {
+  if (PUBLIC_AUTH.has(`${req.method} ${req.path}`)) return next();
+  if (req.user) return next();
+  return res.status(401).json({ error: 'Authentication required.', code: 'UNAUTHORIZED' });
+});
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 const DEMO_PASSWORD = 'demo2026';
@@ -115,7 +133,10 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
       );
       rows = result.rows;
     } catch (tableErr) {
-      // Tables don't exist yet — check static demo users
+      // Tables don't exist yet — check static demo users (dev/test only).
+      if (process.env.ALLOW_DEMO_AUTH !== 'true') {
+        return res.status(401).json({ error: 'Invalid credentials.' });
+      }
       const lc = String(username).trim().toLowerCase();
       const demo = DEMO_USERS_FALLBACK.find(u => u.username === lc || u.email === lc);
       if (demo && password === DEMO_PASSWORD) {
@@ -128,6 +149,7 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
           treatyTypeScope: 'BOTH', approvalsRequired: demo.approvals_required || 1,
           allowedCobIds: [], restrictedCobIds: [], allowedCountryIds: [],
           isSystemAdmin: false, mandateActive: true,
+          token: signAuthToken({ sub: demo.user_id }),
         }});
       }
       return res.status(401).json({ error: 'Invalid credentials.' });
@@ -149,13 +171,13 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
 
   // Password check.
   //
-  // Two accepted credentials:
-  //   • Demo/seeded accounts (password_hash='DEMO_HASH_2026') log in with
-  //     DEMO_PASSWORD — kept so the testing build's seeded users keep working.
-  //   • Real accounts created via the Add-user flow carry a scrypt hash
-  //     ('scrypt$...') and are verified against it.
+  //   • Real accounts carry a scrypt hash ('scrypt$...') and are verified
+  //     against it — this is the ONLY path accepted in production.
+  //   • The universal DEMO_PASSWORD shortcut is a dev/test backdoor and is
+  //     honoured ONLY when ALLOW_DEMO_AUTH=true (never in production).
   const storedHash = user.password_hash;
-  const passwordOk = password === DEMO_PASSWORD
+  const demoAuthAllowed = process.env.ALLOW_DEMO_AUTH === 'true';
+  const passwordOk = (demoAuthAllowed && password === DEMO_PASSWORD)
     || (typeof storedHash === 'string' && storedHash.startsWith('scrypt$') && verifyPassword(password, storedHash));
 
   if (!passwordOk) {
@@ -183,17 +205,19 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
     payload: { office: user.office },
   }).catch(() => {});
 
-  res.json({ session: buildSession(user) });
+  // Issue a signed token carrying only the user id; role/level are re-read from
+  // the DB on every request, so the token can't preserve elevated rights.
+  res.json({ session: { ...buildSession(user), token: signAuthToken({ sub: user.user_id }) } });
 }));
 
-// ── GET /api/auth/me — refresh session from server ─────────────────────────
+// ── GET /api/auth/me — refresh session from the verified token ─────────────
 router.get('/auth/me', asyncHandler(async (req, res) => {
-  const userId = req.headers['x-user-id'];
-  if (!userId) return res.status(401).json({ error: 'Not authenticated.' });
+  // req.user is set by authenticate() from the bearer token (DB-backed).
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated.' });
 
   const { rows } = await pool.query(
     `SELECT * FROM public.v_user_mandate WHERE user_id = $1 AND is_active = true LIMIT 1`,
-    [userId]
+    [req.user.userId]
   );
   if (!rows.length) return res.status(401).json({ error: 'User not found or inactive.' });
 
@@ -250,17 +274,13 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
   const isFormPayload = b.first_name != null || b.surname != null || b.password != null;
 
   // ── Caller gate ──
-  // Authenticated creates still require Chief Underwriter / Chief Executive
-  // (hierarchy_level <= 2). With no caller it's an open (login-screen) create,
-  // allowed only when test registration is enabled.
-  const callerUserId = req.headers['x-user-id'];
-  if (callerUserId) {
-    const { rows: callerRows } = await pool.query(
-      `SELECT r.hierarchy_level FROM public.uw_user u JOIN public.uw_role r ON r.role_id = u.role_id WHERE u.user_id = $1`,
-      [callerUserId]
-    );
-    if (!callerRows.length || callerRows[0].hierarchy_level > 2) {
-      return res.status(403).json({ error: 'Only Chief Underwriter or Chief Executive can create users.' });
+  // Authenticated creates require Chief Underwriter / Chief Executive
+  // (hierarchy_level <= 2), read from the VERIFIED token identity (never a
+  // header). With no identity it's an open (login-screen) create, allowed only
+  // when test registration is enabled.
+  if (req.user) {
+    if (Number(req.user.hierarchyLevel) > 2) {
+      return res.status(403).json({ error: 'Only Chief Underwriter or Chief Executive can create users.', code: 'FORBIDDEN' });
     }
   } else if (!openRegistrationEnabled()) {
     return res.status(403).json({ error: 'Open registration is disabled.' });
@@ -342,15 +362,15 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
 
   await logAudit(pool, {
     entityType: 'USER', entityId: rows[0].user_id,
-    eventType: 'USER_CREATED', actor: req.headers['x-user-name'] || (callerUserId ? 'ADMIN' : 'SELF_REGISTRATION'),
-    payload: { username: finalUsername, role_id: roleId, open_registration: !callerUserId },
+    eventType: 'USER_CREATED', actor: req.user?.displayName || (req.user ? 'ADMIN' : 'SELF_REGISTRATION'),
+    payload: { username: finalUsername, role_id: roleId, open_registration: !req.user },
   }).catch(() => {});
 
   res.status(201).json(rows[0]);
 }));
 
 // ── PATCH /api/auth/users/:id — update user ───────────────────────────────
-router.patch('/auth/users/:id', asyncHandler(async (req, res) => {
+router.patch('/auth/users/:id', requireMinLevel(2), asyncHandler(async (req, res) => {
   const { id } = req.params;
   const b = req.body || {};
   const fields = [];
@@ -388,7 +408,7 @@ router.get('/auth/mandates/:userId', asyncHandler(async (req, res) => {
 }));
 
 // ── PUT /api/auth/mandates/:userId — set/update mandate for a user ─────────
-router.put('/auth/mandates/:userId', asyncHandler(async (req, res) => {
+router.put('/auth/mandates/:userId', requireMinLevel(2), asyncHandler(async (req, res) => {
   const b = req.body || {};
   const { userId } = req.params;
 

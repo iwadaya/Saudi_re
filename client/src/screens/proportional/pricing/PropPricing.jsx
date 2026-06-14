@@ -10,6 +10,8 @@
 
 import { useAppState } from '../../../context/AppContext';
 import { useContractId } from '../../../hooks/useContractId';
+import { useEditLock } from '../../../hooks/useEditLock';
+import EditLockBanner, { ReadOnlyWrap } from '../../../components/EditLockBanner.jsx';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import AggDrilldownModal from './components/AggDrilldownModal';
@@ -36,6 +38,10 @@ const ROUTE_KEY = 'PROP_PRICING';
 export default function PropPricing() {
   const { state: appState } = useAppState();
   const contractId = useContractId();
+  const isQuote = !!appState.quoteMode;
+  const { readOnly, assignedToName: lockAssignedToName, refresh: refreshLock } = useEditLock({
+    contractId: isQuote ? null : contractId, quoteId: isQuote ? contractId : null, isQuote,
+  });
 
   const {
     // identity / context
@@ -82,6 +88,8 @@ export default function PropPricing() {
     <WizardLayout routeKey={ROUTE_KEY} title="Pricing" headerPill="PROPORTIONAL TREATY: FINAL PRICING" onBeforeNext={save} onBeforeBack={save}>
       {() => (
         <div className="PRICING_PAGE">
+          {readOnly && <EditLockBanner contractId={isQuote ? null : contractId} quoteId={isQuote ? contractId : null} isQuote={isQuote} assignedToName={lockAssignedToName} onAllocated={refreshLock} />}
+          <ReadOnlyWrap readOnly={readOnly}>
 
           <PropPricingStatusBanners usedPlaceholderLdfs={usedPlaceholderLdfs} lossStale={lossStale} />
 
@@ -274,6 +282,7 @@ export default function PropPricing() {
           {/* ═══ MOVING AVERAGE CHARTS ═══ */}
           <PropMovingAverageCharts yearly={yearly} terms={movingAvgTerms} />
 
+          </ReadOnlyWrap>
         </div>
       )}
     </WizardLayout>

@@ -37,11 +37,16 @@ export function clearSession() {
 
 // ── Test-mode helpers ────────────────────────────────────────────────────────
 
+// Test-access helpers are a DEV-only convenience and are compiled out of
+// production builds (import.meta.env.DEV is statically false in prod, so the
+// bodies dead-code-eliminate to a no-op).
 export function getTestName() {
+  if (!import.meta.env.DEV) return '';
   return safeStorage(s => s.getItem(TEST_NAME_KEY)) || '';
 }
 
 export function setTestName(name) {
+  if (!import.meta.env.DEV) return;
   safeStorage(s => s.setItem(TEST_NAME_KEY, name));
 }
 
@@ -54,6 +59,7 @@ export function isTestSession() {
  * Reuses the seeded TUW UUID so no DB migration is needed.
  */
 export function createTestSession(displayName) {
+  if (!import.meta.env.DEV) return; // no test sessions in production builds
   const name = displayName.trim();
   setTestName(name);
   setSession({
@@ -85,6 +91,8 @@ export function getUserDisplayName() {
 }
 
 export function getUserId() { return getSession()?.userId || ''; }
+/** The signed bearer token issued by /auth/login (persisted in the session). */
+export function getAuthToken() { return getSession()?.token || ''; }
 export function getHierarchyLevel() { return getSession()?.hierarchyLevel ?? 99; }
 export function getEffectiveLimitUsd() { return getSession()?.effectiveLimitUsd ?? null; }
 export function getTreatyTypeScope() { return getSession()?.treatyTypeScope || 'BOTH'; }
@@ -95,7 +103,9 @@ export function isAtLeast(level) { return getHierarchyLevel() <= level; }
 export function canAccessApprovals() { return APPROVALS_ROLES.has(getSession()?.roleCode); }
 export function canOverrideBelow() { return getSession()?.canOverrideBelow === true; }
 
-/** @returns {Record<string, string>} auth headers for every API request */
+/** @returns {Record<string, string>} auth headers for every API request.
+ *  Authorization (Bearer <token>) is the real identity the server trusts; the
+ *  x-user-* headers are kept for logging and the dev/test ALLOW_DEMO_AUTH path. */
 export function getAuthHeaders() {
   const s = getSession();
   if (!s) return { 'x-user-role': 'TUW', 'x-user-name': 'User', 'x-user-id': '' };
@@ -106,12 +116,14 @@ export function getAuthHeaders() {
     ? (getTestName() || s.displayName || 'Tester')
     : (ROLE_LABELS[s.roleCode] || s.displayName || 'User');
 
-  return {
+  const headers = {
     'x-user-id':    s.userId,
     'x-user-role':  s.roleCode,
     'x-user-name':  userName,
     'x-user-level': String(s.hierarchyLevel || 99),
   };
+  if (s.token) headers.Authorization = `Bearer ${s.token}`;
+  return headers;
 }
 
 // Backward-compat alias used by WizardLayout's logout button.

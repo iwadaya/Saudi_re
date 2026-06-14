@@ -8,7 +8,7 @@ const { poolMock } = vi.hoisted(() => ({ poolMock: { query: vi.fn() } }));
 vi.mock('../db/pool.js', () => ({ pool: poolMock }));
 vi.mock('./audit.js', () => ({ logAudit: vi.fn(() => Promise.resolve()) }));
 
-const { computeEditPermission, assertCanEdit } = await import('./permissions.js');
+const { computeEditPermission, assertCanEdit, getEditPermission } = await import('./permissions.js');
 const { listContractsWithOwnership } = await import('./assignments.js');
 
 let scenario = {};
@@ -73,6 +73,24 @@ describe('assertCanEdit (route guard)', () => {
     scenario.ownershipRows = [];
     await expect(assertCanEdit(reqAs('A'), 'CONTRACT', 'missing'))
       .rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('getEditPermission (non-throwing, for the client lock)', () => {
+  it('reports canEdit:true for the assignee and never throws', async () => {
+    scenario.ownershipRows = [{ assigned_to_user_id: 'A', assigned_to_name: 'Owner' }];
+    const p = await getEditPermission({ user: { userId: 'A' } }, 'CONTRACT', 'c1');
+    expect(p).toMatchObject({ found: true, canEdit: true, isOwner: true, assignedToName: 'Owner' });
+  });
+  it('reports canEdit:false for a non-assignee with the owner name', async () => {
+    scenario.ownershipRows = [{ assigned_to_user_id: 'A', assigned_to_name: 'Owner' }];
+    const p = await getEditPermission({ user: { userId: 'B' } }, 'CONTRACT', 'c1');
+    expect(p).toMatchObject({ found: true, canEdit: false, assignedToName: 'Owner' });
+  });
+  it('reports found:false for a missing entity', async () => {
+    scenario.ownershipRows = [];
+    const p = await getEditPermission({ user: { userId: 'A' } }, 'CONTRACT', 'missing');
+    expect(p).toMatchObject({ found: false, canEdit: false });
   });
 });
 

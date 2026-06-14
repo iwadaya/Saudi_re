@@ -11,6 +11,8 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useContractId } from '../../../hooks/useContractId';
+import { useEditLock } from '../../../hooks/useEditLock';
+import EditLockBanner, { ReadOnlyWrap } from '../../../components/EditLockBanner.jsx';
 import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
 import { getNpTreatyTypeMode, isNpCatFlowDisabled, isNpRiskFlowDisabled, isNpAggregateXlTreaty } from '../../../utils/npTreatyType';
@@ -52,6 +54,9 @@ export default function NpFinalPricing() {
   const navigate = useNavigate();
   const quoteMode = !!appState.quoteMode;
   const isQuote = quoteMode || ROUTE_KEY === 'NP_FINAL_QUOTE';
+  const { readOnly, assignedToName: lockAssignedToName, refresh: refreshLock } = useEditLock({
+    contractId: isQuote ? null : contractId, quoteId: isQuote ? contractId : null, isQuote,
+  });
 
   const npDetail = useMemo(() => appState.npTreatyDetail || {}, [appState.npTreatyDetail]);
   const mode = getNpTreatyTypeMode(appState);
@@ -115,6 +120,8 @@ export default function NpFinalPricing() {
       {({ showToast }) => (
         <div className={`np-final-shell${isQuote ? ' np-final-shell--quote' : ''}`}>
           <SaveStateIndicator saveState={saveState} onRetry={save} />
+          {readOnly && <EditLockBanner contractId={isQuote ? null : contractId} quoteId={isQuote ? contractId : null} isQuote={isQuote} assignedToName={lockAssignedToName} onAllocated={refreshLock} />}
+          <ReadOnlyWrap readOnly={readOnly}>
           {loading ? <div className="df-card df-card--notice"><div className="df-note">Loading...</div></div> : (
             <>
               {isNpAggregateXlTreaty(appState) && (
@@ -313,6 +320,7 @@ export default function NpFinalPricing() {
               />
             </>
           )}
+          </ReadOnlyWrap>
         </div>
       )}
     </WizardLayout>

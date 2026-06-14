@@ -5,6 +5,8 @@ import WizardLayout from '../../../components/WizardLayout';
 import AsyncBoundary from '../../../components/AsyncBoundary';
 import PctInput from '../../../components/PctInput';
 import { useFacRiskId } from '../../../hooks/useContractId';
+import { useEditLock } from '../../../hooks/useEditLock';
+import EditLockBanner, { ReadOnlyWrap } from '../../../components/EditLockBanner.jsx';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import { useResource } from '../../../hooks/useResource';
 import { useGlobalToast } from '../../../hooks/useToast';
@@ -473,6 +475,7 @@ function EngineReadout({ output, premiums, totalLocSar }) {
 
 export default function FacPricing() {
   const riskId = useFacRiskId();
+  const { readOnly, assignedToName: lockAssignedToName, refresh: refreshLock } = useEditLock({ facRiskId: riskId });
   const showToast = useGlobalToast();
   const loaded = useRef(false);
   const dirty = useRef(false);
@@ -867,6 +870,8 @@ export default function FacPricing() {
     <WizardLayout routeKey={ROUTE_KEY} title="Pricing" headerPill="FACULTATIVE" onBeforeNext={save} onBeforeBack={save}>
       <AsyncBoundary loading={pricingLoad.loading} error={pricingLoad.error} onRetry={pricingLoad.refetch} label="fac pricing">
       <div style={{ maxWidth: 800, margin: '0 auto', padding: '8px 0 40px' }}>
+        {readOnly && <EditLockBanner facRiskId={riskId} assignedToName={lockAssignedToName} onAllocated={refreshLock} />}
+        <ReadOnlyWrap readOnly={readOnly}>
         {tsi > 0 && (
           <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.45)', marginBottom: 8 }}>
             Total Sum Insured: <span style={{ color: '#00d4ff', fontWeight: 700 }}>{tsi.toLocaleString('en-US')}</span>
@@ -1080,6 +1085,7 @@ export default function FacPricing() {
             </div>
           </div>
         </Sec>
+        </ReadOnlyWrap>
       </div>
       </AsyncBoundary>
     </WizardLayout>
