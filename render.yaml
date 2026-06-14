@@ -30,10 +30,12 @@ services:
         value: "false"
       - key: DATABASE_URL
         sync: false
-      # Secret used to sign/verify auth tokens (lib/authToken.js). Set in the
-      # Render dashboard, never committed. Falls back to SESSION_SECRET if unset.
+      # REQUIRED in production (validateEnv refuses to boot without it): the
+      # secret that signs/verifies auth tokens (lib/authToken.js). >=32 chars,
+      # set in the Render dashboard, never committed.
       - key: AUTH_JWT_SECRET
         sync: false
+      # Session/cookie secret (>=32 chars). Required secret for the prod service.
       - key: SESSION_SECRET
         sync: false
       - key: GEMINI_API_KEY

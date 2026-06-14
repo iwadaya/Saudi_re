@@ -5,12 +5,21 @@
 // the DB on each request (see middleware/requestContext.js), so a token issued
 // before a demotion cannot carry elevated rights.
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { env } from '../config/env.js';
 
-const SECRET = process.env.AUTH_JWT_SECRET || process.env.SESSION_SECRET || 'dev-insecure-secret-change-me';
 const DEFAULT_TTL_S = Math.max(1, Number(process.env.SESSION_TTL_HOURS) || 8) * 3600;
 
+// Read from the validated env config — no inline literal fallback. If the
+// secret is absent (only possible if validateEnv() was bypassed) we throw
+// rather than sign/verify with an empty/guessable key.
+function secret() {
+  const s = env.authJwtSecret;
+  if (!s) throw new Error('AUTH_JWT_SECRET is not configured (validateEnv was bypassed).');
+  return s;
+}
+
 function sign(data) {
-  return createHmac('sha256', SECRET).update(data).digest('base64url');
+  return createHmac('sha256', secret()).update(data).digest('base64url');
 }
 
 export function signAuthToken({ sub }, ttlSeconds = DEFAULT_TTL_S) {

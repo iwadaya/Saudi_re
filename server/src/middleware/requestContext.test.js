@@ -34,6 +34,12 @@ describe('authToken', () => {
   it('rejects an expired token', () => {
     expect(verifyAuthToken(signAuthToken({ sub: 'u-1' }, -10))).toBeNull();
   });
+  it('rejects a token forged with the old hard-coded dev literal', async () => {
+    const { createHmac } = await import('node:crypto');
+    const body = Buffer.from(JSON.stringify({ sub: 'attacker', iat: 0, exp: 9999999999 })).toString('base64url');
+    const sig = createHmac('sha256', 'dev-insecure-secret-change-me').update(body).digest('base64url');
+    expect(verifyAuthToken(`${body}.${sig}`)).toBeNull();
+  });
 });
 
 describe('authenticate — token path (DB is source of truth)', () => {
