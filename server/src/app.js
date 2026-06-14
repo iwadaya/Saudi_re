@@ -207,6 +207,23 @@ export function createLoginLimiter({ max = 5, windowMs = 15 * 60 * 1000 } = {}) 
   });
 }
 
+// ── Password-change limiter: strict, keyed on the VERIFIED identity ──
+// Stops an attacker on a hijacked session (or a shoulder-surfer) from brute-
+// forcing the *current* password on POST /api/auth/change-password. Keyed on
+// req.user.userId so it's per-account (runs AFTER authenticate); falls back to
+// IP for the anonymous case the route itself rejects with 401. Low ceiling,
+// 15-min window — mirrors the login limiter.
+export function createChangePasswordLimiter({ max = 5, windowMs = 15 * 60 * 1000 } = {}) {
+  return rateLimit({
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many password-change attempts. Please wait a few minutes and try again.', code: 'TOO_MANY_REQUESTS' },
+    keyGenerator: (req) => (req.user?.userId ? `pw:${req.user.userId}` : `pw-ip:${ipKeyGenerator(req.ip)}`),
+  });
+}
+
 // ── Optional per-user limiter (additive, runs AFTER authenticate) ──
 // Per-user quota keyed on the VERIFIED req.user.userId — never replaces the IP
 // limiter. Anonymous requests are skipped here (already IP-limited above).
@@ -349,6 +366,11 @@ export function createApp() {
 
   // Optional additive per-user quota (keyed on the verified user id).
   app.use('/api', createUserApiLimiter());
+
+  // Strict brute-force limiter on self-service password change (after
+  // authenticate so it keys on the verified req.user.userId, before authRouter
+  // so it guards the handler).
+  app.use('/api/auth/change-password', createChangePasswordLimiter());
 
   // Auth routes self-gate (login / open-registration / login-screen lookups are
   // public; /auth/me and the rest require a real identity) — register before the

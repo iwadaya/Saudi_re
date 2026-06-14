@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { clearSession, getSession, ROLE_LABELS, canAccessApprovals, isAtLeast } from '../utils/auth';
 import { useViewAllTreaties } from '../utils/prefs';
 import { api } from '../api';
+import { parseErrorBody } from '../utils/errorBody';
 import ThemeSwitcher from './ThemeSwitcher';
 
 const ROLE_COLORS = {
@@ -54,6 +55,43 @@ export default function Topbar({ title, subtitle, actions }) {
   const [viewingUser, setVU]    = useState(viewingUserStore.user);
   const ref = useRef(null);
   const settingsRef = useRef(null);
+
+  // ── Self-service password change ──
+  const [pwOpen, setPwOpen]   = useState(false);
+  const [pwCur, setPwCur]     = useState('');
+  const [pwNew, setPwNew]     = useState('');
+  const [pwConf, setPwConf]   = useState('');
+  const [pwShow, setPwShow]   = useState(false);
+  const [pwBusy, setPwBusy]   = useState(false);
+  const [pwError, setPwError] = useState('');
+  const [pwDone, setPwDone]   = useState(false);
+
+  // Client validation MIRRORS the server (>=8, match, differs) so Submit stays
+  // disabled until the server would accept it; the server is still authoritative.
+  const pwValid = pwCur.length > 0 && pwNew.length >= 8 && pwNew === pwConf && pwNew !== pwCur;
+  const pwHint = (() => {
+    if (pwNew.length > 0 && pwNew.length < 8) return 'New password must be at least 8 characters.';
+    if (pwConf.length > 0 && pwNew !== pwConf) return 'Passwords do not match';
+    if (pwNew.length >= 8 && pwNew === pwCur) return 'New password must differ';
+    return '';
+  })();
+
+  const resetPwForm = () => { setPwCur(''); setPwNew(''); setPwConf(''); setPwShow(false); setPwError(''); };
+  const cancelPassword = () => { setPwOpen(false); resetPwForm(); };
+  const submitPassword = async () => {
+    if (!pwValid || pwBusy) return;
+    setPwBusy(true); setPwError('');
+    try {
+      await api.changePassword({ currentPassword: pwCur, newPassword: pwNew, confirmPassword: pwConf });
+      resetPwForm(); setPwOpen(false); setPwDone(true);
+      setTimeout(() => setPwDone(false), 4000);
+    } catch (e) {
+      // Surface the server's message inline (e.g. 'Current password is incorrect').
+      setPwError(parseErrorBody(e)?.error || e?.message || 'Could not change password.');
+    } finally {
+      setPwBusy(false);
+    }
+  };
 
   // Sync with store
   useEffect(() => {
@@ -222,6 +260,53 @@ export default function Topbar({ title, subtitle, actions }) {
                           </button>
                         );
                       })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Password — self-service change for the logged-in user. The
+                  server takes the actor from the verified token, never a body id. */}
+              {session && (
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Password</div>
+                  {!pwOpen ? (
+                    <>
+                      <button type="button" onClick={() => { setPwOpen(true); setPwDone(false); setPwError(''); }}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                        Change password
+                      </button>
+                      {pwDone && <div role="status" style={{ fontSize: 11, color: '#23d18b', marginTop: 6 }}>✓ Password updated</div>}
+                    </>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {[
+                        { key: 'cur', ph: 'Current password', val: pwCur, set: setPwCur, ac: 'current-password' },
+                        { key: 'new', ph: 'New password (min 8)', val: pwNew, set: setPwNew, ac: 'new-password' },
+                        { key: 'conf', ph: 'Confirm new password', val: pwConf, set: setPwConf, ac: 'new-password' },
+                      ].map((f) => (
+                        <input key={f.key} type={pwShow ? 'text' : 'password'} value={f.val} placeholder={f.ph}
+                          aria-label={f.ph} autoComplete={f.ac}
+                          onChange={(e) => { f.set(e.target.value); setPwError(''); }}
+                          style={{ width: '100%', padding: '7px 9px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: 12, boxSizing: 'border-box' }} />
+                      ))}
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>
+                        <input type="checkbox" checked={pwShow} onChange={(e) => setPwShow(e.target.checked)}
+                          style={{ width: 13, height: 13, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                        Show passwords
+                      </label>
+                      {pwHint && !pwError && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.40)' }}>{pwHint}</div>}
+                      {pwError && <div role="alert" style={{ fontSize: 11, color: '#f87171' }}>{pwError}</div>}
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button type="button" onClick={submitPassword} disabled={!pwValid || pwBusy}
+                          style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(35,209,139,0.30)', background: pwValid && !pwBusy ? 'rgba(35,209,139,0.12)' : 'rgba(255,255,255,0.04)', color: pwValid && !pwBusy ? '#23d18b' : 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: 700, cursor: pwValid && !pwBusy ? 'pointer' : 'not-allowed' }}>
+                          {pwBusy ? 'Saving…' : 'Update password'}
+                        </button>
+                        <button type="button" onClick={cancelPassword}
+                          style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                          Cancel
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

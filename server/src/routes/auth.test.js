@@ -43,6 +43,14 @@ function fakeQuery(sql, params = []) {
     return Promise.resolve({ rows: scenario.usersList || [] });
   }
   if (sql.includes('UPDATE public.uw_user SET failed_attempts')) return Promise.resolve({ rows: [] });
+  // change-password: load the caller's stored hash, then persist the new one.
+  if (sql.includes('password_hash FROM public.uw_user WHERE user_id')) {
+    return Promise.resolve({ rows: scenario.pwHash !== undefined ? [{ password_hash: scenario.pwHash }] : [] });
+  }
+  if (sql.includes('UPDATE public.uw_user') && sql.includes('password_changed_at')) {
+    scenario.pwUpdate = { userId: params[0], newHash: params[1] };
+    return Promise.resolve({ rows: [] });
+  }
   return Promise.resolve({ rows: [] });
 }
 
@@ -243,6 +251,118 @@ describe('POST /auth/login', () => {
     const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'realpass1' } });
     expect(res.status).toBe(200);
     expect(res.body.session.token).toMatch(/.+\..+/);
+  });
+});
+
+describe('POST /auth/change-password — self-service, verified identity only', () => {
+  const me = { userId: 'u-me', roleCode: 'TUW', hierarchyLevel: 5, displayName: 'Me' };
+
+  it('changes the password with the correct current password (200 ok); new hash verifies, old does not', async () => {
+    currentUser = me;
+    scenario.pwHash = hashPassword('oldpass1');
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/change-password',
+      body: { currentPassword: 'oldpass1', newPassword: 'brandnew2', confirmPassword: 'brandnew2' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+    // Persisted a fresh scrypt of the NEW password against the verified id.
+    expect(scenario.pwUpdate.userId).toBe('u-me');
+    expect(verifyPassword('brandnew2', scenario.pwUpdate.newHash)).toBe(true);
+    expect(verifyPassword('oldpass1', scenario.pwUpdate.newHash)).toBe(false);
+  });
+
+  it('rejects a wrong current password with 401 and writes nothing', async () => {
+    currentUser = me;
+    scenario.pwHash = hashPassword('oldpass1');
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/change-password',
+      body: { currentPassword: 'WRONG', newPassword: 'brandnew2', confirmPassword: 'brandnew2' },
+    });
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('Current password is incorrect.');
+    expect(scenario.pwUpdate).toBeUndefined();
+  });
+
+  it('rejects a mismatched confirm with 400 "Passwords do not match"', async () => {
+    currentUser = me;
+    scenario.pwHash = hashPassword('oldpass1');
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/change-password',
+      body: { currentPassword: 'oldpass1', newPassword: 'brandnew2', confirmPassword: 'different2' },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Passwords do not match');
+    expect(scenario.pwUpdate).toBeUndefined();
+  });
+
+  it('rejects new === current with 400 "New password must differ"', async () => {
+    currentUser = me;
+    scenario.pwHash = hashPassword('samepass1');
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/change-password',
+      body: { currentPassword: 'samepass1', newPassword: 'samepass1', confirmPassword: 'samepass1' },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('New password must differ');
+  });
+
+  it('rejects a new password shorter than 8 chars with 400', async () => {
+    currentUser = me;
+    scenario.pwHash = hashPassword('oldpass1');
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/change-password',
+      body: { currentPassword: 'oldpass1', newPassword: 'short7!', confirmPassword: 'short7!' },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/at least 8/i);
+  });
+
+  it('rejects a missing field with 400', async () => {
+    currentUser = me;
+    scenario.pwHash = hashPassword('oldpass1');
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/change-password',
+      body: { currentPassword: 'oldpass1', newPassword: 'brandnew2' }, // no confirmPassword
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('does NOT accept the demo password as current when the stored hash is legacy/demo → 401', async () => {
+    currentUser = me;
+    scenario.pwHash = 'DEMO_HASH_2026'; // non-scrypt stored value
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/change-password',
+      body: { currentPassword: 'demo2026', newPassword: 'brandnew2', confirmPassword: 'brandnew2' },
+    });
+    expect(res.status).toBe(401);
+    expect(scenario.pwUpdate).toBeUndefined();
+  });
+
+  it('ignores any body/param user id — only ever mutates req.user own hash', async () => {
+    currentUser = me;
+    scenario.pwHash = hashPassword('oldpass1');
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/change-password',
+      body: {
+        userId: 'u-victim', user_id: 'u-victim', id: 'u-victim',
+        currentPassword: 'oldpass1', newPassword: 'brandnew2', confirmPassword: 'brandnew2',
+      },
+    });
+    expect(res.status).toBe(200);
+    expect(scenario.pwUpdate.userId).toBe('u-me');
+    // No query ever ran against the spoofed victim id.
+    expect(queryLog.filter((q) => (q.params || []).includes('u-victim'))).toHaveLength(0);
+  });
+
+  it('rejects an anonymous caller with 401 (no token → router gate / requireAuth)', async () => {
+    currentUser = null;
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/change-password',
+      body: { currentPassword: 'x', newPassword: 'brandnew2', confirmPassword: 'brandnew2' },
+    });
+    expect(res.status).toBe(401);
+    expect(scenario.pwUpdate).toBeUndefined();
   });
 });
 
