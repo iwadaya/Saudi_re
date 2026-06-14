@@ -180,11 +180,14 @@ export default function LoginScreen() {
     .then(data => {
       const list = Array.isArray(data) && data.length ? data : DEMO_FALLBACK;
       setUsers(list);
-      const picked = (selectUserId && list.find(u => u.user_id === selectUserId)) || list[0] || null;
+      // Only select a user when one is explicitly requested (e.g. just created
+      // via Add-user). On a plain load nothing is pre-selected — the dropdown
+      // shows the "Select underwriter…" placeholder.
+      const picked = (selectUserId && list.find(u => u.user_id === selectUserId)) || null;
       setSelectedUser(picked);
       return list;
     })
-    .catch(() => { setUsers(DEMO_FALLBACK); setSelectedUser(DEMO_FALLBACK[0]); return DEMO_FALLBACK; });
+    .catch(() => { setUsers(DEMO_FALLBACK); return DEMO_FALLBACK; });
 
   useEffect(() => {
     loadUsers().finally(() => setLoadingUsers(false));
@@ -250,6 +253,7 @@ export default function LoginScreen() {
                 value={sel?.user_id || ''}
                 onChange={e => { setSelectedUser(users.find(u => u.user_id === e.target.value) || null); setError(''); }}
               >
+                <option value="" disabled>Select underwriter…</option>
                 {users.map(u => (
                   <option key={u.user_id || u.email} value={u.user_id}>{u.display_name}</option>
                 ))}
