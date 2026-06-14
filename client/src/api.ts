@@ -1,4 +1,5 @@
 import { getAuthHeaders } from './utils/auth';
+import { requirePasswordChange } from './utils/passwordGate';
 import { httpFetch, HttpError } from './utils/httpClient.js';
 import type {
   ContractBundle,
@@ -355,7 +356,18 @@ async function request<T = unknown>(path: string, opts: RequestOpts = {}): Promi
     }
   }
 
-  const res = await httpFetch(url, init);
+  let res: Response;
+  try {
+    res = await httpFetch(url, init);
+  } catch (err) {
+    // 423 PWD_CHANGE_REQUIRED → the server's forced-change gate. Flip the client
+    // gate so the mandatory "Set your password" modal appears (covers a stale
+    // session whose token still carries the flag), then rethrow for the caller.
+    if ((err as { status?: number })?.status === 423) {
+      try { requirePasswordChange(); } catch { /* non-React/test context */ }
+    }
+    throw err;
+  }
   const ct = res.headers.get('content-type') || '';
   if (ct.includes('application/json')) return res.json() as Promise<T>;
   return res.text() as Promise<T>;

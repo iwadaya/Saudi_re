@@ -32,6 +32,9 @@ router.use((req, res, next) => {
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 const DEMO_PASSWORD = 'demo2026';
+// The seeded forced-change temp password (migration 123). Forbidden as a NEW
+// password on change-password so a must-change user can't "change" to the temp.
+const TEMP_SEED_PASSWORD = 'Universe#1234';
 
 // Password hashing with the Node stdlib (no new dependency). Format:
 //   scrypt$<saltHex>$<hashHex>
@@ -92,6 +95,9 @@ function buildSession(user) {
     allowedCountryIds:    user.allowed_country_ids || [],
     isSystemAdmin:        user.is_system_admin || false,
     mandateActive:        user.mandate_active !== false,
+    // Forced first-login password change — the client routes to a mandatory
+    // "Set your password" modal while this is true (see migration 123).
+    mustChangePassword:   user.must_change_password === true,
   };
 }
 
@@ -246,6 +252,10 @@ router.post('/auth/change-password', requireAuth, asyncHandler(async (req, res) 
   if (newPassword === currentPassword) {
     return res.status(400).json({ error: 'New password must differ' });
   }
+  // The shared forced-change temp password can never be set as a real password.
+  if (newPassword === TEMP_SEED_PASSWORD) {
+    return res.status(400).json({ error: 'Choose a different password — the temporary password cannot be reused.' });
+  }
 
   // Load the caller's OWN stored hash (keyed on the verified id, never the body).
   const { rows } = await pool.query(
@@ -261,9 +271,12 @@ router.post('/auth/change-password', requireAuth, asyncHandler(async (req, res) 
     return res.status(401).json({ error: 'Current password is incorrect.' });
   }
 
+  // Persist the new hash and clear the forced-change flag in one write, so the
+  // hard gate (app.js) lifts immediately for this session's next request.
   await pool.query(
     `UPDATE public.uw_user
-        SET password_hash = $2, password_changed_at = now(), updated_at = now()
+        SET password_hash = $2, password_changed_at = now(),
+            must_change_password = false, updated_at = now()
       WHERE user_id = $1`,
     [userId, hashPassword(newPassword)]
   );

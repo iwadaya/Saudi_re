@@ -39,7 +39,7 @@ async function loadUserFromDb(sub) {
   try {
     const { rows } = await pool.query(
       `SELECT user_id, display_name, role_code, hierarchy_level, can_override_below,
-              effective_limit_usd, restricted_cob_ids, treaty_type_scope
+              effective_limit_usd, restricted_cob_ids, treaty_type_scope, must_change_password
        FROM public.v_user_mandate WHERE user_id = $1 AND is_active = true LIMIT 1`,
       [sub],
     );
@@ -57,6 +57,7 @@ async function loadUserFromDb(sub) {
       effectiveLimit: u.effective_limit_usd ?? null,
       excludedCobIds: Array.isArray(u.restricted_cob_ids) ? u.restricted_cob_ids : [],
       treatyTypeScope: u.treaty_type_scope || 'BOTH',
+      mustChangePassword: u.must_change_password === true,
       source: 'token',
     };
   } catch (e) {

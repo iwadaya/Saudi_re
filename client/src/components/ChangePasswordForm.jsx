@@ -1,0 +1,78 @@
+// Shared inline "change your password" form — used by the Topbar Settings panel
+// and the mandatory first-login modal (ForcePasswordChange). Renders the three
+// fields + show/hide + validation + submit; the CONTAINER and the success action
+// are the caller's. Client validation mirrors the server (>=8, confirm match,
+// differs from current, not the seeded temp); the server stays authoritative.
+import { useState } from 'react';
+import { api } from '../api';
+import { parseErrorBody } from '../utils/errorBody';
+
+// The seeded forced-change temp password — forbidden as a NEW password (the
+// server rejects it too). Not a secret: it's a throwaway that must be replaced.
+export const TEMP_SEED_PASSWORD = 'Universe#1234';
+
+export default function ChangePasswordForm({ onSuccess, onCancel, submitLabel = 'Update password' }) {
+  const [cur, setCur] = useState('');
+  const [next, setNext] = useState('');
+  const [conf, setConf] = useState('');
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const valid = cur.length > 0 && next.length >= 8 && next === conf && next !== cur && next !== TEMP_SEED_PASSWORD;
+  const hint = (() => {
+    if (next.length > 0 && next.length < 8) return 'New password must be at least 8 characters.';
+    if (conf.length > 0 && next !== conf) return 'Passwords do not match';
+    if (next.length >= 8 && next === cur) return 'New password must differ';
+    if (next.length >= 8 && next === TEMP_SEED_PASSWORD) return 'Choose a different password — not the temporary one.';
+    return '';
+  })();
+
+  const submit = async () => {
+    if (!valid || busy) return;
+    setBusy(true); setError('');
+    try {
+      await api.changePassword({ currentPassword: cur, newPassword: next, confirmPassword: conf });
+      onSuccess?.();
+    } catch (e) {
+      // Surface the server's message inline (e.g. 'Current password is incorrect').
+      setError(parseErrorBody(e)?.error || e?.message || 'Could not change password.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {[
+        { key: 'cur', ph: 'Current password', val: cur, set: setCur, ac: 'current-password' },
+        { key: 'new', ph: 'New password (min 8)', val: next, set: setNext, ac: 'new-password' },
+        { key: 'conf', ph: 'Confirm new password', val: conf, set: setConf, ac: 'new-password' },
+      ].map((f) => (
+        <input key={f.key} type={show ? 'text' : 'password'} value={f.val} placeholder={f.ph}
+          aria-label={f.ph} autoComplete={f.ac}
+          onChange={(e) => { f.set(e.target.value); setError(''); }}
+          style={{ width: '100%', padding: '7px 9px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: 12, boxSizing: 'border-box' }} />
+      ))}
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>
+        <input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)}
+          style={{ width: 13, height: 13, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+        Show passwords
+      </label>
+      {hint && !error && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.40)' }}>{hint}</div>}
+      {error && <div role="alert" style={{ fontSize: 11, color: '#f87171' }}>{error}</div>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="button" onClick={submit} disabled={!valid || busy}
+          style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(35,209,139,0.30)', background: valid && !busy ? 'rgba(35,209,139,0.12)' : 'rgba(255,255,255,0.04)', color: valid && !busy ? '#23d18b' : 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: 700, cursor: valid && !busy ? 'pointer' : 'not-allowed' }}>
+          {busy ? 'Saving…' : submitLabel}
+        </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel}
+            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            Cancel
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

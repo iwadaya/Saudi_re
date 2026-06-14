@@ -3,8 +3,10 @@ import React, { Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppProvider } from '../../context/AppContext';
 import { getSession, canAccessApprovals } from '../../utils/auth';
+import { usePasswordChangeRequired } from '../../utils/passwordGate';
 import { appRoutes } from '../../routes/appRoutes';
 import ScreenErrorBoundary from '../ScreenErrorBoundary';
+import ForcePasswordChange from './ForcePasswordChange';
 import { ToastProvider } from '../ToastProvider';
 
 function AuthGuard({ children, requireApprovals = false }) {
@@ -72,11 +74,20 @@ function ScrollToTop() {
   return null;
 }
 
+// Mandatory password-change overlay: rendered above everything whenever the
+// forced-change gate is active (seeded must-change user, or any API 423
+// PWD_CHANGE_REQUIRED). Non-dismissable — blocks the app until the reset lands.
+function PasswordGateOverlay() {
+  const required = usePasswordChangeRequired();
+  return required ? <ForcePasswordChange /> : null;
+}
+
 export default function AppShell() {
   return (
     <AppProvider>
       <ScrollToTop />
       <ToastProvider>
+        <PasswordGateOverlay />
         <ChunkErrorBoundary>
           <Suspense fallback={<ScreenFallback />}>
             <RoutedScreenBoundary>

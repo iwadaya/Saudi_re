@@ -239,6 +239,21 @@ export function createUserApiLimiter({ max = 600, windowMs = 60 * 1000 } = {}) {
   });
 }
 
+// ── Hard forced-change gate ──
+// While the VERIFIED user has must_change_password = true, block every mutating
+// request with 423 PWD_CHANGE_REQUIRED so they cannot write until they reset.
+// Reads (GET/HEAD/OPTIONS) pass so they can still see the app. The change-password
+// route is exempt (that's how they clear it); login is exempt defensively (a fresh
+// login carries no token, so req.user is null there anyway). Runs after authenticate.
+export function passwordChangeGate(req, res, next) {
+  if (!req.user?.mustChangePassword) return next();
+  const method = (req.method || 'GET').toUpperCase();
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return next();
+  const path = req.path || '';
+  if (path === '/auth/change-password' || path === '/auth/login') return next();
+  return res.status(423).json({ error: 'Password change required', code: 'PWD_CHANGE_REQUIRED' });
+}
+
 export function createApp() {
   const app = express();
 
@@ -371,6 +386,11 @@ export function createApp() {
   // authenticate so it keys on the verified req.user.userId, before authRouter
   // so it guards the handler).
   app.use('/api/auth/change-password', createChangePasswordLimiter());
+
+  // Hard forced-change gate: a must_change_password user can READ (so they can
+  // see the app) but cannot WRITE anything until they reset — every mutating
+  // request gets 423 except the change-password route itself (and login).
+  app.use('/api', passwordChangeGate);
 
   // Auth routes self-gate (login / open-registration / login-screen lookups are
   // public; /auth/me and the rest require a real identity) — register before the
