@@ -9,8 +9,25 @@ import { pool } from '../db/pool.js';
 import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { logAudit } from '../services/audit.js';
+import { signAuthToken } from '../lib/authToken.js';
 
 const router = Router();
+
+// Public auth endpoints (no identity needed): login, the login-screen lookups,
+// and user creation (which self-gates open-registration vs authenticated CU/CE).
+// Everything else under /auth (e.g. /auth/me, mandates) requires a real
+// identity — authenticate() has already run and set req.user.
+const PUBLIC_AUTH = new Set([
+  'POST /auth/login',
+  'GET /auth/users',
+  'GET /auth/roles',
+  'POST /auth/users',
+]);
+router.use((req, res, next) => {
+  if (PUBLIC_AUTH.has(`${req.method} ${req.path}`)) return next();
+  if (req.user) return next();
+  return res.status(401).json({ error: 'Authentication required.', code: 'UNAUTHORIZED' });
+});
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 const DEMO_PASSWORD = 'demo2026';
@@ -128,6 +145,7 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
           treatyTypeScope: 'BOTH', approvalsRequired: demo.approvals_required || 1,
           allowedCobIds: [], restrictedCobIds: [], allowedCountryIds: [],
           isSystemAdmin: false, mandateActive: true,
+          token: signAuthToken({ sub: demo.user_id }),
         }});
       }
       return res.status(401).json({ error: 'Invalid credentials.' });
@@ -183,17 +201,19 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
     payload: { office: user.office },
   }).catch(() => {});
 
-  res.json({ session: buildSession(user) });
+  // Issue a signed token carrying only the user id; role/level are re-read from
+  // the DB on every request, so the token can't preserve elevated rights.
+  res.json({ session: { ...buildSession(user), token: signAuthToken({ sub: user.user_id }) } });
 }));
 
-// ── GET /api/auth/me — refresh session from server ─────────────────────────
+// ── GET /api/auth/me — refresh session from the verified token ─────────────
 router.get('/auth/me', asyncHandler(async (req, res) => {
-  const userId = req.headers['x-user-id'];
-  if (!userId) return res.status(401).json({ error: 'Not authenticated.' });
+  // req.user is set by authenticate() from the bearer token (DB-backed).
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated.' });
 
   const { rows } = await pool.query(
     `SELECT * FROM public.v_user_mandate WHERE user_id = $1 AND is_active = true LIMIT 1`,
-    [userId]
+    [req.user.userId]
   );
   if (!rows.length) return res.status(401).json({ error: 'User not found or inactive.' });
 

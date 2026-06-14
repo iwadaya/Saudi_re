@@ -11,6 +11,9 @@ export default defineConfig({
     root: 'server',
     environment: 'node',
     globals: true,
+    // Dev/test convenience: lets header-based (x-user-*) fixtures authenticate.
+    // Production never sets this — identity must come from a verified token.
+    env: { ALLOW_DEMO_AUTH: 'true' },
     include: [
       'src/**/*.test.js',
       'tests/**/*.test.js',

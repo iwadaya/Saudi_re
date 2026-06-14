@@ -8,7 +8,7 @@ import rateLimit from 'express-rate-limit';
 import { pool, getPoolStats } from './db/pool.js';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
-import { attachRequestContext } from './middleware/requestContext.js';
+import { authenticate, requireAuth } from './middleware/requestContext.js';
 import { attachRequestId } from './middleware/requestId.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { cacheStats } from './middleware/httpCache.js';
@@ -182,23 +182,6 @@ const apiLimiter = rateLimit({
   },
 });
 
-// ── Role auth: require x-user-role header on all API calls ──
-// In production swap this for real JWT/session validation.
-const VALID_ROLES = new Set(['CE', 'CU', 'TD', 'TM', 'TUW', 'UW']); // UW kept for backward compat
-
-function requireRole(req, res, next) {
-  if (req.path === '/health') return next();
-  // Auth routes handle their own auth
-  if (req.path.startsWith('/auth/')) return next();
-  // AI proxy routes use server-side API key — no user role needed
-  if (req.path.startsWith('/ai/')) return next();
-  const role = req.headers['x-user-role'];
-  if (!role || !VALID_ROLES.has(role)) {
-    return res.status(401).json({ error: 'Unauthorised: missing or invalid x-user-role header.', code: 'UNAUTHORIZED', requestId: res.locals.requestId || req.id || null });
-  }
-  next();
-}
-
 export function createApp() {
   const app = express();
 
@@ -261,13 +244,18 @@ export function createApp() {
   // generous and just made DoS-via-fat-body easier.
   app.use(express.json({ limit: '1mb' }));
 
-  // Auth routes bypass role check — register BEFORE requireRole
+  // ── Authentication ──
+  // authenticate sets req.user from a verified token (role/level re-read from
+  // the DB), or — only under ALLOW_DEMO_AUTH — from x-user-* headers, else null.
+  app.use('/api', authenticate);
+
+  // Auth routes self-gate (login / open-registration / login-screen lookups are
+  // public; /auth/me and the rest require a real identity) — register before the
+  // blanket requireAuth so those public endpoints aren't blocked.
   app.use('/api', authRouter);
 
-  // All other API routes require a valid role header
-  app.use('/api', requireRole);
-
-  app.use(attachRequestContext);
+  // Every other API route — reads and writes alike — requires a real identity.
+  app.use('/api', requireAuth);
 
   registerApiRoutes(app);
   registerClient(app);

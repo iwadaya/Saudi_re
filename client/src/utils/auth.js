@@ -85,6 +85,8 @@ export function getUserDisplayName() {
 }
 
 export function getUserId() { return getSession()?.userId || ''; }
+/** The signed bearer token issued by /auth/login (persisted in the session). */
+export function getAuthToken() { return getSession()?.token || ''; }
 export function getHierarchyLevel() { return getSession()?.hierarchyLevel ?? 99; }
 export function getEffectiveLimitUsd() { return getSession()?.effectiveLimitUsd ?? null; }
 export function getTreatyTypeScope() { return getSession()?.treatyTypeScope || 'BOTH'; }
@@ -95,7 +97,9 @@ export function isAtLeast(level) { return getHierarchyLevel() <= level; }
 export function canAccessApprovals() { return APPROVALS_ROLES.has(getSession()?.roleCode); }
 export function canOverrideBelow() { return getSession()?.canOverrideBelow === true; }
 
-/** @returns {Record<string, string>} auth headers for every API request */
+/** @returns {Record<string, string>} auth headers for every API request.
+ *  Authorization (Bearer <token>) is the real identity the server trusts; the
+ *  x-user-* headers are kept for logging and the dev/test ALLOW_DEMO_AUTH path. */
 export function getAuthHeaders() {
   const s = getSession();
   if (!s) return { 'x-user-role': 'TUW', 'x-user-name': 'User', 'x-user-id': '' };
@@ -106,12 +110,14 @@ export function getAuthHeaders() {
     ? (getTestName() || s.displayName || 'Tester')
     : (ROLE_LABELS[s.roleCode] || s.displayName || 'User');
 
-  return {
+  const headers = {
     'x-user-id':    s.userId,
     'x-user-role':  s.roleCode,
     'x-user-name':  userName,
     'x-user-level': String(s.hierarchyLevel || 99),
   };
+  if (s.token) headers.Authorization = `Bearer ${s.token}`;
+  return headers;
 }
 
 // Backward-compat alias used by WizardLayout's logout button.
