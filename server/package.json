@@ -12,6 +12,7 @@
     "seed": "node src/db/seeds/run.js",
     "cleanup:snapshots": "node scripts/cleanup-snapshots.js",
     "relocate:misfiled-renewal-packs": "node scripts/relocate-misfiled-renewal-packs.js",
+    "audit:ownership": "node scripts/audit-contract-quote-ownership.js",
     "refresh:ldf-benchmarks": "node src/jobs/refreshLdfBenchmarks.js"
   },
   "dependencies": {
