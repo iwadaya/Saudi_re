@@ -7,6 +7,7 @@ import { usePasswordChangeRequired } from '../../utils/passwordGate';
 import { appRoutes } from '../../routes/appRoutes';
 import ScreenErrorBoundary from '../ScreenErrorBoundary';
 import ForcePasswordChange from './ForcePasswordChange';
+import ScreenFallback from './ScreenFallback';
 import { ToastProvider } from '../ToastProvider';
 
 function AuthGuard({ children, requireApprovals = false }) {
@@ -14,10 +15,6 @@ function AuthGuard({ children, requireApprovals = false }) {
   if (!session) return <Navigate to="/login" replace />;
   if (requireApprovals && !canAccessApprovals()) return <Navigate to="/select" replace />;
   return children;
-}
-
-function ScreenFallback() {
-  return <div style={{ padding: '2rem', color: '#d7dceb' }}>Loading…</div>;
 }
 
 // Catches stale JS chunk errors after a new deploy and reloads once
