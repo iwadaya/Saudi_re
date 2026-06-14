@@ -9,6 +9,7 @@ import { pool, getPoolStats } from './db/pool.js';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { authenticate, requireAuth } from './middleware/requestContext.js';
+import { guardApiMutations } from './services/permissions.js';
 import { attachRequestId } from './middleware/requestId.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { cacheStats } from './middleware/httpCache.js';
@@ -288,6 +289,11 @@ export function createApp() {
 
   // Every other API route — reads and writes alike — requires a real identity.
   app.use('/api', requireAuth);
+
+  // Comprehensive edit-lock: every mutating route under quotes/treaties/
+  // facultative/pricing passes assertCanEdit on its owning entity (assignee
+  // only). Reads and approval-workflow/create endpoints pass through.
+  app.use('/api', guardApiMutations);
 
   registerApiRoutes(app);
   registerClient(app);
