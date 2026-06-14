@@ -389,17 +389,21 @@ export async function submitForApproval({ contractId, quoteId, submittedByUserId
   }
 
   // Upsert offer — approver_options carries the ordered nearest-sufficient list.
+  // peer1_user_id is left NULL on purpose: it is the RECORD of who actually
+  // claimed peer1, written atomically at decision time by recordDecision. The
+  // submitter's nominated approver is kept as next_approver_id (advisory), so
+  // any eligible approver — not just the nominee — can take the open slot.
   const res=await pool.query(
     `INSERT INTO public.contract_offer (contract_id,quote_id,status,breach_type,approval_step,submitted_by_id,submitted_at,written_line_pct,epi_usd,next_approver_id,next_approver_role,peer1_user_id,approver_options)
-     VALUES ($1,$2,'AWAITING_APPROVAL',$3,1,$4,now(),$5,$6,$7,$8,$9,$10)
+     VALUES ($1,$2,'AWAITING_APPROVAL',$3,1,$4,now(),$5,$6,$7,$8,NULL,$9)
      ON CONFLICT (contract_id) DO UPDATE SET
        status='AWAITING_APPROVAL',breach_type=$3,approval_step=1,submitted_by_id=$4,submitted_at=now(),
-       written_line_pct=$5,epi_usd=$6,next_approver_id=$7,next_approver_role=$8,peer1_user_id=$9,approver_options=$10,
+       written_line_pct=$5,epi_usd=$6,next_approver_id=$7,next_approver_role=$8,peer1_user_id=NULL,approver_options=$9,
        peer1_decision=NULL,peer1_comment=NULL,peer1_at=NULL,peer2_user_id=NULL,peer2_decision=NULL,
        peer2_at=NULL,arbiter_required=false,arbiter_user_id=NULL,arbiter_decision=NULL,updated_at=now()
      RETURNING offer_id`,
     [contractId||null,quoteId||null,resolvedBreachType,submittedByUserId,writtenLinePct||null,
-     epiUsd||null,peer1UserId||null,requiredRole,peer1UserId||null,JSON.stringify(approverOptions)]
+     epiUsd||null,peer1UserId||null,requiredRole,JSON.stringify(approverOptions)]
   );
 
   if (contractId) await pool.query(`UPDATE public.contract SET uw_status='AWAITING_APPROVAL',status='AWAITING_APPROVAL',updated_at=now() WHERE contract_id=$1`,[contractId]);
@@ -408,92 +412,280 @@ export async function submitForApproval({ contractId, quoteId, submittedByUserId
   return { offerId:res.rows[0]?.offer_id, breachType:resolvedBreachType, requiredRole, requiredRoleName:ROLE_NAME[requiredRole]||requiredRole };
 }
 
-export async function recordPeerDecision({ contractId, quoteId, decidedByUserId, decidedByName, decidedByRole, decision, comment }) {
-  const field=contractId?'contract_id':'quote_id';
-  const entityId=contractId||quoteId;
-  // Try join with view; fall back to base table if view doesn't exist
-  let rows = [];
+// ── Decision chokepoint ──────────────────────────────────────────────────────
+// EVERY approval write (peer1, peer2, arbiter) funnels through recordDecision.
+// Storing approver_options at submit time is NOT enough — eligibility is
+// re-derived from LIVE data here, at decision time, and the slot is claimed with
+// a conditional UPDATE so two racing approvers can never both win.
+
+const httpError = (status, message, code) =>
+  Object.assign(new Error(message), code ? { status, code } : { status });
+
+/**
+ * Normalize a persisted approver_options value to a list of user_id strings.
+ * Tolerates the canonical shape (jsonb array of candidate objects) as well as a
+ * bare array of user_id strings or a JSON-encoded string of either.
+ */
+export function approverOptionIds(approverOptions) {
+  let arr = approverOptions;
+  if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch { return []; } }
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map((o) => (o && typeof o === 'object') ? o.user_id : o)
+    .filter((x) => x != null)
+    .map(String);
+}
+
+function sameIdSet(a, b) {
+  if (a.size !== b.size) return false;
+  for (const x of a) if (!b.has(x)) return false;
+  return true;
+}
+
+/**
+ * Re-run the submit-time routing plan against the LIVE mandates/roster, returning
+ * the currently-eligible approver candidate objects. Mirrors submitForApproval's
+ * planSubmission call exactly (same inputs, same defaults) so the live set is
+ * derived identically to the stored snapshot — any divergence therefore means
+ * the routing genuinely changed since submission.
+ */
+async function deriveLiveApproverOptions(offer) {
+  const submitter = await getUserMandate(offer.submitted_by_id);
+  if (!submitter) return [];
+  const candidates = await fetchApproverCandidates();
+  const plan = await planSubmission({
+    submitter,
+    submittedByRole: submitter.role_code,
+    writtenLinePct: offer.written_line_pct,
+    epiUsd: offer.epi_usd,
+    candidates,
+  });
+  return Array.isArray(plan.approverOptions) ? plan.approverOptions : [];
+}
+
+/** Load an offer by id, enriched with peer/submitter role codes from
+ *  v_offer_approval; falls back to the base table when the view is absent. */
+async function loadOfferById(offerId) {
   try {
-    const r = await pool.query(
-      `SELECT o.*,v.peer1_role_code,v.peer2_role_code,v.approval_stage FROM public.contract_offer o
-       LEFT JOIN public.v_offer_approval v ON v.offer_id=o.offer_id
-       WHERE o.${field}=$1 ORDER BY o.updated_at DESC LIMIT 1`,[entityId]
+    const { rows } = await pool.query(
+      `SELECT o.*, v.peer1_role_code, v.peer2_role_code, v.submitted_by_role, v.approval_stage
+         FROM public.contract_offer o
+         LEFT JOIN public.v_offer_approval v ON v.offer_id=o.offer_id
+        WHERE o.offer_id=$1 LIMIT 1`, [offerId]
     );
-    rows = r.rows;
+    if (rows.length) return rows[0];
   } catch {
-    const r = await pool.query(
-      `SELECT * FROM public.contract_offer WHERE ${field}=$1 ORDER BY updated_at DESC LIMIT 1`,[entityId]
-    );
-    rows = r.rows;
+    const { rows } = await pool.query(`SELECT * FROM public.contract_offer WHERE offer_id=$1 LIMIT 1`, [offerId]);
+    return rows[0] || null;
   }
-  if (!rows.length) throw Object.assign(new Error('Offer not found'),{status:404});
-  const offer=rows[0];
-  if (offer.status!=='AWAITING_APPROVAL') throw Object.assign(new Error(`Offer already in status ${offer.status}`),{status:400});
-  if (offer.submitted_by_id===decidedByUserId) throw Object.assign(new Error('Cannot approve own submission'),{status:403});
+  return null;
+}
 
-  const decidedByLevel=LEVEL[decidedByRole]||5;
-  const isFinalAuth=FINAL_AUTH.has(decidedByLevel);
-  const isPeer1Slot=!offer.peer1_decision&&(offer.peer1_user_id===decidedByUserId||!offer.peer1_user_id);
-  const isPeer2Slot=offer.peer1_decision&&!offer.peer2_decision;
+/** Resolve the latest offer for a contract/quote (slot determination only). */
+async function resolveOfferByEntity({ contractId, quoteId }) {
+  const field = contractId ? 'contract_id' : 'quote_id';
+  const { rows } = await pool.query(
+    `SELECT offer_id, status, peer1_decision, peer2_decision
+       FROM public.contract_offer WHERE ${field}=$1 ORDER BY updated_at DESC LIMIT 1`,
+    [contractId || quoteId]
+  );
+  return rows[0] || null;
+}
 
-  if (!isPeer1Slot&&!isPeer2Slot) throw Object.assign(new Error('No open peer slot'),{status:400});
+/**
+ * Atomically claim a peer slot. The conditional WHERE is the real concurrency
+ * guard: a racing claimant who lost (or who is not in the persisted
+ * approver_options) updates 0 rows. The jsonb membership test is the
+ * column-level equivalent of `$actor = ANY(approver_options)` for our
+ * object-array storage. Returns true iff this caller won the slot.
+ */
+async function claimPeerSlot({ offerId, slot, actorUserId, decision, comment }) {
+  const membership = `EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(approver_options,'[]'::jsonb)) ao
+                             WHERE COALESCE(ao->>'user_id', ao#>>'{}') = $2::text)`;
+  if (slot === 'peer1') {
+    const { rows } = await pool.query(
+      `UPDATE public.contract_offer
+          SET peer1_user_id=$2, peer1_decision=$3, peer1_comment=$4, peer1_at=now(), updated_at=now()
+        WHERE offer_id=$1
+          AND status='AWAITING_APPROVAL'
+          AND peer1_user_id IS NULL
+          AND peer1_decision IS NULL
+          AND ${membership}
+        RETURNING offer_id`,
+      [offerId, actorUserId, decision, comment || null]
+    );
+    return rows.length > 0;
+  }
+  // peer2 — also enforces, atomically, that the second approver ≠ the first.
+  const { rows } = await pool.query(
+    `UPDATE public.contract_offer
+        SET peer2_user_id=$2, peer2_decision=$3, peer2_comment=$4, peer2_at=now(), updated_at=now()
+      WHERE offer_id=$1
+        AND status='AWAITING_APPROVAL'
+        AND peer2_user_id IS NULL
+        AND peer2_decision IS NULL
+        AND peer1_decision IS NOT NULL
+        AND peer1_user_id IS DISTINCT FROM $2
+        AND ${membership}
+      RETURNING offer_id`,
+    [offerId, actorUserId, decision, comment || null]
+  );
+  return rows.length > 0;
+}
 
-  let nextStatus='AWAITING_APPROVAL', finalDecision=null, arbiterRequired=false, eventType;
+/** Apply the status transition + event after a peer slot has been claimed.
+ *  Ports the 5-tier final-authority / split-decision rules verbatim. */
+async function applyPeerOutcome({ offer, slot, actorUserId, actorName, actorRole, decision, comment, contractId, quoteId }) {
+  const actorLevel = LEVEL[actorRole] || 5;
+  const isFinalAuth = FINAL_AUTH.has(actorLevel);
+  let nextStatus = 'AWAITING_APPROVAL', finalDecision = null, arbiterRequired = false, eventType;
 
-  if (isPeer1Slot) {
-    await pool.query(`UPDATE public.contract_offer SET peer1_user_id=$2,peer1_decision=$3,peer1_comment=$4,peer1_at=now(),updated_at=now() WHERE offer_id=$1`,[offer.offer_id,decidedByUserId,decision,comment||null]);
-    eventType=decision==='APPROVED'?'PEER1_APPROVED':'PEER1_DECLINED';
-    // CU/CE decision in peer1 slot is immediately final — no second approver needed
+  if (slot === 'peer1') {
+    eventType = decision === 'APPROVED' ? 'PEER1_APPROVED' : 'PEER1_DECLINED';
+    // CU/CE decision in the peer1 slot is immediately final — no second approver.
     if (isFinalAuth) {
-      finalDecision=decision;
-      nextStatus=decision==='APPROVED'?'AWAITING_SIGNED_LINE':'DECLINED';
-      eventType=decision==='APPROVED'?'FINAL_APPROVED_BY_AUTHORITY':'FINAL_DECLINED_BY_AUTHORITY';
+      finalDecision = decision;
+      nextStatus = decision === 'APPROVED' ? 'AWAITING_SIGNED_LINE' : 'DECLINED';
+      eventType = decision === 'APPROVED' ? 'FINAL_APPROVED_BY_AUTHORITY' : 'FINAL_DECLINED_BY_AUTHORITY';
     }
   } else {
-    await pool.query(`UPDATE public.contract_offer SET peer2_user_id=$2,peer2_decision=$3,peer2_comment=$4,peer2_at=now(),updated_at=now() WHERE offer_id=$1`,[offer.offer_id,decidedByUserId,decision,comment||null]);
-    eventType=decision==='APPROVED'?'PEER2_APPROVED':'PEER2_DECLINED';
-    const p1d=offer.peer1_decision;
-    if (p1d===decision) {
-      finalDecision=decision;
-      nextStatus=decision==='APPROVED'?'AWAITING_SIGNED_LINE':'DECLINED';
+    eventType = decision === 'APPROVED' ? 'PEER2_APPROVED' : 'PEER2_DECLINED';
+    const p1d = offer.peer1_decision;
+    if (p1d === decision) {
+      finalDecision = decision;
+      nextStatus = decision === 'APPROVED' ? 'AWAITING_SIGNED_LINE' : 'DECLINED';
     } else {
-      // Split decision
-      const p1Level=LEVEL[offer.peer1_role_code]||5;
-      const higherLevel=Math.min(p1Level,decidedByLevel);
+      // Split decision: a CU/CE on either side decides; otherwise → arbiter.
+      const p1Level = LEVEL[offer.peer1_role_code] || 5;
+      const higherLevel = Math.min(p1Level, actorLevel);
       if (FINAL_AUTH.has(higherLevel)) {
-        const cuDecision=p1Level<=2?p1d:decision;
-        finalDecision=cuDecision;
-        nextStatus=cuDecision==='APPROVED'?'AWAITING_SIGNED_LINE':'DECLINED';
-        eventType=cuDecision==='APPROVED'?'FINAL_APPROVED_BY_AUTHORITY':'FINAL_DECLINED_BY_AUTHORITY';
+        const cuDecision = p1Level <= 2 ? p1d : decision;
+        finalDecision = cuDecision;
+        nextStatus = cuDecision === 'APPROVED' ? 'AWAITING_SIGNED_LINE' : 'DECLINED';
+        eventType = cuDecision === 'APPROVED' ? 'FINAL_APPROVED_BY_AUTHORITY' : 'FINAL_DECLINED_BY_AUTHORITY';
       } else {
-        arbiterRequired=true; nextStatus='DISPUTE_PENDING';
-        await pool.query(`UPDATE public.contract_offer SET arbiter_required=true,updated_at=now() WHERE offer_id=$1`,[offer.offer_id]);
-        eventType='DISPUTE_RAISED';
+        arbiterRequired = true; nextStatus = 'DISPUTE_PENDING';
+        await pool.query(`UPDATE public.contract_offer SET arbiter_required=true,updated_at=now() WHERE offer_id=$1`, [offer.offer_id]);
+        eventType = 'DISPUTE_RAISED';
       }
     }
   }
 
-  await pool.query(`UPDATE public.contract_offer SET status=$2,updated_at=now() WHERE offer_id=$1`,[offer.offer_id,nextStatus]);
+  await pool.query(`UPDATE public.contract_offer SET status=$2,updated_at=now() WHERE offer_id=$1`, [offer.offer_id, nextStatus]);
   if (contractId) {
-    await pool.query(`UPDATE public.contract SET uw_status=$2::public.uw_workflow_status,updated_at=now() WHERE contract_id=$1`,[contractId,nextStatus]);
+    await pool.query(`UPDATE public.contract SET uw_status=$2::public.uw_workflow_status,updated_at=now() WHERE contract_id=$1`, [contractId, nextStatus]);
   }
-  await logOfferEvent({contractId,quoteId,eventType,actorUserId:decidedByUserId,actorName:decidedByName,actorRole:decidedByRole,payload:{decision,isPeer1Slot,finalDecision,arbiterRequired},comment});
-  return { nextStatus, finalDecision, arbiterRequired, eventType, complete:!!finalDecision };
+  await logOfferEvent({ contractId, quoteId, eventType, actorUserId, actorName, actorRole, payload: { decision, slot, finalDecision, arbiterRequired }, comment });
+  return { nextStatus, finalDecision, arbiterRequired, eventType, complete: !!finalDecision };
 }
 
+/** Arbiter (dispute-resolution) slot — TD/CU/CE only, claimed atomically. */
+async function recordArbiterSlot({ offer, contractId, quoteId, actorUserId, actorName, actorRole, decision, comment }) {
+  if (offer.status !== 'DISPUTE_PENDING') throw httpError(400, 'No active dispute');
+  if (String(offer.submitted_by_id) === String(actorUserId)) throw httpError(403, 'Cannot arbitrate own submission');
+  const level = LEVEL[actorRole] || 5;
+  if (level > 3) throw httpError(403, 'Only Treaty Director, Chief Underwriter or Chief Executive can resolve disputes');
+  const nextStatus = decision === 'APPROVED' ? 'AWAITING_SIGNED_LINE' : 'DECLINED';
+  const { rows } = await pool.query(
+    `UPDATE public.contract_offer
+        SET arbiter_user_id=$2, arbiter_decision=$3, arbiter_comment=$4, arbiter_at=now(), status=$5, updated_at=now()
+      WHERE offer_id=$1 AND arbiter_user_id IS NULL AND status='DISPUTE_PENDING'
+      RETURNING offer_id`,
+    [offer.offer_id, actorUserId, decision, comment || null, nextStatus]
+  );
+  if (!rows.length) throw httpError(409, 'That dispute was already resolved', 'DISPUTE_RESOLVED');
+  if (contractId) await pool.query(`UPDATE public.contract SET uw_status=$2,updated_at=now() WHERE contract_id=$1`, [contractId, nextStatus]);
+  await logOfferEvent({ contractId, quoteId, eventType: decision === 'APPROVED' ? 'ARBITER_APPROVED' : 'ARBITER_DECLINED', actorUserId, actorName, actorRole, payload: { decision }, comment });
+  return { nextStatus, decision, complete: true };
+}
+
+/**
+ * The single approval-write chokepoint. For peer1/peer2 it enforces, at decision
+ * time and against LIVE data:
+ *   • the offer is still AWAITING_APPROVAL
+ *   • the actor is not the submitter (four-eyes)
+ *   • for peer2, the actor is not whoever took peer1
+ *   • the actor is in the live eligible set (re-derived from current mandates)
+ *   • the live eligible set still matches the persisted approver_options snapshot
+ *     — otherwise it fails CLOSED with 409 (routing changed; re-submit) rather
+ *     than guessing which set to trust
+ * then claims the slot with a conditional UPDATE (concurrency-safe) and applies
+ * the resulting status transition. For arbiter it requires an open dispute and
+ * TD/CU/CE authority.
+ *
+ * @param {{ offerId:string, actorUserId:string, actorName?:string,
+ *           actorRole?:string, slot:'peer1'|'peer2'|'arbiter',
+ *           decision:'APPROVED'|'DECLINED', comment?:string }} args
+ */
+export async function recordDecision({ offerId, actorUserId, actorName, actorRole, slot, decision, comment }) {
+  if (!offerId) throw httpError(400, 'offerId required');
+  if (!actorUserId) throw httpError(403, 'Not an eligible approver for this offer');
+  if (!['APPROVED', 'DECLINED'].includes(decision)) throw httpError(400, 'decision must be APPROVED or DECLINED');
+  if (!['peer1', 'peer2', 'arbiter'].includes(slot)) throw httpError(400, `Unknown approval slot: ${slot}`);
+
+  const offer = await loadOfferById(offerId);
+  if (!offer) throw httpError(404, 'Offer not found');
+  const contractId = offer.contract_id || null;
+  const quoteId = offer.quote_id || null;
+
+  if (slot === 'arbiter') {
+    return recordArbiterSlot({ offer, contractId, quoteId, actorUserId, actorName, actorRole, decision, comment });
+  }
+
+  // ── peer1 / peer2 ──────────────────────────────────────────────────────────
+  if (offer.status !== 'AWAITING_APPROVAL') throw httpError(400, `Offer already in status ${offer.status}`);
+  if (String(offer.submitted_by_id) === String(actorUserId)) throw httpError(403, 'Cannot approve own submission');
+  if (slot === 'peer1' && offer.peer1_decision) throw httpError(400, 'No open peer slot');
+  if (slot === 'peer2' && !offer.peer1_decision) throw httpError(400, 'No open peer slot');
+  if (slot === 'peer2' && offer.peer1_user_id && String(offer.peer1_user_id) === String(actorUserId)) {
+    throw httpError(403, 'The second approver must be different from the first');
+  }
+
+  // Re-derive eligibility from LIVE data; cross-check the stored snapshot. If the
+  // two disagree, fail closed — the routing changed since submission.
+  const liveOptions = await deriveLiveApproverOptions(offer);
+  const liveIds = new Set(liveOptions.map((c) => String(c.user_id)));
+  const storedIds = new Set(approverOptionIds(offer.approver_options));
+  if (!sameIdSet(liveIds, storedIds)) {
+    throw httpError(409, 'Approval routing changed since submission — please re-submit', 'ROUTING_CHANGED');
+  }
+  if (!liveIds.has(String(actorUserId))) throw httpError(403, 'Not an eligible approver for this offer');
+
+  // Atomic slot claim — guarded against concurrent winners and stale eligibility.
+  const claimed = await claimPeerSlot({ offerId, slot, actorUserId, decision, comment });
+  if (!claimed) throw httpError(409, 'That approval slot was just taken', 'SLOT_TAKEN');
+
+  return applyPeerOutcome({ offer, slot, actorUserId, actorName, actorRole, decision, comment, contractId, quoteId });
+}
+
+/**
+ * Peer-decision entrypoint (HTTP path). Resolves the offer + which peer slot is
+ * open, then routes through the recordDecision chokepoint. Kept as a thin
+ * adapter so existing callers/signatures are unchanged.
+ */
+export async function recordPeerDecision({ contractId, quoteId, decidedByUserId, decidedByName, decidedByRole, decision, comment }) {
+  const offer = await resolveOfferByEntity({ contractId, quoteId });
+  if (!offer) throw httpError(404, 'Offer not found');
+  if (offer.status !== 'AWAITING_APPROVAL') throw httpError(400, `Offer already in status ${offer.status}`);
+  const slot = !offer.peer1_decision ? 'peer1' : (!offer.peer2_decision ? 'peer2' : null);
+  if (!slot) throw httpError(400, 'No open peer slot');
+  return recordDecision({
+    offerId: offer.offer_id, actorUserId: decidedByUserId, actorName: decidedByName,
+    actorRole: decidedByRole, slot, decision, comment,
+  });
+}
+
+/**
+ * Arbiter-decision entrypoint (HTTP path). Resolves the offer then routes
+ * through the recordDecision chokepoint with the arbiter slot.
+ */
 export async function recordArbiterDecision({ contractId, quoteId, decidedByUserId, decidedByName, decidedByRole, decision, comment }) {
-  const field=contractId?'contract_id':'quote_id';
-  const { rows } = await pool.query(`SELECT * FROM public.contract_offer WHERE ${field}=$1 ORDER BY updated_at DESC LIMIT 1`,[contractId||quoteId]);
-  if (!rows.length) throw Object.assign(new Error('Offer not found'),{status:404});
-  const offer=rows[0];
-  if (offer.status!=='DISPUTE_PENDING') throw Object.assign(new Error('No active dispute'),{status:400});
-  const level=LEVEL[decidedByRole]||5;
-  if (level>3) throw Object.assign(new Error('Only Treaty Director, Chief Underwriter or Chief Executive can resolve disputes'),{status:403});
-  const nextStatus=decision==='APPROVED'?'AWAITING_SIGNED_LINE':'DECLINED';
-  await pool.query(`UPDATE public.contract_offer SET arbiter_user_id=$2,arbiter_decision=$3,arbiter_comment=$4,arbiter_at=now(),status=$5,updated_at=now() WHERE offer_id=$1`,[offer.offer_id,decidedByUserId,decision,comment||null,nextStatus]);
-  if (contractId) await pool.query(`UPDATE public.contract SET uw_status=$2,updated_at=now() WHERE contract_id=$1`,[contractId,nextStatus]);
-  await logOfferEvent({contractId,quoteId,eventType:decision==='APPROVED'?'ARBITER_APPROVED':'ARBITER_DECLINED',actorUserId:decidedByUserId,actorName:decidedByName,actorRole:decidedByRole,payload:{decision},comment});
-  return { nextStatus, decision, complete:true };
+  const offer = await resolveOfferByEntity({ contractId, quoteId });
+  if (!offer) throw httpError(404, 'Offer not found');
+  return recordDecision({
+    offerId: offer.offer_id, actorUserId: decidedByUserId, actorName: decidedByName,
+    actorRole: decidedByRole, slot: 'arbiter', decision, comment,
+  });
 }
 
 export async function getApprovalState(contractId, quoteId) {
