@@ -1,7 +1,11 @@
 // server/src/routes/auth.js
-// Authentication, user management, and mandate resolution
-// Demo mode: password 'demo2026' accepted for all users.
-// Production: swap DEMO_HASH check for bcrypt.compare(password, user.password_hash)
+// Authentication, user management, and mandate resolution.
+// Passwords are scrypt-hashed (hashPassword/verifyPassword). A single shared
+// policy (validatePasswordStrength) gates every place a password is set —
+// change-password and ALL user-creation paths. No path stores a static/demo
+// hash; an admin create with no password gets a generated, scrypt-hashed temp
+// and must_change_password=true. The 'demo2026' shortcut is a dev/test-only
+// backdoor gated behind ALLOW_DEMO_AUTH and is never honoured in production.
 
 import { Router } from 'express';
 import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -32,15 +36,60 @@ router.use((req, res, next) => {
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 const DEMO_PASSWORD = 'demo2026';
-// The seeded forced-change temp password (migration 123). Forbidden as a NEW
-// password on change-password so a must-change user can't "change" to the temp.
+// The seeded forced-change temp password (migration 123). Forbidden as a real
+// password everywhere so a must-change user can't "change" to the temp and an
+// admin can't (re)create a user holding it.
 const TEMP_SEED_PASSWORD = 'Universe#1234';
+
+// ── Single shared password policy ────────────────────────────────────────────
+// The ONE place password strength is defined. Used by change-password AND every
+// user-creation path so the rules can never drift apart again.
+const MIN_PASSWORD_LENGTH = 8;
+
+// Obvious weak/common values rejected outright (compared case-insensitively).
+// Anything shorter than MIN_PASSWORD_LENGTH is already rejected on length, so
+// this list only needs the common 8+ char offenders.
+const WEAK_PASSWORDS = new Set([
+  'password', 'password1', 'password123', 'passw0rd', 'p@ssw0rd',
+  '12345678', '123456789', '1234567890', '87654321',
+  'qwerty12', 'qwerty123', 'qwertyuiop', 'asdfghjkl',
+  'iloveyou', 'sunshine', 'princess', 'football', 'baseball', 'superman',
+  'welcome1', 'welcome123', 'letmein1', 'letmein123',
+  'admin123', 'administrator', 'changeme', 'changeme1', 'abc12345',
+]);
+
+/**
+ * Single shared password-strength policy. Returns an error message string when
+ * the candidate is unacceptable, or null when it passes. Rejects: too-short
+ * (< MIN_PASSWORD_LENGTH), the shared seeded temp password, and obviously weak
+ * values (common list, all-one-character, all-digits).
+ *
+ * @param {string} pw
+ * @returns {string|null}
+ */
+export function validatePasswordStrength(pw) {
+  const s = String(pw ?? '');
+  if (s.length < MIN_PASSWORD_LENGTH) {
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+  }
+  if (s === TEMP_SEED_PASSWORD) {
+    return 'Choose a different password — the temporary password cannot be reused.';
+  }
+  if (WEAK_PASSWORDS.has(s.toLowerCase())) {
+    return 'Password is too common — choose something less guessable.';
+  }
+  if (/^(.)\1+$/.test(s)) {            // all one repeated character
+    return 'Password is too weak — choose something less guessable.';
+  }
+  if (/^\d+$/.test(s)) {               // all digits
+    return 'Password must not be all numbers.';
+  }
+  return null;
+}
 
 // Password hashing with the Node stdlib (no new dependency). Format:
 //   scrypt$<saltHex>$<hashHex>
-// Demo/seeded accounts keep the legacy 'DEMO_HASH_2026' sentinel and log in
-// with DEMO_PASSWORD; real accounts created through the Add-user flow get a
-// scrypt hash and are verified against it.
+// Every create/update path stores one of these — there is no static/demo hash.
 export function hashPassword(plain) {
   const salt = randomBytes(16).toString('hex');
   const hash = scryptSync(String(plain), salt, 64).toString('hex');
@@ -55,6 +104,13 @@ export function verifyPassword(plain, stored) {
   let actual;
   try { actual = scryptSync(String(plain), saltHex, 64); } catch { return false; }
   return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+/** Generate a strong, unique one-time temp password (never a shared literal).
+ *  Returned to the admin who created the account; the user must change it on
+ *  first login (must_change_password=true). ~16 chars, URL-safe. */
+function generateTempPassword() {
+  return randomBytes(12).toString('base64url');
 }
 
 // Open (login-screen) registration is allowed only when explicitly enabled —
@@ -243,18 +299,17 @@ router.post('/auth/change-password', requireAuth, asyncHandler(async (req, res) 
   if (!currentPassword || !newPassword || !confirmPassword) {
     return res.status(400).json({ error: 'currentPassword, newPassword and confirmPassword are required.' });
   }
-  if (String(newPassword).length < 8) {
-    return res.status(400).json({ error: 'New password must be at least 8 characters.' });
+  // Shared strength policy (length / temp-password / weak values) — identical to
+  // the rules enforced on user creation.
+  const strengthError = validatePasswordStrength(newPassword);
+  if (strengthError) {
+    return res.status(400).json({ error: strengthError });
   }
   if (newPassword !== confirmPassword) {
     return res.status(400).json({ error: 'Passwords do not match' });
   }
   if (newPassword === currentPassword) {
     return res.status(400).json({ error: 'New password must differ' });
-  }
-  // The shared forced-change temp password can never be set as a real password.
-  if (newPassword === TEMP_SEED_PASSWORD) {
-    return res.status(400).json({ error: 'Choose a different password — the temporary password cannot be reused.' });
   }
 
   // Load the caller's OWN stored hash (keyed on the verified id, never the body).
@@ -334,11 +389,14 @@ router.get('/auth/roles', asyncHandler(async (req, res) => {
 }));
 
 // ── POST /api/auth/users — create new user ────────────────────────────────
-// Accepts two payload shapes:
+// Accepts two payload shapes; BOTH always persist a scrypt hash (never a static
+// or demo hash), and any supplied password runs through validatePasswordStrength:
 //   • Add-user form (login screen): first_name, surname, title (role_code) OR
 //     role_id, password, confirm_password. Composes display_name, derives
-//     username/email, and stores a real scrypt password hash.
-//   • Legacy admin form: username, display_name, email, role_id (DEMO hash).
+//     username/email, and stores a scrypt hash of the chosen password.
+//   • Admin form: username, display_name, email, role_id and NO password. The
+//     account gets a generated, scrypt-hashed one-time temp + must_change_password
+//     =true; the temp is returned to the admin to relay (never a shared literal).
 router.post('/auth/users', asyncHandler(async (req, res) => {
   const b = req.body || {};
   const isFormPayload = b.first_name != null || b.surname != null || b.password != null;
@@ -357,6 +415,10 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
   }
 
   let displayName, finalUsername, finalEmail, roleId, passwordHash;
+  // When an admin creates a user without a password we mint a one-time temp,
+  // force a first-login change, and hand the temp back to the caller to relay.
+  let mustChangePassword = false;
+  let tempPassword = null;
 
   if (isFormPayload) {
     const first = String(b.first_name || '').trim();
@@ -370,7 +432,9 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
     if (!roleId && !roleCode) return res.status(400).json({ error: 'A role (title) is required.' });
     if (!password) return res.status(400).json({ error: 'password is required.' });
     if (password !== b.confirm_password) return res.status(400).json({ error: 'Passwords do not match' });
-    if (String(password).length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    // Shared strength policy — identical to change-password.
+    const strengthError = validatePasswordStrength(password);
+    if (strengthError) return res.status(400).json({ error: strengthError });
 
     // Resolve role_id from title/role_code when not supplied directly.
     if (!roleId) {
@@ -402,7 +466,8 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
     finalEmail = b.email ? String(b.email).trim().toLowerCase() : `${finalUsername}@universe3.app`;
     passwordHash = hashPassword(password);
   } else {
-    // Legacy admin payload.
+    // Admin payload (no password field). Mint a strong one-time temp, hash it,
+    // and force a first-login change — NEVER a static/demo hash.
     const { username, display_name, email, role_id } = b;
     if (!username || !display_name || !email || !role_id) {
       return res.status(400).json({ error: 'username, display_name, email and role_id are required.' });
@@ -411,15 +476,17 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
     finalUsername = username.trim();
     finalEmail = email.trim().toLowerCase();
     roleId = role_id;
-    passwordHash = 'DEMO_HASH_2026';
+    tempPassword = generateTempPassword();
+    passwordHash = hashPassword(tempPassword);
+    mustChangePassword = true;
   }
 
   const { rows } = await pool.query(
     `INSERT INTO public.uw_user
-       (username, display_name, email, role_id, office, phone, company_id, password_hash)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING user_id, username, display_name, email, role_id, office, password_hash, created_at`,
-    [finalUsername, displayName, finalEmail, roleId, b.office || 'Riyadh', b.phone || null, b.company_id || null, passwordHash]
+       (username, display_name, email, role_id, office, phone, company_id, password_hash, must_change_password)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     RETURNING user_id, username, display_name, email, role_id, office, password_hash, must_change_password, created_at`,
+    [finalUsername, displayName, finalEmail, roleId, b.office || 'Riyadh', b.phone || null, b.company_id || null, passwordHash, mustChangePassword]
   );
 
   // Create default mandate
@@ -432,10 +499,13 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
   await logAudit(pool, {
     entityType: 'USER', entityId: rows[0].user_id,
     eventType: 'USER_CREATED', actor: req.user?.displayName || (req.user ? 'ADMIN' : 'SELF_REGISTRATION'),
-    payload: { username: finalUsername, role_id: roleId, open_registration: !req.user },
+    payload: { username: finalUsername, role_id: roleId, open_registration: !req.user, must_change_password: mustChangePassword },
   }).catch(() => {});
 
-  res.status(201).json(rows[0]);
+  // Surface the generated temp password to the creating admin so they can relay
+  // it out-of-band (the only time it is ever exposed; it is stored only hashed).
+  const out = tempPassword ? { ...rows[0], temp_password: tempPassword } : rows[0];
+  res.status(201).json(out);
 }));
 
 // ── PATCH /api/auth/users/:id — update user ───────────────────────────────

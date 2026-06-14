@@ -59,7 +59,7 @@ vi.mock('../db/pool.js', () => ({
 }));
 vi.mock('../services/audit.js', () => ({ logAudit: vi.fn(() => Promise.resolve()) }));
 
-const { default: authRouter, hashPassword, verifyPassword } = await import('./auth.js');
+const { default: authRouter, hashPassword, verifyPassword, validatePasswordStrength } = await import('./auth.js');
 
 // Stand-in for authenticate(): the verified identity for the request, set
 // per-test. null = anonymous (matches the open-registration / login paths).
@@ -106,7 +106,7 @@ beforeEach(() => {
 });
 
 describe('privileged auth gates (verified req.user)', () => {
-  const ADD_USER = { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'secret1', confirm_password: 'secret1' };
+  const ADD_USER = { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'secret12', confirm_password: 'secret12' };
 
   it('POST /auth/users by an authenticated Underwriter → 403', async () => {
     currentUser = { userId: 'u-uw', roleCode: 'TUW', hierarchyLevel: 5, displayName: 'UW' };
@@ -145,12 +145,32 @@ describe('password hashing helpers', () => {
   });
 });
 
+describe('validatePasswordStrength (single shared policy)', () => {
+  it('accepts a reasonable 8+ char password', () => {
+    expect(validatePasswordStrength('secret12')).toBeNull();
+    expect(validatePasswordStrength('brandnew2')).toBeNull();
+  });
+  it('rejects anything shorter than 8 chars', () => {
+    expect(validatePasswordStrength('short7!')).toMatch(/at least 8/i);
+    expect(validatePasswordStrength('')).toMatch(/at least 8/i);
+  });
+  it("rejects the shared seeded temp password 'Universe#1234'", () => {
+    expect(validatePasswordStrength('Universe#1234')).toMatch(/temporary password/i);
+  });
+  it('rejects obvious weak/common values, all-same-char, and all-digit', () => {
+    expect(validatePasswordStrength('password')).toMatch(/too common|weak/i);
+    expect(validatePasswordStrength('qwerty123')).toMatch(/too common|weak/i);
+    expect(validatePasswordStrength('aaaaaaaa')).toMatch(/weak/i);
+    expect(validatePasswordStrength('12345678')).toBeTruthy(); // all-digit (common) rejected
+  });
+});
+
 describe('POST /auth/users (Add-user form)', () => {
   it('creates a real person: 201, composed display_name, scrypt password_hash', async () => {
     const app = buildApp();
     const res = await call(app, {
       method: 'POST', path: '/auth/users',
-      body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'secret1', confirm_password: 'secret1' },
+      body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'secret12', confirm_password: 'secret12' },
     });
     expect(res.status).toBe(201);
     expect(res.body.display_name).toBe('Ada Lovelace');
@@ -158,6 +178,7 @@ describe('POST /auth/users (Add-user form)', () => {
     expect(res.body.email).toBe('ada.lovelace@universe3.app');
     expect(typeof res.body.password_hash).toBe('string');
     expect(res.body.password_hash.startsWith('scrypt$')).toBe(true);
+    expect(res.body.password_hash).not.toBe('DEMO_HASH_2026');
   });
 
   it('rejects a mismatched confirm with 400 "Passwords do not match"', async () => {
@@ -170,14 +191,34 @@ describe('POST /auth/users (Add-user form)', () => {
     expect(res.body.error).toBe('Passwords do not match');
   });
 
-  it('rejects a password shorter than 6 chars', async () => {
+  it('rejects a password shorter than the shared 8-char minimum (was 6)', async () => {
     const app = buildApp();
     const res = await call(app, {
       method: 'POST', path: '/auth/users',
-      body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'abc', confirm_password: 'abc' },
+      body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'short7!', confirm_password: 'short7!' },
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/at least 6/i);
+    expect(res.body.error).toMatch(/at least 8/i);
+  });
+
+  it("rejects the seeded temp password 'Universe#1234' on create (rejected everywhere)", async () => {
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/auth/users',
+      body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'Universe#1234', confirm_password: 'Universe#1234' },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/temporary password/i);
+  });
+
+  it('rejects an obviously weak common password on create', async () => {
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/auth/users',
+      body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'password123', confirm_password: 'password123' },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/too common|weak/i);
   });
 
   it('dedupes the derived username with a numeric suffix on conflict', async () => {
@@ -185,10 +226,31 @@ describe('POST /auth/users (Add-user form)', () => {
     const app = buildApp();
     const res = await call(app, {
       method: 'POST', path: '/auth/users',
-      body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'secret1', confirm_password: 'secret1' },
+      body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'secret12', confirm_password: 'secret12' },
     });
     expect(res.status).toBe(201);
     expect(res.body.username).toBe('ada.lovelace2');
+  });
+
+  it('admin create with NO password mints a scrypt temp + must_change_password — never DEMO_HASH_2026', async () => {
+    currentUser = { userId: 'u-cu', roleCode: 'CU', hierarchyLevel: 2, displayName: 'CU' };
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/users',
+      body: { username: 'aturing', display_name: 'Alan Turing', email: 'alan@universe3.app', role_id: 'role-uw' },
+    });
+    expect(res.status).toBe(201);
+    const insert = queryLog.find((q) => q.sql.includes('INSERT INTO public.uw_user'));
+    // A real scrypt hash was persisted (params[7]) — never the demo sentinel…
+    expect(insert.params[7].startsWith('scrypt$')).toBe(true);
+    expect(insert.params[7]).not.toBe('DEMO_HASH_2026');
+    // …with the force-change flag (params[8]) set.
+    expect(insert.params[8]).toBe(true);
+    // The generated temp is returned to the admin and verifies against the hash,
+    // and is NOT the shared seeded literal.
+    expect(typeof res.body.temp_password).toBe('string');
+    expect(res.body.temp_password.length).toBeGreaterThanOrEqual(12);
+    expect(res.body.temp_password).not.toBe('Universe#1234');
+    expect(verifyPassword(res.body.temp_password, insert.params[7])).toBe(true);
   });
 
   it('blocks open registration when disabled and there is no caller', async () => {
