@@ -75,3 +75,40 @@ export async function getAuditTrail(entityType, entityId, { limit = 100 } = {}) 
     throw err;
   }
 }
+
+/**
+ * Resolve the acting user for AUDIT from VERIFIED identity only.
+ *
+ * The id comes from req.user.userId (set by the authenticate middleware — a
+ * verified token in production, or x-user-id behind ALLOW_DEMO_AUTH in dev).
+ * The display name and role are then looked up server-side from the DB by that
+ * id. Client-supplied labels — x-user-name / x-user-role headers and body
+ * `_actor` — are NEVER trusted for audit fields, so spoofing them changes
+ * nothing in the trail. With no verified user the actor is SYSTEM (never a
+ * client string).
+ *
+ * @param {object} req  Express request (reads only req.user.userId).
+ * @returns {Promise<{ actorUserId: string|null, actorName: string, actorRole: string|null }>}
+ */
+export async function resolveAuditActor(req) {
+  const userId = req?.user?.userId || null;
+  if (!userId) return { actorUserId: null, actorName: "SYSTEM", actorRole: null };
+  try {
+    const { rows } = await pool.query(
+      `SELECT display_name, role_code FROM public.v_user_mandate WHERE user_id = $1 LIMIT 1`,
+      [userId]
+    );
+    if (rows[0]) {
+      return {
+        actorUserId: userId,
+        actorName: rows[0].display_name || "SYSTEM",
+        actorRole: rows[0].role_code || null,
+      };
+    }
+  } catch (e) {
+    logger.warn("resolveAuditActor lookup failed", { error: e.message, userId });
+  }
+  // Verified id but no DB profile (or a lookup error): record the id, never a
+  // client-supplied name.
+  return { actorUserId: userId, actorName: "SYSTEM", actorRole: null };
+}

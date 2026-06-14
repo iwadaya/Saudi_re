@@ -1,12 +1,10 @@
 import { numOrNull } from '../../../helpers.js';
 
-export function resolveActor(req, fallbackName = 'SYSTEM', fallbackRole = null) {
-  return {
-    actorUserId: req.user?.userId || null,
-    actorName: req.user?.displayName || req.headers['x-user-name'] || fallbackName,
-    actorRole: req.user?.role || fallbackRole,
-  };
-}
+// Audit identity must come from VERIFIED req.user, looked up server-side — never
+// from x-user-* headers or a client `_actor`. resolveActor delegates to the
+// audit service's resolveAuditActor (async, DB-resolved name; SYSTEM when
+// anonymous). Re-exported here so existing pricing-controller imports keep working.
+export { resolveAuditActor as resolveActor } from '../../../services/audit.js';
 
 export function parseOfferLinePct({ line_pct, written_line_pct }) {
   if (written_line_pct != null) return parseFloat(String(written_line_pct)) || null;

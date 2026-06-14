@@ -120,7 +120,9 @@ export async function getAssignmentHistory(entityType, entityId) {
   } catch { return []; }
 }
 
-export async function listContractsWithOwnership({ assignedTo, status, uwYear, limit=200, requesterId=null, requesterLevel=null, scope='mine' }={}) {
+// requesterLevel is accepted for API symmetry with the assignment routes but the
+// per-row canEdit is derived in SQL, so it is intentionally unused here.
+export async function listContractsWithOwnership({ assignedTo, status, uwYear, limit=200, requesterId=null, requesterLevel: _requesterLevel=null, scope='mine' }={}) {
   const params=[]; const where=[]; let i=1;
   if (assignedTo) { where.push(`c.assigned_to_user_id=$${i++}`); params.push(assignedTo); }
   if (status)     { where.push(`c.uw_status=$${i++}`); params.push(status); }
