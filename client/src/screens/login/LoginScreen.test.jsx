@@ -47,6 +47,20 @@ describe('LoginScreen people dropdown', () => {
     expect(screen.queryByText('Chief Underwriter')).toBeNull();
   });
 
+  it('defaults to a blank placeholder (no user pre-selected) and keeps Sign In disabled until one is picked', async () => {
+    render(<LoginScreen />);
+    const select = await screen.findByLabelText('Underwriter');
+    // Nothing pre-selected — the disabled placeholder is shown.
+    expect(select.value).toBe('');
+    expect(within(select).getByRole('option', { name: /Select underwriter/i })).toBeDisabled();
+    // A password alone is not enough while no underwriter is chosen.
+    fireEvent.change(screen.getByPlaceholderText('Enter your password'), { target: { value: 'secret1' } });
+    expect(screen.getByRole('button', { name: /Sign In/i })).toBeDisabled();
+    // Picking a real user enables Sign In.
+    fireEvent.change(select, { target: { value: ADA.user_id } });
+    expect(screen.getByRole('button', { name: /Sign In/i })).toBeEnabled();
+  });
+
   it('logs in as the selected user and stores their real name (not the role title)', async () => {
     render(<LoginScreen />);
     const select = await screen.findByLabelText('Underwriter');
