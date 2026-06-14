@@ -3,7 +3,7 @@
 **Audience:** IT team standing up the Universe reinsurance pricing tool on an Ubuntu server.
 **Source repo:** https://github.com/Darchville-Analytics/modelling_tool
 **Snapshot date:** 14 May 2026
-**Last verified:** 2026-06-14 against commit `a81f6ee` (auth hardening, CSP, and password policy reflected below).
+**Last verified:** 2026-06-14 @ `d445dba` (bearer-token auth, enforcing CSP, 12-char password policy, and dev-only Compose all reflected below).
 **Maintainer contact:** Isheanesu Wadaya (Riyadh, UTC+3)
 
 ---
@@ -453,7 +453,7 @@ The auth-hardening work has landed; the items below are how the app behaves **to
 
 4. **Content-Security-Policy is enforcing.** Helmet ships an enforcing nonce-based CSP (`script-src` is `'self'` + per-request nonce; no `unsafe-inline` for scripts — the only `unsafe-inline` is a documented styles-only exception for React inline style attributes). `img-src`/`frame-src` also allow `https://res.cloudinary.com` for document previews when remote storage is configured. Violations are still collected at `/csp-report` for monitoring (see `SECURITY.md` → "Content-Security-Policy"). `server/src/app.js`.
 
-5. **Password policy.** A single enforced policy (`validatePasswordStrength`, used by both change-password and every user-creation path) requires a **minimum of 8 characters**, rejects the seeded temp `Universe#1234`, and rejects obviously weak/common values.
+5. **Password policy.** A single enforced policy (`validatePasswordStrength`, used by both change-password and every user-creation path) requires a **minimum of 12 characters**, rejects the seeded temp `Universe#1234`, and rejects obviously weak/common values.
 
 6. **Boot-time secret gate.** Production refuses to start without a strong `AUTH_JWT_SECRET` (see §7).
 
