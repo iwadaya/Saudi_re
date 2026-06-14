@@ -13,7 +13,9 @@ vi.mock('../../api', () => ({ api: apiMock }));
 const CHILD = 'PROTECTED-APP';
 const Child = () => <div>{CHILD}</div>;
 const httpErr = (status) => Object.assign(new Error(`http ${status}`), { status });
-const validSession = { userId: 'u1', roleCode: 'TUW', hierarchyLevel: 5, displayName: 'Me', token: 'tok-123' };
+// No token field: the auth token lives only in the httpOnly cookie now, never
+// in the stored session.
+const validSession = { userId: 'u1', roleCode: 'TUW', hierarchyLevel: 5, displayName: 'Me' };
 
 afterEach(() => { cleanup(); clearSession(); clearPasswordChange(); vi.clearAllMocks(); });
 
@@ -24,7 +26,7 @@ describe('AuthBootstrap — verify-on-boot', () => {
     expect(apiMock.getMe).not.toHaveBeenCalled();
   });
 
-  it('with a VALID token, shows the splash first (no protected flash) then renders, refreshing the session', async () => {
+  it('with a valid cookie session, shows the splash first (no protected flash) then renders, refreshing the session', async () => {
     setSession(validSession);
     apiMock.getMe.mockResolvedValueOnce({ session: { userId: 'u1', roleCode: 'CU', hierarchyLevel: 2, displayName: 'Chief', effectiveLimitUsd: 5 } });
     render(<AuthBootstrap><Child /></AuthBootstrap>);
@@ -34,7 +36,7 @@ describe('AuthBootstrap — verify-on-boot', () => {
     const s = getSession();
     expect(s.roleCode).toBe('CU');           // refreshed from server truth
     expect(s.hierarchyLevel).toBe(2);
-    expect(s.token).toBe('tok-123');         // token preserved (not echoed by /auth/me)
+    expect(s.token).toBeUndefined();         // token never stored client-side
   });
 
   it('with an EXPIRED/INVALID token (401), clears the session and renders logged-out — no protected flash', async () => {

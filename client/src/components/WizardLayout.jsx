@@ -10,7 +10,7 @@ import SaveStateIndicator from './SaveStateIndicator';
 import FacPendingRecsBanner from './FacPendingRecsBanner';
 import { useToast } from '../hooks/useToast';
 import { useAppState } from '../context/AppContext';
-import { clearRole } from '../utils/auth';
+import { performLogout } from '../utils/logout';
 
 /**
  * Tracks every wizard save (Back/Next click) and renders the shared
@@ -126,7 +126,7 @@ export default function WizardLayout({
           </button>
           <button className="topbar-home" type="button"
             aria-label="Log out"
-            onClick={() => { clearRole(); navigate('/login'); }}>
+            onClick={async () => { await performLogout(); navigate('/login'); }}>
             <span aria-hidden="true">⎋</span> LOG OUT
           </button>
         </div>

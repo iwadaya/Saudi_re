@@ -83,12 +83,16 @@ async function call(app, { method = 'GET', path, body, headers = {} }) {
     });
     const chunks = [];
     const res = Object.assign(Object.create(express.response), {
-      app, statusCode: 200,
+      app, statusCode: 200, cookies: [],
       setHeader() { return res; },
       getHeader() { return undefined; },
+      // Capture cookie writes so tests can assert the auth/CSRF cookie contract
+      // without standing up real Express header plumbing.
+      cookie(name, value, options) { res.cookies.push({ name, value, options: options || {} }); return res; },
+      clearCookie(name, options) { res.cookies.push({ name, value: '', options: options || {}, cleared: true }); return res; },
       status(code) { res.statusCode = code; return res; },
       json(payload) { chunks.push(JSON.stringify(payload)); res.end(); },
-      end() { resolve({ status: res.statusCode, body: chunks.length ? JSON.parse(chunks.join('')) : null }); },
+      end() { resolve({ status: res.statusCode, body: chunks.length ? JSON.parse(chunks.join('')) : null, cookies: res.cookies }); },
     });
     res.req = req; req.res = res;
     try {
@@ -273,6 +277,10 @@ describe('POST /auth/login', () => {
     is_active: true, locked_until: null, password_hash: hash,
   });
 
+  // Find the captured auth/CSRF cookies on a login (or logout) response.
+  const authCookieOf = (res) => (res.cookies || []).find((c) => c.name === 'auth_token');
+  const csrfCookieOf = (res) => (res.cookies || []).find((c) => c.name === 'csrf_token');
+
   it('logs in a real account with the correct password (200 session)', async () => {
     scenario.loginUser = adaRow(hashPassword('secret1'));
     const app = buildApp();
@@ -306,22 +314,47 @@ describe('POST /auth/login', () => {
     // real scrypt password still authenticates without the demo flag
     const ok = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'realpass1' } });
     expect(ok.status).toBe(200);
-    expect(typeof ok.body.session.token).toBe('string');
+    expect(ok.body.session.token).toBeUndefined();          // token never in the body
+    expect(authCookieOf(ok).value).toMatch(/.+\..+/);       // it lives in the cookie
   });
 
-  it('issues a signed token in the session on success', async () => {
+  it('sets an httpOnly Secure-capable SameSite auth cookie + a readable CSRF cookie, and never returns the token in the body', async () => {
     scenario.loginUser = adaRow(hashPassword('realpass1'));
     const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'realpass1' } });
     expect(res.status).toBe(200);
-    expect(res.body.session.token).toMatch(/.+\..+/);
+
+    // Token is in the httpOnly cookie, not the JSON body.
+    expect(res.body.session.token).toBeUndefined();
+    const auth = authCookieOf(res);
+    expect(auth.value).toMatch(/.+\..+/);                   // signed token shape
+    expect(auth.options.httpOnly).toBe(true);
+    expect(auth.options.sameSite).toBe('strict');
+    expect(auth.options.path).toBe('/api');
+    expect(auth.options).toHaveProperty('secure');          // gated to prod at runtime
+
+    // CSRF token is a readable (non-httpOnly) double-submit cookie.
+    const csrf = csrfCookieOf(res);
+    expect(csrf.value).toMatch(/.+\..+/);
+    expect(csrf.options.httpOnly).toBe(false);
+    expect(csrf.options.path).toBe('/');
   });
 
-  it('still issues a token AND flags mustChangePassword for a forced-change user', async () => {
+  it('still authenticates (via cookie) AND flags mustChangePassword for a forced-change user', async () => {
     scenario.loginUser = { ...adaRow(hashPassword('Universe#1234')), must_change_password: true };
     const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'Universe#1234' } });
     expect(res.status).toBe(200);
-    expect(typeof res.body.session.token).toBe('string');
+    expect(res.body.session.token).toBeUndefined();
+    expect(authCookieOf(res).value).toMatch(/.+\..+/);
     expect(res.body.session.mustChangePassword).toBe(true);
+  });
+
+  it('POST /auth/logout clears the auth + CSRF cookies', async () => {
+    const res = await call(buildApp(), { method: 'POST', path: '/auth/logout' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+    const cleared = (res.cookies || []).filter((c) => c.cleared);
+    expect(cleared.some((c) => c.name === 'auth_token' && c.options.path === '/api')).toBe(true);
+    expect(cleared.some((c) => c.name === 'csrf_token' && c.options.path === '/')).toBe(true);
   });
 
   it('does not flag mustChangePassword for a normal user', async () => {

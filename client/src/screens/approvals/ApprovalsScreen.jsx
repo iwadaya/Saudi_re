@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { clearSession } from '../../utils/auth';
+import { performLogout } from '../../utils/logout';
 import { api } from '../../api';
 import { useAppState } from '../../context/AppContext';
 import { useGlobalToast } from '../../hooks/useToast';
@@ -179,7 +179,7 @@ export default function ApprovalsScreen() {
         </div>
         <div className="topbar-right">
           <button className="topbar-pill" onClick={() => setTick(n => n + 1)}>⟳ Refresh</button>
-          <button className="topbar-pill" onClick={() => { clearSession(); navigate('/login'); }}>Log out</button>
+          <button className="topbar-pill" onClick={async () => { await performLogout(); navigate('/login'); }}>Log out</button>
         </div>
       </div>
 

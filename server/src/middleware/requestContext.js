@@ -1,11 +1,16 @@
 // server/src/middleware/requestContext.js
-// Authentication: identity comes from a VERIFIED bearer token; role + level are
-// re-read from the DB (v_user_mandate) on every request, so a stale token can
-// never carry elevated rights after a demotion. x-user-* headers are NOT trusted
-// for authorization in production — only as a dev/test convenience gated behind
-// ALLOW_DEMO_AUTH, and otherwise for logging.
+// Authentication: identity comes from a VERIFIED token carried in an httpOnly
+// `auth_token` cookie; role + level are re-read from the DB (v_user_mandate) on
+// every request, so a stale token can never carry elevated rights after a
+// demotion. The `Authorization: Bearer` header is honoured ONLY under
+// ALLOW_DEMO_AUTH (dev/test), never in production. x-user-* headers are NOT
+// trusted for authorization — only the demo-header fallback (ALLOW_DEMO_AUTH)
+// and otherwise logging. csrfProtection adds a double-submit guard for cookie-
+// authenticated mutations.
 import { pool } from '../db/pool.js';
 import { verifyAuthToken } from '../lib/authToken.js';
+import { verifyCsrfToken } from '../lib/csrf.js';
+import { readCookie, AUTH_COOKIE, CSRF_COOKIE, CSRF_HEADER } from '../lib/authCookies.js';
 import { logger } from '../lib/logger.js';
 
 const ROLE_HIERARCHY = {
@@ -22,16 +27,22 @@ function normalizeRole(rawRole) {
   return ROLE_HIERARCHY[r] ? r : 'TUW';
 }
 
-/** Pull the bearer token from the Authorization header or an httpOnly cookie. */
+/**
+ * Pull the auth token and record HOW it arrived. The httpOnly cookie is the
+ * primary, CSRF-protected credential. The `Authorization: Bearer` header is
+ * honoured ONLY as a dev/test convenience (ALLOW_DEMO_AUTH) and NEVER in
+ * production — a browser cannot read the httpOnly cookie to forge that header,
+ * so leaving it on in prod would reopen the very surface the cookie closes.
+ * @returns {{ token: string|null, via: 'cookie'|'bearer'|null }}
+ */
 function extractToken(req) {
-  const h = req.header && (req.header('authorization') || req.header('Authorization'));
-  if (h && /^Bearer\s+/i.test(h)) return h.replace(/^Bearer\s+/i, '').trim();
-  const cookie = req.headers && req.headers.cookie;
-  if (cookie) {
-    const m = /(?:^|;\s*)auth_token=([^;]+)/.exec(cookie);
-    if (m) { try { return decodeURIComponent(m[1]); } catch { return m[1]; } }
+  const cookieToken = readCookie(req, AUTH_COOKIE);
+  if (cookieToken) return { token: cookieToken, via: 'cookie' };
+  if (process.env.ALLOW_DEMO_AUTH === 'true') {
+    const h = req.header && (req.header('authorization') || req.header('Authorization'));
+    if (h && /^Bearer\s+/i.test(h)) return { token: h.replace(/^Bearer\s+/i, '').trim(), via: 'bearer' };
   }
-  return null;
+  return { token: null, via: null };
 }
 
 /** Load the user FRESH from the DB — the source of truth for role/level. */
@@ -95,22 +106,54 @@ function demoUserFromHeaders(req) {
  */
 export async function authenticate(req, _res, next) {
   try {
-    const token = extractToken(req);
+    const { token, via } = extractToken(req);
     if (token) {
       const payload = verifyAuthToken(token);
       if (payload && payload.sub) {
         const user = await loadUserFromDb(payload.sub);
-        if (user) { req.user = user; return next(); }
+        if (user) { req.user = user; req.authVia = via; return next(); }
       }
       // invalid/expired token or unknown user → fall through to demo/anon
     }
-    req.user = process.env.ALLOW_DEMO_AUTH === 'true' ? demoUserFromHeaders(req) : null;
+    const demo = process.env.ALLOW_DEMO_AUTH === 'true' ? demoUserFromHeaders(req) : null;
+    req.user = demo;
+    req.authVia = demo ? 'demo-header' : null;
     return next();
   } catch (e) {
     logger.warn('authenticate failed', { error: e.message });
     req.user = null;
+    req.authVia = null;
     return next();
   }
+}
+
+const CSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+// Bootstrap endpoints that legitimately carry no CSRF token: login is reached
+// before any session/cookie exists, and logout's only effect is to drop the
+// session (so it must succeed even if the csrf cookie is gone). Paths are
+// relative to the /api mount, matching req.path under app.use('/api', …).
+const CSRF_EXEMPT = new Set(['/auth/login', '/auth/logout']);
+
+/**
+ * CSRF double-submit guard. Enforced ONLY for cookie-authenticated, state-
+ * changing requests: cookies are ambient credentials a cross-site page can ride,
+ * whereas Bearer/demo-header auth carries an explicit credential an attacker
+ * cannot read or forge — so those need no CSRF token (and the dev/test header
+ * path keeps working). A request passes when the X-CSRF-Token header equals the
+ * csrf cookie AND that value carries a valid server signature.
+ */
+export function csrfProtection(req, res, next) {
+  const method = String(req.method || 'GET').toUpperCase();
+  if (CSRF_SAFE_METHODS.has(method)) return next();
+  if (req.authVia !== 'cookie') return next();
+  if (CSRF_EXEMPT.has(req.path)) return next();
+
+  const headerToken = req.header ? req.header(CSRF_HEADER) : req.headers?.[CSRF_HEADER];
+  const cookieToken = readCookie(req, CSRF_COOKIE);
+  if (headerToken && cookieToken && headerToken === cookieToken && verifyCsrfToken(headerToken)) {
+    return next();
+  }
+  return res.status(403).json({ error: 'Invalid or missing CSRF token.', code: 'CSRF_FAILED' });
 }
 
 /** Block requests without a resolved identity. */

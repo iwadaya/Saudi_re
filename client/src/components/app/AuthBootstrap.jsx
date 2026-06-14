@@ -51,9 +51,10 @@ export default function AuthBootstrap({ children }) {
       const res = await api.getMe();
       const s = res?.session;
       if (s && s.userId) {
-        // Refresh from server truth; the token only lives in the stored session
-        // (the /auth/me payload doesn't echo it), so preserve it explicitly.
-        setSession({ ...session, ...s, token: session.token });
+        // /auth/me authenticates via the httpOnly cookie; refresh the local
+        // session metadata from server truth. The token is never stored client-
+        // side — it lives only in the cookie.
+        setSession({ ...session, ...s });
         if (s.mustChangePassword) requirePasswordChange();
       }
       setPhase('ready');

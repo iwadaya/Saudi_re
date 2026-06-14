@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   getSession, setSession, clearSession,
   getRole, getUserDisplayName, getUserId, getHierarchyLevel,
   getEffectiveLimitUsd, getTreatyTypeScope,
   isCE, isCU, isAtLeast, canAccessApprovals, canOverrideBelow,
-  getAuthHeaders, ROLE_LABELS, APPROVALS_ROLES,
+  getAuthHeaders, getCsrfToken, ROLE_LABELS, APPROVALS_ROLES,
 } from './auth.js';
 
 const SESSION_KEY = 'UNIVERSE3_SESSION_V2';
@@ -119,6 +119,41 @@ describe('getAuthHeaders', () => {
     expect(h['x-user-role']).toBe('CU');
     expect(h['x-user-name']).toBe('Chief Underwriter');
     expect(h['x-user-level']).toBe('2');
+  });
+
+  it('NEVER emits an Authorization header — the token lives only in the cookie', () => {
+    // Even if a caller smuggles a token into the session, no Authorization
+    // header is produced and the token is not persisted.
+    setSession({ ...fixtureCU, token: 'leak-me' });
+    const h = getAuthHeaders();
+    expect(h.Authorization).toBeUndefined();
+    expect('Authorization' in h).toBe(false);
+  });
+});
+
+describe('token is never persisted client-side (XSS-safe)', () => {
+  it('setSession strips any token before writing to storage', () => {
+    setSession({ ...fixtureCU, token: 'super-secret.sig' });
+    // Not readable via the session API…
+    expect(getSession().token).toBeUndefined();
+    // …and not present in the raw localStorage blob.
+    expect(localStorage.getItem(SESSION_KEY)).not.toContain('super-secret.sig');
+  });
+});
+
+describe('getCsrfToken', () => {
+  afterEach(() => {
+    document.cookie = 'csrf_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+  });
+
+  it('returns the readable csrf cookie value', () => {
+    document.cookie = 'csrf_token=abc123.def';
+    expect(getCsrfToken()).toBe('abc123.def');
+  });
+
+  it('returns an empty string when no csrf cookie is set', () => {
+    document.cookie = 'csrf_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+    expect(getCsrfToken()).toBe('');
   });
 });
 

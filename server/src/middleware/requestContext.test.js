@@ -6,8 +6,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const { poolMock } = vi.hoisted(() => ({ poolMock: { query: vi.fn() } }));
 vi.mock('../db/pool.js', () => ({ pool: poolMock }));
 
-const { authenticate, requireAuth, requireRole, requireMinLevel } = await import('./requestContext.js');
+const { authenticate, requireAuth, requireRole, requireMinLevel, csrfProtection } = await import('./requestContext.js');
 const { signAuthToken, verifyAuthToken } = await import('../lib/authToken.js');
+const { issueCsrfToken } = await import('../lib/csrf.js');
+
+// CU row returned by loadUserFromDb's query — reused across token-path tests.
+const CU_ROW = {
+  user_id: 'u-cu', display_name: 'Chief', role_code: 'CU', hierarchy_level: 2,
+  effective_limit_usd: null, restricted_cob_ids: [], treaty_type_scope: 'BOTH',
+};
 
 // Minimal Express-like req with header() lookup (case-insensitive).
 function makeReq(headers = {}) {
@@ -62,6 +69,104 @@ describe('authenticate — token path (DB is source of truth)', () => {
     const req = makeReq({ authorization: `Bearer ${signAuthToken({ sub: 'ghost' })}` });
     await authenticate(req, makeRes(), vi.fn());
     expect(req.user).toBeNull();
+  });
+
+  it('authenticates from the httpOnly auth_token cookie (authVia=cookie)', async () => {
+    poolMock.query.mockResolvedValue({ rows: [CU_ROW] });
+    const req = makeReq({ cookie: `auth_token=${signAuthToken({ sub: 'u-cu' })}` });
+    const next = vi.fn();
+    await authenticate(req, makeRes(), next);
+    expect(next).toHaveBeenCalled();
+    expect(req.user).toMatchObject({ userId: 'u-cu', roleCode: 'CU', source: 'token' });
+    expect(req.authVia).toBe('cookie');
+  });
+
+  it('in production (ALLOW_DEMO_AUTH off) a Bearer header is IGNORED — only the cookie authenticates', async () => {
+    delete process.env.ALLOW_DEMO_AUTH;
+    poolMock.query.mockResolvedValue({ rows: [CU_ROW] });
+    const token = signAuthToken({ sub: 'u-cu' });
+    // A valid Bearer header alone is no longer an auth path in prod.
+    const bearerReq = makeReq({ authorization: `Bearer ${token}` });
+    await authenticate(bearerReq, makeRes(), vi.fn());
+    expect(bearerReq.user).toBeNull();
+    expect(bearerReq.authVia).toBeNull();
+    // The same token in the cookie does authenticate.
+    const cookieReq = makeReq({ cookie: `auth_token=${token}` });
+    await authenticate(cookieReq, makeRes(), vi.fn());
+    expect(cookieReq.user).toMatchObject({ userId: 'u-cu' });
+    expect(cookieReq.authVia).toBe('cookie');
+  });
+
+  it('the cookie wins over a Bearer header when both are present', async () => {
+    poolMock.query.mockResolvedValue({ rows: [CU_ROW] });
+    const req = makeReq({
+      cookie: `auth_token=${signAuthToken({ sub: 'u-cu' })}`,
+      authorization: `Bearer ${signAuthToken({ sub: 'someone-else' })}`,
+    });
+    await authenticate(req, makeRes(), vi.fn());
+    expect(req.authVia).toBe('cookie');
+    expect(req.user).toMatchObject({ userId: 'u-cu' });
+  });
+});
+
+describe('csrfProtection (double-submit, cookie-auth only)', () => {
+  // Build a req for the middleware: method/path/authVia + optional csrf cookie & header.
+  function csrfReq({ method = 'POST', path = '/treaties', authVia = 'cookie', cookie, header }) {
+    const headers = {};
+    if (cookie) headers.cookie = cookie;
+    if (header) headers['x-csrf-token'] = header;
+    const req = makeReq(headers);
+    req.method = method; req.path = path; req.authVia = authVia;
+    return req;
+  }
+
+  it('lets safe methods through with no token', () => {
+    const next = vi.fn();
+    csrfProtection(csrfReq({ method: 'GET' }), makeRes(), next);
+    expect(next).toHaveBeenCalled();
+  });
+
+  it('403s a cookie-auth mutation with NO csrf token', () => {
+    const res = makeRes(); const next = vi.fn();
+    csrfProtection(csrfReq({}), res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toMatchObject({ code: 'CSRF_FAILED' });
+  });
+
+  it('passes when the header matches the cookie AND the token is validly signed', () => {
+    const t = issueCsrfToken();
+    const next = vi.fn();
+    csrfProtection(csrfReq({ cookie: `csrf_token=${t}`, header: t }), makeRes(), next);
+    expect(next).toHaveBeenCalled();
+  });
+
+  it('403s on a double-submit mismatch (header ≠ cookie)', () => {
+    const res = makeRes();
+    csrfProtection(csrfReq({ cookie: `csrf_token=${issueCsrfToken()}`, header: issueCsrfToken() }), res, vi.fn());
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('403s a forged/unsigned token even when header === cookie', () => {
+    const res = makeRes();
+    csrfProtection(csrfReq({ cookie: 'csrf_token=forged.sig', header: 'forged.sig' }), res, vi.fn());
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('skips CSRF for non-cookie auth (demo-header / bearer dev-test paths)', () => {
+    for (const authVia of ['demo-header', 'bearer', null]) {
+      const next = vi.fn();
+      csrfProtection(csrfReq({ authVia }), makeRes(), next);
+      expect(next).toHaveBeenCalled();
+    }
+  });
+
+  it('exempts the login + logout bootstrap routes', () => {
+    for (const path of ['/auth/login', '/auth/logout']) {
+      const next = vi.fn();
+      csrfProtection(csrfReq({ path }), makeRes(), next);
+      expect(next).toHaveBeenCalled();
+    }
   });
 });
 
