@@ -1,10 +1,11 @@
-// HomeScreen ownership UX: Mine/Everyone toggle, per-row lock + allocate
-// actions, and the ownership-trail modal. The api + Topbar + AppContext are
-// mocked so the screen renders without a backend.
+// HomeScreen ownership UX: scope driven by the "View treaties" preference,
+// per-row lock + allocate actions, and the ownership-trail modal. The api +
+// Topbar + AppContext are mocked so the screen renders without a backend.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import HomeScreen from './HomeScreen.jsx';
 import { setSession } from '../../utils/auth';
+import { setViewAllTreaties } from '../../utils/prefs';
 
 const { apiMock } = vi.hoisted(() => ({
   apiMock: {
@@ -51,26 +52,26 @@ beforeEach(() => {
   ]);
 });
 
-describe('HomeScreen — Mine/Everyone scope', () => {
-  it('defaults an Underwriter (level 5) to Mine; switching to Everyone lists all with locked rows', async () => {
+describe('HomeScreen — scope driven by the View-treaties preference', () => {
+  it('defaults to Mine (no all-treaties list, no on-screen toggle); enabling the pref lists everyone with locked rows', async () => {
     login(5);
     render(<HomeScreen />);
-    // Default 'Mine' for an underwriter — the all-treaties list is not shown yet.
-    expect(screen.getByRole('tab', { name: 'Mine' })).toHaveAttribute('aria-selected', 'true');
+    // No segmented control on the dashboard anymore, and default is Mine.
+    expect(screen.queryByRole('tab', { name: 'Everyone' })).toBeNull();
     expect(screen.queryByText('ALL TREATIES')).toBeNull();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Everyone' }));
+    // Flipping the Settings preference re-scopes the home lists live (no reload).
+    act(() => setViewAllTreaties('me', true));
     expect(await screen.findByText('ALL TREATIES')).toBeInTheDocument();
     await waitFor(() => expect(apiMock.getContractsAll).toHaveBeenCalledWith({ scope: 'all' }));
     expect(await screen.findByText('Peer Cedant')).toBeInTheDocument();
-    // Peer's row is locked read-only.
-    expect(screen.getByText(/Read-only/)).toBeInTheDocument();
+    expect(screen.getByText(/Read-only/)).toBeInTheDocument(); // peer row locked
   });
 
-  it('defaults a senior (level 3) to Everyone', async () => {
-    login(3);
+  it('persists the preference: a preset viewAll renders the all-treaties list on mount', async () => {
+    login(5);
+    setViewAllTreaties('me', true); // as if set on a previous visit
     render(<HomeScreen />);
-    expect(screen.getByRole('tab', { name: 'Everyone' })).toHaveAttribute('aria-selected', 'true');
     expect(await screen.findByText('ALL TREATIES')).toBeInTheDocument();
   });
 });
@@ -78,8 +79,8 @@ describe('HomeScreen — Mine/Everyone scope', () => {
 describe('HomeScreen — allocation actions', () => {
   it('allocates an unassigned treaty to me', async () => {
     login(5);
+    setViewAllTreaties('me', true);
     render(<HomeScreen />);
-    fireEvent.click(screen.getByRole('tab', { name: 'Everyone' }));
     await screen.findByText('Unclaimed Cedant');
     fireEvent.click(screen.getByRole('button', { name: 'Allocate to me' }));
     await waitFor(() => expect(apiMock.allocateContract).toHaveBeenCalledWith('c-free', expect.any(String)));
@@ -87,6 +88,7 @@ describe('HomeScreen — allocation actions', () => {
 
   it('allocates an owned treaty to a chosen underwriter via the picker → reassign', async () => {
     login(2); // CU — can edit my own row and reassign it
+    setViewAllTreaties('me', true);
     render(<HomeScreen />);
     await screen.findByText('My Cedant');
     fireEvent.click(screen.getByRole('button', { name: 'Allocate to underwriter' }));
@@ -98,6 +100,7 @@ describe('HomeScreen — allocation actions', () => {
 
   it('opens the ownership trail modal for a treaty', async () => {
     login(2);
+    setViewAllTreaties('me', true);
     render(<HomeScreen />);
     await screen.findByText('My Cedant');
     fireEvent.click(within(screen.getByText('My Cedant').closest('.own-row')).getByRole('button', { name: 'Ownership trail' }));
