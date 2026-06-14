@@ -166,7 +166,7 @@ export async function approvalStateController(req, res) {
 }
 
 export async function eligibleApproversController(req, res) {
-  const submitterUserId = req.user?.userId || req.headers['x-user-id'];
+  const submitterUserId = req.user?.userId;
   const { breach_type, epi_usd } = req.query;
   res.json(await getEligibleApproversAction({ submitterUserId, breachType: breach_type, epiUsd: epi_usd }));
 }

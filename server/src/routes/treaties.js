@@ -22,7 +22,7 @@ router.post("/treaties", asyncHandler(async (req, res) => {
   if (!inception_date) {
     return res.status(400).json({ error: 'inception_date is required', code: 'VALIDATION_FAILED' });
   }
-  const creatorUserId = req.user?.userId || req.headers['x-user-id'] || null;
+  const creatorUserId = req.user?.userId || null;
   const { rows } = await pool.query(
     `INSERT INTO public.contract (uw_year,cedant_id,broker_id,currency_id,country_id,treaty_type_id,status,uw_status,experience_source,primary_class_of_business_id,created_by_user_id,assigned_to_user_id,inception_date)
      VALUES ($1,$2,$3,$4,$5,$6,$7::public.contract_status,$8::public.uw_workflow_status,$9,$10,$11,$11,$12) RETURNING contract_id,uw_year,status,uw_status,created_at`,
@@ -108,7 +108,7 @@ router.get("/treaties/:id", asyncHandler(async (req, res) => {
   const detail=detailR.rows[0]||{};const comm=commR.rows[0]||{};const lp=lpR.rows[0]||{};
   // Ownership / edit-permission for the requester (reads stay open; this just
   // tells the client whether to lock the editor). Edit = current assignee only.
-  const requesterId = req.user?.userId || req.headers['x-user-id'] || null;
+  const requesterId = req.user?.userId || null;
   const assignedToUserId = contract.assigned_to_user_id || null;
   const perm = computeEditPermission({ requesterId, assignedToUserId });
   const ownerHistory = await getAssignmentHistory('CONTRACT', id);
@@ -358,7 +358,7 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
     );
 
     await client.query("COMMIT");
-    const actor = terms._actor || req.user?.displayName || req.user?.email || req.headers['x-user-id'] || "SYSTEM";
+    const actor = terms._actor || req.user?.displayName || req.user?.email || "SYSTEM";
     if (staleWriteOverride) {
       await logAudit(pool,{
         entityType:"CONTRACT",
@@ -438,7 +438,7 @@ router.post("/treaties/:id/renew", asyncHandler(async (req, res) => {
     ? new Date(newInception).getFullYear()
     : numOrNull(b.uw_year) || ((o.uw_year || new Date().getFullYear()) + 1);
 
-  const renewedByUserId = req.user?.userId || req.headers['x-user-id'] || null;
+  const renewedByUserId = req.user?.userId || null;
 
   const cl = await pool.connect();
   try {

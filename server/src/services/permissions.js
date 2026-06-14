@@ -72,7 +72,7 @@ async function loadOwnership(entityType, entityId) {
 export async function getEditPermission(req, entityType, entityId) {
   const own = await loadOwnership(entityType, entityId);
   if (!own) return { found: false, canEdit: false, isOwner: false, assignedToUserId: null, assignedToName: null, reason: 'NOT_FOUND' };
-  const requesterId = req?.user?.userId || req?.headers?.['x-user-id'] || null;
+  const requesterId = req?.user?.userId || null; // verified token identity only
   const assignedToUserId = own.assigned_to_user_id || null;
   const perm = computeEditPermission({ requesterId, assignedToUserId });
   return { found: true, ...perm, assignedToUserId, assignedToName: own.assigned_to_name || null };
@@ -89,7 +89,7 @@ export async function assertCanEdit(req, entityType, entityId) {
   const own = await loadOwnership(entityType, entityId);
   if (!own) throw Object.assign(new Error('Not found'), { status: 404 });
 
-  const requesterId = req?.user?.userId || req?.headers?.['x-user-id'] || null;
+  const requesterId = req?.user?.userId || null; // verified token identity only
   const assignedToUserId = own.assigned_to_user_id || null;
 
   const perm = computeEditPermission({ requesterId, assignedToUserId });

@@ -2,9 +2,9 @@ import { numOrNull } from '../../../helpers.js';
 
 export function resolveActor(req, fallbackName = 'SYSTEM', fallbackRole = null) {
   return {
-    actorUserId: req.user?.userId || req.headers['x-user-id'] || null,
+    actorUserId: req.user?.userId || null,
     actorName: req.user?.displayName || req.headers['x-user-name'] || fallbackName,
-    actorRole: req.user?.role || req.headers['x-user-role'] || fallbackRole,
+    actorRole: req.user?.role || fallbackRole,
   };
 }
 

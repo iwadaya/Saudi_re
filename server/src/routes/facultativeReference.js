@@ -20,7 +20,7 @@ const CACHE_HEADER = 'private, max-age=300';
 function requireUserId(req, res, next) {
   if (!req.user?.userId) {
     return res.status(401).json({
-      error: 'Unauthorised: missing x-user-id header.',
+      error: 'Authentication required.',
       code: 'UNAUTHORIZED',
     });
   }

@@ -111,7 +111,7 @@ router.get("/quotes/:id/assignment-history", asyncHandler(async (req, res) => {
 router.get("/contracts/all", asyncHandler(async (req, res) => {
   const { assigned_to, status, uw_year, limit, scope } = req.query;
   const requesterId = req.user?.userId || null;
-  const requesterLevel = req.user?.hierarchyLevel ?? (req.headers['x-user-level'] != null ? Number(req.headers['x-user-level']) : null);
+  const requesterLevel = req.user?.hierarchyLevel ?? null;
   const rows = await listContractsWithOwnership({
     assignedTo: assigned_to,
     status,
@@ -149,7 +149,7 @@ router.get("/users/viewable", asyncHandler(async (req, res) => {
   const requestingUserId = req.user?.userId;
   const rows = await listViewableUsers(requestingUserId);
   // Annotate which ones the requester can allocate FROM (same level or lower)
-  const myLevel = Number(req.headers['x-user-level'] || 99);
+  const myLevel = Number(req.user?.hierarchyLevel ?? 99);
   const annotated = rows.map(u => ({
     ...u,
     canAllocateFrom: u.hierarchy_level >= myLevel, // >= because lower number = higher authority
@@ -162,7 +162,7 @@ router.get("/contracts/by-user/:userId", asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { status } = req.query;
   const requesterId = req.user?.userId || null;
-  const requesterLevel = req.user?.hierarchyLevel ?? (req.headers['x-user-level'] != null ? Number(req.headers['x-user-level']) : null);
+  const requesterLevel = req.user?.hierarchyLevel ?? null;
   // scope:'all' — we're explicitly viewing one user's work; keep their rows but
   // annotate canEdit for the viewer.
   const rows = await listContractsWithOwnership({ assignedTo: userId, status, limit: 100, scope: 'all', requesterId, requesterLevel });

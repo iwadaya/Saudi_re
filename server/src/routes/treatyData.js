@@ -770,7 +770,7 @@ router.put("/treaties/:id/wording-checklist", asyncHandler(async (req, res) => {
     pool,
     { type: 'contract', id: req.params.id },
     req.body?.items || [],
-    { actorUserId: req.user?.userId || req.headers['x-user-id'] || null },
+    { actorUserId: req.user?.userId || null },
   );
   res.json(payload);
 }));
@@ -779,7 +779,7 @@ router.post("/treaties/:id/wording-checklist/ai-check", asyncHandler(async (req,
   const payload = await runWordingChecklistAi(
     pool,
     { type: 'contract', id: req.params.id },
-    { actorUserId: req.user?.userId || req.headers['x-user-id'] || null },
+    { actorUserId: req.user?.userId || null },
   );
   res.json(payload);
 }));
