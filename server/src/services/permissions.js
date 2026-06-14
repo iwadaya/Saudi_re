@@ -105,20 +105,36 @@ export async function assertCanEdit(req, entityType, entityId) {
 // ── Comprehensive mutation guard ────────────────────────────────────────────
 // A single app-level choke point so EVERY mutating route under quotes /
 // treaties / facultative / pricing passes assertCanEdit on its owning entity.
-// Reads pass through. Approval-workflow decisions (peer/arbiter/mark/return/
-// recall/sign/ntu/bind/decline) and creates (renew/amend, bare POST) are exempt
-// — they carry their own authority and don't edit the entity as the assignee.
+// Reads pass through. Two groups deliberately do NOT take the assignee edit-lock,
+// because the actor is an approver/signer/originator — not necessarily the
+// assignee — and the edit-lock would reject the legitimate actor:
+//
+//   WORKFLOW — approval + terminal lifecycle actions. These are NOT unguarded:
+//   each enforces its OWN explicit authority + legal state in the approval engine
+//   (services/approvals.js). There is no blanket sign/NTU exemption anymore —
+//     • peer/arbiter/mark-approved → recordDecision (eligibility + four-eyes)
+//     • sign/ntu/return/recall     → assertWorkflowTransition per-action authority
+//     • decline                    → statusMachine legal-transition guard
+//
+//   CREATE — bare creates (and renew/amend/bind): there is no prior entity to
+//   edit-lock; the creator becomes the assignee via assignOnCreation.
 
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-const EXEMPT_SUFFIXES = [
-  '/renew', '/amend', '/bind', '/decline',
+// Approval-engine + terminal lifecycle actions — authority lives in approvals.js.
+const WORKFLOW_SUFFIXES = [
+  '/decline',
   '/offer/peer-decision', '/offer/arbiter-decision', '/offer/mark-approved',
   '/offer/return-to-underwriter', '/offer/recall', '/offer/mark-signed', '/offer/ntu',
 ];
+// Create-style actions: the creator becomes the assignee (or the route is disabled).
+const CREATE_SUFFIXES = ['/renew', '/amend', '/bind'];
 
-function isExemptMutation(path) {
-  return EXEMPT_SUFFIXES.some((s) => path.endsWith(s));
+function isWorkflowMutation(path) {
+  return WORKFLOW_SUFFIXES.some((s) => path.endsWith(s));
+}
+function isCreateMutation(path) {
+  return CREATE_SUFFIXES.some((s) => path.endsWith(s));
 }
 
 // Out-of-tree resources whose owning entity needs a DB lookup.
@@ -142,14 +158,16 @@ export async function resolveParentEntity(resourceType, id) {
 /**
  * Classify a mutating sub-path (the path AFTER the /api mount) for the registry
  * test and the runtime guard. Returns one of:
- *   'exempt'  — workflow/create, no assignee guard
- *   'create'  — bare entity create (POST /quotes etc.)
+ *   'workflow' — approval/terminal action; authority enforced by the approval
+ *                engine (NOT the assignee edit-lock — see approvals.js)
+ *   'create'   — bare entity create / renew / amend / bind (no assignee guard)
  *   { entityType, entityId } — guard against this entity (entityId may be a route ':id')
  *   { resolve, id } — guard against a DB-resolved parent
  *   null — not an in-scope path
  */
 export function classifyMutationPath(path) {
-  if (isExemptMutation(path)) return 'exempt';
+  if (isWorkflowMutation(path)) return 'workflow';
+  if (isCreateMutation(path)) return 'create';
   let m;
   if ((m = /^\/quotes\/([^/]+)/.exec(path))) return { entityType: 'QUOTE', entityId: m[1] };
   if ((m = /^\/treaties\/([^/]+)/.exec(path))) return { entityType: 'CONTRACT', entityId: m[1] };
@@ -168,7 +186,9 @@ export async function guardApiMutations(req, res, next) {
   try {
     if (READ_METHODS.has(req.method)) return next();
     const cls = classifyMutationPath(req.path);
-    if (cls === 'exempt' || cls === 'create' || cls === null) return next();
+    // 'workflow' (engine-authorized) and 'create' carry their own authority; only
+    // entity-scoped classifications take the assignee edit-lock.
+    if (cls === 'workflow' || cls === 'create' || cls === null) return next();
 
     let target = cls;
     if (cls.resolve) target = await resolveParentEntity(cls.resolve, cls.id);

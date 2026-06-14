@@ -12,7 +12,7 @@
 import { pool } from '../db/pool.js';
 import { logger } from '../lib/logger.js';
 import { logAudit } from './audit.js';
-import { assertLegalTransition } from '../lib/statusMachine.js';
+import { assertLegalTransition, InvalidTransitionError } from '../lib/statusMachine.js';
 import { refreshBenchmarks } from './ldf/benchmark.js';
 
 const LEVEL = { CE:1, CU:2, CA:2, TD:3, UM:3, TM:4, TUW:5, UW:5, AN:6 };
@@ -434,6 +434,26 @@ const ENGINE_TOKEN = Symbol('approval-engine-decision');
 const GUARDED_TARGETS = new Set(['APPROVED', 'AWAITING_SIGNED_LINE', 'SIGNED', 'BOUND']);
 const APPROVE_TARGETS = new Set(['APPROVED', 'AWAITING_SIGNED_LINE']); // need an engine token
 
+// ── Terminal workflow actions ────────────────────────────────────────────────
+// SIGN / NTU / RETURN / RECALL each funnel through assertWorkflowTransition with
+// an `action`. Each action fixes its target state AND the set of legal prior
+// states (its own mini status-machine) AND selects a per-action authority rule
+// (authorizeTerminalAction). No terminal state change may bypass this — the
+// routes used to be exempted from the guard entirely; now each one carries its
+// OWN explicit authorization. The actor is ALWAYS the verified req.user.userId,
+// never a body/param/header value.
+//
+// The prior-state sets live here rather than in the canonical statusMachine
+// because RETURN/RECALL also accept DISPUTE_PENDING — a transient offer state
+// the lifecycle graph deliberately omits. An unresolved split is still "pending
+// with" the approvers (returnable) and not yet bound (recallable by the UW).
+const TERMINAL_ACTIONS = Object.freeze({
+  SIGN:   { to: 'SIGNED', from: ['AWAITING_SIGNED_LINE'] },
+  NTU:    { to: 'NTU',    from: ['AWAITING_SIGNED_LINE'] },
+  RETURN: { to: 'DRAFT',  from: ['AWAITING_APPROVAL', 'AWAITING_SIGNED_LINE', 'DISPUTE_PENDING'] },
+  RECALL: { to: 'DRAFT',  from: ['AWAITING_APPROVAL', 'AWAITING_SIGNED_LINE', 'DISPUTE_PENDING'] },
+});
+
 /** Live workflow status for a contract (uw_status) or quote (status). */
 async function loadEntityStatus(entityType, entityId) {
   const et = String(entityType || '').toUpperCase();
@@ -458,13 +478,25 @@ async function loadEntityStatus(entityType, entityId) {
  *     already enforced eligibility) — without it, 403 NOT_FROM_ENGINE.
  * Verify-only: it never writes. The caller performs the write immediately after.
  *
+ * When `action` (SIGN/NTU/RETURN/RECALL) is supplied it fixes the target state
+ * and additionally enforces that action's authority rule against the LIVE
+ * offer/owner/submitter (authorizeTerminalAction) — a 403 when the verified
+ * actor lacks authority. State legality is checked BEFORE authority so an
+ * illegal jump is a clean 422 regardless of who the actor is.
+ *
  * @param {{ entityType:'CONTRACT'|'QUOTE', entityId:string, from?:string,
- *           to:string, actorUserId?:string, decision?:symbol }} args
+ *           to?:string, actorUserId?:string, actorRole?:string,
+ *           decision?:symbol, action?:'SIGN'|'NTU'|'RETURN'|'RECALL' }} args
  */
-export async function assertWorkflowTransition({ entityType, entityId, from, to, actorUserId, decision } = {}) {
+export async function assertWorkflowTransition({ entityType, entityId, from, to, actorUserId, actorRole, decision, action } = {}) {
   const et = String(entityType || '').toUpperCase();
-  const target = String(to || '').toUpperCase();
-  if (!GUARDED_TARGETS.has(target)) {
+  const act = action ? String(action).toUpperCase() : null;
+  const cfg = act ? TERMINAL_ACTIONS[act] : null;
+  if (act && !cfg) throw httpError(400, `Unknown workflow action: ${action}`);
+  const target = String(cfg ? cfg.to : (to || '')).toUpperCase();
+  // Outside a recognised terminal action, this gate only guards the privileged
+  // approve/sign targets (callers wanting a pure state check).
+  if (!cfg && !GUARDED_TARGETS.has(target)) {
     throw httpError(400, `assertWorkflowTransition only guards ${[...GUARDED_TARGETS].join('/')} (got ${to})`);
   }
   const current = await loadEntityStatus(et, entityId);
@@ -473,15 +505,119 @@ export async function assertWorkflowTransition({ entityType, entityId, from, to,
   if (fromState !== String(current).toUpperCase()) {
     throw httpError(409, 'Workflow state changed since read — re-fetch and retry', 'STATE_CHANGED');
   }
-  // Legal-edge check. The uw_status machine covers the approval-relevant states
-  // for both contracts and quotes; an unknown source state (e.g. QUOTED) is
-  // simply not a legal predecessor and is rejected.
-  assertLegalTransition(current, target);
+  // Legal-edge check. Terminal actions use their own explicit prior-state set;
+  // everything else uses the canonical uw_status machine. Either way an illegal
+  // jump is a 422 INVALID_TRANSITION (with { from, to }) BEFORE any authority check.
+  if (cfg) {
+    if (!cfg.from.includes(String(current).toUpperCase())) throw new InvalidTransitionError(current, target);
+  } else {
+    assertLegalTransition(current, target);
+  }
   // Provenance: an approve move must originate from the decision engine.
   if (APPROVE_TARGETS.has(target) && decision !== ENGINE_TOKEN) {
     throw httpError(403, 'Approval must be recorded through the decision engine', 'NOT_FROM_ENGINE');
   }
+  // Per-action authority for the terminal transitions (SIGN/NTU/RETURN/RECALL).
+  if (cfg) {
+    await authorizeTerminalAction({ action: act, entityType: et, entityId, actorUserId, actorRole });
+  }
   return { entityType: et, entityId, from: current, to: target, actorUserId: actorUserId ?? null };
+}
+
+// ── Terminal-action authority ────────────────────────────────────────────────
+// Each terminal action's authority is resolved against LIVE data (the offer, the
+// assignee/owner, the originator). Eligibility for an approver reuses exactly the
+// same nearest-sufficient / four-eyes / including-COB logic the decision engine
+// uses (deriveLiveApproverOptions), so "can approve" and "can sign" stay in lock-step.
+
+/**
+ * Load the authority context for a terminal transition: the assignee (owner),
+ * the originator (submitter), the live offer, and the nominated next approver.
+ * Works for both contracts (rich contract_offer) and quotes (lighter model).
+ */
+async function loadTerminalContext(entityType, entityId) {
+  if (entityType === 'QUOTE') {
+    const { rows } = await pool.query(
+      `SELECT created_by_user_id, assigned_to_user_id, next_approver FROM public.quote WHERE quote_id=$1`,
+      [entityId]
+    );
+    const q = rows[0] || {};
+    return {
+      entityType,
+      ownerId: q.assigned_to_user_id || null,
+      submitterId: q.created_by_user_id || null,
+      nextApproverId: q.next_approver || null,
+      offer: null,
+    };
+  }
+  const [{ rows: cRows }, { rows: oRows }] = await Promise.all([
+    pool.query(`SELECT assigned_to_user_id FROM public.contract WHERE contract_id=$1`, [entityId]),
+    pool.query(`SELECT * FROM public.contract_offer WHERE contract_id=$1 ORDER BY updated_at DESC NULLS LAST LIMIT 1`, [entityId]),
+  ]);
+  const offer = oRows[0] || null;
+  return {
+    entityType,
+    ownerId: cRows[0]?.assigned_to_user_id || null,
+    submitterId: offer?.submitted_by_id || null,
+    nextApproverId: offer?.next_approver_id || offer?.next_approver || null,
+    offer,
+  };
+}
+
+/** True iff the actor is in the offer's LIVE eligible-approver set (mandate covers
+ *  the written-line exposure, COB not excluded, role in the route, not the submitter). */
+async function isEligibleContractApprover(offer, actorUserId) {
+  if (!offer || !actorUserId) return false;
+  const options = await deriveLiveApproverOptions(offer);
+  return options.some((c) => String(c.user_id) === String(actorUserId));
+}
+
+/** Quote eligibility mirrors approveQuote: the nominated approver, or any senior
+ *  (Treaty Manager and above), and never the submitter (four-eyes). */
+function isEligibleQuoteApprover(ctx, { actorUserId, actorRole }) {
+  if (!actorUserId) return false;
+  if (ctx.submitterId && String(ctx.submitterId) === String(actorUserId)) return false;
+  if (ctx.nextApproverId && String(ctx.nextApproverId) === String(actorUserId)) return true;
+  return (LEVEL[actorRole] || 5) <= 4;
+}
+
+/**
+ * Enforce the per-action authority rule. Throws httpError(403) when the verified
+ * actor lacks authority. The legal prior-state set (incl. "still pending" for a
+ * recall) is already enforced by assertWorkflowTransition before this runs. The
+ * actor is always the verified req.user.userId threaded down from the route.
+ */
+async function authorizeTerminalAction({ action, entityType, entityId, actorUserId, actorRole }) {
+  if (!actorUserId) throw httpError(403, 'A verified user is required for this action', 'NOT_AUTHORIZED');
+  const ctx = await loadTerminalContext(entityType, entityId);
+  const isActor = (id) => id != null && String(id) === String(actorUserId);
+  const isEligibleApprover = () => (entityType === 'CONTRACT'
+    ? isEligibleContractApprover(ctx.offer, actorUserId)
+    : Promise.resolve(isEligibleQuoteApprover(ctx, { actorUserId, actorRole })));
+
+  switch (action) {
+    case 'SIGN':
+      // An eligible approver/authoriser for THIS offer; four-eyes is built into
+      // the eligible set, so the submitter is excluded.
+      if (!(await isEligibleApprover())) throw httpError(403, 'Not authorised to sign this offer', 'SIGN_FORBIDDEN');
+      return;
+    case 'NTU':
+      // The assignee (owner) OR an eligible senior may mark not-taken-up.
+      if (isActor(ctx.ownerId)) return;
+      if (!(await isEligibleApprover())) throw httpError(403, 'Not authorised to mark this offer not-taken-up', 'NTU_FORBIDDEN');
+      return;
+    case 'RETURN':
+      // The approver it is pending with — or a senior in the route — may return it.
+      if (!(await isEligibleApprover())) throw httpError(403, 'Not authorised to return this offer for rework', 'RETURN_FORBIDDEN');
+      return;
+    case 'RECALL':
+      // Only the originator may recall (the still-pending prior state is already
+      // enforced by the action's legal-from set in assertWorkflowTransition).
+      if (!isActor(ctx.submitterId)) throw httpError(403, 'Only the submitter can recall this offer', 'RECALL_FORBIDDEN');
+      return;
+    default:
+      throw httpError(400, `Unknown workflow action: ${action}`);
+  }
 }
 
 /**
@@ -779,11 +915,14 @@ export async function approveContract({ contractId, actorUserId, actorName, acto
 
 /**
  * Sign a contract (AWAITING_SIGNED_LINE → SIGNED). Gated by
- * assertWorkflowTransition: the prior AWAITING_SIGNED_LINE state is itself only
- * reachable through the engine, so it IS the decision record for signing.
+ * assertWorkflowTransition with the SIGN action: the prior AWAITING_SIGNED_LINE
+ * state is only reachable through the engine, AND the signer must be a verified
+ * eligible approver/authoriser for this offer (mandate covers the written-line
+ * exposure, role in the route, not the submitter). Wrong state → 422; wrong
+ * authority → 403.
  */
 export async function markContractSigned({ contractId, actorUserId, actorName, actorRole, signedLinePct }) {
-  await assertWorkflowTransition({ entityType: 'CONTRACT', entityId: contractId, to: 'SIGNED', actorUserId });
+  await assertWorkflowTransition({ entityType: 'CONTRACT', entityId: contractId, to: 'SIGNED', action: 'SIGN', actorUserId, actorRole });
   await pool.query(
     `UPDATE public.contract SET uw_status='SIGNED',status='SIGNED',signed_line_pct=$2,signed_at=now(),updated_at=now() WHERE contract_id=$1`,
     [contractId, signedLinePct ?? null]
@@ -795,6 +934,41 @@ export async function markContractSigned({ contractId, actorUserId, actorName, a
   await logOfferEvent({ contractId, eventType: 'SIGNED', actorUserId, actorName, actorRole, payload: { signedLinePct: signedLinePct ?? null } });
   refreshBenchmarks(pool).catch(() => {});
   return { nextStatus: 'SIGNED' };
+}
+
+/**
+ * Mark an offer NOT-TAKEN-UP (… → NTU) for a treaty OR a quote. Gated by
+ * assertWorkflowTransition with the NTU action: legal only from the permitted
+ * prior state, and only the assignee (owner) or an eligible senior approver may
+ * do it. Writes the NTU state + an immutable NTU event.
+ */
+export async function markNotTakenUp({ contractId, quoteId, actorUserId, actorName, actorRole, reason }) {
+  const entityType = contractId ? 'CONTRACT' : 'QUOTE';
+  const entityId = contractId || quoteId;
+  await assertWorkflowTransition({ entityType, entityId, action: 'NTU', actorUserId, actorRole });
+  if (contractId) {
+    await pool.query(
+      `UPDATE public.contract SET uw_status='NTU',status='NTU',ntu_reason=$2,ntu_at=now(),updated_at=now() WHERE contract_id=$1`,
+      [contractId, reason ?? null]
+    );
+    await pool.query(
+      `UPDATE public.contract_offer SET status='NTU',ntu_at=now(),ntu_reason=$2 WHERE contract_id=$1`,
+      [contractId, reason ?? null]
+    ).catch(() => {});
+  } else {
+    await pool.query(
+      `UPDATE public.quote SET status='NTU',ntu_reason=$2,ntu_at=now(),updated_at=now() WHERE quote_id=$1`,
+      [quoteId, reason ?? null]
+    );
+    await pool.query(
+      `INSERT INTO public.quote_offer (quote_id, status, updated_at) VALUES ($1,'NTU',now())
+       ON CONFLICT (quote_id) DO UPDATE SET status='NTU', updated_at=now()`,
+      [quoteId]
+    ).catch(() => {});
+  }
+  await logOfferEvent({ contractId, quoteId, eventType: 'NTU', actorUserId, actorName, actorRole, payload: { reason: reason ?? null }, comment: reason ?? null });
+  refreshBenchmarks(pool).catch(() => {});
+  return { nextStatus: 'NTU' };
 }
 
 /**
@@ -861,27 +1035,63 @@ export async function getOfferEvents(contractId, quoteId) {
   return rows;
 }
 
+/** SQL fragment that clears every peer/arbiter decision on a contract offer so
+ *  it can be re-submitted cleanly after a return/recall. */
+const RESET_CONTRACT_OFFER = `
+  status='RETURNED',
+  peer1_decision=NULL, peer1_at=NULL, peer1_comment=NULL, peer1_user_id=NULL,
+  peer2_user_id=NULL, peer2_decision=NULL, peer2_at=NULL, peer2_comment=NULL,
+  arbiter_required=false, arbiter_user_id=NULL, arbiter_decision=NULL, arbiter_at=NULL,
+  approval_step=0, next_approver_id=NULL, updated_at=now()`;
+
+/**
+ * Return an offer to the underwriter for rework (… → DRAFT) for a treaty OR a
+ * quote. Gated by assertWorkflowTransition with the RETURN action: only an
+ * eligible approver (the person it is pending with) or a senior in the route may
+ * send it back. Resets the offer, drops the entity to DRAFT, logs who returned it.
+ */
 export async function returnToUnderwriter({ contractId, quoteId, actorUserId, actorName, actorRole, reason }) {
-  const field=contractId?'contract_id':'quote_id';
-  // Reset offer — clear all peer/arbiter decisions so it can be re-submitted cleanly
-  await pool.query(
-    `UPDATE public.contract_offer SET
-       status='RETURNED',
-       peer1_decision=NULL, peer1_at=NULL, peer1_comment=NULL, peer1_user_id=NULL,
-       peer2_user_id=NULL, peer2_decision=NULL, peer2_at=NULL, peer2_comment=NULL,
-       arbiter_required=false, arbiter_user_id=NULL, arbiter_decision=NULL, arbiter_at=NULL,
-       approval_step=0, next_approver_id=NULL, updated_at=now()
-     WHERE ${field}=$1`,
-    [contractId||quoteId]
-  );
-  // Reset contract back to DRAFT — both status columns
+  const entityType = contractId ? 'CONTRACT' : 'QUOTE';
+  const entityId = contractId || quoteId;
+  await assertWorkflowTransition({ entityType, entityId, action: 'RETURN', actorUserId, actorRole });
   if (contractId) {
+    await pool.query(`UPDATE public.contract_offer SET ${RESET_CONTRACT_OFFER} WHERE contract_id=$1`, [contractId]);
+    await pool.query(`UPDATE public.contract SET uw_status='DRAFT', status='DRAFT', updated_at=now() WHERE contract_id=$1`, [contractId]);
+  } else {
+    await pool.query(`UPDATE public.quote SET status='DRAFT', updated_at=now() WHERE quote_id=$1`, [quoteId]);
     await pool.query(
-      `UPDATE public.contract SET uw_status='DRAFT', status='DRAFT', updated_at=now() WHERE contract_id=$1`,
-      [contractId]
-    );
+      `INSERT INTO public.quote_offer (quote_id, status, updated_at) VALUES ($1,'RETURNED',now())
+       ON CONFLICT (quote_id) DO UPDATE SET status='RETURNED', updated_at=now()`,
+      [quoteId]
+    ).catch(() => {});
   }
-  await logOfferEvent({contractId,quoteId,eventType:'RETURNED_TO_UW',actorUserId,actorName,actorRole,payload:{reason},comment:reason});
+  await logOfferEvent({ contractId, quoteId, eventType: 'RETURNED_TO_UW', actorUserId, actorName, actorRole, payload: { reason: reason ?? null }, comment: reason ?? null });
+  return { nextStatus: 'DRAFT' };
+}
+
+/**
+ * Recall a still-pending offer (… → DRAFT) for a treaty OR a quote. Gated by
+ * assertWorkflowTransition with the RECALL action: only the originator
+ * (submitter) may withdraw it, and only while it is still pending (not yet
+ * signed/bound). Returns it to the submitter's editable DRAFT state + an event.
+ */
+export async function recallOffer({ contractId, quoteId, actorUserId, actorName, actorRole, reason }) {
+  const entityType = contractId ? 'CONTRACT' : 'QUOTE';
+  const entityId = contractId || quoteId;
+  await assertWorkflowTransition({ entityType, entityId, action: 'RECALL', actorUserId, actorRole });
+  if (contractId) {
+    await pool.query(`UPDATE public.contract_offer SET ${RESET_CONTRACT_OFFER} WHERE contract_id=$1`, [contractId]);
+    await pool.query(`UPDATE public.contract SET uw_status='DRAFT', status='DRAFT', updated_at=now() WHERE contract_id=$1`, [contractId]);
+  } else {
+    await pool.query(`UPDATE public.quote SET status='DRAFT', updated_at=now() WHERE quote_id=$1`, [quoteId]);
+    await pool.query(
+      `INSERT INTO public.quote_offer (quote_id, status, updated_at) VALUES ($1,'RECALLED',now())
+       ON CONFLICT (quote_id) DO UPDATE SET status='RECALLED', updated_at=now()`,
+      [quoteId]
+    ).catch(() => {});
+  }
+  await logOfferEvent({ contractId, quoteId, eventType: 'RECALLED', actorUserId, actorName, actorRole, payload: { reason: reason ?? null }, comment: reason ?? null });
+  return { nextStatus: 'DRAFT' };
 }
 
 async function logOfferEvent({contractId,quoteId,eventType,actorUserId,actorName,actorRole,payload,comment}) {
