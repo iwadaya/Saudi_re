@@ -465,25 +465,28 @@ The auth-hardening work has landed; the items below are how the app behaves **to
 
 ## 11. Backup and recovery
 
-> **The application does NOT perform or schedule any backups itself.** There is no
-> backup job, cron, or retention logic in the codebase. Everything below is an
-> **operator responsibility** you must stand up on the host — nothing here runs
-> automatically just because the app is deployed.
+The repo ships a checked-in, restore-**verified** backup pair (so backups are
+reproducible, not tribal knowledge). They are operator-scheduled — installing the
+schedule is your step; the app does not run them itself.
 
-Implemented today: **none** (operator-supplied).
+| Script | What it does |
+|---|---|
+| `scripts/backup-db.sh` | Compressed `pg_dump -Fc` of `DATABASE_URL` into `BACKUP_DIR` (default `/var/backups/universe`), then prunes dumps older than `BACKUP_RETENTION_DAYS` (default 30). Logs to stderr; prints the dump path on stdout. |
+| `scripts/verify-restore.sh` | Restores the newest dump into a throwaway scratch DB on the same server, runs a sanity query (`public._migrations` and `public.country` row counts), drops the scratch DB, and **exits non-zero if the dump won't restore** — so a silently-corrupt backup is caught. |
+| `scripts/universe-backup.cron` | Host-cron schedule: nightly dump (02:00) + weekly restore-rehearsal (Sun 03:30). |
 
-Recommended posture to put in place — treat each as **PLANNED — not yet automated** until you have wired it up and confirmed it runs:
-
-- **PLANNED — not yet automated:** Nightly `pg_dump` of the `universe` database to off-host storage, retained ≥ 30 days. (Sample cron below — you must install it.)
-- **PLANNED — not yet automated:** Weekly restore-rehearsal — verify a dump restores cleanly to a scratch Postgres instance. A backup you've never restored is not a backup.
-- **PLANNED — not yet automated:** Back up the **uploads directory** (`/opt/universe/uploads` or your `UPLOAD_DIR`) alongside the database — slips and documents live there. If you use Cloudinary instead of local storage, this directory is empty and the equivalent backup is your Cloudinary account/retention.
-
-Sample nightly-dump command to add to the host's crontab (operator-installed — not shipped):
+**Schedule it.** On a self-hosted host (§6 Option A/C): set `DATABASE_URL` (and optionally `BACKUP_DIR`/`BACKUP_RETENTION_DAYS`) in the cron environment, then `crontab scripts/universe-backup.cron` (or drop it in `/etc/cron.d/`). Send dumps to off-host storage and retain ≥ 30 days. Verify by hand once:
 
 ```bash
-0 2 * * * pg_dump -Fc "postgresql://universe:PASSWORD@localhost/universe" \
-  > /var/backups/universe-$(date +\%F).dump
+DATABASE_URL=postgresql://universe:PASSWORD@localhost:5432/universe \
+BACKUP_DIR=/var/backups/universe scripts/backup-db.sh
+DATABASE_URL=postgresql://universe:PASSWORD@localhost:5432/universe \
+BACKUP_DIR=/var/backups/universe scripts/verify-restore.sh   # exits 0 = restorable
 ```
+
+**Production (Render) — the real fallback.** The production service deploys on Render (`render.yaml`) against a **managed Postgres** (`DATABASE_URL` is set in the dashboard, `sync: false`). Your first line of recovery there is the **managed provider's automated daily snapshots / point-in-time recovery** — confirm they are enabled and note the retention/RPO in your dashboard. Render has no host crontab, so to also keep the independent, restore-verified dumps above, run `scripts/backup-db.sh` (and a weekly `scripts/verify-restore.sh`) as **Render Cron Jobs** pointed at the same `DATABASE_URL`. Don't assume the host cron runs on Render — it doesn't.
+
+**Uploads.** Back up the **uploads directory** (`/opt/universe/uploads` or your `UPLOAD_DIR`) alongside the database — slips and documents live there. If you use Cloudinary instead of local storage this directory is empty, and the equivalent backup is your Cloudinary account/retention.
 
 ## 12. Monitoring and observability
 

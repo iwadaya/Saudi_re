@@ -1,0 +1,23 @@
+# Universe database backup schedule (host cron).
+#
+# Install for a user that can reach the DB and write BACKUP_DIR:
+#   crontab scripts/universe-backup.cron
+# or copy into /etc/cron.d/universe-backup (then add a user field, e.g. "root",
+# between the schedule and the command).
+#
+# Secrets are NOT committed: set DATABASE_URL in the cron environment below
+# (uncomment + fill in) or have the shell source it from a protected file.
+# On Render there is no host crontab — schedule scripts/backup-db.sh (and a
+# weekly scripts/verify-restore.sh) as Render Cron Jobs instead. See
+# DEPLOYMENT.md §11.
+
+SHELL=/bin/bash
+# DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DBNAME   # <- set, do not commit real creds
+BACKUP_DIR=/var/backups/universe
+BACKUP_RETENTION_DAYS=30
+
+# Nightly compressed dump at 02:00.
+0 2 * * * cd /opt/universe && scripts/backup-db.sh >> /var/log/universe-backup.log 2>&1
+
+# Weekly restore-rehearsal, Sunday 03:30 — fails loudly if the latest dump won't restore.
+30 3 * * 0 cd /opt/universe && scripts/verify-restore.sh >> /var/log/universe-backup.log 2>&1
