@@ -451,7 +451,7 @@ The auth-hardening work has landed; the items below are how the app behaves **to
 
 3. **Server-derived audit actor.** Audit/approval events take the actor from the verified `req.user` identity, never a client-supplied `_actor`/header.
 
-4. **Content-Security-Policy is enabled.** Helmet ships a nonce-based CSP (`script-src` is `'self'` + per-request nonce; no `unsafe-inline` for scripts) currently in **Report-Only** mode, with violations collected at `/csp-report`. The plan is to flip it to **enforcing** once real traffic shows a clean report (see `SECURITY.md` → "Content-Security-Policy"). `server/src/app.js`.
+4. **Content-Security-Policy is enforcing.** Helmet ships an enforcing nonce-based CSP (`script-src` is `'self'` + per-request nonce; no `unsafe-inline` for scripts — the only `unsafe-inline` is a documented styles-only exception for React inline style attributes). `img-src`/`frame-src` also allow `https://res.cloudinary.com` for document previews when remote storage is configured. Violations are still collected at `/csp-report` for monitoring (see `SECURITY.md` → "Content-Security-Policy"). `server/src/app.js`.
 
 5. **Password policy.** A single enforced policy (`validatePasswordStrength`, used by both change-password and every user-creation path) requires a **minimum of 8 characters**, rejects the seeded temp `Universe#1234`, and rejects obviously weak/common values.
 

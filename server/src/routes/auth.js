@@ -44,18 +44,19 @@ const TEMP_SEED_PASSWORD = 'Universe#1234';
 // ── Single shared password policy ────────────────────────────────────────────
 // The ONE place password strength is defined. Used by change-password AND every
 // user-creation path so the rules can never drift apart again.
-const MIN_PASSWORD_LENGTH = 8;
+const MIN_PASSWORD_LENGTH = 12;
 
 // Obvious weak/common values rejected outright (compared case-insensitively).
 // Anything shorter than MIN_PASSWORD_LENGTH is already rejected on length, so
-// this list only needs the common 8+ char offenders.
+// this list targets the common 12+ char offenders (plus shorter classics kept
+// as belt-and-braces in case the minimum is ever lowered).
 const WEAK_PASSWORDS = new Set([
-  'password', 'password1', 'password123', 'passw0rd', 'p@ssw0rd',
-  '12345678', '123456789', '1234567890', '87654321',
-  'qwerty12', 'qwerty123', 'qwertyuiop', 'asdfghjkl',
+  'password', 'password1', 'password123', 'password1234', 'passw0rd', 'p@ssw0rd',
+  'passwordpassword', '123456789012', '1234567890', '123456789', '12345678', '87654321',
+  'qwerty12', 'qwerty123', 'qwertyuiop', 'qwertyuiop12', 'asdfghjkl', 'asdfghjkl123',
   'iloveyou', 'sunshine', 'princess', 'football', 'baseball', 'superman',
-  'welcome1', 'welcome123', 'letmein1', 'letmein123',
-  'admin123', 'administrator', 'changeme', 'changeme1', 'abc12345',
+  'welcome1', 'welcome123', 'welcome123456', 'letmein1', 'letmein123', 'letmein123456',
+  'admin123', 'administrator', 'changeme', 'changeme1', 'changeme1234', 'abc12345',
 ]);
 
 /**

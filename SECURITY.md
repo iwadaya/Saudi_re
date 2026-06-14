@@ -82,20 +82,20 @@ which would otherwise downgrade `exceljs` to 3.x and bump Vite to 8.
 
 ## Content-Security-Policy
 
-CSP is rolled out **Report-Only first** (server/src/app.js): the server sends
-`Content-Security-Policy-Report-Only`, so browsers report violations to
-`/csp-report` (logged as `csp-violation`) but enforce nothing. This lets us
-tighten the policy from real traffic and confirm a clean load before flipping it
-to the enforcing `Content-Security-Policy` in a follow-up.
+CSP is **enforcing** (server/src/app.js): the server sends
+`Content-Security-Policy` (not Report-Only), and still keeps a `report-uri`
+pointing at `/csp-report` (logged as `csp-violation`) so any blocked legitimate
+source shows up as a regression signal.
 
 Policy:
 
 ```
 default-src 'self';
 script-src  'self' 'nonce-<per-request>';                        # inline bootstrap script only — no 'unsafe-inline'
-style-src   'self' 'unsafe-inline' https://fonts.googleapis.com; # 'unsafe-inline' = React style attributes
+style-src   'self' 'unsafe-inline' https://fonts.googleapis.com; # 'unsafe-inline' = React style attributes (documented exception)
 font-src    'self' https://fonts.gstatic.com;                    # Google Fonts files
-img-src     'self' data:;                                        # data: = the SVG favicon
+img-src     'self' data: https://res.cloudinary.com;             # data: = SVG favicon; Cloudinary = optional document/image backend
+frame-src   'self' https://res.cloudinary.com;                   # PDF/file preview iframe (/api/documents/:id/view, may redirect to Cloudinary)
 connect-src 'self';                                              # same-origin API
 object-src  'none'; frame-ancestors 'none'; base-uri 'self';
 report-uri  /csp-report;
@@ -103,13 +103,16 @@ report-uri  /csp-report;
 
 - **Nonce, not `'unsafe-inline'`, for scripts.** A fresh per-request nonce
   (`res.locals.cspNonce`) is injected into the single inline `<script>` in
-  index.html when the SPA is served, so the policy is already enforcing-ready.
-- **`style-src 'unsafe-inline'`** is required for React's inline style
-  *attributes* (`style={{}}`), which cannot carry a nonce. Moving those to
+  index.html when the SPA is served.
+- **`style-src 'unsafe-inline'` (documented exception)** is required for React's
+  inline style *attributes* (`style={{}}`), which cannot carry a nonce/hash. It
+  is scoped to styles only — scripts stay nonce-based. Moving those attributes to
   classes/CSS would let us drop it.
-- **To enforce:** confirm `/csp-report` logs no violations under real use, then
-  drop `reportOnly: true` (ships `Content-Security-Policy`) in a follow-up
-  commit.
+- **`img-src`/`frame-src` allow `https://res.cloudinary.com`** because document
+  view/download (`/api/documents/:id/view`) 302-redirects to Cloudinary when
+  remote storage is configured; local-disk deployments stay same-origin.
+- **Regression monitoring:** `/csp-report` stays wired so violations are logged
+  even while enforcing.
 
 ## Reporting
 

@@ -287,14 +287,13 @@ export function createApp() {
     next();
   });
 
-  // Security headers. CSP ships in REPORT-ONLY first: browsers report violations
-  // to /csp-report and enforce nothing, so we can tighten the policy from real
-  // traffic before flipping it to enforcing (Content-Security-Policy) in a
-  // follow-up. See SECURITY.md → "Content-Security-Policy".
+  // Security headers. CSP is ENFORCING (emits Content-Security-Policy): the
+  // policy was validated in Report-Only and is now enforced. Violations are still
+  // collected at /csp-report for monitoring. See SECURITY.md → "Content-Security-Policy".
   app.use(helmet({
     contentSecurityPolicy: {
       useDefaults: false,
-      reportOnly: true,
+      // reportOnly omitted → helmet emits the ENFORCING Content-Security-Policy.
       directives: {
         'default-src': ["'self'"],
         'base-uri': ["'self'"],
@@ -303,23 +302,34 @@ export function createApp() {
         // Inline bootstrap script allowed only via the per-request nonce; all
         // other scripts are same-origin. No 'unsafe-inline' for scripts.
         'script-src': ["'self'", (_req, res) => `'nonce-${res.locals.cspNonce}'`],
-        // 'unsafe-inline' covers React's inline style ATTRIBUTES (style={{}}),
-        // which cannot carry a nonce; fonts.googleapis.com is the Google Fonts
-        // stylesheet linked from index.html.
+        // DOCUMENTED EXCEPTION (styles only): 'unsafe-inline' is unavoidable for
+        // React's inline style ATTRIBUTES (style={{}}), which cannot carry a
+        // nonce/hash. fonts.googleapis.com is the Google Fonts stylesheet linked
+        // from index.html. script-src stays strict (nonce-only).
         'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         'font-src': ["'self'", 'https://fonts.gstatic.com'], // Google Fonts files
-        'img-src': ["'self'", 'data:'],                       // data: = the SVG favicon
-        'connect-src': ["'self'"],                            // same-origin API
+        // data: = the inline SVG favicon. res.cloudinary.com = the optional
+        // document/image storage backend — /api/documents/:id/view 302-redirects
+        // there when remote storage is configured (local-disk deployments stay
+        // same-origin and need only 'self').
+        'img-src': ["'self'", 'data:', 'https://res.cloudinary.com'],
+        // Document/PDF preview <iframe> loads /api/documents/:id/view (same-origin
+        // stream, or a redirect to the Cloudinary host above).
+        'frame-src': ["'self'", 'https://res.cloudinary.com'],
+        // Same-origin API (the SPA is served from the same origin). A deployment
+        // that splits the API onto another origin would add it here.
+        'connect-src': ["'self'"],
+        // Keep collecting violations after enforcing, for monitoring/regressions.
         'report-uri': ['/csp-report'],
       },
     },
     crossOriginEmbedderPolicy: false,
   }));
 
-  // CSP violation collector (public, no auth, not under /api). Browsers POST
-  // reports here under Report-Only; logging them lets us tighten the policy and
-  // confirm a clean load before enforcing. Registered before the SPA fallback so
-  // it isn't swallowed by it.
+  // CSP violation collector (public, no auth, not under /api). The enforcing
+  // policy keeps a report-uri pointing here; logging violations surfaces any
+  // blocked legitimate source as a regression signal. Registered before the SPA
+  // fallback so it isn't swallowed by it.
   app.post('/csp-report',
     express.json({ type: ['application/csp-report', 'application/reports+json', 'application/json'], limit: '64kb' }),
     (req, res) => {
