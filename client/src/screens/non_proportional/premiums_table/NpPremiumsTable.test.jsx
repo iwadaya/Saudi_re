@@ -108,6 +108,22 @@ describe('NpPremiumsTable — country resolution + average inflation', () => {
     expect(boundaryFallback()).toBeNull();
   });
 
+  it('selecting average inflation applies the average of the country curve', async () => {
+    renderScreen();
+    await screen.findByText('Saudi Arabia');
+    // Country inflation (3/4/5%) must be loaded first.
+    await waitFor(() => expect(screen.getAllByDisplayValue('3%').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByLabelText(/Use average inflation/i));
+
+    // Mean of 3/4/5 = 4 — seeded into the average field and applied to every row
+    // (not 0% / blank, which was the "average not showing" regression).
+    const avgInput = await screen.findByLabelText(/Average inflation percent/i);
+    await waitFor(() => expect(avgInput).toHaveValue('4%'));
+    expect(screen.getAllByDisplayValue('4%').length).toBeGreaterThan(1);
+    expect(boundaryFallback()).toBeNull();
+  });
+
   it('toggling to average inflation never blanks the screen, even with empty rows', async () => {
     // No country inflation data → inflation rows have no values to start from.
     installApi({ getRefInflation: vi.fn().mockResolvedValue([]) });

@@ -133,6 +133,19 @@ export default function NpPremiumsTable() {
     return computeCumulative(safeRows.map(r => ({ ...r, inflationPct: formatted })));
   }, []);
 
+  /* ── Mean of the per-year inflation currently in the rows ──
+     "Use average inflation" means a single rate — the average of the loaded
+     country inflation — applied flat to every UW year (matches the loss-
+     selection screen's `average` mode). This seeds that figure from whatever
+     country curve is currently displayed. */
+  const meanInflationPct = useCallback((rows) => {
+    const vals = (Array.isArray(rows) ? rows : [])
+      .map(r => parseFlexNum(r.inflationPct))
+      .filter(n => n !== null);
+    if (!vals.length) return 0;
+    return vals.reduce((s, n) => s + n, 0) / vals.length;
+  }, []);
+
   /* ── Load country inflation from API ── */
   const loadCountryInflation = useCallback(async (yrs, onlyIfEmpty, currentRows) => {
     const rows = Array.isArray(currentRows) ? currentRows : [];
@@ -249,9 +262,12 @@ export default function NpPremiumsTable() {
         // Country values are filled by the dedicated country-inflation effect
         // once the resolved countryId lands in state (its closure would be
         // stale here). Average mode is applied immediately so the cumulative
-        // column is correct on first paint.
+        // column is correct on first paint — falling back to the mean of the
+        // saved curve if no explicit average was persisted.
         if (savedMode === 'average') {
-          setInflationRows(applyAverageInflation(inf, savedAvg));
+          const effectiveAvg = parseFlexNum(savedAvg) !== null ? savedAvg : fmtPct(meanInflationPct(inf));
+          if (parseFlexNum(savedAvg) === null) setAverageInflationPct(effectiveAvg);
+          setInflationRows(applyAverageInflation(inf, effectiveAvg));
         } else {
           setInflationRows(inf);
         }
@@ -266,7 +282,7 @@ export default function NpPremiumsTable() {
     // handleModeChange (no refetch), and re-running this effect on every toggle
     // used to reset the mode back to the server's saved value. loadCountryInflation
     // is excluded because the dedicated country effect owns country fetching.
-  }, [applyAverageInflation, contractId, npCountryId, npCountryName, quoteMode, rebuildRows, years]);
+  }, [applyAverageInflation, contractId, meanInflationPct, npCountryId, npCountryName, quoteMode, rebuildRows, years]);
 
   /* ── Live ref of inflationRows so the country-inflation effect can read the
         latest rows without taking them as a dependency (which would re-fire it
@@ -327,7 +343,16 @@ export default function NpPremiumsTable() {
   const handleModeChange = useCallback(async (newMode) => {
     setInflationMode(newMode);
     if (newMode === 'average') {
-      setInflationRows(prev => applyAverageInflation(Array.isArray(prev) ? prev : [], averageInflationPct));
+      const base = Array.isArray(inflationRows) ? inflationRows : [];
+      // Default the flat average to the mean of the loaded country inflation so
+      // the column shows a meaningful figure instead of 0%/blank. A value the
+      // user already typed is respected.
+      let avg = averageInflationPct;
+      if (parseFlexNum(avg) === null) {
+        avg = fmtPct(meanInflationPct(base));
+        setAverageInflationPct(avg);
+      }
+      setInflationRows(applyAverageInflation(base, avg));
     } else {
       // Force-reload (onlyIfEmpty=false) so toggling back to country overwrites
       // any average values with fresh country inflation.
@@ -335,7 +360,7 @@ export default function NpPremiumsTable() {
       const updated = await loadCountryInflation(years, false, base);
       setInflationRows(updated);
     }
-  }, [years, averageInflationPct, inflationRows, loadCountryInflation, applyAverageInflation]);
+  }, [years, averageInflationPct, inflationRows, loadCountryInflation, applyAverageInflation, meanInflationPct]);
 
   const handleApplyAverage = useCallback(() => {
     setInflationRows(prev => applyAverageInflation(prev, averageInflationPct));
