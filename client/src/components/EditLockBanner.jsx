@@ -32,7 +32,6 @@ export default function EditLockBanner({ contractId, quoteId, isQuote = false, a
     }
   };
 
-  const who = assignedToName ? `${assignedToName}'s treaty` : 'another underwriter’s treaty';
   return (
     <div role="alert" style={{
       display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
@@ -41,7 +40,8 @@ export default function EditLockBanner({ contractId, quoteId, isQuote = false, a
     }}>
       <span style={{ fontSize: 13, fontWeight: 700, color: '#f87171' }}>🔒 Read-only</span>
       <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>
-        You are viewing {who}. {id ? 'Allocate it to edit.' : 'Have it allocated to you to edit.'}
+        {assignedToName ? `— assigned to ${assignedToName}. ` : '— this is unassigned. '}
+        {id ? 'Claim it (if unassigned) or have it allocated to you to edit.' : 'Have it allocated to you to edit.'}
       </span>
       {err && <span style={{ fontSize: 11, color: '#f87171' }}>{err}</span>}
       {id && (

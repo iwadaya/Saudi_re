@@ -54,7 +54,7 @@ export default function NpFinalPricing() {
   const navigate = useNavigate();
   const quoteMode = !!appState.quoteMode;
   const isQuote = quoteMode || ROUTE_KEY === 'NP_FINAL_QUOTE';
-  const { readOnly, assignedToName: lockAssignedToName, refresh: refreshLock } = useEditLock({
+  const { readOnly, assignedToName: lockAssignedToName, refresh: refreshLock, markReadOnly } = useEditLock({
     contractId: isQuote ? null : contractId, quoteId: isQuote ? contractId : null, isQuote,
   });
 
@@ -105,6 +105,7 @@ export default function NpFinalPricing() {
     doMarkNTU, doReturnToUW, doDecline,
   } = useNpPricingActions({
     pricing, contractId, quoteMode, isQuote, npDetail, mode, structRefsMap, actorName,
+    readOnly, onServerReadOnly: markReadOnly,
   });
 
   // ── Workflow ──

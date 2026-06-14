@@ -24,6 +24,7 @@ import { loadLossCategoryByYear, deriveLossComponents } from '../../../../logic/
 import { getRole, getUserDisplayName, getSession } from '../../../../utils/auth';
 import { useGlobalToast } from '../../../../hooks/useToast';
 import { handleStaleWrite as handleStaleWriteRaw } from '../../../../utils/handleStaleWrite';
+import { isReadOnlyError } from '../../../../utils/readOnlyError';
 import { formatPricingDriftMessage } from '../../../../utils/pricingErrors';
 import {
   COMPONENT_ROWS, DEFAULT_SHARE_ROWS,
@@ -62,9 +63,18 @@ export type AppStateLike = Record<string, any>;
 export interface UsePropPricingStateParams {
   appState: AppStateLike;
   contractId: string | null | undefined;
+  /**
+   * Edit-lock verdict from useEditLock. When true (server said canEdit:false),
+   * the save path is a no-op so wizard-nav / workflow saves stop POSTing into a
+   * 403. Absent/undefined ⇒ editable (protects partially-migrated callers and
+   * the golden-master fixtures, which never resolve a permission).
+   */
+  readOnly?: boolean;
+  /** Called when a save comes back 403 READ_ONLY, to flip the UI read-only. */
+  onServerReadOnly?: (assignedToName?: string | null) => void;
 }
 
-export function usePropPricingState({ appState, contractId }: UsePropPricingStateParams) {
+export function usePropPricingState({ appState, contractId, readOnly = false, onServerReadOnly }: UsePropPricingStateParams) {
   const [state, dispatch] = useReducer(propPricingReducer, undefined, createInitialPropPricingState);
 
   const {
@@ -579,6 +589,10 @@ export function usePropPricingState({ appState, contractId }: UsePropPricingStat
     const setSaveMsg = (next: any) => dispatch({ type: 'saveLifecycle/set', key: 'saveMsg', next });
 
     if (!cid) return true;
+    // Read-only (not the assignee): never POST. Returning true is a no-op that
+    // lets wizard navigation proceed without writing — the server would 403 this
+    // (READ_ONLY) and the inert UI already blocks manual edits.
+    if (readOnly) return true;
     if (!loadedRef.current) return true; // don't overwrite DB before data has loaded
     const lockValue = options?.ifUnmodifiedSince || lastUpdatedAt;
     const compArr = COMPONENT_ROWS.map((name: string) => ({
@@ -620,6 +634,15 @@ export function usePropPricingState({ appState, contractId }: UsePropPricingStat
       return true;
     } catch (e) {
       console.error(e);
+      // Not the assignee: the lock raced this write (or failed open). Flip the
+      // editor read-only, surface it once, and STOP — never retry/overwrite an
+      // authz verdict. The banner's "Allocate to me" is the path back to edit.
+      if (isReadOnlyError(e)) {
+        onServerReadOnly?.();
+        setSaveMsg({ type: 'err', text: 'Read-only — this treaty is assigned to someone else. Claim it (if unassigned) or have it allocated to you to edit.' });
+        setTimeout(() => setSaveMsg(null), 4000);
+        return true; // no-op for nav: don't block, don't retry
+      }
       const stale = await handleStaleWrite(e, {
         entityType: 'pricing',
         onRefresh: () => window.location.reload(),
@@ -637,7 +660,7 @@ export function usePropPricingState({ appState, contractId }: UsePropPricingStat
       setTimeout(() => setSaveMsg(null), 3000);
       return false;
     }
-  }, [cid, lastUpdatedAt, leads, shareRows, comment, offerStatus, offerLine, offerComment, offerApprover, signedLinePct, epi, marginAct, calcCR, marginUw, getC, shareGrid]);
+  }, [cid, readOnly, onServerReadOnly, lastUpdatedAt, leads, shareRows, comment, offerStatus, offerLine, offerComment, offerApprover, signedLinePct, epi, marginAct, calcCR, marginUw, getC, shareGrid]);
 
   // Snapshot handlers + offer workflow + the CU-decline listener (the last
   // effect to register, as on the original screen).

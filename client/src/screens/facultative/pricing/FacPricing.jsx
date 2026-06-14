@@ -10,6 +10,7 @@ import EditLockBanner, { ReadOnlyWrap } from '../../../components/EditLockBanner
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import { useResource } from '../../../hooks/useResource';
 import { useGlobalToast } from '../../../hooks/useToast';
+import { isReadOnlyError } from '../../../utils/readOnlyError';
 import { computeScoreAndDecision, computeFacQuote } from '../../../logic/facPropertyPricing';
 
 const ENGINE_VERSION = '1.0.0';
@@ -475,7 +476,7 @@ function EngineReadout({ output, premiums, totalLocSar }) {
 
 export default function FacPricing() {
   const riskId = useFacRiskId();
-  const { readOnly, assignedToName: lockAssignedToName, refresh: refreshLock } = useEditLock({ facRiskId: riskId });
+  const { readOnly, assignedToName: lockAssignedToName, refresh: refreshLock, markReadOnly } = useEditLock({ facRiskId: riskId });
   const showToast = useGlobalToast();
   const loaded = useRef(false);
   const dirty = useRef(false);
@@ -790,6 +791,10 @@ export default function FacPricing() {
   }, [f.blended_rate_per_mille, f.uw_adjustment_pct, extensionsLoadingPct, tsi]);
 
   const save = useCallback(async () => {
+    // Read-only (not the assignee): never POST — not the pricing record nor the
+    // panel-owned UW factors. Returning true is a no-op that lets wizard
+    // navigation proceed; manual edits are already blocked by the inert wrap.
+    if (readOnly) return true;
     // Two independent saves: the pricing record (this screen's local
     // state) and the UW-factor selections (panel-owned). Both have to
     // succeed before WizardLayout advances.
@@ -843,10 +848,18 @@ export default function FacPricing() {
       return uwOk;
     } catch (e) {
       console.error('[FacPricing] save failed:', e);
+      // Not the assignee: the lock raced this write (or failed open). Flip the
+      // editor read-only and surface it once — never retry an authz verdict.
+      // "Allocate to me" on the banner is the path back to editing.
+      if (isReadOnlyError(e)) {
+        markReadOnly();
+        showToast('Read-only — this risk is assigned to someone else. Claim it (if unassigned) or have it allocated to you to edit.');
+        return true; // no-op for nav: don't block, don't retry
+      }
       showToast('Pricing save failed: ' + (e?.message || 'Server error'));
       return false;
     }
-  }, [riskId, f, selectedExtensions, customExtensions, eng, engineOutput, enginePremiums, showToast]);
+  }, [riskId, readOnly, markReadOnly, f, selectedExtensions, customExtensions, eng, engineOutput, enginePremiums, showToast]);
 
   const extCheckbox = (ext, catColor) => {
     const checked = selectedExtensions.has(ext.id);

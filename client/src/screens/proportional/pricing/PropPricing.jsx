@@ -39,7 +39,7 @@ export default function PropPricing() {
   const { state: appState } = useAppState();
   const contractId = useContractId();
   const isQuote = !!appState.quoteMode;
-  const { readOnly, assignedToName: lockAssignedToName, refresh: refreshLock } = useEditLock({
+  const { readOnly, assignedToName: lockAssignedToName, refresh: refreshLock, markReadOnly } = useEditLock({
     contractId: isQuote ? null : contractId, quoteId: isQuote ? contractId : null, isQuote,
   });
 
@@ -75,7 +75,7 @@ export default function PropPricing() {
     save, handleSaveSnapshot, handleDeleteSnapshot, isTerminal, isReadOnly,
     doSubmitForApproval, doMarkApproved, doMarkSigned, doMarkNTU,
     doReturnToUW, doRecall, doDecline,
-  } = usePropPricingState({ appState, contractId });
+  } = usePropPricingState({ appState, contractId, readOnly, onServerReadOnly: markReadOnly });
 
   if (loading) return (
     <WizardLayout routeKey={ROUTE_KEY} title="Pricing" headerPill="PROPORTIONAL TREATY: FINAL PRICING">

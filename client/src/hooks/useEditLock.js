@@ -26,9 +26,24 @@ export function useEditLock({ contractId, quoteId, facRiskId, isQuote = false } 
       .catch(() => setState({ canEdit: true, isOwner: false, assignedToName: null, loading: false, loaded: true }));
   }, [id, fetchFn]);
 
+  // Force the lock closed immediately. The editor calls this when a save comes
+  // back 403 READ_ONLY (the permission lookup raced the first write, or failed
+  // open): the verdict is authoritative, so flip the UI to read-only at once
+  // rather than waiting for an async re-check. `loaded` is set true so the
+  // derived `readOnly` below fires this render.
+  const markReadOnly = useCallback((assignedToName) => {
+    setState((s) => ({
+      ...s,
+      canEdit: false,
+      assignedToName: assignedToName ?? s.assignedToName,
+      loading: false,
+      loaded: true,
+    }));
+  }, []);
+
   useEffect(() => { refresh(); }, [refresh]);
 
-  return { ...state, readOnly: state.loaded && state.canEdit === false, refresh };
+  return { ...state, readOnly: state.loaded && state.canEdit === false, refresh, markReadOnly };
 }
 
 export default useEditLock;
