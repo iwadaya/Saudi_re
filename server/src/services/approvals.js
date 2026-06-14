@@ -27,6 +27,20 @@ export const LIMIT_BASIS = Object.freeze({
   EXPOSURE_100PCT: 'EXPOSURE_100PCT', // gated on the full 100% limit regardless of line
 });
 
+const CANONICAL_BASES = new Set(Object.values(LIMIT_BASIS));
+
+/**
+ * Canonical limit basis for a mandate. On a missing/unknown value, warn and
+ * fall back to the EXPLICIT seeded default (SIGNED_EXPOSURE) — never a silent
+ * guess. (Migration 121 canonicalizes the enum and exposes limit_basis on
+ * v_user_mandate; this guards against rows/views that predate it.)
+ */
+export function resolveLimitBasis(raw) {
+  if (raw && CANONICAL_BASES.has(raw)) return raw;
+  logger.warn('limit_basis missing/unknown — falling back to SIGNED_EXPOSURE', { value: raw ?? null });
+  return LIMIT_BASIS.SIGNED_EXPOSURE;
+}
+
 // ── Normal routing legs (mirrors migration 118 approval_route seed) ──────────
 // Used as the in-memory default when no DB-backed route is supplied. AN is a
 // capture that always hands to the Underwriter first; the Underwriter then
@@ -158,7 +172,7 @@ export async function getEligibleApprovers(params = {}) {
   } = params;
 
   const submitterId = (submitter && submitter.user_id) || submitterUserId || null;
-  const limitBasis = (submitter && submitter.limit_basis) || LIMIT_BASIS.SIGNED_EXPOSURE;
+  const limitBasis = resolveLimitBasis(submitter && submitter.limit_basis);
 
   let writtenExposureUsd = weIn;
   if (writtenExposureUsd == null) {
@@ -264,7 +278,7 @@ export async function detectBreach(submitter, opts = {}) {
   if (!mandate) return { type: 'NONE', reasons: [], writtenExposureUsd: 0, limitBreach: false, classBreach: false };
 
   const { writtenLinePct, programLimit100Usd, cobIds = [], isNp = false, epiUsd } = opts;
-  const limitBasis = mandate.limit_basis || LIMIT_BASIS.SIGNED_EXPOSURE;
+  const limitBasis = resolveLimitBasis(mandate.limit_basis);
   const writtenExposureUsd = (writtenLinePct != null || programLimit100Usd != null)
     ? computeWrittenExposure({ writtenLinePct, programLimit100Usd, limitBasis, epiUsd })
     : (Number(epiUsd) || 0); // legacy callers supply epiUsd directly

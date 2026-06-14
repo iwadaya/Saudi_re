@@ -11,6 +11,7 @@ import {
   normalRoute,
   isCaptureSubmission,
   LIMIT_BASIS,
+  resolveLimitBasis,
 } from './approvals.js';
 
 const M = 1_000_000;
@@ -126,5 +127,36 @@ describe('Analyst hand-off (capture → {UW}, then UW escalates on its own line)
     const plan = await planSubmission({ submitter: UW, writtenLinePct: 30, programLimit100Usd: PROG, cobIds: [PROP], candidates: CANDIDATES });
     expect(plan.kind).toBe('ESCALATE');
     expect(plan.approverOptions[0].role_code).toBe('UM'); // UW->escalates above its 25M cap
+  });
+});
+
+describe('limit_basis routing (canonical enum, no silent default)', () => {
+  const base = { user_id: 'u', effective_limit_usd: 5 * M, excluded_cob_ids: [] };
+
+  it('SIGNED_EXPOSURE gates on the written-line share → breach', async () => {
+    const b = await detectBreach({ ...base, limit_basis: LIMIT_BASIS.SIGNED_EXPOSURE },
+      { writtenLinePct: 30, programLimit100Usd: 100 * M, epiUsd: 4 * M, cobIds: ['x'] });
+    expect(b.writtenExposureUsd).toBe(30 * M);
+    expect(b.type).toBe('LIMIT');
+  });
+
+  it('EPI gates on premium income → NO breach for the SAME inputs', async () => {
+    const b = await detectBreach({ ...base, limit_basis: LIMIT_BASIS.EPI },
+      { writtenLinePct: 30, programLimit100Usd: 100 * M, epiUsd: 4 * M, cobIds: ['x'] });
+    expect(b.writtenExposureUsd).toBe(4 * M);
+    expect(b.type).toBe('NONE');
+  });
+
+  it('EXPOSURE_100PCT gates on the full 100% limit', () => {
+    expect(computeWrittenExposure({ writtenLinePct: 10, programLimit100Usd: 80 * M, limitBasis: LIMIT_BASIS.EXPOSURE_100PCT })).toBe(80 * M);
+  });
+
+  it('missing/unknown basis warns and falls back to SIGNED_EXPOSURE (not a silent guess)', async () => {
+    expect(resolveLimitBasis('WEIRD')).toBe(LIMIT_BASIS.SIGNED_EXPOSURE);
+    expect(resolveLimitBasis(undefined)).toBe(LIMIT_BASIS.SIGNED_EXPOSURE);
+    expect(resolveLimitBasis('PREMIUM')).toBe(LIMIT_BASIS.SIGNED_EXPOSURE); // legacy value no longer canonical
+    const b = await detectBreach({ ...base, limit_basis: 'WEIRD' },
+      { writtenLinePct: 30, programLimit100Usd: 100 * M, epiUsd: 4 * M, cobIds: ['x'] });
+    expect(b.type).toBe('LIMIT'); // fell back to signed exposure
   });
 });
