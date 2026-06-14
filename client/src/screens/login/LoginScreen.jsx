@@ -292,7 +292,8 @@ export default function LoginScreen() {
             </button>
           </form>
 
-          {/* ── Add user (test utility) ─────────────────────────────────── */}
+          {/* ── Add user (test utility — DEV builds only, compiled out of prod) ── */}
+          {import.meta.env.DEV && (
           <div style={{ marginTop: 16, borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 14 }}>
             {addUserSuccess && !showAddUser && (
               <div role="status" style={{ fontSize: 11, color: 'rgba(35,209,139,0.85)', marginBottom: 10 }}>{addUserSuccess}</div>
@@ -309,6 +310,7 @@ export default function LoginScreen() {
               <AddUserPanel onCreated={handleUserCreated} onCancel={() => setShowAddUser(false)} />
             )}
           </div>
+          )}
 
           {/* ── Test Access (DEV builds only — compiled out of production) ── */}
           {import.meta.env.DEV && (
