@@ -97,6 +97,11 @@ jobs:
       - name: Unit tests (server)
         run: npm run test:server
 
+      # Build the client BEFORE the client tests so bundleBudget.test.js runs
+      # against a real dist/ (it FAILS rather than skips when dist is absent).
+      - name: Build client (for the bundle-size budget)
+        run: npm run build --prefix client
+
       - name: Unit tests + coverage (client)
         run: npm run test:client -- --coverage
 
