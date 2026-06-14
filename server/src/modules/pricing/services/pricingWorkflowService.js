@@ -9,16 +9,15 @@ import {
   getArbiterOptions,
   approveContract,
   markContractSigned,
+  markNotTakenUp,
+  recallOffer,
 } from '../../../services/approvals.js';
 import { logAudit } from '../../../services/audit.js';
 import { pool } from '../../../db/pool.js';
 import {
   replaceOffer,
   markDeclined,
-  forceDraftStatus,
   getLegacyApprovalTrail,
-  recallOffer,
-  markNtu,
   insertApprovalEvent,
 } from '../repositories/pricingRepository.js';
 import { parseOfferLinePct, parseSignedLinePct } from './pricingHelpers.js';
@@ -98,8 +97,9 @@ export async function markApprovedAction(contractId, actor, { comment, line_pct 
 }
 
 export async function returnToUnderwriterAction(contractId, actor, reason) {
-  await returnToUnderwriter({ contractId, actorUserId: actor.actorUserId, actorName: actor.actorName, actorRole: actor.actorRole, reason });
-  await forceDraftStatus(contractId);
+  // Authority (eligible approver/senior) + state are enforced inside the
+  // approval service via assertWorkflowTransition; the DRAFT write lives there.
+  return returnToUnderwriter({ contractId, actorUserId: actor.actorUserId, actorName: actor.actorName, actorRole: actor.actorRole, reason });
 }
 
 export async function getApprovalTrailAction(contractId) {
@@ -109,9 +109,9 @@ export async function getApprovalTrailAction(contractId) {
 }
 
 export async function recallOfferAction(contractId, actor, reason) {
-  await recallOffer(contractId, { ...actor, comment: reason });
-  await logAudit(pool, { entityType: 'CONTRACT', entityId: contractId, eventType: 'RECALLED', actor: actor.actorName, payload: { reason } });
-  return { nextStatus: 'DRAFT' };
+  // Only the submitter may recall, and only while still pending — enforced by
+  // the RECALL action inside the approval service, which also logs the event.
+  return recallOffer({ contractId, actorUserId: actor.actorUserId, actorName: actor.actorName, actorRole: actor.actorRole, reason });
 }
 
 export async function markSignedAction(contractId, actor, signedLinePct) {
@@ -126,7 +126,7 @@ export async function markSignedAction(contractId, actor, signedLinePct) {
 }
 
 export async function markNtuAction(contractId, actor, reason) {
-  await markNtu(contractId, reason);
-  await logAudit(pool, { entityType: 'CONTRACT', entityId: contractId, eventType: 'NTU', actor: actor.actorName, payload: { reason } });
-  await insertApprovalEvent(contractId, 'NTU', actor, reason || null);
+  // NTU now funnels through the approval engine: assignee/eligible-senior
+  // authority + legal prior state, with the NTU write + event in one place.
+  return markNotTakenUp({ contractId, actorUserId: actor.actorUserId, actorName: actor.actorName, actorRole: actor.actorRole, reason });
 }

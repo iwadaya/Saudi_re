@@ -30,11 +30,13 @@ describe('no privileged workflow-state write lives outside the approval service'
     .filter((f) => !f.startsWith(path.join('db', 'seeds')))
     .filter((f) => f !== APPROVAL_SERVICE);
 
-  // A *write* of uw_status to a privileged state. The negative lookbehind skips
-  // qualified reads like `c.uw_status = 'SIGNED'` in WHERE clauses.
-  const UW_PRIVILEGED_WRITE = /(?<![\w.])uw_status\s*=\s*'(APPROVED|AWAITING_SIGNED_LINE|SIGNED|BOUND)'/;
+  // A *write* of uw_status to a privileged OR terminal state. The negative
+  // lookbehind skips qualified reads like `c.uw_status = 'SIGNED'` in WHERE
+  // clauses. SIGNED and NTU are both terminal underwriting outcomes — neither
+  // may be written outside the approval service.
+  const UW_PRIVILEGED_WRITE = /(?<![\w.])uw_status\s*=\s*'(APPROVED|AWAITING_SIGNED_LINE|SIGNED|NTU|BOUND)'/;
 
-  it('no file writes uw_status into APPROVED / AWAITING_SIGNED_LINE / SIGNED / BOUND', () => {
+  it('no file writes uw_status into APPROVED / AWAITING_SIGNED_LINE / SIGNED / NTU / BOUND', () => {
     const offenders = [];
     for (const rel of sourceFiles) {
       const body = stripComments(readFileSync(path.join(SRC, rel), 'utf8'));
@@ -42,11 +44,11 @@ describe('no privileged workflow-state write lives outside the approval service'
         if (UW_PRIVILEGED_WRITE.test(line)) offenders.push(`${rel}:${i + 1}  ${line.trim()}`);
       });
     }
-    expect(offenders, `Privileged uw_status writes must go through approvals.js:\n${offenders.join('\n')}`).toEqual([]);
+    expect(offenders, `Privileged/terminal uw_status writes must go through approvals.js:\n${offenders.join('\n')}`).toEqual([]);
   });
 
-  it('the quote routes no longer write an approved/bound quote status directly', () => {
-    const QUOTE_PRIVILEGED_WRITE = /status\s*=\s*'(AWAITING_SIGNED_LINE|SIGNED|BOUND)'/;
+  it('the quote routes no longer write an approved/signed/ntu quote status directly', () => {
+    const QUOTE_PRIVILEGED_WRITE = /status\s*=\s*'(AWAITING_SIGNED_LINE|SIGNED|NTU|BOUND)'/;
     const offenders = [];
     for (const rel of ['routes/quotes.js', 'routes/quoteLifecycle.js']) {
       const body = stripComments(readFileSync(path.join(SRC, rel), 'utf8'));
@@ -54,12 +56,14 @@ describe('no privileged workflow-state write lives outside the approval service'
         if (QUOTE_PRIVILEGED_WRITE.test(line)) offenders.push(`${rel}:${i + 1}  ${line.trim()}`);
       });
     }
-    expect(offenders, `Quote approval must go through approveQuote:\n${offenders.join('\n')}`).toEqual([]);
+    expect(offenders, `Quote sign/NTU must go through approveQuote / markNotTakenUp:\n${offenders.join('\n')}`).toEqual([]);
   });
 
   it('the approval service itself is where these writes now live (sanity)', () => {
     const body = readFileSync(path.join(SRC, APPROVAL_SERVICE), 'utf8');
     expect(body).toMatch(/uw_status='SIGNED'/);                 // markContractSigned
+    expect(body).toMatch(/uw_status='NTU'/);                    // markNotTakenUp (treaty)
+    expect(body).toMatch(/status='NTU'/);                       // markNotTakenUp (quote)
     expect(body).toMatch(/status='AWAITING_SIGNED_LINE'/);      // approveQuote
     expect(body).toMatch(/assertWorkflowTransition/);
   });
@@ -70,7 +74,10 @@ const { poolMock } = vi.hoisted(() => ({ poolMock: { query: vi.fn() } }));
 vi.mock('../db/pool.js', () => ({ pool: poolMock }));
 vi.mock('./ldf/benchmark.js', () => ({ refreshBenchmarks: vi.fn(() => Promise.resolve()) }));
 
-const { assertWorkflowTransition, approveContract, markContractSigned, approveQuote } = await import('./approvals.js');
+const {
+  assertWorkflowTransition, approveContract, markContractSigned, approveQuote,
+  markNotTakenUp, returnToUnderwriter, recallOffer,
+} = await import('./approvals.js');
 
 const M = 1_000_000;
 const submitter = (over = {}) => ({
@@ -94,6 +101,7 @@ function mockDb(cfg = {}) {
     const s = String(sql);
     const isSelect = /^\s*SELECT/i.test(s);
     if (isSelect && s.includes('created_by_user_id')) return { rows: cfg.quoteRow ? [cfg.quoteRow] : [] };
+    if (isSelect && s.includes('assigned_to_user_id') && /FROM\s+public\.contract\s+WHERE/i.test(s)) return { rows: cfg.contractRow ? [cfg.contractRow] : [] };
     if (isSelect && s.includes('uw_status AS status')) return { rows: cfg.contractStatus ? [{ status: cfg.contractStatus }] : [] };
     if (isSelect && /SELECT\s+status\s+FROM\s+public\.quote/i.test(s)) return { rows: cfg.quoteStatus ? [{ status: cfg.quoteStatus }] : [] };
     if (isSelect && s.includes('v_offer_approval')) return { rows: cfg.offer ? [cfg.offer] : [] };
@@ -174,15 +182,194 @@ describe('approveContract (markApprovedAction path)', () => {
   });
 });
 
-describe('markContractSigned (markSignedAction path)', () => {
-  it('signs from AWAITING_SIGNED_LINE', async () => {
-    poolMock.query = mockDb({ contractStatus: 'AWAITING_SIGNED_LINE' });
-    const r = await markContractSigned({ contractId: 'c1', actorUserId: 'u-uw', actorRole: 'UW', signedLinePct: 12 });
+describe('markContractSigned (markSignedAction path) — state AND signer authority', () => {
+  // Within-mandate UW submission → route is CU only, so the eligible signer set is {u-cu}.
+  const signable = (over = {}) => ({
+    contractStatus: 'AWAITING_SIGNED_LINE',
+    offer: offer({ approver_options: [{ user_id: 'u-cu', role_code: 'CU' }] }),
+    submitter: submitter(),
+    candidates: [cand('u-cu', 'CU', 2, null), cand('u-tm', 'TM', 4, 5 * M)],
+    ...over,
+  });
+
+  it('an eligible approver signs from AWAITING_SIGNED_LINE', async () => {
+    poolMock.query = mockDb(signable());
+    const r = await markContractSigned({ contractId: 'c1', actorUserId: 'u-cu', actorName: 'CU', actorRole: 'CU', signedLinePct: 12 });
     expect(r.nextStatus).toBe('SIGNED');
   });
-  it('422s signing a DRAFT', async () => {
+
+  it('422s signing a DRAFT (wrong prior state) — before any authority check', async () => {
     poolMock.query = mockDb({ contractStatus: 'DRAFT' });
-    await expectStatus(markContractSigned({ contractId: 'c1', actorUserId: 'u-uw', actorRole: 'UW', signedLinePct: 12 }), 422);
+    await expectStatus(markContractSigned({ contractId: 'c1', actorUserId: 'u-cu', actorRole: 'CU', signedLinePct: 12 }), 422);
+  });
+
+  it('403s a signer who is not an eligible approver for this offer', async () => {
+    poolMock.query = mockDb(signable());
+    // u-tm is senior but the within-mandate route is CU only — TM is not eligible.
+    await expectStatus(markContractSigned({ contractId: 'c1', actorUserId: 'u-tm', actorRole: 'TM', signedLinePct: 12 }), 403, 'SIGN_FORBIDDEN');
+  });
+
+  it('403s a signer whose mandate does NOT cover the written-line exposure', async () => {
+    // 30M exposure breaches the UW; the TM (5M limit) cannot clear the gate, the CU can.
+    poolMock.query = mockDb({
+      contractStatus: 'AWAITING_SIGNED_LINE',
+      offer: offer({ epi_usd: 30 * M }),
+      submitter: submitter(),
+      candidates: [cand('u-tm', 'TM', 4, 5 * M), cand('u-cu', 'CU', 2, null)],
+    });
+    await expectStatus(markContractSigned({ contractId: 'c1', actorUserId: 'u-tm', actorRole: 'TM', signedLinePct: 12 }), 403, 'SIGN_FORBIDDEN');
+    // …and the sufficient CU may sign the same offer.
+    poolMock.query = mockDb({
+      contractStatus: 'AWAITING_SIGNED_LINE',
+      offer: offer({ epi_usd: 30 * M }),
+      submitter: submitter(),
+      candidates: [cand('u-tm', 'TM', 4, 5 * M), cand('u-cu', 'CU', 2, null)],
+    });
+    const r = await markContractSigned({ contractId: 'c1', actorUserId: 'u-cu', actorName: 'CU', actorRole: 'CU', signedLinePct: 12 });
+    expect(r.nextStatus).toBe('SIGNED');
+  });
+
+  it('403s the submitter signing their own offer (four-eyes built into the eligible set)', async () => {
+    poolMock.query = mockDb(signable());
+    await expectStatus(markContractSigned({ contractId: 'c1', actorUserId: 'u-sub', actorRole: 'UW', signedLinePct: 12 }), 403, 'SIGN_FORBIDDEN');
+  });
+});
+
+describe('markNotTakenUp (NTU) — assignee OR eligible senior, treaty + quote', () => {
+  it('the assignee (owner) may NTU a treaty from AWAITING_SIGNED_LINE', async () => {
+    poolMock.query = mockDb({
+      contractStatus: 'AWAITING_SIGNED_LINE',
+      contractRow: { assigned_to_user_id: 'u-owner' },
+      offer: offer(), submitter: submitter(), candidates: [],
+    });
+    const r = await markNotTakenUp({ contractId: 'c1', actorUserId: 'u-owner', actorName: 'Owner', actorRole: 'UW', reason: 'fell through' });
+    expect(r.nextStatus).toBe('NTU');
+  });
+
+  it('an eligible senior (not the owner) may NTU a treaty', async () => {
+    poolMock.query = mockDb({
+      contractStatus: 'AWAITING_SIGNED_LINE',
+      contractRow: { assigned_to_user_id: 'u-owner' },
+      offer: offer({ approver_options: [{ user_id: 'u-cu', role_code: 'CU' }] }),
+      submitter: submitter(), candidates: [cand('u-cu', 'CU', 2, null)],
+    });
+    const r = await markNotTakenUp({ contractId: 'c1', actorUserId: 'u-cu', actorName: 'CU', actorRole: 'CU', reason: 'x' });
+    expect(r.nextStatus).toBe('NTU');
+  });
+
+  it('403s a user who is neither the assignee nor an eligible senior', async () => {
+    poolMock.query = mockDb({
+      contractStatus: 'AWAITING_SIGNED_LINE',
+      contractRow: { assigned_to_user_id: 'u-owner' },
+      offer: offer({ approver_options: [{ user_id: 'u-cu', role_code: 'CU' }] }),
+      submitter: submitter(), candidates: [cand('u-cu', 'CU', 2, null)],
+    });
+    await expectStatus(markNotTakenUp({ contractId: 'c1', actorUserId: 'u-rando', actorRole: 'UW', reason: 'x' }), 403, 'NTU_FORBIDDEN');
+  });
+
+  it('422s NTU on a DRAFT treaty (wrong prior state)', async () => {
+    poolMock.query = mockDb({ contractStatus: 'DRAFT', contractRow: { assigned_to_user_id: 'u-owner' } });
+    await expectStatus(markNotTakenUp({ contractId: 'c1', actorUserId: 'u-owner', actorRole: 'UW', reason: 'x' }), 422);
+  });
+
+  it('the assignee may NTU a quote; routes through the gate', async () => {
+    poolMock.query = mockDb({
+      quoteStatus: 'AWAITING_SIGNED_LINE',
+      quoteRow: { created_by_user_id: 'u-sub', assigned_to_user_id: 'u-owner', next_approver: null },
+    });
+    const r = await markNotTakenUp({ quoteId: 'q1', actorUserId: 'u-owner', actorName: 'Owner', actorRole: 'UW', reason: 'x' });
+    expect(r.nextStatus).toBe('NTU');
+  });
+
+  it('403s a junior non-assignee on a quote NTU', async () => {
+    poolMock.query = mockDb({
+      quoteStatus: 'AWAITING_SIGNED_LINE',
+      quoteRow: { created_by_user_id: 'u-sub', assigned_to_user_id: 'u-owner', next_approver: null },
+    });
+    await expectStatus(markNotTakenUp({ quoteId: 'q1', actorUserId: 'u-rando', actorRole: 'UW', reason: 'x' }), 403, 'NTU_FORBIDDEN');
+  });
+});
+
+describe('returnToUnderwriter (RETURN) — eligible approver / senior', () => {
+  it('an eligible approver returns a pending treaty to DRAFT', async () => {
+    poolMock.query = mockDb({
+      contractStatus: 'AWAITING_APPROVAL',
+      offer: offer({ status: 'AWAITING_APPROVAL', approver_options: [{ user_id: 'u-cu', role_code: 'CU' }] }),
+      submitter: submitter(), candidates: [cand('u-cu', 'CU', 2, null)],
+    });
+    const r = await returnToUnderwriter({ contractId: 'c1', actorUserId: 'u-cu', actorName: 'CU', actorRole: 'CU', reason: 'redo' });
+    expect(r.nextStatus).toBe('DRAFT');
+  });
+
+  it('403s a non-eligible user trying to return a treaty', async () => {
+    poolMock.query = mockDb({
+      contractStatus: 'AWAITING_APPROVAL',
+      offer: offer({ status: 'AWAITING_APPROVAL', approver_options: [{ user_id: 'u-cu', role_code: 'CU' }] }),
+      submitter: submitter(), candidates: [cand('u-cu', 'CU', 2, null)],
+    });
+    await expectStatus(returnToUnderwriter({ contractId: 'c1', actorUserId: 'u-rando', actorRole: 'UW', reason: 'x' }), 403, 'RETURN_FORBIDDEN');
+  });
+
+  it('a senior may return a pending quote to DRAFT', async () => {
+    poolMock.query = mockDb({
+      quoteStatus: 'AWAITING_APPROVAL',
+      quoteRow: { created_by_user_id: 'u-sub', assigned_to_user_id: 'u-sub', next_approver: null },
+    });
+    const r = await returnToUnderwriter({ quoteId: 'q1', actorUserId: 'u-cu', actorName: 'CU', actorRole: 'CU', reason: 'redo' });
+    expect(r.nextStatus).toBe('DRAFT');
+  });
+
+  it('an eligible approver may return a DISPUTE_PENDING treaty (no regression for disputed items)', async () => {
+    poolMock.query = mockDb({
+      contractStatus: 'DISPUTE_PENDING',
+      offer: offer({ status: 'DISPUTE_PENDING', approver_options: [{ user_id: 'u-cu', role_code: 'CU' }] }),
+      submitter: submitter(), candidates: [cand('u-cu', 'CU', 2, null)],
+    });
+    const r = await returnToUnderwriter({ contractId: 'c1', actorUserId: 'u-cu', actorName: 'CU', actorRole: 'CU', reason: 'rethink' });
+    expect(r.nextStatus).toBe('DRAFT');
+  });
+});
+
+describe('recallOffer (RECALL) — submitter only, while still pending', () => {
+  it('the submitter recalls a pending treaty', async () => {
+    poolMock.query = mockDb({
+      contractStatus: 'AWAITING_APPROVAL',
+      offer: offer({ status: 'AWAITING_APPROVAL' }), submitter: submitter(), candidates: [],
+    });
+    const r = await recallOffer({ contractId: 'c1', actorUserId: 'u-sub', actorName: 'Sub', actorRole: 'UW', reason: 'oops' });
+    expect(r.nextStatus).toBe('DRAFT');
+  });
+
+  it('403s a non-submitter (even an approver) trying to recall', async () => {
+    poolMock.query = mockDb({
+      contractStatus: 'AWAITING_APPROVAL',
+      offer: offer({ status: 'AWAITING_APPROVAL', approver_options: [{ user_id: 'u-cu', role_code: 'CU' }] }),
+      submitter: submitter(), candidates: [cand('u-cu', 'CU', 2, null)],
+    });
+    await expectStatus(recallOffer({ contractId: 'c1', actorUserId: 'u-cu', actorRole: 'CU', reason: 'x' }), 403, 'RECALL_FORBIDDEN');
+  });
+
+  it('422s a recall once the item is no longer pending (DRAFT is not a recallable prior state)', async () => {
+    poolMock.query = mockDb({ contractStatus: 'DRAFT', offer: offer({ status: 'DRAFT' }), submitter: submitter() });
+    await expectStatus(recallOffer({ contractId: 'c1', actorUserId: 'u-sub', actorRole: 'UW' }), 422, 'INVALID_TRANSITION');
+  });
+
+  it('the submitter recalls a DISPUTE_PENDING treaty (an unresolved split is still recallable)', async () => {
+    poolMock.query = mockDb({
+      contractStatus: 'DISPUTE_PENDING',
+      offer: offer({ status: 'DISPUTE_PENDING' }), submitter: submitter(), candidates: [],
+    });
+    const r = await recallOffer({ contractId: 'c1', actorUserId: 'u-sub', actorName: 'Sub', actorRole: 'UW', reason: 'oops' });
+    expect(r.nextStatus).toBe('DRAFT');
+  });
+
+  it('the submitter recalls a pending quote', async () => {
+    poolMock.query = mockDb({
+      quoteStatus: 'AWAITING_APPROVAL',
+      quoteRow: { created_by_user_id: 'u-sub', assigned_to_user_id: 'u-sub', next_approver: null },
+    });
+    const r = await recallOffer({ quoteId: 'q1', actorUserId: 'u-sub', actorName: 'Sub', actorRole: 'UW', reason: 'oops' });
+    expect(r.nextStatus).toBe('DRAFT');
   });
 });
 

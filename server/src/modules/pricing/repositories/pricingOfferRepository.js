@@ -70,14 +70,12 @@ export async function markDeclined(contractId, reason) {
   scheduleBenchmarkRefresh();
 }
 
-// markApproved / markSigned removed: the approved (AWAITING_SIGNED_LINE) and
-// SIGNED writes now live in the approval service (approvals.js), behind the
-// recordDecision engine + assertWorkflowTransition gate. No route may write
-// these privileged states directly.
-
-export async function forceDraftStatus(contractId) {
-  await pool.query(`UPDATE public.contract SET uw_status='DRAFT',status='DRAFT',updated_at=now() WHERE contract_id=$1`, [contractId]);
-}
+// markApproved / markSigned / markNtu / recallOffer / forceDraftStatus removed:
+// every privileged or terminal state write (APPROVED / AWAITING_SIGNED_LINE /
+// SIGNED / NTU, and the DRAFT reset behind return/recall) now lives in the
+// approval service (approvals.js), behind the recordDecision engine +
+// assertWorkflowTransition gate with per-action authority. No route may write
+// these states directly.
 
 export async function getLegacyApprovalTrail(contractId) {
   const { rows } = await pool.query(
@@ -87,41 +85,6 @@ export async function getLegacyApprovalTrail(contractId) {
     [contractId]
   );
   return rows;
-}
-
-export async function recallOffer(contractId, actor) {
-  await pool.query(
-    `UPDATE public.contract_offer SET
-       status='RETURNED',
-       peer1_decision=NULL, peer1_at=NULL, peer1_comment=NULL, peer1_user_id=NULL,
-       peer2_user_id=NULL, peer2_decision=NULL, peer2_at=NULL, peer2_comment=NULL,
-       arbiter_required=false, arbiter_user_id=NULL, arbiter_decision=NULL,
-       approval_step=0, next_approver_id=NULL, updated_at=now()
-     WHERE contract_id=$1`,
-    [contractId]
-  );
-  await forceDraftStatus(contractId);
-  await pool.query(
-    `INSERT INTO public.offer_approval_event (contract_id,event_type,actor_user_id,actor_name,actor_role,comment)
-     VALUES ($1,'RECALLED',$2,$3,$4,$5)`,
-    [contractId, actor.actorUserId || null, actor.actorName, actor.actorRole || null, actor.comment]
-  ).catch(() => {});
-}
-
-export async function markNtu(contractId, reason) {
-  // NTU (Not-Taken-Up) happens AFTER the offer went out; can't NTU
-  // a draft or a pending approval.
-  const current = await loadCurrentStatus(contractId);
-  assertLegalTransition(current, 'NTU');
-  await pool.query(
-    `UPDATE public.contract SET uw_status='NTU',status='NTU',ntu_reason=$2,ntu_at=now(),updated_at=now() WHERE contract_id=$1`,
-    [contractId, reason]
-  );
-  await pool.query(
-    `UPDATE public.contract_offer SET status='NTU',ntu_at=now(),ntu_reason=$2 WHERE contract_id=$1`,
-    [contractId, reason]
-  );
-  scheduleBenchmarkRefresh();
 }
 
 export async function insertApprovalEvent(contractId, eventType, actor, comment = null) {

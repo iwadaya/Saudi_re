@@ -17,7 +17,7 @@ import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { storeUploadedFile } from '../lib/uploadStorage.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
 import { assertCanEdit } from '../services/permissions.js';
-import { approveQuote } from '../services/approvals.js';
+import { approveQuote, returnToUnderwriter, recallOffer, markNotTakenUp } from '../services/approvals.js';
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
 import { verifyNpPricingOutputs, summariseDrifts, isStrictMode, pricingDriftStats } from '../lib/pricingVerifier.js';
 import { getWordingChecklist, runWordingChecklistAi, saveWordingChecklist } from '../services/wordingChecklist.js';
@@ -1551,40 +1551,25 @@ router.post("/quotes/:id/offer/mark-approved", asyncHandler(async (req, res) => 
 }));
 
 router.post("/quotes/:id/offer/return-to-underwriter", asyncHandler(async (req, res) => {
+  // Authority (eligible approver / senior) + legal prior state are enforced by
+  // the RETURN action inside the approval service; the DRAFT write + event live
+  // there. Actor identity is the verified req.user (DB-resolved), never client input.
   const { id } = req.params;
   const { reason } = req.body;
   const actor = await resolveAuditActor(req);
-  await pool.query(`UPDATE public.quote SET status='DRAFT', updated_at=now() WHERE quote_id=$1`, [id]);
-  await pool.query(
-    `INSERT INTO public.quote_offer (quote_id, status, updated_at)
-     VALUES ($1, 'RETURNED', now())
-     ON CONFLICT (quote_id) DO UPDATE SET
-       status='RETURNED',
-       updated_at=now()`,
-    [id]
-  ).catch(() => {});
-  await pool.query(`INSERT INTO public.offer_approval_event (quote_id,event_type,actor_user_id,actor_name,actor_role,comment) VALUES ($1,'RETURNED_TO_UW',$2,$3,$4,$5)`,[id,actor.actorUserId,actor.actorName,actor.actorRole,reason||null]).catch(()=>{});
-  res.json({ ok: true });
+  const result = await returnToUnderwriter({ quoteId: id, actorUserId: actor.actorUserId, actorName: actor.actorName, actorRole: actor.actorRole, reason });
+  res.json({ ok: true, ...result });
 }));
 
 // POST /quotes/:id/offer/recall — underwriter recalls submission before CU decides
 router.post("/quotes/:id/offer/recall", asyncHandler(async (req, res) => {
+  // Only the originator may recall, and only while still pending — enforced by
+  // the RECALL action inside the approval service, which also logs the event.
   const { id } = req.params;
   const { reason } = req.body;
   const actor = await resolveAuditActor(req);
-  await pool.query(`UPDATE public.quote SET status='DRAFT', updated_at=now() WHERE quote_id=$1`, [id]);
-  await pool.query(
-    `INSERT INTO public.quote_offer (quote_id, status, updated_at)
-     VALUES ($1, 'RECALLED', now())
-     ON CONFLICT (quote_id) DO UPDATE SET status='RECALLED', updated_at=now()`,
-    [id]
-  ).catch(() => {});
-  await pool.query(
-    `INSERT INTO public.offer_approval_event (quote_id,event_type,actor_user_id,actor_name,actor_role,comment)
-     VALUES ($1,'RECALLED',$2,$3,$4,$5)`,
-    [id, actor.actorUserId, actor.actorName, actor.actorRole, reason||null]
-  ).catch(() => {});
-  res.json({ ok: true });
+  const result = await recallOffer({ quoteId: id, actorUserId: actor.actorUserId, actorName: actor.actorName, actorRole: actor.actorRole, reason });
+  res.json({ ok: true, ...result });
 }));
 
 router.post("/quotes/:id/offer/mark-signed", asyncHandler(async (req, res) => {
@@ -1600,18 +1585,13 @@ router.post("/quotes/:id/offer/mark-signed", asyncHandler(async (req, res) => {
 }));
 
 router.post("/quotes/:id/offer/ntu", asyncHandler(async (req, res) => {
+  // NTU funnels through the approval engine: assignee / eligible-senior authority
+  // + legal prior state, with the NTU write + immutable event in one place.
   const { id } = req.params;
   const { reason } = req.body;
   const actor = await resolveAuditActor(req);
-  await pool.query(`UPDATE public.quote SET status='NTU',ntu_reason=$2,ntu_at=now(),updated_at=now() WHERE quote_id=$1`, [id,reason||null]);
-  await pool.query(`INSERT INTO public.offer_approval_event (quote_id,event_type,actor_user_id,actor_name,actor_role,comment) VALUES ($1,'NTU',$2,$3,$4,$5)`,[id,actor.actorUserId,actor.actorName,actor.actorRole,reason||null]).catch(()=>{});
-  await pool.query(
-    `INSERT INTO public.quote_offer (quote_id, status, updated_at)
-     VALUES ($1, 'NTU', now())
-     ON CONFLICT (quote_id) DO UPDATE SET status='NTU', updated_at=now()`,
-    [id]
-  ).catch(() => {});
-  res.json({ ok: true });
+  const result = await markNotTakenUp({ quoteId: id, actorUserId: actor.actorUserId, actorName: actor.actorName, actorRole: actor.actorRole, reason });
+  res.json({ ok: true, ...result });
 }));
 // Approval trail for quotes (mirrors contracts endpoint)
 router.get("/quotes/:id/approval-trail", asyncHandler(async (req, res) => {
