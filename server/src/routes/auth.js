@@ -10,6 +10,7 @@ import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { logAudit } from '../services/audit.js';
 import { signAuthToken } from '../lib/authToken.js';
+import { requireMinLevel } from '../middleware/requestContext.js';
 
 const router = Router();
 
@@ -270,17 +271,13 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
   const isFormPayload = b.first_name != null || b.surname != null || b.password != null;
 
   // ── Caller gate ──
-  // Authenticated creates still require Chief Underwriter / Chief Executive
-  // (hierarchy_level <= 2). With no caller it's an open (login-screen) create,
-  // allowed only when test registration is enabled.
-  const callerUserId = req.headers['x-user-id'];
-  if (callerUserId) {
-    const { rows: callerRows } = await pool.query(
-      `SELECT r.hierarchy_level FROM public.uw_user u JOIN public.uw_role r ON r.role_id = u.role_id WHERE u.user_id = $1`,
-      [callerUserId]
-    );
-    if (!callerRows.length || callerRows[0].hierarchy_level > 2) {
-      return res.status(403).json({ error: 'Only Chief Underwriter or Chief Executive can create users.' });
+  // Authenticated creates require Chief Underwriter / Chief Executive
+  // (hierarchy_level <= 2), read from the VERIFIED token identity (never a
+  // header). With no identity it's an open (login-screen) create, allowed only
+  // when test registration is enabled.
+  if (req.user) {
+    if (Number(req.user.hierarchyLevel) > 2) {
+      return res.status(403).json({ error: 'Only Chief Underwriter or Chief Executive can create users.', code: 'FORBIDDEN' });
     }
   } else if (!openRegistrationEnabled()) {
     return res.status(403).json({ error: 'Open registration is disabled.' });
@@ -362,15 +359,15 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
 
   await logAudit(pool, {
     entityType: 'USER', entityId: rows[0].user_id,
-    eventType: 'USER_CREATED', actor: req.headers['x-user-name'] || (callerUserId ? 'ADMIN' : 'SELF_REGISTRATION'),
-    payload: { username: finalUsername, role_id: roleId, open_registration: !callerUserId },
+    eventType: 'USER_CREATED', actor: req.user?.displayName || (req.user ? 'ADMIN' : 'SELF_REGISTRATION'),
+    payload: { username: finalUsername, role_id: roleId, open_registration: !req.user },
   }).catch(() => {});
 
   res.status(201).json(rows[0]);
 }));
 
 // ── PATCH /api/auth/users/:id — update user ───────────────────────────────
-router.patch('/auth/users/:id', asyncHandler(async (req, res) => {
+router.patch('/auth/users/:id', requireMinLevel(2), asyncHandler(async (req, res) => {
   const { id } = req.params;
   const b = req.body || {};
   const fields = [];
@@ -408,7 +405,7 @@ router.get('/auth/mandates/:userId', asyncHandler(async (req, res) => {
 }));
 
 // ── PUT /api/auth/mandates/:userId — set/update mandate for a user ─────────
-router.put('/auth/mandates/:userId', asyncHandler(async (req, res) => {
+router.put('/auth/mandates/:userId', requireMinLevel(2), asyncHandler(async (req, res) => {
   const b = req.body || {};
   const { userId } = req.params;
 

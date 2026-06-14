@@ -50,9 +50,14 @@ vi.mock('../services/audit.js', () => ({ logAudit: vi.fn(() => Promise.resolve()
 
 const { default: authRouter, hashPassword, verifyPassword } = await import('./auth.js');
 
+// Stand-in for authenticate(): the verified identity for the request, set
+// per-test. null = anonymous (matches the open-registration / login paths).
+let currentUser = null;
+
 function buildApp() {
   const app = express();
   app.use(express.json());
+  app.use((req, _res, next) => { req.user = currentUser; next(); });
   app.use(authRouter);
   app.use((err, _req, res, _next) => { res.status(err.status || 500).json({ error: err.message }); });
   return app;
@@ -84,7 +89,34 @@ async function call(app, { method = 'GET', path, body, headers = {} }) {
 beforeEach(() => {
   queryLog.length = 0;
   scenario = {};
+  currentUser = null;
   delete process.env.ALLOW_OPEN_REGISTRATION; // default-on in test env (NODE_ENV !== 'production')
+});
+
+describe('privileged auth gates (verified req.user)', () => {
+  const ADD_USER = { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'secret1', confirm_password: 'secret1' };
+
+  it('POST /auth/users by an authenticated Underwriter → 403', async () => {
+    currentUser = { userId: 'u-uw', roleCode: 'TUW', hierarchyLevel: 5, displayName: 'UW' };
+    const res = await call(buildApp(), { method: 'POST', path: '/auth/users', body: ADD_USER });
+    expect(res.status).toBe(403);
+  });
+
+  it('POST /auth/users by a CU → 201', async () => {
+    currentUser = { userId: 'u-cu', roleCode: 'CU', hierarchyLevel: 2, displayName: 'CU' };
+    const res = await call(buildApp(), { method: 'POST', path: '/auth/users', body: ADD_USER });
+    expect(res.status).toBe(201);
+  });
+
+  it('PUT /auth/mandates/:id by an Underwriter → 403, by a CU → not 403', async () => {
+    currentUser = { userId: 'u-uw', roleCode: 'TUW', hierarchyLevel: 5, displayName: 'UW' };
+    const denied = await call(buildApp(), { method: 'PUT', path: '/auth/mandates/u-x', body: { treaty_limit_usd: 1 } });
+    expect(denied.status).toBe(403);
+
+    currentUser = { userId: 'u-cu', roleCode: 'CU', hierarchyLevel: 2, displayName: 'CU' };
+    const ok = await call(buildApp(), { method: 'PUT', path: '/auth/mandates/u-x', body: { treaty_limit_usd: 1 } });
+    expect(ok.status).not.toBe(403);
+  });
 });
 
 describe('password hashing helpers', () => {

@@ -122,5 +122,31 @@ export function requireAuth(req, res, next) {
   });
 }
 
+/**
+ * Authorize by role code, e.g. requireRole('CE','CU'). Reads the VERIFIED
+ * req.user (set by authenticate) — never a client header. 401 if anonymous,
+ * 403 if the role isn't allowed.
+ */
+export function requireRole(...codes) {
+  const allowed = new Set(codes.map((c) => String(c).toUpperCase()));
+  return (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'Authentication required.', code: 'UNAUTHORIZED' });
+    if (allowed.has(String(req.user.roleCode || '').toUpperCase())) return next();
+    return res.status(403).json({ error: `Requires role: ${codes.join(', ')}.`, code: 'FORBIDDEN' });
+  };
+}
+
+/**
+ * Authorize by minimum hierarchy level (lower number = higher authority), e.g.
+ * requireMinLevel(2) = Chief Underwriter or above. Reads the VERIFIED req.user.
+ */
+export function requireMinLevel(n) {
+  return (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'Authentication required.', code: 'UNAUTHORIZED' });
+    if (Number(req.user.hierarchyLevel) <= n) return next();
+    return res.status(403).json({ error: 'You do not have sufficient authority for this action.', code: 'FORBIDDEN' });
+  };
+}
+
 // Back-compat alias (older imports referenced attachRequestContext).
 export const attachRequestContext = authenticate;

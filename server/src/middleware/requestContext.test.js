@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const { poolMock } = vi.hoisted(() => ({ poolMock: { query: vi.fn() } }));
 vi.mock('../db/pool.js', () => ({ pool: poolMock }));
 
-const { authenticate, requireAuth } = await import('./requestContext.js');
+const { authenticate, requireAuth, requireRole, requireMinLevel } = await import('./requestContext.js');
 const { signAuthToken, verifyAuthToken } = await import('../lib/authToken.js');
 
 // Minimal Express-like req with header() lookup (case-insensitive).
@@ -72,6 +72,35 @@ describe('authenticate — demo + anonymous', () => {
     const req = makeReq({ 'x-user-role': 'CE', 'x-user-id': 'attacker', 'x-user-level': '1' });
     await authenticate(req, makeRes(), vi.fn());
     expect(req.user).toBeNull();
+  });
+});
+
+describe('requireMinLevel / requireRole (verified req.user only)', () => {
+  it('requireMinLevel(2): an Underwriter (level 5) is 403, a CU (level 2) passes', () => {
+    const uw = makeRes(); const uwNext = vi.fn();
+    requireMinLevel(2)({ user: { hierarchyLevel: 5, roleCode: 'TUW' } }, uw, uwNext);
+    expect(uwNext).not.toHaveBeenCalled();
+    expect(uw.statusCode).toBe(403);
+    expect(uw.body).toMatchObject({ code: 'FORBIDDEN' });
+
+    const cuNext = vi.fn();
+    requireMinLevel(2)({ user: { hierarchyLevel: 2, roleCode: 'CU' } }, makeRes(), cuNext);
+    expect(cuNext).toHaveBeenCalled();
+  });
+
+  it('requireRole: only listed roles pass; anonymous is 401', () => {
+    const okNext = vi.fn();
+    requireRole('CE', 'CU')({ user: { roleCode: 'CE' } }, makeRes(), okNext);
+    expect(okNext).toHaveBeenCalled();
+
+    const noRes = makeRes(); const noNext = vi.fn();
+    requireRole('CE', 'CU')({ user: { roleCode: 'TUW' } }, noRes, noNext);
+    expect(noNext).not.toHaveBeenCalled();
+    expect(noRes.statusCode).toBe(403);
+
+    const anonRes = makeRes();
+    requireRole('CU')({ user: null }, anonRes, vi.fn());
+    expect(anonRes.statusCode).toBe(401);
   });
 });
 
