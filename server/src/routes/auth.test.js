@@ -106,7 +106,7 @@ beforeEach(() => {
 });
 
 describe('privileged auth gates (verified req.user)', () => {
-  const ADD_USER = { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'secret12', confirm_password: 'secret12' };
+  const ADD_USER = { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'correcthorse12', confirm_password: 'correcthorse12' };
 
   it('POST /auth/users by an authenticated Underwriter → 403', async () => {
     currentUser = { userId: 'u-uw', roleCode: 'TUW', hierarchyLevel: 5, displayName: 'UW' };
@@ -146,22 +146,23 @@ describe('password hashing helpers', () => {
 });
 
 describe('validatePasswordStrength (single shared policy)', () => {
-  it('accepts a reasonable 8+ char password', () => {
-    expect(validatePasswordStrength('secret12')).toBeNull();
-    expect(validatePasswordStrength('brandnew2')).toBeNull();
+  it('accepts a reasonable 12+ char password', () => {
+    expect(validatePasswordStrength('correcthorse12')).toBeNull();
+    expect(validatePasswordStrength('brandnewpass12')).toBeNull();
   });
-  it('rejects anything shorter than 8 chars', () => {
-    expect(validatePasswordStrength('short7!')).toMatch(/at least 8/i);
-    expect(validatePasswordStrength('')).toMatch(/at least 8/i);
+  it('rejects anything shorter than 12 chars (incl. an 11-char near-miss)', () => {
+    expect(validatePasswordStrength('short7!')).toMatch(/at least 12/i);
+    expect(validatePasswordStrength('elevenchars')).toMatch(/at least 12/i); // 11 chars
+    expect(validatePasswordStrength('')).toMatch(/at least 12/i);
   });
-  it("rejects the shared seeded temp password 'Universe#1234'", () => {
+  it("rejects the shared seeded temp password 'Universe#1234' (13 chars, passes length)", () => {
     expect(validatePasswordStrength('Universe#1234')).toMatch(/temporary password/i);
   });
-  it('rejects obvious weak/common values, all-same-char, and all-digit', () => {
-    expect(validatePasswordStrength('password')).toMatch(/too common|weak/i);
-    expect(validatePasswordStrength('qwerty123')).toMatch(/too common|weak/i);
-    expect(validatePasswordStrength('aaaaaaaa')).toMatch(/weak/i);
-    expect(validatePasswordStrength('12345678')).toBeTruthy(); // all-digit (common) rejected
+  it('rejects obvious weak/common values, all-same-char, and all-digit (at 12+ length)', () => {
+    expect(validatePasswordStrength('password1234')).toMatch(/too common|weak/i);
+    expect(validatePasswordStrength('qwertyuiop12')).toMatch(/too common|weak/i);
+    expect(validatePasswordStrength('aaaaaaaaaaaa')).toMatch(/weak/i);          // 12 same chars
+    expect(validatePasswordStrength('123456789012')).toBeTruthy();              // 12 all-digit
   });
 });
 
@@ -170,7 +171,7 @@ describe('POST /auth/users (Add-user form)', () => {
     const app = buildApp();
     const res = await call(app, {
       method: 'POST', path: '/auth/users',
-      body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'secret12', confirm_password: 'secret12' },
+      body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'correcthorse12', confirm_password: 'correcthorse12' },
     });
     expect(res.status).toBe(201);
     expect(res.body.display_name).toBe('Ada Lovelace');
@@ -191,14 +192,14 @@ describe('POST /auth/users (Add-user form)', () => {
     expect(res.body.error).toBe('Passwords do not match');
   });
 
-  it('rejects a password shorter than the shared 8-char minimum (was 6)', async () => {
+  it('rejects a password shorter than the shared 12-char minimum', async () => {
     const app = buildApp();
     const res = await call(app, {
       method: 'POST', path: '/auth/users',
       body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'short7!', confirm_password: 'short7!' },
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/at least 8/i);
+    expect(res.body.error).toMatch(/at least 12/i);
   });
 
   it("rejects the seeded temp password 'Universe#1234' on create (rejected everywhere)", async () => {
@@ -215,7 +216,7 @@ describe('POST /auth/users (Add-user form)', () => {
     const app = buildApp();
     const res = await call(app, {
       method: 'POST', path: '/auth/users',
-      body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'password123', confirm_password: 'password123' },
+      body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'password1234', confirm_password: 'password1234' },
     });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/too common|weak/i);
@@ -226,7 +227,7 @@ describe('POST /auth/users (Add-user form)', () => {
     const app = buildApp();
     const res = await call(app, {
       method: 'POST', path: '/auth/users',
-      body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'secret12', confirm_password: 'secret12' },
+      body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'correcthorse12', confirm_password: 'correcthorse12' },
     });
     expect(res.status).toBe(201);
     expect(res.body.username).toBe('ada.lovelace2');
@@ -338,13 +339,13 @@ describe('POST /auth/change-password — self-service, verified identity only', 
     scenario.pwHash = hashPassword('oldpass1');
     const res = await call(buildApp(), {
       method: 'POST', path: '/auth/change-password',
-      body: { currentPassword: 'oldpass1', newPassword: 'brandnew2', confirmPassword: 'brandnew2' },
+      body: { currentPassword: 'oldpass1', newPassword: 'brandnewpass12', confirmPassword: 'brandnewpass12' },
     });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
     // Persisted a fresh scrypt of the NEW password against the verified id…
     expect(scenario.pwUpdate.userId).toBe('u-me');
-    expect(verifyPassword('brandnew2', scenario.pwUpdate.newHash)).toBe(true);
+    expect(verifyPassword('brandnewpass12', scenario.pwUpdate.newHash)).toBe(true);
     expect(verifyPassword('oldpass1', scenario.pwUpdate.newHash)).toBe(false);
     // …and cleared must_change_password in the same write.
     expect(scenario.pwUpdate.clearsForceFlag).toBe(true);
@@ -366,7 +367,7 @@ describe('POST /auth/change-password — self-service, verified identity only', 
     scenario.pwHash = hashPassword('oldpass1');
     const res = await call(buildApp(), {
       method: 'POST', path: '/auth/change-password',
-      body: { currentPassword: 'WRONG', newPassword: 'brandnew2', confirmPassword: 'brandnew2' },
+      body: { currentPassword: 'WRONG', newPassword: 'brandnewpass12', confirmPassword: 'brandnewpass12' },
     });
     expect(res.status).toBe(401);
     expect(res.body.error).toBe('Current password is incorrect.');
@@ -378,7 +379,7 @@ describe('POST /auth/change-password — self-service, verified identity only', 
     scenario.pwHash = hashPassword('oldpass1');
     const res = await call(buildApp(), {
       method: 'POST', path: '/auth/change-password',
-      body: { currentPassword: 'oldpass1', newPassword: 'brandnew2', confirmPassword: 'different2' },
+      body: { currentPassword: 'oldpass1', newPassword: 'brandnewpass12', confirmPassword: 'different2' },
     });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Passwords do not match');
@@ -387,10 +388,10 @@ describe('POST /auth/change-password — self-service, verified identity only', 
 
   it('rejects new === current with 400 "New password must differ"', async () => {
     currentUser = me;
-    scenario.pwHash = hashPassword('samepass1');
+    scenario.pwHash = hashPassword('samepasslong12');
     const res = await call(buildApp(), {
       method: 'POST', path: '/auth/change-password',
-      body: { currentPassword: 'samepass1', newPassword: 'samepass1', confirmPassword: 'samepass1' },
+      body: { currentPassword: 'samepasslong12', newPassword: 'samepasslong12', confirmPassword: 'samepasslong12' },
     });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('New password must differ');
@@ -404,7 +405,7 @@ describe('POST /auth/change-password — self-service, verified identity only', 
       body: { currentPassword: 'oldpass1', newPassword: 'short7!', confirmPassword: 'short7!' },
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/at least 8/i);
+    expect(res.body.error).toMatch(/at least 12/i);
   });
 
   it('rejects a missing field with 400', async () => {
@@ -412,7 +413,7 @@ describe('POST /auth/change-password — self-service, verified identity only', 
     scenario.pwHash = hashPassword('oldpass1');
     const res = await call(buildApp(), {
       method: 'POST', path: '/auth/change-password',
-      body: { currentPassword: 'oldpass1', newPassword: 'brandnew2' }, // no confirmPassword
+      body: { currentPassword: 'oldpass1', newPassword: 'brandnewpass12' }, // no confirmPassword
     });
     expect(res.status).toBe(400);
   });
@@ -422,7 +423,7 @@ describe('POST /auth/change-password — self-service, verified identity only', 
     scenario.pwHash = 'DEMO_HASH_2026'; // non-scrypt stored value
     const res = await call(buildApp(), {
       method: 'POST', path: '/auth/change-password',
-      body: { currentPassword: 'demo2026', newPassword: 'brandnew2', confirmPassword: 'brandnew2' },
+      body: { currentPassword: 'demo2026', newPassword: 'brandnewpass12', confirmPassword: 'brandnewpass12' },
     });
     expect(res.status).toBe(401);
     expect(scenario.pwUpdate).toBeUndefined();
@@ -435,7 +436,7 @@ describe('POST /auth/change-password — self-service, verified identity only', 
       method: 'POST', path: '/auth/change-password',
       body: {
         userId: 'u-victim', user_id: 'u-victim', id: 'u-victim',
-        currentPassword: 'oldpass1', newPassword: 'brandnew2', confirmPassword: 'brandnew2',
+        currentPassword: 'oldpass1', newPassword: 'brandnewpass12', confirmPassword: 'brandnewpass12',
       },
     });
     expect(res.status).toBe(200);
@@ -448,7 +449,7 @@ describe('POST /auth/change-password — self-service, verified identity only', 
     currentUser = null;
     const res = await call(buildApp(), {
       method: 'POST', path: '/auth/change-password',
-      body: { currentPassword: 'x', newPassword: 'brandnew2', confirmPassword: 'brandnew2' },
+      body: { currentPassword: 'x', newPassword: 'brandnewpass12', confirmPassword: 'brandnewpass12' },
     });
     expect(res.status).toBe(401);
     expect(scenario.pwUpdate).toBeUndefined();
