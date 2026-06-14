@@ -47,6 +47,21 @@ describe('LoginScreen people dropdown', () => {
     expect(screen.queryByText('Chief Underwriter')).toBeNull();
   });
 
+  it('renders the underwriter select and password input with an identical box model', async () => {
+    render(<LoginScreen />);
+    const select = await screen.findByLabelText('Underwriter');
+    const input = screen.getByPlaceholderText('Enter your password');
+    // The shared FIELD_STYLE is applied to both, so the box model can't drift.
+    for (const prop of ['height', 'boxSizing', 'borderRadius', 'padding', 'borderTopWidth']) {
+      expect(select.style[prop]).toBe(input.style[prop]);
+    }
+    expect(select.style.height).toBe('42px');
+    expect(select.style.boxSizing).toBe('border-box');
+    expect(input.style.height).toBe('42px');
+    // Native select chrome is reset so its height matches the input.
+    expect(select.style.appearance).toBe('none');
+  });
+
   it('defaults to a blank placeholder (no user pre-selected) and keeps Sign In disabled until one is picked', async () => {
     render(<LoginScreen />);
     const select = await screen.findByLabelText('Underwriter');

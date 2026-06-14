@@ -17,6 +17,47 @@ const DEMO_FALLBACK = [
   { user_id:'00000000-0000-0000-0000-000000000002', username:'underwriter', display_name:'Underwriter',                email:'uw@universe3.app',  role_code:'TUW', office:'Riyadh', treaty_limit_usd:10000000, approvals_required:2 },
 ];
 
+// One shared box model for every login control so the underwriter <select> and
+// the password <input> are pixel-identical (the native select otherwise renders
+// shorter + with an OS arrow — appearance:none + a custom chevron fixes that).
+// Mirrors .form-input's dark-theme values (components.css) but with an explicit
+// height + border-box so the two can't drift. The Sign In button reuses the
+// width + radius below. Padding leaves room on the right for each field's icon
+// (chevron / show-hide toggle).
+const FIELD_HEIGHT = 42;
+const FIELD_RADIUS = 10;
+const FIELD_STYLE = {
+  display: 'block',
+  width: '100%',
+  boxSizing: 'border-box',
+  height: FIELD_HEIGHT,
+  margin: 0,
+  padding: '0 38px 0 12px',
+  fontSize: 13,
+  fontFamily: 'inherit',
+  color: 'rgba(255,255,255,0.92)',
+  background: 'rgba(15,23,42,0.92)',
+  border: '1px solid rgba(148,163,184,0.35)',
+  borderRadius: FIELD_RADIUS,
+  outline: 'none',
+  appearance: 'none',
+  WebkitAppearance: 'none',
+  MozAppearance: 'none',
+  transition: 'border-color 0.15s, box-shadow 0.15s',
+};
+// Inline focus ring (identical on both fields) — matches .form-input:focus.
+// Inline styles can't carry :focus, and the inline border above would otherwise
+// win over the CSS rule, so the accent ring is applied via focus handlers (the
+// same e.currentTarget.style idiom this file already uses for hover).
+const onFieldFocus = (e) => {
+  e.currentTarget.style.borderColor = 'rgba(var(--accent-rgb),0.5)';
+  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(var(--accent-rgb),0.1)';
+};
+const onFieldBlur = (e) => {
+  e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)';
+  e.currentTarget.style.boxShadow = 'none';
+};
+
 // ── Test Access Panel ─────────────────────────────────────────────────────────
 function TestAccessPanel({ onLogin }) {
   const [name, setName] = useState('');
@@ -246,18 +287,26 @@ export default function LoginScreen() {
             {loadingUsers ? (
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,.35)', padding: '10px 0' }} aria-live="polite">Loading users…</div>
             ) : (
-              <select
-                id="login-user"
-                className="form-input"
-                aria-label="Underwriter"
-                value={sel?.user_id || ''}
-                onChange={e => { setSelectedUser(users.find(u => u.user_id === e.target.value) || null); setError(''); }}
-              >
-                <option value="" disabled>Select underwriter…</option>
-                {users.map(u => (
-                  <option key={u.user_id || u.email} value={u.user_id}>{u.display_name}</option>
-                ))}
-              </select>
+              <div style={{ position: 'relative' }}>
+                <select
+                  id="login-user"
+                  className="form-input"
+                  aria-label="Underwriter"
+                  value={sel?.user_id || ''}
+                  onChange={e => { setSelectedUser(users.find(u => u.user_id === e.target.value) || null); setError(''); }}
+                  onFocus={onFieldFocus}
+                  onBlur={onFieldBlur}
+                  style={FIELD_STYLE}
+                >
+                  <option value="" disabled>Select underwriter…</option>
+                  {users.map(u => (
+                    <option key={u.user_id || u.email} value={u.user_id}>{u.display_name}</option>
+                  ))}
+                </select>
+                {/* Custom chevron — the native arrow is removed by appearance:none
+                    so the select height matches the password input exactly. */}
+                <span aria-hidden="true" style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'rgba(255,255,255,0.45)', fontSize: 10 }}>▼</span>
+              </div>
             )}
           </div>
 
@@ -270,7 +319,8 @@ export default function LoginScreen() {
                   placeholder="Enter your password" autoComplete="current-password"
                   aria-describedby={error ? 'login-error' : (import.meta.env.DEV ? 'login-hint' : undefined)}
                   aria-invalid={!!error}
-                  style={{ width: '100%', paddingRight: 40 }} />
+                  onFocus={onFieldFocus} onBlur={onFieldBlur}
+                  style={FIELD_STYLE} />
                 <button type="button" onClick={() => setShowPw(v => !v)}
                   aria-label={showPw ? 'Hide password' : 'Show password'}
                   aria-pressed={showPw}
@@ -294,7 +344,7 @@ export default function LoginScreen() {
             <button type="submit" disabled={loading || !sel || !password}
               className="action-pill action-pill--primary"
               aria-label={loading ? 'Signing in' : 'Sign in'}
-              style={{ width: '100%', minHeight: 42, fontSize: 14, fontWeight: 700, opacity: (loading || !sel || !password) ? 0.5 : 1 }}>
+              style={{ width: '100%', minHeight: FIELD_HEIGHT, borderRadius: FIELD_RADIUS, fontSize: 14, fontWeight: 700, opacity: (loading || !sel || !password) ? 0.5 : 1 }}>
               {loading ? 'Signing in…' : <>Sign In <span aria-hidden="true">→</span></>}
             </button>
           </form>
