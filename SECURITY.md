@@ -2,15 +2,32 @@
 
 ## Authentication & authorization
 
-Identity comes from a **verified bearer token**, not client headers. On every
-request `authenticate` (server/src/middleware/requestContext.js) verifies the
-`Authorization: Bearer <token>` (or `auth_token` cookie), then re-reads the
-user's role and hierarchy level **fresh from the database** (`v_user_mandate`).
-A token issued before a demotion therefore cannot carry elevated rights.
+Identity comes from a **verified token carried in an httpOnly cookie**, not
+client headers and not JS-readable storage. On every request `authenticate`
+(server/src/middleware/requestContext.js) reads the token from the `auth_token`
+cookie, verifies its signature, then re-reads the user's role and hierarchy
+level **fresh from the database** (`v_user_mandate`). A token issued before a
+demotion therefore cannot carry elevated rights.
 
+- The token is set as an **httpOnly, SameSite=Strict, `Secure` (prod), `Path=/api`
+  cookie** by `POST /auth/login` and is **never** returned in the JSON body or
+  stored in `localStorage` — so an XSS payload cannot read or exfiltrate it.
+  `POST /auth/logout` clears the cookie.
+- `Authorization: Bearer <token>` is accepted **only** as a dev/test convenience
+  gated behind `ALLOW_DEMO_AUTH`; in production the header path is off entirely
+  (the browser cannot read the httpOnly cookie to forge it).
+- **CSRF:** because cookies are sent automatically by the browser, every
+  state-changing request (`POST/PUT/PATCH/DELETE`) that is cookie-authenticated
+  must carry a valid CSRF token. Login issues a **signed double-submit token** as
+  a readable `csrf_token` cookie (`Path=/`); the SPA echoes it in the
+  `X-CSRF-Token` header and `csrfProtection` requires header == cookie **and** a
+  valid server signature (a missing/forged/mismatched token → `403 CSRF_FAILED`).
+  GETs are exempt; `login`/`logout` are exempt (bootstrap); the Bearer/demo-header
+  dev-test paths are exempt (they carry no ambient cookie credential).
 - `requireAuth` blocks anonymous requests on all `/api` routes except the
-  login-screen public endpoints: `POST /auth/login`, `GET /auth/users`,
-  `GET /auth/roles`, and `POST /auth/users` (open registration, see below).
+  login-screen public endpoints: `POST /auth/login`, `POST /auth/logout`,
+  `GET /auth/users`, `GET /auth/roles`, and `POST /auth/users` (open
+  registration, see below).
 - `requireRole(...codes)` / `requireMinLevel(n)` gate privileged routes
   (e.g. user create/patch, mandate writes) on the **verified** `req.user`.
 - Assignment actions (allocate/reassign/self-assign) take the actor from
@@ -24,6 +41,11 @@ A token issued before a demotion therefore cannot carry elevated rights.
   still appear in request logging, never as the recorded actor.)
 - Editing a treaty/quote/fac risk is allowed only for the current assignee
   (services/permissions.js); seniority governs allocate/reassign, not edit.
+
+When the API and SPA share an origin (the production deployment serves the built
+client), `SameSite=Strict` + same-origin requests need no CORS. A split-origin
+deployment must set `CORS_ORIGIN` to the explicit client origin (never `*`) so
+the credentialed cookie flow works; `*` cannot be combined with credentials.
 
 ## Environment flags
 

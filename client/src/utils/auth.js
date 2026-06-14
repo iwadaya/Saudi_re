@@ -26,7 +26,23 @@ export function getSession() {
 }
 
 export function setSession(sessionData) {
-  safeStorage(s => s.setItem(SESSION_KEY, JSON.stringify(sessionData)));
+  // The auth token lives ONLY in the server's httpOnly cookie. Strip it before
+  // persisting so it can never land in localStorage (XSS-readable) — even if a
+  // caller accidentally passes one through.
+  const safe = { ...(sessionData || {}) };
+  delete safe.token;
+  safeStorage(s => s.setItem(SESSION_KEY, JSON.stringify(safe)));
+}
+
+/** Read the double-submit CSRF token the server set as a readable cookie.
+ *  Echoed back in the X-CSRF-Token header on mutating requests (see api.ts).
+ *  Returns '' when absent (e.g. logged out). The auth token itself is httpOnly
+ *  and intentionally NOT readable here. */
+export function getCsrfToken() {
+  try {
+    const m = /(?:^|;\s*)csrf_token=([^;]+)/.exec(document.cookie || '');
+    return m ? decodeURIComponent(m[1]) : '';
+  } catch { return ''; }
 }
 
 export function clearSession() {
@@ -91,8 +107,6 @@ export function getUserDisplayName() {
 }
 
 export function getUserId() { return getSession()?.userId || ''; }
-/** The signed bearer token issued by /auth/login (persisted in the session). */
-export function getAuthToken() { return getSession()?.token || ''; }
 export function getHierarchyLevel() { return getSession()?.hierarchyLevel ?? 99; }
 export function getEffectiveLimitUsd() { return getSession()?.effectiveLimitUsd ?? null; }
 export function getTreatyTypeScope() { return getSession()?.treatyTypeScope || 'BOTH'; }
@@ -103,9 +117,14 @@ export function isAtLeast(level) { return getHierarchyLevel() <= level; }
 export function canAccessApprovals() { return APPROVALS_ROLES.has(getSession()?.roleCode); }
 export function canOverrideBelow() { return getSession()?.canOverrideBelow === true; }
 
-/** @returns {Record<string, string>} auth headers for every API request.
- *  Authorization (Bearer <token>) is the real identity the server trusts; the
- *  x-user-* headers are kept for logging and the dev/test ALLOW_DEMO_AUTH path. */
+// (Sign-out now flows through utils/logout.performLogout, which also clears the
+//  server's httpOnly auth + CSRF cookies — see WizardLayout / Topbar / Approvals.)
+
+/** @returns {Record<string, string>} non-auth headers for every API request.
+ *  The real identity rides in the httpOnly auth cookie — never an Authorization
+ *  header sourced from JS-readable storage. The x-user-* headers carry NO
+ *  authority in production (the server ignores them unless ALLOW_DEMO_AUTH is on
+ *  for dev/test); they are kept for audit logging and that dev/test path. */
 export function getAuthHeaders() {
   const s = getSession();
   if (!s) return { 'x-user-role': 'TUW', 'x-user-name': 'User', 'x-user-id': '' };
@@ -116,15 +135,10 @@ export function getAuthHeaders() {
     ? (getTestName() || s.displayName || 'Tester')
     : (ROLE_LABELS[s.roleCode] || s.displayName || 'User');
 
-  const headers = {
+  return {
     'x-user-id':    s.userId,
     'x-user-role':  s.roleCode,
     'x-user-name':  userName,
     'x-user-level': String(s.hierarchyLevel || 99),
   };
-  if (s.token) headers.Authorization = `Bearer ${s.token}`;
-  return headers;
 }
-
-// Backward-compat alias used by WizardLayout's logout button.
-export function clearRole() { clearSession(); }

@@ -1,7 +1,8 @@
 // src/components/Topbar.jsx
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { clearSession, getSession, ROLE_LABELS, canAccessApprovals, isAtLeast } from '../utils/auth';
+import { getSession, ROLE_LABELS, canAccessApprovals, isAtLeast } from '../utils/auth';
+import { performLogout } from '../utils/logout';
 import { useViewAllTreaties } from '../utils/prefs';
 import { api } from '../api';
 import ChangePasswordForm from './ChangePasswordForm';
@@ -257,7 +258,7 @@ export default function Topbar({ title, subtitle, actions }) {
               {/* Logout */}
               {session && (
                 <div style={{ padding: 8 }}>
-                  <button onClick={() => { setViewingUser(null); clearSession(); navigate('/login'); }} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(248,113,113,0.25)', background: 'rgba(248,113,113,0.08)', color: '#f87171', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                  <button onClick={async () => { setViewingUser(null); await performLogout(); navigate('/login'); }} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(248,113,113,0.25)', background: 'rgba(248,113,113,0.08)', color: '#f87171', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                     ⎋ Log Out
                   </button>
                 </div>

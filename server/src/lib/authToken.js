@@ -9,6 +9,10 @@ import { env } from '../config/env.js';
 
 const DEFAULT_TTL_S = Math.max(1, Number(process.env.SESSION_TTL_HOURS) || 8) * 3600;
 
+// The token's lifetime in seconds — exported so the auth cookie's Max-Age can be
+// kept in lock-step with the signed token's exp (see lib/authCookies.js).
+export const AUTH_TOKEN_TTL_SECONDS = DEFAULT_TTL_S;
+
 // Read from the validated env config — no inline literal fallback. If the
 // secret is absent (only possible if validateEnv() was bypassed) we throw
 // rather than sign/verify with an empty/guessable key.

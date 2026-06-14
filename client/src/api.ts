@@ -1,4 +1,4 @@
-import { getAuthHeaders } from './utils/auth';
+import { getAuthHeaders, getCsrfToken } from './utils/auth';
 import { requirePasswordChange } from './utils/passwordGate';
 import { httpFetch, HttpError } from './utils/httpClient.js';
 import type {
@@ -223,6 +223,7 @@ const PATHS = {
   npExpiring: (id: string) => `/api/treaties/${enc(id)}/np/expiring`,
   mandateCheck: '/api/auth/mandate-check',
   authLogin: '/api/auth/login',
+  authLogout: '/api/auth/logout',
   authChangePassword: '/api/auth/change-password',
   authMe: '/api/auth/me',
   authUsers: '/api/auth/users',
@@ -337,12 +338,22 @@ async function request<T = unknown>(path: string, opts: RequestOpts = {}): Promi
     headers['Cache-Control'] = headers['Cache-Control'] || 'no-cache';
     headers.Pragma = headers.Pragma || 'no-cache';
   }
+  // CSRF double-submit: echo the readable csrf cookie on state-changing requests
+  // (GETs are exempt server-side). A caller-supplied header wins.
+  if (upperMethod !== 'GET' && upperMethod !== 'HEAD'
+      && !('X-CSRF-Token' in headers) && !('x-csrf-token' in headers)) {
+    const csrf = getCsrfToken();
+    if (csrf) headers['X-CSRF-Token'] = csrf;
+  }
   const init: Record<string, unknown> = {
     method,
     headers,
     signal,
     timeoutMs,
     retry,
+    // Send the httpOnly auth cookie on every request (same-origin in prod,
+    // CORS-credentialed cross-origin in dev). A caller can override via opts.
+    credentials: 'include',
     ...(bypassBrowserCache ? { cache: 'no-store' } : cache ? { cache } : {}),
     ...rest,
   };
@@ -587,9 +598,10 @@ export const api = {
   deleteDocument(docId: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.deleteDocument(docId), { method: 'DELETE', ...opts }); },
   getDocumentDownloadUrl(docId: string): string { return `${API_BASE}${PATHS.documentDownload(docId)}`; },
   getDocumentViewUrl(docId: string): string { return `${API_BASE}${PATHS.documentView(docId)}`; },
-  // Fetched as a blob (not an <a href>) because auth rides in headers.
+  // Fetched as a blob (not an <a href>) so we can surface a clean error. Auth
+  // rides in the httpOnly cookie, so credentials must be included.
   async getRenewalPackBlob(): Promise<Blob> {
-    const res = await fetch(`${API_BASE}/api/renewal-pack/export`, { headers: getAuthHeaders() });
+    const res = await fetch(`${API_BASE}/api/renewal-pack/export`, { headers: getAuthHeaders(), credentials: 'include' });
     if (!res.ok) throw new Error(`Renewal pack export failed (${res.status})`);
     return res.blob();
   },
@@ -738,6 +750,8 @@ export const api = {
   getUsers(opts?: RequestOpts): Promise<unknown> { return request(PATHS.authUsers, opts); },
   createUser(payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request(PATHS.authUsers, { method: 'POST', body: payload, ...opts }); },
   loginUser(payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request(PATHS.authLogin, { method: 'POST', body: payload, ...opts }); },
+  // Clears the server's httpOnly auth + CSRF cookies. Best-effort on sign-out.
+  logout(opts?: RequestOpts): Promise<unknown> { return request(PATHS.authLogout, { method: 'POST', body: {}, ...opts }); },
   // Verify the stored bearer token and refresh the session from server truth.
   // Used by the boot-time AuthBootstrap check; 401 ⇒ invalid/expired token.
   getMe(opts?: RequestOpts): Promise<{ session?: Record<string, unknown> }> { return request(PATHS.authMe, opts); },

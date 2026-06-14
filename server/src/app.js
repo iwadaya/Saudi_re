@@ -9,7 +9,7 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { pool, getPoolStats } from './db/pool.js';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
-import { authenticate, requireAuth } from './middleware/requestContext.js';
+import { authenticate, requireAuth, csrfProtection } from './middleware/requestContext.js';
 import { guardApiMutations } from './services/permissions.js';
 import { attachRequestId } from './middleware/requestId.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -31,9 +31,14 @@ const CORS_PREFLIGHT_MAX_AGE = 86400;
 
 function createCorsOptions() {
   if (env.corsOrigin === '*') {
+    // Wildcard is a dev convenience. Credentialed (cookie) requests cannot use a
+    // literal '*' ACAO, so outside production we REFLECT the request origin and
+    // allow credentials — that makes the cookie auth flow work cross-origin in
+    // dev (vite :3000 → api :4000, same-site). In production a wildcard is a
+    // misconfiguration: never reflect-with-credentials there.
     return {
-      origin: true,
-      credentials: false,
+      origin: true, // reflect the request origin (not a literal '*')
+      credentials: !env.isProduction,
       exposedHeaders: EXPOSED_HEADERS,
       maxAge: CORS_PREFLIGHT_MAX_AGE,
     };
@@ -391,6 +396,11 @@ export function createApp() {
 
   // Optional additive per-user quota (keyed on the verified user id).
   app.use('/api', createUserApiLimiter());
+
+  // CSRF double-submit guard. Runs after authenticate (needs req.authVia) and
+  // before any mutation handler. Only cookie-authenticated POST/PUT/PATCH/DELETE
+  // are checked; reads and the Bearer/demo-header dev-test paths pass through.
+  app.use('/api', csrfProtection);
 
   // Strict brute-force limiter on self-service password change (after
   // authenticate so it keys on the verified req.user.userId, before authRouter

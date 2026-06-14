@@ -14,6 +14,7 @@ import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { logAudit } from '../services/audit.js';
 import { signAuthToken } from '../lib/authToken.js';
+import { setAuthCookies, clearAuthCookies } from '../lib/authCookies.js';
 import { requireAuth, requireMinLevel } from '../middleware/requestContext.js';
 
 const router = Router();
@@ -24,6 +25,7 @@ const router = Router();
 // identity — authenticate() has already run and set req.user.
 const PUBLIC_AUTH = new Set([
   'POST /auth/login',
+  'POST /auth/logout',
   'GET /auth/users',
   'GET /auth/roles',
   'POST /auth/users',
@@ -203,6 +205,8 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
       const lc = String(username).trim().toLowerCase();
       const demo = DEMO_USERS_FALLBACK.find(u => u.username === lc || u.email === lc);
       if (demo && password === DEMO_PASSWORD) {
+        // Identity rides in the httpOnly cookie — never the JSON body.
+        setAuthCookies(res, signAuthToken({ sub: demo.user_id }));
         return res.json({ session: {
           userId: demo.user_id, username: demo.username, displayName: demo.display_name,
           email: demo.email, office: demo.office, roleId: demo.user_id,
@@ -212,7 +216,6 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
           treatyTypeScope: 'BOTH', approvalsRequired: demo.approvals_required || 1,
           allowedCobIds: [], restrictedCobIds: [], allowedCountryIds: [],
           isSystemAdmin: false, mandateActive: true,
-          token: signAuthToken({ sub: demo.user_id }),
         }});
       }
       return res.status(401).json({ error: 'Invalid credentials.' });
@@ -269,9 +272,20 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
   }).catch(() => {});
 
   // Issue a signed token carrying only the user id; role/level are re-read from
-  // the DB on every request, so the token can't preserve elevated rights.
-  res.json({ session: { ...buildSession(user), token: signAuthToken({ sub: user.user_id }) } });
+  // the DB on every request, so the token can't preserve elevated rights. The
+  // token is set as an httpOnly cookie (+ a readable CSRF cookie) and is NEVER
+  // returned in the body — the client gets session metadata only.
+  setAuthCookies(res, signAuthToken({ sub: user.user_id }));
+  res.json({ session: buildSession(user) });
 }));
+
+// ── POST /api/auth/logout — clear the auth + CSRF cookies ───────────────────
+// Public + CSRF-exempt so it always succeeds in dropping the session. Re-reading
+// identity is unnecessary: its sole effect is to clear this browser's cookies.
+router.post('/auth/logout', (_req, res) => {
+  clearAuthCookies(res);
+  res.json({ ok: true });
+});
 
 // ── GET /api/auth/me — refresh session from the verified token ─────────────
 router.get('/auth/me', asyncHandler(async (req, res) => {
