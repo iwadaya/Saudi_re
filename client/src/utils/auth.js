@@ -37,11 +37,16 @@ export function clearSession() {
 
 // ── Test-mode helpers ────────────────────────────────────────────────────────
 
+// Test-access helpers are a DEV-only convenience and are compiled out of
+// production builds (import.meta.env.DEV is statically false in prod, so the
+// bodies dead-code-eliminate to a no-op).
 export function getTestName() {
+  if (!import.meta.env.DEV) return '';
   return safeStorage(s => s.getItem(TEST_NAME_KEY)) || '';
 }
 
 export function setTestName(name) {
+  if (!import.meta.env.DEV) return;
   safeStorage(s => s.setItem(TEST_NAME_KEY, name));
 }
 
@@ -54,6 +59,7 @@ export function isTestSession() {
  * Reuses the seeded TUW UUID so no DB migration is needed.
  */
 export function createTestSession(displayName) {
+  if (!import.meta.env.DEV) return; // no test sessions in production builds
   const name = displayName.trim();
   setTestName(name);
   setSession({

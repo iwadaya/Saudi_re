@@ -6,7 +6,7 @@
 // before a demotion cannot carry elevated rights.
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
-const SECRET = process.env.SESSION_SECRET || 'dev-insecure-secret-change-me';
+const SECRET = process.env.AUTH_JWT_SECRET || process.env.SESSION_SECRET || 'dev-insecure-secret-change-me';
 const DEFAULT_TTL_S = Math.max(1, Number(process.env.SESSION_TTL_HOURS) || 8) * 3600;
 
 function sign(data) {

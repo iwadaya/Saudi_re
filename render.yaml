@@ -19,13 +19,20 @@ services:
         value: "https://modelling-tool.onrender.com"
       - key: SESSION_TTL_HOURS
         value: "8"
-      # Open (login-screen) self-registration. Enabled on this testing
-      # deployment so the login "Add user" utility works (this build also
-      # ships the no-password "Enter without password" test access). Set to
-      # "false" to lock self-registration down to authenticated CU/CE creates.
+      # Production security posture (see SECURITY.md):
+      #   • ALLOW_DEMO_AUTH is intentionally UNSET → the universal 'demo2026'
+      #     password and x-user-* header identity are rejected; only verified
+      #     token auth against real scrypt passwords works.
+      #   • Open (login-screen) self-registration is OFF → only CU/CE create users.
+      # A dev/preview service may set ALLOW_OPEN_REGISTRATION=true (and
+      # ALLOW_DEMO_AUTH=true) for testing; production must not.
       - key: ALLOW_OPEN_REGISTRATION
-        value: "true"
+        value: "false"
       - key: DATABASE_URL
+        sync: false
+      # Secret used to sign/verify auth tokens (lib/authToken.js). Set in the
+      # Render dashboard, never committed. Falls back to SESSION_SECRET if unset.
+      - key: AUTH_JWT_SECRET
         sync: false
       - key: SESSION_SECRET
         sync: false

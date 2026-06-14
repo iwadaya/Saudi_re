@@ -261,7 +261,7 @@ export default function LoginScreen() {
                 <input id="login-password" type={showPw ? 'text' : 'password'} className="form-input"
                   value={password} onChange={e => { setPassword(e.target.value); setError(''); }}
                   placeholder="Enter your password" autoComplete="current-password"
-                  aria-describedby={error ? 'login-error' : 'login-hint'}
+                  aria-describedby={error ? 'login-error' : (import.meta.env.DEV ? 'login-hint' : undefined)}
                   aria-invalid={!!error}
                   style={{ width: '100%', paddingRight: 40 }} />
                 <button type="button" onClick={() => setShowPw(v => !v)}
@@ -271,9 +271,11 @@ export default function LoginScreen() {
                   <span aria-hidden="true">{showPw ? '▼' : '▶'}</span>
                 </button>
               </div>
-              <div id="login-hint" style={{ fontSize: 10, color: 'rgba(255,255,255,.22)', marginTop: 5 }}>
-                Demo: <span style={{ fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,.38)' }}>demo2026</span>
-              </div>
+              {import.meta.env.DEV && (
+                <div id="login-hint" style={{ fontSize: 10, color: 'rgba(255,255,255,.22)', marginTop: 5 }}>
+                  Demo: <span style={{ fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,.38)' }}>demo2026</span>
+                </div>
+              )}
             </div>
 
             {error && (
@@ -308,7 +310,8 @@ export default function LoginScreen() {
             )}
           </div>
 
-          {/* ── Test Access ─────────────────────────────────────────────── */}
+          {/* ── Test Access (DEV builds only — compiled out of production) ── */}
+          {import.meta.env.DEV && (
           <div style={{ marginTop: 16, borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 14 }}>
             {!showTestPanel ? (
               <button
@@ -324,6 +327,7 @@ export default function LoginScreen() {
               <TestAccessPanel onLogin={handleTestLogin} />
             )}
           </div>
+          )}
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 16, fontSize: 10, color: 'rgba(255,255,255,.18)', letterSpacing: '.04em' }}>

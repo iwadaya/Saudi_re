@@ -133,7 +133,10 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
       );
       rows = result.rows;
     } catch (tableErr) {
-      // Tables don't exist yet — check static demo users
+      // Tables don't exist yet — check static demo users (dev/test only).
+      if (process.env.ALLOW_DEMO_AUTH !== 'true') {
+        return res.status(401).json({ error: 'Invalid credentials.' });
+      }
       const lc = String(username).trim().toLowerCase();
       const demo = DEMO_USERS_FALLBACK.find(u => u.username === lc || u.email === lc);
       if (demo && password === DEMO_PASSWORD) {
@@ -168,13 +171,13 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
 
   // Password check.
   //
-  // Two accepted credentials:
-  //   • Demo/seeded accounts (password_hash='DEMO_HASH_2026') log in with
-  //     DEMO_PASSWORD — kept so the testing build's seeded users keep working.
-  //   • Real accounts created via the Add-user flow carry a scrypt hash
-  //     ('scrypt$...') and are verified against it.
+  //   • Real accounts carry a scrypt hash ('scrypt$...') and are verified
+  //     against it — this is the ONLY path accepted in production.
+  //   • The universal DEMO_PASSWORD shortcut is a dev/test backdoor and is
+  //     honoured ONLY when ALLOW_DEMO_AUTH=true (never in production).
   const storedHash = user.password_hash;
-  const passwordOk = password === DEMO_PASSWORD
+  const demoAuthAllowed = process.env.ALLOW_DEMO_AUTH === 'true';
+  const passwordOk = (demoAuthAllowed && password === DEMO_PASSWORD)
     || (typeof storedHash === 'string' && storedHash.startsWith('scrypt$') && verifyPassword(password, storedHash));
 
   if (!passwordOk) {

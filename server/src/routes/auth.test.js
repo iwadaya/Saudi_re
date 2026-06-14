@@ -90,6 +90,7 @@ beforeEach(() => {
   queryLog.length = 0;
   scenario = {};
   currentUser = null;
+  process.env.ALLOW_DEMO_AUTH = 'true'; // test default (mirrors vitest env); some tests unset it
   delete process.env.ALLOW_OPEN_REGISTRATION; // default-on in test env (NODE_ENV !== 'production')
 });
 
@@ -214,12 +215,46 @@ describe('POST /auth/login', () => {
     expect(res.status).toBe(401);
   });
 
-  it('still accepts demo accounts with demo2026', async () => {
+  it('still accepts demo accounts with demo2026 when ALLOW_DEMO_AUTH=true', async () => {
     scenario.loginUser = { ...adaRow('DEMO_HASH_2026'), user_id: 'u-cuo', username: 'cuo', display_name: 'Chief Underwriting Officer', role_code: 'CU', hierarchy_level: 2 };
     const app = buildApp();
     const res = await call(app, { method: 'POST', path: '/auth/login', body: { username: 'cuo', password: 'demo2026' } });
     expect(res.status).toBe(200);
     expect(res.body.session.username).toBe('cuo');
+  });
+
+  it('REJECTS demo2026 in production mode (ALLOW_DEMO_AUTH unset) — only the real scrypt password works', async () => {
+    delete process.env.ALLOW_DEMO_AUTH;
+    scenario.loginUser = adaRow(hashPassword('realpass1')); // real password, not demo2026
+    // demo backdoor refused
+    const bad = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'demo2026' } });
+    expect(bad.status).toBe(401);
+    // real scrypt password still authenticates without the demo flag
+    const ok = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'realpass1' } });
+    expect(ok.status).toBe(200);
+    expect(typeof ok.body.session.token).toBe('string');
+  });
+
+  it('issues a signed token in the session on success', async () => {
+    scenario.loginUser = adaRow(hashPassword('realpass1'));
+    const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'realpass1' } });
+    expect(res.status).toBe(200);
+    expect(res.body.session.token).toMatch(/.+\..+/);
+  });
+});
+
+describe('open registration gate (production default)', () => {
+  it('returns 403 for an anonymous create when ALLOW_OPEN_REGISTRATION is unset in production', async () => {
+    const prevNode = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    delete process.env.ALLOW_OPEN_REGISTRATION;
+    currentUser = null; // anonymous (no token)
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/users',
+      body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'secret1', confirm_password: 'secret1' },
+    });
+    expect(res.status).toBe(403);
+    process.env.NODE_ENV = prevNode;
   });
 });
 
