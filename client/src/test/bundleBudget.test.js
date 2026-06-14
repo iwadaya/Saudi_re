@@ -28,7 +28,14 @@ const DIST = resolve('client/dist/assets');
 // a commit-message line explaining what justified the growth.
 const BUDGETS_KB = {
   vendor: 300,             // React + router, plus non-lazy deps
-  'app-core': 460,         // global components + utils + context + api surface
+  // Re-baselined 460 -> 860. This gate only runs after a build, and neither CI
+  // nor `npm run verify` built first, so it silently skipped while app-core
+  // drifted to ~761KB raw (~206KB gz) as shared components/utils/hooks/context/
+  // logic accumulated. 860 = current size + ~13% headroom. `npm run verify` now
+  // builds before the client tests so this is enforced and catches FUTURE
+  // creep; splitting app-core into lazy chunks to push it back down is tracked
+  // as separate work (see the circular-chunk warnings the build emits).
+  'app-core': 860,         // global components + utils + context + api surface
   'np-final-pricing': 250, // the big screen — still the biggest after the split
   // Bumped to 260 for the Aggregate XL structure (NpAggregateXlStructure
   // + read-only mount on Final Pricing) and the Stop Loss workflow

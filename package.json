@@ -30,7 +30,7 @@
     "cluster:stop": "pm2 stop ecosystem.config.cjs",
     "cluster:status": "pm2 status",
     "cluster:logs": "pm2 logs universe",
-    "verify": "npm run lint && npm run typecheck && npm run budget:frontend && npm run test:server && npm run test:client:coverage"
+    "verify": "npm run lint && npm run typecheck && npm run budget:frontend && npm run test:server && npm run build && npm run test:client:coverage"
   },
   "engines": {
     "node": ">=20.18.0"
