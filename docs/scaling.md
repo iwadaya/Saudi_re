@@ -5,16 +5,28 @@ uses measured staging runs, not theoretical single-box estimates.
 
 ## Current Capacity Answer
 
-Status on 2026-05-02: **not measured from this workspace**.
+Status as of **2026-06-14** (commit `177a1e6`): **unmeasured** — still no
+staging run.
 
-I could not run the requested staging benchmark because this shell does
-not contain a staging `BASE_URL`, Render access, staging database
-connection, or production-shape seed access. There is also no local app
-or database currently listening on `127.0.0.1:4000`.
+The staging benchmark has not been run from any workspace available so far:
+no staging `BASE_URL` / Render access, no production-shape staging database,
+and no `k6` binary or local app+DB on `127.0.0.1:4000` to run it against.
+The numbers below remain templates, not evidence.
 
-Do not quote a supported user count until the staging run below is
-completed. The old theoretical PM2 numbers have been removed from this
-document so we do not accidentally treat estimates as evidence.
+Do not quote a supported user count until the staging run in **How To Run**
+is completed and the **Measured Results** table is filled from real output.
+The old theoretical PM2 numbers were removed so estimates are never mistaken
+for measurements.
+
+> **Auth caveat — read before running k6.** The load scripts
+> (`load-test/k6/*.js`) currently send identity via `x-user-role` / `x-user-id`
+> **headers**. After the auth hardening those headers are honoured **only** when
+> the target runs with `ALLOW_DEMO_AUTH=true` (a dev/preview service); against a
+> production-config service they are ignored and protected endpoints return 401 —
+> the run would then measure error responses, not real work. So either point k6
+> at a preview service started with `ALLOW_DEMO_AUTH=true`, or first update the
+> scripts to log in via `POST /api/auth/login` and send the returned
+> `Authorization: Bearer` token. Record which mode was used next to the results.
 
 ## Required Staging Shape
 

@@ -3,6 +3,7 @@
 **Audience:** IT team standing up the Universe reinsurance pricing tool on an Ubuntu server.
 **Source repo:** https://github.com/Darchville-Analytics/modelling_tool
 **Snapshot date:** 14 May 2026
+**Last verified:** 2026-06-14 against commit `a81f6ee` (auth hardening, CSP, and password policy reflected below).
 **Maintainer contact:** Isheanesu Wadaya (Riyadh, UTC+3)
 
 ---
@@ -356,13 +357,17 @@ Key variables (full list in `.env.example`):
 | `NODE_ENV` | Yes | Set to `production` |
 | `PORT` | Yes | App listens here. Default `4000` |
 | `DATABASE_URL` | Yes | Postgres connection string |
-| `SESSION_SECRET` | Yes | At least 64 random hex chars |
+| `AUTH_JWT_SECRET` | **Yes (production)** | Signs/verifies the login bearer token. Must be ≥ 32 chars. **The server refuses to start in production without a strong value** (`server/src/config/env.js` → `validateEnv()` exits 1). Generate with `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`. In dev/test a per-process ephemeral secret is minted automatically. |
+| `SESSION_SECRET` | No (reserved) | Reserved for future cookie/session use; not consumed at runtime today, so it does **not** block boot. If you set it, it is strength-checked (≥ 32 chars, not the dev placeholder). Generate the same way as `AUTH_JWT_SECRET`. |
 | `RUN_MIGRATIONS_ON_BOOT` | No | Defaults to `false`. Leave unset in production — run `npm run migrate:up --prefix server` as a pre-deploy step instead. Set to `true` only for the local docker-compose path. |
 | `CORS_ORIGIN` | Yes | Set to the public URL, e.g. `https://universe.internal.company.com`. **Do not use `*` in production.** |
+| `ALLOW_DEMO_AUTH` | No | **Dev/test only.** When `true`, enables the `demo2026` shortcut and `x-user-*` header identity. NEVER set in production — leave unset so only verified bearer tokens authenticate. |
 | `OPENAI_API_KEY` | No | Required only for AI slip ingestion |
 | `UPLOAD_DIR` | No | Defaults to `./uploads` relative to project root |
 | `DB_POOL_MAX` | No | Defaults to 50 |
 | `DB_POOL_MIN` | No | Defaults to 4 |
+
+> **Boot-time secret gate.** With `NODE_ENV=production` the server validates secrets before serving and exits with a clear error if `AUTH_JWT_SECRET` is missing, the insecure dev placeholder, or shorter than 32 chars. A production container/host that doesn't supply it will not start (this is intentional — a missing secret would let anyone forge tokens).
 
 ## 8. First-run checklist
 
@@ -393,7 +398,17 @@ After starting the service for the first time:
    SELECT COUNT(*) FROM public.currency;    -- expect 32
    ```
 
-6. **Test login.** Browse to `https://universe.internal.company.com`. The login screen lists demo users. Default password is `demo2026` — see §10 below before going live.
+6. **Test login (bearer-token auth).** Browse to `https://universe.internal.company.com`. Login is a real credential check: `POST /api/auth/login` verifies the password against the user's stored scrypt hash and returns a signed bearer token. The SPA stores that token and sends it as `Authorization: Bearer <token>` on every request; the server re-reads the user's role and authority level from the database on each request (the token carries only the user id), so a demotion takes effect immediately. There is **no** `demo2026`-for-everyone and **no** `x-user-*` header auth in production — those exist only under `ALLOW_DEMO_AUTH=true` for local dev (§7, §10).
+
+   **First login / seeded users.** Migration `123_seed_users_force_change.sql` seeds three real accounts, each with the temporary password `Universe#1234` and `must_change_password=true`, so each is **forced to set a new password on first login** (hard server-side gate + mandatory client modal):
+
+   | Username | Name | Role | Can create users? |
+   |---|---|---|---|
+   | `chongo.nkalamo` | Chongo Nkalamo | Chief Actuary (level 2) | Yes |
+   | `edwin.taruvinga` | Edwin Taruvinga | Underwriter (level 5) | No |
+   | `catho.ba` | Catho Ba | Underwriter (level 5) | No |
+
+   **Seed a real admin / provision users.** Log in as the Chief Actuary (`chongo.nkalamo` / `Universe#1234`) — the only seeded account with user-creation authority (Chief level, ≤ 2) — and change its password when prompted. Then create real accounts via **Admin → Add User** (restricted to Chief Underwriter / Chief Executive / Chief Actuary). An account created without a password is given a generated one-time temp (returned to the creating admin to relay) and `must_change_password=true`; it never carries a shared/static hash. Rotate or deactivate any seeded account you don't need.
 
 7. **Confirm logs flow.** Tail your chosen runtime's logs and confirm one or two real requests show up cleanly with request IDs.
 
@@ -426,36 +441,52 @@ For an Option B (docker-compose) host that wants the same tighter control as A/C
 
 ## 10. Security notes — read before going live
 
-Several items in this snapshot are intentionally open for development and **must be addressed before exposing the application to anyone other than trusted internal users**:
+### Resolved since the original snapshot (verified — no action needed)
 
-1. **Demo authentication.** Every user logs in with the password `demo2026`. The login route at `server/src/routes/auth.js` accepts `password === DEMO_PASSWORD` for all users. Replace this with `bcrypt.compare(password, user.password_hash)` and remove the demo branch before production. The seeded users have a placeholder hash `DEMO_HASH_2026` that must also be replaced with real bcrypt hashes.
+The auth-hardening work has landed; the items below are how the app behaves **today**:
 
-2. **Header-based role enforcement.** The API trusts an `x-user-role` header for authorisation. Anyone who can craft an HTTP request can claim any role. This is acceptable behind a corporate authentication proxy that strips and re-injects this header from a verified session — not acceptable when exposed directly. Either deploy behind such a proxy (Nginx + an SSO module, Cloudflare Access, etc.) or replace the header check with proper session/JWT validation.
+1. **Real credential auth.** `POST /api/auth/login` verifies the password against the user's stored **scrypt** hash and issues a signed bearer token. The `demo2026` password is a dev/test convenience gated behind `ALLOW_DEMO_AUTH=true` and is **never honoured in production**. There is no `DEMO_HASH_2026` placeholder on real accounts — every create/update path stores a scrypt hash (`server/src/routes/auth.js`).
 
-3. **`_actor` field is client-controlled.** Audit events take their actor from `req.body._actor` when present. Server-derive this from the authenticated session before going live for compliance auditing.
+2. **Token-based, DB-backed authorisation.** Authorisation comes from the verified bearer token, not headers. `x-user-*` headers are trusted **only** under `ALLOW_DEMO_AUTH=true` (local dev). Role and authority level are re-read from the database on every request, so a stale token can't preserve elevated rights (`server/src/middleware/requestContext.js`).
 
-4. **CORS is permissive by default.** `.env.example` sets `CORS_ORIGIN=*` for development. Set it to the application's public URL only.
+3. **Server-derived audit actor.** Audit/approval events take the actor from the verified `req.user` identity, never a client-supplied `_actor`/header.
 
-5. **No CSP.** Helmet is initialised with `contentSecurityPolicy: false`. Enable a sensible CSP before production.
+4. **Content-Security-Policy is enabled.** Helmet ships a nonce-based CSP (`script-src` is `'self'` + per-request nonce; no `unsafe-inline` for scripts) currently in **Report-Only** mode, with violations collected at `/csp-report`. The plan is to flip it to **enforcing** once real traffic shows a clean report (see `SECURITY.md` → "Content-Security-Policy"). `server/src/app.js`.
 
-6. **Rate limiting is in-memory.** Adequate for one Node process. If running PM2 cluster mode or multiple replicas, swap for Redis-backed rate limiting (the code calls this out as a future change).
+5. **Password policy.** A single enforced policy (`validatePasswordStrength`, used by both change-password and every user-creation path) requires a **minimum of 8 characters**, rejects the seeded temp `Universe#1234`, and rejects obviously weak/common values.
 
-A coordinated remediation pass is the right way to handle these — don't tackle them piecemeal.
+6. **Boot-time secret gate.** Production refuses to start without a strong `AUTH_JWT_SECRET` (see §7).
+
+### Still your responsibility before / at go-live
+
+1. **Set `CORS_ORIGIN` to the public URL** — never `*` in production. `.env.example` ships a development default.
+2. **Rate limiting is in-memory.** Adequate for one Node process. If you run PM2 cluster mode or multiple replicas, move to a shared store (e.g. Redis-backed rate limiting) so limits are enforced across processes.
+3. **Provide and protect `AUTH_JWT_SECRET`** as a real secret (secrets manager / env injection), and rotate the seeded users' temporary passwords on first login (§8).
 
 ## 11. Backup and recovery
 
-Minimum recommended posture:
+The repo ships a checked-in, restore-**verified** backup pair (so backups are
+reproducible, not tribal knowledge). They are operator-scheduled — installing the
+schedule is your step; the app does not run them itself.
 
-- **Nightly `pg_dump`** of the `universe` database to off-host storage. Retain at least 30 days.
-- **Weekly verification** that a dump can be restored to a scratch Postgres instance.
-- **Uploads directory** (`/opt/universe/uploads` or equivalent) backed up alongside the database — slip and document files live there. If using Cloudinary instead of local storage, this directory is empty.
+| Script | What it does |
+|---|---|
+| `scripts/backup-db.sh` | Compressed `pg_dump -Fc` of `DATABASE_URL` into `BACKUP_DIR` (default `/var/backups/universe`), then prunes dumps older than `BACKUP_RETENTION_DAYS` (default 30). Logs to stderr; prints the dump path on stdout. |
+| `scripts/verify-restore.sh` | Restores the newest dump into a throwaway scratch DB on the same server, runs a sanity query (`public._migrations` and `public.country` row counts), drops the scratch DB, and **exits non-zero if the dump won't restore** — so a silently-corrupt backup is caught. |
+| `scripts/universe-backup.cron` | Host-cron schedule: nightly dump (02:00) + weekly restore-rehearsal (Sun 03:30). |
 
-Sample backup command for cron:
+**Schedule it.** On a self-hosted host (§6 Option A/C): set `DATABASE_URL` (and optionally `BACKUP_DIR`/`BACKUP_RETENTION_DAYS`) in the cron environment, then `crontab scripts/universe-backup.cron` (or drop it in `/etc/cron.d/`). Send dumps to off-host storage and retain ≥ 30 days. Verify by hand once:
 
 ```bash
-0 2 * * * pg_dump -Fc "postgresql://universe:PASSWORD@localhost/universe" \
-  > /var/backups/universe-$(date +\%F).dump
+DATABASE_URL=postgresql://universe:PASSWORD@localhost:5432/universe \
+BACKUP_DIR=/var/backups/universe scripts/backup-db.sh
+DATABASE_URL=postgresql://universe:PASSWORD@localhost:5432/universe \
+BACKUP_DIR=/var/backups/universe scripts/verify-restore.sh   # exits 0 = restorable
 ```
+
+**Production (Render) — the real fallback.** The production service deploys on Render (`render.yaml`) against a **managed Postgres** (`DATABASE_URL` is set in the dashboard, `sync: false`). Your first line of recovery there is the **managed provider's automated daily snapshots / point-in-time recovery** — confirm they are enabled and note the retention/RPO in your dashboard. Render has no host crontab, so to also keep the independent, restore-verified dumps above, run `scripts/backup-db.sh` (and a weekly `scripts/verify-restore.sh`) as **Render Cron Jobs** pointed at the same `DATABASE_URL`. Don't assume the host cron runs on Render — it doesn't.
+
+**Uploads.** Back up the **uploads directory** (`/opt/universe/uploads` or your `UPLOAD_DIR`) alongside the database — slips and documents live there. If you use Cloudinary instead of local storage this directory is empty, and the equivalent backup is your Cloudinary account/retention.
 
 ## 12. Monitoring and observability
 

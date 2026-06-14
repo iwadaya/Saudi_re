@@ -1,10 +1,23 @@
+# docker-compose is for LOCAL DEV ONLY — a one-command app + Postgres stack.
+# Production deploys via Render (see render.yaml) / your orchestrator, where the
+# auth secrets are injected as real secret env vars. This file therefore runs the
+# app in NODE_ENV=development so the production secret gate (server/src/config/
+# env.js) does not require AUTH_JWT_SECRET / SESSION_SECRET — dev mints a
+# per-process ephemeral token secret instead. Do NOT point this compose at a real
+# environment; if you need a production container, supply real secrets via
+# env_file/Docker secrets and set NODE_ENV=production.
 services:
   universe-app:
     build: .
     ports:
       - '4000:4000'
     environment:
-      NODE_ENV: production
+      # Local dev: keeps the prod secret gate off and applies dev behaviour.
+      NODE_ENV: development
+      # Dev-only login backdoor: lets you sign in as a seeded demo user
+      # (e.g. cuo / demo2026) without provisioning real passwords. It is
+      # gated behind this flag and is NEVER honoured when NODE_ENV=production.
+      ALLOW_DEMO_AUTH: 'true'
       PORT: 4000
       DATABASE_URL: postgresql://postgres:postgres@db:5432/reinsurance_tool
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:4000}
