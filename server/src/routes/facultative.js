@@ -851,7 +851,7 @@ function actorLabel(req) {
   const u = req.user || {};
   if (u.displayName) return u.displayName;
   if (u.userId) return u.userId;
-  return req.headers['x-user-id'] || 'unknown';
+  return 'unknown';
 }
 
 // req.user.userId comes from the x-user-id header which may carry a

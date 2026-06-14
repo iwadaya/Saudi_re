@@ -1,5 +1,5 @@
 import { createApp } from '../app.js';
-import { env, validateRuntimeEnv } from '../config/env.js';
+import { env, validateRuntimeEnv, validateEnv } from '../config/env.js';
 import { verifyDatabaseConnection } from '../db/pool.js';
 import { startPoolWatchdog } from '../db/poolWatchdog.js';
 import { logger } from '../lib/logger.js';
@@ -20,6 +20,9 @@ function logStartupBanner() {
 }
 
 export async function bootstrap() {
+  // Fail fast on a missing/weak auth secret before anything mounts — never
+  // boot with forgeable tokens in production.
+  validateEnv();
   validateRuntimeEnv();
   logStartupBanner();
   warnIfWarnOnlyInProduction();

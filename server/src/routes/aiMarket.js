@@ -137,7 +137,7 @@ Cite Axco as a source by including it in the sources array (idx of your choosing
 function requireUser(req, res) {
   const uid = req.user?.userId;
   if (!uid) {
-    res.status(401).json({ error: 'x-user-id header required' });
+    res.status(401).json({ error: 'Authentication required.' });
     return null;
   }
   return uid;

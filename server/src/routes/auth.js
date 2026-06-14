@@ -399,9 +399,16 @@ router.patch('/auth/users/:id', requireMinLevel(2), asyncHandler(async (req, res
 
 // ── GET /api/auth/mandates/:userId — get full mandate for a user ───────────
 router.get('/auth/mandates/:userId', asyncHandler(async (req, res) => {
+  // Identity from the verified token. A user may read their OWN mandate;
+  // reading anyone else's requires Chief Underwriter / Chief Executive (<=2).
+  const callerId = req.user?.userId;
+  const target = req.params.userId;
+  if (target !== callerId && Number(req.user?.hierarchyLevel) > 2) {
+    return res.status(403).json({ error: 'You may only view your own mandate.', code: 'FORBIDDEN' });
+  }
   const { rows } = await pool.query(
     `SELECT * FROM public.v_user_mandate WHERE user_id = $1 LIMIT 1`,
-    [req.params.userId]
+    [target]
   );
   if (!rows.length) return res.status(404).json({ error: 'User not found.' });
   res.json(rows[0]);
@@ -445,13 +452,13 @@ router.put('/auth/mandates/:userId', requireMinLevel(2), asyncHandler(async (req
       b.effective_from || new Date().toISOString().slice(0, 10),
       b.effective_to || null,
       b.notes || null,
-      req.headers['x-user-id'] || null,
+      req.user?.userId || null,
     ]
   );
 
   await logAudit(pool, {
     entityType: 'USER_MANDATE', entityId: userId,
-    eventType: 'MANDATE_UPDATED', actor: req.headers['x-user-name'] || 'ADMIN',
+    eventType: 'MANDATE_UPDATED', actor: req.user?.displayName || req.user?.userId || 'ADMIN',
     payload: b,
   }).catch(() => {});
 
@@ -461,7 +468,9 @@ router.put('/auth/mandates/:userId', requireMinLevel(2), asyncHandler(async (req
 // ── GET /api/auth/mandate-check — can this user offer a treaty? ─────────────
 // Query params: contract_id OR quote_id, plus epi_usd (optional if server can compute)
 router.get('/auth/mandate-check', asyncHandler(async (req, res) => {
-  const userId = req.headers['x-user-id'];
+  // Always the CALLER's own mandate, from the verified token — never a header
+  // or a client-supplied id, so one user can't probe another's authority.
+  const userId = req.user?.userId;
   const { contract_id, quote_id, epi_usd, cob_ids } = req.query;
 
   if (!userId) return res.status(401).json({ error: 'Not authenticated.' });

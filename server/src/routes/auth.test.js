@@ -36,6 +36,9 @@ function fakeQuery(sql, params = []) {
   if (sql.includes('FROM public.v_user_mandate vm')) {
     return Promise.resolve({ rows: scenario.loginUser ? [scenario.loginUser] : [] });
   }
+  if (sql.includes('FROM public.v_user_mandate WHERE user_id')) {
+    return Promise.resolve({ rows: scenario.mandateRow ? [{ user_id: params[0], ...scenario.mandateRow }] : [] });
+  }
   if (sql.includes('FROM public.uw_user u') && sql.includes('LEFT JOIN public.user_mandate')) {
     return Promise.resolve({ rows: scenario.usersList || [] });
   }
@@ -240,6 +243,31 @@ describe('POST /auth/login', () => {
     const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'realpass1' } });
     expect(res.status).toBe(200);
     expect(res.body.session.token).toMatch(/.+\..+/);
+  });
+});
+
+describe('GET /auth/mandates/:userId — identity from token, no cross-user reads', () => {
+  it('an Underwriter reads their OWN mandate', async () => {
+    currentUser = { userId: 'u-uw', roleCode: 'TUW', hierarchyLevel: 5, displayName: 'UW' };
+    scenario.mandateRow = { role_code: 'TUW', hierarchy_level: 5 };
+    const res = await call(buildApp(), { method: 'GET', path: '/auth/mandates/u-uw' });
+    expect(res.status).toBe(200);
+    expect(res.body.user_id).toBe('u-uw');
+  });
+
+  it('an Underwriter requesting ANOTHER user mandate → 403', async () => {
+    currentUser = { userId: 'u-uw', roleCode: 'TUW', hierarchyLevel: 5, displayName: 'UW' };
+    scenario.mandateRow = { role_code: 'CU', hierarchy_level: 2 };
+    const res = await call(buildApp(), { method: 'GET', path: '/auth/mandates/u-someone-else' });
+    expect(res.status).toBe(403);
+  });
+
+  it('a CU may read another user mandate via :userId', async () => {
+    currentUser = { userId: 'u-cu', roleCode: 'CU', hierarchyLevel: 2, displayName: 'CU' };
+    scenario.mandateRow = { role_code: 'TUW', hierarchy_level: 5 };
+    const res = await call(buildApp(), { method: 'GET', path: '/auth/mandates/u-target' });
+    expect(res.status).toBe(200);
+    expect(res.body.user_id).toBe('u-target');
   });
 });
 

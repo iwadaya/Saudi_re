@@ -172,7 +172,7 @@ function makeStartImportHandler(entityType) {
       throw err;
     }
 
-    const actor = req.user?.displayName || req.user?.userId || req.headers['x-user-id'] || 'SYSTEM';
+    const actor = req.user?.displayName || req.user?.userId || 'SYSTEM';
 
     // Kick off the async work. setImmediate runs after the response
     // is flushed, so the underwriter sees the 202 promptly even on a
@@ -337,7 +337,7 @@ function makeRestoreSnapshotHandler(entityType) {
       });
     }
 
-    const actor = req.user?.displayName || req.user?.userId || req.headers['x-user-id'] || 'SYSTEM';
+    const actor = req.user?.displayName || req.user?.userId || 'SYSTEM';
     const client = await pool.connect();
     try {
       await client.query('BEGIN');

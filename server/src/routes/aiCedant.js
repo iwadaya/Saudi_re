@@ -71,7 +71,7 @@ Constraints:
 function requireUser(req, res) {
   const uid = req.user?.userId;
   if (!uid) {
-    res.status(401).json({ error: 'x-user-id header required' });
+    res.status(401).json({ error: 'Authentication required.' });
     return null;
   }
   return uid;

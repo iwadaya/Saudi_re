@@ -4,11 +4,12 @@ import express from 'express';
 import fs from 'fs';
 import helmet from 'helmet';
 import path from 'path';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { pool, getPoolStats } from './db/pool.js';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { authenticate, requireAuth } from './middleware/requestContext.js';
+import { guardApiMutations } from './services/permissions.js';
 import { attachRequestId } from './middleware/requestId.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { cacheStats } from './middleware/httpCache.js';
@@ -145,42 +146,67 @@ function registerClient(app) {
   logger.info('[static] serving client', { clientDir });
 }
 
-// ── Rate limiter: 300 req/min per user, falling back to IP ──
-// Behind Render's proxy every user shares one IP, so a plain per-IP
-// limit would throttle the whole team whenever one person loops on
-// something. Key by x-user-id first (set by the auth middleware);
-// fall back to the IP only for pre-auth requests (e.g. /api/health
-// which bypasses this limiter anyway, or /api/auth/login).
-//
-// skip() excludes endpoints that must never be rate-limited at this
-// layer (health probes, lightweight webhooks from ourselves).
-const apiLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 300,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests, please slow down.' },
-  keyGenerator(req) {
-    // Prefer an authenticated user id; trim so whitespace variants
-    // don't create separate buckets.
-    const uid = String(req.headers['x-user-id'] || '').trim();
-    if (uid) return `u:${uid}`;
-    // ipKeyGenerator (added in express-rate-limit v7) handles IPv6
-    // normalisation; if it's not available we fall back to req.ip.
-    return `ip:${req.ip || 'unknown'}`;
-  },
-  // Client-event telemetry should never be throttled below the
-  // telemetry budget — losing crash reports to rate limits is worse
-  // than the extra capacity. The reporter has its own cap (20/min).
-  skip(req) {
-    const path = req.path || '';
-    const original = req.originalUrl || req.url || '';
-    return path.startsWith('/health') ||
-           original.startsWith('/api/health') ||
-           path === '/client-events' ||
-           original === '/api/client-events';
-  },
-});
+// Endpoints that must never be throttled at the IP layer (health probes and
+// our own crash-report telemetry, which has its own 20/min cap).
+function skipRateLimit(req) {
+  const path = req.path || '';
+  const original = req.originalUrl || req.url || '';
+  return path.startsWith('/health') ||
+         original.startsWith('/api/health') ||
+         path === '/client-events' ||
+         original === '/api/client-events';
+}
+
+// ── Pre-auth global limiter: keyed on the real client IP ONLY ──
+// With trust proxy set, req.ip is the forwarded client IP (each user's own IP,
+// not the shared Render proxy), so a per-IP ceiling no longer throttles the
+// whole team. It is keyed on IP ONLY — never x-user-id — so rotating that
+// header can't manufacture fresh buckets to bypass the limit (incl. login
+// brute force, which hits this before authenticate runs).
+export function createApiLimiter({ max = 300, windowMs = 60 * 1000 } = {}) {
+  return rateLimit({
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, please slow down.' },
+    keyGenerator: (req) => `ip:${ipKeyGenerator(req.ip)}`,
+    skip: skipRateLimit,
+  });
+}
+
+// ── Login limiter: strict, keyed on IP + the submitted identity ──
+// Complements the DB failed_attempts lockout (5 fails → 15-min account lock):
+// this throttles brute force at the edge per IP+identity before the handler/DB
+// is touched. Low ceiling, 15-min window.
+export function createLoginLimiter({ max = 5, windowMs = 15 * 60 * 1000 } = {}) {
+  return rateLimit({
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many login attempts. Please wait a few minutes and try again.', code: 'TOO_MANY_LOGINS' },
+    keyGenerator: (req) => {
+      const id = String(req.body?.username || req.body?.email || '').trim().toLowerCase();
+      return `login:${ipKeyGenerator(req.ip)}:${id}`;
+    },
+  });
+}
+
+// ── Optional per-user limiter (additive, runs AFTER authenticate) ──
+// Per-user quota keyed on the VERIFIED req.user.userId — never replaces the IP
+// limiter. Anonymous requests are skipped here (already IP-limited above).
+export function createUserApiLimiter({ max = 600, windowMs = 60 * 1000 } = {}) {
+  return rateLimit({
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, please slow down.' },
+    keyGenerator: (req) => `u:${req.user?.userId}`,
+    skip: (req) => !req.user || skipRateLimit(req),
+  });
+}
 
 export function createApp() {
   const app = express();
@@ -237,17 +263,24 @@ export function createApp() {
   // throttled clients do not make the process spend CPU/memory parsing
   // a body that will be rejected anyway. In-memory store is fine for a
   // single Node process; swap to Redis when scaling horizontally.
-  app.use('/api', apiLimiter);
+  app.use('/api', createApiLimiter());
 
   // Body parser — 1MB is plenty for any realistic pricing payload.
   // File uploads use multer and bypass this. 5MB was unnecessarily
   // generous and just made DoS-via-fat-body easier.
   app.use(express.json({ limit: '1mb' }));
 
+  // Strict brute-force limiter on login (after JSON parse so the identity is
+  // available for keying; keyed on IP + identity).
+  app.use('/api/auth/login', createLoginLimiter());
+
   // ── Authentication ──
   // authenticate sets req.user from a verified token (role/level re-read from
   // the DB), or — only under ALLOW_DEMO_AUTH — from x-user-* headers, else null.
   app.use('/api', authenticate);
+
+  // Optional additive per-user quota (keyed on the verified user id).
+  app.use('/api', createUserApiLimiter());
 
   // Auth routes self-gate (login / open-registration / login-screen lookups are
   // public; /auth/me and the rest require a real identity) — register before the
@@ -256,6 +289,11 @@ export function createApp() {
 
   // Every other API route — reads and writes alike — requires a real identity.
   app.use('/api', requireAuth);
+
+  // Comprehensive edit-lock: every mutating route under quotes/treaties/
+  // facultative/pricing passes assertCanEdit on its owning entity (assignee
+  // only). Reads and approval-workflow/create endpoints pass through.
+  app.use('/api', guardApiMutations);
 
   registerApiRoutes(app);
   registerClient(app);

@@ -72,7 +72,7 @@ async function loadOwnership(entityType, entityId) {
 export async function getEditPermission(req, entityType, entityId) {
   const own = await loadOwnership(entityType, entityId);
   if (!own) return { found: false, canEdit: false, isOwner: false, assignedToUserId: null, assignedToName: null, reason: 'NOT_FOUND' };
-  const requesterId = req?.user?.userId || req?.headers?.['x-user-id'] || null;
+  const requesterId = req?.user?.userId || null; // verified token identity only
   const assignedToUserId = own.assigned_to_user_id || null;
   const perm = computeEditPermission({ requesterId, assignedToUserId });
   return { found: true, ...perm, assignedToUserId, assignedToName: own.assigned_to_name || null };
@@ -89,7 +89,7 @@ export async function assertCanEdit(req, entityType, entityId) {
   const own = await loadOwnership(entityType, entityId);
   if (!own) throw Object.assign(new Error('Not found'), { status: 404 });
 
-  const requesterId = req?.user?.userId || req?.headers?.['x-user-id'] || null;
+  const requesterId = req?.user?.userId || null; // verified token identity only
   const assignedToUserId = own.assigned_to_user_id || null;
 
   const perm = computeEditPermission({ requesterId, assignedToUserId });
@@ -100,4 +100,82 @@ export async function assertCanEdit(req, entityType, entityId) {
     );
   }
   return { ...perm, assignedToUserId, assignedToName: own.assigned_to_name || null };
+}
+
+// ── Comprehensive mutation guard ────────────────────────────────────────────
+// A single app-level choke point so EVERY mutating route under quotes /
+// treaties / facultative / pricing passes assertCanEdit on its owning entity.
+// Reads pass through. Approval-workflow decisions (peer/arbiter/mark/return/
+// recall/sign/ntu/bind/decline) and creates (renew/amend, bare POST) are exempt
+// — they carry their own authority and don't edit the entity as the assignee.
+
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+const EXEMPT_SUFFIXES = [
+  '/renew', '/amend', '/bind', '/decline',
+  '/offer/peer-decision', '/offer/arbiter-decision', '/offer/mark-approved',
+  '/offer/return-to-underwriter', '/offer/recall', '/offer/mark-signed', '/offer/ntu',
+];
+
+function isExemptMutation(path) {
+  return EXEMPT_SUFFIXES.some((s) => path.endsWith(s));
+}
+
+// Out-of-tree resources whose owning entity needs a DB lookup.
+const PARENT_RESOLVERS = {
+  facDocument:       { sql: 'SELECT fac_risk_id AS id FROM public.fac_document WHERE document_id=$1',            entityType: 'FAC_RISK' },
+  facRecommendation: { sql: 'SELECT fac_risk_id AS id FROM public.fac_ai_recommendation WHERE recommendation_id=$1', entityType: 'FAC_RISK' },
+  pricingSnapshot:   { sql: 'SELECT contract_id AS id FROM public.pricing_component_snapshots WHERE id=$1',      entityType: 'CONTRACT' },
+};
+
+/** Map a nested resource to its owning {entityType, entityId} via a DB lookup. */
+export async function resolveParentEntity(resourceType, id) {
+  const r = PARENT_RESOLVERS[resourceType];
+  if (!r || !id) return null;
+  try {
+    const { rows } = await pool.query(r.sql, [id]);
+    if (!rows.length || !rows[0].id) return null;
+    return { entityType: r.entityType, entityId: rows[0].id };
+  } catch { return null; }
+}
+
+/**
+ * Classify a mutating sub-path (the path AFTER the /api mount) for the registry
+ * test and the runtime guard. Returns one of:
+ *   'exempt'  — workflow/create, no assignee guard
+ *   'create'  — bare entity create (POST /quotes etc.)
+ *   { entityType, entityId } — guard against this entity (entityId may be a route ':id')
+ *   { resolve, id } — guard against a DB-resolved parent
+ *   null — not an in-scope path
+ */
+export function classifyMutationPath(path) {
+  if (isExemptMutation(path)) return 'exempt';
+  let m;
+  if ((m = /^\/quotes\/([^/]+)/.exec(path))) return { entityType: 'QUOTE', entityId: m[1] };
+  if ((m = /^\/treaties\/([^/]+)/.exec(path))) return { entityType: 'CONTRACT', entityId: m[1] };
+  if ((m = /^\/fac\/risks\/([^/]+)/.exec(path))) return { entityType: 'FAC_RISK', entityId: m[1] };
+  if ((m = /^\/fac\/documents\/([^/]+)/.exec(path))) return { resolve: 'facDocument', id: m[1] };
+  if ((m = /^\/fac\/recommendation\/([^/]+)/.exec(path))) return { resolve: 'facRecommendation', id: m[1] };
+  if (/^\/pricing\/save$/.test(path) || /^\/straight-stats\/save$/.test(path)) return { entityType: 'CONTRACT', entityId: '@body' };
+  if ((m = /^\/pricing\/component-snapshot\/([^/]+)/.exec(path))) return { resolve: 'pricingSnapshot', id: m[1] };
+  if ((m = /^\/pricing\/([^/]+)\/component-snapshot$/.exec(path))) return { entityType: 'CONTRACT', entityId: m[1] };
+  if (path === '/quotes' || path === '/treaties' || path === '/fac/risks') return 'create';
+  return null;
+}
+
+/** App-level guard: assertCanEdit on the owning entity for every in-scope mutator. */
+export async function guardApiMutations(req, res, next) {
+  try {
+    if (READ_METHODS.has(req.method)) return next();
+    const cls = classifyMutationPath(req.path);
+    if (cls === 'exempt' || cls === 'create' || cls === null) return next();
+
+    let target = cls;
+    if (cls.resolve) target = await resolveParentEntity(cls.resolve, cls.id);
+    else if (cls.entityId === '@body') target = { entityType: cls.entityType, entityId: req.body?.contractId || req.body?.contract_id };
+    if (!target || !target.entityId) return next(); // unresolved/create → nothing to guard
+
+    await assertCanEdit(req, target.entityType, target.entityId);
+    return next();
+  } catch (e) { return next(e); }
 }

@@ -411,7 +411,7 @@ async function saveQuoteFinalWorkflowState(db, quoteId, npFinalPricing, req) {
         quoteId,
         qRows[0]?.quote_version || null,
         req?.user?.displayName || req?.headers?.['x-user-name'] || npFinalPricing._actor || req?.body?._actor || 'Underwriter',
-        req?.user?.role || req?.headers?.['x-user-role'] || null,
+        req?.user?.role || null,
         changedSnapshotKeys(beforeSnapshot || {}, afterSnapshot),
         json(beforeSnapshot),
         afterJson,
@@ -485,7 +485,7 @@ router.post("/quotes", asyncHandler(async (req, res) => {
   if (!inception_date) {
     return res.status(400).json({ error: 'inception_date is required', code: 'VALIDATION_FAILED' });
   }
-  const creatorUserId = req.user?.userId || req.headers['x-user-id'] || null;
+  const creatorUserId = req.user?.userId || null;
   const { rows } = await pool.query(
     `INSERT INTO public.quote (uw_year,cedant_id,broker_id,currency_id,country_id,treaty_type_id,status,experience_source,renewal_date,inception_date,contract_description,created_by_user_id,assigned_to_user_id)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12) RETURNING *`,
@@ -668,7 +668,7 @@ router.put("/quotes/:id", validateBody(quotePutBodySchema), asyncHandler(async (
     [id],
   );
   await cl.query("COMMIT");
-  const actor = terms._actor || req.user?.displayName || req.user?.email || req.headers['x-user-id'] || "SYSTEM";
+  const actor = terms._actor || req.user?.displayName || req.user?.email || "SYSTEM";
   if (staleWriteOverride) {
     await logAudit(pool, {
       entityType: 'QUOTE',
@@ -1084,7 +1084,7 @@ router.get("/quotes/:id/np-pricing", asyncHandler(async (req, res) => {
 
 // GET /quotes/:id/offer/eligible-approvers — same logic as treaties
 router.get("/quotes/:id/offer/eligible-approvers", asyncHandler(async (req, res) => {
-  const submitterUserId = req.user?.userId || req.headers['x-user-id'];
+  const submitterUserId = req.user?.userId;
   const { breach_type, epi_usd } = req.query;
   const { getEligibleApprovers } = await import('../services/approvals.js');
   const approvers = await getEligibleApprovers({ submitterUserId, breachType: breach_type, epiUsd: epi_usd });
@@ -1113,7 +1113,7 @@ router.put("/quotes/:id/wording-checklist", asyncHandler(async (req, res) => {
     pool,
     { type: 'quote', id: req.params.id },
     req.body?.items || [],
-    { actorUserId: req.user?.userId || req.headers['x-user-id'] || null },
+    { actorUserId: req.user?.userId || null },
   );
   res.json(payload);
 }));
@@ -1122,7 +1122,7 @@ router.post("/quotes/:id/wording-checklist/ai-check", asyncHandler(async (req, r
   const payload = await runWordingChecklistAi(
     pool,
     { type: 'quote', id: req.params.id },
-    { actorUserId: req.user?.userId || req.headers['x-user-id'] || null },
+    { actorUserId: req.user?.userId || null },
   );
   res.json(payload);
 }));
@@ -1186,7 +1186,7 @@ router.get("/quotes/:id/cedant-exposure", asyncHandler(async (req, res) => {
 // Renew
 router.post("/quotes/:id/renew", asyncHandler(async (req, res) => {
   const {id}=req.params;const b=req.body||{};
-  const creatorUserId = req.user?.userId || req.headers['x-user-id'] || null;
+  const creatorUserId = req.user?.userId || null;
   const {rows:orig}=await pool.query(`SELECT * FROM public.quote WHERE quote_id=$1`,[id]);
   if(!orig.length) return res.status(404).json({error:"Quote not found"});
   const o=orig[0];
@@ -1478,7 +1478,7 @@ router.post("/quotes/:id/decline", asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { reason, _actor } = req.body;
   const actorName = req.user?.displayName || req.headers['x-user-name'] || _actor || 'Chief Underwriter';
-  const actorRole = req.user?.role || req.headers['x-user-role'];
+  const actorRole = req.user?.role;
   await pool.query(`UPDATE public.quote SET status='DECLINED',decline_reason=$2,declined_at=now(),updated_at=now() WHERE quote_id=$1`,[id,reason||null]);
   await pool.query(`UPDATE public.quote_offer SET status='DECLINED',decline_reason=$2,updated_at=now() WHERE quote_id=$1`,[id,reason||null]).catch(()=>{});
   await pool.query(`INSERT INTO public.offer_approval_event (quote_id,event_type,actor_name,actor_role,comment) VALUES ($1,'DECLINED',$2,$3,$4)`,[id,actorName,actorRole||null,reason||null]).catch(()=>{});
@@ -1525,7 +1525,7 @@ router.post("/quotes/:id/offer/submit-for-approval", asyncHandler(async (req, re
     `INSERT INTO public.offer_approval_event (quote_id,event_type,actor_name,actor_role,comment,payload)
      VALUES ($1,'SUBMITTED_FOR_APPROVAL',$2,$3,$4,$5)`,
     [id, req.user?.displayName || req.headers['x-user-name'] || req.body._actor || 'Underwriter',
-     req.user?.role || req.headers['x-user-role'] || null,
+     req.user?.role || null,
      comment || null,
      JSON.stringify({ written_line_pct: wlPct, approver: approver || null })]
   ).catch(() => {});
@@ -1536,7 +1536,7 @@ router.post("/quotes/:id/offer/mark-approved", asyncHandler(async (req, res) => 
   const { id } = req.params;
   const { _actor, comment } = req.body;
   const actorName = req.user?.displayName || req.headers['x-user-name'] || _actor || 'Approver';
-  const actorRole = req.user?.role || req.headers['x-user-role'];
+  const actorRole = req.user?.role;
   await pool.query(`UPDATE public.quote SET status='AWAITING_SIGNED_LINE', updated_at=now() WHERE quote_id=$1`, [id]);
   await pool.query(
     `INSERT INTO public.quote_offer (quote_id, status, updated_at)
@@ -1556,7 +1556,7 @@ router.post("/quotes/:id/offer/return-to-underwriter", asyncHandler(async (req, 
   const { id } = req.params;
   const { reason, _actor } = req.body;
   const actorName = req.user?.displayName || req.headers['x-user-name'] || _actor || 'Approver';
-  const actorRole = req.user?.role || req.headers['x-user-role'];
+  const actorRole = req.user?.role;
   await pool.query(`UPDATE public.quote SET status='DRAFT', updated_at=now() WHERE quote_id=$1`, [id]);
   await pool.query(
     `INSERT INTO public.quote_offer (quote_id, status, updated_at)
@@ -1575,7 +1575,7 @@ router.post("/quotes/:id/offer/recall", asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { reason, _actor } = req.body;
   const actorName = req.user?.displayName || req.headers['x-user-name'] || _actor || 'Underwriter';
-  const actorRole = req.user?.role || req.headers['x-user-role'];
+  const actorRole = req.user?.role;
   await pool.query(`UPDATE public.quote SET status='DRAFT', updated_at=now() WHERE quote_id=$1`, [id]);
   await pool.query(
     `INSERT INTO public.quote_offer (quote_id, status, updated_at)
@@ -1607,7 +1607,7 @@ router.post("/quotes/:id/offer/ntu", asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { reason, _actor } = req.body;
   const actorName = req.user?.displayName || req.headers['x-user-name'] || _actor || 'Underwriter';
-  const actorRole = req.user?.role || req.headers['x-user-role'];
+  const actorRole = req.user?.role;
   await pool.query(`UPDATE public.quote SET status='NTU',ntu_reason=$2,ntu_at=now(),updated_at=now() WHERE quote_id=$1`, [id,reason||null]);
   await pool.query(`INSERT INTO public.offer_approval_event (quote_id,event_type,actor_name,actor_role,comment) VALUES ($1,'NTU',$2,$3,$4)`,[id,actorName,actorRole||null,reason||null]).catch(()=>{});
   await pool.query(

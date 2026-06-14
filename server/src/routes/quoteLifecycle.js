@@ -44,8 +44,8 @@ router.post('/quotes/:id/amend', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { reason, _actor } = req.body;
   const actorName = req.user?.displayName || req.headers['x-user-name'] || _actor || 'Underwriter';
-  const actorRole = req.user?.role || req.headers['x-user-role'];
-  const creatorId = req.user?.userId || req.headers['x-user-id'] || null;
+  const actorRole = req.user?.role;
+  const creatorId = req.user?.userId || null;
 
   // Existence + status preconditions are checked OUTSIDE the transaction so
   // we never return an early-exit response with an open BEGIN on a pool
