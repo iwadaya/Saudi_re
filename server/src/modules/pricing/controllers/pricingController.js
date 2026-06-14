@@ -130,15 +130,15 @@ export async function saveOfferController(req, res) {
 
 export async function declineTreatyController(req, res) {
   const id = req.params.id;
-  const { reason, _actor } = req.body;
-  const actor = resolveActor(req, _actor || 'Chief Underwriter');
+  const { reason } = req.body;
+  const actor = await resolveActor(req);
   await declineTreatyAction(id, actor, reason);
   res.json({ ok: true });
 }
 
 export async function submitForApprovalController(req, res) {
   const id = req.params.id;
-  const actor = resolveActor(req, req.body._actor || 'Underwriter');
+  const actor = await resolveActor(req);
   const result = await submitForApprovalAction(id, actor, req.body);
   res.json({ ok: true, ...result });
 }
@@ -148,14 +148,14 @@ export async function peerDecisionController(req, res) {
   if (!['APPROVED', 'DECLINED'].includes(decision)) {
     return res.status(400).json({ error: 'decision must be APPROVED or DECLINED' });
   }
-  const actor = resolveActor(req, 'Approver');
+  const actor = await resolveActor(req);
   const result = await peerDecisionAction(req.params.id, actor, decision, comment);
   res.json({ ok: true, ...result });
 }
 
 export async function arbiterDecisionController(req, res) {
   const { decision, comment } = req.body;
-  const actor = resolveActor(req, 'Arbiter');
+  const actor = await resolveActor(req);
   const result = await arbiterDecisionAction(req.params.id, actor, decision, comment);
   res.json({ ok: true, ...result });
 }
@@ -177,7 +177,7 @@ export async function arbiterOptionsController(req, res) {
 
 export async function markApprovedController(req, res) {
   const id = req.params.id;
-  const actor = resolveActor(req, req.body._actor || 'Approver');
+  const actor = await resolveActor(req);
   const result = await markApprovedAction(id, actor, req.body);
   res.json({ ok: true, ...result });
 }
@@ -185,7 +185,7 @@ export async function markApprovedController(req, res) {
 export async function returnToUnderwriterController(req, res) {
   const id = req.params.id;
   const reason = req.body.reason || req.body.comment || '';
-  const actor = resolveActor(req, req.body._actor || 'Approver');
+  const actor = await resolveActor(req);
   await returnToUnderwriterAction(id, actor, reason);
   res.json({ ok: true });
 }
@@ -197,22 +197,22 @@ export async function approvalTrailController(req, res) {
 export async function recallOfferController(req, res) {
   const id = req.params.id;
   const reason = req.body.reason || 'Recalled by underwriter';
-  const actor = resolveActor(req, req.body._actor || 'Underwriter');
+  const actor = await resolveActor(req);
   const result = await recallOfferAction(id, actor, reason);
   res.json({ ok: true, ...result });
 }
 
 export async function markSignedController(req, res) {
   const id = req.params.id;
-  const actor = resolveActor(req, req.body._actor || 'Underwriter');
+  const actor = await resolveActor(req);
   await markSignedAction(id, actor, req.body.signed_line_pct);
   res.json({ ok: true });
 }
 
 export async function markNtuController(req, res) {
   const id = req.params.id;
-  const { reason, _actor } = req.body;
-  const actor = resolveActor(req, _actor || 'Underwriter');
+  const { reason } = req.body;
+  const actor = await resolveActor(req);
   await markNtuAction(id, actor, reason);
   res.json({ ok: true });
 }

@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
+import { resolveAuditActor } from '../services/audit.js';
 
 const router = Router();
 
@@ -42,10 +43,12 @@ router.get('/quotes/:id/versions', asyncHandler(async (req, res) => {
 // Status flow: APPROVED / AWAITING_SIGNED_LINE / SIGNED → SUPERSEDED
 router.post('/quotes/:id/amend', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { reason, _actor } = req.body;
-  const actorName = req.user?.displayName || req.headers['x-user-name'] || _actor || 'Underwriter';
-  const actorRole = req.user?.role;
-  const creatorId = req.user?.userId || null;
+  const { reason } = req.body;
+  // Actor identity from verified req.user (DB-resolved) — never client headers/body.
+  const actor = await resolveAuditActor(req);
+  const actorName = actor.actorName;
+  const actorRole = actor.actorRole;
+  const creatorId = actor.actorUserId;
 
   // Existence + status preconditions are checked OUTSIDE the transaction so
   // we never return an early-exit response with an open BEGIN on a pool
