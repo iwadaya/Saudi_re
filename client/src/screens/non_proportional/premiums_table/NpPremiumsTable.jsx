@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { api } from '../../../api';
 import { useContractId } from '../../../hooks/useContractId';
 import { useAppState } from '../../../context/AppContext';
@@ -42,7 +42,9 @@ function fmtPct(n) { const x = Number(n); if (!Number.isFinite(x)) return ''; re
 
 function computeCumulative(rows) {
   let f = 1.0;
-  return rows.map((r, idx) => {
+  // Coerce: a non-array (stale / partial state) must never reach `.map` and
+  // white-screen the page behind ScreenErrorBoundary.
+  return (Array.isArray(rows) ? rows : []).map((r, idx) => {
     const pct = numOrZero(r.inflationPct);
     if (idx > 0) f *= (1 + pct / 100);
     return { ...r, cumulativeFactor: f };
@@ -70,6 +72,18 @@ export default function NpPremiumsTable() {
   const [rateChangeRows, setRateChangeRows] = useState([]); // [{uwYear, rateChangePct}]
   const [showRateModal, setShowRateModal] = useState(false);
 
+  // Country resolution is local state — not a render-time const off
+  // appState.npTreatyDetail, which is not reliably hydrated on this screen in
+  // NP/quote mode. Seeded from npDetail when present; the load effect overrides
+  // it from the authoritative contract header. Keeping it as state means the
+  // country-inflation effect re-runs once the id finally resolves.
+  const npCountryId = npDetail.countryId || npDetail.country_id || null;
+  const npCountryName = npDetail.country || npDetail.countryName || '';
+  const [countryId, setCountryId] = useState(npCountryId ? String(npCountryId) : null);
+  const [countryName, setCountryName] = useState(npCountryName || '');
+  const [countryPickerOpen, setCountryPickerOpen] = useState(false);
+  const [countryOptions, setCountryOptions] = useState([]);
+
   /* ── Build years from treaty detail ── */
   const years = useMemo(() => {
     const start =
@@ -87,8 +101,6 @@ export default function NpPremiumsTable() {
 
   const cedantName = npDetail.cedantName || npDetail.cedant_name || '';
   const treatyLabel = npDetail.treatyTypeName || npDetail.treaty_type_name || '';
-  const countryName = npDetail.country || npDetail.countryName || '';
-  const countryId = npDetail.countryId || npDetail.country_id || null;
 
   /* ── Rebuild rows when years change ── */
   const rebuildRows = useCallback((yrs, existingUw, existingInf, existingRate) => {
@@ -112,21 +124,26 @@ export default function NpPremiumsTable() {
 
   /* ── Apply average inflation to all rows ── */
   const applyAverageInflation = useCallback((rows, avgPct) => {
-    const n = parseFlexNum(avgPct);
-    const formatted = n === null ? '' : fmtPct(n);
-    return computeCumulative(rows.map(r => ({ ...r, inflationPct: formatted })));
+    const safeRows = Array.isArray(rows) ? rows : [];
+    // A blank average is applied as 0% (no inflation) rather than left blank —
+    // blank would flow into computeCumulative as a non-number and surface NaN
+    // in the cumulative column. parseFlexNum('') === null → 0.
+    const parsed = parseFlexNum(avgPct);
+    const formatted = fmtPct(parsed === null ? 0 : parsed);
+    return computeCumulative(safeRows.map(r => ({ ...r, inflationPct: formatted })));
   }, []);
 
   /* ── Load country inflation from API ── */
   const loadCountryInflation = useCallback(async (yrs, onlyIfEmpty, currentRows) => {
-    if (!countryId || !yrs.length) return currentRows;
-    const hasAny = currentRows.some(r => String(r.inflationPct || '').trim() !== '');
-    if (onlyIfEmpty && hasAny) return currentRows;
+    const rows = Array.isArray(currentRows) ? currentRows : [];
+    if (!countryId || !yrs.length) return rows;
+    const hasAny = rows.some(r => String(r.inflationPct || '').trim() !== '');
+    if (onlyIfEmpty && hasAny) return rows;
     try {
       const data = await api.getRefInflation(countryId, yrs[0], yrs[yrs.length - 1]);
-      if (!Array.isArray(data) || !data.length) return currentRows;
+      if (!Array.isArray(data) || !data.length) return rows;
       const byYear = new Map(data.map(r => [String(r.uwYear ?? r.uw_year ?? r.year), r]));
-      const updated = currentRows.map(r => {
+      const updated = rows.map(r => {
         const hit = byYear.get(String(r.uwYear));
         if (!hit) return r;
         const v = hit.inflationPct ?? hit.inflation_pct ?? hit.inflation_rate ?? null;
@@ -134,7 +151,7 @@ export default function NpPremiumsTable() {
         return { ...r, inflationPct: n === null ? '' : fmtPct(n) };
       });
       return computeCumulative(updated);
-    } catch { return currentRows; }
+    } catch { return rows; }
   }, [countryId]);
 
   /* ── Load from server ── */
@@ -147,10 +164,29 @@ export default function NpPremiumsTable() {
     setLoading(true);
     (async () => {
       try {
-        const [egnpiData, npData] = await Promise.all([
+        const [egnpiData, npData, contractData] = await Promise.all([
           api.getNpEgnpiYear(contractId, quoteMode ? { quote: true } : undefined).catch(() => null),
           api.getNonPropTreaty(contractId, quoteMode ? { quote: true } : undefined).catch(() => null),
+          api.getContract(contractId, quoteMode ? { quote: true } : undefined).catch(() => null),
         ]);
+
+        // ── Resolve country from the loaded treaty ──
+        // The contract header is the authoritative source for country (the
+        // non-prop detail row carries no country column). Fall back to anything
+        // the non-prop payload happens to expose, then to npDetail. Writing it
+        // to state lets the country-inflation effect re-run once it resolves.
+        const header = contractData?.header || {};
+        const resolvedCountryId =
+          header.country_id ?? header.countryId ??
+          npData?.detail?.country_id ?? npData?.country_id ?? npData?.terms?.treaty_detail?.countryId ??
+          npCountryId ?? null;
+        const resolvedCountryName =
+          header.country_name ?? header.countryName ??
+          npData?.detail?.country_name ?? npData?.country ?? npData?.country_name ??
+          npData?.terms?.treaty_detail?.country ?? npData?.terms?.treaty_detail?.countryName ??
+          npCountryName ?? '';
+        if (resolvedCountryId != null && String(resolvedCountryId) !== '') setCountryId(String(resolvedCountryId));
+        if (resolvedCountryName) setCountryName(resolvedCountryName);
 
         const premData = npData?.terms?.premiums_table || npData?.premiumsTable || {};
         const savedMode = premData.inflationMode || premData.inflation_mode || 'country';
@@ -210,10 +246,11 @@ export default function NpPremiumsTable() {
         setUwRows(uw);
         setRateChangeRows(rate);
 
-        if (savedMode === 'country') {
-          const withCountry = await loadCountryInflation(years, true, inf);
-          setInflationRows(withCountry);
-        } else if (savedMode === 'average' && savedAvg) {
+        // Country values are filled by the dedicated country-inflation effect
+        // once the resolved countryId lands in state (its closure would be
+        // stale here). Average mode is applied immediately so the cumulative
+        // column is correct on first paint.
+        if (savedMode === 'average') {
           setInflationRows(applyAverageInflation(inf, savedAvg));
         } else {
           setInflationRows(inf);
@@ -222,15 +259,36 @@ export default function NpPremiumsTable() {
         const { uwRows: uw, inflationRows: inf, rateChangeRows: rate } = rebuildRows(years, [], [], []);
         setUwRows(uw);
         setRateChangeRows(rate);
-        if (inflationMode === 'country') {
-          const withCountry = await loadCountryInflation(years, true, inf);
-          setInflationRows(withCountry);
-        } else {
-          setInflationRows(inf);
-        }
+        setInflationRows(inf);
       } finally { setLoading(false); }
     })();
-  }, [applyAverageInflation, contractId, inflationMode, loadCountryInflation, quoteMode, rebuildRows, years]); // intentionally exclude loadCountryInflation/applyAverageInflation — they are called within the effect body using current closure values
+    // inflationMode is intentionally NOT a dependency: mode toggles are owned by
+    // handleModeChange (no refetch), and re-running this effect on every toggle
+    // used to reset the mode back to the server's saved value. loadCountryInflation
+    // is excluded because the dedicated country effect owns country fetching.
+  }, [applyAverageInflation, contractId, npCountryId, npCountryName, quoteMode, rebuildRows, years]);
+
+  /* ── Live ref of inflationRows so the country-inflation effect can read the
+        latest rows without taking them as a dependency (which would re-fire it
+        every time it fills values). ── */
+  const inflationRowsRef = useRef(inflationRows);
+  useEffect(() => { inflationRowsRef.current = inflationRows; }, [inflationRows]);
+
+  /* ── Fill country inflation once the country resolves (or years change) while
+        in country mode. onlyIfEmpty so saved / hand-typed values are never
+        clobbered — explicit toggles back to country go through handleModeChange,
+        which force-reloads. This is what unblocks the country path when the id
+        only becomes known after the initial render. ── */
+  useEffect(() => {
+    if (inflationMode !== 'country' || !countryId || !years.length) return;
+    let cancelled = false;
+    (async () => {
+      const base = Array.isArray(inflationRowsRef.current) ? inflationRowsRef.current : [];
+      const updated = await loadCountryInflation(years, true, base);
+      if (!cancelled) setInflationRows(updated);
+    })();
+    return () => { cancelled = true; };
+  }, [countryId, inflationMode, years, loadCountryInflation]);
 
   /* ── UW row updates ── */
   const updateUwRow = useCallback((idx, value) => {
@@ -269,9 +327,12 @@ export default function NpPremiumsTable() {
   const handleModeChange = useCallback(async (newMode) => {
     setInflationMode(newMode);
     if (newMode === 'average') {
-      setInflationRows(prev => applyAverageInflation(prev, averageInflationPct));
+      setInflationRows(prev => applyAverageInflation(Array.isArray(prev) ? prev : [], averageInflationPct));
     } else {
-      const updated = await loadCountryInflation(years, false, inflationRows);
+      // Force-reload (onlyIfEmpty=false) so toggling back to country overwrites
+      // any average values with fresh country inflation.
+      const base = Array.isArray(inflationRows) ? inflationRows : [];
+      const updated = await loadCountryInflation(years, false, base);
       setInflationRows(updated);
     }
   }, [years, averageInflationPct, inflationRows, loadCountryInflation, applyAverageInflation]);
@@ -280,8 +341,28 @@ export default function NpPremiumsTable() {
     setInflationRows(prev => applyAverageInflation(prev, averageInflationPct));
   }, [averageInflationPct, applyAverageInflation]);
 
+  /* ── Country picker — fallback so the country path is never stuck when it
+        can't be derived from the loaded treaty. Lazily loads the country list
+        on first open. Picking a country sets local countryId/countryName, which
+        re-runs the country-inflation effect. ── */
+  const openCountryPicker = useCallback(async () => {
+    setCountryPickerOpen(open => !open);
+    if (countryOptions.length) return;
+    try {
+      const list = await api.getRefListItems('country');
+      setCountryOptions(Array.isArray(list) ? list : []);
+    } catch { setCountryOptions([]); }
+  }, [countryOptions.length]);
+
+  const pickCountry = useCallback((id) => {
+    const opt = (Array.isArray(countryOptions) ? countryOptions : []).find(c => String(c.id) === String(id));
+    setCountryId(id ? String(id) : null);
+    setCountryName(opt?.name || '');
+    setCountryPickerOpen(false);
+  }, [countryOptions]);
+
   /* ── Δ vs prev calculation ── */
-  const uwNums = useMemo(() => uwRows.map(r => parseFlexNum(r.egnpi)), [uwRows]);
+  const uwNums = useMemo(() => (Array.isArray(uwRows) ? uwRows : []).map(r => parseFlexNum(r.egnpi)), [uwRows]);
 
   /* ── Paste handler for EGNPI ── */
   const handleUwPaste = useCallback((startIdx, e) => {
@@ -412,7 +493,7 @@ export default function NpPremiumsTable() {
                     <table className="np-prem-table">
                       <thead><tr><th className="np-table-sticky">UW</th><th>Premium</th><th className="cell-right">Δ vs prev</th></tr></thead>
                       <tbody>
-                        {uwRows.length === 0 ? (
+                        {!Array.isArray(uwRows) || uwRows.length === 0 ? (
                           <tr><td colSpan={3} className="np-muted">Set Start Year / Renewal Date on Treaty Detail.</td></tr>
                         ) : uwRows.map((r, i) => {
                           const cur = uwNums[i]; const prev = i > 0 ? uwNums[i - 1] : null;
@@ -445,9 +526,32 @@ export default function NpPremiumsTable() {
 
                   {/* Inflation controls */}
                   <div className="np-inf-controls" style={{ padding: '8px 12px' }}>
-                    <div className="np-inf-line" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div className="np-inf-line" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span className="np-muted">Country:</span>
                       <b style={{ marginLeft: 6 }}>{countryName || '—'}</b>
+                      <button
+                        type="button"
+                        className="dock-btn dock-btn--ghost"
+                        onClick={openCountryPicker}
+                        title="Pick or confirm the country used for inflation lookup"
+                        style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '3px 9px', letterSpacing: '.05em' }}
+                      >
+                        COUNTRY
+                      </button>
+                      {countryPickerOpen && (
+                        <select
+                          className="fi"
+                          aria-label="Select country for inflation"
+                          value={countryId || ''}
+                          onChange={e => pickCountry(e.target.value)}
+                          style={{ marginLeft: 4, maxWidth: 220 }}
+                        >
+                          <option value="">Select country…</option>
+                          {(Array.isArray(countryOptions) ? countryOptions : []).map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      )}
                       <span className="np-tag" style={{ marginLeft: 10 }}>{inflationMode === 'country' ? 'Country' : 'Average'}</span>
                     </div>
                     <div style={{ marginTop: 8, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
@@ -465,6 +569,7 @@ export default function NpPremiumsTable() {
                         <span className="np-muted">Average inflation %</span>
                         <PctInput className="np-inp np-inp-pct" value={averageInflationPct}
                           placeholder="0.00%" style={{ maxWidth: 120 }}
+                          aria-label="Average inflation percent"
                           onChange={v => setAverageInflationPct(v)}
                           onBlur={() => {
                             const n = parseFlexNum(averageInflationPct);
