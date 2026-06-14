@@ -320,7 +320,6 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
       const base = `${first}.${last}`.toLowerCase().replace(/[^a-z0-9.]+/g, '');
       finalUsername = base;
       let n = 1;
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const { rows: dup } = await pool.query(
           `SELECT 1 FROM public.uw_user WHERE username = $1 LIMIT 1`, [finalUsername]

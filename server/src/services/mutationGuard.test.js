@@ -22,8 +22,18 @@ poolMock.query.mockImplementation((sql) => {
   return P([]);
 });
 
-let server = null;
-afterEach(() => { if (server) { server.close(); server = null; } });
+// Some tests boot more than one server; track every one and tear them ALL down
+// (sockets forced closed, close awaited) after each test so a leaked listener
+// never lingers to contend with the rest of the full-suite run. Timeout is
+// raised here (per-file) rather than globally — these bind a real port.
+vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
+
+const servers = [];
+afterEach(async () => {
+  for (const s of servers.splice(0)) {
+    await new Promise((resolve) => { s.close(resolve); s.closeAllConnections?.(); });
+  }
+});
 
 function boot(userId) {
   const app = express();
@@ -33,7 +43,8 @@ function boot(userId) {
   app.all('/api/*splat', (_req, res) => res.json({ reached: true }));
   app.use((err, _req, res, _next) => res.status(err.status || 500).json({ error: err.message, code: err.code }));
   return new Promise((resolve) => {
-    server = app.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`));
+    const s = app.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${s.address().port}`));
+    servers.push(s);
   });
 }
 const send = (base, method, p, body) =>

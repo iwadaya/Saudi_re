@@ -187,7 +187,6 @@ export default function LoginScreen() {
 
   useEffect(() => {
     loadUsers().finally(() => setLoadingUsers(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleLogin = async (e) => {

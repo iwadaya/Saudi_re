@@ -71,7 +71,6 @@ function resolveAuthSecret() {
   if (raw && raw.length) return raw;
   if (nodeEnv === 'production') return '';
   const ephemeral = randomBytes(32).toString('hex');
-  // eslint-disable-next-line no-console
   console.warn('[env] AUTH_JWT_SECRET not set — using a per-process ephemeral secret; tokens will not survive a restart.');
   return ephemeral;
 }
@@ -158,7 +157,6 @@ export function validateEnv() {
     sessionSecret: process.env.SESSION_SECRET || '',
   });
   if (errors.length) {
-    // eslint-disable-next-line no-console
     console.error('[env] Refusing to start with an insecure configuration:\n  - ' + errors.join('\n  - '));
     process.exit(1);
   }
