@@ -48,7 +48,7 @@ function fakeQuery(sql, params = []) {
     return Promise.resolve({ rows: scenario.pwHash !== undefined ? [{ password_hash: scenario.pwHash }] : [] });
   }
   if (sql.includes('UPDATE public.uw_user') && sql.includes('password_changed_at')) {
-    scenario.pwUpdate = { userId: params[0], newHash: params[1] };
+    scenario.pwUpdate = { userId: params[0], newHash: params[1], clearsForceFlag: sql.includes('must_change_password = false') };
     return Promise.resolve({ rows: [] });
   }
   return Promise.resolve({ rows: [] });
@@ -252,12 +252,26 @@ describe('POST /auth/login', () => {
     expect(res.status).toBe(200);
     expect(res.body.session.token).toMatch(/.+\..+/);
   });
+
+  it('still issues a token AND flags mustChangePassword for a forced-change user', async () => {
+    scenario.loginUser = { ...adaRow(hashPassword('Universe#1234')), must_change_password: true };
+    const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'Universe#1234' } });
+    expect(res.status).toBe(200);
+    expect(typeof res.body.session.token).toBe('string');
+    expect(res.body.session.mustChangePassword).toBe(true);
+  });
+
+  it('does not flag mustChangePassword for a normal user', async () => {
+    scenario.loginUser = adaRow(hashPassword('realpass1'));
+    const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'realpass1' } });
+    expect(res.body.session.mustChangePassword).toBe(false);
+  });
 });
 
 describe('POST /auth/change-password — self-service, verified identity only', () => {
   const me = { userId: 'u-me', roleCode: 'TUW', hierarchyLevel: 5, displayName: 'Me' };
 
-  it('changes the password with the correct current password (200 ok); new hash verifies, old does not', async () => {
+  it('changes the password with the correct current password (200 ok); new hash verifies, old does not, force-flag cleared', async () => {
     currentUser = me;
     scenario.pwHash = hashPassword('oldpass1');
     const res = await call(buildApp(), {
@@ -266,10 +280,23 @@ describe('POST /auth/change-password — self-service, verified identity only', 
     });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
-    // Persisted a fresh scrypt of the NEW password against the verified id.
+    // Persisted a fresh scrypt of the NEW password against the verified id…
     expect(scenario.pwUpdate.userId).toBe('u-me');
     expect(verifyPassword('brandnew2', scenario.pwUpdate.newHash)).toBe(true);
     expect(verifyPassword('oldpass1', scenario.pwUpdate.newHash)).toBe(false);
+    // …and cleared must_change_password in the same write.
+    expect(scenario.pwUpdate.clearsForceFlag).toBe(true);
+  });
+
+  it('rejects the forced-change temp password (Universe#1234) as the new password → 400', async () => {
+    currentUser = me;
+    scenario.pwHash = hashPassword('oldpass1');
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/change-password',
+      body: { currentPassword: 'oldpass1', newPassword: 'Universe#1234', confirmPassword: 'Universe#1234' },
+    });
+    expect(res.status).toBe(400);
+    expect(scenario.pwUpdate).toBeUndefined();
   });
 
   it('rejects a wrong current password with 401 and writes nothing', async () => {

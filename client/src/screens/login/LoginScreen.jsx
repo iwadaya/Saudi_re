@@ -5,6 +5,7 @@ import {
   getSession, setSession, canAccessApprovals,
   createTestSession,
 } from '../../utils/auth';
+import { requirePasswordChange } from '../../utils/passwordGate';
 import { api } from '../../api';
 import ThemeSwitcher from '../../components/ThemeSwitcher';
 
@@ -200,6 +201,9 @@ export default function LoginScreen() {
       });
       // Use the person's real name, not the role title.
       setSession({ ...session, displayName: selectedUser.display_name || session.displayName });
+      // Forced first-login change: flip the gate so the mandatory "Set your
+      // password" modal appears immediately (the AppShell overlay reads this).
+      if (session.mustChangePassword) requirePasswordChange();
       navigate(canAccessApprovals() ? '/approvals' : '/select');
     } catch (err) {
       setError(err.message || 'Login failed.');
