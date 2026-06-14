@@ -222,6 +222,7 @@ const PATHS = {
   npExpiring: (id: string) => `/api/treaties/${enc(id)}/np/expiring`,
   mandateCheck: '/api/auth/mandate-check',
   authLogin: '/api/auth/login',
+  authChangePassword: '/api/auth/change-password',
   authMe: '/api/auth/me',
   authUsers: '/api/auth/users',
   authRoles: '/api/auth/roles',
@@ -725,6 +726,9 @@ export const api = {
   getUsers(opts?: RequestOpts): Promise<unknown> { return request(PATHS.authUsers, opts); },
   createUser(payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request(PATHS.authUsers, { method: 'POST', body: payload, ...opts }); },
   loginUser(payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request(PATHS.authLogin, { method: 'POST', body: payload, ...opts }); },
+  // Self-service password change for the logged-in user. The bearer token (added
+  // by the request wrapper) is the identity; the server ignores any body user id.
+  changePassword(payload: { currentPassword: string; newPassword: string; confirmPassword: string }, opts?: RequestOpts): Promise<unknown> { return request(PATHS.authChangePassword, { method: 'POST', body: payload, ...opts }); },
   getViewableUsers(opts?: RequestOpts): Promise<unknown> { return request('/api/users/viewable', opts); },
   getUserContracts(userId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/contracts/by-user/${enc(userId)}`, opts); },
   allocateContract(contractId: string, comment?: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/contracts/${enc(contractId)}/allocate`, { method: 'POST', body: { comment }, ...opts }); },

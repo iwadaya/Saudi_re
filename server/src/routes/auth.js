@@ -10,7 +10,7 @@ import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { logAudit } from '../services/audit.js';
 import { signAuthToken } from '../lib/authToken.js';
-import { requireMinLevel } from '../middleware/requestContext.js';
+import { requireAuth, requireMinLevel } from '../middleware/requestContext.js';
 
 const router = Router();
 
@@ -222,6 +222,63 @@ router.get('/auth/me', asyncHandler(async (req, res) => {
   if (!rows.length) return res.status(401).json({ error: 'User not found or inactive.' });
 
   res.json({ session: buildSession(rows[0]) });
+}));
+
+// ── POST /api/auth/change-password — change your OWN password ───────────────
+// Behind requireAuth; rate-limited per identity in app.js. The actor is ALWAYS
+// the verified req.user.userId — there is no body/param user id, so a user can
+// only ever change their own hash. Uses the same scrypt hashPassword/
+// verifyPassword as login; the v1 token policy keeps the current session valid.
+router.post('/auth/change-password', requireAuth, asyncHandler(async (req, res) => {
+  const userId = req.user.userId; // verified token identity — the ONLY actor
+  const { currentPassword, newPassword, confirmPassword } = req.body || {};
+
+  // Validation, fail-closed (order matters; messages are asserted by tests).
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    return res.status(400).json({ error: 'currentPassword, newPassword and confirmPassword are required.' });
+  }
+  if (String(newPassword).length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters.' });
+  }
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({ error: 'Passwords do not match' });
+  }
+  if (newPassword === currentPassword) {
+    return res.status(400).json({ error: 'New password must differ' });
+  }
+
+  // Load the caller's OWN stored hash (keyed on the verified id, never the body).
+  const { rows } = await pool.query(
+    `SELECT password_hash FROM public.uw_user WHERE user_id = $1 LIMIT 1`,
+    [userId]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'User not found.' });
+
+  // Current-password check. verifyPassword returns false for any non-'scrypt$'
+  // value, so a legacy/demo hash (e.g. 'DEMO_HASH_2026') can never pass and
+  // demo2026 is NOT accepted here — such users must be reset by an admin first.
+  if (!verifyPassword(currentPassword, rows[0].password_hash)) {
+    return res.status(401).json({ error: 'Current password is incorrect.' });
+  }
+
+  await pool.query(
+    `UPDATE public.uw_user
+        SET password_hash = $2, password_changed_at = now(), updated_at = now()
+      WHERE user_id = $1`,
+    [userId, hashPassword(newPassword)]
+  );
+
+  // Audit the change — actor is the verified identity; never the plaintext/hash.
+  await logAudit(pool, {
+    entityType: 'USER', entityId: userId,
+    eventType: 'PASSWORD_CHANGED',
+    actor: req.user.displayName || userId,
+    payload: { self_service: true },
+  }).catch(() => {});
+
+  // v1: keep the current session valid (no forced re-login). If server-side
+  // token revocation is added later, bump a token version here.
+  res.json({ ok: true });
 }));
 
 // ── GET /api/auth/users — list all users
