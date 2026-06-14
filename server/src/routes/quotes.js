@@ -17,6 +17,7 @@ import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { storeUploadedFile } from '../lib/uploadStorage.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
 import { assertCanEdit } from '../services/permissions.js';
+import { approveQuote } from '../services/approvals.js';
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
 import { verifyNpPricingOutputs, summariseDrifts, isStrictMode, pricingDriftStats } from '../lib/pricingVerifier.js';
 import { getWordingChecklist, runWordingChecklistAi, saveWordingChecklist } from '../services/wordingChecklist.js';
@@ -1535,21 +1536,17 @@ router.post("/quotes/:id/offer/submit-for-approval", asyncHandler(async (req, re
 router.post("/quotes/:id/offer/mark-approved", asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { _actor, comment } = req.body;
-  const actorName = req.user?.displayName || req.headers['x-user-name'] || _actor || 'Approver';
-  const actorRole = req.user?.role;
-  await pool.query(`UPDATE public.quote SET status='AWAITING_SIGNED_LINE', updated_at=now() WHERE quote_id=$1`, [id]);
-  await pool.query(
-    `INSERT INTO public.quote_offer (quote_id, status, updated_at)
-     VALUES ($1, 'AWAITING_SIGNED_LINE', now())
-     ON CONFLICT (quote_id) DO UPDATE SET status='AWAITING_SIGNED_LINE', updated_at=now()`,
-    [id]
-  ).catch(() => {});
-  await pool.query(
-    `INSERT INTO public.offer_approval_event (quote_id,event_type,actor_name,actor_role,comment)
-     VALUES ($1,'APPROVED',$2,$3,$4)`,
-    [id, actorName, actorRole||null, comment||null]
-  ).catch(() => {});
-  res.json({ ok: true });
+  // Route through the approval service: enforces four-eyes + approver authority
+  // and the approved-state write goes through the assertWorkflowTransition gate.
+  // No direct status write here.
+  const result = await approveQuote({
+    quoteId: id,
+    actorUserId: req.user?.userId || null,
+    actorName: req.user?.displayName || req.headers['x-user-name'] || _actor || 'Approver',
+    actorRole: req.user?.role || null,
+    comment: comment || null,
+  });
+  res.json({ ok: true, ...result });
 }));
 
 router.post("/quotes/:id/offer/return-to-underwriter", asyncHandler(async (req, res) => {

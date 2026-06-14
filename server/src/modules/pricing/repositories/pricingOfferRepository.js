@@ -70,26 +70,10 @@ export async function markDeclined(contractId, reason) {
   scheduleBenchmarkRefresh();
 }
 
-export async function markApproved(contractId, linePct) {
-  // Only legal from APPROVED (the approval engine just finished) or
-  // AWAITING_SIGNED_LINE (self — idempotent re-save).
-  const current = await loadCurrentStatus(contractId);
-  assertLegalTransition(current, 'AWAITING_SIGNED_LINE');
-  await pool.query(
-    `UPDATE public.contract SET uw_status='AWAITING_SIGNED_LINE', status='AWAITING_SIGNED_LINE', updated_at=now() WHERE contract_id=$1`,
-    [contractId]
-  );
-  await pool.query(
-    `UPDATE public.contract_offer SET status='AWAITING_SIGNED_LINE', approved_at=now(), updated_at=now() WHERE contract_id=$1`,
-    [contractId]
-  );
-  if (linePct != null) {
-    await pool.query(
-      `UPDATE public.contract_pricing_outputs SET offer_line=$2, updated_at=now() WHERE contract_id=$1`,
-      [contractId, String(linePct)]
-    ).catch(() => {});
-  }
-}
+// markApproved / markSigned removed: the approved (AWAITING_SIGNED_LINE) and
+// SIGNED writes now live in the approval service (approvals.js), behind the
+// recordDecision engine + assertWorkflowTransition gate. No route may write
+// these privileged states directly.
 
 export async function forceDraftStatus(contractId) {
   await pool.query(`UPDATE public.contract SET uw_status='DRAFT',status='DRAFT',updated_at=now() WHERE contract_id=$1`, [contractId]);
@@ -122,21 +106,6 @@ export async function recallOffer(contractId, actor) {
      VALUES ($1,'RECALLED',$2,$3,$4,$5)`,
     [contractId, actor.actorUserId || null, actor.actorName, actor.actorRole || null, actor.comment]
   ).catch(() => {});
-}
-
-export async function markSigned(contractId, signedLinePct) {
-  // Must have been on offer — no signing a DRAFT or an AWAITING_APPROVAL.
-  const current = await loadCurrentStatus(contractId);
-  assertLegalTransition(current, 'SIGNED');
-  await pool.query(
-    `UPDATE public.contract SET uw_status='SIGNED',status='SIGNED',signed_line_pct=$2,signed_at=now(),updated_at=now() WHERE contract_id=$1`,
-    [contractId, signedLinePct]
-  );
-  await pool.query(
-    `UPDATE public.contract_offer SET status='SIGNED',signed_at=now(),written_line_pct=COALESCE(written_line_pct,$2) WHERE contract_id=$1`,
-    [contractId, signedLinePct]
-  );
-  scheduleBenchmarkRefresh();
 }
 
 export async function markNtu(contractId, reason) {

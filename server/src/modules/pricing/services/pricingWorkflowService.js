@@ -7,17 +7,17 @@ import {
   getOfferEvents,
   getEligibleApprovers,
   getArbiterOptions,
+  approveContract,
+  markContractSigned,
 } from '../../../services/approvals.js';
 import { logAudit } from '../../../services/audit.js';
 import { pool } from '../../../db/pool.js';
 import {
   replaceOffer,
   markDeclined,
-  markApproved,
   forceDraftStatus,
   getLegacyApprovalTrail,
   recallOffer,
-  markSigned,
   markNtu,
   insertApprovalEvent,
 } from '../repositories/pricingRepository.js';
@@ -85,10 +85,16 @@ export async function getArbiterOptionsAction(contractId) {
 }
 
 export async function markApprovedAction(contractId, actor, { comment, line_pct }) {
-  await markApproved(contractId, line_pct);
-  await logAudit(pool, { entityType: 'CONTRACT', entityId: contractId, eventType: 'APPROVED', actor: actor.actorName, comment: comment || null });
-  await insertApprovalEvent(contractId, 'APPROVED', actor, comment || null);
-  return { nextStatus: 'AWAITING_SIGNED_LINE' };
+  // Routes through the decision engine: enforces approver eligibility + four-eyes
+  // and only the engine writes the approved state. No direct uw_status write.
+  return approveContract({
+    contractId,
+    actorUserId: actor.actorUserId,
+    actorName: actor.actorName,
+    actorRole: actor.actorRole,
+    comment: comment || null,
+    linePct: line_pct ?? null,
+  });
 }
 
 export async function returnToUnderwriterAction(contractId, actor, reason) {
@@ -109,9 +115,14 @@ export async function recallOfferAction(contractId, actor, reason) {
 }
 
 export async function markSignedAction(contractId, actor, signedLinePct) {
-  await markSigned(contractId, parseSignedLinePct(signedLinePct));
-  await logAudit(pool, { entityType: 'CONTRACT', entityId: contractId, eventType: 'SIGNED', actor: actor.actorName });
-  await insertApprovalEvent(contractId, 'SIGNED', actor, null);
+  // SIGNED is gated by assertWorkflowTransition inside the approval service.
+  await markContractSigned({
+    contractId,
+    actorUserId: actor.actorUserId,
+    actorName: actor.actorName,
+    actorRole: actor.actorRole,
+    signedLinePct: parseSignedLinePct(signedLinePct),
+  });
 }
 
 export async function markNtuAction(contractId, actor, reason) {

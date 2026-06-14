@@ -10,11 +10,9 @@ export {
   getOffer,
   replaceOffer,
   markDeclined,
-  markApproved,
   forceDraftStatus,
   getLegacyApprovalTrail,
   recallOffer,
-  markSigned,
   markNtu,
   insertApprovalEvent,
 } from './pricingOfferRepository.js';

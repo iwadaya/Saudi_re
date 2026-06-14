@@ -12,6 +12,8 @@
 import { pool } from '../db/pool.js';
 import { logger } from '../lib/logger.js';
 import { logAudit } from './audit.js';
+import { assertLegalTransition } from '../lib/statusMachine.js';
+import { refreshBenchmarks } from './ldf/benchmark.js';
 
 const LEVEL = { CE:1, CU:2, CA:2, TD:3, UM:3, TM:4, TUW:5, UW:5, AN:6 };
 const ROLE_NAME = { CE:'Chief Executive', CU:'Chief Underwriter', CA:'Chief Actuary', TD:'Treaty Director', UM:'Underwriting Manager', TM:'Treaty Manager', TUW:'Treaty Underwriter', UW:'Underwriter', AN:'Analyst' };
@@ -421,6 +423,67 @@ export async function submitForApproval({ contractId, quoteId, submittedByUserId
 const httpError = (status, message, code) =>
   Object.assign(new Error(message), code ? { status, code } : { status });
 
+// ── Workflow-transition gate ─────────────────────────────────────────────────
+// A privileged state (APPROVED / AWAITING_SIGNED_LINE / SIGNED / BOUND) may be
+// reached ONLY through assertWorkflowTransition. The module-private ENGINE_TOKEN
+// is the "decision record": only this module (recordDecision and the approval
+// entrypoints below) can hand it to assertWorkflowTransition, so a route can
+// never flip an item to approved/bound without first clearing the engine's
+// eligibility checks. The token is never exported — external code cannot forge it.
+const ENGINE_TOKEN = Symbol('approval-engine-decision');
+const GUARDED_TARGETS = new Set(['APPROVED', 'AWAITING_SIGNED_LINE', 'SIGNED', 'BOUND']);
+const APPROVE_TARGETS = new Set(['APPROVED', 'AWAITING_SIGNED_LINE']); // need an engine token
+
+/** Live workflow status for a contract (uw_status) or quote (status). */
+async function loadEntityStatus(entityType, entityId) {
+  const et = String(entityType || '').toUpperCase();
+  if (et === 'CONTRACT') {
+    const { rows } = await pool.query(`SELECT uw_status AS status FROM public.contract WHERE contract_id=$1`, [entityId]);
+    return rows[0] ? rows[0].status : null;
+  }
+  if (et === 'QUOTE') {
+    const { rows } = await pool.query(`SELECT status FROM public.quote WHERE quote_id=$1`, [entityId]);
+    return rows[0] ? rows[0].status : null;
+  }
+  throw httpError(400, `Unknown entityType: ${entityType}`);
+}
+
+/**
+ * The ONLY sanctioned gate into a privileged workflow state. It:
+ *   • loads the live current state (404 if the entity is gone),
+ *   • rejects illegal jumps via the uw_status machine (422 INVALID_TRANSITION) —
+ *     so DRAFT → SIGNED / DRAFT → AWAITING_SIGNED_LINE etc. are blocked,
+ *   • for an APPROVE move requires the module-private ENGINE_TOKEN as proof the
+ *     decision came from recordDecision (or an approval-service entrypoint that
+ *     already enforced eligibility) — without it, 403 NOT_FROM_ENGINE.
+ * Verify-only: it never writes. The caller performs the write immediately after.
+ *
+ * @param {{ entityType:'CONTRACT'|'QUOTE', entityId:string, from?:string,
+ *           to:string, actorUserId?:string, decision?:symbol }} args
+ */
+export async function assertWorkflowTransition({ entityType, entityId, from, to, actorUserId, decision } = {}) {
+  const et = String(entityType || '').toUpperCase();
+  const target = String(to || '').toUpperCase();
+  if (!GUARDED_TARGETS.has(target)) {
+    throw httpError(400, `assertWorkflowTransition only guards ${[...GUARDED_TARGETS].join('/')} (got ${to})`);
+  }
+  const current = await loadEntityStatus(et, entityId);
+  if (current == null) throw httpError(404, `${et === 'QUOTE' ? 'Quote' : 'Contract'} not found`, `${et}_NOT_FOUND`);
+  const fromState = from != null ? String(from).toUpperCase() : String(current).toUpperCase();
+  if (fromState !== String(current).toUpperCase()) {
+    throw httpError(409, 'Workflow state changed since read — re-fetch and retry', 'STATE_CHANGED');
+  }
+  // Legal-edge check. The uw_status machine covers the approval-relevant states
+  // for both contracts and quotes; an unknown source state (e.g. QUOTED) is
+  // simply not a legal predecessor and is rejected.
+  assertLegalTransition(current, target);
+  // Provenance: an approve move must originate from the decision engine.
+  if (APPROVE_TARGETS.has(target) && decision !== ENGINE_TOKEN) {
+    throw httpError(403, 'Approval must be recorded through the decision engine', 'NOT_FROM_ENGINE');
+  }
+  return { entityType: et, entityId, from: current, to: target, actorUserId: actorUserId ?? null };
+}
+
 /**
  * Normalize a persisted approver_options value to a list of user_id strings.
  * Tolerates the canonical shape (jsonb array of candidate objects) as well as a
@@ -686,6 +749,88 @@ export async function recordArbiterDecision({ contractId, quoteId, decidedByUser
     offerId: offer.offer_id, actorUserId: decidedByUserId, actorName: decidedByName,
     actorRole: decidedByRole, slot: 'arbiter', decision, comment,
   });
+}
+
+// ── Privileged-state entrypoints (the only writers of approved/signed/bound) ──
+
+/**
+ * Approve a contract offer. Replaces the old one-shot markApproved write: an
+ * illegal pre-state (e.g. DRAFT) is a clean 422 BEFORE any decision, then the
+ * approver's decision is recorded through the chokepoint (eligibility +
+ * four-eyes + atomic finalize). The approved-state write happens inside the
+ * engine — never directly from a route.
+ */
+export async function approveContract({ contractId, actorUserId, actorName, actorRole, comment, linePct }) {
+  const current = await loadEntityStatus('CONTRACT', contractId);
+  if (current == null) throw httpError(404, 'Contract not found', 'CONTRACT_NOT_FOUND');
+  assertLegalTransition(current, 'AWAITING_SIGNED_LINE'); // 422 on an illegal jump
+  const result = await recordPeerDecision({
+    contractId, decidedByUserId: actorUserId, decidedByName: actorName,
+    decidedByRole: actorRole, decision: 'APPROVED', comment,
+  });
+  if (linePct != null && result?.finalDecision === 'APPROVED') {
+    await pool.query(
+      `UPDATE public.contract_pricing_outputs SET offer_line=$2, updated_at=now() WHERE contract_id=$1`,
+      [contractId, String(linePct)]
+    ).catch(() => {});
+  }
+  return result;
+}
+
+/**
+ * Sign a contract (AWAITING_SIGNED_LINE → SIGNED). Gated by
+ * assertWorkflowTransition: the prior AWAITING_SIGNED_LINE state is itself only
+ * reachable through the engine, so it IS the decision record for signing.
+ */
+export async function markContractSigned({ contractId, actorUserId, actorName, actorRole, signedLinePct }) {
+  await assertWorkflowTransition({ entityType: 'CONTRACT', entityId: contractId, to: 'SIGNED', actorUserId });
+  await pool.query(
+    `UPDATE public.contract SET uw_status='SIGNED',status='SIGNED',signed_line_pct=$2,signed_at=now(),updated_at=now() WHERE contract_id=$1`,
+    [contractId, signedLinePct ?? null]
+  );
+  await pool.query(
+    `UPDATE public.contract_offer SET status='SIGNED',signed_at=now(),written_line_pct=COALESCE(written_line_pct,$2) WHERE contract_id=$1`,
+    [contractId, signedLinePct ?? null]
+  );
+  await logOfferEvent({ contractId, eventType: 'SIGNED', actorUserId, actorName, actorRole, payload: { signedLinePct: signedLinePct ?? null } });
+  refreshBenchmarks(pool).catch(() => {});
+  return { nextStatus: 'SIGNED' };
+}
+
+/**
+ * Approve a quote. Quotes run a lighter single-approver model (no peer engine),
+ * so eligibility is enforced here — four-eyes plus approval authority (or the
+ * nominated approver) — and the approved-state write goes through the
+ * assertWorkflowTransition gate with an engine token.
+ */
+export async function approveQuote({ quoteId, actorUserId, actorName, actorRole, comment }) {
+  const { rows } = await pool.query(
+    `SELECT q.created_by_user_id, qo.next_approver
+       FROM public.quote q
+       LEFT JOIN public.quote_offer qo ON qo.quote_id=q.quote_id
+      WHERE q.quote_id=$1 ORDER BY qo.updated_at DESC NULLS LAST LIMIT 1`,
+    [quoteId]
+  );
+  if (!rows.length) throw httpError(404, 'Quote not found', 'QUOTE_NOT_FOUND');
+  const submitterId = rows[0].created_by_user_id;
+  if (actorUserId && submitterId && String(actorUserId) === String(submitterId)) {
+    throw httpError(403, 'Cannot approve own submission');
+  }
+  const actorLevel = LEVEL[actorRole] || 5;
+  const isNominee = rows[0].next_approver && actorUserId && String(rows[0].next_approver) === String(actorUserId);
+  if (actorLevel > 4 && !isNominee) {
+    throw httpError(403, 'Not an eligible approver for this quote');
+  }
+  await assertWorkflowTransition({ entityType: 'QUOTE', entityId: quoteId, to: 'AWAITING_SIGNED_LINE', actorUserId, decision: ENGINE_TOKEN });
+  await pool.query(`UPDATE public.quote SET status='AWAITING_SIGNED_LINE', updated_at=now() WHERE quote_id=$1`, [quoteId]);
+  await pool.query(
+    `INSERT INTO public.quote_offer (quote_id, status, updated_at)
+     VALUES ($1, 'AWAITING_SIGNED_LINE', now())
+     ON CONFLICT (quote_id) DO UPDATE SET status='AWAITING_SIGNED_LINE', updated_at=now()`,
+    [quoteId]
+  ).catch(() => {});
+  await logOfferEvent({ quoteId, eventType: 'APPROVED', actorUserId, actorName, actorRole, payload: { decision: 'APPROVED' }, comment });
+  return { nextStatus: 'AWAITING_SIGNED_LINE' };
 }
 
 export async function getApprovalState(contractId, quoteId) {
