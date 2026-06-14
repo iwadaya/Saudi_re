@@ -1,5 +1,6 @@
 import cors from 'cors';
 import compression from 'compression';
+import crypto from 'node:crypto';
 import express from 'express';
 import fs from 'fs';
 import helmet from 'helmet';
@@ -109,39 +110,52 @@ function registerClient(app) {
     return;
   }
 
-  // JS/CSS assets have content-hash in filename — long cache fine
-  // index.html and manifest must never be cached so fresh chunk hashes load
-  //
-  // For the hashed bundle in /assets/ we send `immutable` so browsers skip
-  // the conditional GET entirely on revisits. Vite emits content-hashed
-  // filenames there, so a different hash means a different URL — there is
-  // never a case where the cached bytes for a given URL go stale.
+  // index.html is read once and served by serveIndex (below) — NOT by
+  // express.static — so it always ships with the request's CSP nonce injected
+  // into its inline bootstrap <script>. Read here at startup; the per-request
+  // string replace is cheap.
+  let indexHtml = null;
+  try { indexHtml = fs.readFileSync(path.join(clientDir, 'index.html'), 'utf8'); }
+  catch (e) { logger.warn('[static] could not read index.html', { error: e.message }); }
+
+  const serveIndex = (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    if (!indexHtml) return res.status(404).end();
+    const nonce = res.locals.cspNonce;
+    // Add the nonce to inline <script> tags (those without a src=); external
+    // scripts are covered by script-src 'self'.
+    const html = nonce
+      ? indexHtml.replace(/<script(?![^>]*\bsrc=)/gi, `<script nonce="${nonce}"`)
+      : indexHtml;
+    res.type('html').send(html);
+  };
+
+  // Root + explicit index.html, registered BEFORE express.static so they never
+  // serve the un-nonced file.
+  app.get(['/', '/index.html'], serveIndex);
+
+  // Hashed JS/CSS assets in /assets/ — long, immutable cache (a different hash
+  // is a different URL, so cached bytes can never go stale). `index: false` so
+  // express.static never serves index.html itself.
   app.use(express.static(clientDir, {
+    index: false,
     maxAge: '1y',
     etag: false,        // hashed filenames already invalidate; ETag is wasted CPU
     lastModified: false,
     setHeaders(res, filePath) {
-      if (filePath.endsWith('index.html') || filePath.endsWith('manifest.json') || filePath.endsWith('.webmanifest')) {
-        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-        res.setHeader('Pragma', 'no-cache');
-        res.setHeader('Expires', '0');
-        return;
-      }
       if (filePath.includes(`${path.sep}assets${path.sep}`)) {
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       }
     }
   }));
+
   // SPA fallback: serve index.html for all non-API, non-asset routes.
   // IMPORTANT: exclude /assets/ so stale chunk URLs return 404 instead of index.html.
   // A 404 is correctly handled by the chunk error handler; index.html with text/html
   // MIME type causes browser to throw a MIME type mismatch error.
-  app.get(/^(?!\/api\/)(?!\/assets\/).*/, (_req, res) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.sendFile(path.join(clientDir, 'index.html'));
-  });
+  app.get(/^(?!\/api\/)(?!\/assets\/).*/, serveIndex);
 
   logger.info('[static] serving client', { clientDir });
 }
@@ -232,8 +246,62 @@ export function createApp() {
   // real user traffic waiting on helmet/compression/CORS.
   registerHealthRoutes(app);
 
-  // Security headers (CSP disabled — client uses inline styles in dev)
-  app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+  // Per-request CSP nonce. Lets script-src stay nonce-based (no 'unsafe-inline'
+  // for scripts) while still allowing the single inline bootstrap script in
+  // index.html — the nonce is injected into that <script> when the SPA is
+  // served (see registerClient).
+  app.use((_req, res, next) => {
+    res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
+    next();
+  });
+
+  // Security headers. CSP ships in REPORT-ONLY first: browsers report violations
+  // to /csp-report and enforce nothing, so we can tighten the policy from real
+  // traffic before flipping it to enforcing (Content-Security-Policy) in a
+  // follow-up. See SECURITY.md → "Content-Security-Policy".
+  app.use(helmet({
+    contentSecurityPolicy: {
+      useDefaults: false,
+      reportOnly: true,
+      directives: {
+        'default-src': ["'self'"],
+        'base-uri': ["'self'"],
+        'object-src': ["'none'"],
+        'frame-ancestors': ["'none'"],
+        // Inline bootstrap script allowed only via the per-request nonce; all
+        // other scripts are same-origin. No 'unsafe-inline' for scripts.
+        'script-src': ["'self'", (_req, res) => `'nonce-${res.locals.cspNonce}'`],
+        // 'unsafe-inline' covers React's inline style ATTRIBUTES (style={{}}),
+        // which cannot carry a nonce; fonts.googleapis.com is the Google Fonts
+        // stylesheet linked from index.html.
+        'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        'font-src': ["'self'", 'https://fonts.gstatic.com'], // Google Fonts files
+        'img-src': ["'self'", 'data:'],                       // data: = the SVG favicon
+        'connect-src': ["'self'"],                            // same-origin API
+        'report-uri': ['/csp-report'],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  }));
+
+  // CSP violation collector (public, no auth, not under /api). Browsers POST
+  // reports here under Report-Only; logging them lets us tighten the policy and
+  // confirm a clean load before enforcing. Registered before the SPA fallback so
+  // it isn't swallowed by it.
+  app.post('/csp-report',
+    express.json({ type: ['application/csp-report', 'application/reports+json', 'application/json'], limit: '64kb' }),
+    (req, res) => {
+      const body = req.body || {};
+      const r = body['csp-report'] || (Array.isArray(body) ? body[0]?.body : body) || {};
+      logger.warn('csp-violation', {
+        blockedURI: r['blocked-uri'] || r.blockedURI || null,
+        violatedDirective: r['violated-directive'] || r.effectiveDirective || r.violatedDirective || null,
+        documentURI: r['document-uri'] || r.documentURI || null,
+        sourceFile: r['source-file'] || r.sourceFile || null,
+        lineNumber: r['line-number'] || r.lineNumber || null,
+      });
+      res.status(204).end();
+    });
 
   // Compression — gzip responses > 1KB. Skip already-compressed bodies
   // (images, PDFs) by default via compression's filter.

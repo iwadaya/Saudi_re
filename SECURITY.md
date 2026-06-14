@@ -16,6 +16,12 @@ A token issued before a demotion therefore cannot carry elevated rights.
 - Assignment actions (allocate/reassign/self-assign) take the actor from
   `req.user.userId` only — `reassigned_by`/`user_id` in the body and
   `x-user-*` headers are ignored, so nobody can act as someone else.
+- Audit/log rows record the actor from the verified `req.user.userId`, with the
+  display name resolved server-side from the DB (`resolveAuditActor` in
+  services/audit.js); `x-user-name`/`x-user-role` and body `_actor` are never
+  the recorded actor, and an anonymous/system action is labelled `SYSTEM`.
+  Spoofing `x-user-name` therefore changes nothing in the trail. (Headers may
+  still appear in request logging, never as the recorded actor.)
 - Editing a treaty/quote/fac risk is allowed only for the current assignee
   (services/permissions.js); seniority governs allocate/reassign, not edit.
 
@@ -73,6 +79,37 @@ Deliberately **dev-only**, excluded from the runtime gate (documented, not silen
 
 We pin patched transitives via `overrides` rather than `npm audit fix --force`,
 which would otherwise downgrade `exceljs` to 3.x and bump Vite to 8.
+
+## Content-Security-Policy
+
+CSP is rolled out **Report-Only first** (server/src/app.js): the server sends
+`Content-Security-Policy-Report-Only`, so browsers report violations to
+`/csp-report` (logged as `csp-violation`) but enforce nothing. This lets us
+tighten the policy from real traffic and confirm a clean load before flipping it
+to the enforcing `Content-Security-Policy` in a follow-up.
+
+Policy:
+
+```
+default-src 'self';
+script-src  'self' 'nonce-<per-request>';                        # inline bootstrap script only — no 'unsafe-inline'
+style-src   'self' 'unsafe-inline' https://fonts.googleapis.com; # 'unsafe-inline' = React style attributes
+font-src    'self' https://fonts.gstatic.com;                    # Google Fonts files
+img-src     'self' data:;                                        # data: = the SVG favicon
+connect-src 'self';                                              # same-origin API
+object-src  'none'; frame-ancestors 'none'; base-uri 'self';
+report-uri  /csp-report;
+```
+
+- **Nonce, not `'unsafe-inline'`, for scripts.** A fresh per-request nonce
+  (`res.locals.cspNonce`) is injected into the single inline `<script>` in
+  index.html when the SPA is served, so the policy is already enforcing-ready.
+- **`style-src 'unsafe-inline'`** is required for React's inline style
+  *attributes* (`style={{}}`), which cannot carry a nonce. Moving those to
+  classes/CSS would let us drop it.
+- **To enforce:** confirm `/csp-report` logs no violations under real use, then
+  drop `reportOnly: true` (ships `Content-Security-Policy`) in a follow-up
+  commit.
 
 ## Reporting
 

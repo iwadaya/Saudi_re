@@ -159,4 +159,20 @@ describe('limit_basis routing (canonical enum, no silent default)', () => {
       { writtenLinePct: 30, programLimit100Usd: 100 * M, epiUsd: 4 * M, cobIds: ['x'] });
     expect(b.type).toBe('LIMIT'); // fell back to signed exposure
   });
+
+  it('SIGNED_EXPOSURE vs EPI drive DIFFERENT eligible-approver sets for the same submission', async () => {
+    // Same submission (30% of a 100M programme, EPI 4M) under a 5M-authority UW.
+    const submitterSE  = { ...base, role_code: 'UW', hierarchy_level: 4, limit_basis: LIMIT_BASIS.SIGNED_EXPOSURE };
+    const submitterEPI = { ...base, role_code: 'UW', hierarchy_level: 4, limit_basis: LIMIT_BASIS.EPI };
+    const inputs = { writtenLinePct: 30, programLimit100Usd: PROG, epiUsd: 4 * M, cobIds: [PROP], candidates: CANDIDATES };
+
+    // SIGNED_EXPOSURE → exposure 30M: only titles clearing 30M qualify (UW's 25M is out).
+    const se = await getEligibleApprovers({ submitter: submitterSE, ...inputs });
+    // EPI → exposure 4M: the lower UW (25M) title now also clears the gate.
+    const epi = await getEligibleApprovers({ submitter: submitterEPI, ...inputs });
+
+    expect(codes(se)).not.toContain('UW');
+    expect(codes(epi)).toContain('UW');
+    expect(codes(epi)).not.toEqual(codes(se)); // basis changes who is eligible, not just whether it breaches
+  });
 });

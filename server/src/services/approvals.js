@@ -710,7 +710,7 @@ export async function recordDecision({ offerId, actorUserId, actorName, actorRol
   const liveIds = new Set(liveOptions.map((c) => String(c.user_id)));
   const storedIds = new Set(approverOptionIds(offer.approver_options));
   if (!sameIdSet(liveIds, storedIds)) {
-    throw httpError(409, 'Approval routing changed since submission — please re-submit', 'ROUTING_CHANGED');
+    throw httpError(409, 'Approval routing changed — re-submit', 'ROUTING_STALE');
   }
   if (!liveIds.has(String(actorUserId))) throw httpError(403, 'Not an eligible approver for this offer');
 

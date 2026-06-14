@@ -25,16 +25,24 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      # Each workspace ships its own lockfile and prod-vs-dev split, so
-      # audit them independently. Failing at `moderate` because anything
-      # higher would still allow `moderate` advisories through, and the
-      # current baseline is zero. Root devDeps are intentionally not
-      # gated here — they're not shipped, and forcing them to zero
-      # would block on a vitest/pm2 advisory we can land separately.
-      - name: Audit server prod deps
+      # Runtime-only audit gate. `--omit=dev` deliberately scopes this to each
+      # workspace's SHIPPED (prod) dependency tree; the baseline is zero
+      # moderate-or-higher. `moderate` (not `high`) is intentional so a future
+      # runtime *moderate* can't slip through.
+      #
+      # Deliberately allow-listed because it is NOT in the shipped bundle:
+      #   - esbuild GHSA-gv7w-rqvm-qjhr (high) — build-only, reached via the Vite
+      #     toolchain which lives in devDependencies; production serves the
+      #     pre-built client/dist, so --omit=dev excludes it by design.
+      # That advisory (and the prod fixes via `overrides`) is documented in
+      # SECURITY.md → "Dependency audit". Root devDeps are likewise not gated
+      # (not shipped) — e.g. a vitest/pm2 advisory we can land separately.
+      # When a NEW advisory appears, fix it in prod or add it here + SECURITY.md
+      # with a reason; do not loosen the gate to make it pass.
+      - name: Audit server prod deps (runtime)
         run: npm audit --omit=dev --audit-level=moderate --prefix server
 
-      - name: Audit client prod deps
+      - name: Audit client prod deps (runtime)
         run: npm audit --omit=dev --audit-level=moderate --prefix client
 
   lint-and-unit:
@@ -88,6 +96,11 @@ jobs:
 
       - name: Unit tests (server)
         run: npm run test:server
+
+      # Build the client BEFORE the client tests so bundleBudget.test.js runs
+      # against a real dist/ (it FAILS rather than skips when dist is absent).
+      - name: Build client (for the bundle-size budget)
+        run: npm run build --prefix client
 
       - name: Unit tests + coverage (client)
         run: npm run test:client -- --coverage
