@@ -52,6 +52,23 @@ describe('editor read-only lock', () => {
     expect(container.querySelector('[inert]')).toBeNull();
   });
 
+  it('markReadOnly flips an editable lock closed on demand (server 403 path)', async () => {
+    apiMock.getEditPermission.mockResolvedValue({ canEdit: true, isOwner: true, assignedToName: 'Me' });
+    function Flip() {
+      const { readOnly, markReadOnly } = useEditLock({ contractId: 'c1' });
+      return (
+        <div>
+          <span>{readOnly ? 'LOCKED' : 'EDITABLE'}</span>
+          <button type="button" onClick={() => markReadOnly('Grace Hopper')}>flip</button>
+        </div>
+      );
+    }
+    render(<Flip />);
+    await waitFor(() => expect(screen.getByText('EDITABLE')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('flip'));
+    await waitFor(() => expect(screen.getByText('LOCKED')).toBeInTheDocument());
+  });
+
   it('Allocate to me claims the treaty, then re-checks and unlocks', async () => {
     apiMock.getEditPermission
       .mockResolvedValueOnce({ canEdit: false, assignedToName: null })  // initial: locked (unassigned)

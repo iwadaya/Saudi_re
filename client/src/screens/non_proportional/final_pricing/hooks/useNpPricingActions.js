@@ -12,6 +12,7 @@ import { useCallback } from 'react';
 import { api } from '../../../../api';
 import { calcLayerPricing } from '../../../../utils/npPricingEngine';
 import { handleStaleWrite } from '../../../../utils/handleStaleWrite';
+import { isReadOnlyError } from '../../../../utils/readOnlyError';
 import { formatPricingDriftMessage } from '../../../../utils/pricingErrors';
 import { useGlobalToast } from '../../../../hooks/useToast';
 import { toN } from '../formatters.js';
@@ -27,6 +28,8 @@ import { expLayerEarnedPremium, normalizeQuoteStructures } from '../fqQuoteMath.
  *   mode: string,
  *   structRefsMap: { current: Record<string, any> },
  *   actorName: string,
+ *   readOnly?: boolean,
+ *   onServerReadOnly?: (assignedToName?: string | null) => void,
  * }} params
  */
 export function useNpPricingActions({
@@ -38,6 +41,12 @@ export function useNpPricingActions({
   mode,
   structRefsMap,
   actorName,
+  // Edit-lock verdict (useEditLock). When true the save path no-ops so wizard-
+  // nav / workflow saves stop POSTing into a 403. Strictly gated on an explicit
+  // read-only — absent/undefined ⇒ editable (golden-master fixtures resolve no
+  // permission, so they stay fully editable and byte-identical).
+  readOnly = false,
+  onServerReadOnly,
 }) {
   const showToast = useGlobalToast();
   const {
@@ -148,6 +157,10 @@ export function useNpPricingActions({
   // can show "Saved HH:MM:SS" or a failure banner instead of silently losing data.
   const save = useCallback(async (options = {}) => {
     if (!contractId) return true;
+    // Read-only (not the assignee): never POST. Returning true is a no-op that
+    // lets wizard navigation proceed; manual edits are already blocked by the
+    // inert wrap. Checked before saveStart() so the save indicator never churns.
+    if (readOnly) return true;
     const lockOverride = options?.ifUnmodifiedSince;
     let activeLock = lockOverride || lastUpdatedAt;
     const requestOptions = () => (
@@ -336,6 +349,14 @@ export function useNpPricingActions({
       return true;
     } catch (e) {
       console.error('[NP Final Pricing save]', e);
+      // Not the assignee: the lock raced this write (or failed open). Flip the
+      // editor read-only and surface it once via the save indicator — never
+      // retry/overwrite an authz verdict. "Allocate to me" is the path back.
+      if (isReadOnlyError(e)) {
+        onServerReadOnly?.();
+        saveFailed(Date.now(), 'Read-only — this treaty is assigned to someone else. Claim it (if unassigned) or have it allocated to you to edit.');
+        return true; // no-op for nav: don't block, don't retry
+      }
       if (lockOverride !== '*') {
         const stale = await handleStaleWrite(e, {
           entityType: isQuote ? 'quote pricing' : 'pricing',
@@ -347,7 +368,7 @@ export function useNpPricingActions({
       saveFailed(Date.now(), formatPricingDriftMessage(e) || e?.message || 'Save failed');
       return false;
     }
-  }, [contractId, quoteMode, lastUpdatedAt, layers, quoteStructures, isQuote, structRefsMap, expLayers, treatyMetrics, leadSetup, offerComment, layerWrittenLines, signedLinePcts, approvedStructures, quotePricing, clientStructures, quoteCurve, quoteCobUwLimits, cobToggles, cobManual, npDetail.brokeragePct, selectedCobs, saveStart, saveSaved, saveFailed, setLastUpdatedAt]);
+  }, [contractId, readOnly, onServerReadOnly, quoteMode, lastUpdatedAt, layers, quoteStructures, isQuote, structRefsMap, expLayers, treatyMetrics, leadSetup, offerComment, layerWrittenLines, signedLinePcts, approvedStructures, quotePricing, clientStructures, quoteCurve, quoteCobUwLimits, cobToggles, cobManual, npDetail.brokeragePct, selectedCobs, saveStart, saveSaved, saveFailed, setLastUpdatedAt]);
 
   // ── Workflow ──────────────────────────────────────────────────────────────
 

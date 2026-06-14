@@ -125,6 +125,44 @@ describe('PropPricing integration', () => {
     expect(apiMock.declineContract.mock.calls.at(-1)[1]).toBe('Capacity full');
   });
 
+  it('locks the editor (banner + inert inputs) for a non-assignee and never POSTs a save', async () => {
+    resetApi({ getEditPermission: vi.fn().mockResolvedValue({ canEdit: false, isOwner: false, assignedToName: 'Grace Hopper' }) });
+    const { container } = renderScreen();
+
+    await screen.findByText(/Component Pricing Comparison/i);
+    // Read-only banner names the assignee and offers an Allocate path.
+    expect(await screen.findByText(/Grace Hopper/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Allocate to me/ })).toBeInTheDocument();
+    // The editor body is wrapped inert — inputs/actions are non-interactive.
+    expect(container.querySelector('[inert]')).toBeTruthy();
+
+    // Navigating (WizardLayout Back/Next → onBeforeNext=save) must NOT POST: a
+    // non-assignee save is a no-op that just lets navigation proceed.
+    const nextBtn = screen.queryByRole('button', { name: /Next/i });
+    if (nextBtn) fireEvent.click(nextBtn);
+    await Promise.resolve();
+    expect(apiMock.savePricingComposite).not.toHaveBeenCalled();
+  });
+
+  it('flips to read-only without retrying when a save returns 403 READ_ONLY', async () => {
+    // getEditPermission is absent → the lock fails open (editable) on load, so
+    // the user can edit and click Save; the server is the one that says no.
+    apiMock.savePricingComposite.mockRejectedValue(makeHttpError({
+      status: 403, code: 'READ_ONLY', message: 'This treaty is read-only. Claim it (if unassigned) or have it allocated to you to edit.',
+    }));
+    const { container } = renderScreen();
+
+    await screen.findByText(/Component Pricing Comparison/i);
+    const overrideInputs = screen.getAllByPlaceholderText('Override');
+    fireEvent.change(overrideInputs[0], { target: { value: '47.00%' } });
+    fireEvent.click(container.querySelector('.bbg-btn--save'));
+
+    // The 403 flips the editor read-only and surfaces the Allocate path…
+    expect(await screen.findByRole('button', { name: /Allocate to me/ })).toBeInTheDocument();
+    // …and the write is attempted exactly once — a 403 authz verdict is never retried.
+    expect(apiMock.savePricingComposite).toHaveBeenCalledTimes(1);
+  });
+
   it('renders under quote mode without changing the pricing payload shape', async () => {
     const { container } = renderScreen({ quoteMode: true });
 
