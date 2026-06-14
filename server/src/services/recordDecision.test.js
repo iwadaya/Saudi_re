@@ -157,7 +157,7 @@ describe('recordDecision — four-eyes (peer2 ≠ peer1 ≠ submitter)', () => {
 });
 
 describe('recordDecision — fail closed when stored options ≠ live eligibility', () => {
-  it('returns 409 ROUTING_CHANGED when approver_options is tampered to include a non-eligible user', async () => {
+  it('returns 409 ROUTING_STALE when approver_options is tampered to include a non-eligible user', async () => {
     poolMock.query = mockDb({
       // Stored snapshot has been tampered to add u-attacker; live routing (UW
       // within-mandate → CU only) does NOT include them.
@@ -167,7 +167,7 @@ describe('recordDecision — fail closed when stored options ≠ live eligibilit
     });
     await expectStatus(
       recordDecision({ offerId: 'o1', actorUserId: 'u-attacker', actorRole: 'CU', slot: 'peer1', decision: 'APPROVED' }),
-      409, 'ROUTING_CHANGED',
+      409, 'ROUTING_STALE',
     );
     expect(claimedPeer1()).toBe(false);
   });
