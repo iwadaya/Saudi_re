@@ -18,6 +18,8 @@ import {
   quoteComponentDerived,
   quoteComponentSummary,
   QUOTE_COMPONENT_SCOPES,
+  emptyStrLayer,
+  normalizeQuotePricingLayer,
 } from './fqQuoteMath.js';
 
 // A synthetic engine result shaped exactly like calcLayerPricing's output:
@@ -83,5 +85,22 @@ describe('mergeQuoteEngineResult — component mapping', () => {
     // Cat fields stay untouched (engine returned no cat component).
     expect(merged.catPureBurn ?? '').toBe('');
     expect(merged.catExposure ?? '').toBe('');
+  });
+});
+
+describe('per-layer note fields', () => {
+  it('emptyStrLayer seeds riskLayerNote / catLayerNote to empty strings', () => {
+    const layer = emptyStrLayer(0);
+    expect(layer.riskLayerNote).toBe('');
+    expect(layer.catLayerNote).toBe('');
+  });
+
+  it('normalizeQuotePricingLayer preserves the notes (round-trips through save)', () => {
+    const normalized = normalizeQuotePricingLayer(
+      { risk: true, cat: true, limit: '1000000', riskLayerNote: 'cap at 2x', catLayerNote: 'wind only' },
+      0,
+    );
+    expect(normalized.riskLayerNote).toBe('cap at 2x');
+    expect(normalized.catLayerNote).toBe('wind only');
   });
 });

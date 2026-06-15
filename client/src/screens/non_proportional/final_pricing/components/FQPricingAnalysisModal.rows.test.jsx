@@ -5,7 +5,7 @@
 // BOTH peril sections (active or not), and the Total Section must show the
 // Risk / Cat / Total rows. Rows are read from clientStructures[sIdx].layers.
 
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import FQPricingAnalysisModal from './FQPricingAnalysisModal.jsx';
 
@@ -104,12 +104,44 @@ describe('FQPricingAnalysisModal — row rendering', () => {
     expect(screen.queryByText('USD 1,000,000')).toBeNull(); // Structure 1's limit must not appear
   });
 
-  it('renders peril sections that grow to fit content (no vertical clip)', () => {
+  it('renders peril sections that size to content (overflow visible, no shrink)', () => {
     renderModal();
     const riskSection = screen.getByText('Risk Pricing Analysis').closest('section');
     expect(riskSection).toBeTruthy();
+    // overflow:visible so no parent clips the table's horizontal scroll;
+    // flexShrink:0 so the section sizes to content and the body scrolls as one.
     expect(riskSection.style.overflow).toBe('visible');
     expect(riskSection.style.flexShrink).toBe('0');
-    expect(riskSection.style.minHeight).toBe('330px');
+  });
+
+  it('gives each peril table its own horizontal scroll (fixed layout + minWidth)', () => {
+    renderModal();
+    const riskSection = screen.getByText('Risk Pricing Analysis').closest('section');
+    const table = within(riskSection).getAllByRole('table')[0];
+    expect(table.style.tableLayout).toBe('fixed');
+    expect(parseInt(table.style.minWidth, 10)).toBeGreaterThanOrEqual(1500);
+    expect(table.parentElement.style.overflowX).toBe('auto');
+  });
+
+  it('adds P(Attach) / P(Exhaust) / Note columns and shows engine probabilities', () => {
+    const withProbs = {
+      id: 'str-0',
+      layers: [{ id: 0, risk: true, cat: false, limit: '1000000', attachment: '500000', egnpi: '50000000', riskPureBurn: '4.00%', riskExposure: '5.00%', riskPrAttach: '12.5', riskPrExhaust: '3.2' }],
+    };
+    renderModal({ clientStructures: [withProbs], catDisabled: true });
+    expect(screen.getByText('P(Attach)')).toBeInTheDocument();
+    expect(screen.getByText('P(Exhaust)')).toBeInTheDocument();
+    expect(screen.getByText('Note')).toBeInTheDocument();
+    // riskPrAttach "12.5" → "12.50%", riskPrExhaust "3.2" → "3.20%"
+    expect(screen.getByText('12.50%')).toBeInTheDocument();
+    expect(screen.getByText('3.20%')).toBeInTheDocument();
+  });
+
+  it('edits the per-layer Note via updateClientStructureLayer(`${scope}LayerNote`)', () => {
+    const updateClientStructureLayer = vi.fn();
+    renderModal({ updateClientStructureLayer });
+    const noteInput = screen.getByLabelText('Risk Structure 1 Layer 1 note');
+    fireEvent.change(noteInput, { target: { value: 'cap at 2x' } });
+    expect(updateClientStructureLayer).toHaveBeenCalledWith(0, 0, 'riskLayerNote', 'cap at 2x');
   });
 });
