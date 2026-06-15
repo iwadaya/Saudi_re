@@ -144,7 +144,27 @@ export default function FQPricingAnalysisModal({
   const showCalculating = isQuote && calcRunningForStructure;
   const showStaleHint = isQuote && autoRan && !calcRunningForStructure && !hasEngineResults;
 
-  if (!pricingAnalysisModal.open || !structure) return null;
+  if (!pricingAnalysisModal.open) return null;
+
+  // Resolve layers straight from the LIVE list (clientStructures[sIdx].layers),
+  // never a modal-payload copy. A null structure means the modal was opened for
+  // an index that no longer exists (structure removed/reordered while open) —
+  // show a dismissable note rather than a blank shell.
+  if (!structure) {
+    return (
+      <div className="bm-modal-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
+        <div className="bm-modal" style={{ width: 'min(420px, 92vw)', display: 'grid', gridTemplateRows: 'auto auto' }}>
+          <div className="bm-modal-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div>Pricing Analysis</div>
+            <button className="bm-pill" onClick={() => onClose()}>Close</button>
+          </div>
+          <div data-testid="fq-analysis-no-structure" style={{ padding: '24px 20px', fontSize: 12, color: 'rgba(148,163,184,0.8)' }}>
+            No structure selected.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const layers = structure.layers || [];
   const fmtMoney = (value) => {
@@ -376,9 +396,14 @@ export default function FQPricingAnalysisModal({
                   {calcEngineError}
                 </div>
               )}
-              {showRisk && renderScopeSection('risk')}
-              {showCat && renderScopeSection('cat')}
-              {bothShown && (
+              {layers.length === 0 && (
+                <div data-testid="fq-analysis-no-layers" style={{ padding: '18px 14px', borderRadius: 8, background: 'rgba(8,14,30,0.6)', border: '1px solid rgba(255,255,255,0.09)', fontSize: 12, color: 'rgba(148,163,184,0.78)' }}>
+                  This structure has no layers yet.
+                </div>
+              )}
+              {layers.length > 0 && showRisk && renderScopeSection('risk')}
+              {layers.length > 0 && showCat && renderScopeSection('cat')}
+              {layers.length > 0 && bothShown && (
                 <section style={{ background: 'rgba(8,14,30,0.72)', border: '1px solid rgba(35,209,139,0.28)', borderRadius: 12, overflow: 'hidden' }}>
                   <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
                     <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: '#23d18b' }}>Total Section</div>
