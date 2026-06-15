@@ -207,6 +207,9 @@ export function useNpPricingState({
   const updateClientStructureLayer = useCallback((sIdx: number, lIdx: number, field: string, val: unknown) => {
     dispatch({ type: 'fq/editStructureLayer', structureIndex: sIdx, layerIndex: lIdx, field, value: val, curve: quoteCurve });
   }, [quoteCurve]);
+  const updateClientStructure = useCallback((sIdx: number, field: string, val: unknown) => {
+    dispatch({ type: 'fq/editStructure', structureIndex: sIdx, field, value: val });
+  }, []);
 
   const perilDefaults: PerilDefaults = useMemo(
     () => ({ riskDisabled, catDisabled }),
@@ -508,7 +511,7 @@ export function useNpPricingState({
     quoteCurve, snap, techRatioAvg,
     // dispatch surface
     ...setters,
-    updateLayer, updateLeadSetup, updateClientStructureLayer,
+    updateLayer, updateLeadSetup, updateClientStructureLayer, updateClientStructure,
     addQuoteStructure, addClientStructureLayer,
     getCobUwLimit, getCobFlags,
   };

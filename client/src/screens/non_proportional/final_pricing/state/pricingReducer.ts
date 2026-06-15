@@ -547,6 +547,13 @@ export function pricingReducer(state: NpPricingState, action: PricingAction): Np
       });
       return { ...state, fq: { ...state.fq, clientStructures } };
     }
+    case 'fq/editStructure': {
+      const { structureIndex, field, value } = action;
+      const clientStructures = state.fq.clientStructures.map((s, i) => (
+        i === structureIndex ? { ...s, [field]: value } : s
+      ));
+      return { ...state, fq: { ...state.fq, clientStructures } };
+    }
     case 'fq/addStructure':
       return {
         ...state,

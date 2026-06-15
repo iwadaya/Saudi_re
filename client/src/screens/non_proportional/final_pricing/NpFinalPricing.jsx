@@ -91,10 +91,10 @@ export default function NpFinalPricing() {
     showReinsurerModal, showTechAnalysisModal, insightOpen,
     quoteStructures, selectedCobs, benchmarkModal,
     saveState, pricingGraphModal, pricingAnalysisModal, expLayers,
-    portfolioExportRows, clientStructures, techRatioAvg,
+    portfolioExportRows, clientStructures, techRatioAvg, quoteCurve,
     setShowReinsurerModal, setShowTechAnalysisModal, setMarketModalOpen,
     setTreatyMetrics, closeBenchmark, closePricingGraph, closePricingAnalysis,
-    updateLeadSetup, updateClientStructureLayer,
+    updateLeadSetup, updateClientStructureLayer, updateClientStructure,
   } = pricing;
 
   // ── Imperative handlers (engine runs, dual save, offer workflow) ──
@@ -193,7 +193,11 @@ export default function NpFinalPricing() {
                 isQuote={isQuote}
                 riskDisabled={riskDisabled}
                 catDisabled={catDisabled}
+                quoteCurve={quoteCurve}
+                contractId={contractId}
+                cobIds={selectedCobs.map((c) => c.id).filter(Boolean)}
                 updateClientStructureLayer={updateClientStructureLayer}
+                updateClientStructure={updateClientStructure}
                 onClose={closePricingAnalysis}
               />
 

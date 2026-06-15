@@ -315,6 +315,7 @@ export type PricingAction =
   | { type: 'fq/editExpLayer'; index: number; field: string; value: unknown }
   | { type: 'fq/setNumExpLayers'; n: number }
   | { type: 'fq/editStructureLayer'; structureIndex: number; layerIndex: number; field: string; value: unknown; curve: unknown }
+  | { type: 'fq/editStructure'; structureIndex: number; field: string; value: unknown }
   | { type: 'fq/addStructure'; idBase: number; defaults: PerilDefaults }
   | { type: 'fq/addStructureLayer'; structureIndex: number; defaults: PerilDefaults }
   | { type: 'fq/removeStructureLayer'; structureIndex: number; layerIndex: number }
