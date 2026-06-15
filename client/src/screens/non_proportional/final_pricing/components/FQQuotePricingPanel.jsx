@@ -19,7 +19,6 @@ import {
 } from '../fqQuoteMath.js';
 import FQCobSelectModal from './FQCobSelectModal.jsx';
 import { FQNumCell, FQPctCell, FQReadCell } from './FQCells.jsx';
-import FQPricingCurve from './FQPricingCurve.jsx';
 import FQCobParticipationTable from './FQCobParticipationTable.jsx';
 
 const quoteInsightButtonStyle = {
@@ -181,6 +180,13 @@ export default function FQQuotePricingPanel({
                         >
                           Analysis
                         </button>
+                        <button
+                          className="bbg-ib bbg-ib--blue"
+                          style={quoteInsightButtonStyle}
+                          onClick={() => openPricingGraph('Pricing Curve', { id: 'expiring', layers: expLayers })}
+                        >
+                          Pricing Curve
+                        </button>
                         <label className="bm-label" style={{ margin: 0 }} htmlFor={numExpLayersSelectId}>Number of Layers</label>
                         <select
                           id={numExpLayersSelectId}
@@ -282,19 +288,6 @@ export default function FQQuotePricingPanel({
                           );
                         })()}
                       </table>
-                    </div>
-                  </section>
-
-                  {/* ── Implied Pricing Curve ── */}
-                  <section className="bm-card bm-card--curve" style={{ marginBottom: 12 }}>
-                    <div className="bm-card-header">
-                      <div>
-                        <div className="bm-card-title">Implied Pricing Curve</div>
-                        <div className="bm-card-hint">Violet = expiring · Coloured dots = new structure layers priced on curve</div>
-                      </div>
-                    </div>
-                    <div className="bm-curve-svg-wrap">
-                      <FQPricingCurve curve={quoteCurve} />
                     </div>
                   </section>
 

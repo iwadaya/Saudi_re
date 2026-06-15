@@ -146,6 +146,19 @@ describe('NpFinalPricing integration', () => {
     expect(apiMock.saveNpPricing.mock.calls.at(-1)[2]).toMatchObject({ quote: true });
   });
 
+  it('drops the inline implied-pricing-curve card and opens it via the Pricing Curve modal', async () => {
+    const { container } = renderScreen({ quoteMode: true });
+
+    expect(await screen.findByText(/Expiring Structure/i)).toBeInTheDocument();
+    // The inline SVG curve card is gone — the curve now lives in the modal only.
+    expect(container.querySelector('.bm-card--curve')).toBeNull();
+    expect(container.querySelector('.bm-curve-svg-wrap')).toBeNull();
+
+    // The Pricing Curve header button opens the shared FQPricingGraphModal.
+    fireEvent.click(screen.getByRole('button', { name: /^Pricing Curve$/i }));
+    expect(await screen.findByText(/Pricing Graph Analysis/i)).toBeInTheDocument();
+  });
+
   it('supports quote-mode structure editing, benchmark modal, and COB participation', async () => {
     const { container } = renderScreen({ quoteMode: true });
 
