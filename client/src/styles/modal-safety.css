@@ -76,6 +76,27 @@
   margin-right: auto !important;
 }
 
+/* Edge-to-edge full-screen modals (e.g. the FQ Pricing Analysis workbench).
+   Defeats the centered-dialog caps above (higher specificity + !important) so
+   the fixed shell truly fills the viewport: pinned to all four edges with a
+   100vh→100dvh height and no max-size / margin / radius shrink. The matching
+   backdrop drops its safe-area padding so the shell reaches every edge. */
+.bm-modal-backdrop.bm-modal-backdrop--fullscreen{
+  padding: 0 !important;
+}
+.bm-modal.bm-modal--fullscreen{
+  position: fixed !important;
+  top: 0 !important; right: 0 !important; bottom: 0 !important; left: 0 !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;   /* fallback for browsers without dvh */
+  height: 100dvh !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+}
+
 .modal-title,
 .screen-modal-header,
 .slide-modal-header,
