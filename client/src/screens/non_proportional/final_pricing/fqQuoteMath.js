@@ -75,6 +75,11 @@ export const emptyStrLayer = (i, { riskDisabled = false, catDisabled = false } =
     catUwPrice: '',
     pAttach: '',
     pExhaust: '',
+    // Per-layer, per-scope free-text note shown in the Pricing Analysis
+    // modal's "Note" column. Defaults to '' so it round-trips through the
+    // save path (normalize spreads ...layer, so these persist).
+    riskLayerNote: '',
+    catLayerNote: '',
   };
 };
 

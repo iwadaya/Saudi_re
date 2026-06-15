@@ -27,6 +27,7 @@ const G = {
   region: 'rgba(167,139,250,0.08)',
   global: 'rgba(74,222,128,0.08)',
   uw: 'rgba(0,212,255,0.08)',
+  note: 'rgba(148,163,184,0.06)',
 };
 
 /**
@@ -222,6 +223,15 @@ export default function FQPricingAnalysisModal({
   const renderScopeSection = (scopeKey) => {
     const scope = QUOTE_COMPONENT_SCOPES[scopeKey];
     const f = scope.fields;
+    // Engine-written probability fields + the per-layer note field live
+    // outside scope.fields (rendered as their own columns right of UW Price).
+    const prAttachField  = scopeKey === 'risk' ? 'riskPrAttach'  : 'catPrAttach';
+    const prExhaustField = scopeKey === 'risk' ? 'riskPrExhaust' : 'catPrExhaust';
+    const noteField      = `${scopeKey}LayerNote`;
+    // Fixed column widths (table-layout: fixed) so the 17 columns don't crush;
+    // the table scrolls horizontally inside its own wrapper when narrower.
+    const COLW = [56, 64, 116, 116, 124, 92, 80, 92, 80, 116, 108, 108, 108, 104, 92, 96, 190];
+    const TABLE_MIN_W = COLW.reduce((s, w) => s + w, 0);
     const disabledByMode = scopeKey === 'risk' ? riskDisabled : catDisabled;
     const layer0 = layers[0] || {};
     // Blender weights live at peril level (read from layer 0); defaults 50/0/50.
@@ -249,7 +259,7 @@ export default function FQPricingAnalysisModal({
       </div>
     );
     return (
-      <section key={scopeKey} style={{ background: 'rgba(8,14,30,0.72)', border: `1px solid ${scope.color}35`, borderRadius: 12, overflow: 'visible', minHeight: 330, flexShrink: 0 }}>
+      <section key={scopeKey} style={{ background: 'rgba(8,14,30,0.72)', border: `1px solid ${scope.color}35`, borderRadius: 12, overflow: 'visible', flexShrink: 0, minWidth: 0 }}>
         <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: scope.color }}>{scope.label} Pricing Analysis</div>
@@ -266,8 +276,11 @@ export default function FQPricingAnalysisModal({
           <span style={{ fontSize: 11, fontWeight: 800, color: valid ? '#23d18b' : '#f87171' }}>Σ = {Math.round(wSum)}%</span>
           {!valid && <span style={{ fontSize: 10, color: '#f87171' }}>weights must total 100%</span>}
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1180, fontSize: 11 }}>
+        {/* Only the table scrolls horizontally; the header, blender bar and
+            notes textarea stay full-width. */}
+        <div style={{ overflowX: 'auto', width: '100%' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: TABLE_MIN_W, tableLayout: 'fixed', fontSize: 11 }}>
+            <colgroup>{COLW.map((w, ci) => (<col key={`col-${ci}`} style={{ width: w }} />))}</colgroup>
             <thead style={{ background: '#050810' }}>
               <tr>
                 <th style={{ ...th, textAlign: 'center' }}>Layer</th>
@@ -285,6 +298,9 @@ export default function FQPricingAnalysisModal({
                 <th style={groupTh(G.region, '#a78bfa')}>Implied · Region</th>
                 <th style={groupTh(G.global, '#4ade80')}>Implied · Global</th>
                 <th style={groupTh(G.uw, '#00d4ff')}>UW Price</th>
+                <th style={groupTh(G.modelled, '#4ade80')}>P(Attach)</th>
+                <th style={groupTh(G.modelled, '#4ade80')}>P(Exhaust)</th>
+                <th style={{ ...groupTh(G.note, 'rgba(148,163,184,0.45)'), textAlign: 'left' }}>Note</th>
               </tr>
             </thead>
             <tbody>
@@ -325,6 +341,21 @@ export default function FQPricingAnalysisModal({
                       );
                     })}
                     <td style={{ ...td, background: G.uw }}>{editorWrap(<FQPctCell value={layer[f.uwPrice]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.uwPrice, v)} placeholder={blendVal > 0 ? `${blendVal.toFixed(2)}%` : '—%'} />)}</td>
+                    {/* Engine-written probabilities (read-only). */}
+                    <td style={{ ...td, background: G.modelled }}><FQReadCell value={fmtPct(toN(layer[prAttachField]))} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" /></td>
+                    <td style={{ ...td, background: G.modelled }}><FQReadCell value={fmtPct(toN(layer[prExhaustField]))} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" /></td>
+                    {/* Per-layer free-text note (persists via the save path). */}
+                    <td style={{ ...td, background: G.note, textAlign: 'left' }}>
+                      <input
+                        type="text"
+                        value={layer[noteField] || ''}
+                        disabled={disabledByMode}
+                        placeholder="Note…"
+                        aria-label={`${scope.label} Structure ${sIdx + 1} Layer ${lIdx + 1} note`}
+                        onChange={(e) => updateClientStructureLayer(sIdx, lIdx, noteField, e.target.value)}
+                        style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(5,8,16,0.6)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: 'rgba(226,232,240,0.9)', fontSize: 10, padding: '4px 6px', fontFamily: 'inherit', opacity: disabledByMode ? 0.5 : 1 }}
+                      />
+                    </td>
                   </tr>
                 );
               })}
@@ -359,8 +390,8 @@ export default function FQPricingAnalysisModal({
       <div
         className="bm-modal"
         style={isQuote
-          ? { width: '100vw', height: '100vh', maxWidth: 'none', maxHeight: 'none', borderRadius: 0, display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)' }
-          : { width: '96vw', maxWidth: '1500px', maxHeight: '92vh', display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)' }}
+          ? { width: '100vw', height: '100dvh', maxWidth: 'none', maxHeight: 'none', borderRadius: 0, display: 'grid', gridTemplateRows: 'auto auto 1fr' }
+          : { width: '96vw', maxWidth: '1500px', height: '100dvh', maxHeight: '92vh', display: 'grid', gridTemplateRows: 'auto auto 1fr' }}
       >
         <div className="bm-modal-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
@@ -371,14 +402,13 @@ export default function FQPricingAnalysisModal({
           </div>
           <button className="bm-pill" onClick={() => onClose()}>Close</button>
         </div>
+        {/* Tab bar — its own grid row, pinned, so the body scrolls under it. */}
+        <div style={{ display: 'flex', gap: 4, padding: '0 20px', borderBottom: '1px solid rgba(255,255,255,0.10)', flexShrink: 0 }}>
+          {TOP_TABS.map((t) => (
+            <button key={t.k} onClick={() => setTab(t.k)} style={tabBtn(tab === t.k)}>{t.label}</button>
+          ))}
+        </div>
         <div className="bm-modal-body" style={{ minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, padding: '18px 20px' }}>
-          {/* Top-level tabs (styled like the benchmark chart tabs). */}
-          <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid rgba(255,255,255,0.10)' }}>
-            {TOP_TABS.map((t) => (
-              <button key={t.k} onClick={() => setTab(t.k)} style={tabBtn(tab === t.k)}>{t.label}</button>
-            ))}
-          </div>
-
           {tab === 'pricing' && (
             <>
               {showCalculating && (
@@ -404,12 +434,12 @@ export default function FQPricingAnalysisModal({
               {layers.length > 0 && showRisk && renderScopeSection('risk')}
               {layers.length > 0 && showCat && renderScopeSection('cat')}
               {layers.length > 0 && bothShown && (
-                <section style={{ background: 'rgba(8,14,30,0.72)', border: '1px solid rgba(35,209,139,0.28)', borderRadius: 12, overflow: 'visible', minHeight: 210, flexShrink: 0 }}>
+                <section style={{ background: 'rgba(8,14,30,0.72)', border: '1px solid rgba(35,209,139,0.28)', borderRadius: 12, overflow: 'visible', flexShrink: 0, minWidth: 0 }}>
                   <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
                     <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: '#23d18b' }}>Total Section</div>
                     <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.58)', marginTop: 2 }}>Combined component premium and weighted ROL used by the main structure table.</div>
                   </div>
-                  <div style={{ overflowX: 'auto' }}>
+                  <div style={{ overflowX: 'auto', width: '100%' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760, fontSize: 11 }}>
                       <thead style={{ background: '#050810' }}>
                         <tr>

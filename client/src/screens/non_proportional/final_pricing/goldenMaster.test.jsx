@@ -324,8 +324,8 @@ describe('NpFinalPricing golden master (quote mode)', () => {
     const paTables = Array.from(container.querySelector('.bm-modal').querySelectorAll('table'));
 
     const componentRows = (scope) => [
-      ['Layer', 'Active', 'Limit', 'Deductible', 'EGNPI', 'Pure Burn', 'Pareto', 'Exposure', 'Blend', 'Implied · Expiring', 'Implied · Country', 'Implied · Region', 'Implied · Global', 'UW Price'],
-      ['1', '[x]', 'SAR 750,000', 'SAR 100,000', 'SAR 1,500,000', `[${scope}]`, '[0%]', `[${scope}]`, '53.32%', '62.73%', '—', '—', '—', '[62.726%]'],
+      ['Layer', 'Active', 'Limit', 'Deductible', 'EGNPI', 'Pure Burn', 'Pareto', 'Exposure', 'Blend', 'Implied · Expiring', 'Implied · Country', 'Implied · Region', 'Implied · Global', 'UW Price', 'P(Attach)', 'P(Exhaust)', 'Note'],
+      ['1', '[x]', 'SAR 750,000', 'SAR 100,000', 'SAR 1,500,000', `[${scope}]`, '[0%]', `[${scope}]`, '53.32%', '62.73%', '—', '—', '—', '[62.726%]', '—', '—', '[]'],
     ];
     expect(rowsOf(paTables[0])).toEqual(componentRows('53.3171%'));
     expect(rowsOf(paTables[1])).toEqual(componentRows('53.3171%'));
