@@ -5,51 +5,9 @@ import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import { useGlobalToast } from '../../../hooks/useToast';
+import { toInt, yearFromDate, parseFlexNum, numOrZero, fmtMoney, fmtPct, computeCumulative } from './formatters';
 
 const ROUTE_KEY = 'NP_PREMIUMS_TABLE';
-
-/* ─── helpers (matching prototype) ─── */
-function toInt(v) { const n = parseInt(String(v ?? '').replace(/[^\d-]/g, ''), 10); return Number.isFinite(n) ? n : null; }
-function yearFromDate(v) { if (!v) return null; const m = String(v).match(/(\d{4})/); return m ? parseInt(m[1], 10) : null; }
-
-function parseFlexNum(v) {
-  let s = String(v ?? '').trim();
-  if (!s) return null;
-  s = s.replace(/[\u2212]/g, '-');
-  let neg = false;
-  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
-  s = s.replace(/[%$£€¥]|\b(SAR|USD|EUR|GBP|AED|ZAR)\b/gi, '').replace(/[\s\u00A0]/g, '');
-  const lastDot = s.lastIndexOf('.'); const lastComma = s.lastIndexOf(',');
-  if (lastDot !== -1 && lastComma !== -1) {
-    if (lastComma > lastDot) { s = s.replace(/\./g, '').replace(/,/g, '.'); }
-    else { s = s.replace(/,/g, ''); }
-  } else if (lastComma !== -1) {
-    const tail = s.split(',').pop();
-    if (tail.length <= 2) { s = s.replace(/,/g, '.'); } else { s = s.replace(/,/g, ''); }
-  } else {
-    if ((s.match(/\./g) || []).length > 1) s = s.replace(/\./g, '');
-  }
-  s = s.replace(/[^0-9.-]/g, '');
-  if (!s || s === '-' || s === '.' || s === '-.') return null;
-  const n = Number(s);
-  if (!Number.isFinite(n)) return null;
-  return neg ? -Math.abs(n) : n;
-}
-
-function numOrZero(v) { return parseFlexNum(v) ?? 0; }
-function fmtMoney(n) { const x = Number(n); if (!Number.isFinite(x)) return ''; return x.toLocaleString('en-US', { maximumFractionDigits: 0 }); }
-function fmtPct(n) { const x = Number(n); if (!Number.isFinite(x)) return ''; return x.toLocaleString('en-US', { maximumFractionDigits: 2 }); }
-
-function computeCumulative(rows) {
-  let f = 1.0;
-  // Coerce: a non-array (stale / partial state) must never reach `.map` and
-  // white-screen the page behind ScreenErrorBoundary.
-  return (Array.isArray(rows) ? rows : []).map((r, idx) => {
-    const pct = numOrZero(r.inflationPct);
-    if (idx > 0) f *= (1 + pct / 100);
-    return { ...r, cumulativeFactor: f };
-  });
-}
 
 /* ═══════════════════════════════════════════════
    MAIN COMPONENT
@@ -296,29 +254,59 @@ export default function NpPremiumsTable() {
         resolving (onlyIfEmpty, never clobber saved values). ── */
   const prevInflationModeRef = useRef(inflationMode);
 
-  /* ── SINGLE owner of country loading: fills country inflation when the country
-        resolves / years change, and when the mode flips back to 'country'
-        (handleModeChange no longer reloads — two owners used to race and could
-        leave flat average values in the column). Force-reloads (onlyIfEmpty=false)
-        only when coming straight from average; otherwise onlyIfEmpty=true so
-        saved / hand-typed values survive initial mount, a late header resolve, or
-        a years change. ── */
+  /* ── Set by the country picker so the country-inflation effect can tell a
+        user-driven country change from the header merely resolving on load.
+        A user pick forces a fresh fetch in BOTH modes and, in average mode,
+        re-seeds the flat average from the new country's curve. Header
+        resolution must NOT do this — it would clobber a saved average. ── */
+  const countryPickedRef = useRef(false);
+
+  /* ── SINGLE owner of country loading. In COUNTRY mode it fills the per-year
+        curve when the country resolves / years change, when the mode flips back
+        from average, or when the user picks a country (handleModeChange no longer
+        reloads — two owners used to race and could leave flat average values in
+        the column). In AVERAGE mode it stays idle EXCEPT when the user picks a
+        new country, where it refetches that country's curve and re-seeds the flat
+        average from its mean — the "reload on new country" the user expects
+        instead of having to leave and re-enter the screen.
+
+        Force-reloads (onlyIfEmpty=false) only when coming straight from average
+        or on a user pick (the displayed curve is for the OLD country); otherwise
+        onlyIfEmpty=true so saved / hand-typed values survive initial mount, a
+        late header resolve, or a years change. ── */
   useEffect(() => {
-    if (inflationMode !== 'country' || !countryId || !years.length) {
-      // Track the transition even while bailing out (e.g. in average mode).
+    if (!countryId || !years.length) {
+      // Track the mode even while bailing so a later average → country toggle
+      // (and the next country pick) is still detected.
       prevInflationModeRef.current = inflationMode;
       return;
     }
     const cameFromAverage = prevInflationModeRef.current === 'average';
     prevInflationModeRef.current = inflationMode;
+    const userPicked = countryPickedRef.current;
+    countryPickedRef.current = false;
+
+    // Average mode is otherwise owned by the main load (initial seed) and
+    // handleModeChange (toggle); only a user pick reloads it here.
+    if (inflationMode === 'average' && !userPicked) return;
+
     let cancelled = false;
     (async () => {
       const base = Array.isArray(inflationRowsRef.current) ? inflationRowsRef.current : [];
-      const updated = await loadCountryInflation(years, !cameFromAverage, base);
+      if (inflationMode === 'average') {
+        // Re-seed the flat average from the freshly-fetched new-country curve.
+        const curve = await loadCountryInflation(years, false, base);
+        if (cancelled) return;
+        const avg = fmtPct(meanInflationPct(curve));
+        setAverageInflationPct(avg);
+        setInflationRows(applyAverageInflation(curve, avg));
+        return;
+      }
+      const updated = await loadCountryInflation(years, !(cameFromAverage || userPicked), base);
       if (!cancelled) setInflationRows(updated);
     })();
     return () => { cancelled = true; };
-  }, [countryId, inflationMode, years, loadCountryInflation]);
+  }, [countryId, inflationMode, years, loadCountryInflation, meanInflationPct, applyAverageInflation]);
 
   /* ── UW row updates ── */
   const updateUwRow = useCallback((idx, value) => {
@@ -391,11 +379,17 @@ export default function NpPremiumsTable() {
   }, [countryOptions.length]);
 
   const pickCountry = useCallback((id) => {
+    const next = id ? String(id) : null;
     const opt = (Array.isArray(countryOptions) ? countryOptions : []).find(c => String(c.id) === String(id));
-    setCountryId(id ? String(id) : null);
+    // Flag only a real change as user-driven so the country-inflation effect
+    // force-reloads (and, in average mode, re-seeds the flat average from the new
+    // country). Re-picking the same country is a no-op and must not leave a stale
+    // flag that re-seeds on a later, unrelated effect run.
+    if (next !== countryId) countryPickedRef.current = true;
+    setCountryId(next);
     setCountryName(opt?.name || '');
     setCountryPickerOpen(false);
-  }, [countryOptions]);
+  }, [countryOptions, countryId]);
 
   /* ── Δ vs prev calculation ── */
   const uwNums = useMemo(() => (Array.isArray(uwRows) ? uwRows : []).map(r => parseFlexNum(r.egnpi)), [uwRows]);
