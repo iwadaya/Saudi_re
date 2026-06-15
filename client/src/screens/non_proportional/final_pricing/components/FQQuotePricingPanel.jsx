@@ -11,12 +11,11 @@
 import React, { useId } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
 import { toN } from '../formatters.js';
-import { FQ_STRUCTURE_COLORS, fqGeomean } from '../fqHelpers.js';
+import { FQ_STRUCTURE_COLORS, fqGeomean, fqPriceLayerOnCurve } from '../fqHelpers.js';
 import {
   expLayerEarnedPremium,
   QM_MAX_LAYERS,
   QM_MAX_STRUCTURES,
-  quoteLayerDerived,
 } from '../fqQuoteMath.js';
 import FQCobSelectModal from './FQCobSelectModal.jsx';
 import { FQNumCell, FQPctCell, FQReadCell } from './FQCells.jsx';
@@ -39,8 +38,6 @@ const quoteInsightButtonStyle = {
  *   pricing: import('../hooks/useNpPricingState').NpPricingStateApi,
  *   npDetail: Record<string, any>,
  *   currency: string,
- *   riskDisabled: boolean,
- *   catDisabled: boolean,
  *   save: (options?: object) => Promise<boolean>,
  *   runQuoteCalcEngine: (structureIndex?: number|null) => Promise<void>,
  *   showToast: ((message: string) => void) | undefined,
@@ -50,8 +47,6 @@ export default function FQQuotePricingPanel({
   pricing,
   npDetail,
   currency,
-  riskDisabled,
-  catDisabled,
   save,
   runQuoteCalcEngine,
   showToast,
@@ -67,10 +62,6 @@ export default function FQQuotePricingPanel({
     openBenchmark, openPricingGraph, openPricingAnalysis,
     getCobFlags, getCobUwLimit, updateUwLimit, setCobToggle,
   } = pricing;
-  // Derived per-layer values for the quote-pricing columns —
-  // mirrors NpLayerTable's display logic but stays string-safe for
-  // fields the user hasn't typed yet.
-  const computeLayerDerived = quoteLayerDerived;
 
   return (
                 /* ═══════ QUOTE PRICING — QuickBenchmark-style topbar ═══════
@@ -399,52 +390,39 @@ export default function FQQuotePricingPanel({
                           </div>
                         </div>
                         <div className="bm-table-wrap">
-                          <table className="bm-table" style={{ minWidth: 1853, tableLayout: 'fixed' }}>
+                          <table className="bm-table" style={{ minWidth: 1100, tableLayout: 'fixed' }}>
                             <colgroup>{[
                               <col key="layer" style={{ width: 58 }} />,
                               <col key="limit" style={{ width: 127 }} />,
-                              <col key="deductible" style={{ width: 127 }} />,
-                              <col key="risk" style={{ width: 64 }} />,
-                              <col key="cat" style={{ width: 64 }} />,
-                              <col key="pureBurn" style={{ width: 92 }} />,
-                              <col key="pareto" style={{ width: 92 }} />,
-                              <col key="burnPareto" style={{ width: 104 }} />,
-                              <col key="exposure" style={{ width: 104 }} />,
-                              <col key="wtBurn" style={{ width: 92 }} />,
-                              <col key="wtPareto" style={{ width: 92 }} />,
-                              <col key="wtExp" style={{ width: 92 }} />,
-                              <col key="loading" style={{ width: 92 }} />,
-                              <col key="totalRol" style={{ width: 104 }} />,
-                              <col key="uwPrice" style={{ width: 104 }} />,
-                              <col key="pAttach" style={{ width: 104 }} />,
-                              <col key="pExhaust" style={{ width: 104 }} />,
+                              <col key="attachment" style={{ width: 127 }} />,
+                              <col key="egnpi" style={{ width: 127 }} />,
+                              <col key="geomean" style={{ width: 110 }} />,
+                              <col key="xGE" style={{ width: 100 }} />,
+                              <col key="rol" style={{ width: 104 }} />,
+                              <col key="premium" style={{ width: 127 }} />,
+                              <col key="rate" style={{ width: 110 }} />,
                               <col key="delete" style={{ width: 41 }} />,
                             ]}</colgroup>
                             <thead>
                               <tr>
-                                <th>Layer</th>
+                                <th>#</th>
                                 <th>Limit</th>
-                                <th>Deductible</th>
-                                <th>Risk</th>
-                                <th>Cat</th>
-                                <th>Pure Burn</th>
-                                <th>Pareto</th>
-                                <th>Burn+Pareto</th>
-                                <th>Exposure</th>
-                                <th>Wt Burn %</th>
-                                <th>Wt Pareto %</th>
-                                <th>Wt Exp %</th>
-                                <th>Loading %</th>
-                                <th>Total ROL</th>
-                                <th style={{ color: '#00d4ff' }}>UW Price</th>
-                                <th>P(Attach)</th>
-                                <th>P(Exh)</th>
+                                <th>Attachment</th>
+                                {/* NOTE: bound to l.egnpi; relabeling this column "Premium" is a one-word header change if product wants it. */}
+                                <th>EGNPI</th>
+                                <th>Geomean</th>
+                                <th>x=G/E</th>
+                                <th style={{ color }}>ROL % ↗</th>
+                                <th style={{ color }}>Premium ↗</th>
+                                <th style={{ color }}>Rate % ↗</th>
                                 <th></th>
                               </tr>
                             </thead>
                             <tbody>
                               {str.layers.map((l, lIdx) => {
-                                const d = computeLayerDerived(l);
+                                const geomean = fqGeomean(toN(l.limit), toN(l.attachment));
+                                const xGE = toN(l.egnpi) > 0 ? geomean / toN(l.egnpi) : 0;
+                                const priced = fqPriceLayerOnCurve(l, quoteCurve.fit, quoteCurve.baseEgnpi);
                                 return (
                                   <tr key={l.id}>
                                     <td style={{ textAlign: 'center' }}>
@@ -456,53 +434,13 @@ export default function FQQuotePricingPanel({
                                         ? <FQNumCell value={l.attachment} onChange={() => {}} className="bm-cell" style={{ opacity: 0.6, pointerEvents: 'none' }} />
                                         : <FQNumCell value={l.attachment} onChange={(v) => setStrLayer(lIdx, 'attachment', v)} />}
                                     </td>
-                                    <td style={{ textAlign: 'center' }}>
-                                      <input
-                                        type="checkbox"
-                                        className="np-check"
-                                        aria-label={`Structure ${sIdx + 1} Layer ${lIdx + 1} Risk`}
-                                        checked={!!l.risk}
-                                        disabled={riskDisabled}
-                                        onChange={(e) => setStrLayer(lIdx, 'risk', e.target.checked)}
-                                      />
-                                    </td>
-                                    <td style={{ textAlign: 'center' }}>
-                                      <input
-                                        type="checkbox"
-                                        className="np-check"
-                                        aria-label={`Structure ${sIdx + 1} Layer ${lIdx + 1} Cat`}
-                                        checked={!!l.cat}
-                                        disabled={catDisabled}
-                                        onChange={(e) => setStrLayer(lIdx, 'cat', e.target.checked)}
-                                      />
-                                    </td>
-                                    <td><FQPctCell value={l.pureBurn}    onChange={(v) => setStrLayer(lIdx, 'pureBurn', v)} /></td>
-                                    <td><FQPctCell value={l.pareto}      onChange={(v) => setStrLayer(lIdx, 'pareto', v)} /></td>
-                                    <td>
-                                      <FQReadCell
-                                        value={d.burnPlusPareto > 0 ? `${d.burnPlusPareto.toFixed(2)}%` : '—'}
-                                        className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc"
-                                      />
-                                    </td>
-                                    <td><FQPctCell value={l.exposure}    onChange={(v) => setStrLayer(lIdx, 'exposure', v)} /></td>
-                                    <td><FQPctCell value={l.wtBurn}      onChange={(v) => setStrLayer(lIdx, 'wtBurn', v)} /></td>
-                                    <td><FQPctCell value={l.wtPareto}    onChange={(v) => setStrLayer(lIdx, 'wtPareto', v)} /></td>
-                                    <td>
-                                      <FQReadCell
-                                        value={`${d.wtExp.toFixed(0)}%`}
-                                        className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc"
-                                      />
-                                    </td>
-                                    <td><FQPctCell value={l.loading}     onChange={(v) => setStrLayer(lIdx, 'loading', v)} /></td>
-                                    <td>
-                                      <FQReadCell
-                                        value={d.totalRol > 0 ? `${d.totalRol.toFixed(2)}%` : '—'}
-                                        className="bm-cell bm-cell--sm bm-cell--display bm-cell--accent bm-calc"
-                                      />
-                                    </td>
-                                    <td><FQPctCell value={l.uwPrice}     onChange={(v) => setStrLayer(lIdx, 'uwPrice', v)} placeholder={d.totalRol > 0 ? `${d.totalRol.toFixed(2)}%` : '—%'} /></td>
-                                    <td><FQPctCell value={l.pAttach}     onChange={(v) => setStrLayer(lIdx, 'pAttach', v)} /></td>
-                                    <td><FQPctCell value={l.pExhaust}    onChange={(v) => setStrLayer(lIdx, 'pExhaust', v)} /></td>
+                                    {/* NOTE: bound to l.egnpi; relabeling to "Premium" is a one-word header change if product wants it. */}
+                                    <td><FQNumCell value={l.egnpi}      onChange={(v) => setStrLayer(lIdx, 'egnpi', v)} /></td>
+                                    <td className="bm-calc bm-calc--dim">{geomean > 0 ? formatWithCommas(String(Math.round(geomean))) : '—'}</td>
+                                    <td className="bm-calc bm-calc--dim">{xGE > 0 ? xGE.toFixed(4) : '—'}</td>
+                                    <td className="bm-calc" style={{ color, fontWeight: 800 }}>{priced ? `${(priced.y * 100).toFixed(2)}%` : '—'}</td>
+                                    <td className="bm-calc" style={{ color }}>{priced ? formatWithCommas(String(Math.round(priced.premium))) : '—'}</td>
+                                    <td className="bm-calc" style={{ color, opacity: 0.8 }}>{priced ? `${(priced.rate * 100).toFixed(4)}%` : '—'}</td>
                                     <td><button className="bm-del" onClick={() => removeLayer(lIdx)}>✕</button></td>
                                   </tr>
                                 );
@@ -511,44 +449,30 @@ export default function FQQuotePricingPanel({
                             {(() => {
                               const totLim = str.layers.reduce((s, l) => s + toN(l.limit), 0);
                               if (totLim <= 0) return null;
-                              // Limit-weighted averages for the percentage columns
-                              const wAvg = (key) => {
-                                const num = str.layers.reduce((s, l) => s + toN(l.limit) * toN(l[key]), 0);
-                                return totLim > 0 ? num / totLim : 0;
-                              };
-                              const wAvgDerived = (selector) => {
-                                const num = str.layers.reduce((s, l) => s + toN(l.limit) * selector(computeLayerDerived(l)), 0);
-                                return totLim > 0 ? num / totLim : 0;
-                              };
-                              const wPureBurn  = wAvg('pureBurn');
-                              const wPareto    = wAvg('pareto');
-                              const wExposure  = wAvg('exposure');
-                              const wTotalRol  = wAvgDerived((d) => d.totalRol);
-                              const wUwPrice   = wAvg('uwPrice');
-                              const avg = (key, dflt) => {
-                                const vals = str.layers.map((l) => toN(l[key]) || toN(dflt));
-                                if (!vals.length) return 0;
-                                return vals.reduce((s, v) => s + v, 0) / vals.length;
-                              };
+                              const totEgnpi = str.layers.reduce((s, l) => s + toN(l.egnpi), 0);
+                              // Curve-priced footer: limit-weighted ROL and summed premium from
+                              // fqPriceLayerOnCurve over the layers (mirrors the per-row ↗ columns).
+                              let rolNum = 0, rolDen = 0, totPrem = 0;
+                              str.layers.forEach((l) => {
+                                const p = fqPriceLayerOnCurve(l, quoteCurve.fit, quoteCurve.baseEgnpi);
+                                if (!p) return;
+                                const lim = toN(l.limit);
+                                rolNum += p.y * lim;
+                                rolDen += lim;
+                                totPrem += p.premium;
+                              });
+                              const wRol = rolDen > 0 ? (rolNum / rolDen) * 100 : 0;
                               return (
                                 <tfoot>
                                   <tr className="bm-foot" style={{ borderTopColor: `${color}25` }}>
                                     <td><FQReadCell value="TOTAL" className="bm-cell bm-cell--display bm-cell--foot" /></td>
                                     <td><FQReadCell value={formatWithCommas(String(Math.round(totLim)))} className="bm-cell bm-cell--display bm-cell--foot" /></td>
                                     <td></td>
+                                    <td><FQReadCell value={totEgnpi > 0 ? formatWithCommas(String(Math.round(totEgnpi))) : '—'} className="bm-cell bm-cell--display bm-cell--foot" /></td>
                                     <td></td>
                                     <td></td>
-                                    <td><FQReadCell value={wPureBurn  > 0 ? `${wPureBurn.toFixed(2)}%`  : '—'} className="bm-cell bm-cell--sm bm-cell--display bm-cell--foot" /></td>
-                                    <td><FQReadCell value={wPareto    > 0 ? `${wPareto.toFixed(2)}%`    : '—'} className="bm-cell bm-cell--sm bm-cell--display bm-cell--foot" /></td>
-                                    <td><FQReadCell value={(wPureBurn + wPareto) > 0 ? `${(wPureBurn + wPareto).toFixed(2)}%` : '—'} className="bm-cell bm-cell--sm bm-cell--display bm-cell--foot" /></td>
-                                    <td><FQReadCell value={wExposure  > 0 ? `${wExposure.toFixed(2)}%`  : '—'} className="bm-cell bm-cell--sm bm-cell--display bm-cell--foot" /></td>
-                                    <td><FQReadCell value={`${avg('wtBurn', '50').toFixed(0)}%`} className="bm-cell bm-cell--sm bm-cell--display bm-cell--foot" /></td>
-                                    <td><FQReadCell value={`${avg('wtPareto', '0').toFixed(0)}%`} className="bm-cell bm-cell--sm bm-cell--display bm-cell--foot" /></td>
-                                    <td><FQReadCell value={`${(100 - avg('wtBurn', '50') - avg('wtPareto', '0')).toFixed(0)}%`} className="bm-cell bm-cell--sm bm-cell--display bm-cell--foot" /></td>
-                                    <td><FQReadCell value={`${avg('loading', '15').toFixed(0)}%`} className="bm-cell bm-cell--sm bm-cell--display bm-cell--foot" /></td>
-                                    <td><FQReadCell value={wTotalRol > 0 ? `${wTotalRol.toFixed(2)}%` : '—'} className="bm-cell bm-cell--sm bm-cell--display bm-cell--accent" /></td>
-                                    <td><FQReadCell value={wUwPrice  > 0 ? `${wUwPrice.toFixed(2)}%`  : '—'} className="bm-cell bm-cell--sm bm-cell--display bm-cell--accent" /></td>
-                                    <td></td>
+                                    <td><FQReadCell value={wRol > 0 ? `${wRol.toFixed(2)}%` : '—'} className="bm-cell bm-cell--sm bm-cell--display bm-cell--foot" style={{ color, fontWeight: 800 }} /></td>
+                                    <td><FQReadCell value={totPrem > 0 ? formatWithCommas(String(Math.round(totPrem))) : '—'} className="bm-cell bm-cell--display bm-cell--foot" style={{ color, fontWeight: 800 }} /></td>
                                     <td></td>
                                     <td></td>
                                   </tr>
