@@ -21,6 +21,8 @@ export default function FQBenchmarkModal({
   const [cobFilter, setCobFilter] = useState('all');
   const [sortKey, setSortKey] = useState('limit');
   const [sortDir, setSortDir] = useState('desc');
+  const [topN, setTopN] = useState('10');          // '10' | '20' | 'all'
+  const [excluded, setExcluded] = useState(() => new Set()); // peer ids that are UNTICKED
 
   // Peer pool fetched per (contractId, scope, cobIds). Stored as a
   // per-scope map so toggling tabs doesn't refetch already-loaded data.
@@ -49,7 +51,11 @@ export default function FQBenchmarkModal({
     setPeerNote('');
     setCommentary({});
     setCommentaryError('');
+    setExcluded(new Set());
   }, [open, initialScope, contractId, cobIdsKey]);
+
+  // Selection must never leak across scope or COB-filter changes.
+  useEffect(() => { setExcluded(new Set()); }, [scope, cobFilter]);
 
   // Fetch peers when the active scope changes (or we just opened). The
   // mountedRef guard stops a stale fetch from clobbering state if the
@@ -99,6 +105,12 @@ export default function FQBenchmarkModal({
 
   const peers = peerPools[scope] || [];
   const filtered = cobFilter === 'all' ? peers : peers.filter((p) => p.cob === cobFilter);
+  // Active subset feeding every per-scope calc: API order = relevance, capped by
+  // Top-N, minus any rows the user has un-ticked (excluded).
+  const ranked = filtered;                                   // API order = relevance
+  const pool = topN === 'all' ? ranked : ranked.slice(0, Number(topN));
+  const isSel = (p) => !excluded.has(p.id);
+  const activePeers = pool.filter(isSel);
   // Median helper
   const median = (arr) => {
     if (!arr.length) return 0;
@@ -106,14 +118,14 @@ export default function FQBenchmarkModal({
     const m = Math.floor(s.length / 2);
     return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
   };
-  const peerLimit = filtered.map((p) => p.limit);
-  const peerDed   = filtered.map((p) => p.ded);
-  const peerRol   = filtered.map((p) => p.rolPct);
+  const peerLimit = activePeers.map((p) => p.limit);
+  const peerDed   = activePeers.map((p) => p.ded);
+  const peerRol   = activePeers.map((p) => p.rolPct);
   const mLimit  = median(peerLimit);
   const mDed    = median(peerDed);
-  const mDoverL = median(filtered.map((p) => (p.limit > 0 ? p.ded / p.limit : 0)));
-  const mDoverE = median(filtered.map((p) => (p.egnpi > 0 ? p.ded / p.egnpi : 0)));
-  const mLoverE = median(filtered.map((p) => (p.egnpi > 0 ? p.limit / p.egnpi : 0)));
+  const mDoverL = median(activePeers.map((p) => (p.limit > 0 ? p.ded / p.limit : 0)));
+  const mDoverE = median(activePeers.map((p) => (p.egnpi > 0 ? p.ded / p.egnpi : 0)));
+  const mLoverE = median(activePeers.map((p) => (p.egnpi > 0 ? p.limit / p.egnpi : 0)));
   const mRol    = median(peerRol);
 
   // Percentile rank of source value within peer list (0–100)
@@ -130,14 +142,14 @@ export default function FQBenchmarkModal({
   const cards = [
     { key: 'ded',   label: 'Deductible',   value: fmt(ded),         market: fmt(mDed),   p: pRank(ded, peerDed),        src: ded,      mkt: mDed,    higherIsBetter: true },
     { key: 'lim',   label: 'Limit',        value: fmt(totalLim),    market: fmt(mLimit), p: pRank(totalLim, peerLimit), src: totalLim, mkt: mLimit,  higherIsBetter: false }, // higher limit = more exposure = bad
-    { key: 'd_l',   label: 'Ded / Limit',  value: fmtRatio(dOverL), market: fmtRatio(mDoverL), p: pRank(dOverL, filtered.map((p) => (p.limit > 0 ? p.ded / p.limit : 0))), src: dOverL, mkt: mDoverL, higherIsBetter: true },
-    { key: 'd_e',   label: 'Ded / EGNPI',  value: fmtRatio(dOverE), market: fmtRatio(mDoverE), p: pRank(dOverE, filtered.map((p) => (p.egnpi > 0 ? p.ded / p.egnpi : 0))), src: dOverE, mkt: mDoverE, higherIsBetter: true },
-    { key: 'l_e',   label: 'Limit / EGNPI',value: fmtRatio(lOverE), market: fmtRatio(mLoverE), p: pRank(lOverE, filtered.map((p) => (p.egnpi > 0 ? p.limit / p.egnpi : 0))), src: lOverE, mkt: mLoverE, higherIsBetter: true },
+    { key: 'd_l',   label: 'Ded / Limit',  value: fmtRatio(dOverL), market: fmtRatio(mDoverL), p: pRank(dOverL, activePeers.map((p) => (p.limit > 0 ? p.ded / p.limit : 0))), src: dOverL, mkt: mDoverL, higherIsBetter: true },
+    { key: 'd_e',   label: 'Ded / EGNPI',  value: fmtRatio(dOverE), market: fmtRatio(mDoverE), p: pRank(dOverE, activePeers.map((p) => (p.egnpi > 0 ? p.ded / p.egnpi : 0))), src: dOverE, mkt: mDoverE, higherIsBetter: true },
+    { key: 'l_e',   label: 'Limit / EGNPI',value: fmtRatio(lOverE), market: fmtRatio(mLoverE), p: pRank(lOverE, activePeers.map((p) => (p.egnpi > 0 ? p.limit / p.egnpi : 0))), src: lOverE, mkt: mLoverE, higherIsBetter: true },
     { key: 'rol',   label: 'ROL %',        value: fmtPct(wRol),     market: fmtPct(mRol), p: pRank(wRol, peerRol),       src: wRol,     mkt: mRol,    higherIsBetter: true }, // NOTE: higher ROL treated as favorable — confirm
   ];
 
-  // ── Sortable peer-treaty table ──
-  const sortedFiltered = [...filtered].sort((a, b) => {
+  // ── Sortable peer-treaty table (over the Top-N pool) ──
+  const sortedPool = [...pool].sort((a, b) => {
     const av = sortKey === 'cedant' || sortKey === 'cob' || sortKey === 'country' ? a[sortKey] : (a[sortKey] || 0);
     const bv = sortKey === 'cedant' || sortKey === 'cob' || sortKey === 'country' ? b[sortKey] : (b[sortKey] || 0);
     if (av < bv) return sortDir === 'asc' ? -1 : 1;
@@ -183,7 +195,7 @@ export default function FQBenchmarkModal({
           lOverE: mLoverE,
           rolPct: mRol,
         },
-        peer_count: filtered.length,
+        peer_count: activePeers.length,
         cob_names: cobNames || [],
         currency: currency || '',
       });
@@ -235,8 +247,8 @@ export default function FQBenchmarkModal({
   };
 
   const Scatter = ({ xKey, yKey, xLabel, yLabel, sourceX, sourceY }) => {
-    const xs = filtered.map((p) => p[xKey]);
-    const ys = filtered.map((p) => p[yKey]);
+    const xs = activePeers.map((p) => p[xKey]);
+    const ys = activePeers.map((p) => p[yKey]);
     if (!xs.length) return null;
     const xMin = Math.min(...xs, sourceX || 0);
     const xMax = Math.max(...xs, sourceX || 0);
@@ -248,7 +260,7 @@ export default function FQBenchmarkModal({
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(226,232,240,0.75)' }}>{yLabel} vs {xLabel}</span>
-          <span style={{ fontSize: 10, color: 'rgba(148,163,184,0.55)' }}>{filtered.length} treaties</span>
+          <span style={{ fontSize: 10, color: 'rgba(148,163,184,0.55)' }}>{activePeers.length} treaties</span>
         </div>
         <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: 240, display: 'block', background: 'rgba(0,0,0,0.20)', borderRadius: 8, fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums' }}>
           {[20, 40, 60, 80].map((g) => (
@@ -257,7 +269,7 @@ export default function FQBenchmarkModal({
           {[20, 40, 60, 80].map((g) => (
             <line key={`gy${g}`} x1={8} y1={g} x2={96} y2={g} stroke="rgba(255,255,255,0.06)" strokeWidth="1" shapeRendering="crispEdges" vectorEffect="non-scaling-stroke" />
           ))}
-          {filtered.map((p) => (
+          {activePeers.map((p) => (
             <circle key={p.id} cx={X(p[xKey])} cy={Y(p[yKey])} r="0.9" fill={cobColor(p.cob)} fillOpacity="0.75" />
           ))}
           {sourceX > 0 && sourceY > 0 && (
@@ -307,7 +319,7 @@ export default function FQBenchmarkModal({
   // there is no peer data, { flat: true } when effectively equal, otherwise an
   // arrow + colored % where the color reflects favorability (higherIsBetter).
   const benchDelta = (src, mkt, higherIsBetter) => {
-    if (!filtered.length || !(mkt > 0) || !(src > 0)) return null;   // no peer data → no chip
+    if (!activePeers.length || !(mkt > 0) || !(src > 0)) return null;   // no active peer data → no chip
     const pct = ((src - mkt) / mkt) * 100;
     if (Math.abs(pct) < 0.05) return { flat: true };                 // effectively equal
     const isHigher = src > mkt;
@@ -440,9 +452,9 @@ export default function FQBenchmarkModal({
               <div>
                 <BoxPlot label="Deductible"     values={peerDed}   sourceVal={ded} />
                 <BoxPlot label="Limit"          values={peerLimit} sourceVal={totalLim} />
-                <BoxPlot label="Ded / Limit"    values={filtered.map((p) => (p.limit > 0 ? p.ded / p.limit : 0))} sourceVal={dOverL} formatter={fmtRatio} />
-                <BoxPlot label="Ded / EGNPI"    values={filtered.map((p) => (p.egnpi > 0 ? p.ded / p.egnpi : 0))} sourceVal={dOverE} formatter={fmtRatio} />
-                <BoxPlot label="Limit / EGNPI"  values={filtered.map((p) => (p.egnpi > 0 ? p.limit / p.egnpi : 0))} sourceVal={lOverE} formatter={fmtRatio} />
+                <BoxPlot label="Ded / Limit"    values={activePeers.map((p) => (p.limit > 0 ? p.ded / p.limit : 0))} sourceVal={dOverL} formatter={fmtRatio} />
+                <BoxPlot label="Ded / EGNPI"    values={activePeers.map((p) => (p.egnpi > 0 ? p.ded / p.egnpi : 0))} sourceVal={dOverE} formatter={fmtRatio} />
+                <BoxPlot label="Limit / EGNPI"  values={activePeers.map((p) => (p.egnpi > 0 ? p.limit / p.egnpi : 0))} sourceVal={lOverE} formatter={fmtRatio} />
                 <BoxPlot label="ROL %"          values={peerRol}   sourceVal={wRol} formatter={fmtPct} />
               </div>
             )}
@@ -605,9 +617,9 @@ export default function FQBenchmarkModal({
             )}
             {tab === 'aggregates' && (
               <div>
-                <BoxPlot label="Aggregate Ded / EGNPI" values={filtered.map((p) => (p.egnpi > 0 ? p.ded * 0.6 / p.egnpi : 0))} sourceVal={totalEgnpi > 0 ? ded * 0.6 / totalEgnpi : 0} formatter={fmtRatio} />
-                <BoxPlot label="Aggregate Limit / EGNPI" values={filtered.map((p) => (p.egnpi > 0 ? p.limit * 1.2 / p.egnpi : 0))} sourceVal={totalEgnpi > 0 ? totalLim * 1.2 / totalEgnpi : 0} formatter={fmtRatio} />
-                <BoxPlot label="Occurrence Ded / Limit" values={filtered.map((p) => (p.limit > 0 ? p.ded / p.limit : 0))} sourceVal={dOverL} formatter={fmtRatio} />
+                <BoxPlot label="Aggregate Ded / EGNPI" values={activePeers.map((p) => (p.egnpi > 0 ? p.ded * 0.6 / p.egnpi : 0))} sourceVal={totalEgnpi > 0 ? ded * 0.6 / totalEgnpi : 0} formatter={fmtRatio} />
+                <BoxPlot label="Aggregate Limit / EGNPI" values={activePeers.map((p) => (p.egnpi > 0 ? p.limit * 1.2 / p.egnpi : 0))} sourceVal={totalEgnpi > 0 ? totalLim * 1.2 / totalEgnpi : 0} formatter={fmtRatio} />
+                <BoxPlot label="Occurrence Ded / Limit" values={activePeers.map((p) => (p.limit > 0 ? p.ded / p.limit : 0))} sourceVal={dOverL} formatter={fmtRatio} />
                 <BoxPlot label="Rate %" values={peerRol} sourceVal={wRol} formatter={fmtPct} />
               </div>
             )}
@@ -616,13 +628,42 @@ export default function FQBenchmarkModal({
 
           {/* Comparable treaty table */}
           <section style={{ ...sectionStyle, marginTop: 2, borderTop: '1px solid rgba(0,212,255,0.32)', boxShadow: '0 -1px 0 rgba(0,212,255,0.12), 0 1px 0 rgba(255,255,255,0.035) inset' }}>
-            <div style={{ ...sectionTitleStyle, marginBottom: 8 }}>
-              Comparable treaties · top {Math.min(25, sortedFiltered.length)}
+            <div style={{ ...sectionTitleStyle, marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <span>Comparable treaties · {activePeers.length} of {pool.length} selected</span>
+              <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                {[
+                  { k: '10', label: 'Top 10' },
+                  { k: '20', label: 'Top 20' },
+                  { k: 'all', label: 'All' },
+                ].map((o) => (
+                  <button key={o.k} onClick={() => setTopN(o.k)}
+                    style={{ appearance: 'none', padding: '6px 12px', border: 'none', borderBottom: topN === o.k ? '2px solid #00d4ff' : '2px solid transparent', background: topN === o.k ? 'rgba(0,212,255,0.08)' : 'transparent', color: topN === o.k ? '#00d4ff' : 'rgba(226,232,240,0.65)', fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', cursor: 'pointer' }}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div style={{ border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                 <thead style={{ background: 'rgba(5,8,16,0.95)' }}>
                   <tr>
+                    <th style={{ ...thStyle, width: 34, textAlign: 'center', cursor: 'default' }}>
+                      <input
+                        type="checkbox"
+                        className="np-check"
+                        aria-label="Select all comparable treaties"
+                        ref={(el) => { if (el) el.indeterminate = activePeers.length > 0 && activePeers.length < pool.length; }}
+                        checked={pool.length > 0 && activePeers.length === pool.length}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => setExcluded((prev) => {
+                          const n = new Set(prev);
+                          const allSelected = pool.length > 0 && activePeers.length === pool.length;
+                          pool.forEach((p) => (allSelected ? n.add(p.id) : n.delete(p.id)));
+                          return n;
+                        })}
+                        style={{ verticalAlign: 'middle' }}
+                      />
+                    </th>
                     {[
                       { k: 'cedant',  label: 'Cedant' },
                       { k: 'cob',     label: 'COB' },
@@ -639,8 +680,18 @@ export default function FQBenchmarkModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedFiltered.slice(0, 25).map((p) => (
+                  {sortedPool.map((p) => (
                     <tr key={p.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          className="np-check"
+                          aria-label={`Include ${p.cedant}`}
+                          checked={isSel(p)}
+                          onChange={() => setExcluded((prev) => { const n = new Set(prev); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; })}
+                          style={{ verticalAlign: 'middle' }}
+                        />
+                      </td>
                       <td style={{ ...tdStyle, textAlign: 'left', color: 'rgba(226,232,240,0.85)' }}>{p.cedant}</td>
                       <td style={{ ...tdStyle, textAlign: 'left' }}><span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 6, background: `${cobColor(p.cob)}1f`, border: `1px solid ${cobColor(p.cob)}55`, color: cobColor(p.cob), fontSize: 10, fontWeight: 700 }}>{p.cob}</span></td>
                       <td style={{ ...tdStyle, textAlign: 'left', color: 'rgba(148,163,184,0.75)' }}>{p.country}</td>
@@ -664,7 +715,7 @@ export default function FQBenchmarkModal({
               <div style={sectionTitleStyle}>Market Intelligence · AI Commentary</div>
               <button
                 onClick={runCommentary}
-                disabled={commentaryLoading || filtered.length === 0 || !contractId}
+                disabled={commentaryLoading || activePeers.length === 0 || !contractId}
                 style={{
                   appearance: 'none',
                   padding: '6px 14px',
@@ -676,8 +727,8 @@ export default function FQBenchmarkModal({
                   fontWeight: 800,
                   letterSpacing: '.08em',
                   textTransform: 'uppercase',
-                  cursor: commentaryLoading || filtered.length === 0 || !contractId ? 'not-allowed' : 'pointer',
-                  opacity: commentaryLoading || filtered.length === 0 || !contractId ? 0.5 : 1,
+                  cursor: commentaryLoading || activePeers.length === 0 || !contractId ? 'not-allowed' : 'pointer',
+                  opacity: commentaryLoading || activePeers.length === 0 || !contractId ? 0.5 : 1,
                 }}
               >
                 {commentaryLoading ? 'Generating…' : activeCommentary ? 'Regenerate' : 'Generate'}
@@ -688,7 +739,7 @@ export default function FQBenchmarkModal({
             )}
             {!activeCommentary && !commentaryLoading && !commentaryError && (
               <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.65)' }}>
-                {filtered.length === 0
+                {activePeers.length === 0
                   ? 'No peers available for the current scope — switch to a wider scope to enable commentary.'
                   : 'Click Generate to surface AI analysis on how this structure\'s deductible, limit, and exposure positioning compare to the peer median.'}
               </div>
@@ -710,7 +761,7 @@ export default function FQBenchmarkModal({
                     {activeCommentary.signal}
                   </span>
                   <span style={{ fontSize: 10, color: 'rgba(148,163,184,0.55)' }}>
-                    {scope.toUpperCase()} scope · {filtered.length} peers
+                    {scope.toUpperCase()} scope · {activePeers.length} peers
                   </span>
                 </div>
                 <p style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(226,232,240,0.85)', margin: '0 0 14px' }}>
