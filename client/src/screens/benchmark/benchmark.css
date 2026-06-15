@@ -1,5 +1,10 @@
 /* ── Quick Benchmark Screen ───────────────────────────────────────────── */
 
+/* Single height token shared by every in-row table control (text inputs,
+   percent inputs, in-row selects, checkboxes, and computed cells) so the
+   quote-table rows line up at one uniform height. */
+:root { --bm-row-control-h: 30px; }
+
 .bm-shell {
   min-height: 100vh;
   background: linear-gradient(180deg, #070d1c 0%, #050a14 100%);
@@ -747,11 +752,12 @@
 /* ── Table cells ──────────────────────────────────────────────────────── */
 .bm-cell {
   width: 100%; min-width: 88px;
+  height: var(--bm-row-control-h);
   background: transparent;
   border: 1px solid rgba(255,255,255,0.07);
   border-radius: 5px;
   color: rgba(226,232,240,0.90);
-  font-size: 12px; padding: 5px 8px;
+  font-size: 12px; padding: 0 8px;
   outline: none;
   text-align: center;
   box-sizing: border-box;
@@ -762,12 +768,16 @@
   border-color: rgba(35,209,139,0.40);
   background: rgba(35,209,139,0.04);
 }
+/* Narrower min-width only — height stays var(--bm-row-control-h) from .bm-cell. */
 .bm-cell--sm { min-width: 60px; }
+/* Computed/read-only cells: borderless tabular text, same row height, centered. */
 .bm-cell--display {
   display: flex !important;
   align-items: center;
   justify-content: center;
-  min-height: 29px;
+  min-height: var(--bm-row-control-h);
+  padding: 0 8px;
+  border: none;
   user-select: none;
 }
 .bm-cell--muted { color: rgba(148,163,184,0.58); }
@@ -779,16 +789,39 @@
 }
 
 .bm-table td {
-  padding: 5px 8px;
+  padding: 4px 8px;
   border-bottom: 1px solid rgba(255,255,255,0.04);
   vertical-align: middle;
   text-align: center;
 }
-.bm-table td:first-child { padding: 5px 6px; }
+.bm-table td:first-child { padding: 4px 6px; }
 .bm-table td .bm-cell { display: block; }
+/* In-row dropdowns match the editable input cell box exactly. The treaty-detail
+   .bm-input selects live in the meta grid (outside .bm-table) and are untouched. */
+.bm-table td select,
+.bm-cell-select {
+  width: 100%;
+  height: var(--bm-row-control-h);
+  box-sizing: border-box;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 5px;
+  color: rgba(226,232,240,0.90);
+  font-size: 12px;
+  padding: 0 8px;
+  text-align: center;
+  outline: none;
+}
+/* Checkbox sits vertically centered within the same row height; size/accent unchanged. */
+.bm-table td .np-check { vertical-align: middle; }
 
+/* Computed tabular text. As a <td> it stays a table-cell and centers via the
+   .bm-table td vertical-align (a flex <td> would break column/colgroup layout);
+   as a <span> in modals it pairs with .bm-cell--display for flex centering. */
 .bm-calc {
-  padding: 5px 12px;
+  min-height: var(--bm-row-control-h);
+  padding: 0 8px;
+  border: none;
   text-align: center;
   font-variant-numeric: tabular-nums;
   color: rgba(226,232,240,0.70);

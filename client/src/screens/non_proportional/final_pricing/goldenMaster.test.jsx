@@ -289,15 +289,17 @@ describe('NpFinalPricing golden master (quote mode)', () => {
     const cells = structure.querySelectorAll('input.bm-cell');
     fireEvent.change(cells[0], { target: { value: '750000' } });
     fireEvent.change(cells[1], { target: { value: '100000' } });
+    // Limit + attachment auto-fill EGNPI from the curve baseEgnpi (1.5M) and
+    // price the layer on the implied curve (market default a=0.108, b=-1.074).
     await waitFor(() => {
       const priced = screen.getByText(/^Structure 1$/i).closest('section').querySelectorAll('input.bm-cell');
-      expect(priced[2].value).toBe('106.6342%');
+      expect(priced[2].value).toBe('1,500,000');
     });
 
     expect(rowsOf(screen.getByText(/^Structure 1$/i).closest('section').querySelector('table'))).toEqual([
-      ['Layer', 'Limit', 'Deductible', 'Risk', 'Cat', 'Pure Burn', 'Pareto', 'Burn+Pareto', 'Exposure', 'Wt Burn %', 'Wt Pareto %', 'Wt Exp %', 'Loading %', 'Total ROL', 'UW Price', 'P(Attach)', 'P(Exh)', ''],
-      ['1', '[750,000]', '[100,000]', '[x]', '[x]', '[106.6342%]', '[0%]', '106.63%', '[106.6342%]', '[50%]', '[0%]', '50%', '[15%]', '125.45%', '[125.452%]', '[]', '[]', '✕'],
-      ['TOTAL', '750,000', '', '', '', '106.63%', '—', '106.63%', '106.63%', '50%', '0%', '50%', '15%', '125.45%', '125.45%', '', '', ''],
+      ['#', 'Limit', 'Attachment', 'EGNPI', 'Geomean', 'x=G/E', 'ROL % ↗', 'Premium ↗', 'Rate % ↗', ''],
+      ['1', '[750,000]', '[100,000]', '[1,500,000]', '291,548', '0.1944', '62.73%', '470,445', '31.3630%', '✕'],
+      ['TOTAL', '750,000', '', '1,500,000', '', '', '62.73%', '470,445', '', ''],
     ]);
   });
 
@@ -312,7 +314,7 @@ describe('NpFinalPricing golden master (quote mode)', () => {
     fireEvent.change(cells[1], { target: { value: '100000' } });
     await waitFor(() => {
       const priced = screen.getByText(/^Structure 1$/i).closest('section').querySelectorAll('input.bm-cell');
-      expect(priced[2].value).toBe('106.6342%');
+      expect(priced[2].value).toBe('1,500,000');
     });
 
     const paButton = Array.from(screen.getByText(/^Structure 1$/i).closest('section').querySelectorAll('button'))

@@ -285,6 +285,24 @@ export default function FQBenchmarkModal({
     textTransform: 'uppercase',
     marginBottom: 10,
   };
+  // Shared table typography so the curve-metrics and comparable-treaty tables
+  // read in the same visual language as the main tables / FQPricingAnalysisModal:
+  // uppercase letter-spaced headers, borderless tabular-nums value cells.
+  const thStyle = {
+    padding: '8px 10px',
+    fontSize: 9,
+    fontWeight: 850,
+    letterSpacing: '.11em',
+    color: 'rgba(148,163,184,0.68)',
+    textTransform: 'uppercase',
+    borderBottom: '1px solid rgba(255,255,255,0.08)',
+    whiteSpace: 'nowrap',
+  };
+  const tdStyle = {
+    padding: '7px 8px',
+    verticalAlign: 'middle',
+    fontVariantNumeric: 'tabular-nums',
+  };
 
   return (
     <div className="bm-modal-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -295,10 +313,10 @@ export default function FQBenchmarkModal({
             <div>Analysis · {sourceLabel}</div>
             <div style={{ fontSize: 11, fontWeight: 500, color: 'rgba(148,163,184,0.55)', marginTop: 2 }}>{scopeLabel}</div>
           </div>
-          <button className="bm-pill" onClick={onClose}>✕</button>
+          <button className="bm-pill" onClick={onClose}>Close</button>
         </div>
 
-        <div className="bm-modal-body" style={{ minHeight: 0, height: '100%', maxHeight: 'none', overflowY: 'scroll', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 16, padding: '20px 28px' }}>
+        <div className="bm-modal-body" style={{ minHeight: 0, height: '100%', maxHeight: 'none', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 16, padding: '20px 28px' }}>
           {/* Scope tabs + COB filter */}
           <section style={{ ...sectionStyle, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
@@ -520,9 +538,9 @@ export default function FQBenchmarkModal({
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                         <thead style={{ background: 'rgba(5,8,16,0.95)' }}>
                           <tr>
-                            <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 10, fontWeight: 800, letterSpacing: '.12em', color: 'rgba(148,163,184,0.65)', textTransform: 'uppercase' }}>Metric</th>
+                            <th style={{ ...thStyle, textAlign: 'left' }}>Metric</th>
                             {fits.map((f) => (
-                              <th key={f.key} style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, fontWeight: 800, letterSpacing: '.12em', color: f.color, textTransform: 'uppercase' }}>{f.label}</th>
+                              <th key={f.key} style={{ ...thStyle, textAlign: 'right', color: f.color }}>{f.label}</th>
                             ))}
                           </tr>
                         </thead>
@@ -538,9 +556,9 @@ export default function FQBenchmarkModal({
                             { k: 'rolHi', label: 'ROL @ x = 0.20', cell: (f) => `${(f.fit.a * Math.pow(0.20, f.fit.b) * 100).toFixed(2)}%` },
                           ].map((row) => (
                             <tr key={row.k} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                              <td style={{ padding: '6px 12px', color: 'rgba(226,232,240,0.85)' }}>{row.label}</td>
+                              <td style={{ ...tdStyle, textAlign: 'left', color: 'rgba(226,232,240,0.85)' }}>{row.label}</td>
                               {fits.map((f) => (
-                                <td key={f.key} style={{ padding: '6px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: f.key === 'source' ? f.color : 'rgba(226,232,240,0.85)' }}>{row.cell(f)}</td>
+                                <td key={f.key} style={{ ...tdStyle, textAlign: 'right', fontFamily: 'var(--font-mono)', color: f.key === 'source' ? f.color : 'rgba(226,232,240,0.85)' }}>{row.cell(f)}</td>
                               ))}
                             </tr>
                           ))}
@@ -589,7 +607,7 @@ export default function FQBenchmarkModal({
                       { k: 'egnpi',   label: 'EGNPI' },
                       { k: 'rolPct',  label: 'ROL %' },
                     ].map((h) => (
-                      <th key={h.k} onClick={headerSort(h.k)} style={{ padding: '6px 10px', textAlign: h.k === 'cedant' || h.k === 'cob' || h.k === 'country' ? 'left' : 'right', fontSize: 10, fontWeight: 800, letterSpacing: '.12em', color: 'rgba(148,163,184,0.65)', textTransform: 'uppercase', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.10)', userSelect: 'none' }}>
+                      <th key={h.k} onClick={headerSort(h.k)} style={{ ...thStyle, textAlign: h.k === 'cedant' || h.k === 'cob' || h.k === 'country' ? 'left' : 'right', cursor: 'pointer', userSelect: 'none' }}>
                         {h.label}{sortArrow(h.k)}
                       </th>
                     ))}
@@ -598,13 +616,13 @@ export default function FQBenchmarkModal({
                 <tbody>
                   {sortedFiltered.slice(0, 25).map((p) => (
                     <tr key={p.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                      <td style={{ padding: '5px 10px', color: 'rgba(226,232,240,0.85)' }}>{p.cedant}</td>
-                      <td style={{ padding: '5px 10px' }}><span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 6, background: `${cobColor(p.cob)}1f`, border: `1px solid ${cobColor(p.cob)}55`, color: cobColor(p.cob), fontSize: 10, fontWeight: 700 }}>{p.cob}</span></td>
-                      <td style={{ padding: '5px 10px', color: 'rgba(148,163,184,0.75)' }}>{p.country}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'right' }}>{fmt(p.limit)}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'right' }}>{fmt(p.ded)}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'right' }}>{fmt(p.egnpi)}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'right', color: '#00d4ff', fontWeight: 700 }}>{fmtPct(p.rolPct)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'left', color: 'rgba(226,232,240,0.85)' }}>{p.cedant}</td>
+                      <td style={{ ...tdStyle, textAlign: 'left' }}><span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 6, background: `${cobColor(p.cob)}1f`, border: `1px solid ${cobColor(p.cob)}55`, color: cobColor(p.cob), fontSize: 10, fontWeight: 700 }}>{p.cob}</span></td>
+                      <td style={{ ...tdStyle, textAlign: 'left', color: 'rgba(148,163,184,0.75)' }}>{p.country}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{fmt(p.limit)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{fmt(p.ded)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{fmt(p.egnpi)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: '#00d4ff', fontWeight: 700 }}>{fmtPct(p.rolPct)}</td>
                     </tr>
                   ))}
                 </tbody>

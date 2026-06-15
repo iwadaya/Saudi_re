@@ -146,6 +146,19 @@ describe('NpFinalPricing integration', () => {
     expect(apiMock.saveNpPricing.mock.calls.at(-1)[2]).toMatchObject({ quote: true });
   });
 
+  it('drops the inline implied-pricing-curve card and opens it via the Pricing Curve modal', async () => {
+    const { container } = renderScreen({ quoteMode: true });
+
+    expect(await screen.findByText(/Expiring Structure/i)).toBeInTheDocument();
+    // The inline SVG curve card is gone — the curve now lives in the modal only.
+    expect(container.querySelector('.bm-card--curve')).toBeNull();
+    expect(container.querySelector('.bm-curve-svg-wrap')).toBeNull();
+
+    // The Pricing Curve header button opens the shared FQPricingGraphModal.
+    fireEvent.click(screen.getByRole('button', { name: /^Pricing Curve$/i }));
+    expect(await screen.findByText(/Pricing Graph Analysis/i)).toBeInTheDocument();
+  });
+
   it('supports quote-mode structure editing, benchmark modal, and COB participation', async () => {
     const { container } = renderScreen({ quoteMode: true });
 
@@ -157,11 +170,11 @@ describe('NpFinalPricing integration', () => {
 
     const structure = screen.getByText(/Structure 1/i).closest('section');
     const cells = structure.querySelectorAll('input.bm-cell');
+    // Main table now exposes limit / attachment / EGNPI only; the actuarial
+    // inputs moved to the Pricing Analysis modal. Limit + attachment are enough
+    // to curve-price the row (ROL/Premium/Rate ↗ columns).
     fireEvent.change(cells[0], { target: { value: '750000' } });
     fireEvent.change(cells[1], { target: { value: '100000' } });
-    fireEvent.change(cells[2], { target: { value: '2.5%' } });
-    fireEvent.change(cells[3], { target: { value: '1.5%' } });
-    fireEvent.change(cells[4], { target: { value: '4.0%' } });
 
     await waitFor(() => {
       const calculatedCells = Array.from(structure.querySelectorAll('.bm-calc'));
@@ -230,17 +243,23 @@ describe('NpFinalPricing integration', () => {
     fireEvent.change(cells[1], { target: { value: '100000' } });
     await waitFor(() => {
       const priced = screen.getByText(/Structure 1/i).closest('section').querySelectorAll('input.bm-cell');
-      expect(priced[2].value).toMatch(/%$/);
+      expect(priced[2].value).not.toBe('');
     });
 
     fireEvent.click(screen.getByRole('button', { name: /Run Actuarial Engine/i }));
 
     await waitFor(() => expect(apiMock.getLargeLosses).toHaveBeenCalled());
+    // Pure burn + exposure now surface in the Pricing Analysis modal (not the
+    // main structure table). Open it and confirm the engine populated risk.
+    const paButton = Array.from(structure.querySelectorAll('button'))
+      .find((b) => /^Pricing Analysis$/i.test((b.textContent || '').trim()));
+    fireEvent.click(paButton);
+    await screen.findByText(/Risk Pricing Analysis/i);
     await waitFor(() => {
-      const refreshed = screen.getByText(/Structure 1/i).closest('section').querySelectorAll('input.bm-cell');
-      expect(refreshed[2].value).toMatch(/^40/);
-      expect(refreshed[4].value).toMatch(/%$/);
-      expect(refreshed[4].value).not.toBe('');
+      const riskInputs = container.querySelector('.bm-modal').querySelectorAll('table')[0].querySelectorAll('input.bm-cell');
+      expect(riskInputs[0].value).toMatch(/^40/);
+      expect(riskInputs[2].value).toMatch(/%$/);
+      expect(riskInputs[2].value).not.toBe('');
     });
     expect(apiMock.getLargeLosses).toHaveBeenCalledWith(bindIds.quote, { quote: true });
     expect(apiMock.getRiskProfile).toHaveBeenCalled();
@@ -263,7 +282,7 @@ describe('NpFinalPricing integration', () => {
       }),
       getCrestaData: vi.fn().mockResolvedValue([]),
     });
-    renderScreen({ quoteMode: true });
+    const { container } = renderScreen({ quoteMode: true });
 
     expect(await screen.findByText(/Quote Pricing/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /\+ Add Structure/i }));
@@ -273,7 +292,7 @@ describe('NpFinalPricing integration', () => {
     fireEvent.change(cells[1], { target: { value: '100000' } });
     await waitFor(() => {
       const priced = screen.getByText(/Structure 1/i).closest('section').querySelectorAll('input.bm-cell');
-      expect(priced[2].value).toMatch(/%$/);
+      expect(priced[2].value).not.toBe('');
     });
 
     // Per-structure button lives in the structure header (not the topbar).
@@ -286,15 +305,20 @@ describe('NpFinalPricing integration', () => {
     await waitFor(() => expect(apiMock.saveNonPropTreaty).toHaveBeenCalled());
     await waitFor(() => expect(apiMock.getLargeLosses).toHaveBeenCalled());
 
-    // burn (col 2) + exposure (col 4) populate from the engine result.
+    // Pure burn + exposure populate from the engine result — now surfaced in
+    // the Pricing Analysis modal rather than the main structure table.
     // Anchor on the exact card title — the success toast also contains
     // "Structure 1", so an unanchored match finds two elements.
     const structureSection = () => screen.getByText(/^Structure 1$/i).closest('section');
+    const paButton = Array.from(structureSection().querySelectorAll('button'))
+      .find((b) => /^Pricing Analysis$/i.test((b.textContent || '').trim()));
+    fireEvent.click(paButton);
+    await screen.findByText(/Risk Pricing Analysis/i);
     await waitFor(() => {
-      const refreshed = structureSection().querySelectorAll('input.bm-cell');
-      expect(refreshed[2].value).toMatch(/^40/);
-      expect(refreshed[4].value).toMatch(/%$/);
-      expect(refreshed[4].value).not.toBe('');
+      const riskInputs = container.querySelector('.bm-modal').querySelectorAll('table')[0].querySelectorAll('input.bm-cell');
+      expect(riskInputs[0].value).toMatch(/^40/);
+      expect(riskInputs[2].value).toMatch(/%$/);
+      expect(riskInputs[2].value).not.toBe('');
     });
   });
 });
