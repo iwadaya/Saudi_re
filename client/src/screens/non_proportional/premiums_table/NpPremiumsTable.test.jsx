@@ -191,6 +191,47 @@ describe('NpPremiumsTable — country resolution + average inflation', () => {
     expect(boundaryFallback()).toBeNull();
   });
 
+  it('re-seeds the average from a newly picked country without leaving the screen', async () => {
+    // country-sa → 3/4/5 (mean 4); country-ae → 10/20/30 (mean 20).
+    installApi({
+      getRefInflation: vi.fn((id) =>
+        Promise.resolve(
+          String(id) === 'country-ae'
+            ? [
+                { uwYear: 2020, inflationPct: 10 },
+                { uwYear: 2021, inflationPct: 20 },
+                { uwYear: 2022, inflationPct: 30 },
+              ]
+            : COUNTRY_INFLATION,
+        ),
+      ),
+    });
+    renderScreen();
+    await screen.findByText('Saudi Arabia');
+    await waitFor(() => expect(screen.getAllByDisplayValue('3%').length).toBeGreaterThan(0));
+
+    // Switch to average → flat mean of the loaded country curve (3/4/5 → 4%).
+    fireEvent.click(screen.getByLabelText(/Use average inflation/i));
+    const avgInput = await screen.findByLabelText(/Average inflation percent/i);
+    await waitFor(() => expect(avgInput).toHaveValue('4%'));
+
+    // Pick a different country WITHOUT leaving average mode.
+    fireEvent.click(screen.getByRole('button', { name: 'COUNTRY' }));
+    const select = await screen.findByLabelText(/Select country for inflation/i);
+    fireEvent.change(select, { target: { value: 'country-ae' } });
+
+    // The fix: it refetches for the new country and re-seeds the flat average
+    // from its mean (10/20/30 → 20%) across every row — previously this only
+    // updated after navigating away from the screen and back.
+    await waitFor(() =>
+      expect(apiMock.getRefInflation).toHaveBeenCalledWith('country-ae', 2020, 2022),
+    );
+    await waitFor(() => expect(avgInput).toHaveValue('20%'));
+    expect(screen.getAllByDisplayValue('20%').length).toBeGreaterThan(1);
+    expect(await screen.findByText('United Arab Emirates')).toBeInTheDocument();
+    expect(boundaryFallback()).toBeNull();
+  });
+
   it('lets the user pick a country when it cannot be derived', async () => {
     // No country anywhere: empty slice + header without a country.
     installApi({ getContract: vi.fn().mockResolvedValue({ header: {} }) });
