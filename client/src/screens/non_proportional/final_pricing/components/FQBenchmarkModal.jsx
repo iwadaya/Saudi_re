@@ -128,12 +128,12 @@ export default function FQBenchmarkModal({
   const fmtRatio = (n) => (n > 0 ? n.toFixed(3) : '—');
 
   const cards = [
-    { key: 'ded',   label: 'Deductible',   value: fmt(ded),         market: fmt(mDed),   p: pRank(ded, peerDed) },
-    { key: 'lim',   label: 'Limit',        value: fmt(totalLim),    market: fmt(mLimit), p: pRank(totalLim, peerLimit) },
-    { key: 'd_l',   label: 'Ded / Limit',  value: fmtRatio(dOverL), market: fmtRatio(mDoverL), p: pRank(dOverL, filtered.map((p) => (p.limit > 0 ? p.ded / p.limit : 0))) },
-    { key: 'd_e',   label: 'Ded / EGNPI',  value: fmtRatio(dOverE), market: fmtRatio(mDoverE), p: pRank(dOverE, filtered.map((p) => (p.egnpi > 0 ? p.ded / p.egnpi : 0))) },
-    { key: 'l_e',   label: 'Limit / EGNPI',value: fmtRatio(lOverE), market: fmtRatio(mLoverE), p: pRank(lOverE, filtered.map((p) => (p.egnpi > 0 ? p.limit / p.egnpi : 0))) },
-    { key: 'rol',   label: 'ROL %',        value: fmtPct(wRol),     market: fmtPct(mRol), p: pRank(wRol, peerRol) },
+    { key: 'ded',   label: 'Deductible',   value: fmt(ded),         market: fmt(mDed),   p: pRank(ded, peerDed),        src: ded,      mkt: mDed,    higherIsBetter: true },
+    { key: 'lim',   label: 'Limit',        value: fmt(totalLim),    market: fmt(mLimit), p: pRank(totalLim, peerLimit), src: totalLim, mkt: mLimit,  higherIsBetter: false }, // higher limit = more exposure = bad
+    { key: 'd_l',   label: 'Ded / Limit',  value: fmtRatio(dOverL), market: fmtRatio(mDoverL), p: pRank(dOverL, filtered.map((p) => (p.limit > 0 ? p.ded / p.limit : 0))), src: dOverL, mkt: mDoverL, higherIsBetter: true },
+    { key: 'd_e',   label: 'Ded / EGNPI',  value: fmtRatio(dOverE), market: fmtRatio(mDoverE), p: pRank(dOverE, filtered.map((p) => (p.egnpi > 0 ? p.ded / p.egnpi : 0))), src: dOverE, mkt: mDoverE, higherIsBetter: true },
+    { key: 'l_e',   label: 'Limit / EGNPI',value: fmtRatio(lOverE), market: fmtRatio(mLoverE), p: pRank(lOverE, filtered.map((p) => (p.egnpi > 0 ? p.limit / p.egnpi : 0))), src: lOverE, mkt: mLoverE, higherIsBetter: true },
+    { key: 'rol',   label: 'ROL %',        value: fmtPct(wRol),     market: fmtPct(mRol), p: pRank(wRol, peerRol),       src: wRol,     mkt: mRol,    higherIsBetter: true }, // NOTE: higher ROL treated as favorable — confirm
   ];
 
   // ── Sortable peer-treaty table ──
@@ -303,6 +303,21 @@ export default function FQBenchmarkModal({
     verticalAlign: 'middle',
     fontVariantNumeric: 'tabular-nums',
   };
+  // Directional delta vs the market median for the summary cards: null when
+  // there is no peer data, { flat: true } when effectively equal, otherwise an
+  // arrow + colored % where the color reflects favorability (higherIsBetter).
+  const benchDelta = (src, mkt, higherIsBetter) => {
+    if (!filtered.length || !(mkt > 0) || !(src > 0)) return null;   // no peer data → no chip
+    const pct = ((src - mkt) / mkt) * 100;
+    if (Math.abs(pct) < 0.05) return { flat: true };                 // effectively equal
+    const isHigher = src > mkt;
+    const favorable = isHigher === higherIsBetter;
+    return {
+      arrow: isHigher ? '▲' : '▼',
+      color: favorable ? '#23d18b' : '#f87171',
+      text: `${Math.abs(pct).toFixed(1)}%`,
+    };
+  };
 
   return (
     <div className="bm-modal-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -367,10 +382,19 @@ export default function FQBenchmarkModal({
           <section style={sectionStyle}>
             <div style={sectionTitleStyle}>Benchmark Summary</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(150px, 1fr))', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
-              {cards.map((c) => (
+              {cards.map((c) => {
+                const d = benchDelta(c.src, c.mkt, c.higherIsBetter);
+                return (
                 <div key={c.key} style={{ background: 'rgba(5,8,16,0.46)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 10, padding: '10px 12px' }}>
                   <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.14em', color: 'rgba(148,163,184,0.55)', textTransform: 'uppercase' }}>{c.label}</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: 'rgba(226,232,240,0.92)', marginTop: 4 }}>{c.value}</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginTop: 4 }}>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: 'rgba(226,232,240,0.92)' }}>{c.value}</span>
+                    {d && !d.flat && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 800, color: d.color }}>
+                        <span style={{ fontSize: 9, lineHeight: 1 }}>{d.arrow}</span>{d.text}
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.55)', marginTop: 2 }}>Market median <b style={{ color: 'rgba(226,232,240,0.75)' }}>{c.market}</b></div>
                   {c.p != null && (
                     <div style={{ marginTop: 6 }}>
@@ -381,7 +405,8 @@ export default function FQBenchmarkModal({
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </section>
 
