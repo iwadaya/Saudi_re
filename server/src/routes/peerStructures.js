@@ -1,15 +1,16 @@
 // server/src/routes/peerStructures.js
 //
 // Peer-structure benchmark data for the per-structure analysis modal
-// (FQBenchmarkModal). Given a source contract we surface every comparable
-// NP treaty in the same Country / Region / Global scope, optionally
-// constrained to a set of classes-of-business, with each peer's headline
-// metrics (deductible, total limit, total EGNPI, limit-weighted ROL).
+// (FQBenchmarkModal). Given a source contract/quote we surface every comparable
+// NP treaty — across BOTH bound contracts and open quotes — that shares the
+// source's geographic scope (Country / Region / Global), its treaty type, and
+// at least one class of business, with each peer's headline metrics
+// (deductible, total limit, total EGNPI, limit-weighted ROL).
 //
-// The client side previously rendered against a mock peer pool generated
-// from the source structure itself. This endpoint feeds the same UI from
-// real portfolio data so percentile ranks, medians, and scatter plots
-// reflect the cedant book.
+// The pool unions public.contract and public.quote (NP-only), with no status
+// filter so NTU / Declined / Quoted / Signed / Bound treaties are all eligible.
+// A quote that has been bound into a contract already present in the pool is
+// dropped (de-dup via parent_contract_id) so it is not double-counted.
 
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
@@ -36,18 +37,15 @@ function parseCobIds(raw) {
     .filter((s) => UUID_RE.test(s));
 }
 
-// Resolve the source's country + region so we know which scope buckets
-// to filter against. The route is mounted at /api/treaties/:contractId
-// because the peer pool is always bound NP contracts, but the source
-// ID can be either a contract_id (looking at a bound treaty) or a
-// quote_id (FQBenchmarkModal opened from quote-mode NP final pricing).
-// We try public.contract first, then fall back to public.quote so the
-// modal works in both modes without a frontend change. Returns null
-// when neither table resolves the id — the caller 404s on that.
+// Resolve the source's country, region, and treaty type so we know which scope
+// + treaty-type buckets to match against. The source id can be either a
+// contract_id (a bound treaty) or a quote_id (FQBenchmarkModal opened from
+// quote-mode NP final pricing); we try public.contract first, then fall back to
+// public.quote. Returns null when neither table resolves the id.
 async function loadSourceContext(sourceId) {
   const contractRow = await pool.query(
     `SELECT c.contract_id AS source_id, 'contract'::text AS source_kind,
-            c.country_id, c.uw_year, co.country_code, co.country_name, co.region
+            c.country_id, c.uw_year, c.treaty_type_id, co.country_code, co.country_name, co.region
        FROM public.contract c
        LEFT JOIN public.country co ON co.country_id = c.country_id
       WHERE c.contract_id = $1`,
@@ -57,7 +55,7 @@ async function loadSourceContext(sourceId) {
 
   const quoteRow = await pool.query(
     `SELECT q.quote_id AS source_id, 'quote'::text AS source_kind,
-            q.country_id, q.uw_year, co.country_code, co.country_name, co.region
+            q.country_id, q.uw_year, q.treaty_type_id, co.country_code, co.country_name, co.region
        FROM public.quote q
        LEFT JOIN public.country co ON co.country_id = q.country_id
       WHERE q.quote_id = $1`,
@@ -66,27 +64,23 @@ async function loadSourceContext(sourceId) {
   return quoteRow.rows[0] || null;
 }
 
-// Build a parameterised WHERE that limits peers to the requested
-// geographic scope. We carry the params through to the final query so
-// pg can plan them as bind variables.
-function scopeFilter(scope, source) {
-  if (scope === 'country') {
-    if (!source.country_id) return null;
-    return { sql: 'c.country_id = $1 AND c.country_id IS NOT NULL', params: [source.country_id] };
-  }
-  if (scope === 'region') {
-    if (!source.region) return null;
-    return { sql: 'co.region = $1', params: [source.region] };
-  }
-  // global — no geographic filter, just NP and excluding self.
-  return { sql: 'TRUE', params: [] };
+// The classes the source itself carries — used when the request does not pass an
+// explicit cobIds set (e.g. a bound treaty being benchmarked). Reads the source's
+// own class table (contract or quote).
+async function loadSourceCobs(source) {
+  const isQuote = source.source_kind === 'quote';
+  const sql = isQuote
+    ? 'SELECT class_of_business_id FROM public.quote_class_of_business WHERE quote_id = $1'
+    : 'SELECT class_of_business_id FROM public.contract_class_of_business WHERE contract_id = $1';
+  const result = await pool.query(sql, [source.source_id]);
+  return result.rows.map((r) => r.class_of_business_id).filter(Boolean);
 }
 
 // GET /api/treaties/:contractId/peer-structures
 //   ?scope=country|region|global
 //   &cobIds=uuid1,uuid2,...
 //
-// Returns { sourceContract, scope, peers: [...], peerCount }.
+// Returns { sourceContract, scope, peers: [...], peerCount, note? }.
 router.get(
   '/treaties/:contractId/peer-structures',
   asyncHandler(async (req, res) => {
@@ -112,99 +106,151 @@ router.get(
       countryCode: source.country_code,
       countryName: source.country_name,
       region: source.region,
+      treatyTypeId: source.treaty_type_id,
       uwYear: source.uw_year,
     };
 
-    const filter = scopeFilter(scope, source);
-    if (!filter) {
-      // Source has no country (country) or no resolvable region (region).
-      // Return an empty peer set with the source context so the UI can
-      // render a "no comparable scope" hint cleanly.
-      return res.json({
-        scope,
-        sourceContract: sourceContext,
-        peers: [],
-        peerCount: 0,
-        note: scope === 'country' ? 'source contract has no country_id' : 'source contract has no region',
-      });
+    // Scope feasibility: country needs a country_id, region needs a region.
+    if (scope === 'country' && !source.country_id) {
+      return res.json({ scope, sourceContract: sourceContext, peers: [], peerCount: 0, note: 'source contract has no country_id' });
+    }
+    if (scope === 'region' && !source.region) {
+      return res.json({ scope, sourceContract: sourceContext, peers: [], peerCount: 0, note: 'source contract has no region' });
     }
 
-    // Layer roll-up: per peer-contract we want sum(limit), sum(egnpi),
-    // min(attachment) as the primary deductible, and limit-weighted
-    // average ROL. Layers without limit or rol skip silently.
-    //
-    // The COB overlap filter uses an EXISTS subquery rather than joining
-    // contract_class_of_business directly, so peers with multiple COBs
-    // don't multiply in the result before we aggregate.
-    const params = [...filter.params, contractId];
-    const exclusionIdx = params.length; // $N for the source contract
-    let cobClause = '';
-    if (cobIds.length) {
-      params.push(cobIds);
-      cobClause = `AND EXISTS (
-        SELECT 1 FROM public.contract_class_of_business ccb
-         WHERE ccb.contract_id = c.contract_id
-           AND ccb.class_of_business_id = ANY($${params.length}::uuid[])
-      )`;
-    }
-    params.push(PEER_LIMIT);
-    const limitIdx = params.length;
+    // COB set to match on: the classes being quoted (request) else the source's
+    // own classes. Empty → skip the COB filter rather than excluding everything.
+    let cobIdSet = cobIds;
+    if (!cobIdSet.length) cobIdSet = await loadSourceCobs(source);
 
+    // Build the parameterised filters shared by both union branches. The scope
+    // value, source id, treaty type, and COB array are each bound once and
+    // referenced from both branches.
+    const params = [];
+    const push = (v) => { params.push(v); return params.length; };
+    const notes = [];
+
+    let scopeC = 'TRUE';
+    let scopeQ = 'TRUE';
+    if (scope === 'country') {
+      const i = push(source.country_id);
+      scopeC = `c.country_id = $${i}`;
+      scopeQ = `q.country_id = $${i}`;
+    } else if (scope === 'region') {
+      const i = push(source.region);
+      scopeC = `co.region = $${i}`;
+      scopeQ = `co.region = $${i}`;
+    }
+
+    const srcIdx = push(contractId);
+
+    let ttC = '';
+    let ttQ = '';
+    if (source.treaty_type_id) {
+      const i = push(source.treaty_type_id);
+      ttC = `AND c.treaty_type_id = $${i}`;
+      ttQ = `AND q.treaty_type_id = $${i}`;
+    } else {
+      notes.push('source has no treaty type — matching on scope + COB only');
+    }
+
+    let cobC = '';
+    let cobQ = '';
+    if (cobIdSet.length) {
+      const i = push(cobIdSet);
+      cobC = `AND EXISTS (
+            SELECT 1 FROM public.contract_class_of_business ccb
+             WHERE ccb.contract_id = c.contract_id
+               AND ccb.class_of_business_id = ANY($${i}::uuid[]))`;
+      cobQ = `AND EXISTS (
+            SELECT 1 FROM public.quote_class_of_business qcb
+             WHERE qcb.quote_id = q.quote_id
+               AND qcb.class_of_business_id = ANY($${i}::uuid[]))`;
+    } else {
+      notes.push('source has no classes — matching on scope + treaty type only');
+    }
+
+    const limitIdx = push(PEER_LIMIT);
+
+    // Union of contract peers + quote peers, NP-only, with per-branch layer
+    // roll-up + first-COB label. No status filter. Quote rows whose bound
+    // contract is already in the pool are dropped (parent_contract_id NOT EXISTS).
     const sql = `
       WITH peer_contracts AS (
-        SELECT c.contract_id, c.cedant_id, c.country_id, c.uw_year, co.country_code, co.country_name, co.region
-          FROM public.contract c
-          INNER JOIN public.contract_np_details nd ON nd.contract_id = c.contract_id
-          LEFT JOIN public.country co ON co.country_id = c.country_id
-         WHERE ${filter.sql}
-           AND c.contract_id <> $${exclusionIdx}
-           ${cobClause}
-         ORDER BY c.uw_year DESC, c.contract_id
-         LIMIT $${limitIdx}
-      ),
-      peer_layer_rollup AS (
         SELECT
-          pc.contract_id,
+          c.contract_id AS contract_id,
+          c.uw_year,
+          co.country_code, co.country_name, co.region,
+          comp.company_name AS cedant_name,
           SUM(COALESCE(l.layer_limit, 0))   AS total_limit,
           SUM(COALESCE(l.egnpi, 0))         AS total_egnpi,
           MIN(NULLIF(l.attachment, 0))      AS primary_attachment,
           CASE WHEN SUM(COALESCE(l.layer_limit, 0)) > 0
                THEN SUM(COALESCE(l.layer_limit, 0) * COALESCE(l.rol, 0))
                     / NULLIF(SUM(COALESCE(l.layer_limit, 0)), 0)
-               ELSE NULL END AS weighted_rol,
-          COUNT(l.layer_id)::int             AS layer_count
-        FROM peer_contracts pc
-        LEFT JOIN public.contract_np_layers l ON l.contract_id = pc.contract_id
-        GROUP BY pc.contract_id
-      ),
-      peer_first_cob AS (
-        SELECT DISTINCT ON (pc.contract_id)
-          pc.contract_id,
-          cob.class_of_business AS cob_name
-        FROM peer_contracts pc
-        JOIN public.contract_class_of_business ccb ON ccb.contract_id = pc.contract_id
-        JOIN public.class_of_business cob ON cob.class_of_business_id = ccb.class_of_business_id
-        ORDER BY pc.contract_id, cob.class_of_business
+               ELSE NULL END                AS weighted_rol,
+          COUNT(l.layer_id)::int            AS layer_count,
+          pfc.cob_name
+        FROM public.contract c
+        INNER JOIN public.contract_np_details nd ON nd.contract_id = c.contract_id
+        LEFT JOIN public.country co   ON co.country_id = c.country_id
+        LEFT JOIN public.companies comp ON comp.company_id = c.cedant_id
+        LEFT JOIN public.contract_np_layers l ON l.contract_id = c.contract_id
+        LEFT JOIN LATERAL (
+          SELECT cob.class_of_business AS cob_name
+            FROM public.contract_class_of_business ccb
+            JOIN public.class_of_business cob ON cob.class_of_business_id = ccb.class_of_business_id
+           WHERE ccb.contract_id = c.contract_id
+           ORDER BY cob.class_of_business
+           LIMIT 1
+        ) pfc ON TRUE
+        WHERE ${scopeC}
+          AND c.contract_id <> $${srcIdx}
+          ${ttC}
+          ${cobC}
+        GROUP BY c.contract_id, c.uw_year, co.country_code, co.country_name, co.region, comp.company_name, pfc.cob_name
+        UNION ALL
+        SELECT
+          q.quote_id AS contract_id,
+          q.uw_year,
+          co.country_code, co.country_name, co.region,
+          comp.company_name AS cedant_name,
+          SUM(COALESCE(ql.layer_limit, 0))  AS total_limit,
+          SUM(COALESCE(ql.egnpi, 0))        AS total_egnpi,
+          MIN(NULLIF(ql.attachment, 0))     AS primary_attachment,
+          CASE WHEN SUM(COALESCE(ql.layer_limit, 0)) > 0
+               THEN SUM(COALESCE(ql.layer_limit, 0) * COALESCE(ql.rol, 0))
+                    / NULLIF(SUM(COALESCE(ql.layer_limit, 0)), 0)
+               ELSE NULL END                AS weighted_rol,
+          COUNT(ql.layer_number)::int       AS layer_count,
+          qfc.cob_name
+        FROM public.quote q
+        INNER JOIN public.quote_np_details qnd ON qnd.quote_id = q.quote_id
+        LEFT JOIN public.country co   ON co.country_id = q.country_id
+        LEFT JOIN public.companies comp ON comp.company_id = q.cedant_id
+        LEFT JOIN public.quote_np_layers ql ON ql.quote_id = q.quote_id
+        LEFT JOIN LATERAL (
+          SELECT cob.class_of_business AS cob_name
+            FROM public.quote_class_of_business qcb
+            JOIN public.class_of_business cob ON cob.class_of_business_id = qcb.class_of_business_id
+           WHERE qcb.quote_id = q.quote_id
+           ORDER BY cob.class_of_business
+           LIMIT 1
+        ) qfc ON TRUE
+        WHERE ${scopeQ}
+          AND q.quote_id <> $${srcIdx}
+          AND NOT EXISTS (SELECT 1 FROM public.contract c2 WHERE c2.contract_id = q.parent_contract_id)
+          ${ttQ}
+          ${cobQ}
+        GROUP BY q.quote_id, q.uw_year, co.country_code, co.country_name, co.region, comp.company_name, qfc.cob_name
       )
       SELECT
-        pc.contract_id,
-        pc.uw_year,
-        pc.country_code,
-        pc.country_name,
-        pc.region,
-        comp.company_name                 AS cedant_name,
-        plr.total_limit,
-        plr.total_egnpi,
-        plr.primary_attachment,
-        plr.weighted_rol,
-        plr.layer_count,
-        pfc.cob_name
-      FROM peer_contracts pc
-      LEFT JOIN public.companies comp ON comp.company_id = pc.cedant_id
-      LEFT JOIN peer_layer_rollup plr  ON plr.contract_id = pc.contract_id
-      LEFT JOIN peer_first_cob   pfc   ON pfc.contract_id = pc.contract_id
-      WHERE plr.layer_count IS NOT NULL AND plr.layer_count > 0
-      ORDER BY pc.uw_year DESC, comp.company_name NULLS LAST
+        contract_id, uw_year, country_code, country_name, region, cedant_name,
+        total_limit, total_egnpi, primary_attachment, weighted_rol, layer_count, cob_name
+      FROM peer_contracts
+      WHERE layer_count IS NOT NULL AND layer_count > 0
+      ORDER BY uw_year DESC, cedant_name NULLS LAST
+      LIMIT $${limitIdx}
     `;
 
     let rows;
@@ -212,7 +258,7 @@ router.get(
       const result = await pool.query(sql, params);
       rows = result.rows;
     } catch (err) {
-      logger.error('[peer-structures] query failed', { contractId, scope, cobCount: cobIds.length, error: err.message });
+      logger.error('[peer-structures] query failed', { contractId, scope, cobCount: cobIdSet.length, error: err.message });
       throw err;
     }
 
@@ -236,6 +282,7 @@ router.get(
       peers,
       peerCount: peers.length,
       truncated: peers.length >= PEER_LIMIT,
+      note: notes.join('; ') || undefined,
     });
   }),
 );

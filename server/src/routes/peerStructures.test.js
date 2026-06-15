@@ -235,4 +235,111 @@ describe('GET /api/treaties/:contractId/peer-structures', () => {
     expect(capturedParams).toEqual(expect.arrayContaining([[goodCob]]));
     expect(JSON.stringify(capturedParams)).not.toContain('not-a-uuid');
   });
+
+  it('unions contract + quote NP branches and restricts to the source treaty type', async () => {
+    let capturedSql = null;
+    let capturedParams = null;
+    pushHandler((sql, params) => {
+      if (sql.includes('WHERE c.contract_id = $1')) {
+        return { rows: [{
+          source_id: UUID, source_kind: 'contract',
+          country_id: 'cn-1', uw_year: 2025, treaty_type_id: 'tt-9',
+          country_code: 'KSA', country_name: 'Saudi Arabia', region: 'Middle East',
+        }] };
+      }
+      if (sql.includes('WITH peer_contracts AS')) {
+        capturedSql = sql;
+        capturedParams = params;
+        return { rows: [
+          { contract_id: 'c1', uw_year: 2025, country_code: 'KSA', country_name: 'KSA', region: 'ME',
+            cedant_name: 'Bound Re', total_limit: '10000000', total_egnpi: '20000000',
+            primary_attachment: '1000000', weighted_rol: '0.05', layer_count: 2, cob_name: 'Property' },
+          { contract_id: 'q1', uw_year: 2024, country_code: 'KSA', country_name: 'KSA', region: 'ME',
+            cedant_name: 'Quoted Re', total_limit: '5000000', total_egnpi: '8000000',
+            primary_attachment: '500000', weighted_rol: '0.07', layer_count: 1, cob_name: 'Marine' },
+        ] };
+      }
+      return undefined;
+    });
+    const app = buildApp();
+    const cob = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const r = await call(app, `/api/treaties/${UUID}/peer-structures?scope=country&cobIds=${cob}`);
+    expect(r.status).toBe(200);
+    // Both a bound (contract) and an open quote-stage NP peer flow through the union.
+    expect(r.body.peers.map((p) => p.id)).toEqual(['c1', 'q1']);
+    // Same treaty type required on BOTH branches, bound to the source's id.
+    expect(capturedSql).toContain('c.treaty_type_id = $');
+    expect(capturedSql).toContain('q.treaty_type_id = $');
+    expect(capturedParams).toContain('tt-9');
+    // Quote branch unioned in, NP-only.
+    expect(capturedSql).toContain('UNION ALL');
+    expect(capturedSql).toContain('public.quote_np_details');
+    // No status filter — NTU / Declined / Quoted / Signed / Bound all eligible.
+    expect(capturedSql).not.toMatch(/status/i);
+    // De-dup: a quote whose bound contract is in the pool is dropped (not double-counted).
+    expect(capturedSql).toContain('NOT EXISTS');
+    expect(capturedSql).toContain('q.parent_contract_id');
+  });
+
+  it('requires COB overlap (≥1 shared class) on both branches via EXISTS … ANY()', async () => {
+    let capturedSql = null;
+    let capturedParams = null;
+    pushHandler((sql, params) => {
+      if (sql.includes('WHERE c.contract_id = $1')) {
+        return { rows: [{ source_id: UUID, source_kind: 'contract', country_id: 'cn-1', uw_year: 2025, treaty_type_id: 'tt-9', country_code: 'KSA', country_name: 'KSA', region: 'ME' }] };
+      }
+      if (sql.includes('WITH peer_contracts AS')) { capturedSql = sql; capturedParams = params; return { rows: [] }; }
+      return undefined;
+    });
+    const app = buildApp();
+    const cobA = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const cobB = 'ffffffff-1111-2222-3333-444444444444';
+    const r = await call(app, `/api/treaties/${UUID}/peer-structures?scope=country&cobIds=${cobA},${cobB}`);
+    expect(r.status).toBe(200);
+    // A peer carrying ≥1 of these classes satisfies EXISTS … ANY() (included); one
+    // sharing none fails it (excluded). Both branches use their own class table.
+    expect(capturedSql).toContain('contract_class_of_business');
+    expect(capturedSql).toContain('quote_class_of_business');
+    expect(capturedSql).toMatch(/class_of_business_id = ANY\(\$\d+::uuid\[\]\)/);
+    expect(capturedParams).toEqual(expect.arrayContaining([[cobA, cobB]]));
+  });
+
+  it('derives the source COB set when cobIds is omitted', async () => {
+    let capturedParams = null;
+    pushHandler((sql, params) => {
+      if (sql.includes('WHERE c.contract_id = $1')) {
+        return { rows: [{ source_id: UUID, source_kind: 'contract', country_id: 'cn-1', uw_year: 2025, treaty_type_id: 'tt-9', country_code: 'KSA', country_name: 'KSA', region: 'ME' }] };
+      }
+      if (sql.includes('FROM public.contract_class_of_business WHERE contract_id = $1')) {
+        return { rows: [{ class_of_business_id: 'src-cob-1' }, { class_of_business_id: 'src-cob-2' }] };
+      }
+      if (sql.includes('WITH peer_contracts AS')) { capturedParams = params; return { rows: [] }; }
+      return undefined;
+    });
+    const app = buildApp();
+    const r = await call(app, `/api/treaties/${UUID}/peer-structures?scope=country`);
+    expect(r.status).toBe(200);
+    // The source's own classes become the required overlap set.
+    expect(capturedParams).toEqual(expect.arrayContaining([['src-cob-1', 'src-cob-2']]));
+    expect(r.body.note).toBeUndefined(); // both treaty type and classes resolved
+  });
+
+  it('skips treaty-type / COB filters with a note when the source has neither', async () => {
+    let capturedSql = null;
+    pushHandler((sql) => {
+      if (sql.includes('WHERE c.contract_id = $1')) {
+        return { rows: [{ source_id: UUID, source_kind: 'contract', country_id: 'cn-1', uw_year: 2025, treaty_type_id: null, country_code: 'KSA', country_name: 'KSA', region: 'ME' }] };
+      }
+      if (sql.includes('FROM public.contract_class_of_business WHERE contract_id = $1')) return { rows: [] };
+      if (sql.includes('WITH peer_contracts AS')) { capturedSql = sql; return { rows: [] }; }
+      return undefined;
+    });
+    const app = buildApp();
+    const r = await call(app, `/api/treaties/${UUID}/peer-structures?scope=country`);
+    expect(r.status).toBe(200);
+    expect(r.body.note).toMatch(/no treaty type/);
+    expect(r.body.note).toMatch(/no classes/);
+    expect(capturedSql).not.toContain('treaty_type_id = $');
+    expect(capturedSql).not.toContain('class_of_business_id = ANY');
+  });
 });
