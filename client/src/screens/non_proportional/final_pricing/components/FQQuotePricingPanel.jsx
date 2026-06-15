@@ -11,7 +11,7 @@
 import React, { useId } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
 import { toN } from '../formatters.js';
-import { FQ_STRUCTURE_COLORS } from '../fqHelpers.js';
+import { FQ_STRUCTURE_COLORS, fqGeomean } from '../fqHelpers.js';
 import {
   expLayerEarnedPremium,
   QM_MAX_LAYERS,
@@ -208,45 +208,41 @@ export default function FQQuotePricingPanel({
                       </div>
                     </div>
                     <div className="bm-table-wrap">
-                      <table className="bm-table" style={{ minWidth: 1600, tableLayout: 'fixed' }}>
+                      <table className="bm-table" style={{ minWidth: 1180, tableLayout: 'fixed' }}>
                         <colgroup>{[
                           <col key="layer" style={{ width: 58 }} />,
                           <col key="limit" style={{ width: 127 }} />,
                           <col key="attachment" style={{ width: 127 }} />,
                           <col key="egnpi" style={{ width: 127 }} />,
                           <col key="rate" style={{ width: 81 }} />,
-                          <col key="earnedPremium" style={{ width: 127 }} />,
                           <col key="rol" style={{ width: 81 }} />,
+                          <col key="premium" style={{ width: 127 }} />,
                           <col key="mdp" style={{ width: 81 }} />,
                           <col key="reinstatements" style={{ width: 81 }} />,
-                          <col key="pctReinst" style={{ width: 81 }} />,
-                          <col key="risk" style={{ width: 64 }} />,
-                          <col key="cat" style={{ width: 64 }} />,
-                          <col key="pAttach" style={{ width: 104 }} />,
-                          <col key="pExhaust" style={{ width: 104 }} />,
+                          <col key="geomean" style={{ width: 110 }} />,
+                          <col key="xGE" style={{ width: 100 }} />,
                         ]}</colgroup>
                         <thead>
                           <tr>
-                            <th>Layer</th>
+                            <th>#</th>
                             <th>Limit</th>
                             <th>Attachment</th>
                             <th>EGNPI</th>
                             <th>Rate %</th>
-                            <th>Earned Premium</th>
-                            <th>ROL</th>
+                            <th>ROL %</th>
+                            <th>Premium</th>
                             <th>MDP</th>
-                            <th>Reinst</th>
-                            <th>Reinst %</th>
-                            <th>Risk</th>
-                            <th>Cat</th>
-                            <th>P(Attach)</th>
-                            <th>P(Exh)</th>
+                            <th>Reinst.</th>
+                            <th>Geomean</th>
+                            <th>x=G/E</th>
                           </tr>
                         </thead>
                         <tbody>
                           {expLayers.map((l, i) => {
                             const setField = (field, val) => editExpLayer(i, field, val);
                             const attachmentLocked = i > 0;
+                            const geomean = fqGeomean(toN(l.limit), toN(l.attachment));
+                            const xGE = toN(l.egnpi) > 0 ? geomean / toN(l.egnpi) : 0;
                             return (
                               <tr key={l.id}>
                                 <td style={{ textAlign: 'center' }}><span className="bm-badge bm-badge--exp">{i + 1}</span></td>
@@ -258,20 +254,12 @@ export default function FQQuotePricingPanel({
                                 </td>
                                 <td><FQNumCell value={l.egnpi}          onChange={(v) => setField('egnpi', v)} /></td>
                                 <td><FQPctCell value={l.rate}           onChange={(v) => setField('rate', v)} /></td>
-                                <td>
-                                  <FQReadCell
-                                    value={l.earnedPremium ? formatWithCommas(String(Math.round(toN(l.earnedPremium)))) : ''}
-                                    className="bm-cell bm-cell--display bm-cell--muted"
-                                  />
-                                </td>
-                                <td><FQPctCell value={l.rol}            onChange={(v) => setField('rol', v)} /></td>
-                                <td><FQNumCell value={l.mdp}            onChange={(v) => setField('mdp', v)} className="bm-cell bm-cell--sm" /></td>
+                                <td className="bm-calc bm-calc--hi">{toN(l.rol) > 0 ? `${toN(l.rol).toFixed(2)}%` : '—'}</td>
+                                <td className="bm-calc">{l.earnedPremium ? formatWithCommas(String(Math.round(toN(l.earnedPremium)))) : '—'}</td>
+                                <td><input className="bm-cell bm-cell--sm" value={l.mdp} onChange={(e) => setField('mdp', e.target.value)} placeholder="—" /></td>
                                 <td><input className="bm-cell bm-cell--sm" value={l.reinstatements} onChange={(e) => setField('reinstatements', e.target.value)} placeholder="—" /></td>
-                                <td><FQPctCell value={l.pctReinst}      onChange={(v) => setField('pctReinst', v)} /></td>
-                                <td style={{ textAlign: 'center' }}><input type="checkbox" className="np-check" checked={!!l.risk} onChange={() => setField('risk', !l.risk)} /></td>
-                                <td style={{ textAlign: 'center' }}><input type="checkbox" className="np-check" checked={!!l.cat}  onChange={() => setField('cat', !l.cat)} /></td>
-                                <td><FQPctCell value={l.pAttach}        onChange={(v) => setField('pAttach', v)} /></td>
-                                <td><FQPctCell value={l.pExhaust}       onChange={(v) => setField('pExhaust', v)} /></td>
+                                <td className="bm-calc bm-calc--dim">{geomean > 0 ? formatWithCommas(String(Math.round(geomean))) : '—'}</td>
+                                <td className="bm-calc bm-calc--dim">{xGE > 0 ? xGE.toFixed(4) : '—'}</td>
                               </tr>
                             );
                           })}
@@ -292,9 +280,12 @@ export default function FQQuotePricingPanel({
                                 <td><FQReadCell value={totAtt   > 0 ? formatWithCommas(String(Math.round(totAtt)))   : '—'} className="bm-cell bm-cell--display bm-cell--foot" /></td>
                                 <td><FQReadCell value={totEgnpi > 0 ? formatWithCommas(String(Math.round(totEgnpi))) : '—'} className="bm-cell bm-cell--display bm-cell--foot" /></td>
                                 <td><FQReadCell value={wRate > 0 ? `${wRate.toFixed(2)}%` : '—'} className="bm-cell bm-cell--sm bm-cell--display bm-cell--foot" /></td>
-                                <td><FQReadCell value={totEp > 0 ? formatWithCommas(String(Math.round(totEp))) : '—'} className="bm-cell bm-cell--display bm-cell--foot" /></td>
                                 <td><FQReadCell value={wRol  > 0 ? `${wRol.toFixed(2)}%`  : '—'} className="bm-cell bm-cell--sm bm-cell--display bm-cell--foot" /></td>
-                                <td colSpan={7}></td>
+                                <td><FQReadCell value={totEp > 0 ? formatWithCommas(String(Math.round(totEp))) : '—'} className="bm-cell bm-cell--display bm-cell--foot" /></td>
+                                <td></td>
+                                <td></td>
+                                <td></td>
+                                <td></td>
                               </tr>
                             </tfoot>
                           );
