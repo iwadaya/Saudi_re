@@ -40,6 +40,10 @@ const G = {
  *   quoteCurve: object,
  *   contractId?: string,   // reserved for the Implied · Country/Region/Global columns (next prompt)
  *   cobIds?: string[],     // reserved (peer fetch) for the implied-market columns
+ *   runQuoteCalcEngine?: (structureIndex?: number | null) => void,
+ *   calcEngineRunning?: boolean,
+ *   runningStructures?: Record<string, boolean>,
+ *   calcEngineError?: string,
  *   updateClientStructureLayer: (sIdx: number, lIdx: number, field: string, value: unknown) => void,
  *   updateClientStructure: (sIdx: number, field: string, value: unknown) => void,
  *   onClose: () => void,
@@ -55,6 +59,10 @@ export default function FQPricingAnalysisModal({
   quoteCurve,
   contractId,
   cobIds,
+  runQuoteCalcEngine,
+  calcEngineRunning,
+  runningStructures,
+  calcEngineError,
   updateClientStructureLayer,
   updateClientStructure,
   onClose,
@@ -91,6 +99,51 @@ export default function FQPricingAnalysisModal({
   }, [peerPools]);
   const sIdx = pricingAnalysisModal.structureIndex;
   const structure = Number.isInteger(sIdx) ? clientStructures[sIdx] : null;
+
+  // ── Auto-run the shared actuarial engine on open ─────────────────────────
+  // The modal reads engine-computed pure burn / exposure straight off the
+  // layer rows (riskPureBurn/catPureBurn, riskExposure/catExposure). Those
+  // only populate after a calc run, so a freshly-opened structure that hasn't
+  // been calc'd yet would show blank cells. When the modal opens for a quote
+  // structure whose layers carry no engine results yet, kick `runQuoteCalcEngine`
+  // ONCE so the same numbers a bound treaty computes land here too. Guards:
+  //   • only quote mode, only when an engine fn is wired in
+  //   • skip if a calc for this structure is already in flight
+  //   • skip if results already exist (don't clobber / re-run)
+  //   • one shot per open (autoRunKeyRef), reset when the modal closes
+  // If the run finds no saved inputs the cells stay "—" and an inline hint
+  // points the user at the earlier NP steps. We never auto-run on keystrokes —
+  // only on open while the structure is stale/empty.
+  const modalOpen = !!pricingAnalysisModal.open;
+  const calcRunningForStructure = !!calcEngineRunning
+    || !!(runningStructures && Number.isInteger(sIdx) && runningStructures[sIdx]);
+  const hasEngineResults = useMemo(() => (structure?.layers || []).some((l) => (
+    toN(l.riskPureBurn) > 0 || toN(l.catPureBurn) > 0
+    || toN(l.riskExposure) > 0 || toN(l.catExposure) > 0
+    || toN(l.riskPareto) > 0 || toN(l.catPareto) > 0
+  )), [structure]);
+  const autoRunKeyRef = useRef(null);
+  const [autoRan, setAutoRan] = useState(false);
+  // Reset the one-shot guard when the modal closes so the next open re-evaluates.
+  useEffect(() => {
+    if (!modalOpen) { autoRunKeyRef.current = null; setAutoRan(false); }
+  }, [modalOpen]);
+  useEffect(() => {
+    if (!modalOpen || !isQuote || typeof runQuoteCalcEngine !== 'function') return;
+    if (!Number.isInteger(sIdx) || !structure) return;
+    const key = String(sIdx);
+    if (autoRunKeyRef.current === key) return;       // already handled this open/target
+    if (calcRunningForStructure) return;             // a calc is in flight — let it finish
+    if (hasEngineResults) { autoRunKeyRef.current = key; return; } // results exist — no run
+    autoRunKeyRef.current = key;
+    setAutoRan(true);
+    runQuoteCalcEngine(sIdx);
+  }, [modalOpen, isQuote, runQuoteCalcEngine, sIdx, structure, hasEngineResults, calcRunningForStructure]);
+  // "Calculating…" while the engine runs; the stale hint only after our own
+  // auto-run came back empty (i.e. no saved losses / profile to price from).
+  const showCalculating = isQuote && calcRunningForStructure;
+  const showStaleHint = isQuote && autoRan && !calcRunningForStructure && !hasEngineResults;
+
   if (!pricingAnalysisModal.open || !structure) return null;
 
   const layers = structure.layers || [];
@@ -308,6 +361,21 @@ export default function FQPricingAnalysisModal({
 
           {tab === 'pricing' && (
             <>
+              {showCalculating && (
+                <div data-testid="fq-analysis-calculating" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(0,212,255,0.08)', border: '1px solid rgba(0,212,255,0.28)', color: '#7dd3fc', fontSize: 11, fontWeight: 700, letterSpacing: '.04em' }}>
+                  <span aria-hidden="true">⟳</span> Calculating pure burn &amp; exposure…
+                </div>
+              )}
+              {showStaleHint && (
+                <div data-testid="fq-analysis-stale-hint" style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.28)', color: 'rgba(251,191,36,0.95)', fontSize: 11, lineHeight: 1.5 }}>
+                  Save large/cat losses and risk profile on the earlier NP steps to compute pure burn &amp; exposure.
+                </div>
+              )}
+              {isQuote && calcEngineError && !showCalculating && (
+                <div data-testid="fq-analysis-error" style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171', fontSize: 11 }}>
+                  {calcEngineError}
+                </div>
+              )}
               {showRisk && renderScopeSection('risk')}
               {showCat && renderScopeSection('cat')}
               {bothShown && (
