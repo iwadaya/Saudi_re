@@ -259,7 +259,7 @@ export default function FQPricingAnalysisModal({
       </div>
     );
     return (
-      <section key={scopeKey} style={{ background: 'rgba(8,14,30,0.72)', border: `1px solid ${scope.color}35`, borderRadius: 12, overflow: 'visible', flexShrink: 0, minWidth: 0 }}>
+      <section key={scopeKey} style={{ background: 'rgba(8,14,30,0.72)', border: `1px solid ${scope.color}35`, borderRadius: 12 }}>
         <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: scope.color }}>{scope.label} Pricing Analysis</div>
@@ -276,9 +276,11 @@ export default function FQPricingAnalysisModal({
           <span style={{ fontSize: 11, fontWeight: 800, color: valid ? '#23d18b' : '#f87171' }}>Σ = {Math.round(wSum)}%</span>
           {!valid && <span style={{ fontSize: 10, color: '#f87171' }}>weights must total 100%</span>}
         </div>
-        {/* Only the table scrolls horizontally; the header, blender bar and
-            notes textarea stay full-width. */}
-        <div style={{ overflowX: 'auto', width: '100%' }}>
+        {/* ONLY the table scrolls — horizontally. The section header/Wtd ROL
+            line and the BLEND WEIGHTS bar sit ABOVE this wrapper (full-width,
+            never sideways); the notes textarea sits BELOW it. overflowY:visible
+            + no height on table/wrapper ⇒ no stray inner vertical scrollbar. */}
+        <div style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: TABLE_MIN_W, tableLayout: 'fixed', fontSize: 11 }}>
             <colgroup>{COLW.map((w, ci) => (<col key={`col-${ci}`} style={{ width: w }} />))}</colgroup>
             <thead style={{ background: '#050810' }}>
@@ -390,8 +392,8 @@ export default function FQPricingAnalysisModal({
       <div
         className="bm-modal"
         style={isQuote
-          ? { width: '100vw', height: '100dvh', maxWidth: 'none', maxHeight: 'none', borderRadius: 0, display: 'grid', gridTemplateRows: 'auto auto 1fr' }
-          : { width: '96vw', maxWidth: '1500px', height: '100dvh', maxHeight: '92vh', display: 'grid', gridTemplateRows: 'auto auto 1fr' }}
+          ? { position: 'fixed', inset: 0, width: '100vw', height: '100dvh', maxWidth: 'none', maxHeight: 'none', borderRadius: 0, display: 'grid', gridTemplateRows: 'auto auto 1fr', overflow: 'hidden' }
+          : { width: '96vw', maxWidth: '1500px', height: '100dvh', maxHeight: '92vh', display: 'grid', gridTemplateRows: 'auto auto 1fr', overflow: 'hidden' }}
       >
         <div className="bm-modal-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
@@ -408,7 +410,10 @@ export default function FQPricingAnalysisModal({
             <button key={t.k} onClick={() => setTab(t.k)} style={tabBtn(tab === t.k)}>{t.label}</button>
           ))}
         </div>
-        <div className="bm-modal-body" style={{ minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, padding: '18px 20px' }}>
+        {/* Row 3 — the ONLY vertical scroller. minHeight:0 is required for it to
+            scroll inside the grid; overflowX:hidden keeps the blender bar and
+            section chrome from sliding sideways (only each table scrolls X). */}
+        <div className="bm-modal-body" style={{ minHeight: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 12, padding: '18px 20px' }}>
           {tab === 'pricing' && (
             <>
               {showCalculating && (
@@ -434,12 +439,12 @@ export default function FQPricingAnalysisModal({
               {layers.length > 0 && showRisk && renderScopeSection('risk')}
               {layers.length > 0 && showCat && renderScopeSection('cat')}
               {layers.length > 0 && bothShown && (
-                <section style={{ background: 'rgba(8,14,30,0.72)', border: '1px solid rgba(35,209,139,0.28)', borderRadius: 12, overflow: 'visible', flexShrink: 0, minWidth: 0 }}>
+                <section style={{ background: 'rgba(8,14,30,0.72)', border: '1px solid rgba(35,209,139,0.28)', borderRadius: 12 }}>
                   <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
                     <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: '#23d18b' }}>Total Section</div>
                     <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.58)', marginTop: 2 }}>Combined component premium and weighted ROL used by the main structure table.</div>
                   </div>
-                  <div style={{ overflowX: 'auto', width: '100%' }}>
+                  <div style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760, fontSize: 11 }}>
                       <thead style={{ background: '#050810' }}>
                         <tr>

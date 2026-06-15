@@ -104,23 +104,36 @@ describe('FQPricingAnalysisModal — row rendering', () => {
     expect(screen.queryByText('USD 1,000,000')).toBeNull(); // Structure 1's limit must not appear
   });
 
-  it('renders peril sections that size to content (overflow visible, no shrink)', () => {
+  it('uses a fixed full-viewport shell where only the body scrolls vertically', () => {
+    const { container } = renderModal();
+    const shell = container.querySelector('.bm-modal');
+    expect(shell.style.overflow).toBe('hidden');                // the shell itself never scrolls
+    expect(shell.style.gridTemplateRows).toBe('auto auto 1fr'); // title / tabs / body
+    const body = container.querySelector('.bm-modal-body');
+    expect(body.style.overflowY).toBe('auto');                  // the ONLY vertical scroller
+    expect(body.style.overflowX).toBe('hidden');                // blender bar can't slide sideways
+    expect(parseInt(body.style.minHeight, 10)).toBe(0);         // required to scroll inside the grid
+  });
+
+  it('lets sections size to content (no per-section overflow)', () => {
     renderModal();
     const riskSection = screen.getByText('Risk Pricing Analysis').closest('section');
     expect(riskSection).toBeTruthy();
-    // overflow:visible so no parent clips the table's horizontal scroll;
-    // flexShrink:0 so the section sizes to content and the body scrolls as one.
-    expect(riskSection.style.overflow).toBe('visible');
-    expect(riskSection.style.flexShrink).toBe('0');
+    // No overflow / flexShrink on the section — it flows with the body's scroll.
+    expect(riskSection.style.overflow).toBe('');
+    expect(riskSection.style.flexShrink).toBe('');
   });
 
-  it('gives each peril table its own horizontal scroll (fixed layout + minWidth)', () => {
+  it('gives each peril table its own horizontal-only scroll (fixed layout + minWidth)', () => {
     renderModal();
     const riskSection = screen.getByText('Risk Pricing Analysis').closest('section');
     const table = within(riskSection).getAllByRole('table')[0];
     expect(table.style.tableLayout).toBe('fixed');
     expect(parseInt(table.style.minWidth, 10)).toBeGreaterThanOrEqual(1500);
-    expect(table.parentElement.style.overflowX).toBe('auto');
+    const wrapper = table.parentElement;
+    expect(wrapper.style.overflowX).toBe('auto');
+    expect(wrapper.style.overflowY).toBe('visible'); // no stray inner vertical scrollbar
+    expect(wrapper.style.width).toBe('100%');
   });
 
   it('adds P(Attach) / P(Exhaust) / Note columns and shows engine probabilities', () => {
