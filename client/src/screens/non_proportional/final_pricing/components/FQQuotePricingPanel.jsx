@@ -208,20 +208,24 @@ export default function FQQuotePricingPanel({
                       <table className="bm-table" style={{ minWidth: 1180, tableLayout: 'fixed' }}>
                         <colgroup>{[
                           <col key="layer" style={{ width: 58 }} />,
+                          <col key="risk" style={{ width: 52 }} />,
+                          <col key="cat" style={{ width: 52 }} />,
                           <col key="limit" style={{ width: 127 }} />,
                           <col key="attachment" style={{ width: 127 }} />,
                           <col key="egnpi" style={{ width: 127 }} />,
                           <col key="rate" style={{ width: 81 }} />,
                           <col key="rol" style={{ width: 81 }} />,
-                          <col key="premium" style={{ width: 127 }} />,
+                          <col key="premium" style={{ width: 104 }} />,
                           <col key="mdp" style={{ width: 81 }} />,
                           <col key="reinstatements" style={{ width: 81 }} />,
-                          <col key="geomean" style={{ width: 110 }} />,
-                          <col key="xGE" style={{ width: 100 }} />,
+                          <col key="geomean" style={{ width: 104 }} />,
+                          <col key="xGE" style={{ width: 104 }} />,
                         ]}</colgroup>
                         <thead>
                           <tr>
                             <th>#</th>
+                            <th>Risk</th>
+                            <th>Cat</th>
                             <th>Limit</th>
                             <th>Attachment</th>
                             <th>EGNPI</th>
@@ -243,6 +247,8 @@ export default function FQQuotePricingPanel({
                             return (
                               <tr key={l.id}>
                                 <td style={{ textAlign: 'center' }}><span className="bm-badge bm-badge--exp">{i + 1}</span></td>
+                                <td style={{ textAlign: 'center' }}><input type="checkbox" className="np-check" checked={!!l.risk} onChange={() => setField('risk', !l.risk)} /></td>
+                                <td style={{ textAlign: 'center' }}><input type="checkbox" className="np-check" checked={!!l.cat}  onChange={() => setField('cat', !l.cat)} /></td>
                                 <td><FQNumCell value={l.limit}          onChange={(v) => setField('limit', v)} /></td>
                                 <td>
                                   {attachmentLocked
@@ -273,6 +279,8 @@ export default function FQQuotePricingPanel({
                             <tfoot>
                               <tr className="bm-foot">
                                 <td><FQReadCell value="TOTAL" className="bm-cell bm-cell--display bm-cell--foot" /></td>
+                                <td></td>
+                                <td></td>
                                 <td><FQReadCell value={totLim   > 0 ? formatWithCommas(String(Math.round(totLim)))   : '—'} className="bm-cell bm-cell--display bm-cell--foot" /></td>
                                 <td><FQReadCell value={totAtt   > 0 ? formatWithCommas(String(Math.round(totAtt)))   : '—'} className="bm-cell bm-cell--display bm-cell--foot" /></td>
                                 <td><FQReadCell value={totEgnpi > 0 ? formatWithCommas(String(Math.round(totEgnpi))) : '—'} className="bm-cell bm-cell--display bm-cell--foot" /></td>
