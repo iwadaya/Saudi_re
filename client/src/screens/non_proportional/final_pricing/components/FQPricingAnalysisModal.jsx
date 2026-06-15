@@ -4,11 +4,12 @@
 // vertically, each with a weight Blender bar, a metrics table, and a notes
 // box; a reconciled Total Section is shown only when both perils are active.
 // Tabs 2/3 ("Pareto Simulation", "Inflation & Loss") are placeholders.
-import { useState } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
 import { toN } from '../formatters.js';
 import { QUOTE_COMPONENT_SCOPES, quoteComponentDerived } from '../fqQuoteMath.js';
-import { fqPriceLayerOnCurve } from '../fqHelpers.js';
+import { fqPriceLayerOnCurve, fqFitPowerLaw, fqPeerToXY, fqGeomean } from '../fqHelpers.js';
+import { api } from '../../../../api';
 import { FQPctCell, FQReadCell } from './FQCells.jsx';
 
 const TOP_TABS = [
@@ -52,11 +53,42 @@ export default function FQPricingAnalysisModal({
   riskDisabled,
   catDisabled,
   quoteCurve,
+  contractId,
+  cobIds,
   updateClientStructureLayer,
   updateClientStructure,
   onClose,
 }) {
   const [tab, setTab] = useState('pricing');
+  // ── Peer pools per scope → power-law fits for the Implied · Country/Region/
+  //    Global columns (same fits the benchmark modal uses). Fetched on open and
+  //    whenever contractId/cobIds change; failures degrade to an empty pool. ──
+  const [peerPools, setPeerPools] = useState({});
+  const cobIdsKey = useMemo(() => (Array.isArray(cobIds) ? cobIds.slice().sort().join(',') : ''), [cobIds]);
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  useEffect(() => {
+    if (!pricingAnalysisModal.open || !contractId) return undefined;
+    let cancelled = false;
+    const cobIdList = cobIdsKey ? cobIdsKey.split(',').filter(Boolean) : [];
+    setPeerPools({});
+    ['country', 'region', 'global'].forEach((scope) => {
+      api.getPeerStructures(contractId, { scope, cobIds: cobIdList })
+        .then((data) => {
+          if (cancelled || !mountedRef.current) return;
+          setPeerPools((prev) => ({ ...prev, [scope]: Array.isArray(data?.peers) ? data.peers : [] }));
+        })
+        .catch(() => {
+          if (cancelled || !mountedRef.current) return;
+          setPeerPools((prev) => ({ ...prev, [scope]: [] }));
+        });
+    });
+    return () => { cancelled = true; };
+  }, [pricingAnalysisModal.open, contractId, cobIdsKey]);
+  const scopeFits = useMemo(() => {
+    const fit = (peers) => fqFitPowerLaw((peers || []).map(fqPeerToXY).filter(Boolean));
+    return { country: fit(peerPools.country), region: fit(peerPools.region), global: fit(peerPools.global) };
+  }, [peerPools]);
   const sIdx = pricingAnalysisModal.structureIndex;
   const structure = Number.isInteger(sIdx) ? clientStructures[sIdx] : null;
   if (!pricingAnalysisModal.open || !structure) return null;
@@ -67,6 +99,16 @@ export default function FQPricingAnalysisModal({
     return n > 0 ? `${currency ? `${currency} ` : ''}${formatWithCommas(String(Math.round(n)))}` : '—';
   };
   const fmtPct = (n) => (n > 0 ? `${n.toFixed(2)}%` : '—');
+  // Curve-predicted ROL% for a layer under a peer-scope fit: a·x^b·100, where
+  // x = geomean(limit, attachment) / egnpi. "—" when uncalibrated or x ≤ 0.
+  const impliedScopeRol = (layer, fit) => {
+    if (!fit || !fit.calibrated) return null;
+    const egnpi = toN(layer.egnpi);
+    const x = egnpi > 0 ? fqGeomean(toN(layer.limit), toN(layer.attachment)) / egnpi : 0;
+    if (!(x > 0)) return null;
+    const rol = fit.a * Math.pow(x, fit.b) * 100;
+    return Number.isFinite(rol) && rol > 0 ? rol : null;
+  };
 
   // ── Peril activity: active = not disabled by mode AND ≥1 layer flagged.
   //    If both allowed but none flagged, show both. ──
@@ -196,10 +238,19 @@ export default function FQPricingAnalysisModal({
                     <td style={{ ...td, background: G.modelled }}>{editorWrap(<FQPctCell value={layer[f.exposure]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.exposure, v)} />)}</td>
                     <td style={{ ...td, background: G.modelled, opacity: valid ? 1 : 0.5 }}><FQReadCell value={blendTxt} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" /></td>
                     <td style={{ ...td, background: G.exp }}><FQReadCell value={impliedExp != null ? `${impliedExp.toFixed(2)}%` : '—'} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" /></td>
-                    {/* NOTE: Implied · Country/Region/Global placeholder cells — wired next prompt. */}
-                    <td style={{ ...td, background: G.country, color: 'rgba(148,163,184,0.4)' }}>—</td>
-                    <td style={{ ...td, background: G.region, color: 'rgba(148,163,184,0.4)' }}>—</td>
-                    <td style={{ ...td, background: G.global, color: 'rgba(148,163,184,0.4)' }}>—</td>
+                    {/* Implied · Country / Region / Global — peer-curve-predicted ROL ("—" when no calibrated pool). */}
+                    {[
+                      { bg: G.country, fit: scopeFits.country },
+                      { bg: G.region, fit: scopeFits.region },
+                      { bg: G.global, fit: scopeFits.global },
+                    ].map((c, ci) => {
+                      const rol = impliedScopeRol(layer, c.fit);
+                      return (
+                        <td key={`imp-${ci}`} style={{ ...td, background: c.bg }}>
+                          <FQReadCell value={rol != null ? `${rol.toFixed(2)}%` : '—'} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" />
+                        </td>
+                      );
+                    })}
                     <td style={{ ...td, background: G.uw }}>{editorWrap(<FQPctCell value={layer[f.uwPrice]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.uwPrice, v)} placeholder={blendVal > 0 ? `${blendVal.toFixed(2)}%` : '—%'} />)}</td>
                   </tr>
                 );
