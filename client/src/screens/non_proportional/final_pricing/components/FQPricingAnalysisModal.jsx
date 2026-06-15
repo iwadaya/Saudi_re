@@ -1,14 +1,32 @@
-// components/FQPricingAnalysisModal.jsx — Phase 4.1 extraction.
+// components/FQPricingAnalysisModal.jsx — 3-tab pricing workbench.
 //
-// Per-structure "Pricing Analysis" modal: risk + cat component tables
-// and the reconciled Total Section. JSX + derivations moved verbatim
-// from NpFinalPricing's renderPricingAnalysisModal — props in,
-// callbacks out, no logic changes.
-
+// Tab 1 "Pricing Analysis": per-peril sections (Risk above Cat) stacked
+// vertically, each with a weight Blender bar, a metrics table, and a notes
+// box; a reconciled Total Section is shown only when both perils are active.
+// Tabs 2/3 ("Pareto Simulation", "Inflation & Loss") are placeholders.
+import { useState } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
 import { toN } from '../formatters.js';
 import { QUOTE_COMPONENT_SCOPES, quoteComponentDerived } from '../fqQuoteMath.js';
+import { fqPriceLayerOnCurve } from '../fqHelpers.js';
 import { FQPctCell, FQReadCell } from './FQCells.jsx';
+
+const TOP_TABS = [
+  { k: 'pricing', label: 'Pricing Analysis' },
+  { k: 'pareto', label: 'Pareto Simulation' },
+  { k: 'loss', label: 'Inflation & Loss' },
+];
+
+// Subtle background tints that band the table into Modelled / Implied-Expiring /
+// Implied-Market / UW groups.
+const G = {
+  modelled: 'rgba(74,222,128,0.06)',
+  exp: 'rgba(245,158,11,0.08)',
+  country: 'rgba(0,212,255,0.08)',
+  region: 'rgba(167,139,250,0.08)',
+  global: 'rgba(74,222,128,0.08)',
+  uw: 'rgba(0,212,255,0.08)',
+};
 
 /**
  * @param {{
@@ -18,7 +36,11 @@ import { FQPctCell, FQReadCell } from './FQCells.jsx';
  *   isQuote: boolean,
  *   riskDisabled: boolean,
  *   catDisabled: boolean,
+ *   quoteCurve: object,
+ *   contractId?: string,   // reserved for the Implied · Country/Region/Global columns (next prompt)
+ *   cobIds?: string[],     // reserved (peer fetch) for the implied-market columns
  *   updateClientStructureLayer: (sIdx: number, lIdx: number, field: string, value: unknown) => void,
+ *   updateClientStructure: (sIdx: number, field: string, value: unknown) => void,
  *   onClose: () => void,
  * }} props
  */
@@ -29,181 +51,254 @@ export default function FQPricingAnalysisModal({
   isQuote,
   riskDisabled,
   catDisabled,
+  quoteCurve,
   updateClientStructureLayer,
+  updateClientStructure,
   onClose,
 }) {
-    const sIdx = pricingAnalysisModal.structureIndex;
-    const structure = Number.isInteger(sIdx) ? clientStructures[sIdx] : null;
-    if (!pricingAnalysisModal.open || !structure) return null;
+  const [tab, setTab] = useState('pricing');
+  const sIdx = pricingAnalysisModal.structureIndex;
+  const structure = Number.isInteger(sIdx) ? clientStructures[sIdx] : null;
+  if (!pricingAnalysisModal.open || !structure) return null;
 
-    const fmtMoney = (value) => {
-      const n = toN(value);
-      return n > 0 ? `${currency ? `${currency} ` : ''}${formatWithCommas(String(Math.round(n)))}` : '—';
-    };
-    const componentTotals = (scopeKey) => {
-      const activeLayers = (structure.layers || []).filter((layer) => !!layer[scopeKey]);
-      const totalLimit = activeLayers.reduce((s, layer) => s + toN(layer.limit), 0);
-      const premium = activeLayers.reduce((s, layer) => {
-        const limit = toN(layer.limit);
-        const rol = quoteComponentDerived(layer, scopeKey).totalRol;
-        return s + (limit > 0 && rol > 0 ? limit * rol / 100 : 0);
-      }, 0);
-      return {
-        activeCount: activeLayers.length,
-        totalLimit,
-        premium,
-        wtdRol: totalLimit > 0 ? (premium / totalLimit) * 100 : 0,
-      };
-    };
-    const riskTotal = componentTotals('risk');
-    const catTotal = componentTotals('cat');
-    const grandLimit = riskTotal.totalLimit + catTotal.totalLimit;
-    const grandPremium = riskTotal.premium + catTotal.premium;
-    const grandTotal = {
-      activeCount: riskTotal.activeCount + catTotal.activeCount,
-      totalLimit: grandLimit,
-      premium: grandPremium,
-      wtdRol: grandLimit > 0 ? (grandPremium / grandLimit) * 100 : 0,
-    };
+  const layers = structure.layers || [];
+  const fmtMoney = (value) => {
+    const n = toN(value);
+    return n > 0 ? `${currency ? `${currency} ` : ''}${formatWithCommas(String(Math.round(n)))}` : '—';
+  };
+  const fmtPct = (n) => (n > 0 ? `${n.toFixed(2)}%` : '—');
 
-    const th = {
-      padding: '8px 10px',
-      textAlign: 'right',
-      fontSize: 9,
-      fontWeight: 850,
-      letterSpacing: '.11em',
-      color: 'rgba(148,163,184,0.68)',
-      textTransform: 'uppercase',
-      borderBottom: '1px solid rgba(255,255,255,0.08)',
-      whiteSpace: 'nowrap',
-    };
-    const td = { padding: '7px 8px', textAlign: 'right', verticalAlign: 'middle' };
+  // ── Peril activity: active = not disabled by mode AND ≥1 layer flagged.
+  //    If both allowed but none flagged, show both. ──
+  const riskFlagged = layers.some((l) => !!l.risk);
+  const catFlagged = layers.some((l) => !!l.cat);
+  const bothAllowedNoneFlagged = !riskDisabled && !catDisabled && !riskFlagged && !catFlagged;
+  const showRisk = (!riskDisabled && riskFlagged) || bothAllowedNoneFlagged;
+  const showCat = (!catDisabled && catFlagged) || bothAllowedNoneFlagged;
+  const bothShown = showRisk && showCat;
 
-    const renderScopeSection = (scopeKey) => {
-      const scope = QUOTE_COMPONENT_SCOPES[scopeKey];
-      const f = scope.fields;
-      const disabledByMode = scopeKey === 'risk' ? riskDisabled : catDisabled;
-      return (
-        <section key={scopeKey} style={{ background: 'rgba(8,14,30,0.72)', border: `1px solid ${scope.color}35`, borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: scope.color }}>
-                {scope.label} Pricing Analysis
-              </div>
-              <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.58)', marginTop: 2 }}>
-                Edit component metrics here; the main structure table updates from these totals.
-              </div>
-            </div>
-            <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.75)', fontWeight: 750 }}>
-              Wtd ROL {componentTotals(scopeKey).wtdRol > 0 ? `${componentTotals(scopeKey).wtdRol.toFixed(2)}%` : '—'}
-            </div>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1180, fontSize: 11 }}>
-              <thead style={{ background: '#050810' }}>
-                <tr>
-                  {['Layer', 'Active', 'Limit', 'Deductible', 'Pure Burn', 'Pareto', 'Exposure', 'Wt Burn %', 'Wt Pareto %', 'Wt Exp %', 'Loading %', 'Total ROL', 'UW Price'].map((h, i) => (
-                    <th key={`${scopeKey}-${h}`} style={{ ...th, textAlign: i < 2 ? 'center' : 'right' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(structure.layers || []).map((layer, lIdx) => {
-                  const active = !!layer[scopeKey];
-                  const d = quoteComponentDerived(layer, scopeKey);
-                  const editorWrap = (node) => (
-                    <div style={{ opacity: active ? 1 : 0.36, pointerEvents: active ? 'auto' : 'none' }}>{node}</div>
-                  );
-                  return (
-                    <tr key={`${scopeKey}-${layer.id || lIdx}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.045)', background: lIdx % 2 ? 'rgba(255,255,255,0.012)' : 'transparent' }}>
-                      <td style={{ ...td, textAlign: 'center' }}>
-                        <span className="bm-badge" style={{ background: `${scope.color}14`, borderColor: `${scope.color}35`, color: scope.color }}>{lIdx + 1}</span>
-                      </td>
-                      <td style={{ ...td, textAlign: 'center' }}>
-                        <input
-                          type="checkbox"
-                          className="np-check"
-                          aria-label={`${scope.label} Pricing Structure ${sIdx + 1} Layer ${lIdx + 1}`}
-                          checked={active}
-                          disabled={disabledByMode}
-                          onChange={(e) => updateClientStructureLayer(sIdx, lIdx, scopeKey, e.target.checked)}
-                        />
-                      </td>
-                      <td style={td}><FQReadCell value={fmtMoney(layer.limit)} className="bm-cell bm-cell--display bm-cell--foot" /></td>
-                      <td style={td}><FQReadCell value={fmtMoney(layer.attachment)} className="bm-cell bm-cell--display bm-cell--foot" /></td>
-                      <td style={td}>{editorWrap(<FQPctCell value={layer[f.pureBurn]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.pureBurn, v)} />)}</td>
-                      <td style={td}>{editorWrap(<FQPctCell value={layer[f.pareto]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.pareto, v)} />)}</td>
-                      <td style={td}>{editorWrap(<FQPctCell value={layer[f.exposure]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.exposure, v)} />)}</td>
-                      <td style={td}>{editorWrap(<FQPctCell value={layer[f.wtBurn]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.wtBurn, v)} />)}</td>
-                      <td style={td}>{editorWrap(<FQPctCell value={layer[f.wtPareto]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.wtPareto, v)} />)}</td>
-                      <td style={td}><FQReadCell value={`${d.wtExp.toFixed(0)}%`} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" /></td>
-                      <td style={td}>{editorWrap(<FQPctCell value={layer[f.loading]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.loading, v)} />)}</td>
-                      <td style={td}><FQReadCell value={d.totalRol > 0 ? `${d.totalRol.toFixed(2)}%` : '—'} className="bm-cell bm-cell--sm bm-cell--display bm-cell--accent bm-calc" /></td>
-                      <td style={td}>{editorWrap(<FQPctCell value={layer[f.uwPrice]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.uwPrice, v)} placeholder={d.totalRol > 0 ? `${d.totalRol.toFixed(2)}%` : '—%'} />)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      );
-    };
+  // ── Total Section (reconciled) — unchanged from the prior modal. ──
+  const componentTotals = (scopeKey) => {
+    const activeLayers = layers.filter((layer) => !!layer[scopeKey]);
+    const totalLimit = activeLayers.reduce((s, layer) => s + toN(layer.limit), 0);
+    const premium = activeLayers.reduce((s, layer) => {
+      const limit = toN(layer.limit);
+      const rol = quoteComponentDerived(layer, scopeKey).totalRol;
+      return s + (limit > 0 && rol > 0 ? limit * rol / 100 : 0);
+    }, 0);
+    return { activeCount: activeLayers.length, totalLimit, premium, wtdRol: totalLimit > 0 ? (premium / totalLimit) * 100 : 0 };
+  };
+  const riskTotal = componentTotals('risk');
+  const catTotal = componentTotals('cat');
+  const grandLimit = riskTotal.totalLimit + catTotal.totalLimit;
+  const grandPremium = riskTotal.premium + catTotal.premium;
+  const grandTotal = {
+    activeCount: riskTotal.activeCount + catTotal.activeCount,
+    totalLimit: grandLimit,
+    premium: grandPremium,
+    wtdRol: grandLimit > 0 ? (grandPremium / grandLimit) * 100 : 0,
+  };
 
-    return (
-      <div className="bm-modal-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
-        <div
-          className="bm-modal"
-          style={isQuote
-            ? { width: '100vw', height: '100vh', maxWidth: 'none', maxHeight: 'none', borderRadius: 0, display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)' }
-            : { width: '96vw', maxWidth: '1500px', maxHeight: '92vh', display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)' }}
-        >
-          <div className="bm-modal-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <div>
-              <div>Pricing Analysis · Structure {sIdx + 1}</div>
-              <div style={{ fontSize: 11, fontWeight: 500, color: 'rgba(148,163,184,0.55)', marginTop: 2 }}>
-                Risk and cat layer pricing are analysed separately, then reconciled into the structure totals.
-              </div>
-            </div>
-            <button className="bm-pill" onClick={() => onClose()}>Close</button>
-          </div>
-          <div className="bm-modal-body" style={{ minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, padding: '18px 20px' }}>
-            {renderScopeSection('risk')}
-            {renderScopeSection('cat')}
-            <section style={{ background: 'rgba(8,14,30,0.72)', border: '1px solid rgba(35,209,139,0.28)', borderRadius: 12, overflow: 'hidden' }}>
-              <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-                <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: '#23d18b' }}>Total Section</div>
-                <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.58)', marginTop: 2 }}>Combined component premium and weighted ROL used by the main structure table.</div>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760, fontSize: 11 }}>
-                  <thead style={{ background: '#050810' }}>
-                    <tr>
-                      {['Component', 'Active Layers', 'Limit', 'Premium', 'Weighted ROL'].map((h, i) => (
-                        <th key={`total-${h}`} style={{ ...th, textAlign: i === 0 ? 'left' : 'right' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      { label: 'Risk', color: QUOTE_COMPONENT_SCOPES.risk.color, ...riskTotal },
-                      { label: 'Cat', color: QUOTE_COMPONENT_SCOPES.cat.color, ...catTotal },
-                      { label: 'Total', color: '#23d18b', ...grandTotal },
-                    ].map((row) => (
-                      <tr key={`total-${row.label}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.045)' }}>
-                        <td style={{ padding: '8px 10px', color: row.color, fontWeight: 850 }}>{row.label}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>{row.activeCount || '—'}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>{fmtMoney(row.totalLimit)}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>{fmtMoney(row.premium)}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right', color: row.color, fontWeight: 850 }}>{row.wtdRol > 0 ? `${row.wtdRol.toFixed(2)}%` : '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-        </div>
+  const th = { padding: '8px 10px', textAlign: 'right', fontSize: 9, fontWeight: 850, letterSpacing: '.11em', color: 'rgba(148,163,184,0.68)', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap' };
+  const td = { padding: '7px 8px', textAlign: 'right', verticalAlign: 'middle' };
+  const groupTh = (bg, underline) => ({ ...th, background: bg, borderBottom: `2px solid ${underline}` });
+  const tabBtn = (active) => ({ padding: '10px 16px', background: active ? 'rgba(0,212,255,0.08)' : 'transparent', border: 'none', borderBottom: active ? '2px solid #00d4ff' : '2px solid transparent', color: active ? '#00d4ff' : 'rgba(226,232,240,0.65)', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', cursor: 'pointer' });
+
+  const renderScopeSection = (scopeKey) => {
+    const scope = QUOTE_COMPONENT_SCOPES[scopeKey];
+    const f = scope.fields;
+    const disabledByMode = scopeKey === 'risk' ? riskDisabled : catDisabled;
+    const layer0 = layers[0] || {};
+    // Blender weights live at peril level (read from layer 0); defaults 50/0/50.
+    const wOf = (field, dflt) => (layer0[field] != null && layer0[field] !== '' ? toN(layer0[field]) : dflt);
+    const burnW = wOf(f.wtBurn, 50);
+    const paretoW = wOf(f.wtPareto, 0);
+    const expW = wOf(f.wtExp, 50);
+    const wSum = burnW + paretoW + expW;
+    const valid = Math.round(wSum * 100) / 100 === 100;
+    // Any weight change writes to EVERY layer of this peril so the engine and
+    // the main-table footer stay consistent.
+    const setWeight = (field, raw) => {
+      const value = raw.replace(/[^0-9.]/g, '');
+      layers.forEach((_, lIdx) => updateClientStructureLayer(sIdx, lIdx, field, value));
+    };
+    const blendOf = (layer) => {
+      const denom = burnW + paretoW + expW;
+      return denom > 0 ? (burnW * toN(layer[f.pureBurn]) + paretoW * toN(layer[f.pareto]) + expW * toN(layer[f.exposure])) / denom : 0;
+    };
+    const wInput = (label, val, field) => (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 10, color: 'rgba(148,163,184,0.7)', whiteSpace: 'nowrap' }}>{label}</span>
+        <input type="text" inputMode="decimal" className="bm-cell bm-cell--sm" style={{ width: 60, opacity: disabledByMode ? 0.5 : 1 }}
+          value={val} disabled={disabledByMode} onChange={(e) => setWeight(field, e.target.value)} />
       </div>
     );
+    return (
+      <section key={scopeKey} style={{ background: 'rgba(8,14,30,0.72)', border: `1px solid ${scope.color}35`, borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: scope.color }}>{scope.label} Pricing Analysis</div>
+            <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.58)', marginTop: 2 }}>Edit component metrics here; the main structure table updates from these totals.</div>
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.75)', fontWeight: 750 }}>Wtd ROL {fmtPct(componentTotals(scopeKey).wtdRol)}</div>
+        </div>
+        {/* (a) Blender bar — three directly-editable weights + live Σ. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: G.modelled }}>
+          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.6)' }}>Blend weights</span>
+          {wInput('Pure Burn %', burnW, f.wtBurn)}
+          {wInput('Pareto %', paretoW, f.wtPareto)}
+          {wInput('Exposure %', expW, f.wtExp)}
+          <span style={{ fontSize: 11, fontWeight: 800, color: valid ? '#23d18b' : '#f87171' }}>Σ = {Math.round(wSum)}%</span>
+          {!valid && <span style={{ fontSize: 10, color: '#f87171' }}>weights must total 100%</span>}
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1180, fontSize: 11 }}>
+            <thead style={{ background: '#050810' }}>
+              <tr>
+                <th style={{ ...th, textAlign: 'center' }}>Layer</th>
+                <th style={{ ...th, textAlign: 'center' }}>Active</th>
+                <th style={th}>Limit</th>
+                <th style={th}>Deductible</th>
+                <th style={th}>EGNPI</th>
+                <th style={groupTh(G.modelled, '#4ade80')}>Pure Burn</th>
+                <th style={groupTh(G.modelled, '#4ade80')}>Pareto</th>
+                <th style={groupTh(G.modelled, '#4ade80')}>Exposure</th>
+                <th style={groupTh(G.modelled, '#4ade80')}>Blend</th>
+                <th style={groupTh(G.exp, '#f59e0b')}>Implied · Expiring</th>
+                {/* NOTE: Implied · Country/Region/Global placeholders — populated in the next prompt. */}
+                <th style={groupTh(G.country, '#00d4ff')}>Implied · Country</th>
+                <th style={groupTh(G.region, '#a78bfa')}>Implied · Region</th>
+                <th style={groupTh(G.global, '#4ade80')}>Implied · Global</th>
+                <th style={groupTh(G.uw, '#00d4ff')}>UW Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              {layers.map((layer, lIdx) => {
+                const active = !!layer[scopeKey];
+                const editorWrap = (node) => (<div style={{ opacity: active ? 1 : 0.36, pointerEvents: active ? 'auto' : 'none' }}>{node}</div>);
+                const blendVal = blendOf(layer);
+                const priced = fqPriceLayerOnCurve(layer, quoteCurve?.fit, quoteCurve?.baseEgnpi);
+                const impliedExp = priced ? priced.y * 100 : null;
+                const blendTxt = blendVal > 0 ? `${blendVal.toFixed(2)}%` : '—';
+                return (
+                  <tr key={`${scopeKey}-${layer.id || lIdx}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.045)', background: lIdx % 2 ? 'rgba(255,255,255,0.012)' : 'transparent' }}>
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      <span className="bm-badge" style={{ background: `${scope.color}14`, borderColor: `${scope.color}35`, color: scope.color }}>{lIdx + 1}</span>
+                    </td>
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      <input type="checkbox" className="np-check" aria-label={`${scope.label} Pricing Structure ${sIdx + 1} Layer ${lIdx + 1}`} checked={active} disabled={disabledByMode} onChange={(e) => updateClientStructureLayer(sIdx, lIdx, scopeKey, e.target.checked)} />
+                    </td>
+                    <td style={td}><FQReadCell value={fmtMoney(layer.limit)} className="bm-cell bm-cell--display bm-cell--foot" /></td>
+                    <td style={td}><FQReadCell value={fmtMoney(layer.attachment)} className="bm-cell bm-cell--display bm-cell--foot" /></td>
+                    <td style={td}><FQReadCell value={fmtMoney(layer.egnpi)} className="bm-cell bm-cell--display bm-cell--foot" /></td>
+                    <td style={{ ...td, background: G.modelled }}>{editorWrap(<FQPctCell value={layer[f.pureBurn]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.pureBurn, v)} />)}</td>
+                    <td style={{ ...td, background: G.modelled }}>{editorWrap(<FQPctCell value={layer[f.pareto]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.pareto, v)} />)}</td>
+                    <td style={{ ...td, background: G.modelled }}>{editorWrap(<FQPctCell value={layer[f.exposure]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.exposure, v)} />)}</td>
+                    <td style={{ ...td, background: G.modelled, opacity: valid ? 1 : 0.5 }}><FQReadCell value={blendTxt} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" /></td>
+                    <td style={{ ...td, background: G.exp }}><FQReadCell value={impliedExp != null ? `${impliedExp.toFixed(2)}%` : '—'} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" /></td>
+                    {/* NOTE: Implied · Country/Region/Global placeholder cells — wired next prompt. */}
+                    <td style={{ ...td, background: G.country, color: 'rgba(148,163,184,0.4)' }}>—</td>
+                    <td style={{ ...td, background: G.region, color: 'rgba(148,163,184,0.4)' }}>—</td>
+                    <td style={{ ...td, background: G.global, color: 'rgba(148,163,184,0.4)' }}>—</td>
+                    <td style={{ ...td, background: G.uw }}>{editorWrap(<FQPctCell value={layer[f.uwPrice]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.uwPrice, v)} placeholder={blendVal > 0 ? `${blendVal.toFixed(2)}%` : '—%'} />)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {/* (c) Notes — persists on structure[`${scopeKey}Notes`] via the save path. */}
+        <div style={{ padding: '10px 14px' }}>
+          <textarea
+            rows={3}
+            placeholder={`${scope.label} pricing notes…`}
+            value={structure[`${scopeKey}Notes`] || ''}
+            onChange={(e) => updateClientStructure(sIdx, `${scopeKey}Notes`, e.target.value)}
+            style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(5,8,16,0.6)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'rgba(226,232,240,0.9)', fontSize: 11, padding: '8px 10px', resize: 'vertical', fontFamily: 'inherit' }}
+          />
+        </div>
+      </section>
+    );
+  };
+
+  const placeholderTab = (title, line) => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 320 }}>
+      <div style={{ maxWidth: 480, textAlign: 'center', background: 'rgba(8,14,30,0.6)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 12, padding: '32px 28px' }}>
+        <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: '.06em', color: 'rgba(226,232,240,0.9)' }}>{title}</div>
+        <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.6)', marginTop: 8, lineHeight: 1.5 }}>{line}</div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="bm-modal-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div
+        className="bm-modal"
+        style={isQuote
+          ? { width: '100vw', height: '100vh', maxWidth: 'none', maxHeight: 'none', borderRadius: 0, display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)' }
+          : { width: '96vw', maxWidth: '1500px', maxHeight: '92vh', display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)' }}
+      >
+        <div className="bm-modal-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <div>Pricing Analysis · Structure {sIdx + 1}</div>
+            <div style={{ fontSize: 11, fontWeight: 500, color: 'rgba(148,163,184,0.55)', marginTop: 2 }}>
+              Risk and cat layer pricing are analysed separately, then reconciled into the structure totals.
+            </div>
+          </div>
+          <button className="bm-pill" onClick={() => onClose()}>Close</button>
+        </div>
+        <div className="bm-modal-body" style={{ minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, padding: '18px 20px' }}>
+          {/* Top-level tabs (styled like the benchmark chart tabs). */}
+          <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid rgba(255,255,255,0.10)' }}>
+            {TOP_TABS.map((t) => (
+              <button key={t.k} onClick={() => setTab(t.k)} style={tabBtn(tab === t.k)}>{t.label}</button>
+            ))}
+          </div>
+
+          {tab === 'pricing' && (
+            <>
+              {showRisk && renderScopeSection('risk')}
+              {showCat && renderScopeSection('cat')}
+              {bothShown && (
+                <section style={{ background: 'rgba(8,14,30,0.72)', border: '1px solid rgba(35,209,139,0.28)', borderRadius: 12, overflow: 'hidden' }}>
+                  <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                    <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: '#23d18b' }}>Total Section</div>
+                    <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.58)', marginTop: 2 }}>Combined component premium and weighted ROL used by the main structure table.</div>
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760, fontSize: 11 }}>
+                      <thead style={{ background: '#050810' }}>
+                        <tr>
+                          {['Component', 'Active Layers', 'Limit', 'Premium', 'Weighted ROL'].map((h, i) => (
+                            <th key={`total-${h}`} style={{ ...th, textAlign: i === 0 ? 'left' : 'right' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          { label: 'Risk', color: QUOTE_COMPONENT_SCOPES.risk.color, ...riskTotal },
+                          { label: 'Cat', color: QUOTE_COMPONENT_SCOPES.cat.color, ...catTotal },
+                          { label: 'Total', color: '#23d18b', ...grandTotal },
+                        ].map((row) => (
+                          <tr key={`total-${row.label}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.045)' }}>
+                            <td style={{ padding: '8px 10px', color: row.color, fontWeight: 850 }}>{row.label}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right' }}>{row.activeCount || '—'}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right' }}>{fmtMoney(row.totalLimit)}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right' }}>{fmtMoney(row.premium)}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', color: row.color, fontWeight: 850 }}>{row.wtdRol > 0 ? `${row.wtdRol.toFixed(2)}%` : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+            </>
+          )}
+          {tab === 'pareto' && placeholderTab('Pareto Simulation', 'Adjust large-loss and cat Pareto parameters (alpha, threshold, severity) and see pricing update live — coming soon.')}
+          {tab === 'loss' && placeholderTab('Inflation & Loss Manipulation', 'Apply inflation and adjust large/cat loss inputs to stress pricing — coming soon.')}
+        </div>
+      </div>
+    </div>
+  );
 }
