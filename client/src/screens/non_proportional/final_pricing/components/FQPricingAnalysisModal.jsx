@@ -259,8 +259,8 @@ export default function FQPricingAnalysisModal({
       </div>
     );
     return (
-      <section key={scopeKey} style={{ background: 'rgba(8,14,30,0.72)', border: `1px solid ${scope.color}35`, borderRadius: 12, display: 'flex', flexDirection: 'column', minHeight: 0, flex: '1 1 0', overflow: 'hidden' }}>
-        <div style={{ flexShrink: 0, padding: '7px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+      <section key={scopeKey} style={{ background: 'rgba(8,14,30,0.72)', border: `1px solid ${scope.color}35`, borderRadius: 12 }}>
+        <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: scope.color }}>{scope.label} Pricing Analysis</div>
             <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.58)', marginTop: 2 }}>Edit component metrics here; the main structure table updates from these totals.</div>
@@ -268,7 +268,7 @@ export default function FQPricingAnalysisModal({
           <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.75)', fontWeight: 750 }}>Wtd ROL {fmtPct(componentTotals(scopeKey).wtdRol)}</div>
         </div>
         {/* (a) Blender bar — three directly-editable weights + live Σ. */}
-        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'nowrap', padding: '6px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: G.modelled, overflowX: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: G.modelled }}>
           <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.6)' }}>Blend weights</span>
           {wInput('Pure Burn %', burnW, f.wtBurn)}
           {wInput('Pareto %', paretoW, f.wtPareto)}
@@ -276,12 +276,11 @@ export default function FQPricingAnalysisModal({
           <span style={{ fontSize: 11, fontWeight: 800, color: valid ? '#23d18b' : '#f87171' }}>Σ = {Math.round(wSum)}%</span>
           {!valid && <span style={{ fontSize: 10, color: '#f87171' }}>weights must total 100%</span>}
         </div>
-        {/* This wrapper takes the section's remaining height (flex:1) and is the
-            ONLY scroller — horizontal. overflowY:hidden + no height cap ⇒ no
-            inner vertical scrollbar; with few layers all rows fit, and many
-            layers clip rather than scroll (acceptable for now). The header/Wtd
-            ROL line and blender bar are ABOVE it; the notes textarea is BELOW. */}
-        <div style={{ flex: '1 1 0', minHeight: 0, overflowX: 'auto', overflowY: 'hidden', width: '100%' }}>
+        {/* ONLY the table scrolls — horizontally. The section header/Wtd ROL
+            line and the BLEND WEIGHTS bar sit ABOVE this wrapper (full-width,
+            never sideways); the notes textarea sits BELOW it. overflowY:visible
+            + no height on table/wrapper ⇒ no stray inner vertical scrollbar. */}
+        <div style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: TABLE_MIN_W, tableLayout: 'fixed', fontSize: 11 }}>
             <colgroup>{COLW.map((w, ci) => (<col key={`col-${ci}`} style={{ width: w }} />))}</colgroup>
             <thead style={{ background: '#050810' }}>
@@ -366,13 +365,13 @@ export default function FQPricingAnalysisModal({
           </table>
         </div>
         {/* (c) Notes — persists on structure[`${scopeKey}Notes`] via the save path. */}
-        <div style={{ flexShrink: 0, padding: '6px 14px' }}>
+        <div style={{ padding: '10px 14px' }}>
           <textarea
-            rows={2}
+            rows={3}
             placeholder={`${scope.label} pricing notes…`}
             value={structure[`${scopeKey}Notes`] || ''}
             onChange={(e) => updateClientStructure(sIdx, `${scopeKey}Notes`, e.target.value)}
-            style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(5,8,16,0.6)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'rgba(226,232,240,0.9)', fontSize: 11, padding: '6px 10px', resize: 'none', fontFamily: 'inherit' }}
+            style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(5,8,16,0.6)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'rgba(226,232,240,0.9)', fontSize: 11, padding: '8px 10px', resize: 'vertical', fontFamily: 'inherit' }}
           />
         </div>
       </section>
@@ -411,12 +410,12 @@ export default function FQPricingAnalysisModal({
             <button key={t.k} onClick={() => setTab(t.k)} style={tabBtn(tab === t.k)}>{t.label}</button>
           ))}
         </div>
-        {/* Row 3 — NO vertical scroll (overflow:hidden, minHeight:0). The pricing
-            tab divides this height among its sections so everything fits in one
-            100dvh screen; only the tables scroll (horizontally). */}
-        <div className="bm-modal-body" style={{ minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: '8px 16px' }}>
+        {/* Row 3 — the ONLY vertical scroller. minHeight:0 is required for it to
+            scroll inside the grid; overflowX:hidden keeps the blender bar and
+            section chrome from sliding sideways (only each table scrolls X). */}
+        <div className="bm-modal-body" style={{ minHeight: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 12, padding: '18px 20px' }}>
           {tab === 'pricing' && (
-            <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1, gap: 8 }}>
+            <>
               {showCalculating && (
                 <div data-testid="fq-analysis-calculating" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(0,212,255,0.08)', border: '1px solid rgba(0,212,255,0.28)', color: '#7dd3fc', fontSize: 11, fontWeight: 700, letterSpacing: '.04em' }}>
                   <span aria-hidden="true">⟳</span> Calculating pure burn &amp; exposure…
@@ -440,12 +439,12 @@ export default function FQPricingAnalysisModal({
               {layers.length > 0 && showRisk && renderScopeSection('risk')}
               {layers.length > 0 && showCat && renderScopeSection('cat')}
               {layers.length > 0 && bothShown && (
-                <section style={{ background: 'rgba(8,14,30,0.72)', border: '1px solid rgba(35,209,139,0.28)', borderRadius: 12, flex: '0 0 auto', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
-                  <div style={{ flexShrink: 0, padding: '7px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                <section style={{ background: 'rgba(8,14,30,0.72)', border: '1px solid rgba(35,209,139,0.28)', borderRadius: 12 }}>
+                  <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
                     <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: '#23d18b' }}>Total Section</div>
                     <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.58)', marginTop: 2 }}>Combined component premium and weighted ROL used by the main structure table.</div>
                   </div>
-                  <div style={{ overflowX: 'auto', overflowY: 'hidden', width: '100%' }}>
+                  <div style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760, fontSize: 11 }}>
                       <thead style={{ background: '#050810' }}>
                         <tr>
@@ -473,7 +472,7 @@ export default function FQPricingAnalysisModal({
                   </div>
                 </section>
               )}
-            </div>
+            </>
           )}
           {tab === 'pareto' && placeholderTab('Pareto Simulation', 'Adjust large-loss and cat Pareto parameters (alpha, threshold, severity) and see pricing update live — coming soon.')}
           {tab === 'loss' && placeholderTab('Inflation & Loss Manipulation', 'Apply inflation and adjust large/cat loss inputs to stress pricing — coming soon.')}
