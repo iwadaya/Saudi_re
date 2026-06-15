@@ -9,7 +9,7 @@
 // MLE over noisy data), we pick inputs where the expected answer
 // is either degenerate (returns 0) or has a well-known closed form.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   cn, fmtRol, fmtPct,
   mbbefdG, mbbefdLayerLEV, SWISS_RE_C,
@@ -23,6 +23,7 @@ import {
   calcCatExposureRating,
   buildCobTokenMap,
   filterLossesForLayer,
+  calcLayerPricing,
 } from './npPricingEngine.js';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -629,5 +630,92 @@ describe('filterLossesForLayer', () => {
     expect(filterLossesForLayer([],        ['motor-id'], cobMap)).toEqual([]);
     expect(filterLossesForLayer(null,      ['motor-id'], cobMap)).toEqual([]);
     expect(filterLossesForLayer(undefined, ['motor-id'], cobMap)).toEqual([]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// calcLayerPricing — async orchestrator in QUOTE MODE
+//
+// Locks the contract this whole task hinges on: a quote-mode run must
+// (a) fetch every input with the { quote: true } flag so the server
+//     resolves the quote_* / shared-with-quote_id tables, and
+// (b) produce the SAME non-zero pure burn + exposure rating a bound
+//     non-prop treaty would, given seeded quote large losses + a risk
+//     profile. These are the numbers FQPricingAnalysisModal renders.
+// ═══════════════════════════════════════════════════════════════════
+
+describe('calcLayerPricing — quote mode', () => {
+  const pctToNum = (s) => Number(String(s).replace('%', ''));
+
+  // Seeded quote large losses — all pierce a 500k-xs layer and there are
+  // ≥3 so the Pareto fit engages too.
+  const seededLargeLosses = [
+    { uw_year: 2019, inflated_incurred: 1_200_000, is_selected: true, class_of_business: 'Motor' },
+    { uw_year: 2020, inflated_incurred: 800_000,   is_selected: true, class_of_business: 'Motor' },
+    { uw_year: 2021, inflated_incurred: 2_500_000, is_selected: true, class_of_business: 'Motor' },
+    { uw_year: 2022, inflated_incurred: 1_800_000, is_selected: true, class_of_business: 'Motor' },
+    { uw_year: 2023, inflated_incurred: 3_000_000, is_selected: true, class_of_business: 'Motor' },
+  ];
+  // Seeded quote risk profile (mirrors contract_risk_profile shape).
+  const seededProfile = {
+    profile: { pml_percentage: 60, selected_curve: 'Y3' },
+    bands: [
+      { no_of_risks: 100, total_sum_insured: 100_000_000 }, // avg SI 1M
+      { no_of_risks: 50,  total_sum_insured: 100_000_000 }, // avg SI 2M
+    ],
+  };
+
+  function makeApi(overrides = {}) {
+    return {
+      getLargeLosses:        vi.fn(async () => ({ report: { report_id: 'r1' }, losses: seededLargeLosses })),
+      getCatLosses:          vi.fn(async () => ({ report: null, losses: [] })),
+      getLossSelectionLatest:vi.fn(async () => ({ snapshot: {}, items: [] })),
+      getCrestaData:         vi.fn(async () => []),
+      getNpEgnpiYear:        vi.fn(async () => []),
+      listClassOfBusiness:   vi.fn(async () => [
+        { class_of_business_id: 'cob-1', class_of_business: 'Motor', code: 'MOT' },
+      ]),
+      getRiskProfile:        vi.fn(async () => seededProfile),
+      getContractCobs:       vi.fn(async () => []),
+      ...overrides,
+    };
+  }
+
+  const layer = {
+    deductible: 500_000,
+    limit: 1_500_000,
+    egnpi: 50_000_000,
+    riskCover: true,
+    catCover: false,
+    classOfBusinessIds: ['cob-1'],
+  };
+
+  it('fetches every input with { quote: true } when quoteMode', async () => {
+    const mockApi = makeApi();
+    await calcLayerPricing(mockApi, 'quote-1', [layer], { estGnpi: 50_000_000 }, 'RISK', true);
+    expect(mockApi.getLargeLosses).toHaveBeenCalledWith('quote-1', { quote: true });
+    expect(mockApi.getLossSelectionLatest).toHaveBeenCalledWith('quote-1', 'large', { quote: true });
+    expect(mockApi.getNpEgnpiYear).toHaveBeenCalledWith('quote-1', { quote: true });
+    expect(mockApi.getRiskProfile).toHaveBeenCalledWith('quote-1', 'cob-1', { quote: true });
+  });
+
+  it('produces non-zero pure burn AND exposure rating for a risk layer', async () => {
+    const mockApi = makeApi();
+    const results = await calcLayerPricing(mockApi, 'quote-1', [layer], { estGnpi: 50_000_000 }, 'RISK', true);
+    expect(results).toHaveLength(1);
+    const risk = results[0].risk;
+    expect(risk).toBeTruthy();
+    // Both are formatted ROL strings like "2.34%"; assert they parse > 0.
+    expect(pctToNum(risk.pureBurn)).toBeGreaterThan(0);
+    expect(pctToNum(risk.exposureRating)).toBeGreaterThan(0);
+    expect(risk._pureBurnRol).toBeGreaterThan(0);
+    expect(risk._exposureRol).toBeGreaterThan(0);
+  });
+
+  it('contract mode (quoteMode=false) passes no quote flag — same data, different table resolution', async () => {
+    const mockApi = makeApi();
+    await calcLayerPricing(mockApi, 'contract-1', [layer], { estGnpi: 50_000_000 }, 'RISK', false);
+    expect(mockApi.getLargeLosses).toHaveBeenCalledWith('contract-1', undefined);
+    expect(mockApi.getRiskProfile).toHaveBeenCalledWith('contract-1', 'cob-1', undefined);
   });
 });

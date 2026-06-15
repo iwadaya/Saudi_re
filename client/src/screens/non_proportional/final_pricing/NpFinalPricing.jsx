@@ -91,6 +91,7 @@ export default function NpFinalPricing() {
     showReinsurerModal, showTechAnalysisModal, insightOpen,
     quoteStructures, selectedCobs, benchmarkModal,
     saveState, pricingGraphModal, pricingAnalysisModal, expLayers,
+    calcEngineRunning, runningStructures, calcEngineError,
     portfolioExportRows, clientStructures, techRatioAvg, quoteCurve,
     setShowReinsurerModal, setShowTechAnalysisModal, setMarketModalOpen,
     setTreatyMetrics, closeBenchmark, closePricingGraph, closePricingAnalysis,
@@ -196,6 +197,10 @@ export default function NpFinalPricing() {
                 quoteCurve={quoteCurve}
                 contractId={contractId}
                 cobIds={selectedCobs.map((c) => c.id).filter(Boolean)}
+                runQuoteCalcEngine={runQuoteCalcEngine}
+                calcEngineRunning={calcEngineRunning}
+                runningStructures={runningStructures}
+                calcEngineError={calcEngineError}
                 updateClientStructureLayer={updateClientStructureLayer}
                 updateClientStructure={updateClientStructure}
                 onClose={closePricingAnalysis}
