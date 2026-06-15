@@ -948,32 +948,35 @@
 .np-check {
   -webkit-appearance: none;
   appearance: none;
-  width: 20px; height: 20px;
-  border: 2px solid rgba(255,255,255,0.9);
+  width: 18px; height: 18px;
+  border: 1px solid rgba(255,255,255,0.28);
   border-radius: 4px;
-  background: rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.06);
   cursor: pointer;
   position: relative;
-  transition: all 150ms ease;
+  transition: border-color 120ms ease, background 120ms ease;
 }
 .np-check:hover {
-  border-color: #fff;
-  background: rgba(255,255,255,0.25);
-  box-shadow: 0 0 8px rgba(255,255,255,0.3);
+  border-color: rgba(255,255,255,0.45);
+  background: rgba(255,255,255,0.10);
 }
 .np-check:checked {
-  border-color: #16a34a;
-  background: #16a34a;
+  border-color: rgba(22,163,74,0.85);
+  background: rgba(22,163,74,0.85);
 }
 .np-check:checked::after {
-  content: '✓';
-  position: absolute; top: 50%; left: 50%;
-  transform: translate(-50%,-50%);
-  color: #fff; font-size: 14px; font-weight: 800; line-height: 1;
+  /* thin CSS-drawn tick, not a bold glyph */
+  content: '';
+  position: absolute;
+  top: 46%; left: 50%;
+  width: 4px; height: 8px;
+  border: solid #fff;
+  border-width: 0 1.5px 1.5px 0;
+  transform: translate(-50%, -55%) rotate(45deg);
 }
 .np-check:checked:hover {
-  background: #15803d; border-color: #15803d;
-  box-shadow: 0 0 10px rgba(22,163,74,0.5);
+  background: rgba(21,128,61,0.9);
+  border-color: rgba(21,128,61,0.9);
 }
 
 /* Topbar context */
