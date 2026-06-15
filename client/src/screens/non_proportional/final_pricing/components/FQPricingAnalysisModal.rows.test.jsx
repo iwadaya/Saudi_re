@@ -92,4 +92,24 @@ describe('FQPricingAnalysisModal — row rendering', () => {
     renderModal({ pricingAnalysisModal: { open: true, structureIndex: 9 } });
     expect(screen.getByTestId('fq-analysis-no-structure')).toBeInTheDocument();
   });
+
+  it('pulls the structure at the opened index, not Structure 1', () => {
+    const twoStructures = [
+      structureWithLayers, // index 0 — limit 1,000,000
+      { id: 'str-1', layers: [{ id: 0, risk: true, cat: true, limit: '7777777', attachment: '3000000', egnpi: '99000000', riskPureBurn: '2.00%', riskExposure: '3.00%' }] },
+    ];
+    renderModal({ clientStructures: twoStructures, pricingAnalysisModal: { open: true, structureIndex: 1 } });
+    expect(screen.getByText('Pricing Analysis · Structure 2')).toBeInTheDocument();
+    expect(screen.getAllByText('USD 7,777,777').length).toBeGreaterThan(0);
+    expect(screen.queryByText('USD 1,000,000')).toBeNull(); // Structure 1's limit must not appear
+  });
+
+  it('renders peril sections that grow to fit content (no vertical clip)', () => {
+    renderModal();
+    const riskSection = screen.getByText('Risk Pricing Analysis').closest('section');
+    expect(riskSection).toBeTruthy();
+    expect(riskSection.style.overflow).toBe('visible');
+    expect(riskSection.style.flexShrink).toBe('0');
+    expect(riskSection.style.minHeight).toBe('330px');
+  });
 });
