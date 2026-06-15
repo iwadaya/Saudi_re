@@ -163,13 +163,31 @@ describe('NpPremiumsTable — country resolution + average inflation', () => {
     await screen.findByText('Saudi Arabia');
     await waitFor(() => expect(apiMock.getRefInflation).toHaveBeenCalled());
 
+    // Country curve (3/4/5%) loads first. The distinct 3% and 5% — neither of
+    // which equals the flat 4% average — are what prove the column holds the
+    // real per-year curve rather than a flat value.
+    await waitFor(() => expect(screen.getAllByDisplayValue('3%').length).toBeGreaterThan(0));
+    expect(screen.getAllByDisplayValue('5%').length).toBeGreaterThan(0);
+
     fireEvent.click(screen.getByLabelText(/Use average inflation/i));
     await waitFor(() => expect(screen.getByText(/Average inflation %/i)).toBeInTheDocument());
+
+    // Mean of 3/4/5 = 4 → the column collapses to a flat 4%; the distinct
+    // country values (3% and 5%) are gone.
+    await waitFor(() => expect(screen.queryAllByDisplayValue('3%')).toHaveLength(0));
+    expect(screen.queryAllByDisplayValue('5%')).toHaveLength(0);
+    expect(screen.getAllByDisplayValue('4%').length).toBeGreaterThan(1);
 
     apiMock.getRefInflation.mockClear();
     fireEvent.click(screen.getByLabelText(/Use country inflation/i));
 
+    // The fix under test: switching back re-fetches AND the per-year country
+    // curve actually repopulates — 3% and 5% reappear, not just a flat 4%.
     await waitFor(() => expect(apiMock.getRefInflation).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(screen.getAllByDisplayValue('3%').length).toBeGreaterThan(0);
+      expect(screen.getAllByDisplayValue('5%').length).toBeGreaterThan(0);
+    });
     expect(boundaryFallback()).toBeNull();
   });
 
