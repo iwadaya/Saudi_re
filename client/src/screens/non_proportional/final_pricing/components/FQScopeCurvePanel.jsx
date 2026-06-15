@@ -29,6 +29,7 @@ const tdStyle = {
  *   sourceLayers: Array<object>,
  *   peerPools: { country?: object[], region?: object[], global?: object[] },
  *   sourceLabel: string,
+ *   sourceSeriesLabel?: string,  // name for the dominant source curve; defaults to sourceLabel
  *   layerToXY: (layer: object) => ({ x: number, y: number } | null),
  *   peerToXY: (peer: object) => ({ x: number, y: number } | null),
  *   title: string,
@@ -40,6 +41,7 @@ export default function FQScopeCurvePanel({
   sourceLayers = [],
   peerPools = {},
   sourceLabel,
+  sourceSeriesLabel = sourceLabel,
   layerToXY,
   peerToXY,
   title,
@@ -58,7 +60,7 @@ export default function FQScopeCurvePanel({
   const regionFit  = fqFitPowerLaw(regionPts);
   const globalFit  = fqFitPowerLaw(globalPts);
   const fits = [
-    { key: 'source',  label: sourceLabel, color: '#f59e0b', fit: sourceFit, n: sourcePts.length, sample: 'layers' },
+    { key: 'source',  label: sourceSeriesLabel, color: '#f59e0b', fit: sourceFit, n: sourcePts.length, sample: 'layers' },
     { key: 'country', label: 'Country',  color: '#00d4ff', fit: countryFit, n: countryFit.n, sample: 'treaties' },
     { key: 'region',  label: 'Region',   color: '#a78bfa', fit: regionFit,  n: regionFit.n,  sample: 'treaties' },
     { key: 'global',  label: 'Global',   color: '#4ade80', fit: globalFit,  n: globalFit.n,  sample: 'treaties' },
