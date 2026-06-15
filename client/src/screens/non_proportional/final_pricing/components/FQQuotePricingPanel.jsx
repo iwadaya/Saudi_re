@@ -398,8 +398,6 @@ export default function FQQuotePricingPanel({
                           <table className="bm-table" style={{ minWidth: 1104, tableLayout: 'fixed' }}>
                             <colgroup>{[
                               <col key="layer" style={{ width: 58 }} />,
-                              <col key="risk" style={{ width: 52 }} />,
-                              <col key="cat" style={{ width: 52 }} />,
                               <col key="limit" style={{ width: 127 }} />,
                               <col key="attachment" style={{ width: 127 }} />,
                               <col key="egnpi" style={{ width: 127 }} />,
@@ -408,13 +406,13 @@ export default function FQQuotePricingPanel({
                               <col key="rol" style={{ width: 104 }} />,
                               <col key="premium" style={{ width: 104 }} />,
                               <col key="rate" style={{ width: 104 }} />,
+                              <col key="risk" style={{ width: 52 }} />,
+                              <col key="cat" style={{ width: 52 }} />,
                               <col key="delete" style={{ width: 41 }} />,
                             ]}</colgroup>
                             <thead>
                               <tr>
                                 <th>#</th>
-                                <th>Risk</th>
-                                <th>Cat</th>
                                 <th>Limit</th>
                                 <th>Attachment</th>
                                 {/* NOTE: bound to l.egnpi; screenshot labels this "Premium" but it stores EGNPI for x=Geomean/EGNPI. */}
@@ -424,6 +422,8 @@ export default function FQQuotePricingPanel({
                                 <th style={{ color }}>ROL % ↗</th>
                                 <th style={{ color }}>Premium ↗</th>
                                 <th style={{ color }}>Rate % ↗</th>
+                                <th>Risk</th>
+                                <th>Cat</th>
                                 <th></th>
                               </tr>
                             </thead>
@@ -437,6 +437,19 @@ export default function FQQuotePricingPanel({
                                     <td style={{ textAlign: 'center' }}>
                                       <span className="bm-badge" style={{ background: `${color}14`, borderColor: `${color}35`, color }}>{lIdx + 1}</span>
                                     </td>
+                                    <td><FQNumCell value={l.limit}      onChange={(v) => setStrLayer(lIdx, 'limit', v)} /></td>
+                                    <td>
+                                      {lIdx > 0
+                                        ? <FQNumCell value={l.attachment} onChange={() => {}} className="bm-cell" style={{ opacity: 0.6, pointerEvents: 'none' }} />
+                                        : <FQNumCell value={l.attachment} onChange={(v) => setStrLayer(lIdx, 'attachment', v)} />}
+                                    </td>
+                                    {/* NOTE: bound to l.egnpi; relabeling to "Premium" is a one-word header change if product wants it. */}
+                                    <td><FQNumCell value={l.egnpi}      onChange={(v) => setStrLayer(lIdx, 'egnpi', v)} /></td>
+                                    <td className="bm-calc bm-calc--dim">{geomean > 0 ? formatWithCommas(String(Math.round(geomean))) : '—'}</td>
+                                    <td className="bm-calc bm-calc--dim">{xGE > 0 ? xGE.toFixed(4) : '—'}</td>
+                                    <td className="bm-calc" style={{ color, fontWeight: 800 }}>{priced ? `${(priced.y * 100).toFixed(2)}%` : '—'}</td>
+                                    <td className="bm-calc" style={{ color }}>{priced ? formatWithCommas(String(Math.round(priced.premium))) : '—'}</td>
+                                    <td className="bm-calc" style={{ color, opacity: 0.8 }}>{priced ? `${(priced.rate * 100).toFixed(4)}%` : '—'}</td>
                                     <td style={{ textAlign: 'center' }}>
                                       <input
                                         type="checkbox"
@@ -459,19 +472,6 @@ export default function FQQuotePricingPanel({
                                         style={{ opacity: catDisabled ? 0.4 : 1 }}
                                       />
                                     </td>
-                                    <td><FQNumCell value={l.limit}      onChange={(v) => setStrLayer(lIdx, 'limit', v)} /></td>
-                                    <td>
-                                      {lIdx > 0
-                                        ? <FQNumCell value={l.attachment} onChange={() => {}} className="bm-cell" style={{ opacity: 0.6, pointerEvents: 'none' }} />
-                                        : <FQNumCell value={l.attachment} onChange={(v) => setStrLayer(lIdx, 'attachment', v)} />}
-                                    </td>
-                                    {/* NOTE: bound to l.egnpi; relabeling to "Premium" is a one-word header change if product wants it. */}
-                                    <td><FQNumCell value={l.egnpi}      onChange={(v) => setStrLayer(lIdx, 'egnpi', v)} /></td>
-                                    <td className="bm-calc bm-calc--dim">{geomean > 0 ? formatWithCommas(String(Math.round(geomean))) : '—'}</td>
-                                    <td className="bm-calc bm-calc--dim">{xGE > 0 ? xGE.toFixed(4) : '—'}</td>
-                                    <td className="bm-calc" style={{ color, fontWeight: 800 }}>{priced ? `${(priced.y * 100).toFixed(2)}%` : '—'}</td>
-                                    <td className="bm-calc" style={{ color }}>{priced ? formatWithCommas(String(Math.round(priced.premium))) : '—'}</td>
-                                    <td className="bm-calc" style={{ color, opacity: 0.8 }}>{priced ? `${(priced.rate * 100).toFixed(4)}%` : '—'}</td>
                                     <td><button className="bm-del" onClick={() => removeLayer(lIdx)}>✕</button></td>
                                   </tr>
                                 );
@@ -497,8 +497,6 @@ export default function FQQuotePricingPanel({
                                 <tfoot>
                                   <tr className="bm-foot" style={{ borderTopColor: `${color}25` }}>
                                     <td><FQReadCell value="TOTAL" className="bm-cell bm-cell--display bm-cell--foot" /></td>
-                                    <td></td>
-                                    <td></td>
                                     <td><FQReadCell value={formatWithCommas(String(Math.round(totLim)))} className="bm-cell bm-cell--display bm-cell--foot" /></td>
                                     <td></td>
                                     <td><FQReadCell value={totEgnpi > 0 ? formatWithCommas(String(Math.round(totEgnpi))) : '—'} className="bm-cell bm-cell--display bm-cell--foot" /></td>
@@ -506,6 +504,8 @@ export default function FQQuotePricingPanel({
                                     <td></td>
                                     <td><FQReadCell value={wRol > 0 ? `${wRol.toFixed(2)}%` : '—'} className="bm-cell bm-cell--sm bm-cell--display bm-cell--foot" style={{ color, fontWeight: 800 }} /></td>
                                     <td><FQReadCell value={totPrem > 0 ? formatWithCommas(String(Math.round(totPrem))) : '—'} className="bm-cell bm-cell--display bm-cell--foot" style={{ color, fontWeight: 800 }} /></td>
+                                    <td></td>
+                                    <td></td>
                                     <td></td>
                                     <td></td>
                                   </tr>
