@@ -468,6 +468,7 @@ export default function FQBenchmarkModal({
             {tab === 'pricing_curve' && (
               <FQScopeCurvePanel
                 sourceLayers={sourceLayers} peerPools={curvePeerPools} sourceLabel={sourceLabel}
+                sourceSeriesLabel={sourceLabel === 'Expiring Structure' ? 'Implied' : sourceLabel}
                 layerToXY={fqLayerToXY} peerToXY={fqPeerToXY}
                 title="Implied Pricing Curves · y = a·x^b"
                 axisCaption="x = √((L+A)·A) / EGNPI · y = ROL %"
@@ -477,6 +478,7 @@ export default function FQBenchmarkModal({
             {tab === 'rate_curve' && (
               <FQScopeCurvePanel
                 sourceLayers={sourceLayers} peerPools={curvePeerPools} sourceLabel={sourceLabel}
+                sourceSeriesLabel={sourceLabel === 'Expiring Structure' ? 'Implied' : sourceLabel}
                 layerToXY={rcLayerXY} peerToXY={rcPeerXY}
                 title="Rate Curves · y = a·x^b"
                 axisCaption="x = Limit / EGNPI · y = ROL %"
