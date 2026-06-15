@@ -104,27 +104,25 @@ describe('FQPricingAnalysisModal — row rendering', () => {
     expect(screen.queryByText('USD 1,000,000')).toBeNull(); // Structure 1's limit must not appear
   });
 
-  it('uses a fixed full-viewport shell where only the body scrolls vertically', () => {
+  it('fits one full-viewport screen with NO vertical scroll (shell + body)', () => {
     const { container } = renderModal();
     const shell = container.querySelector('.bm-modal');
-    expect(shell.style.overflow).toBe('hidden');                // the shell itself never scrolls
+    expect(shell.style.overflow).toBe('hidden');                // the shell never scrolls
     expect(shell.style.gridTemplateRows).toBe('auto auto 1fr'); // title / tabs / body
     const body = container.querySelector('.bm-modal-body');
-    expect(body.style.overflowY).toBe('auto');                  // the ONLY vertical scroller
-    expect(body.style.overflowX).toBe('hidden');                // blender bar can't slide sideways
-    expect(parseInt(body.style.minHeight, 10)).toBe(0);         // required to scroll inside the grid
+    expect(body.style.overflow).toBe('hidden');                 // body has NO vertical scroll
+    expect(parseInt(body.style.minHeight, 10)).toBe(0);         // required to size inside the grid
   });
 
-  it('lets sections size to content (no per-section overflow)', () => {
+  it('makes each peril section a height-dividing flex column', () => {
     renderModal();
     const riskSection = screen.getByText('Risk Pricing Analysis').closest('section');
-    expect(riskSection).toBeTruthy();
-    // No overflow / flexShrink on the section — it flows with the body's scroll.
-    expect(riskSection.style.overflow).toBe('');
-    expect(riskSection.style.flexShrink).toBe('');
+    expect(riskSection.style.display).toBe('flex');
+    expect(riskSection.style.flexDirection).toBe('column');
+    expect(parseInt(riskSection.style.minHeight, 10)).toBe(0);  // can shrink to share height
   });
 
-  it('gives each peril table its own horizontal-only scroll (fixed layout + minWidth)', () => {
+  it('gives each peril table a horizontal-only scroll that fills the section (no vertical scrollbar)', () => {
     renderModal();
     const riskSection = screen.getByText('Risk Pricing Analysis').closest('section');
     const table = within(riskSection).getAllByRole('table')[0];
@@ -132,8 +130,8 @@ describe('FQPricingAnalysisModal — row rendering', () => {
     expect(parseInt(table.style.minWidth, 10)).toBeGreaterThanOrEqual(1500);
     const wrapper = table.parentElement;
     expect(wrapper.style.overflowX).toBe('auto');
-    expect(wrapper.style.overflowY).toBe('visible'); // no stray inner vertical scrollbar
-    expect(wrapper.style.width).toBe('100%');
+    expect(wrapper.style.overflowY).toBe('hidden');             // NO inner vertical scrollbar
+    expect(parseInt(wrapper.style.minHeight, 10)).toBe(0);      // fills the section's remaining height
   });
 
   it('adds P(Attach) / P(Exhaust) / Note columns and shows engine probabilities', () => {
