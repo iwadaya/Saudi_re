@@ -297,9 +297,9 @@ describe('NpFinalPricing golden master (quote mode)', () => {
     });
 
     expect(rowsOf(screen.getByText(/^Structure 1$/i).closest('section').querySelector('table'))).toEqual([
-      ['#', 'Risk', 'Cat', 'Limit', 'Attachment', 'EGNPI', 'Geomean', 'x=G/E', 'ROL % ↗', 'Premium ↗', 'Rate % ↗', ''],
-      ['1', '[x]', '[x]', '[750,000]', '[100,000]', '[1,500,000]', '291,548', '0.1944', '62.73%', '470,445', '31.3630%', '✕'],
-      ['TOTAL', '', '', '750,000', '', '1,500,000', '', '', '62.73%', '470,445', '', ''],
+      ['#', 'Limit', 'Attachment', 'EGNPI', 'Geomean', 'x=G/E', 'ROL % ↗', 'Premium ↗', 'Rate % ↗', 'Risk', 'Cat', ''],
+      ['1', '[750,000]', '[100,000]', '[1,500,000]', '291,548', '0.1944', '62.73%', '470,445', '31.3630%', '[x]', '[x]', '✕'],
+      ['TOTAL', '750,000', '', '1,500,000', '', '', '62.73%', '470,445', '', '', '', ''],
     ]);
   });
 
