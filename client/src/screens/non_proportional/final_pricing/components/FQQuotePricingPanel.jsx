@@ -37,6 +37,8 @@ const quoteInsightButtonStyle = {
  *   pricing: import('../hooks/useNpPricingState').NpPricingStateApi,
  *   npDetail: Record<string, any>,
  *   currency: string,
+ *   riskDisabled: boolean,
+ *   catDisabled: boolean,
  *   save: (options?: object) => Promise<boolean>,
  *   runQuoteCalcEngine: (structureIndex?: number|null) => Promise<void>,
  *   showToast: ((message: string) => void) | undefined,
@@ -46,6 +48,8 @@ export default function FQQuotePricingPanel({
   pricing,
   npDetail,
   currency,
+  riskDisabled,
+  catDisabled,
   save,
   runQuoteCalcEngine,
   showToast,
@@ -391,25 +395,29 @@ export default function FQQuotePricingPanel({
                           </div>
                         </div>
                         <div className="bm-table-wrap">
-                          <table className="bm-table" style={{ minWidth: 1100, tableLayout: 'fixed' }}>
+                          <table className="bm-table" style={{ minWidth: 1104, tableLayout: 'fixed' }}>
                             <colgroup>{[
                               <col key="layer" style={{ width: 58 }} />,
+                              <col key="risk" style={{ width: 52 }} />,
+                              <col key="cat" style={{ width: 52 }} />,
                               <col key="limit" style={{ width: 127 }} />,
                               <col key="attachment" style={{ width: 127 }} />,
                               <col key="egnpi" style={{ width: 127 }} />,
-                              <col key="geomean" style={{ width: 110 }} />,
-                              <col key="xGE" style={{ width: 100 }} />,
+                              <col key="geomean" style={{ width: 104 }} />,
+                              <col key="xGE" style={{ width: 104 }} />,
                               <col key="rol" style={{ width: 104 }} />,
-                              <col key="premium" style={{ width: 127 }} />,
-                              <col key="rate" style={{ width: 110 }} />,
+                              <col key="premium" style={{ width: 104 }} />,
+                              <col key="rate" style={{ width: 104 }} />,
                               <col key="delete" style={{ width: 41 }} />,
                             ]}</colgroup>
                             <thead>
                               <tr>
                                 <th>#</th>
+                                <th>Risk</th>
+                                <th>Cat</th>
                                 <th>Limit</th>
                                 <th>Attachment</th>
-                                {/* NOTE: bound to l.egnpi; relabeling this column "Premium" is a one-word header change if product wants it. */}
+                                {/* NOTE: bound to l.egnpi; screenshot labels this "Premium" but it stores EGNPI for x=Geomean/EGNPI. */}
                                 <th>EGNPI</th>
                                 <th>Geomean</th>
                                 <th>x=G/E</th>
@@ -428,6 +436,28 @@ export default function FQQuotePricingPanel({
                                   <tr key={l.id}>
                                     <td style={{ textAlign: 'center' }}>
                                       <span className="bm-badge" style={{ background: `${color}14`, borderColor: `${color}35`, color }}>{lIdx + 1}</span>
+                                    </td>
+                                    <td style={{ textAlign: 'center' }}>
+                                      <input
+                                        type="checkbox"
+                                        className="np-check"
+                                        aria-label={`Structure ${sIdx + 1} Layer ${lIdx + 1} Risk`}
+                                        checked={!!l.risk}
+                                        disabled={riskDisabled}
+                                        onChange={(e) => setStrLayer(lIdx, 'risk', e.target.checked)}
+                                        style={{ opacity: riskDisabled ? 0.4 : 1 }}
+                                      />
+                                    </td>
+                                    <td style={{ textAlign: 'center' }}>
+                                      <input
+                                        type="checkbox"
+                                        className="np-check"
+                                        aria-label={`Structure ${sIdx + 1} Layer ${lIdx + 1} Cat`}
+                                        checked={!!l.cat}
+                                        disabled={catDisabled}
+                                        onChange={(e) => setStrLayer(lIdx, 'cat', e.target.checked)}
+                                        style={{ opacity: catDisabled ? 0.4 : 1 }}
+                                      />
                                     </td>
                                     <td><FQNumCell value={l.limit}      onChange={(v) => setStrLayer(lIdx, 'limit', v)} /></td>
                                     <td>
@@ -467,6 +497,8 @@ export default function FQQuotePricingPanel({
                                 <tfoot>
                                   <tr className="bm-foot" style={{ borderTopColor: `${color}25` }}>
                                     <td><FQReadCell value="TOTAL" className="bm-cell bm-cell--display bm-cell--foot" /></td>
+                                    <td></td>
+                                    <td></td>
                                     <td><FQReadCell value={formatWithCommas(String(Math.round(totLim)))} className="bm-cell bm-cell--display bm-cell--foot" /></td>
                                     <td></td>
                                     <td><FQReadCell value={totEgnpi > 0 ? formatWithCommas(String(Math.round(totEgnpi))) : '—'} className="bm-cell bm-cell--display bm-cell--foot" /></td>
