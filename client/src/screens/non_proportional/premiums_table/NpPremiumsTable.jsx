@@ -280,10 +280,9 @@ export default function NpPremiumsTable() {
     })();
     // inflationMode is intentionally NOT a dependency: mode toggles are owned by
     // handleModeChange (average) and the country-inflation effect (country) —
-    // neither refetches from the server, and re-running this effect on every
-    // toggle used to reset the mode back to the server's saved value.
-    // loadCountryInflation is excluded because the dedicated country effect owns
-    // country fetching.
+    // neither refetches; re-running this effect on every toggle used to reset the
+    // mode to the server's saved value. loadCountryInflation is excluded — the
+    // dedicated country effect owns country fetching.
   }, [applyAverageInflation, contractId, meanInflationPct, npCountryId, npCountryName, quoteMode, rebuildRows, years]);
 
   /* ── Live ref of inflationRows so the country-inflation effect can read the
@@ -292,27 +291,21 @@ export default function NpPremiumsTable() {
   const inflationRowsRef = useRef(inflationRows);
   useEffect(() => { inflationRowsRef.current = inflationRows; }, [inflationRows]);
 
-  /* ── Previous inflation mode, so the country-inflation effect can tell whether
-        the user just toggled back from average (→ force-reload) versus the
-        country id / years merely resolving (→ onlyIfEmpty, never clobber saved
-        values). ── */
+  /* ── Previous inflation mode: lets the country-inflation effect tell an
+        average → country toggle (force-reload) from the id / years merely
+        resolving (onlyIfEmpty, never clobber saved values). ── */
   const prevInflationModeRef = useRef(inflationMode);
 
-  /* ── Fill country inflation once the country resolves (or years change) while
-        in country mode. This effect is the SINGLE owner of country loading: it
-        also fires when the mode flips back to 'country', so handleModeChange no
-        longer reloads itself (two owners used to race over inflationRows and
-        could leave flat average values in the column).
-
-        It force-reloads (onlyIfEmpty=false) only when coming straight from
-        average mode — the one case where the rows hold flat average values that
-        must be overwritten with the per-year country curve. Otherwise
-        onlyIfEmpty=true so saved / hand-typed country values are never clobbered
-        on initial mount, a late header resolve, or a years change. ── */
+  /* ── SINGLE owner of country loading: fills country inflation when the country
+        resolves / years change, and when the mode flips back to 'country'
+        (handleModeChange no longer reloads — two owners used to race and could
+        leave flat average values in the column). Force-reloads (onlyIfEmpty=false)
+        only when coming straight from average; otherwise onlyIfEmpty=true so
+        saved / hand-typed values survive initial mount, a late header resolve, or
+        a years change. ── */
   useEffect(() => {
     if (inflationMode !== 'country' || !countryId || !years.length) {
-      // Track the transition even when bailing out (e.g. while in average mode),
-      // so the next country run can detect the average → country toggle.
+      // Track the transition even while bailing out (e.g. in average mode).
       prevInflationModeRef.current = inflationMode;
       return;
     }
@@ -360,12 +353,10 @@ export default function NpPremiumsTable() {
     });
   }, []);
 
-  /* ── Inflation mode change ──
-     Average: seed the flat average (mean of the loaded country curve) and apply
-     it here. Country: only flip the mode — the country-inflation effect owns the
-     reload. It re-runs on this mode change and force-reloads because it sees the
-     average → country toggle. Reloading here too would race that effect and
-     could leave flat average values in the column. ── */
+  /* ── Inflation mode change. Average: seed + apply the flat average here.
+     Country: only flip the mode — the country-inflation effect owns the reload
+     (it force-reloads because it sees the average → country toggle); reloading
+     here too would race it and could leave average values in the column. ── */
   const handleModeChange = useCallback((newMode) => {
     setInflationMode(newMode);
     if (newMode === 'average') {
