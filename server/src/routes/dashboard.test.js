@@ -6,6 +6,7 @@ import {
   unitsCte,
   unitsLobCte,
   UNIT_AGGREGATES,
+  bandCaseSql,
 } from './dashboard.js';
 
 // The dashboard's shared query layer is the single place prop and NP metrics
@@ -141,6 +142,22 @@ describe('unitsLobCte', () => {
     expect(sql).toContain('units AS (');
     expect(sql).toContain('UNION ALL');
     expect(sql.split(where).length - 1).toBe(2);
+  });
+});
+
+describe('bandCaseSql', () => {
+  const sql = bandCaseSql('rol', [
+    { label: '0–5%', lo: 0, hi: 0.05 },
+    { label: '>20%', lo: 0.20, hi: null },
+  ]);
+
+  it('emits half-open [lo, hi) WHEN clauses in declared order', () => {
+    expect(sql).toBe("CASE WHEN rol >= 0 AND rol < 0.05 THEN '0–5%' WHEN rol >= 0.2 THEN '>20%' ELSE NULL END");
+  });
+
+  it('leaves a null hi open-ended (lower bound only)', () => {
+    expect(sql).toContain("WHEN rol >= 0.2 THEN '>20%'");
+    expect(sql).not.toContain('< null');
   });
 });
 
