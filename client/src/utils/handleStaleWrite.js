@@ -11,10 +11,6 @@ export function getStaleWritePayload(error) {
   };
 }
 
-export function isStaleWriteError(error) {
-  return !!getStaleWritePayload(error);
-}
-
 function formatTimestamp(value) {
   if (!value) return 'an unknown time';
   const d = new Date(value);

@@ -40,7 +40,7 @@ function UltimateSummaryTable({ ayRows, ldfs, tailFactor }) {
     const sorted = [...ayRows].sort((a, b) => a.year - b.year);
     const n = sorted.length;
     return sorted.map((r, i) => {
-      // Oldest year = most developed = lowest CDF index
+      // Oldest year = most developed = highest CDF index (tail end)
       const ageIdx = Math.max(0, Math.min(cdfs.length - 1, n - 1 - i));
       const cdf = cdfs[ageIdx] ?? 1.0;
       const ultimate = r.reported * cdf;

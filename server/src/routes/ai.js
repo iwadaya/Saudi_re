@@ -120,7 +120,8 @@ router.post('/ai/slip-ingest', validateBody(slipIngestSchema), asyncHandler(asyn
 
 // POST /api/ai/complete
 // General-purpose Claude text completion proxy. This is separate from
-// treaty-detail slip ingest, which uses OpenAI only.
+// treaty-detail slip ingest, which uses the shared Gemini-first /
+// OpenAI-fallback llmClient.
 router.post('/ai/complete', validateBody(aiCompleteSchema), asyncHandler(async (req, res) => {
   const { messages, system, max_tokens = 1000 } = req.body;
 

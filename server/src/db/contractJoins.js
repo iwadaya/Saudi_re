@@ -63,7 +63,6 @@ export const contractContextListColumns =
     'ced.company_name  AS name',
     'cnt.country_name  AS country',
     'cnt.country_code',
-    'tt.treaty_type',
     'tt.treaty_type    AS treaty_type_name',
     'tt.category       AS treaty_category',
     'cur.currency_code',

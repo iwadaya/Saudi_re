@@ -178,7 +178,7 @@ export function applyLoading(pureRate, loadingPct) {
  * @param {number} weightPareto   % weight on Pareto (0..100).
  * @param {number} weightExposure % weight on exposure (0..100).
  * @param {number} loading        % internal loading (0..99).
- * @returns {number} Blended, loaded rate. 0 when Σ weights ≤ 0 or loading ≥ 100.
+ * @returns {number} Blended, loaded rate. 0 when Σ weights ≤ 0 (loading is clamped to ≤ 99%).
  */
 export function deriveComponentTotal(pureBurn, pareto, exposure, weightBurn, weightPareto, weightExposure, loading) {
   // Strip non-numeric chars before parseFloat so that values like
@@ -197,7 +197,7 @@ export function deriveComponentTotal(pureBurn, pareto, exposure, weightBurn, wei
   if (wTot <= 0) return 0;
   const blended = (wB * toN(pureBurn) + wP * toN(pareto) + wE * toN(exposure)) / wTot;
   const loadingN = clamp(toN(loading), 0, 99);
-  return loadingN < 100 ? blended / (1 - loadingN / 100) : 0;
+  return blended / (1 - loadingN / 100);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

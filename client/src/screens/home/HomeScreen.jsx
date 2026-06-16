@@ -261,7 +261,7 @@ function RenewalModal({ open, onClose, onRenew }) {
     try {
       // Use direct endpoint — returns ALL statuses so signed/NTU contracts are renewable
       const rows = await api.listTreaties({ cedant_id: id, limit: 200 });
-      // Sort by uw_year desc, exclude already-being-renewed (has a child)
+      // Sort by uw_year desc (newest first)
       setContracts(Array.isArray(rows) ? rows.sort((a,b) => (b.uw_year||0)-(a.uw_year||0)) : []);
     } catch { setError('Could not load contracts.'); }
     setBusy(false);

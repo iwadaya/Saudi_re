@@ -66,10 +66,6 @@ export function setTestName(name) {
   safeStorage(s => s.setItem(TEST_NAME_KEY, name));
 }
 
-export function isTestSession() {
-  return getSession()?.isTestUser === true;
-}
-
 /**
  * Creates and stores a test session for a named tester.
  * Reuses the seeded TUW UUID so no DB migration is needed.

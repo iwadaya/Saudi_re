@@ -752,11 +752,11 @@ export const api = {
   loginUser(payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request(PATHS.authLogin, { method: 'POST', body: payload, ...opts }); },
   // Clears the server's httpOnly auth + CSRF cookies. Best-effort on sign-out.
   logout(opts?: RequestOpts): Promise<unknown> { return request(PATHS.authLogout, { method: 'POST', body: {}, ...opts }); },
-  // Verify the stored bearer token and refresh the session from server truth.
+  // Verify the session via the httpOnly auth cookie and refresh from server truth.
   // Used by the boot-time AuthBootstrap check; 401 ⇒ invalid/expired token.
   getMe(opts?: RequestOpts): Promise<{ session?: Record<string, unknown> }> { return request(PATHS.authMe, opts); },
-  // Self-service password change for the logged-in user. The bearer token (added
-  // by the request wrapper) is the identity; the server ignores any body user id.
+  // Self-service password change for the logged-in user. The httpOnly auth cookie
+  // is the identity; the server ignores any body user id.
   changePassword(payload: { currentPassword: string; newPassword: string; confirmPassword: string }, opts?: RequestOpts): Promise<unknown> { return request(PATHS.authChangePassword, { method: 'POST', body: payload, ...opts }); },
   getViewableUsers(opts?: RequestOpts): Promise<unknown> { return request('/api/users/viewable', opts); },
   getUserContracts(userId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/contracts/by-user/${enc(userId)}`, opts); },
