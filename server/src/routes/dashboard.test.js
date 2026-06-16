@@ -156,9 +156,11 @@ describe('proportional balance direction (limit ÷ premium, never inverted)', ()
     expect(sql).not.toContain('/ NULLIF(COALESCE(pd.total_capacity'); // capacity must never be the denominator
   });
 
-  it('weighted balance is SUM(balance*premium) / SUM(premium) → a cell equals Exposure ÷ Premium', () => {
-    expect(UNIT_AGGREGATES.balance.startsWith('SUM(balance*premium)')).toBe(true);
-    expect(UNIT_AGGREGATES.balance).toContain('NULLIF(SUM(premium) FILTER (WHERE balance IS NOT NULL),0)');
+  it('aggregate balance is prop-only Σexposure / Σpremium (no NP-premium leak)', () => {
+    // Both sides restricted to kind='PROP', so NP premium can never enter the
+    // denominator and a no-prop group → NULL → "—".
+    expect(UNIT_AGGREGATES.balance).toBe("SUM(exposure) FILTER (WHERE kind = 'PROP') / NULLIF(SUM(premium) FILTER (WHERE kind = 'PROP'),0)");
+    expect(UNIT_AGGREGATES.balance).not.toContain('balance*premium'); // never an avg of per-unit ratios
   });
 });
 
@@ -182,12 +184,13 @@ describe('UNIT_AGGREGATES', () => {
   it('exposes premium-weighted rate aggregates over the units CTE', () => {
     expect(UNIT_AGGREGATES.premium).toBe('SUM(premium)');
     expect(UNIT_AGGREGATES.exposure).toBe('SUM(exposure)');
-    for (const key of ['avgRol', 'balance', 'uwMargin']) {
+    // avgRol / uwMargin are premium-weighted rates; balance is a prop-only
+    // Σexposure/Σpremium (covered by its own describe), not *premium-weighted.
+    for (const key of ['avgRol', 'uwMargin']) {
       expect(UNIT_AGGREGATES[key]).toContain('*premium)');
       expect(UNIT_AGGREGATES[key]).toContain('NULLIF(SUM(premium) FILTER');
     }
     expect(UNIT_AGGREGATES.avgRol).toContain('rol');
-    expect(UNIT_AGGREGATES.balance).toContain('balance');
     expect(UNIT_AGGREGATES.uwMargin).toContain('margin');
   });
 });
