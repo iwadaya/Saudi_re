@@ -413,9 +413,10 @@ export default function FQPricingAnalysisModal({
         {/* Row 3 = the single vertical scroller. height:100% fills the 1fr track
             and minHeight:0 lets it shrink so overflowY:auto actually scrolls
             (without minHeight:0 the track refuses to shrink and content clips).
+            maxHeight:none defeats the shared benchmark modal body's 55vh cap.
             overflowX:hidden keeps the blender bar / section chrome from sliding
             sideways — only each table scrolls horizontally. */}
-        <div className="bm-modal-body" style={{ minHeight: 0, height: '100%', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 12, padding: '18px 20px' }}>
+        <div className="bm-modal-body" style={{ minHeight: 0, height: '100%', maxHeight: 'none', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 12, padding: '18px 20px' }}>
           {tab === 'pricing' && (
             <>
               {showCalculating && (
