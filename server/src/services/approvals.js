@@ -12,6 +12,7 @@
 import { pool } from '../db/pool.js';
 import { logger } from '../lib/logger.js';
 import { logAudit } from './audit.js';
+import { withTransaction as withTxn } from '../db/withTransaction.js';
 import { assertLegalTransition, InvalidTransitionError } from '../lib/statusMachine.js';
 import { refreshBenchmarks } from './ldf/benchmark.js';
 
@@ -395,23 +396,24 @@ export async function submitForApproval({ contractId, quoteId, submittedByUserId
   // claimed peer1, written atomically at decision time by recordDecision. The
   // submitter's nominated approver is kept as next_approver_id (advisory), so
   // any eligible approver — not just the nominee — can take the open slot.
-  const res=await pool.query(
-    `INSERT INTO public.contract_offer (contract_id,quote_id,status,breach_type,approval_step,submitted_by_id,submitted_at,written_line_pct,epi_usd,next_approver_id,next_approver_role,peer1_user_id,approver_options)
-     VALUES ($1,$2,'AWAITING_APPROVAL',$3,1,$4,now(),$5,$6,$7,$8,NULL,$9)
-     ON CONFLICT (contract_id) DO UPDATE SET
-       status='AWAITING_APPROVAL',breach_type=$3,approval_step=1,submitted_by_id=$4,submitted_at=now(),
-       written_line_pct=$5,epi_usd=$6,next_approver_id=$7,next_approver_role=$8,peer1_user_id=NULL,approver_options=$9,
-       peer1_decision=NULL,peer1_comment=NULL,peer1_at=NULL,peer2_user_id=NULL,peer2_decision=NULL,
-       peer2_at=NULL,arbiter_required=false,arbiter_user_id=NULL,arbiter_decision=NULL,updated_at=now()
-     RETURNING offer_id`,
-    [contractId||null,quoteId||null,resolvedBreachType,submittedByUserId,writtenLinePct||null,
-     epiUsd||null,peer1UserId||null,requiredRole,JSON.stringify(approverOptions)]
-  );
-
-  if (contractId) await pool.query(`UPDATE public.contract SET uw_status='AWAITING_APPROVAL',status='AWAITING_APPROVAL',updated_at=now() WHERE contract_id=$1`,[contractId]);
-
-  await logOfferEvent({contractId,quoteId,eventType:'SUBMITTED',actorUserId:submittedByUserId,actorName:submittedByName,actorRole:submittedByRole,payload:{breachType:resolvedBreachType,requiredRole,epiUsd,peer1UserId},comment});
-  return { offerId:res.rows[0]?.offer_id, breachType:resolvedBreachType, requiredRole, requiredRoleName:ROLE_NAME[requiredRole]||requiredRole };
+  const offerId = await withTxn(async (client) => {
+    const res = await client.query(
+      `INSERT INTO public.contract_offer (contract_id,quote_id,status,breach_type,approval_step,submitted_by_id,submitted_at,written_line_pct,epi_usd,next_approver_id,next_approver_role,peer1_user_id,approver_options)
+       VALUES ($1,$2,'AWAITING_APPROVAL',$3,1,$4,now(),$5,$6,$7,$8,NULL,$9)
+       ON CONFLICT (contract_id) DO UPDATE SET
+         status='AWAITING_APPROVAL',breach_type=$3,approval_step=1,submitted_by_id=$4,submitted_at=now(),
+         written_line_pct=$5,epi_usd=$6,next_approver_id=$7,next_approver_role=$8,peer1_user_id=NULL,approver_options=$9,
+         peer1_decision=NULL,peer1_comment=NULL,peer1_at=NULL,peer2_user_id=NULL,peer2_decision=NULL,
+         peer2_at=NULL,arbiter_required=false,arbiter_user_id=NULL,arbiter_decision=NULL,updated_at=now()
+       RETURNING offer_id`,
+      [contractId||null,quoteId||null,resolvedBreachType,submittedByUserId,writtenLinePct||null,
+       epiUsd||null,peer1UserId||null,requiredRole,JSON.stringify(approverOptions)]
+    );
+    if (contractId) await client.query(`UPDATE public.contract SET uw_status='AWAITING_APPROVAL',status='AWAITING_APPROVAL',updated_at=now() WHERE contract_id=$1`,[contractId]);
+    await logOfferEvent({contractId,quoteId,eventType:'SUBMITTED',actorUserId:submittedByUserId,actorName:submittedByName,actorRole:submittedByRole,payload:{breachType:resolvedBreachType,requiredRole,epiUsd,peer1UserId},comment,client});
+    return res.rows[0]?.offer_id;
+  });
+  return { offerId, breachType:resolvedBreachType, requiredRole, requiredRoleName:ROLE_NAME[requiredRole]||requiredRole };
 }
 
 // ── Decision chokepoint ──────────────────────────────────────────────────────
@@ -698,11 +700,12 @@ async function resolveOfferByEntity({ contractId, quoteId }) {
  * column-level equivalent of `$actor = ANY(approver_options)` for our
  * object-array storage. Returns true iff this caller won the slot.
  */
-async function claimPeerSlot({ offerId, slot, actorUserId, decision, comment }) {
+async function claimPeerSlot({ offerId, slot, actorUserId, decision, comment, client }) {
+  const db = client || pool;
   const membership = `EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(approver_options,'[]'::jsonb)) ao
                              WHERE COALESCE(ao->>'user_id', ao#>>'{}') = $2::text)`;
   if (slot === 'peer1') {
-    const { rows } = await pool.query(
+    const { rows } = await db.query(
       `UPDATE public.contract_offer
           SET peer1_user_id=$2, peer1_decision=$3, peer1_comment=$4, peer1_at=now(), updated_at=now()
         WHERE offer_id=$1
@@ -716,7 +719,7 @@ async function claimPeerSlot({ offerId, slot, actorUserId, decision, comment }) 
     return rows.length > 0;
   }
   // peer2 — also enforces, atomically, that the second approver ≠ the first.
-  const { rows } = await pool.query(
+  const { rows } = await db.query(
     `UPDATE public.contract_offer
         SET peer2_user_id=$2, peer2_decision=$3, peer2_comment=$4, peer2_at=now(), updated_at=now()
       WHERE offer_id=$1
@@ -734,7 +737,8 @@ async function claimPeerSlot({ offerId, slot, actorUserId, decision, comment }) 
 
 /** Apply the status transition + event after a peer slot has been claimed.
  *  Ports the 5-tier final-authority / split-decision rules verbatim. */
-async function applyPeerOutcome({ offer, slot, actorUserId, actorName, actorRole, decision, comment, contractId, quoteId }) {
+async function applyPeerOutcome({ offer, slot, actorUserId, actorName, actorRole, decision, comment, contractId, quoteId, client }) {
+  const db = client || pool;
   const actorLevel = LEVEL[actorRole] || 5;
   const isFinalAuth = FINAL_AUTH.has(actorLevel);
   let nextStatus = 'AWAITING_APPROVAL', finalDecision = null, arbiterRequired = false, eventType;
@@ -764,28 +768,29 @@ async function applyPeerOutcome({ offer, slot, actorUserId, actorName, actorRole
         eventType = cuDecision === 'APPROVED' ? 'FINAL_APPROVED_BY_AUTHORITY' : 'FINAL_DECLINED_BY_AUTHORITY';
       } else {
         arbiterRequired = true; nextStatus = 'DISPUTE_PENDING';
-        await pool.query(`UPDATE public.contract_offer SET arbiter_required=true,updated_at=now() WHERE offer_id=$1`, [offer.offer_id]);
+        await db.query(`UPDATE public.contract_offer SET arbiter_required=true,updated_at=now() WHERE offer_id=$1`, [offer.offer_id]);
         eventType = 'DISPUTE_RAISED';
       }
     }
   }
 
-  await pool.query(`UPDATE public.contract_offer SET status=$2,updated_at=now() WHERE offer_id=$1`, [offer.offer_id, nextStatus]);
+  await db.query(`UPDATE public.contract_offer SET status=$2,updated_at=now() WHERE offer_id=$1`, [offer.offer_id, nextStatus]);
   if (contractId) {
-    await pool.query(`UPDATE public.contract SET uw_status=$2::public.uw_workflow_status,updated_at=now() WHERE contract_id=$1`, [contractId, nextStatus]);
+    await db.query(`UPDATE public.contract SET uw_status=$2::public.uw_workflow_status,updated_at=now() WHERE contract_id=$1`, [contractId, nextStatus]);
   }
-  await logOfferEvent({ contractId, quoteId, eventType, actorUserId, actorName, actorRole, payload: { decision, slot, finalDecision, arbiterRequired }, comment });
+  await logOfferEvent({ contractId, quoteId, eventType, actorUserId, actorName, actorRole, payload: { decision, slot, finalDecision, arbiterRequired }, comment, client: db });
   return { nextStatus, finalDecision, arbiterRequired, eventType, complete: !!finalDecision };
 }
 
 /** Arbiter (dispute-resolution) slot — TD/CU/CE only, claimed atomically. */
-async function recordArbiterSlot({ offer, contractId, quoteId, actorUserId, actorName, actorRole, decision, comment }) {
+async function recordArbiterSlot({ offer, contractId, quoteId, actorUserId, actorName, actorRole, decision, comment, client }) {
+  const db = client || pool;
   if (offer.status !== 'DISPUTE_PENDING') throw httpError(400, 'No active dispute');
   if (String(offer.submitted_by_id) === String(actorUserId)) throw httpError(403, 'Cannot arbitrate own submission');
   const level = LEVEL[actorRole] || 5;
   if (level > 3) throw httpError(403, 'Only Treaty Director, Chief Underwriter or Chief Executive can resolve disputes');
   const nextStatus = decision === 'APPROVED' ? 'AWAITING_SIGNED_LINE' : 'DECLINED';
-  const { rows } = await pool.query(
+  const { rows } = await db.query(
     `UPDATE public.contract_offer
         SET arbiter_user_id=$2, arbiter_decision=$3, arbiter_comment=$4, arbiter_at=now(), status=$5, updated_at=now()
       WHERE offer_id=$1 AND arbiter_user_id IS NULL AND status='DISPUTE_PENDING'
@@ -793,8 +798,8 @@ async function recordArbiterSlot({ offer, contractId, quoteId, actorUserId, acto
     [offer.offer_id, actorUserId, decision, comment || null, nextStatus]
   );
   if (!rows.length) throw httpError(409, 'That dispute was already resolved', 'DISPUTE_RESOLVED');
-  if (contractId) await pool.query(`UPDATE public.contract SET uw_status=$2,updated_at=now() WHERE contract_id=$1`, [contractId, nextStatus]);
-  await logOfferEvent({ contractId, quoteId, eventType: decision === 'APPROVED' ? 'ARBITER_APPROVED' : 'ARBITER_DECLINED', actorUserId, actorName, actorRole, payload: { decision }, comment });
+  if (contractId) await db.query(`UPDATE public.contract SET uw_status=$2,updated_at=now() WHERE contract_id=$1`, [contractId, nextStatus]);
+  await logOfferEvent({ contractId, quoteId, eventType: decision === 'APPROVED' ? 'ARBITER_APPROVED' : 'ARBITER_DECLINED', actorUserId, actorName, actorRole, payload: { decision }, comment, client: db });
   return { nextStatus, decision, complete: true };
 }
 
@@ -828,7 +833,7 @@ export async function recordDecision({ offerId, actorUserId, actorName, actorRol
   const quoteId = offer.quote_id || null;
 
   if (slot === 'arbiter') {
-    return recordArbiterSlot({ offer, contractId, quoteId, actorUserId, actorName, actorRole, decision, comment });
+    return withTxn((client) => recordArbiterSlot({ offer, contractId, quoteId, actorUserId, actorName, actorRole, decision, comment, client }));
   }
 
   // ── peer1 / peer2 ──────────────────────────────────────────────────────────
@@ -850,11 +855,13 @@ export async function recordDecision({ offerId, actorUserId, actorName, actorRol
   }
   if (!liveIds.has(String(actorUserId))) throw httpError(403, 'Not an eligible approver for this offer');
 
-  // Atomic slot claim — guarded against concurrent winners and stale eligibility.
-  const claimed = await claimPeerSlot({ offerId, slot, actorUserId, decision, comment });
-  if (!claimed) throw httpError(409, 'That approval slot was just taken', 'SLOT_TAKEN');
-
-  return applyPeerOutcome({ offer, slot, actorUserId, actorName, actorRole, decision, comment, contractId, quoteId });
+  // Atomic slot claim + outcome in ONE transaction: the claim, the status
+  // transition, the event and the critical audit commit together or roll back.
+  return withTxn(async (client) => {
+    const claimed = await claimPeerSlot({ offerId, slot, actorUserId, decision, comment, client });
+    if (!claimed) throw httpError(409, 'That approval slot was just taken', 'SLOT_TAKEN');
+    return applyPeerOutcome({ offer, slot, actorUserId, actorName, actorRole, decision, comment, contractId, quoteId, client });
+  });
 }
 
 /**
@@ -923,15 +930,17 @@ export async function approveContract({ contractId, actorUserId, actorName, acto
  */
 export async function markContractSigned({ contractId, actorUserId, actorName, actorRole, signedLinePct }) {
   await assertWorkflowTransition({ entityType: 'CONTRACT', entityId: contractId, to: 'SIGNED', action: 'SIGN', actorUserId, actorRole });
-  await pool.query(
-    `UPDATE public.contract SET uw_status='SIGNED',status='SIGNED',signed_line_pct=$2,signed_at=now(),updated_at=now() WHERE contract_id=$1`,
-    [contractId, signedLinePct ?? null]
-  );
-  await pool.query(
-    `UPDATE public.contract_offer SET status='SIGNED',signed_at=now(),written_line_pct=COALESCE(written_line_pct,$2) WHERE contract_id=$1`,
-    [contractId, signedLinePct ?? null]
-  );
-  await logOfferEvent({ contractId, eventType: 'SIGNED', actorUserId, actorName, actorRole, payload: { signedLinePct: signedLinePct ?? null } });
+  await withTxn(async (client) => {
+    await client.query(
+      `UPDATE public.contract SET uw_status='SIGNED',status='SIGNED',signed_line_pct=$2,signed_at=now(),updated_at=now() WHERE contract_id=$1`,
+      [contractId, signedLinePct ?? null]
+    );
+    await client.query(
+      `UPDATE public.contract_offer SET status='SIGNED',signed_at=now(),written_line_pct=COALESCE(written_line_pct,$2) WHERE contract_id=$1`,
+      [contractId, signedLinePct ?? null]
+    );
+    await logOfferEvent({ contractId, eventType: 'SIGNED', actorUserId, actorName, actorRole, payload: { signedLinePct: signedLinePct ?? null }, client });
+  });
   refreshBenchmarks(pool).catch(() => {});
   return { nextStatus: 'SIGNED' };
 }
@@ -946,27 +955,33 @@ export async function markNotTakenUp({ contractId, quoteId, actorUserId, actorNa
   const entityType = contractId ? 'CONTRACT' : 'QUOTE';
   const entityId = contractId || quoteId;
   await assertWorkflowTransition({ entityType, entityId, action: 'NTU', actorUserId, actorRole });
+  await withTxn(async (client) => {
+    if (contractId) {
+      await client.query(
+        `UPDATE public.contract SET uw_status='NTU',status='NTU',ntu_reason=$2,ntu_at=now(),updated_at=now() WHERE contract_id=$1`,
+        [contractId, reason ?? null]
+      );
+    } else {
+      await client.query(
+        `UPDATE public.quote SET status='NTU',ntu_reason=$2,ntu_at=now(),updated_at=now() WHERE quote_id=$1`,
+        [quoteId, reason ?? null]
+      );
+    }
+    await logOfferEvent({ contractId, quoteId, eventType: 'NTU', actorUserId, actorName, actorRole, payload: { reason: reason ?? null }, comment: reason ?? null, client });
+  });
+  // Best-effort denormalised mirror on the offer table — never blocks the action.
   if (contractId) {
-    await pool.query(
-      `UPDATE public.contract SET uw_status='NTU',status='NTU',ntu_reason=$2,ntu_at=now(),updated_at=now() WHERE contract_id=$1`,
-      [contractId, reason ?? null]
-    );
     await pool.query(
       `UPDATE public.contract_offer SET status='NTU',ntu_at=now(),ntu_reason=$2 WHERE contract_id=$1`,
       [contractId, reason ?? null]
     ).catch(() => {});
   } else {
     await pool.query(
-      `UPDATE public.quote SET status='NTU',ntu_reason=$2,ntu_at=now(),updated_at=now() WHERE quote_id=$1`,
-      [quoteId, reason ?? null]
-    );
-    await pool.query(
       `INSERT INTO public.quote_offer (quote_id, status, updated_at) VALUES ($1,'NTU',now())
        ON CONFLICT (quote_id) DO UPDATE SET status='NTU', updated_at=now()`,
       [quoteId]
     ).catch(() => {});
   }
-  await logOfferEvent({ contractId, quoteId, eventType: 'NTU', actorUserId, actorName, actorRole, payload: { reason: reason ?? null }, comment: reason ?? null });
   refreshBenchmarks(pool).catch(() => {});
   return { nextStatus: 'NTU' };
 }
@@ -996,14 +1011,17 @@ export async function approveQuote({ quoteId, actorUserId, actorName, actorRole,
     throw httpError(403, 'Not an eligible approver for this quote');
   }
   await assertWorkflowTransition({ entityType: 'QUOTE', entityId: quoteId, to: 'AWAITING_SIGNED_LINE', actorUserId, decision: ENGINE_TOKEN });
-  await pool.query(`UPDATE public.quote SET status='AWAITING_SIGNED_LINE', updated_at=now() WHERE quote_id=$1`, [quoteId]);
+  await withTxn(async (client) => {
+    await client.query(`UPDATE public.quote SET status='AWAITING_SIGNED_LINE', updated_at=now() WHERE quote_id=$1`, [quoteId]);
+    await logOfferEvent({ quoteId, eventType: 'APPROVED', actorUserId, actorName, actorRole, payload: { decision: 'APPROVED' }, comment, client });
+  });
+  // Best-effort denormalised mirror on the quote_offer table — never blocks the action.
   await pool.query(
     `INSERT INTO public.quote_offer (quote_id, status, updated_at)
      VALUES ($1, 'AWAITING_SIGNED_LINE', now())
      ON CONFLICT (quote_id) DO UPDATE SET status='AWAITING_SIGNED_LINE', updated_at=now()`,
     [quoteId]
   ).catch(() => {});
-  await logOfferEvent({ quoteId, eventType: 'APPROVED', actorUserId, actorName, actorRole, payload: { decision: 'APPROVED' }, comment });
   return { nextStatus: 'AWAITING_SIGNED_LINE' };
 }
 
@@ -1054,18 +1072,23 @@ export async function returnToUnderwriter({ contractId, quoteId, actorUserId, ac
   const entityType = contractId ? 'CONTRACT' : 'QUOTE';
   const entityId = contractId || quoteId;
   await assertWorkflowTransition({ entityType, entityId, action: 'RETURN', actorUserId, actorRole });
-  if (contractId) {
-    await pool.query(`UPDATE public.contract_offer SET ${RESET_CONTRACT_OFFER} WHERE contract_id=$1`, [contractId]);
-    await pool.query(`UPDATE public.contract SET uw_status='DRAFT', status='DRAFT', updated_at=now() WHERE contract_id=$1`, [contractId]);
-  } else {
-    await pool.query(`UPDATE public.quote SET status='DRAFT', updated_at=now() WHERE quote_id=$1`, [quoteId]);
+  await withTxn(async (client) => {
+    if (contractId) {
+      await client.query(`UPDATE public.contract_offer SET ${RESET_CONTRACT_OFFER} WHERE contract_id=$1`, [contractId]);
+      await client.query(`UPDATE public.contract SET uw_status='DRAFT', status='DRAFT', updated_at=now() WHERE contract_id=$1`, [contractId]);
+    } else {
+      await client.query(`UPDATE public.quote SET status='DRAFT', updated_at=now() WHERE quote_id=$1`, [quoteId]);
+    }
+    await logOfferEvent({ contractId, quoteId, eventType: 'RETURNED_TO_UW', actorUserId, actorName, actorRole, payload: { reason: reason ?? null }, comment: reason ?? null, client });
+  });
+  // Best-effort denormalised quote_offer mirror — never blocks the action.
+  if (!contractId) {
     await pool.query(
       `INSERT INTO public.quote_offer (quote_id, status, updated_at) VALUES ($1,'RETURNED',now())
        ON CONFLICT (quote_id) DO UPDATE SET status='RETURNED', updated_at=now()`,
       [quoteId]
     ).catch(() => {});
   }
-  await logOfferEvent({ contractId, quoteId, eventType: 'RETURNED_TO_UW', actorUserId, actorName, actorRole, payload: { reason: reason ?? null }, comment: reason ?? null });
   return { nextStatus: 'DRAFT' };
 }
 
@@ -1079,25 +1102,33 @@ export async function recallOffer({ contractId, quoteId, actorUserId, actorName,
   const entityType = contractId ? 'CONTRACT' : 'QUOTE';
   const entityId = contractId || quoteId;
   await assertWorkflowTransition({ entityType, entityId, action: 'RECALL', actorUserId, actorRole });
-  if (contractId) {
-    await pool.query(`UPDATE public.contract_offer SET ${RESET_CONTRACT_OFFER} WHERE contract_id=$1`, [contractId]);
-    await pool.query(`UPDATE public.contract SET uw_status='DRAFT', status='DRAFT', updated_at=now() WHERE contract_id=$1`, [contractId]);
-  } else {
-    await pool.query(`UPDATE public.quote SET status='DRAFT', updated_at=now() WHERE quote_id=$1`, [quoteId]);
+  await withTxn(async (client) => {
+    if (contractId) {
+      await client.query(`UPDATE public.contract_offer SET ${RESET_CONTRACT_OFFER} WHERE contract_id=$1`, [contractId]);
+      await client.query(`UPDATE public.contract SET uw_status='DRAFT', status='DRAFT', updated_at=now() WHERE contract_id=$1`, [contractId]);
+    } else {
+      await client.query(`UPDATE public.quote SET status='DRAFT', updated_at=now() WHERE quote_id=$1`, [quoteId]);
+    }
+    await logOfferEvent({ contractId, quoteId, eventType: 'RECALLED', actorUserId, actorName, actorRole, payload: { reason: reason ?? null }, comment: reason ?? null, client });
+  });
+  // Best-effort denormalised quote_offer mirror — never blocks the action.
+  if (!contractId) {
     await pool.query(
       `INSERT INTO public.quote_offer (quote_id, status, updated_at) VALUES ($1,'RECALLED',now())
        ON CONFLICT (quote_id) DO UPDATE SET status='RECALLED', updated_at=now()`,
       [quoteId]
     ).catch(() => {});
   }
-  await logOfferEvent({ contractId, quoteId, eventType: 'RECALLED', actorUserId, actorName, actorRole, payload: { reason: reason ?? null }, comment: reason ?? null });
   return { nextStatus: 'DRAFT' };
 }
 
-async function logOfferEvent({contractId,quoteId,eventType,actorUserId,actorName,actorRole,payload,comment}) {
-  await pool.query(
+async function logOfferEvent({contractId,quoteId,eventType,actorUserId,actorName,actorRole,payload,comment,client}) {
+  const db = client || pool;
+  await db.query(
     `INSERT INTO public.offer_approval_event (contract_id,quote_id,event_type,actor_user_id,actor_name,actor_role,payload,comment) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
     [contractId||null,quoteId||null,eventType,actorUserId||null,actorName||'SYSTEM',actorRole||null,payload?JSON.stringify(payload):null,comment||null]
   );
-  if (contractId) await logAudit(pool,{entityType:'CONTRACT',entityId:contractId,eventType,actor:{id:actorUserId,name:actorName,role:actorRole},payload,comment}).catch(()=>{});
+  // Critical: a failed audit write throws so the surrounding transaction rolls
+  // back (status change + event + audit are atomic). Runs on the same client.
+  if (contractId) await logAudit(db,{entityType:'CONTRACT',entityId:contractId,eventType,actor:{id:actorUserId,name:actorName,role:actorRole},payload,comment}, { critical: true });
 }

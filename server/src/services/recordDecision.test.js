@@ -11,7 +11,15 @@
 //   • stored approver_options disagreeing with live eligibility → fail-closed 409
 import { describe, it, expect, vi } from 'vitest';
 
-const { poolMock } = vi.hoisted(() => ({ poolMock: { query: vi.fn() } }));
+const { poolMock } = vi.hoisted(() => {
+  const poolMock = { query: vi.fn() };
+  // Approval actions now run inside a transaction: connect() returns a client
+  // backed by the CURRENT poolMock.query (each test reassigns it), so BEGIN /
+  // COMMIT / ROLLBACK dispatch through the same SQL-text mock (unrecognised SQL
+  // → { rows: [] }, harmless) and slot-claim calls are still recorded on it.
+  poolMock.connect = async () => ({ query: (...a) => poolMock.query(...a), release: () => {} });
+  return { poolMock };
+});
 vi.mock('../db/pool.js', () => ({ pool: poolMock }));
 
 const { recordDecision, recordPeerDecision, approverOptionIds } = await import('./approvals.js');

@@ -70,7 +70,15 @@ describe('no privileged workflow-state write lives outside the approval service'
 });
 
 // ── 2. Behavioural tests (pool mocked) ───────────────────────────────────────
-const { poolMock } = vi.hoisted(() => ({ poolMock: { query: vi.fn() } }));
+const { poolMock } = vi.hoisted(() => {
+  const poolMock = { query: vi.fn() };
+  // Approval actions now run inside a transaction: connect() returns a client
+  // backed by the CURRENT poolMock.query (each test reassigns it), so BEGIN /
+  // COMMIT / ROLLBACK dispatch through the same SQL-text mock (unrecognised SQL
+  // → { rows: [] }, harmless).
+  poolMock.connect = async () => ({ query: (...a) => poolMock.query(...a), release: () => {} });
+  return { poolMock };
+});
 vi.mock('../db/pool.js', () => ({ pool: poolMock }));
 vi.mock('./ldf/benchmark.js', () => ({ refreshBenchmarks: vi.fn(() => Promise.resolve()) }));
 

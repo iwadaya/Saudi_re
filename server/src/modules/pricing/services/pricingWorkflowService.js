@@ -13,7 +13,7 @@ import {
   recallOffer,
 } from '../../../services/approvals.js';
 import { logAudit } from '../../../services/audit.js';
-import { pool } from '../../../db/pool.js';
+import { withTransaction } from '../../../db/withTransaction.js';
 import {
   replaceOffer,
   markDeclined,
@@ -23,15 +23,23 @@ import {
 import { parseOfferLinePct, parseSignedLinePct } from './pricingHelpers.js';
 
 export async function saveOfferAction(contractId, offer, actor) {
-  const saved = await replaceOffer(contractId, offer);
-  await logAudit(pool, { entityType: 'CONTRACT', entityId: contractId, eventType: 'OFFERED', actor });
-  return saved;
+  // OFFERED: the offer rows, the contract status flip and the (critical) audit
+  // commit together — a failed audit rolls the whole offer back.
+  return withTransaction(async (client) => {
+    const saved = await replaceOffer(contractId, offer, client);
+    await logAudit(client, { entityType: 'CONTRACT', entityId: contractId, eventType: 'OFFERED', actor }, { critical: true });
+    return saved;
+  });
 }
 
 export async function declineTreatyAction(contractId, actor, reason) {
-  await markDeclined(contractId, reason);
-  await logAudit(pool, { entityType: 'CONTRACT', entityId: contractId, eventType: 'DECLINED', actor, payload: { reason }, comment: reason || null });
-  await insertApprovalEvent(contractId, 'DECLINED', actor, reason || null);
+  // DECLINED: status change, offer_approval_event and the (critical) audit row
+  // are one atomic unit.
+  await withTransaction(async (client) => {
+    await markDeclined(contractId, reason, client);
+    await logAudit(client, { entityType: 'CONTRACT', entityId: contractId, eventType: 'DECLINED', actor, payload: { reason }, comment: reason || null }, { critical: true });
+    await insertApprovalEvent(contractId, 'DECLINED', actor, reason || null, client);
+  });
 }
 
 export async function submitForApprovalAction(contractId, actor, payload) {

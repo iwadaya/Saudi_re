@@ -15,8 +15,9 @@ function scheduleBenchmarkRefresh() {
  * Error when the contract doesn't exist; the error handler turns
  * that into { status: 404, code: 'NOT_FOUND' } via resolveStatus.
  */
-async function loadCurrentStatus(contractId) {
-  const { rows } = await pool.query(
+async function loadCurrentStatus(contractId, client) {
+  const db = client || pool;
+  const { rows } = await db.query(
     'SELECT uw_status FROM public.contract WHERE contract_id=$1',
     [contractId]
   );
@@ -34,9 +35,10 @@ export async function getOffer(contractId) {
   return rows[0] || null;
 }
 
-export async function replaceOffer(contractId, offer) {
-  await pool.query('DELETE FROM public.contract_offer WHERE contract_id=$1', [contractId]);
-  const { rows } = await pool.query(
+export async function replaceOffer(contractId, offer, client) {
+  const db = client || pool;
+  await db.query('DELETE FROM public.contract_offer WHERE contract_id=$1', [contractId]);
+  const { rows } = await db.query(
     `INSERT INTO public.contract_offer
       (contract_id,written_line_pct,premium_driver,profit_driver,strategic_rationale,tactical_rationale,next_approver,status)
      VALUES ($1,$2,$3,$4,$5,$6,$7,'PENDING') RETURNING *`,
@@ -50,23 +52,26 @@ export async function replaceOffer(contractId, offer) {
       offer.next_approver,
     ]
   );
-  await pool.query("UPDATE public.contract SET status='OFFERED',updated_at=now() WHERE contract_id=$1", [contractId]);
+  await db.query("UPDATE public.contract SET status='OFFERED',updated_at=now() WHERE contract_id=$1", [contractId]);
   return rows[0];
 }
 
-export async function markDeclined(contractId, reason) {
+export async function markDeclined(contractId, reason, client) {
+  const db = client || pool;
   // Decline is legal from any non-terminal state; the machine blocks
   // only SIGNED → DECLINED and NTU → DECLINED (can't un-sign a treaty).
-  const current = await loadCurrentStatus(contractId);
+  const current = await loadCurrentStatus(contractId, client);
   assertLegalTransition(current, 'DECLINED');
-  await pool.query(
+  await db.query(
     `UPDATE public.contract SET uw_status='DECLINED',status='DECLINED',decline_reason=$2,declined_at=now(),updated_at=now() WHERE contract_id=$1`,
     [contractId, reason]
   );
-  await pool.query(
+  // Offer-table mirror — a 0-row update (no offer yet) is a no-op, so this is
+  // safe to keep inside the caller's transaction (atomic with the decline).
+  await db.query(
     `UPDATE public.contract_offer SET status='DECLINED',decline_reason=$2,declined_at=now(),updated_at=now() WHERE contract_id=$1`,
     [contractId, reason || null]
-  ).catch(() => {});
+  );
   scheduleBenchmarkRefresh();
 }
 
@@ -87,10 +92,11 @@ export async function getLegacyApprovalTrail(contractId) {
   return rows;
 }
 
-export async function insertApprovalEvent(contractId, eventType, actor, comment = null) {
-  await pool.query(
+export async function insertApprovalEvent(contractId, eventType, actor, comment = null, client) {
+  const db = client || pool;
+  await db.query(
     `INSERT INTO public.offer_approval_event (contract_id,event_type,actor_user_id,actor_name,actor_role,comment)
      VALUES ($1,$2,$3,$4,$5,$6)`,
     [contractId, eventType, actor.actorUserId || null, actor.actorName, actor.actorRole || null, comment]
-  ).catch(() => {});
+  );
 }
