@@ -40,6 +40,8 @@ function renderModal(over = {}) {
     calcEngineError: '',
     updateClientStructureLayer: vi.fn(),
     updateClientStructure: vi.fn(),
+    save: vi.fn(async () => true),
+    doSubmitForApproval: vi.fn(async () => {}),
     onClose: vi.fn(),
     ...over,
   };
@@ -80,6 +82,16 @@ describe('FQPricingAnalysisModal — row rendering', () => {
     expect(scoped.getByText('Risk')).toBeInTheDocument();
     expect(scoped.getByText('Cat')).toBeInTheDocument();
     expect(scoped.getByText('Total')).toBeInTheDocument();
+  });
+
+  it('opens the per-scope Final Price modal from each peril section header', () => {
+    renderModal();
+    expect(screen.getByTestId('fq-final-price-open-risk')).toBeInTheDocument();
+    expect(screen.getByTestId('fq-final-price-open-cat')).toBeInTheDocument();
+    // Closed until triggered.
+    expect(screen.queryByTestId('fq-final-price-title')).toBeNull();
+    fireEvent.click(screen.getByTestId('fq-final-price-open-risk'));
+    expect(screen.getByTestId('fq-final-price-title').textContent).toBe('Final Price · Structure 1 · Risk');
   });
 
   it('renders a per-section total as the table tfoot (sums + limit-weighted rates across every column)', () => {

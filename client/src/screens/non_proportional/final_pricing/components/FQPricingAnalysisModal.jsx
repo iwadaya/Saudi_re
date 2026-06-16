@@ -11,6 +11,7 @@ import { QUOTE_COMPONENT_SCOPES, quoteComponentDerived } from '../fqQuoteMath.js
 import { fqPriceLayerOnCurve, fqFitPowerLaw, fqPeerToXY, fqGeomean } from '../fqHelpers.js';
 import { api } from '../../../../api';
 import { FQPctCell, FQReadCell } from './FQCells.jsx';
+import FQFinalPriceModal from './FQFinalPriceModal.jsx';
 
 const TOP_TABS = [
   { k: 'pricing', label: 'Pricing Analysis' },
@@ -64,9 +65,13 @@ export default function FQPricingAnalysisModal({
   calcEngineError,
   updateClientStructureLayer,
   updateClientStructure,
+  save,
+  doSubmitForApproval,
   onClose,
 }) {
   const [tab, setTab] = useState('pricing');
+  // Per-scope "Final Price" modal (null = closed, else 'risk' | 'cat').
+  const [finalPriceScope, setFinalPriceScope] = useState(null);
   // ── Peer pools per scope → power-law fits for the Implied · Country/Region/
   //    Global columns (same fits the benchmark modal uses). Fetched on open and
   //    whenever contractId/cobIds change; failures degrade to an empty pool. ──
@@ -278,7 +283,17 @@ export default function FQPricingAnalysisModal({
             <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: scope.color }}>{scope.label} Pricing Analysis</div>
             <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.58)', marginTop: 2 }}>Edit component metrics here; the main structure table updates from these totals.</div>
           </div>
-          <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.75)', fontWeight: 750 }}>Wtd ROL {fmtPct(componentTotals(scopeKey).wtdRol)}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.75)', fontWeight: 750 }}>Wtd ROL {fmtPct(componentTotals(scopeKey).wtdRol)}</div>
+            <button
+              type="button"
+              data-testid={`fq-final-price-open-${scopeKey}`}
+              onClick={() => setFinalPriceScope(scopeKey)}
+              style={{ padding: '5px 12px', borderRadius: 8, border: `1px solid ${scope.color}66`, background: `${scope.color}1f`, color: scope.color, fontSize: 10, fontWeight: 850, letterSpacing: '.08em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap' }}
+            >
+              Final Price
+            </button>
+          </div>
         </div>
         {/* Weights are now per-row columns (Wt Burn/Pareto/Exp) — no top blender.
             ONLY the table scrolls horizontally; the section header sits above
@@ -445,6 +460,7 @@ export default function FQPricingAnalysisModal({
   );
 
   return (
+    <>
     <div className={`bm-modal-backdrop${isQuote ? ' bm-modal-backdrop--fullscreen' : ''}`} role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div
         className={`bm-modal${isQuote ? ' bm-modal--fullscreen' : ''}`}
@@ -539,5 +555,16 @@ export default function FQPricingAnalysisModal({
         </div>
       </div>
     </div>
+    <FQFinalPriceModal
+      open={!!finalPriceScope}
+      scopeKey={finalPriceScope}
+      structure={structure}
+      sIdx={sIdx}
+      updateClientStructureLayer={updateClientStructureLayer}
+      save={save}
+      doSubmitForApproval={doSubmitForApproval}
+      onClose={() => setFinalPriceScope(null)}
+    />
+    </>
   );
 }
