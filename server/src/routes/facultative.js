@@ -161,7 +161,11 @@ router.post('/fac/risks', validateBody(facRiskSaveSchema), asyncHandler(async (r
     numOrNull(b.commission_pct), numOrNull(b.brokerage_pct), numOrNull(b.taxes_pct),
     numOrNull(b.original_premium), numOrNull(b.ri_premium), numOrNull(b.original_rate),
     numOrNull(b.pml_amount), numOrNull(b.pml_pct), numOrNull(b.mfl_amount), numOrNull(b.mfl_pct),
-    b.created_by_user_id || null, b.assigned_to_user_id || null,
+    // Creator/owner come from the verified session, not the body (created_by is
+    // not even in the schema). Default the assignee to the creator so the risk is
+    // immediately editable by them — the edit-lock guard requires ownership, and
+    // an unassigned risk would otherwise be read-only the moment it's created.
+    req.user?.userId || null, b.assigned_to_user_id || req.user?.userId || null,
     b.linked_contract_id || null, b.underwriter_notes || null, b.status || 'DRAFT',
     b.cedant_region || null, b.renewal_or_new || null, b.expiring_reference || null, b.risk_country_zone || null,
     b.multi_location_flag ?? false, b.multi_occupancy_flag ?? false, b.risk_location_top_address || null,
@@ -209,7 +213,10 @@ router.put('/fac/risks/:id', validateBody(facRiskSaveSchema), asyncHandler(async
     numOrNull(b.commission_pct), numOrNull(b.brokerage_pct), numOrNull(b.taxes_pct),
     numOrNull(b.original_premium), numOrNull(b.ri_premium), numOrNull(b.original_rate),
     numOrNull(b.pml_amount), numOrNull(b.pml_pct), numOrNull(b.mfl_amount), numOrNull(b.mfl_pct),
-    b.assigned_to_user_id || null,
+    // Preserve ownership on a plain save: only the owner can reach this guarded
+    // route, so default the assignee to them rather than NULLing it (which would
+    // make the risk read-only and lock the owner out of their own next save).
+    b.assigned_to_user_id || req.user?.userId || null,
     b.linked_contract_id || null, b.underwriter_notes || null, b.status || 'DRAFT',
     b.cedant_region || null, b.renewal_or_new || null, b.expiring_reference || null,
     b.risk_country_zone || null, b.multi_location_flag ?? false, b.multi_occupancy_flag ?? false,

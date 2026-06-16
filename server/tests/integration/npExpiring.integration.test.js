@@ -13,14 +13,15 @@
 //   • Quote variant of the same pair           (/api/quotes/:id/np/expiring)
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { bootApp, shouldSkipDb, closePools } from './helpers.js';
+import { bootApp, shouldSkipDb, closePools, seedRefs } from './helpers.js';
 
 describe.skipIf(shouldSkipDb)('integration: NP expiring structure round-trip', () => {
   let harness;
+  let refs;
   const createdTreaties = [];
   const createdQuotes = [];
 
-  beforeAll(async () => { harness = await bootApp(); });
+  beforeAll(async () => { harness = await bootApp(); refs = await seedRefs({ category: 'NON_PROPORTIONAL' }); });
   afterAll(async () => {
     for (const id of createdTreaties) {
       try { await harness.fetchApp('DELETE', `/api/treaties/${id}`); } catch {}
@@ -34,7 +35,7 @@ describe.skipIf(shouldSkipDb)('integration: NP expiring structure round-trip', (
 
   it('treaty: PUT layers + terms → GET returns the same values', async () => {
     const c = await harness.fetchApp('POST', '/api/treaties', {
-      body: { uw_year: 2026, inception_date: '2026-01-01' },
+      body: { ...refs, uw_year: 2026, inception_date: '2026-01-01' },
     }).then((r) => r.json());
     createdTreaties.push(c.contract_id);
 
@@ -70,7 +71,7 @@ describe.skipIf(shouldSkipDb)('integration: NP expiring structure round-trip', (
 
   it('treaty: re-PUT with fewer layers replaces the prior set (no stale rows)', async () => {
     const c = await harness.fetchApp('POST', '/api/treaties', {
-      body: { uw_year: 2026, inception_date: '2026-01-01' },
+      body: { ...refs, uw_year: 2026, inception_date: '2026-01-01' },
     }).then((r) => r.json());
     createdTreaties.push(c.contract_id);
 
@@ -103,7 +104,7 @@ describe.skipIf(shouldSkipDb)('integration: NP expiring structure round-trip', (
   it('quote: the /api/quotes/:id/np/expiring alias round-trips too', async () => {
     // Quote creation mirrors treaty creation on the same endpoint
     const q = await harness.fetchApp('POST', '/api/quotes', {
-      body: { uw_year: 2026, status: 'DRAFT', inception_date: '2026-01-01' },
+      body: { ...refs, uw_year: 2026, status: 'DRAFT', inception_date: '2026-01-01' },
     }).then((r) => r.json());
     const qid = q.quote_id || q.id;
     createdQuotes.push(qid);
@@ -124,7 +125,7 @@ describe.skipIf(shouldSkipDb)('integration: NP expiring structure round-trip', (
 
   it('GET on an empty treaty returns the zero-layers shape without throwing', async () => {
     const c = await harness.fetchApp('POST', '/api/treaties', {
-      body: { uw_year: 2026, inception_date: '2026-01-01' },
+      body: { ...refs, uw_year: 2026, inception_date: '2026-01-01' },
     }).then((r) => r.json());
     createdTreaties.push(c.contract_id);
 

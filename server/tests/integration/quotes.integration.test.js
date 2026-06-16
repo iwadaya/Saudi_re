@@ -109,7 +109,13 @@ describe.skipIf(shouldSkipDb)('integration: /api/quotes end-to-end', () => {
   });
 
   it('rejects an invalid save payload with 400 + fields[]', async () => {
-    const bad = await harness.fetchApp('PUT', '/api/quotes/00000000-0000-0000-0000-000000000000', {
+    // The edit-lock guard runs before body validation, so the invalid payload
+    // must target a real, caller-owned quote to reach the validator.
+    const q = await harness.fetchApp('POST', '/api/quotes', {
+      body: { ...refs, uw_year: 2026, inception_date: '2026-01-01' },
+    }).then((r) => r.json());
+    createdQuoteIds.push(q.quote_id);
+    const bad = await harness.fetchApp('PUT', `/api/quotes/${q.quote_id}`, {
       body: { terms: { header: { uw_year: 2026, status: 'BANANA' } } },
     });
     expect(bad.status).toBe(400);

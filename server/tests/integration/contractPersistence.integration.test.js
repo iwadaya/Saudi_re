@@ -78,7 +78,7 @@ describe.skipIf(shouldSkipDb)('integration: contract save and rehydrate every ro
       ),
       one(
         `INSERT INTO public.treaty_type (treaty_type, category)
-         VALUES ($1, 'PROPORTIONAL') RETURNING treaty_type_id`,
+         VALUES ($1, 'NON_PROPORTIONAL') RETURNING treaty_type_id`,
         [`Persist Treaty Type ${suffix}`],
       ),
       one(
@@ -748,17 +748,39 @@ describe.skipIf(shouldSkipDb)('integration: contract save and rehydrate every ro
     expect(historical).toHaveLength(1);
     expect(n(historical[0].combined_ratio)).toBeCloseTo(70);
 
+    // straight-stats requires a PROPORTIONAL treaty, but this contract is
+    // NON_PROPORTIONAL (it hosts the NP surfaces above). Round-trip the straight
+    // experience on a sibling proportional contract so both category-guarded
+    // surfaces stay covered by this persistence test.
+    const propTreatyType = await one(
+      `INSERT INTO public.treaty_type (treaty_type, category) VALUES ($1,'PROPORTIONAL') RETURNING treaty_type_id`,
+      [`Persist Prop TType ${Date.now()}`],
+    );
+    const straightContract = await jsonOk(
+      await harness.fetchApp('POST', '/api/treaties', {
+        body: {
+          uw_year: 2026, cedant_id: refs.cedantId, broker_id: refs.brokerId,
+          country_id: refs.countryId, currency_id: refs.currencyId,
+          treaty_type_id: propTreatyType.treaty_type_id, status: 'DRAFT',
+          inception_date: '2026-01-01',
+        },
+      }),
+      'create proportional sibling for straight stats',
+    );
+    const straightContractId = straightContract.contract_id;
+    createdContracts.push(straightContractId);
+
     await expectOk(
       await harness.fetchApp('POST', '/api/straight-stats/save', {
         body: {
-          contractId,
+          contractId: straightContractId,
           tailType: 'LONG_TAIL',
           stats: [{ underwriting_year: 2022, premium: 1000, paid_claims: 300, os_claims: 200 }],
         },
       }),
       'save straight stats',
     );
-    const straight = await jsonOk(await harness.fetchApp('GET', `/api/straight-stats/load/${contractId}`), 'load straight stats');
+    const straight = await jsonOk(await harness.fetchApp('GET', `/api/straight-stats/load/${straightContractId}`), 'load straight stats');
     expect(straight.tail_type).toBe('LONG_TAIL');
     expect(straight.stats).toHaveLength(1);
 
@@ -809,8 +831,11 @@ describe.skipIf(shouldSkipDb)('integration: contract save and rehydrate every ro
     ];
 
     for (const table of directContractTables) {
-      const rows = await many(`SELECT 1 FROM public.${table} WHERE contract_id=$1 LIMIT 1`, [contractId]);
-      expect(rows.length, `${table} should have saved rows for ${contractId}`).toBe(1);
+      // straight-experience tables live on the proportional sibling; everything
+      // else (including the NP tables) lives on the main NON_PROPORTIONAL contract.
+      const id = table.startsWith('contract_straight_') ? straightContractId : contractId;
+      const rows = await many(`SELECT 1 FROM public.${table} WHERE contract_id=$1 LIMIT 1`, [id]);
+      expect(rows.length, `${table} should have saved rows for ${id}`).toBe(1);
     }
 
     const secondLevelChecks = [
