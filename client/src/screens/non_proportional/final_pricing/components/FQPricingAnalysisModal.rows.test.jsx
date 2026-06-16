@@ -62,12 +62,13 @@ describe('FQPricingAnalysisModal — row rendering', () => {
     expect(catL2).not.toBeChecked();
   });
 
-  it('populates Limit / Deductible / EGNPI from the layer', () => {
+  it('populates Limit / Deductible / EGNPI from the layer (no currency code)', () => {
     renderModal();
-    // Money formatting → "USD 1,000,000" etc. appears in both sections.
-    expect(screen.getAllByText('USD 1,000,000').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('USD 500,000').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('USD 2,000,000').length).toBeGreaterThan(0);
+    // Bare numbers, no "USD" prefix.
+    expect(screen.getAllByText('1,000,000').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('500,000').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('2,000,000').length).toBeGreaterThan(0);
+    expect(screen.queryByText('USD 1,000,000')).toBeNull();
   });
 
   it('renders the Total Section with Risk / Cat / Total rows when both perils are active', () => {
@@ -81,27 +82,47 @@ describe('FQPricingAnalysisModal — row rendering', () => {
     expect(scoped.getByText('Total')).toBeInTheDocument();
   });
 
-  it('renders a per-section total strip under each peril table (matching the header Wtd ROL)', () => {
+  it('renders a per-section total as the table tfoot (sums + limit-weighted rates across every column)', () => {
     renderModal();
-    const riskStrip = screen.getByTestId('fq-section-total-risk');
+    const riskTotal = screen.getByTestId('fq-section-total-risk');
     expect(screen.getByTestId('fq-section-total-cat')).toBeInTheDocument();
 
-    const riskSection = screen.getByText('Risk Pricing Analysis').closest('section');
-    // Inside the section card, but OUTSIDE the table's horizontal-scroll wrapper.
-    expect(riskSection.contains(riskStrip)).toBe(true);
-    const riskTableWrapper = within(riskSection).getAllByRole('table')[0].parentElement;
-    expect(riskTableWrapper.contains(riskStrip)).toBe(false);
+    // It's the table's <tfoot> row, so it stays per-column aligned and scrolls with the columns.
+    expect(riskTotal.tagName).toBe('TR');
+    expect(riskTotal.closest('tfoot')).toBeTruthy();
+    const tds = riskTotal.querySelectorAll('td');
+    expect(tds.length).toBe(22);                          // one cell per column
+    expect(tds[0].textContent).toBe('TOTAL');            // Layer column
+    expect(tds[2].textContent).toBe('3,000,000');        // Limit = 1,000,000 + 2,000,000 (no currency)
+    // Non-summable term columns stay blank.
+    expect(tds[3].textContent).toBe('—');                // Deductible
+    expect(tds[5].textContent).toBe('—');                // Reinst.
+    expect(tds[10].textContent).toBe('—');               // Wt Burn
+    expect(tds[21].textContent).toBe('—');               // Note
+    // Rate columns: limit-weighted average across active layers (limits 1M, 2M).
+    expect(tds[7].textContent).toBe('3.33%');            // Pure Burn (1·4 + 2·3)/3
+    expect(tds[9].textContent).toBe('5.67%');            // Exposure (1·5 + 2·6)/3
 
-    // Risk-only summary: Active / Limit / Premium / Wtd ROL.
-    expect(riskStrip.textContent).toMatch(/Risk Total/);
-    expect(riskStrip.textContent).toMatch(/Active/);
-    expect(riskStrip.textContent).toMatch(/Limit/);
-    expect(riskStrip.textContent).toMatch(/Premium/);
-    const m = riskStrip.textContent.match(/Wtd ROL (\d+\.\d{2}%)/);
-    expect(m).toBeTruthy();
-    // The strip's Wtd ROL equals the section header's (same value appears in the
-    // section at least twice: the header line + the strip).
-    expect(riskSection.textContent.split(m[1]).length - 1).toBeGreaterThanOrEqual(2);
+    // The combined reconciliation Total Section is still rendered at the bottom.
+    expect(screen.getByText('Total Section')).toBeInTheDocument();
+  });
+
+  it('moves weights to per-row Wt columns (no top blender) and adds editable reinstatement columns', () => {
+    const updateClientStructureLayer = vi.fn();
+    renderModal({ updateClientStructureLayer });
+    // The old top "BLEND WEIGHTS" bar is gone.
+    expect(screen.queryByText('Blend weights')).toBeNull();
+    // New headers appear (once per peril table).
+    ['Wt Burn', 'Wt Pareto', 'Wt Exp', 'Reinst.', '% Reinst.'].forEach((h) => {
+      expect(screen.getAllByText(h).length).toBeGreaterThanOrEqual(1);
+    });
+    // Per-row Wt Burn drives the scope weight field.
+    fireEvent.change(screen.getByLabelText('Risk Structure 1 Layer 1 riskWeightBurn'), { target: { value: '60' } });
+    expect(updateClientStructureLayer).toHaveBeenCalledWith(0, 0, 'riskWeightBurn', '60');
+    // Reinstatements is layer-level (same input lives in both tables) and editable.
+    const riskSection = screen.getByText('Risk Pricing Analysis').closest('section');
+    fireEvent.change(within(riskSection).getByLabelText('Structure 1 Layer 1 reinstatements'), { target: { value: '2' } });
+    expect(updateClientStructureLayer).toHaveBeenCalledWith(0, 0, 'reinstatements', '2');
 
     // The combined reconciliation Total Section is still rendered at the bottom.
     expect(screen.getByText('Total Section')).toBeInTheDocument();
@@ -126,8 +147,8 @@ describe('FQPricingAnalysisModal — row rendering', () => {
     ];
     renderModal({ clientStructures: twoStructures, pricingAnalysisModal: { open: true, structureIndex: 1 } });
     expect(screen.getByText('Pricing Analysis · Structure 2')).toBeInTheDocument();
-    expect(screen.getAllByText('USD 7,777,777').length).toBeGreaterThan(0);
-    expect(screen.queryByText('USD 1,000,000')).toBeNull(); // Structure 1's limit must not appear
+    expect(screen.getAllByText('7,777,777').length).toBeGreaterThan(0);
+    expect(screen.queryByText('1,000,000')).toBeNull(); // Structure 1's limit must not appear
   });
 
   it('uses a fixed full-viewport shell that fills the screen (caps defeated), body scrolls', () => {
@@ -178,8 +199,9 @@ describe('FQPricingAnalysisModal — row rendering', () => {
     expect(screen.getByText('P(Exhaust)')).toBeInTheDocument();
     expect(screen.getByText('Note')).toBeInTheDocument();
     // riskPrAttach "12.5" → "12.50%", riskPrExhaust "3.2" → "3.20%"
-    expect(screen.getByText('12.50%')).toBeInTheDocument();
-    expect(screen.getByText('3.20%')).toBeInTheDocument();
+    // Appears in the layer cell and the tfoot total (single active layer → same value).
+    expect(screen.getAllByText('12.50%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('3.20%').length).toBeGreaterThan(0);
   });
 
   it('edits the per-layer Note via updateClientStructureLayer(`${scope}LayerNote`)', () => {

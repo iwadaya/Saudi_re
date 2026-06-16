@@ -64,6 +64,7 @@ export const emptyStrLayer = (i, { riskDisabled = false, catDisabled = false } =
     riskExposure: '',
     riskWeightBurn: '50',
     riskWeightPareto: '0',
+    riskWeightExp: '50',
     riskLoading: '15',
     riskUwPrice: '',
     catPureBurn: '',
@@ -71,10 +72,16 @@ export const emptyStrLayer = (i, { riskDisabled = false, catDisabled = false } =
     catExposure: '',
     catWeightBurn: '50',
     catWeightPareto: '0',
+    catWeightExp: '50',
     catLoading: '15',
     catUwPrice: '',
     pAttach: '',
     pExhaust: '',
+    // Layer-level reinstatement terms (same value shown in the Risk and Cat
+    // Pricing Analysis tables). Default '' so they round-trip through the save
+    // path (normalize spreads ...layer, so these persist).
+    reinstatements: '',
+    pctReinst: '',
     // Per-layer, per-scope free-text note shown in the Pricing Analysis
     // modal's "Note" column. Defaults to '' so it round-trips through the
     // save path (normalize spreads ...layer, so these persist).

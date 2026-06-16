@@ -323,17 +323,21 @@ describe('NpFinalPricing golden master (quote mode)', () => {
     await screen.findByText(/Risk Pricing Analysis/i);
     const paTables = Array.from(container.querySelector('.bm-modal').querySelectorAll('table'));
 
+    // Header + the single data row + the per-column <tfoot> total. Money cells
+    // are bare (no "SAR"); weights are per-row [50]/[0]/[50]; the tfoot sums
+    // amounts and limit-weights the rate columns.
     const componentRows = (scope) => [
-      ['Layer', 'Active', 'Limit', 'Deductible', 'EGNPI', 'Pure Burn', 'Pareto', 'Exposure', 'Blend', 'Implied · Expiring', 'Implied · Country', 'Implied · Region', 'Implied · Global', 'UW Price', 'P(Attach)', 'P(Exhaust)', 'Note'],
-      ['1', '[x]', 'SAR 750,000', 'SAR 100,000', 'SAR 1,500,000', `[${scope}]`, '[0%]', `[${scope}]`, '53.32%', '62.73%', '—', '—', '—', '[62.726%]', '—', '—', '[]'],
+      ['Layer', 'Active', 'Limit', 'Deductible', 'EGNPI', 'Reinst.', '% Reinst.', 'Pure Burn', 'Pareto', 'Exposure', 'Wt Burn', 'Wt Pareto', 'Wt Exp', 'Blend', 'Implied · Expiring', 'Implied · Country', 'Implied · Region', 'Implied · Global', 'UW Price', 'P(Attach)', 'P(Exhaust)', 'Note'],
+      ['1', '[x]', '750,000', '100,000', '1,500,000', '[]', '[]', `[${scope}]`, '[0%]', `[${scope}]`, '[50]', '[0]', '[50]', '53.32%', '62.73%', '—', '—', '—', '[62.726%]', '—', '—', '[]'],
+      ['TOTAL', '1', '750,000', '—', '1,500,000', '—', '—', '53.32%', '—', '53.32%', '—', '—', '—', '53.32%', '62.73%', '—', '—', '—', '62.73%', '—', '—', '—'],
     ];
     expect(rowsOf(paTables[0])).toEqual(componentRows('53.3171%'));
     expect(rowsOf(paTables[1])).toEqual(componentRows('53.3171%'));
     expect(rowsOf(paTables[2])).toEqual([
       ['Component', 'Active Layers', 'Limit', 'Premium', 'Weighted ROL'],
-      ['Risk', '1', 'SAR 750,000', 'SAR 470,445', '62.73%'],
-      ['Cat', '1', 'SAR 750,000', 'SAR 470,445', '62.73%'],
-      ['Total', '2', 'SAR 1,500,000', 'SAR 940,890', '62.73%'],
+      ['Risk', '1', '750,000', '470,445', '62.73%'],
+      ['Cat', '1', '750,000', '470,445', '62.73%'],
+      ['Total', '2', '1,500,000', '940,890', '62.73%'],
     ]);
   });
 });

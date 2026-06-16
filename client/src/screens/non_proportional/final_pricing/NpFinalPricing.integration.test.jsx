@@ -256,10 +256,12 @@ describe('NpFinalPricing integration', () => {
     fireEvent.click(paButton);
     await screen.findByText(/Risk Pricing Analysis/i);
     await waitFor(() => {
+      // In-table editable bm-cell inputs, in column order:
+      //   [0] % Reinst · [1] Pure Burn · [2] Pareto · [3] Exposure · [4-6] Wt · [7] UW Price
       const riskInputs = container.querySelector('.bm-modal').querySelectorAll('table')[0].querySelectorAll('input.bm-cell');
-      expect(riskInputs[0].value).toMatch(/^40/);
-      expect(riskInputs[2].value).toMatch(/%$/);
-      expect(riskInputs[2].value).not.toBe('');
+      expect(riskInputs[1].value).toMatch(/^40/);   // Pure Burn populated by the engine
+      expect(riskInputs[3].value).toMatch(/%$/);    // Exposure populated by the engine
+      expect(riskInputs[3].value).not.toBe('');
     });
     expect(apiMock.getLargeLosses).toHaveBeenCalledWith(bindIds.quote, { quote: true });
     expect(apiMock.getRiskProfile).toHaveBeenCalled();
@@ -315,10 +317,12 @@ describe('NpFinalPricing integration', () => {
     fireEvent.click(paButton);
     await screen.findByText(/Risk Pricing Analysis/i);
     await waitFor(() => {
+      // In-table editable bm-cell inputs, in column order:
+      //   [0] % Reinst · [1] Pure Burn · [2] Pareto · [3] Exposure · [4-6] Wt · [7] UW Price
       const riskInputs = container.querySelector('.bm-modal').querySelectorAll('table')[0].querySelectorAll('input.bm-cell');
-      expect(riskInputs[0].value).toMatch(/^40/);
-      expect(riskInputs[2].value).toMatch(/%$/);
-      expect(riskInputs[2].value).not.toBe('');
+      expect(riskInputs[1].value).toMatch(/^40/);   // Pure Burn populated by the engine
+      expect(riskInputs[3].value).toMatch(/%$/);    // Exposure populated by the engine
+      expect(riskInputs[3].value).not.toBe('');
     });
   });
 });
