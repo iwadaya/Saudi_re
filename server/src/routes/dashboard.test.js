@@ -146,6 +146,22 @@ describe('unitsLobCte', () => {
   });
 });
 
+describe('proportional balance direction (limit ÷ premium, never inverted)', () => {
+  const sql = unitsCte("WHERE c.uw_status NOT IN ('DRAFT')", 1);
+
+  it('per-unit balance is total_capacity / (quota_share_epi + surplus_epi)', () => {
+    // Numerator = limit/exposure base; denominator = premium base. The
+    // inverse (premium ÷ limit) would render Agriculture as 0.65× not 1.52×.
+    expect(sql).toContain('COALESCE(pd.total_capacity,0) / NULLIF(COALESCE(pd.quota_share_epi,0)+COALESCE(pd.surplus_epi,0),0) AS balance');
+    expect(sql).not.toContain('/ NULLIF(COALESCE(pd.total_capacity'); // capacity must never be the denominator
+  });
+
+  it('weighted balance is SUM(balance*premium) / SUM(premium) → a cell equals Exposure ÷ Premium', () => {
+    expect(UNIT_AGGREGATES.balance.startsWith('SUM(balance*premium)')).toBe(true);
+    expect(UNIT_AGGREGATES.balance).toContain('NULLIF(SUM(premium) FILTER (WHERE balance IS NOT NULL),0)');
+  });
+});
+
 describe('bandCaseSql', () => {
   const sql = bandCaseSql('rol', [
     { label: '0–5%', lo: 0, hi: 0.05 },
