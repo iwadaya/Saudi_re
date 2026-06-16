@@ -171,12 +171,15 @@ export default function DashboardScreen() {
   const showYearsBack = tab === 'portfolio-summary';
   const showMonth = !(tab === 'return-analysis-proportional' || tab === 'return-analysis-nonproportional');
 
-  const exportDisabled = exporting || loading || !data || (showRegion && !filters.region);
-
   return (
     <div className="dashboard-screen app-shell grid-bg">
       <Topbar title="Portfolio Dashboard" subtitle={`Analytics & reporting · All amounts in ${currency}`}
-        actions={<button className="topbar-pill" onClick={() => navigate('/')}>← Home</button>} />
+        actions={
+          <>
+            <button className="topbar-pill" onClick={handleExport} disabled={exporting || loading || !data} title="Export this tab to Excel">{exporting ? 'Exporting…' : '↓ Export to Excel'}</button>
+            <button className="topbar-pill" onClick={() => navigate('/')}>← Home</button>
+          </>
+        } />
       <main className="workspace dashboard-workspace">
         <div className="container dashboard-container">
           <div className="crumb glass"><span className="dot" /><span className="crumb-text">DASHBOARD</span><span className="muted" style={{ marginLeft: 10 }}>/</span><span className="crumb-text" style={{ marginLeft: 10 }}>{TABS.find(t => t.key === tab)?.label}</span></div>
@@ -217,7 +220,6 @@ export default function DashboardScreen() {
                     }}>{ccy}</button>
                   ))}
                 </div>
-                <button className="chip-btn" onClick={handleExport} disabled={exportDisabled} title="Download the current tab as a branded Excel workbook">{exporting ? 'Exporting…' : '⤓ Export to Excel'}</button>
                 <button className="chip-btn" onClick={() => setFilters(p => ({ ...p, region: '', treatyType: '' }))}>Reset</button>
                 <button className="primary-pill" onClick={loadData}>Apply</button>
               </div>
