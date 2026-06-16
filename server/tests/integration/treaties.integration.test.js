@@ -103,7 +103,13 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
   });
 
   it('rejects an invalid status enum with 400 + fields[]', async () => {
-    const bad = await harness.fetchApp('PUT', '/api/treaties/00000000-0000-0000-0000-000000000000', {
+    // The edit-lock guard runs before body validation, so the invalid payload
+    // must target a real, caller-owned contract to reach the validator.
+    const c = await harness.fetchApp('POST', '/api/treaties', {
+      body: { ...refs, uw_year: 2026, inception_date: '2026-01-01' },
+    }).then((r) => r.json());
+    created.push(c.contract_id);
+    const bad = await harness.fetchApp('PUT', `/api/treaties/${c.contract_id}`, {
       body: { terms: { header: { uw_year: 2026, uw_status: 'SOMETIMES' } } },
     });
     expect(bad.status).toBe(400);

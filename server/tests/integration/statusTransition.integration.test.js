@@ -6,13 +6,14 @@
 // 422 INVALID_TRANSITION with { from, to } on the error body.
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { bootApp, shouldSkipDb, closePools } from './helpers.js';
+import { bootApp, shouldSkipDb, closePools, seedRefs } from './helpers.js';
 
 describe.skipIf(shouldSkipDb)('integration: uw_status transition guard', () => {
   let harness;
+  let refs;
   const created = [];
 
-  beforeAll(async () => { harness = await bootApp(); });
+  beforeAll(async () => { harness = await bootApp(); refs = await seedRefs(); });
   afterAll(async () => {
     for (const id of created) {
       try { await harness.fetchApp('DELETE', `/api/treaties/${id}`); } catch {}
@@ -23,7 +24,7 @@ describe.skipIf(shouldSkipDb)('integration: uw_status transition guard', () => {
 
   async function newDraft() {
     const res = await harness.fetchApp('POST', '/api/treaties', {
-      body: { uw_year: 2026, status: 'DRAFT', inception_date: '2026-01-01' },
+      body: { ...refs, uw_year: 2026, status: 'DRAFT', inception_date: '2026-01-01' },
     });
     const c = await res.json();
     created.push(c.contract_id);

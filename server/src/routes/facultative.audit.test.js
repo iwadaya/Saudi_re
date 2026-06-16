@@ -567,17 +567,18 @@ describe.skipIf(shouldSkipDb)('Phase 6: fac persistence round-trip audit', () =>
     // overlapping cob. Create one inline.
     const { rows: [tt] } = await pool.query(
       `INSERT INTO public.treaty_type (treaty_type, category)
-       VALUES ('Audit XL', 'NON_PROPORTIONAL') RETURNING treaty_type_id`,
+       VALUES ($1, 'NON_PROPORTIONAL') RETURNING treaty_type_id`,
+      [`Audit XL ${Date.now()}`],
     );
     const { rows: [cob] } = await pool.query(
       `SELECT class_of_business_id FROM public.class_of_business WHERE class_of_business = 'Property' LIMIT 1`,
     );
     const { rows: [contract] } = await pool.query(
       `INSERT INTO public.contract
-         (cedant_id, treaty_type_id, uw_year, status, inception_date, renewal_date)
-       VALUES ($1, $2, 2026, 'BOUND'::contract_status, '2026-01-01', '2026-12-31')
+         (cedant_id, broker_id, currency_id, country_id, treaty_type_id, uw_year, status, inception_date, renewal_date)
+       VALUES ($1, $2, $3, $4, $5, 2026, 'BOUND'::contract_status, '2026-01-01', '2026-12-31')
        RETURNING contract_id`,
-      [cedantId, tt.treaty_type_id],
+      [cedantId, brokerId, currencyId, countryId, tt.treaty_type_id],
     );
     await pool.query(
       `INSERT INTO public.contract_class_of_business (contract_id, class_of_business_id)

@@ -25,7 +25,7 @@ vi.hoisted(() => {
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { bootApp, shouldSkipDb, closePools } from './helpers.js';
+import { bootApp, shouldSkipDb, closePools, DEMO_USER_ID } from './helpers.js';
 import { pool } from '../../src/db/pool.js';
 import { env } from '../../src/config/env.js';
 
@@ -202,9 +202,9 @@ async function createQuote({ treatyCategory = 'PROPORTIONAL' } = {}) {
   const refs = await pickRequiredRefIds();
   const { rows } = await pool.query(
     `INSERT INTO public.quote (uw_year, status, treaty_type_id, cedant_id, broker_id, currency_id, country_id, inception_date, created_by_user_id, assigned_to_user_id)
-     VALUES ($1, 'DRAFT', $2, $3, $4, $5, $6, $7, NULL, NULL)
+     VALUES ($1, 'DRAFT', $2, $3, $4, $5, $6, $7, $8, $8)
      RETURNING quote_id`,
-    [new Date().getFullYear(), treaty_type_id, refs.cedant_id, refs.broker_id, refs.currency_id, refs.country_id, '2026-01-01'],
+    [new Date().getFullYear(), treaty_type_id, refs.cedant_id, refs.broker_id, refs.currency_id, refs.country_id, '2026-01-01', DEMO_USER_ID],
   );
   return rows[0].quote_id;
 }
@@ -217,9 +217,9 @@ async function createQuoteWithoutTreatyDetail() {
   const refs = await pickRequiredRefIds();
   const { rows } = await pool.query(
     `INSERT INTO public.quote (uw_year, status, treaty_type_id, cedant_id, broker_id, currency_id, country_id, inception_date, created_by_user_id, assigned_to_user_id)
-     VALUES ($1, 'DRAFT', $2, $3, $4, $5, $6, $7, NULL, NULL)
+     VALUES ($1, 'DRAFT', $2, $3, $4, $5, $6, $7, $8, $8)
      RETURNING quote_id`,
-    [new Date().getFullYear(), treaty_type_id, refs.cedant_id, refs.broker_id, refs.currency_id, refs.country_id, '2026-01-01'],
+    [new Date().getFullYear(), treaty_type_id, refs.cedant_id, refs.broker_id, refs.currency_id, refs.country_id, '2026-01-01', DEMO_USER_ID],
   );
   return rows[0].quote_id;
 }
@@ -297,7 +297,8 @@ describe.skipIf(shouldSkipDb)('integration: renewal-pack import (simplified)', (
       try { await pool.query(`DELETE FROM public.quote WHERE quote_id=$1`, [id]); } catch {}
     }
     await harness.close();
-    await closePools();
+    // NOTE: do NOT closePools() here — the "treaty side" describe below shares
+    // this process's pool and runs after us. Only the last describe closes it.
   });
 
   it('happy path: empty quote + renewal pack doc → 202 → done with filledPages + snapshot row + audit', async () => {
@@ -671,9 +672,9 @@ async function createContract({ treatyCategory = 'PROPORTIONAL' } = {}) {
   const refs = await pickRequiredRefIds();
   const { rows } = await pool.query(
     `INSERT INTO public.contract (uw_year, status, treaty_type_id, cedant_id, broker_id, currency_id, country_id, inception_date, created_by_user_id, assigned_to_user_id)
-     VALUES ($1, 'DRAFT', $2, $3, $4, $5, $6, $7, NULL, NULL)
+     VALUES ($1, 'DRAFT', $2, $3, $4, $5, $6, $7, $8, $8)
      RETURNING contract_id`,
-    [new Date().getFullYear(), treaty_type_id, refs.cedant_id, refs.broker_id, refs.currency_id, refs.country_id, '2026-01-01'],
+    [new Date().getFullYear(), treaty_type_id, refs.cedant_id, refs.broker_id, refs.currency_id, refs.country_id, '2026-01-01', DEMO_USER_ID],
   );
   return rows[0].contract_id;
 }
@@ -686,9 +687,9 @@ async function createContractWithoutTreatyDetail() {
   const refs = await pickRequiredRefIds();
   const { rows } = await pool.query(
     `INSERT INTO public.contract (uw_year, status, treaty_type_id, cedant_id, broker_id, currency_id, country_id, inception_date, created_by_user_id, assigned_to_user_id)
-     VALUES ($1, 'DRAFT', $2, $3, $4, $5, $6, $7, NULL, NULL)
+     VALUES ($1, 'DRAFT', $2, $3, $4, $5, $6, $7, $8, $8)
      RETURNING contract_id`,
-    [new Date().getFullYear(), treaty_type_id, refs.cedant_id, refs.broker_id, refs.currency_id, refs.country_id, '2026-01-01'],
+    [new Date().getFullYear(), treaty_type_id, refs.cedant_id, refs.broker_id, refs.currency_id, refs.country_id, '2026-01-01', DEMO_USER_ID],
   );
   return rows[0].contract_id;
 }
