@@ -6,8 +6,9 @@ import { logger } from '../lib/logger.js';
 import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from '../lib/triangleBounds.js';
 import { stripTriangleCells, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from '../lib/triangleStripping.js';
 import { suggestLossQuarters } from '../lib/lossQuarterMapper.js';
-import { logAudit, resolveAuditActor } from '../services/audit.js';
+import { logAudit, diffAudit, resolveAuditActor } from '../services/audit.js';
 import { actorFromReq } from '../middleware/requestContext.js';
+import { summarizeCellChanges, summarizeLossChanges, lossSummaryIsNoop, layerDiffMap, unionKeys, LOSS_SELECTION_FIELDS } from '../lib/auditDiffSummaries.js';
 import { contractContextJoins } from '../db/contractJoins.js';
 import { assertEntityUnchanged, optimisticLockOverrideRequested } from '../db/optimisticLock.js';
 import { buildBatchInsert } from '../db/batchInsert.js';
@@ -30,6 +31,32 @@ const router = Router();
 // Category fence for the NP-only quote routes: a proportional quote has no
 // quote_np_* rows, so reject (409) rather than silently returning empties.
 const npQuoteGuard = [loadQuoteCategory, requireQuoteCategory('NON_PROPORTIONAL')];
+
+// Field-diff watch lists for the audit trail (services/audit.js diffAudit).
+const QUOTE_HEADER_FIELDS = ['uw_year','treaty_type_id','country_id','currency_id','cedant_id','broker_id',
+  'inception_date','renewal_date','experience_source','contract_description','status','assigned_to_user_id'];
+const QUOTE_PROP_DETAILS_FIELDS = ['qs_limit','retention_pct','retention_amt','cession_pct','cession_amt',
+  'surplus_max_retention','num_lines','total_capacity','event_limit','aal','quota_share_epi','surplus_epi',
+  'brokerage_pct','taxes_pct','loss_cap_pct','experience_start_year','triangulations_available','strip_large_cat_losses'];
+const QUOTE_COMMISSIONS_FIELDS = ['mode','fixed_commission_pct','fixed_commission_qs_pct','fixed_commission_surplus_pct',
+  'sliding_min_loss_ratio','sliding_max_loss_ratio','sliding_min_commission','sliding_max_commission',
+  'provisional_commission_pct','mgmt_expenses_pct','profit_commission_pct','sliding_table'];
+const QUOTE_NP_DETAILS_FIELDS = ['number_of_layers','expiring_number_of_layers','deductible','max_retention',
+  'accounting_method','xl_type','accounts','brokerage_pct','taxes_pct','no_claims_bonus_pct',
+  'profit_commission_pct','est_gnpi','experience_start_year','structures_to_quote'];
+const QUOTE_NP_LAYER_FIELDS = ['attachment','layer_limit','aggregate_limit','egnpi','earned_premium','rate','rol',
+  'num_reinstatements','reinstatement_pct','annual_agg_deductible','peril_scope','mdp','mdp_pct',
+  'hist_margin','modelled_margin','tech_ratio','uw_price','expiring_price','lead_price'];
+const QUOTE_NP_LAYER_PRICING_FIELDS = ['hist_margin','modelled_margin','tech_ratio','uw_price','expiring_price','lead_price'];
+
+// Snapshot the quote commissions row + its sliding-scale rows as one object so
+// the slide table diffs as a single `sliding_table` summary field.
+async function snapshotQuoteCommissions(client, id) {
+  const cols = QUOTE_COMMISSIONS_FIELDS.filter((f) => f !== 'sliding_table');
+  const row = (await client.query(`SELECT ${cols.join(',')} FROM public.quote_commissions WHERE quote_id=$1`, [id])).rows[0] || {};
+  const slides = (await client.query(`SELECT row_no,loss_ratio_pct,commission_pct FROM public.quote_commission_slides WHERE quote_id=$1 ORDER BY row_no`, [id])).rows;
+  return { ...row, sliding_table: slides };
+}
 
 // Triangle variant (migration 116). Reads/writes default to MODIFIED so all
 // pre-variant behaviour is unchanged unless ACTUAL is explicitly requested.
@@ -615,6 +642,15 @@ router.put("/quotes/:id", validateBody(quotePutBodySchema), asyncHandler(async (
   }
   await assertEntityUnchanged(cl, { table: 'public.quote', idColumn: 'quote_id', id, ifUnmodifiedSince });
   await cl.query("BEGIN");
+  // Snapshot terms/financials BEFORE the writes so the audit can field-diff
+  // them after — only for the sections this save touches.
+  const diffHeader = !!(terms.header && Object.keys(terms.header).length);
+  const diffDetail = !!(terms.detail && Object.keys(terms.detail).length);
+  const diffComm = terms.commissions != null;
+  const diffBefore = {};
+  if (diffHeader) diffBefore.header = (await cl.query(`SELECT ${QUOTE_HEADER_FIELDS.join(',')} FROM public.quote WHERE quote_id=$1`,[id])).rows[0] || {};
+  if (diffDetail) diffBefore.detail = (await cl.query(`SELECT ${QUOTE_PROP_DETAILS_FIELDS.join(',')} FROM public.quote_prop_details WHERE quote_id=$1`,[id])).rows[0] || {};
+  if (diffComm) diffBefore.comm = await snapshotQuoteCommissions(cl, id);
   const h=terms.header||{};
   const d0=terms.detail||{};
   // Inception/renewal can arrive in either slice; header is source of
@@ -675,6 +711,18 @@ router.put("/quotes/:id", validateBody(quotePutBodySchema), asyncHandler(async (
     [id],
   );
   const actor = actorFromReq(req);
+  if (diffHeader) {
+    const after = (await cl.query(`SELECT ${QUOTE_HEADER_FIELDS.join(',')} FROM public.quote WHERE quote_id=$1`,[id])).rows[0] || {};
+    await diffAudit(cl,{entityType:'QUOTE',entityId:id,eventType:'QUOTE_HEADER_UPDATED',actor,before:diffBefore.header,after,fields:QUOTE_HEADER_FIELDS,label:'quote header'});
+  }
+  if (diffDetail) {
+    const after = (await cl.query(`SELECT ${QUOTE_PROP_DETAILS_FIELDS.join(',')} FROM public.quote_prop_details WHERE quote_id=$1`,[id])).rows[0] || {};
+    await diffAudit(cl,{entityType:'QUOTE',entityId:id,eventType:'PROP_DETAILS_UPDATED',actor,before:diffBefore.detail,after,fields:QUOTE_PROP_DETAILS_FIELDS,label:'quote proportional details'});
+  }
+  if (diffComm) {
+    const after = await snapshotQuoteCommissions(cl, id);
+    await diffAudit(cl,{entityType:'QUOTE',entityId:id,eventType:'COMMISSIONS_UPDATED',actor,before:diffBefore.comm,after,fields:QUOTE_COMMISSIONS_FIELDS,label:'quote commissions'});
+  }
   if (staleWriteOverride) {
     await logAudit(cl, {
       entityType: 'QUOTE',
@@ -827,6 +875,12 @@ router.post("/quotes/:id/triangles/:type", asyncHandler(async (req, res) => {
   const cl = await pool.connect();
   try {
     await cl.query("BEGIN");
+    // Snapshot existing cells so the audit records a summary diff
+    // (added/removed/changed counts) rather than every cell.
+    const beforeCells = (await cl.query(
+      `SELECT origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type=$2::public.triangle_type AND variant=$3::public.triangle_variant`,
+      [id, t, variant]
+    )).rows;
     // Scope the delete to this variant — saving one variant must never wipe
     // the other's cells.
     await cl.query(
@@ -851,7 +905,8 @@ router.post("/quotes/:id/triangles/:type", asyncHandler(async (req, res) => {
     await logAudit(cl, {
       entityType: 'QUOTE', entityId: id, eventType: 'TRIANGLE_SAVED',
       actor: actorFromReq(req),
-      payload: { triangle_type: t, variant, saved: cells.length, dropped: rawCells.length - cells.length },
+      payload: { triangle_type: t, variant, saved: cells.length, dropped: rawCells.length - cells.length,
+        summary: summarizeCellChanges(beforeCells, cells) },
     }, { critical: true });
     await cl.query("COMMIT");
     res.json({ ok: true, saved: cells.length, dropped: rawCells.length - cells.length });
@@ -959,7 +1014,7 @@ router.put("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
   let rid;
   if(existing.length){rid=existing[0].report_id;await cl.query(`UPDATE public.contract_large_loss_report SET report_date=$2,updated_at=now() WHERE report_id=$1`,[rid,dateOrNull(report_date)]);
   }else{const {rows:rr}=await cl.query(`INSERT INTO public.contract_large_loss_report (quote_id,report_date) VALUES ($1,$2) RETURNING report_id`,[id,dateOrNull(report_date)]);rid=rr[0].report_id;}
-  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
+  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor,incurred,paid,os FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
   const prevReported=new Map(prev.map(r=>[String(r.loss_id),r.reported_date]));
   const prevSelected=new Map(prev.map(r=>[String(r.loss_id),r.is_selected]));
   const prevInfl=new Map(prev.map(r=>[String(r.loss_id),r.inflation_factor]));
@@ -967,6 +1022,7 @@ router.put("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
   const today=new Date().toISOString().slice(0,10);
   const reportSaved=dateOrNull(report_date)||today;
   const savedLosses = [];
+  const nextForSummary = [];
   for(const l of losses) {
     const key=l.loss_id?String(l.loss_id):null;
     const existedReported=key?prevReported.get(key):null;
@@ -985,6 +1041,12 @@ router.put("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
     const {rows:ins}=await cl.query(`INSERT INTO public.contract_large_losses (report_id,loss_id,uw_year,insured_name,loss_name,date_of_loss,class_of_business,paid,os,incurred,is_selected,inflation_factor,reported_date,actuarial_reported_date,policy_inception_date) VALUES ($1,COALESCE($2,gen_random_uuid()),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING loss_id`,
     [rid,l.loss_id||null,uwy,l.insured_name,l.loss_name,dateOrNull(l.date_of_loss),l.class_of_business,numOrNull(l.paid),numOrNull(l.os),numOrNull(l.incurred),selected,infl,reported,actuarial,pinc]);
     savedLosses.push(ins[0]?.loss_id);
+    nextForSummary.push({ loss_id: l.loss_id||null, is_selected: selected, incurred: l.incurred, paid: l.paid, os: l.os, inflation_factor: infl });
+  }
+  const lossSummary = summarizeLossChanges(prev, nextForSummary);
+  if (!lossSummaryIsNoop(lossSummary)) {
+    await logAudit(cl, { entityType: 'QUOTE', entityId: id, eventType: 'LARGE_LOSSES_UPDATED',
+      actor: actorFromReq(req), payload: { entity: 'large losses', summary: lossSummary } }, { critical: true });
   }
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
@@ -1238,6 +1300,16 @@ router.post("/quotes/:id/non-prop/save", ...npQuoteGuard, asyncHandler(async (re
       return res.status(404).json({error:"Quote not found"});
     }
 
+    // Snapshot terms/financials BEFORE the writes so the audit can field-diff
+    // them after — only for the sections this save touches.
+    const diffDetail = !!(detail && Object.keys(detail).length>0);
+    const diffLayers = Array.isArray(layers) && layers.length>0;
+    const diffTerms = !!(terms && Object.keys(terms).length>0);
+    const npBefore = {};
+    if (diffDetail) npBefore.detail = (await cl.query(`SELECT ${QUOTE_NP_DETAILS_FIELDS.join(',')} FROM public.quote_np_details WHERE quote_id=$1`,[id])).rows[0] || {};
+    if (diffLayers) npBefore.layers = (await cl.query(`SELECT layer_number,${QUOTE_NP_LAYER_FIELDS.join(',')} FROM public.quote_np_layers WHERE quote_id=$1`,[id])).rows;
+    if (diffTerms) npBefore.terms = (await cl.query(`SELECT terms FROM public.quote_np_terms WHERE quote_id=$1`,[id])).rows[0]?.terms || {};
+
     // ── Upsert NP details ──
     if(detail && Object.keys(detail).length>0){
       const quoteStructuresCount = detail.structures_to_quote
@@ -1333,6 +1405,27 @@ router.post("/quotes/:id/non-prop/save", ...npQuoteGuard, asyncHandler(async (re
           throw err;
         });
       }
+    }
+
+    // ── Field-diff the terms/financials this save changed ──
+    const actor = actorFromReq(req);
+    if (diffDetail) {
+      const after = (await cl.query(`SELECT ${QUOTE_NP_DETAILS_FIELDS.join(',')} FROM public.quote_np_details WHERE quote_id=$1`,[id])).rows[0] || {};
+      await diffAudit(cl, { entityType: 'QUOTE', entityId: id, eventType: 'NP_DETAILS_UPDATED', actor, before: npBefore.detail, after, fields: QUOTE_NP_DETAILS_FIELDS, label: 'quote non-proportional details' });
+    }
+    if (diffLayers) {
+      const afterRows = (await cl.query(`SELECT layer_number,${QUOTE_NP_LAYER_FIELDS.join(',')} FROM public.quote_np_layers WHERE quote_id=$1`,[id])).rows;
+      const beforeMap = layerDiffMap(npBefore.layers, QUOTE_NP_LAYER_FIELDS);
+      const afterMap = layerDiffMap(afterRows, QUOTE_NP_LAYER_FIELDS);
+      await diffAudit(cl, { entityType: 'QUOTE', entityId: id, eventType: 'NP_LAYER_UPDATED', actor, before: beforeMap, after: afterMap, fields: unionKeys(beforeMap, afterMap), label: 'quote non-proportional layers' });
+    }
+    if (diffTerms) {
+      const after = (await cl.query(`SELECT terms FROM public.quote_np_terms WHERE quote_id=$1`,[id])).rows[0]?.terms || {};
+      // np_final_pricing is a large blob persisted + audited via
+      // saveQuoteFinalWorkflowState (quote_negotiation_event) — exclude it here
+      // so the key-by-key terms diff stays bounded and isn't duplicated.
+      const termKeys = unionKeys(npBefore.terms, after).filter((k) => k !== 'np_final_pricing');
+      await diffAudit(cl, { entityType: 'QUOTE', entityId: id, eventType: 'NP_TERMS_UPDATED', actor, before: npBefore.terms, after, fields: termKeys, label: 'quote non-proportional terms' });
     }
 
     const updatedAt = await touchParentEntity(cl, {
@@ -1453,6 +1546,10 @@ router.put("/quotes/:id/np-pricing", ...npQuoteGuard, asyncHandler(async (req, r
     // with every field, so a NULL here means the user cleared the cell
     // and the DB should clear it too. COALESCE used to silently drop
     // deletions because NULL on the wire was treated as "preserve".
+    const diffMargins = Array.isArray(layer_margins) && layer_margins.length > 0;
+    const marginsBefore = diffMargins
+      ? (await cl.query(`SELECT layer_number,${QUOTE_NP_LAYER_PRICING_FIELDS.join(',')} FROM public.quote_np_layers WHERE quote_id=$1`,[id])).rows
+      : null;
     for(const m of layer_margins) {
       await cl.query(
         `UPDATE public.quote_np_layers
@@ -1468,6 +1565,12 @@ router.put("/quotes/:id/np-pricing", ...npQuoteGuard, asyncHandler(async (req, r
          numOrNull(m.hist_margin), numOrNull(m.modelled_margin), numOrNull(m.tech_ratio),
          numOrNull(m.uw_price), numOrNull(m.expiring_price), numOrNull(m.lead_price)]
       ).catch(() => {});
+    }
+    if (diffMargins) {
+      const afterRows = (await cl.query(`SELECT layer_number,${QUOTE_NP_LAYER_PRICING_FIELDS.join(',')} FROM public.quote_np_layers WHERE quote_id=$1`,[id])).rows;
+      const beforeMap = layerDiffMap(marginsBefore, QUOTE_NP_LAYER_PRICING_FIELDS);
+      const afterMap = layerDiffMap(afterRows, QUOTE_NP_LAYER_PRICING_FIELDS);
+      await diffAudit(cl, { entityType: 'QUOTE', entityId: id, eventType: 'NP_LAYER_UPDATED', actor: actorFromReq(req), before: beforeMap, after: afterMap, fields: unionKeys(beforeMap, afterMap), label: 'quote non-proportional layer pricing' });
     }
     const updatedAt = await touchParentEntity(cl, {
       parentTable: 'quote',
@@ -1676,7 +1779,7 @@ router.put("/quotes/:id/cat-losses", asyncHandler(async (req, res) => {
   let rid;
   if(existing.length){rid=existing[0].report_id;await cl.query(`UPDATE public.contract_cat_loss_report SET report_date=$2,updated_at=now() WHERE report_id=$1`,[rid,reportDateNorm]);
   }else{const {rows:rr}=await cl.query(`INSERT INTO public.contract_cat_loss_report (quote_id,report_date) VALUES ($1,$2) RETURNING report_id`,[id,reportDateNorm]);rid=rr[0].report_id;}
-  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
+  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor,incurred,paid,os FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
   const prevReported=new Map(prev.map(r=>[String(r.loss_id),r.reported_date]));
   const prevSelected=new Map(prev.map(r=>[String(r.loss_id),r.is_selected]));
   const prevInfl=new Map(prev.map(r=>[String(r.loss_id),r.inflation_factor]));
@@ -1718,6 +1821,14 @@ router.put("/quotes/:id/cat-losses", asyncHandler(async (req, res) => {
   });
   if (lossesInsert) await cl.query(lossesInsert.sql, lossesInsert.params);
   const savedLosses = lossesWithIds.map((l) => l._loss_id);
+  const lossSummary = summarizeLossChanges(prev, lossesWithIds.map((l) => ({
+    loss_id: l.loss_id || null, is_selected: l._selected,
+    incurred: l.incurred, paid: l.paid, os: l.os, inflation_factor: l._infl,
+  })));
+  if (!lossSummaryIsNoop(lossSummary)) {
+    await logAudit(cl, { entityType: 'QUOTE', entityId: id, eventType: 'CAT_LOSSES_UPDATED',
+      actor: actorFromReq(req), payload: { entity: 'cat losses', summary: lossSummary } }, { critical: true });
+  }
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
@@ -1919,6 +2030,12 @@ router.put("/quotes/:id/loss-selection/:lossType/snapshot", asyncHandler(async (
   const selected_losses=Array.isArray(body.selected_losses)?body.selected_losses:[];
   const cl=await pool.connect();
   try{await cl.query("BEGIN");
+  // Previous selection for this loss type — diffed against the new snapshot.
+  const prevSnap = (await cl.query(
+    `SELECT ${LOSS_SELECTION_FIELDS.join(',')} FROM public.contract_loss_selection_snapshot
+      WHERE quote_id=$1 AND loss_type=$2 ORDER BY created_at DESC LIMIT 1`,
+    [id, lt]
+  )).rows[0] || {};
   const {rows}=await cl.query(
     `INSERT INTO public.contract_loss_selection_snapshot
       (quote_id,loss_type,
@@ -1929,7 +2046,7 @@ router.put("/quotes/:id/loss-selection/:lossType/snapshot", asyncHandler(async (
        pareto_xm,pareto_alpha,pareto_limit,observation_years,
        return_period_curve,return_period_key_points,assumptions_hash)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
-     RETURNING snapshot_id`,
+     RETURNING *`,
     [id,lt,
      body.inflation_mode||null,body.inflation_index||null,
      numOrNull(body.inflation_rate_pct),numOrNull(body.inflation_base_year),numOrNull(body.inflation_to_year),
@@ -1942,7 +2059,8 @@ router.put("/quotes/:id/loss-selection/:lossType/snapshot", asyncHandler(async (
      body.return_period_curve?JSON.stringify(body.return_period_curve):null,
      body.return_period_key_points?JSON.stringify(body.return_period_key_points):null,
      body.assumptions_hash||null]);
-  const sid=rows[0].snapshot_id;
+  const snap=rows[0];
+  const sid=snap.snapshot_id;
   const snapItemInsert = buildBatchInsert({
     table: 'public.contract_loss_selection_snapshot_item',
     columns: ['snapshot_id','uw_year','source_loss_id','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','inflation_factor','inflated_incurred'],
@@ -1970,6 +2088,9 @@ router.put("/quotes/:id/loss-selection/:lossType/snapshot", asyncHandler(async (
      ON CONFLICT (quote_id) DO UPDATE SET loss_selection_saved_at=now(), updated_at=now()`,
     [id]
   );
+  await diffAudit(cl, { entityType: 'QUOTE', entityId: id, eventType: 'LOSS_SELECTION_UPDATED',
+    actor: actorFromReq(req), before: prevSnap, after: snap, fields: LOSS_SELECTION_FIELDS,
+    label: `${lt.toLowerCase()} loss selection` });
   await cl.query("COMMIT");res.json({ok:true,snapshot_id:sid});
   }catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));

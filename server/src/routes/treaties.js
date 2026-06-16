@@ -2,7 +2,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { asyncHandler, numOrNull, dateOrNull, boolOrDefault } from '../helpers.js';
-import { logAudit } from "../services/audit.js";
+import { logAudit, diffAudit } from "../services/audit.js";
 import { actorFromReq } from "../middleware/requestContext.js";
 import { contractContextJoins } from "../db/contractJoins.js";
 import { assertEntityUnchanged, optimisticLockOverrideRequested } from "../db/optimisticLock.js";
@@ -13,6 +13,27 @@ import { buildBatchInsert } from "../db/batchInsert.js";
 import { assertCanEdit, computeEditPermission } from "../services/permissions.js";
 import { getAssignmentHistory } from "../services/assignments.js";
 const router = Router();
+
+// Field-diff watch lists for the audit trail (see services/audit.js diffAudit).
+// Terms & financials only — derived/echo columns and updated_at are excluded.
+const CONTRACT_HEADER_FIELDS = ['uw_year','treaty_type_id','country_id','currency_id','cedant_id','broker_id',
+  'inception_date','renewal_date','signed_line_pct','assigned_to_user_id','experience_source',
+  'primary_class_of_business_id','status','uw_status','contract_description','alt_contract_id'];
+const PROP_DETAILS_FIELDS = ['qs_limit','retention_pct','retention_amt','cession_pct','cession_amt',
+  'surplus_max_retention','num_lines','total_capacity','event_limit','aal','quota_share_epi','surplus_epi',
+  'brokerage_pct','taxes_pct','loss_cap_pct','experience_start_year','triangulations_available','strip_large_cat_losses'];
+const COMMISSIONS_FIELDS = ['mode','fixed_commission_pct','fixed_commission_qs_pct','fixed_commission_surplus_pct',
+  'sliding_min_loss_ratio','sliding_max_loss_ratio','sliding_min_commission','sliding_max_commission',
+  'provisional_commission_pct','mgmt_expenses_pct','profit_commission_pct','lcf_years','lcf_extinction','sliding_table'];
+
+// Snapshot the commissions row + its sliding-scale rows as one object so the
+// slide table diffs as a single `sliding_table` summary field, not row-by-row.
+async function snapshotContractCommissions(client, id) {
+  const cols = COMMISSIONS_FIELDS.filter((f) => f !== 'sliding_table');
+  const row = (await client.query(`SELECT ${cols.join(',')} FROM public.contract_commissions WHERE contract_id=$1`, [id])).rows[0] || {};
+  const slides = (await client.query(`SELECT row_no,loss_ratio_pct,commission_pct FROM public.contract_commission_slides WHERE contract_id=$1 ORDER BY row_no`, [id])).rows;
+  return { ...row, sliding_table: slides };
+}
 
 
 // ── POST /api/treaties ──
@@ -204,6 +225,16 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
     await assertEntityUnchanged(client, { table: 'public.contract', idColumn: 'contract_id', id, ifUnmodifiedSince });
     await client.query("BEGIN");
 
+    // Snapshot terms/financials BEFORE the writes so the audit trail can
+    // field-diff them after — only for the sections this save actually touches.
+    const diffHeader = !!(terms.header && Object.keys(terms.header).length);
+    const diffDetail = !!(terms.detail && Object.keys(terms.detail).length);
+    const diffComm = terms.commissions != null;
+    const diffBefore = {};
+    if (diffHeader) diffBefore.header = (await client.query(`SELECT ${CONTRACT_HEADER_FIELDS.join(',')} FROM public.contract WHERE contract_id=$1`, [id])).rows[0] || {};
+    if (diffDetail) diffBefore.detail = (await client.query(`SELECT ${PROP_DETAILS_FIELDS.join(',')} FROM public.contract_prop_details WHERE contract_id=$1`, [id])).rows[0] || {};
+    if (diffComm) diffBefore.comm = await snapshotContractCommissions(client, id);
+
     // ── Header (only if explicitly provided) ──
     const h=terms.header;
     if(h && Object.keys(h).length) {
@@ -362,6 +393,18 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
     // compliance-critical write rolls the whole save back rather than
     // committing a field-diff with no audit record.
     const actor = actorFromReq(req);
+    if (diffHeader) {
+      const after = (await client.query(`SELECT ${CONTRACT_HEADER_FIELDS.join(',')} FROM public.contract WHERE contract_id=$1`, [id])).rows[0] || {};
+      await diffAudit(client, { entityType: "CONTRACT", entityId: id, eventType: "CONTRACT_HEADER_UPDATED", actor, before: diffBefore.header, after, fields: CONTRACT_HEADER_FIELDS, label: "contract header" });
+    }
+    if (diffDetail) {
+      const after = (await client.query(`SELECT ${PROP_DETAILS_FIELDS.join(',')} FROM public.contract_prop_details WHERE contract_id=$1`, [id])).rows[0] || {};
+      await diffAudit(client, { entityType: "CONTRACT", entityId: id, eventType: "PROP_DETAILS_UPDATED", actor, before: diffBefore.detail, after, fields: PROP_DETAILS_FIELDS, label: "proportional details" });
+    }
+    if (diffComm) {
+      const after = await snapshotContractCommissions(client, id);
+      await diffAudit(client, { entityType: "CONTRACT", entityId: id, eventType: "COMMISSIONS_UPDATED", actor, before: diffBefore.comm, after, fields: COMMISSIONS_FIELDS, label: "commissions" });
+    }
     if (staleWriteOverride) {
       await logAudit(client,{
         entityType:"CONTRACT",

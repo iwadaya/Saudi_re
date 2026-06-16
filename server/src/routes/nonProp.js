@@ -2,6 +2,9 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { asyncHandler, numOrNull } from '../helpers.js';
+import { diffAudit } from '../services/audit.js';
+import { actorFromReq } from '../middleware/requestContext.js';
+import { layerDiffMap, unionKeys } from '../lib/auditDiffSummaries.js';
 import { entityContext } from '../lib/entityContext.js';
 import { assertParentEntityUnchanged, touchParentEntity } from '../lib/parentEntityPersistence.js';
 import { validateBody } from '../lib/validate.js';
@@ -30,6 +33,18 @@ const npTreatyGuard = [loadTreatyCategory, requireTreatyCategory('NON_PROPORTION
 const npQuoteGuard = [loadQuoteCategory, requireQuoteCategory('NON_PROPORTIONAL')];
 // "UNLIMITED" reinstatements stays null in numeric column; preserved in JSONB
 function reinstatInt(v){if(String(v||'').trim().toUpperCase()==='UNLIMITED')return null;return numOrNull(v);}
+
+// Field-diff watch lists for the audit trail (services/audit.js diffAudit).
+const NP_DETAILS_FIELDS = ['number_of_layers','expiring_number_of_layers','deductible','max_retention',
+  'accounting_method','xl_type','accounts','brokerage_pct','taxes_pct','no_claims_bonus_pct',
+  'profit_commission_pct','est_gnpi','adjustment_rate','deposit_premium','experience_start_year'];
+// Every persisted layer column (structure + pricing) — a wholesale layer
+// replace can touch any of them.
+const NP_LAYER_FIELDS = ['attachment','layer_limit','aggregate_limit','egnpi','earned_premium','rate','rol',
+  'num_reinstatements','reinstatement_pct','annual_agg_deductible','peril_scope','mdp','mdp_pct',
+  'hist_margin','modelled_margin','tech_ratio','uw_price','expiring_price','lead_price'];
+// Just the final-pricing margin columns written per layer by /np-pricing.
+const NP_LAYER_PRICING_FIELDS = ['hist_margin','modelled_margin','tech_ratio','uw_price','expiring_price','lead_price'];
 
 // ── GET /api/treaties/:id/non-prop ──
 // Returns: detail row, layers (each with their COB ids), cob UW limits, JSONB terms,
@@ -98,6 +113,16 @@ router.post("/treaties/:id/non-prop/save", ...npTreatyGuard, validateBody(npSave
       id,
       ifUnmodifiedSince: req.headers['if-unmodified-since'],
     });
+
+    // Snapshot terms/financials BEFORE the writes so the audit trail can
+    // field-diff them after — only for the sections this save touches.
+    const diffDetail = !!(detail && Object.keys(detail).length > 0);
+    const diffLayers = Array.isArray(layers) && layers.length > 0;
+    const diffTerms = !!(terms && Object.keys(terms).length > 0);
+    const npBefore = {};
+    if (diffDetail) npBefore.detail = (await cl.query(`SELECT ${NP_DETAILS_FIELDS.join(',')} FROM public.contract_np_details WHERE contract_id=$1`, [id])).rows[0] || {};
+    if (diffLayers) npBefore.layers = (await cl.query(`SELECT layer_number,${NP_LAYER_FIELDS.join(',')} FROM public.contract_np_layers WHERE contract_id=$1`, [id])).rows;
+    if (diffTerms) npBefore.terms = (await cl.query(`SELECT terms FROM public.contract_np_terms WHERE contract_id=$1`, [id])).rows[0]?.terms || {};
 
     // ── Upsert NP details ──
     if (detail && Object.keys(detail).length > 0) {
@@ -207,6 +232,26 @@ router.post("/treaties/:id/non-prop/save", ...npTreatyGuard, validateBody(npSave
            SET terms=contract_np_terms.terms || $2::jsonb, updated_at=now()`,
         [id, JSON.stringify(terms)]
       );
+    }
+
+    // ── Field-diff the terms/financials this save changed ──
+    const actor = actorFromReq(req);
+    if (diffDetail) {
+      const after = (await cl.query(`SELECT ${NP_DETAILS_FIELDS.join(',')} FROM public.contract_np_details WHERE contract_id=$1`, [id])).rows[0] || {};
+      await diffAudit(cl, { entityType: 'CONTRACT', entityId: id, eventType: 'NP_DETAILS_UPDATED', actor, before: npBefore.detail, after, fields: NP_DETAILS_FIELDS, label: 'non-proportional details' });
+    }
+    if (diffLayers) {
+      const afterRows = (await cl.query(`SELECT layer_number,${NP_LAYER_FIELDS.join(',')} FROM public.contract_np_layers WHERE contract_id=$1`, [id])).rows;
+      const beforeMap = layerDiffMap(npBefore.layers, NP_LAYER_FIELDS);
+      const afterMap = layerDiffMap(afterRows, NP_LAYER_FIELDS);
+      await diffAudit(cl, { entityType: 'CONTRACT', entityId: id, eventType: 'NP_LAYER_UPDATED', actor, before: beforeMap, after: afterMap, fields: unionKeys(beforeMap, afterMap), label: 'non-proportional layers' });
+    }
+    if (diffTerms) {
+      const after = (await cl.query(`SELECT terms FROM public.contract_np_terms WHERE contract_id=$1`, [id])).rows[0]?.terms || {};
+      // np_final_pricing is a large blob with its own dedicated audit — exclude
+      // it so the key-by-key terms diff stays bounded.
+      const termKeys = unionKeys(npBefore.terms, after).filter((k) => k !== 'np_final_pricing');
+      await diffAudit(cl, { entityType: 'CONTRACT', entityId: id, eventType: 'NP_TERMS_UPDATED', actor, before: npBefore.terms, after, fields: termKeys, label: 'non-proportional terms' });
     }
 
     const updatedAt = await touchParentEntity(cl, {
@@ -337,6 +382,10 @@ router.put("/treaties/:id/np-pricing", ...npTreatyGuard, validateBody(npPricingP
     // with every field, so a NULL here means the user cleared the cell
     // and the DB should clear it too. COALESCE used to silently drop
     // deletions because NULL on the wire was treated as "preserve".
+    const diffMargins = Array.isArray(layer_margins) && layer_margins.length > 0;
+    const marginsBefore = diffMargins
+      ? (await cl.query(`SELECT layer_number,${NP_LAYER_PRICING_FIELDS.join(',')} FROM public.contract_np_layers WHERE contract_id=$1`, [id])).rows
+      : null;
     for(const m of layer_margins) {
       await cl.query(
         `UPDATE public.contract_np_layers
@@ -352,6 +401,12 @@ router.put("/treaties/:id/np-pricing", ...npTreatyGuard, validateBody(npPricingP
          numOrNull(m.hist_margin), numOrNull(m.modelled_margin), numOrNull(m.tech_ratio),
          numOrNull(m.uw_price), numOrNull(m.expiring_price), numOrNull(m.lead_price)]
       ).catch(() => {}); // silent — columns may not exist pre-migration 052
+    }
+    if (diffMargins) {
+      const afterRows = (await cl.query(`SELECT layer_number,${NP_LAYER_PRICING_FIELDS.join(',')} FROM public.contract_np_layers WHERE contract_id=$1`, [id])).rows;
+      const beforeMap = layerDiffMap(marginsBefore, NP_LAYER_PRICING_FIELDS);
+      const afterMap = layerDiffMap(afterRows, NP_LAYER_PRICING_FIELDS);
+      await diffAudit(cl, { entityType: 'CONTRACT', entityId: id, eventType: 'NP_LAYER_UPDATED', actor: actorFromReq(req), before: beforeMap, after: afterMap, fields: unionKeys(beforeMap, afterMap), label: 'non-proportional layer pricing' });
     }
     const updatedAt = await touchParentEntity(cl, {
       parentTable: 'contract',

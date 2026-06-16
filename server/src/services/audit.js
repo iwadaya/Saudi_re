@@ -105,6 +105,87 @@ export async function logAudit(client, {
 }
 
 /**
+ * Normalise a field value so cosmetically-different-but-equal values don't
+ * register as changes:
+ *   • null / undefined / '' → null (treated as "unset")
+ *   • Date → ISO instant (pg returns date/timestamp columns as Date objects, so
+ *     two equal dates compare equal regardless of object identity)
+ *   • numbers & numeric strings → Number ("10.00" === 10 === "10"; pg returns
+ *     numeric columns as strings, so this is what stops every save looking dirty)
+ *   • objects / arrays → stable JSON (drives the key-by-key terms diff and the
+ *     per-layer/per-slide summaries)
+ *   • everything else (incl. booleans) → its trimmed String() form
+ * Returns a primitive safe for === comparison.
+ */
+function normalizeForDiff(v) {
+  if (v === null || v === undefined || v === "") return null;
+  if (v instanceof Date) return v.toISOString();
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "object") {
+    try { return JSON.stringify(v); } catch { return String(v); }
+  }
+  const s = String(v).trim();
+  if (s === "") return null;
+  const numeric = s.replace(/,/g, "");
+  if (/^-?\d+(?:\.\d+)?$/.test(numeric)) {
+    const n = Number(numeric);
+    if (Number.isFinite(n)) return n;
+  }
+  return s;
+}
+
+/**
+ * Field-level diff audit for treaty terms & financials.
+ *
+ * Snapshot the affected row(s) BEFORE the UPDATE and pass them as `before`, the
+ * post-UPDATE row(s) as `after`, and the columns/keys to watch as `fields`. For
+ * each field whose NORMALISED value differs (numbers/dates normalised, updated_at
+ * and equal values ignored) a `{ from, to }` entry (raw values, for readability)
+ * is recorded under payload.changes.
+ *
+ *   • Nothing changed → NOTHING is written (no empty audit rows).
+ *   • Otherwise one CRITICAL audit event is written on the SAME client, so a
+ *     failed audit write rolls the surrounding transaction back rather than
+ *     committing a financial change with no trail (see the file-header contract).
+ *
+ * Collections (layers, slides, triangle cells, terms JSON) are diffed by passing
+ * a map/object keyed by id (layer number, key, …) whose values are the watched
+ * sub-objects — each changed key is then summarised as a single from/to entry
+ * rather than a per-column explosion.
+ *
+ * @param {object|null} client  Transaction client (REQUIRED when inside a txn).
+ * @param {object} args
+ * @param {string}   args.entityType  CONTRACT | QUOTE | …
+ * @param {string}   args.entityId
+ * @param {string}   args.eventType   '<ENTITY>_UPDATED' (e.g. PROP_DETAILS_UPDATED, NP_LAYER_UPDATED)
+ * @param {object}   args.actor       actorFromReq(req) / SYSTEM_ACTOR
+ * @param {object}   [args.before]    pre-update snapshot (row or plain object)
+ * @param {object}   [args.after]     post-update snapshot
+ * @param {string[]} [args.fields]    columns/keys to compare
+ * @param {string}   [args.label]     human label for payload.entity
+ * @returns {Promise<object|null>} the recorded `changes`, or null when nothing changed.
+ */
+export async function diffAudit(client, { entityType, entityId, eventType, actor, before, after, fields, label }) {
+  const changes = {};
+  for (const field of fields || []) {
+    if (field === "updated_at") continue;
+    const fromRaw = before ? before[field] : undefined;
+    const toRaw = after ? after[field] : undefined;
+    if (normalizeForDiff(fromRaw) === normalizeForDiff(toRaw)) continue;
+    changes[field] = { from: fromRaw ?? null, to: toRaw ?? null };
+  }
+  if (Object.keys(changes).length === 0) return null;
+  await logAudit(client, {
+    entityType,
+    entityId,
+    eventType,
+    actor,
+    payload: { entity: label, changes },
+  }, { critical: true });
+  return changes;
+}
+
+/**
  * Retrieve audit history for an entity (newest first).
  * Throws on DB errors so callers can distinguish "no history" from
  * "audit service unavailable" — the previous catch-and-return-`[]`

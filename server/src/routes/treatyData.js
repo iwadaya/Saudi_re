@@ -6,8 +6,9 @@ import { logger } from '../lib/logger.js';
 import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from '../lib/triangleBounds.js';
 import { stripTriangleCells, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from '../lib/triangleStripping.js';
 import { suggestLossQuarters } from '../lib/lossQuarterMapper.js';
-import { logAudit } from '../services/audit.js';
+import { logAudit, diffAudit } from '../services/audit.js';
 import { actorFromReq } from '../middleware/requestContext.js';
+import { summarizeCellChanges, summarizeLossChanges, lossSummaryIsNoop, LOSS_SELECTION_FIELDS } from '../lib/auditDiffSummaries.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
@@ -130,6 +131,12 @@ router.post("/treaties/:id/triangles/:type", asyncHandler(async (req, res) => {
   const cl = await pool.connect();
   try {
     await cl.query("BEGIN");
+    // Snapshot the existing cells so the audit records a summary diff
+    // (added/removed/changed counts) rather than every cell.
+    const beforeCells = (await cl.query(
+      `SELECT origin_year,dev_months,cum_value FROM public.contract_triangle_cells WHERE contract_id=$1 AND type=$2::public.triangle_type AND variant=$3::public.triangle_variant`,
+      [id, t, variant]
+    )).rows;
     // Scope the delete to this variant — saving one variant must never wipe
     // the other's cells.
     await cl.query(`DELETE FROM public.contract_triangle_cells WHERE contract_id=$1 AND type=$2::public.triangle_type AND variant=$3::public.triangle_variant`, [id, t, variant]);
@@ -152,7 +159,8 @@ router.post("/treaties/:id/triangles/:type", asyncHandler(async (req, res) => {
     await logAudit(cl, {
       entityType: 'CONTRACT', entityId: id, eventType: 'TRIANGLE_SAVED',
       actor: actorFromReq(req),
-      payload: { triangle_type: t, variant, saved: cells.length, dropped: rawCells.length - cells.length },
+      payload: { triangle_type: t, variant, saved: cells.length, dropped: rawCells.length - cells.length,
+        summary: summarizeCellChanges(beforeCells, cells) },
     }, { critical: true });
     await cl.query("COMMIT");
     res.json({ ok: true, saved: cells.length, dropped: rawCells.length - cells.length });
@@ -257,8 +265,9 @@ router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
   const rid=rr[0].report_id;
   // Snapshot existing reported_date / is_selected / inflation_factor per loss_id
   // so a delete+reinsert doesn't erase them when this save omits them (the
-  // loss-list grid sends neither selection nor inflation).
-  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
+  // loss-list grid sends neither selection nor inflation). incurred/paid/os are
+  // also captured so the audit summary can flag amount edits.
+  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor,incurred,paid,os FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
   const prevReported=new Map(prev.map(r=>[String(r.loss_id),r.reported_date]));
   const prevSelected=new Map(prev.map(r=>[String(r.loss_id),r.is_selected]));
   const prevInfl=new Map(prev.map(r=>[String(r.loss_id),r.inflation_factor]));
@@ -303,6 +312,15 @@ router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
   });
   if (largeLossesInsert) await cl.query(largeLossesInsert.sql, largeLossesInsert.params);
   const savedLosses = largeLossesWithIds.map((l) => l._loss_id);
+  // Summary diff audit — counts + the is_selected toggles that matter for pricing.
+  const lossSummary = summarizeLossChanges(prev, largeLossesWithIds.map((l) => ({
+    loss_id: l.loss_id || null, is_selected: l._selected,
+    incurred: l.incurred, paid: l.paid, os: l.os, inflation_factor: l._infl,
+  })));
+  if (!lossSummaryIsNoop(lossSummary)) {
+    await logAudit(cl, { entityType: 'CONTRACT', entityId: id, eventType: 'LARGE_LOSSES_UPDATED',
+      actor: actorFromReq(req), payload: { entity: 'large losses', summary: lossSummary } }, { critical: true });
+  }
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
@@ -319,7 +337,7 @@ router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
   await assertExists(cl, 'public.contract', 'contract_id', id, 'Treaty');
   const {rows:rr}=await cl.query(`INSERT INTO public.contract_cat_loss_report (contract_id,report_date) VALUES ($1,$2) ON CONFLICT (contract_id) DO UPDATE SET report_date=EXCLUDED.report_date,updated_at=now() RETURNING report_id`,[id,dateOrNull(report_date)]);
   const rid=rr[0].report_id;
-  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
+  const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor,incurred,paid,os FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
   const prevReported=new Map(prev.map(r=>[String(r.loss_id),r.reported_date]));
   const prevSelected=new Map(prev.map(r=>[String(r.loss_id),r.is_selected]));
   const prevInfl=new Map(prev.map(r=>[String(r.loss_id),r.inflation_factor]));
@@ -359,6 +377,14 @@ router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
   });
   if (catLossesInsert) await cl.query(catLossesInsert.sql, catLossesInsert.params);
   const savedLosses = catLossesWithIds.map((l) => l._loss_id);
+  const lossSummary = summarizeLossChanges(prev, catLossesWithIds.map((l) => ({
+    loss_id: l.loss_id || null, is_selected: l._selected,
+    incurred: l.incurred, paid: l.paid, os: l.os, inflation_factor: l._infl,
+  })));
+  if (!lossSummaryIsNoop(lossSummary)) {
+    await logAudit(cl, { entityType: 'CONTRACT', entityId: id, eventType: 'CAT_LOSSES_UPDATED',
+      actor: actorFromReq(req), payload: { entity: 'cat losses', summary: lossSummary } }, { critical: true });
+  }
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
@@ -513,6 +539,13 @@ router.put("/treaties/:id/loss-selection/:lossType/snapshot", asyncHandler(async
   const cl=await pool.connect();
   try{
     await cl.query("BEGIN");
+    // Previous selection for this loss type — diffed against the new snapshot
+    // so the trail records what the underwriter actually changed.
+    const prevSnap = (await cl.query(
+      `SELECT ${LOSS_SELECTION_FIELDS.join(',')} FROM public.contract_loss_selection_snapshot
+        WHERE contract_id=$1 AND loss_type=$2 ORDER BY created_at DESC LIMIT 1`,
+      [req.params.id, lt]
+    )).rows[0] || {};
     const {rows}=await cl.query(
       `INSERT INTO public.contract_loss_selection_snapshot
         (contract_id, loss_type,
@@ -583,6 +616,9 @@ router.put("/treaties/:id/loss-selection/:lossType/snapshot", asyncHandler(async
        ON CONFLICT (contract_id) DO UPDATE SET loss_selection_saved_at=now(), updated_at=now()`,
       [req.params.id]
     );
+    await diffAudit(cl, { entityType: 'CONTRACT', entityId: req.params.id, eventType: 'LOSS_SELECTION_UPDATED',
+      actor: actorFromReq(req), before: prevSnap, after: snap, fields: LOSS_SELECTION_FIELDS,
+      label: `${lt.toLowerCase()} loss selection` });
     await cl.query("COMMIT");
     res.json({ok:true, snapshot:snap});
   }catch(e){
