@@ -9,6 +9,17 @@ Two k6 scripts exercise the hot paths of the reinsurance tool:
   30, and 50 VUs against production-shape data to answer "what user load
   can this support?"
 
+## Findings (June 2026)
+
+A full write-up of the latest capacity run (Render + Neon, tested from
+Riyadh) sits at the top of `k6/capacity.js`. Headline: the stack
+comfortably handles the intended ~10-20 concurrent underwriters at 0%
+errors with large headroom. The only ceiling found was the Postgres
+connection pool, which first queued briefly at ~100 concurrent VUs
+(`pg_pool_waiting` peaked 18) — a pool-config limit, not a
+hardware/compute one. See `k6/capacity.js` for the per-VU numbers and
+the ordered scaling levers.
+
 ## What it hits
 
 | Surface                     | Share of iterations | Why it matters                                     |
