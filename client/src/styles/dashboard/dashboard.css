@@ -104,6 +104,23 @@
   white-space: nowrap;
 }
 
+/* Row-label (first) column: left-aligned + a FIXED width sized to the longest
+   label in the data (set via --dash-label-w by labelWidth.js, default 180px),
+   so it never truncates and never reflows between tabs. Numeric columns stay
+   centered (rule above). Applies to summary tables, pivots, and the compact
+   premium-region block alike. */
+.dash-table th:first-child,
+.dash-table td:first-child{
+  text-align: left;
+  width: var(--dash-label-w, 180px);
+  min-width: var(--dash-label-w, 180px);
+  max-width: var(--dash-label-w, 180px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: 14px;
+}
+
 .dash-th{
   position: sticky;
   top: 0;

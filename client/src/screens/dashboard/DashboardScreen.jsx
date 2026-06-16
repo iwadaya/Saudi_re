@@ -4,6 +4,7 @@ import { api } from '../../api';
 import Topbar from '../../components/Topbar';
 import { fmtNum, fmtPct, fmtMoney, fmtBal } from '../../utils/format';
 import { REGION_COLS, LOB_COLS, BY_YEAR_COLS, ROL_BAND_COLS, BALANCE_BAND_COLS, TREATY_TYPE_COLS } from './dashboardColumns';
+import { fitLabelColumn } from './labelWidth';
 
 const TABS = [
   { key: 'portfolio-overview', label: 'Portfolio Overview' },
@@ -33,6 +34,29 @@ const byYearCols = withFmt(BY_YEAR_COLS);
 const rolBandCols = withFmt(ROL_BAND_COLS);
 const balanceBandCols = withFmt(BALANCE_BAND_COLS);
 const treatyTypeCols = withFmt(TREATY_TYPE_COLS);
+
+// Every value that can land in a table's first (row-label) column — across the
+// loaded tab data plus the region/treaty filter universes — so the fixed label
+// column is sized to the real longest LOB / region / country / treaty type.
+function gatherLabels(data, filterOpts) {
+  const out = new Set();
+  for (const r of filterOpts?.regions || []) if (r != null && r !== '') out.add(String(r));
+  for (const t of filterOpts?.treatyTypes || []) if (t != null && t !== '') out.add(String(t));
+  const labelOf = (row) => row?.region ?? row?.lob ?? row?.country ?? row?.treatyType ?? row?.band ?? row?.uwYear ?? row?.key;
+  const eat = (val) => {
+    if (Array.isArray(val)) {
+      for (const row of val) { const v = labelOf(row); if (v != null && v !== '') out.add(String(v)); }
+    } else if (val && typeof val === 'object') {
+      if (Array.isArray(val.rows)) {                 // pivot: { columns, rows, totals }
+        for (const row of val.rows) { const v = labelOf(row); if (v != null && v !== '') out.add(String(v)); }
+      } else {
+        for (const inner of Object.values(val)) if (Array.isArray(inner)) eat(inner); // e.g. series.*
+      }
+    }
+  };
+  if (data) for (const val of Object.values(data)) eat(val);
+  return [...out];
+}
 
 function sortRows(rows, key, dir) {
   const sign = dir === 'asc' ? 1 : -1;
@@ -164,6 +188,14 @@ export default function DashboardScreen() {
 
   useEffect(() => { loadFilters(); }, [loadFilters]);
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Size the row-label (first) column to the longest label once the tab's tables
+  // have rendered. The font is read from a real first-column cell so it matches;
+  // labelWidth.js keeps a high-water mark so the width is fixed across tabs.
+  useEffect(() => {
+    const fontEl = document.querySelector('.dash-table td:first-child') || document.querySelector('.dash-table');
+    fitLabelColumn(gatherLabels(data, filterOpts), fontEl);
+  }, [data, filterOpts]);
 
   const k = data?.kpis || {};
   const showRegion = tab === 'regional-analysis' || tab === 'regional-technical-analysis';
