@@ -115,6 +115,7 @@ describe('FQPricingAnalysisModal — row rendering', () => {
     expect(shell.style.gridTemplateRows).toBe('auto auto 1fr'); // title / tabs / body
     const body = container.querySelector('.bm-modal-body');
     expect(body.style.height).toBe('100%');                     // fills the 1fr track
+    expect(body.style.maxHeight).toBe('none');                  // defeats shared .bm-modal-body 55vh cap
     expect(body.style.overflowY).toBe('auto');                  // the ONLY vertical scroller
     expect(body.style.overflowX).toBe('hidden');                // blender bar can't slide sideways
     expect(parseInt(body.style.minHeight, 10)).toBe(0);         // required to scroll inside the grid
