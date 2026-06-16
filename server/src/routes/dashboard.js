@@ -53,7 +53,8 @@ export const UNIT_AGGREGATES = {
 
 // One row per calculation unit so every tab aggregates prop and NP identically:
 //   PROP → one row per contract (premium = signed × (QS+surplus EPI)).
-//   NP   → one row per layer    (premium = signed × Σ(uw_price × layer_limit)).
+//   NP   → one row per layer; uw_price is a ROL percent, so premium = signed ×
+//          Σ(uw_price/100 × layer_limit) and rol is stored as a fraction.
 // `where` is applied to BOTH halves of the UNION ALL. `withLob` adds the COB
 // join (fanning rows out per class of business, as the legacy LOB queries do).
 function buildUnits(where, ccyDivisor, withLob) {
@@ -96,9 +97,9 @@ function buildUnits(where, ccyDivisor, withLob) {
       ${regionBucket} AS region,
       COALESCE(tt.treaty_type,'Unknown') AS treaty_type,
       'NP'::text AS kind,
-      ${signedShare} * (COALESCE(l.uw_price,0) * COALESCE(l.layer_limit,0)) * COALESCE(fx.rate_to_usd,1.0) / ${ccyDivisor} AS premium,
+      ${signedShare} * (COALESCE(l.uw_price,0)/100.0 * COALESCE(l.layer_limit,0)) * COALESCE(fx.rate_to_usd,1.0) / ${ccyDivisor} AS premium,
       ${signedShare} * COALESCE(l.layer_limit,0) * COALESCE(fx.rate_to_usd,1.0) / ${ccyDivisor} AS exposure,
-      l.uw_price AS rol,
+      l.uw_price / 100.0 AS rol,
       NULL::numeric AS balance,
       l.modelled_margin AS margin,
       c.inception_date AS inception_date,

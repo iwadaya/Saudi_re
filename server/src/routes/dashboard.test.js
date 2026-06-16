@@ -107,9 +107,14 @@ describe('unitsCte', () => {
     expect(sql).toContain("'NP'::text AS kind");
   });
 
-  it('uses booked reinsurer premium (uw_price × layer_limit) for NP', () => {
-    expect(sql).toContain('COALESCE(l.uw_price,0) * COALESCE(l.layer_limit,0)');
+  it('uses booked reinsurer premium (uw_price% × layer_limit) for NP', () => {
+    // uw_price is a ROL percent, so it is divided by 100 for booked premium
+    expect(sql).toContain('COALESCE(l.uw_price,0)/100.0 * COALESCE(l.layer_limit,0)');
     expect(sql).not.toContain('est_gnpi');
+  });
+
+  it('stores NP rol as a fraction (uw_price / 100) for fmtPct', () => {
+    expect(sql).toContain('l.uw_price / 100.0 AS rol');
   });
 
   it('applies the where clause to BOTH halves and interpolates the fx divisor', () => {
