@@ -13,6 +13,10 @@ export function fmtPct(n, decimals = 2) {
   return `${(v * 100).toFixed(decimals)}%`;
 }
 
+// Treaty balance / ratio multiplier, e.g. 2.50× . Distinct from money/percent
+// so balance columns read as a multiple of premium rather than an amount.
+export const fmtX = (v) => Number.isFinite(Number(v)) ? `${Number(v).toFixed(2)}×` : '—';
+
 export function fmtMoney(n) {
   const v = Number(n);
   if (!Number.isFinite(v)) return '0';
