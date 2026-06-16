@@ -388,11 +388,11 @@ export default function FQPricingAnalysisModal({
   );
 
   return (
-    <div className="bm-modal-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className={`bm-modal-backdrop${isQuote ? ' bm-modal-backdrop--fullscreen' : ''}`} role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div
-        className="bm-modal"
+        className={`bm-modal${isQuote ? ' bm-modal--fullscreen' : ''}`}
         style={isQuote
-          ? { position: 'fixed', inset: 0, width: '100vw', height: '100dvh', maxWidth: 'none', maxHeight: 'none', borderRadius: 0, display: 'grid', gridTemplateRows: 'auto auto 1fr', overflow: 'hidden' }
+          ? { display: 'grid', gridTemplateRows: 'auto auto 1fr', overflow: 'hidden', background: 'rgb(4, 8, 19)' }
           : { width: '96vw', maxWidth: '1500px', height: '100dvh', maxHeight: '92vh', display: 'grid', gridTemplateRows: 'auto auto 1fr', overflow: 'hidden' }}
       >
         <div className="bm-modal-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -410,10 +410,12 @@ export default function FQPricingAnalysisModal({
             <button key={t.k} onClick={() => setTab(t.k)} style={tabBtn(tab === t.k)}>{t.label}</button>
           ))}
         </div>
-        {/* Row 3 — the ONLY vertical scroller. minHeight:0 is required for it to
-            scroll inside the grid; overflowX:hidden keeps the blender bar and
-            section chrome from sliding sideways (only each table scrolls X). */}
-        <div className="bm-modal-body" style={{ minHeight: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 12, padding: '18px 20px' }}>
+        {/* Row 3 = the single vertical scroller. height:100% fills the 1fr track
+            and minHeight:0 lets it shrink so overflowY:auto actually scrolls
+            (without minHeight:0 the track refuses to shrink and content clips).
+            overflowX:hidden keeps the blender bar / section chrome from sliding
+            sideways — only each table scrolls horizontally. */}
+        <div className="bm-modal-body" style={{ minHeight: 0, height: '100%', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 12, padding: '18px 20px' }}>
           {tab === 'pricing' && (
             <>
               {showCalculating && (
