@@ -97,7 +97,7 @@ export default function DashboardScreen() {
   const [filters, setFilters] = useState({ uwYear: '', month: '', region: '', treatyType: '', yearsBack: '3', currency: 'USD' });
   const [filterOpts, setFilterOpts] = useState({ uwYears: [], months: [], regions: [], treatyTypes: [], currencies: ['USD','SAR','GBP'] });
   const [data, setData] = useState(null);
-  const [sort, setSort] = useState({ byRegion: { key: 'premium', dir: 'desc' }, byLob: { key: 'premium', dir: 'desc' }, byYear: { key: 'uwYear', dir: 'asc' }, byBand: { key: 'premium', dir: 'desc' }, byTreaty: { key: 'premium', dir: 'desc' } });
+  const [sort, setSort] = useState({ byRegion: { key: 'premium', dir: 'desc' }, byLob: { key: 'premium', dir: 'desc' }, byYear: { key: 'uwYear', dir: 'asc' }, byBand: { key: 'premium', dir: 'desc' }, byBalanceBand: { key: 'premium', dir: 'desc' }, byTreaty: { key: 'premium', dir: 'desc' } });
 
   const currency = filters.currency || 'USD';
   const fm = useCallback((v) => fmtMoney(v), []);
@@ -249,11 +249,11 @@ export default function DashboardScreen() {
                 tab === 'regional-technical-analysis' && !filters.region
                   ? <div className="glass dash-block"><div className="dash-block-title">Regional Technical Analysis</div><div className="muted">Select a region to view this page.</div></div>
                   : <div className="dash-stack">
-                      <SummaryTable title="XL Premiums by ROL Band" rows={data?.rolBands || []} columns={[{ key: 'band', label: 'ROL Band' },{ key: 'premium', label: 'Premium', fmt: fm },{ key: 'exposure', label: 'Exposure', fmt: fm },{ key: 'rol', label: 'Avg ROL', fmt: fp },{ key: 'uwMargin', label: 'Avg UW Margin', fmt: fp }]} sort={sort.byBand} sortKey="byBand" onSort={handleSort} currency={currency} />
-                      <SummaryTable title="Treaty Type Breakdown" rows={data?.byTreatyType || []} columns={[{ key: 'treatyType', label: 'Treaty Type' },{ key: 'premium', label: 'Premium', fmt: fm },{ key: 'exposure', label: 'Exposure', fmt: fm },{ key: 'rol', label: 'Avg ROL', fmt: fp },{ key: 'uwMargin', label: 'Avg UW Margin', fmt: fp }]} sort={sort.byTreaty} sortKey="byTreaty" onSort={handleSort} currency={currency} />
-                      <PivotTable title="XL Premiums (ROL Band × Layer)" data={data?.xolBandLayerPremium} cellFmt={fm} rowLabel="ROL Band" />
+                      <SummaryTable title="NP Premiums by ROL Band" rows={data?.rolBands || []} columns={[{ key: 'band', label: 'ROL Band' },{ key: 'premium', label: 'Premium', fmt: fm },{ key: 'exposure', label: 'Exposure', fmt: fm },{ key: 'rol', label: 'Avg ROL', fmt: fp },{ key: 'uwMargin', label: 'Avg UW Margin', fmt: fp }]} sort={sort.byBand} sortKey="byBand" onSort={handleSort} currency={currency} />
+                      <SummaryTable title="Proportional Premiums by Balance Band" rows={data?.balanceBands || []} columns={[{ key: 'band', label: 'Balance Band' },{ key: 'premium', label: 'Premium', fmt: fm },{ key: 'exposure', label: 'Exposure', fmt: fm },{ key: 'balance', label: 'Avg Balance', fmt: fmtX },{ key: 'uwMargin', label: 'Avg UW Margin', fmt: fp }]} sort={sort.byBalanceBand} sortKey="byBalanceBand" onSort={handleSort} currency={currency} />
+                      <SummaryTable title="Treaty Type Breakdown" rows={data?.byTreatyType || []} columns={[{ key: 'treatyType', label: 'Treaty Type' },{ key: 'premium', label: 'Premium', fmt: fm },{ key: 'exposure', label: 'Exposure', fmt: fm },{ key: 'rol', label: 'Avg ROL', fmt: fp },{ key: 'balance', label: 'Avg Balance', fmt: fmtX },{ key: 'uwMargin', label: 'Avg UW Margin', fmt: fp }]} sort={sort.byTreaty} sortKey="byTreaty" onSort={handleSort} currency={currency} />
                       <PivotTable title="Treaty Premium (by UW Year)" data={data?.treatyPremiumByYear} cellFmt={fm} rowLabel="Treaty Type" />
-                      <PivotTable title="Treaty Balance (by UW Year)" data={data?.treatyBalanceByYear} cellFmt={fm} rowLabel="Treaty Type" />
+                      <PivotTable title="Treaty Balance (by UW Year)" data={data?.treatyBalanceByYear} cellFmt={fmtX} rowLabel="Treaty Type" />
                       <PivotTable title="Treaty ROL (by UW Year)" data={data?.treatyRolByYear} cellFmt={fp} rowLabel="Treaty Type" />
                       <PivotTable title="Treaty UW Margin (by UW Year)" data={data?.treatyUwMarginByYear} cellFmt={fp} rowLabel="Treaty Type" />
                     </div>)}

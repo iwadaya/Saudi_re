@@ -51,6 +51,31 @@ export const UNIT_AGGREGATES = {
   uwMargin: 'SUM(margin*premium)  FILTER (WHERE margin  IS NOT NULL) / NULLIF(SUM(premium) FILTER (WHERE margin  IS NOT NULL),0)',
 };
 
+// ROL / balance banding for the technical-analysis tabs. Order is meaningful —
+// rows render in declared order (not sorted) — and a null `hi` is open-ended.
+const ROL_BANDS = [
+  { label: '0–5%',   lo: 0,    hi: 0.05 },
+  { label: '5–10%',  lo: 0.05, hi: 0.10 },
+  { label: '10–20%', lo: 0.10, hi: 0.20 },
+  { label: '>20%',   lo: 0.20, hi: null },   // null hi = open-ended
+];
+const BALANCE_BANDS = [
+  { label: '0–1×', lo: 0, hi: 1 },
+  { label: '1–3×', lo: 1, hi: 3 },
+  { label: '3–8×', lo: 3, hi: 8 },
+  { label: '>8×',  lo: 8, hi: null },        // edges were 0-1,1-3,3-8,>10; top set to >8 to avoid an 8–10 gap
+];
+
+// Build a half-open [lo, hi) banding CASE over a units column from a band list.
+export function bandCaseSql(col, bands) {
+  const whens = bands.map((b) => {
+    const conds = [`${col} >= ${b.lo}`];
+    if (b.hi != null) conds.push(`${col} < ${b.hi}`);
+    return `WHEN ${conds.join(' AND ')} THEN '${b.label}'`;
+  });
+  return `CASE ${whens.join(' ')} ELSE NULL END`;
+}
+
 // One row per calculation unit so every tab aggregates prop and NP identically:
 //   PROP → one row per contract (premium = signed × (QS+surplus EPI)).
 //   NP   → one row per layer; uw_price is a ROL percent, so premium = signed ×
@@ -406,6 +431,100 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
       lobTreatyExposure:    buildPivot(lobTreatyR.rows, 'lob', 'treaty_type', 'exposure'),
       lobTreatyComposition: normalizePivot(lobTreatyPremium),
       lobTreatyUwMargin:    buildWeightedPivot(lobTreatyR.rows, 'lob', 'treaty_type', 'mw_num', 'mw_den'),
+    });
+  }
+
+  // ── technical-analysis (portfolio + regional) ─────────────────────────
+  // Both tabs are identical apart from the region filter, which is already in
+  // `where`; the regional tab is gated client-side on a region selection.
+  if (tab === 'portfolio-technical-analysis' || tab === 'regional-technical-analysis') {
+    const unitsW = unitsCte(where, ccyDivisor);
+    const [rolBandsR, balanceBandsR, treatyR, treatyYearR] = await Promise.all([
+      // ROL bands over NP units only.
+      pool.query(`WITH ${unitsW}
+        SELECT ${bandCaseSql('rol', ROL_BANDS)} AS band,
+          COALESCE(SUM(premium),0)  AS premium,
+          COALESCE(SUM(exposure),0) AS exposure,
+          ${UNIT_AGGREGATES.avgRol}   AS rol,
+          ${UNIT_AGGREGATES.uwMargin} AS "uwMargin"
+        FROM units WHERE kind = 'NP' GROUP BY 1`, params),
+      // Balance bands over PROP units only.
+      pool.query(`WITH ${unitsW}
+        SELECT ${bandCaseSql('balance', BALANCE_BANDS)} AS band,
+          COALESCE(SUM(premium),0)  AS premium,
+          COALESCE(SUM(exposure),0) AS exposure,
+          ${UNIT_AGGREGATES.balance}  AS balance,
+          ${UNIT_AGGREGATES.uwMargin} AS "uwMargin"
+        FROM units WHERE kind = 'PROP' GROUP BY 1`, params),
+      // Treaty-type breakdown over all units (rol resolves for NP, balance for
+      // PROP — the FILTER expressions drop the NULLs).
+      pool.query(`WITH ${unitsW}
+        SELECT treaty_type AS "treatyType",
+          COALESCE(SUM(premium),0)  AS premium,
+          COALESCE(SUM(exposure),0) AS exposure,
+          ${UNIT_AGGREGATES.avgRol}   AS rol,
+          ${UNIT_AGGREGATES.balance}  AS balance,
+          ${UNIT_AGGREGATES.uwMargin} AS "uwMargin"
+        FROM units GROUP BY treaty_type ORDER BY 2 DESC`, params),
+      // Treaty-type × UW year — premium plus weighted-pivot num/den pairs.
+      pool.query(`WITH ${unitsW}
+        SELECT treaty_type, uw_year::text AS uw_year,
+          COALESCE(SUM(premium),0) AS premium,
+          COALESCE(SUM(balance*premium) FILTER (WHERE balance IS NOT NULL),0) AS bal_num,
+          COALESCE(SUM(premium)         FILTER (WHERE balance IS NOT NULL),0) AS bal_den,
+          COALESCE(SUM(rol*premium)     FILTER (WHERE rol     IS NOT NULL),0) AS rol_num,
+          COALESCE(SUM(premium)         FILTER (WHERE rol     IS NOT NULL),0) AS rol_den,
+          COALESCE(SUM(margin*premium)  FILTER (WHERE margin  IS NOT NULL),0) AS mw_num,
+          COALESCE(SUM(premium)         FILTER (WHERE margin  IS NOT NULL),0) AS mw_den
+        FROM units GROUP BY treaty_type, uw_year`, params),
+    ]);
+
+    // Re-key band aggregates and emit one row per declared band (zero-filling
+    // empty bands), preserving declared order.
+    const rolByBand = new Map(rolBandsR.rows.map(r => [r.band, r]));
+    const rolBands = ROL_BANDS.map(b => {
+      const r = rolByBand.get(b.label);
+      return {
+        band: b.label,
+        premium:  r ? Number(r.premium) : 0,
+        exposure: r ? Number(r.exposure) : 0,
+        rol:      r ? num(r.rol) : null,
+        uwMargin: r ? num(r.uwMargin) : null,
+      };
+    });
+
+    const balByBand = new Map(balanceBandsR.rows.map(r => [r.band, r]));
+    const balanceBands = BALANCE_BANDS.map(b => {
+      const r = balByBand.get(b.label);
+      return {
+        band: b.label,
+        premium:  r ? Number(r.premium) : 0,
+        exposure: r ? Number(r.exposure) : 0,
+        balance:  r ? num(r.balance) : null,
+        uwMargin: r ? num(r.uwMargin) : null,
+      };
+    });
+
+    const byTreatyType = treatyR.rows.map(r => ({
+      treatyType: r.treatyType,
+      premium:  Number(r.premium),
+      exposure: Number(r.exposure),
+      rol:      num(r.rol),
+      balance:  num(r.balance),
+      uwMargin: num(r.uwMargin),
+    }));
+
+    return res.json({
+      kpis: {},
+      rolBands,
+      balanceBands,
+      byTreatyType,
+      // xolBandLayerPremium is intentionally omitted (pending the premium-band
+      // definition); the client no-ops on an undefined pivot.
+      treatyPremiumByYear:  buildPivot(treatyYearR.rows, 'treaty_type', 'uw_year', 'premium'),
+      treatyBalanceByYear:  buildWeightedPivot(treatyYearR.rows, 'treaty_type', 'uw_year', 'bal_num', 'bal_den'),
+      treatyRolByYear:      buildWeightedPivot(treatyYearR.rows, 'treaty_type', 'uw_year', 'rol_num', 'rol_den'),
+      treatyUwMarginByYear: buildWeightedPivot(treatyYearR.rows, 'treaty_type', 'uw_year', 'mw_num', 'mw_den'),
     });
   }
 
