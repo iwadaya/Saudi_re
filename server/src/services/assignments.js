@@ -42,7 +42,7 @@ async function logHistory({ entityType, entityId, fromUserId, toUserId, assigned
       [entityType, entityId, fromUserId||null, toUserId, assignedBy||toUserId, action, comment||null]
     );
   } catch {
-    await logAudit(pool,{entityType,entityId,eventType:action,actor:assignedBy||toUserId,payload:{fromUserId,toUserId,comment}}).catch(()=>{});
+    await logAudit(pool,{entityType,entityId,eventType:action,actor:{id:assignedBy||toUserId},payload:{fromUserId,toUserId,comment}}).catch(()=>{});
   }
 }
 

@@ -15,7 +15,7 @@ import { logger } from '../lib/logger.js';
 import { logAudit } from '../services/audit.js';
 import { signAuthToken } from '../lib/authToken.js';
 import { setAuthCookies, clearAuthCookies } from '../lib/authCookies.js';
-import { requireAuth, requireMinLevel } from '../middleware/requestContext.js';
+import { requireAuth, requireMinLevel, actorFromReq } from '../middleware/requestContext.js';
 
 const router = Router();
 
@@ -265,9 +265,11 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
     [user.user_id]
   ).catch(() => {});
 
+  // At login req.user isn't set yet (this IS the authentication), so the actor
+  // is the user being authenticated, built from the verified DB row.
   await logAudit(pool, {
     entityType: 'USER', entityId: user.user_id,
-    eventType: 'LOGIN', actor: user.username || user.email,
+    eventType: 'LOGIN', actor: { id: user.user_id, name: user.username || user.email },
     payload: { office: user.office },
   }).catch(() => {});
 
@@ -355,7 +357,7 @@ router.post('/auth/change-password', requireAuth, asyncHandler(async (req, res) 
   await logAudit(pool, {
     entityType: 'USER', entityId: userId,
     eventType: 'PASSWORD_CHANGED',
-    actor: req.user.displayName || userId,
+    actor: actorFromReq(req),
     payload: { self_service: true },
   }).catch(() => {});
 
@@ -513,7 +515,7 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
 
   await logAudit(pool, {
     entityType: 'USER', entityId: rows[0].user_id,
-    eventType: 'USER_CREATED', actor: req.user?.displayName || (req.user ? 'ADMIN' : 'SELF_REGISTRATION'),
+    eventType: 'USER_CREATED', actor: actorFromReq(req),
     payload: { username: finalUsername, role_id: roleId, open_registration: !req.user, must_change_password: mustChangePassword },
   }).catch(() => {});
 
@@ -612,7 +614,7 @@ router.put('/auth/mandates/:userId', requireMinLevel(2), asyncHandler(async (req
 
   await logAudit(pool, {
     entityType: 'USER_MANDATE', entityId: userId,
-    eventType: 'MANDATE_UPDATED', actor: req.user?.displayName || req.user?.userId || 'ADMIN',
+    eventType: 'MANDATE_UPDATED', actor: actorFromReq(req),
     payload: b,
   }).catch(() => {});
 

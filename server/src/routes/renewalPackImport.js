@@ -38,6 +38,7 @@ import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { logAudit } from '../services/audit.js';
 import { runImportJob } from '../services/renewalPack/importJob.js';
+import { actorFromReq } from '../middleware/requestContext.js';
 import {
   loadSnapshot,
   markSnapshotRestored,
@@ -172,7 +173,7 @@ function makeStartImportHandler(entityType) {
       throw err;
     }
 
-    const actor = req.user?.displayName || req.user?.userId || 'SYSTEM';
+    const actor = actorFromReq(req);
 
     // Kick off the async work. setImmediate runs after the response
     // is flushed, so the underwriter sees the 202 promptly even on a
@@ -337,7 +338,7 @@ function makeRestoreSnapshotHandler(entityType) {
       });
     }
 
-    const actor = req.user?.displayName || req.user?.userId || 'SYSTEM';
+    const actor = actorFromReq(req);
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -388,7 +389,7 @@ function makeRestoreSnapshotHandler(entityType) {
           snapshotId,
           restoredPages: Object.keys(fresh.row.payload?.pages || {}),
         },
-      });
+      }, { critical: true });
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});

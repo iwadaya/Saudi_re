@@ -22,15 +22,15 @@ import {
 } from '../repositories/pricingRepository.js';
 import { parseOfferLinePct, parseSignedLinePct } from './pricingHelpers.js';
 
-export async function saveOfferAction(contractId, offer) {
+export async function saveOfferAction(contractId, offer, actor) {
   const saved = await replaceOffer(contractId, offer);
-  await logAudit(pool, { entityType: 'CONTRACT', entityId: contractId, eventType: 'OFFERED', actor: offer._actor || 'SYSTEM' });
+  await logAudit(pool, { entityType: 'CONTRACT', entityId: contractId, eventType: 'OFFERED', actor });
   return saved;
 }
 
 export async function declineTreatyAction(contractId, actor, reason) {
   await markDeclined(contractId, reason);
-  await logAudit(pool, { entityType: 'CONTRACT', entityId: contractId, eventType: 'DECLINED', actor: actor.actorName, payload: { reason }, comment: reason || null });
+  await logAudit(pool, { entityType: 'CONTRACT', entityId: contractId, eventType: 'DECLINED', actor, payload: { reason }, comment: reason || null });
   await insertApprovalEvent(contractId, 'DECLINED', actor, reason || null);
 }
 

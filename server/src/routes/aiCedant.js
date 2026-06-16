@@ -32,6 +32,7 @@ import {
 } from '../validation/ai.js';
 import { checkPortfolioCompliance } from '../lib/portfolioCompliance.js';
 import { logAudit } from '../services/audit.js';
+import { actorFromReq } from '../middleware/requestContext.js';
 
 const router = Router();
 
@@ -506,7 +507,7 @@ router.post(
         entityType: 'CEDANT_AI_RECOMMENDATION',
         entityId: recId,
         eventType: 'REJECTED',
-        actor: userId,
+        actor: actorFromReq(req),
         payload: { reason },
       });
     }
@@ -652,16 +653,16 @@ router.post(
           [staged.source_rec_id],
         );
       }
-      await client.query('COMMIT');
       if (reason) {
-        await logAudit(null, {
+        await logAudit(client, {
           entityType: 'CEDANT_PORTFOLIO_STAGING',
           entityId: stagingId,
           eventType: 'DISCARDED',
-          actor: userId,
+          actor: actorFromReq(req),
           payload: { reason },
         });
       }
+      await client.query('COMMIT');
       res.json({ staging: staged });
     } catch (e) {
       await client.query('ROLLBACK').catch(() => {});
@@ -723,14 +724,14 @@ router.post(
             entityType: 'CONTRACT',
             entityId:   row.contract_id,
             eventType:  'LINE_SIZE_COMMITTED',
-            actor:      userId,
+            actor:      actorFromReq(req),
             payload: {
               staging_id: row.staging_id,
               source:     row.source,
               source_rec_id: row.source_rec_id,
               ...writeRes,
             },
-          });
+          }, { critical: true });
           results.push({ staging_id: row.staging_id, ...writeRes });
         } catch (e) {
           await client.query('ROLLBACK').catch(() => {});

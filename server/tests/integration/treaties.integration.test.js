@@ -172,20 +172,20 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
     const staleTs = sessionBRead.updated_at;
 
     const sessionA = await harness.fetchApp('PUT', `/api/treaties/${c.contract_id}`, {
-      body: { terms: { _actor: 'Alice Underwriter', header: { contract_description: 'session A save' } } },
+      body: { terms: { header: { contract_description: 'session A save' } } },
     });
     expect(sessionA.status).toBe(200);
 
     const staleAttempt = await harness.fetchApp('PUT', `/api/treaties/${c.contract_id}`, {
       headers: { 'if-unmodified-since': staleTs },
-      body: { terms: { _actor: 'Bob Underwriter', header: { contract_description: 'session B stale save' } } },
+      body: { terms: { header: { contract_description: 'session B stale save' } } },
     });
     expect(staleAttempt.status).toBe(409);
     await expect(staleAttempt.json()).resolves.toMatchObject({ code: 'STALE_WRITE' });
 
     const override = await harness.fetchApp('PUT', `/api/treaties/${c.contract_id}`, {
       headers: { 'if-unmodified-since': '*' },
-      body: { terms: { _actor: 'Bob Underwriter', header: { contract_description: 'session B override' } } },
+      body: { terms: { header: { contract_description: 'session B override' } } },
     });
     expect(override.status).toBe(200);
     await expect(override.json()).resolves.toMatchObject({ ok: true, contract_id: c.contract_id });
@@ -202,11 +202,16 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
       [c.contract_id],
     );
     expect(rows.length).toBe(1);
-    expect(rows[0].actor).toBe('Bob Underwriter');
+    // The audit actor is now the VERIFIED user id (the demo harness's default
+    // CU user, ...001 — the contract's assignee), not the client-supplied
+    // _actor label. The human-readable name/role ride along under payload.actor.
+    const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000001';
+    expect(rows[0].actor).toBe(DEFAULT_USER_ID);
     expect(rows[0].payload).toMatchObject({
-      overwrittenBy: 'Bob Underwriter',
-      previousActor: 'Alice Underwriter',
+      overwrittenBy: DEFAULT_USER_ID,
+      previousActor: DEFAULT_USER_ID,
       overrideHeader: 'If-Unmodified-Since: *',
+      actor: { name: 'Chief Underwriter', role: 'CU' },
     });
   });
 

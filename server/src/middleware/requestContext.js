@@ -194,3 +194,25 @@ export function requireMinLevel(n) {
 
 // Back-compat alias (older imports referenced attachRequestContext).
 export const attachRequestContext = authenticate;
+
+/**
+ * Build the audit actor from VERIFIED request identity only.
+ *
+ * Reads req.user (populated by `authenticate` from a verified token, DB-backed)
+ * and req.authVia. Client-supplied labels — body `_actor`, x-user-* headers —
+ * are NEVER trusted here, so spoofing them changes nothing in the trail. For
+ * genuinely system-initiated work (schedulers, imports with no request user)
+ * pass SYSTEM_ACTOR (services/audit.js) EXPLICITLY — a user-initiated route must
+ * never silently fall through to SYSTEM.
+ *
+ * @param {object} req Express request.
+ * @returns {{ id: string|null, role: string|null, name: string|null, via: string|null }}
+ */
+export function actorFromReq(req) {
+  return {
+    id: req?.user?.userId ?? null,
+    role: req?.user?.roleCode ?? null,
+    name: req?.user?.displayName ?? null,
+    via: req?.authVia ?? null,
+  };
+}

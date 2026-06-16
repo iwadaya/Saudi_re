@@ -125,7 +125,8 @@ export async function getOfferController(req, res) {
 export async function saveOfferController(req, res) {
   const id = req.params.id;
   const offer = req.body.offer ?? req.body;
-  res.json(await saveOfferAction(id, offer));
+  const actor = await resolveActor(req);
+  res.json(await saveOfferAction(id, offer, actor));
 }
 
 export async function declineTreatyController(req, res) {

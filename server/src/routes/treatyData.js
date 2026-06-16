@@ -7,6 +7,7 @@ import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from
 import { stripTriangleCells, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from '../lib/triangleStripping.js';
 import { suggestLossQuarters } from '../lib/lossQuarterMapper.js';
 import { logAudit } from '../services/audit.js';
+import { actorFromReq } from '../middleware/requestContext.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
@@ -148,12 +149,12 @@ router.post("/treaties/:id/triangles/:type", asyncHandler(async (req, res) => {
         ]
       );
     }
-    await cl.query("COMMIT");
-    await logAudit(pool, {
+    await logAudit(cl, {
       entityType: 'CONTRACT', entityId: id, eventType: 'TRIANGLE_SAVED',
-      actor: req.body?._actor || req.user?.displayName || 'SYSTEM',
+      actor: actorFromReq(req),
       payload: { triangle_type: t, variant, saved: cells.length, dropped: rawCells.length - cells.length },
-    });
+    }, { critical: true });
+    await cl.query("COMMIT");
     res.json({ ok: true, saved: cells.length, dropped: rawCells.length - cells.length });
   } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }
 }));
@@ -231,12 +232,12 @@ router.put("/treaties/:id/dev-factors/:type", validateBody(devFactorPutSchema), 
         params,
       );
     }
-    await cl.query("COMMIT");
-    await logAudit(pool, {
+    await logAudit(cl, {
       entityType: 'CONTRACT', entityId: id, eventType: 'DEV_FACTORS_SAVED',
-      actor: req.body?._actor || req.user?.displayName || 'SYSTEM',
+      actor: actorFromReq(req),
       payload: { triangle_type: t, count: factors.length, method: req.body?.method || null, basis: req.body?.basis || null },
-    });
+    }, { critical: true });
+    await cl.query("COMMIT");
     res.json({ ok: true });
   } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }
 }));

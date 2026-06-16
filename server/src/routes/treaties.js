@@ -3,6 +3,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { asyncHandler, numOrNull, dateOrNull, boolOrDefault } from '../helpers.js';
 import { logAudit } from "../services/audit.js";
+import { actorFromReq } from "../middleware/requestContext.js";
 import { contractContextJoins } from "../db/contractJoins.js";
 import { assertEntityUnchanged, optimisticLockOverrideRequested } from "../db/optimisticLock.js";
 import { validateBody } from "../lib/validate.js";
@@ -31,7 +32,7 @@ router.post("/treaties", asyncHandler(async (req, res) => {
      b.primary_class_of_business_id || null, creatorUserId, inception_date]
   );
   const c = rows[0];
-  await logAudit(pool, { entityType: "CONTRACT", entityId: c.contract_id, eventType: "CREATED", actor: b._actor || req.user?.displayName || "SYSTEM", payload: { uw_year, assignedTo: creatorUserId } });
+  await logAudit(pool, { entityType: "CONTRACT", entityId: c.contract_id, eventType: "CREATED", actor: actorFromReq(req), payload: { uw_year, assignedTo: creatorUserId } });
   res.status(201).json({ id: c.contract_id, contract_id: c.contract_id, ...c });
 }));
 
@@ -357,23 +358,26 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
       [id],
     );
 
-    await client.query("COMMIT");
-    const actor = terms._actor || req.user?.displayName || req.user?.email || "SYSTEM";
+    // Audit BEFORE COMMIT, on the transaction client, so a failed
+    // compliance-critical write rolls the whole save back rather than
+    // committing a field-diff with no audit record.
+    const actor = actorFromReq(req);
     if (staleWriteOverride) {
-      await logAudit(pool,{
+      await logAudit(client,{
         entityType:"CONTRACT",
         entityId:id,
         eventType:"STALE_WRITE_OVERRIDE",
         actor,
         payload:{
           overrideHeader:"If-Unmodified-Since: *",
-          overwrittenBy:actor,
+          overwrittenBy:actor.id ?? actor.name ?? "SYSTEM",
           overwrittenAt:new Date().toISOString(),
           ...staleWriteContext,
         },
-      });
+      }, { critical: true });
     }
-    await logAudit(pool,{entityType:"CONTRACT",entityId:id,eventType:save_mode==="AUTOSAVE"?"AUTOSAVED":"UPDATED",actor});
+    await logAudit(client,{entityType:"CONTRACT",entityId:id,eventType:save_mode==="AUTOSAVE"?"AUTOSAVED":"UPDATED",actor}, { critical: save_mode !== "AUTOSAVE" });
+    await client.query("COMMIT");
     res.json({ok:true,contract_id:id,updated_at:updatedR.rows[0]?.updated_at||null});
   }catch(e){await client.query("ROLLBACK").catch(()=>{});throw e;}finally{client.release();}
 }));
@@ -513,12 +517,12 @@ router.post("/treaties/:id/renew", asyncHandler(async (req, res) => {
       );
     }
 
-    await cl.query('COMMIT');
-    await logAudit(pool, {
+    await logAudit(cl, {
       entityType: 'CONTRACT', entityId: newId, eventType: 'RENEWED',
-      actor: b._actor || 'SYSTEM',
+      actor: actorFromReq(req),
       payload: { parent_contract_id: id, uw_year: newYear, slip_copied: !!slipDoc }
-    });
+    }, { critical: true });
+    await cl.query('COMMIT');
 
     res.status(201).json({
       id: newId,
@@ -543,7 +547,7 @@ router.delete("/treaties/:id", asyncHandler(async (req, res) => {
   await assertCanEdit(req, 'CONTRACT', req.params.id);
   const {rowCount}=await pool.query(`DELETE FROM public.contract WHERE contract_id=$1`,[req.params.id]);
   if(!rowCount) return res.status(404).json({error:"Contract not found"});
-  await logAudit(pool,{entityType:"CONTRACT",entityId:req.params.id,eventType:"DELETED",actor:"SYSTEM"});
+  await logAudit(pool,{entityType:"CONTRACT",entityId:req.params.id,eventType:"DELETED",actor:actorFromReq(req)});
   res.json({ok:true,deleted:req.params.id});
 }));
 
