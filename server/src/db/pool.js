@@ -30,6 +30,7 @@ logger.info('DB pool connecting', { url: redactConnectionString(env.databaseUrl)
 const poolMax = Number(process.env.DB_POOL_MAX) || 50;
 const poolMin = Number(process.env.DB_POOL_MIN) || 4;
 
+// Capacity: pool was the first ceiling at ~100 concurrent users in load tests; see load-test/k6/capacity.js findings.
 export const pool = new Pool({
   connectionString: env.databaseUrl,
   max: poolMax,

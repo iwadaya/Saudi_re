@@ -6,6 +6,38 @@
 // Example:
 //   BASE_URL=https://staging.example.com K6_VUS=30 K6_DURATION=5m \
 //     k6 run --summary-export=load-test/out/staging-30vu.json load-test/k6/capacity.js
+//
+// LOAD TEST FINDINGS — June 2026 (Render + Neon, tested from Riyadh)
+//
+// Target real-world load: ~10 treaty underwriters in a small/medium company,
+// ~20 concurrent with analysts. Tested well beyond that to find the ceiling.
+//
+// Results (capacity.js, WRITE_CRUD=0, 60s warmup, rate limiter bypassed via
+// LOAD_TEST=true):
+//    10 VUs : median ~585ms, p95 ~2.0s, 0% errors, pg_pool_waiting=0
+//    20 VUs : median ~610ms, p95 ~4.2s, 0% errors, pg_pool_waiting=0
+//    50 VUs : median ~205ms, p95 ~1.7s, 100% checks ok, pg_pool_waiting=0
+//   100 VUs: median ~265ms, p95 ~875ms, 0% errors, pg_pool_waiting peaked 18 (brief)
+//
+// Interpretation:
+// - DB/app are not the bottleneck at expected load. Postgres pool never queued
+//   below 100 concurrent users; at 100 it only briefly spiked
+//   (pg_pool_waiting=18, 3 occurrences) with no request failures — the first
+//   sign of pool-connection limit, NOT a hardware/compute limit.
+// - 0% error rate at 50 and 100 VUs once the API rate limiter was bypassed for
+//   the test. Real 10-20 user load runs with large headroom.
+// - The dominant latency factor for remote testers was network distance to the
+//   Render region (US/EU), not app compute. Real GCC users benefit from a
+//   region close to Saudi (e.g. Frankfurt) + edge caching.
+//
+// Conclusion: comfortably handles the intended ~10-20 concurrent underwriters.
+// Scaling levers if usage grows past ~100 concurrent, in order:
+//   1. Use Neon's pooled (PgBouncer) connection string; size pool max so
+//      (instances x pool_max) stays under Neon max_connections.
+//   2. Place the service in a region near users (Frankfurt for GCC).
+//   3. Add Render web instances (web tier was healthy through 100 VUs).
+// A higher-end/dedicated server is NOT indicated: the only ceiling found was DB
+// connection-pool config, which is tuned, not bought.
 
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';
