@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 import Topbar from '../../components/Topbar';
-import { fmtNum, fmtPct, fmtMoney, fmtX } from '../../utils/format';
+import { fmtNum, fmtPct, fmtMoney, fmtX, fmtBal } from '../../utils/format';
 
 const TABS = [
   { key: 'portfolio-overview', label: 'Portfolio Overview' },
@@ -231,13 +231,13 @@ export default function DashboardScreen() {
 
               {tab === 'portfolio-summary' && <div className="dash-stack">
                 <PivotTable title="Consolidated Figures — Premium by Region" data={data?.regionYear} cellFmt={fm} rowLabel="Region" />
-                <SummaryTable title="Summary by Year" rows={data?.byYear || []} columns={[{ key: 'uwYear', label: 'UW Year' },{ key: 'premium', label: 'Premium', fmt: fm },{ key: 'exposure', label: 'Exposure', fmt: fm },{ key: 'balance', label: 'Balance', fmt: fmtX },{ key: 'rol', label: 'ROL', fmt: fp },{ key: 'uwMargin', label: 'UW Margin', fmt: fp }]} sort={sort.byYear} sortKey="byYear" onSort={handleSort} currency={currency} />
+                <SummaryTable title="Summary by Year" rows={data?.byYear || []} columns={[{ key: 'uwYear', label: 'UW Year' },{ key: 'premium', label: 'Premium', fmt: fm },{ key: 'exposure', label: 'Exposure', fmt: fm },{ key: 'balance', label: 'Balance', fmt: fmtBal },{ key: 'rol', label: 'ROL', fmt: fp },{ key: 'uwMargin', label: 'UW Margin', fmt: fp }]} sort={sort.byYear} sortKey="byYear" onSort={handleSort} currency={currency} />
               </div>}
 
               {tab === 'regional-analysis' && (!filters.region
                 ? <div className="glass dash-block"><div className="dash-block-title">Regional Analysis</div><div className="muted">Select a region to view this page.</div></div>
                 : <div className="dash-stack">
-                    <SummaryTable title="Summary by Year" rows={data?.byYear || []} columns={[{ key: 'uwYear', label: 'UW Year' },{ key: 'premium', label: 'Premium', fmt: fm },{ key: 'exposure', label: 'Exposure', fmt: fm },{ key: 'balance', label: 'Balance', fmt: fmtX },{ key: 'rol', label: 'ROL', fmt: fp },{ key: 'uwMargin', label: 'UW Margin', fmt: fp }]} sort={sort.byYear} sortKey="byYear" onSort={handleSort} currency={currency} />
+                    <SummaryTable title="Summary by Year" rows={data?.byYear || []} columns={[{ key: 'uwYear', label: 'UW Year' },{ key: 'premium', label: 'Premium', fmt: fm },{ key: 'exposure', label: 'Exposure', fmt: fm },{ key: 'balance', label: 'Balance', fmt: fmtBal },{ key: 'rol', label: 'ROL', fmt: fp },{ key: 'uwMargin', label: 'UW Margin', fmt: fp }]} sort={sort.byYear} sortKey="byYear" onSort={handleSort} currency={currency} />
                     <SummaryTable title="Summary by Line of Business" rows={data?.byLob || []} columns={lobCols} sort={sort.byLob} sortKey="byLob" onSort={handleSort} currency={currency} />
                     <PivotTable title="Premium (LOB × Treaty Type)" data={data?.lobTreatyPremium} cellFmt={fm} rowLabel="Line of Business" />
                     <PivotTable title="Exposure (LOB × Treaty Type)" data={data?.lobTreatyExposure} cellFmt={fm} rowLabel="Line of Business" />

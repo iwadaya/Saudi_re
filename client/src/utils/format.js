@@ -17,6 +17,11 @@ export function fmtPct(n, decimals = 2) {
 // so balance columns read as a multiple of premium rather than an amount.
 export const fmtX = (v) => Number.isFinite(Number(v)) ? `${Number(v).toFixed(2)}×` : '—';
 
+// N/A-aware balance multiplier: a null/blank balance (e.g. a year or region
+// with no proportional business — the server sends null, not 0) renders as
+// '—' rather than a misleading 0.00×. A genuine 0 still shows as 0.00×.
+export const fmtBal = (v) => (v != null && Number.isFinite(Number(v))) ? `${Number(v).toFixed(2)}×` : '—';
+
 export function fmtMoney(n) {
   const v = Number(n);
   if (!Number.isFinite(v)) return '0';

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   addMonthsClamped,
   dateInputValue,
+  fmtBal,
   fmtPctPoints,
   fmtX,
   sanitizeNumber,
@@ -79,6 +80,20 @@ describe('fmtX — treaty balance multiplier', () => {
     expect(fmtX(undefined)).toBe('—');
     expect(fmtX(NaN)).toBe('—');
     expect(fmtX('abc')).toBe('—');
+  });
+});
+
+describe('fmtBal — N/A-aware balance multiplier', () => {
+  it('formats finite values (including a genuine 0) with a × suffix', () => {
+    expect(fmtBal(2.5)).toBe('2.50×');
+    expect(fmtBal(0)).toBe('0.00×');
+    expect(fmtBal('1.234')).toBe('1.23×');
+  });
+  it('renders null/blank/non-finite as N/A (—) — unlike fmtX(null)', () => {
+    expect(fmtBal(null)).toBe('—');
+    expect(fmtBal(undefined)).toBe('—');
+    expect(fmtBal(NaN)).toBe('—');
+    expect(fmtBal('abc')).toBe('—');
   });
 });
 
