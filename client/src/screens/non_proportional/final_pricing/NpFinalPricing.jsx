@@ -203,6 +203,8 @@ export default function NpFinalPricing() {
                 calcEngineError={calcEngineError}
                 updateClientStructureLayer={updateClientStructureLayer}
                 updateClientStructure={updateClientStructure}
+                save={save}
+                doSubmitForApproval={doSubmitForApproval}
                 onClose={closePricingAnalysis}
               />
 
