@@ -235,11 +235,18 @@ router.get("/cedants/:cedantId/np-layers", asyncHandler(async (req, res) => {
   const cobIdCol   = cobColNames.find(c => c === 'class_of_business_id') || cobColNames.find(c => c === 'class_id') || cobColNames[0];
   const cobNameCol = cobColNames.find(c => c === 'class_of_business') || cobColNames.find(c => c === 'class_name') || cobColNames[1] || cobColNames[0];
 
-  const cobSubquery = `(
-    SELECT string_agg(cob.${cobNameCol}, ', ')
-    FROM public.contract_class_of_business ccb
-    JOIN public.class_of_business cob ON cob.${cobIdCol} = ccb.class_of_business_id
-    WHERE ccb.contract_id = c.contract_id
+  // Each row is a single layer, so show that layer's OWN classes of business
+  // (layers can cover a different COB mix than the treaty as a whole). Fall
+  // back to the contract-level COBs when a layer has no COBs recorded.
+  const cobSubquery = `COALESCE(
+    (SELECT string_agg(cob.${cobNameCol}, ', ')
+       FROM public.contract_np_layer_class_of_business lcb
+       JOIN public.class_of_business cob ON cob.${cobIdCol} = lcb.class_of_business_id
+      WHERE lcb.layer_id = l.layer_id),
+    (SELECT string_agg(cob.${cobNameCol}, ', ')
+       FROM public.contract_class_of_business ccb
+       JOIN public.class_of_business cob ON cob.${cobIdCol} = ccb.class_of_business_id
+      WHERE ccb.contract_id = c.contract_id)
   )`;
 
   const layers = await tryQuery(`

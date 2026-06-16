@@ -29,9 +29,11 @@ joins in `server/src/db/contractJoins.js`.
 
 ## Quote Versus Treaty
 
-Quotes are pre-bind working records. They can be amended, approved, or
-bound into a contract. Migration `044_quote_lifecycle.sql` adds the
-versioning and binding columns:
+Quotes are pre-bind working records. They can be amended or approved,
+and the schema is designed for them to bind into a contract (binding
+itself is currently out of scope — see "Quote binding scope" below).
+Migration `044_quote_lifecycle.sql` adds the versioning and binding
+columns:
 
 | Column | Meaning |
 | --- | --- |
@@ -46,6 +48,25 @@ Some tables are shared instead of duplicated: `contract_document`,
 `contract_loss_selection_snapshot`. They carry either `contract_id` or
 `quote_id`, enforced for new rows by migration
 `072_database_alignment_and_index_cleanup.sql`.
+
+### Quote binding scope (intentionally out of scope)
+
+Although the schema carries the binding columns above, quote → contract
+binding is **intentionally disabled** in this build: `POST
+/api/quotes/:id/bind` returns `410 QUOTE_BIND_DISABLED` (see
+`server/src/routes/quoteLifecycle.js`). Quotes run as a standalone
+artefact — a SIGNED/bound quote does **not** create a contract and does
+**not** contribute to portfolio exposure. Portfolio metrics
+(`/api/dashboard/*`) aggregate `public.contract` only; there is no read
+path from quotes into accumulation or the dashboard. The disabled
+transactional copy is preserved in git history and can be restored when
+binding is re-wired, so treat `quote.bound_contract_id` and
+`contract.source_quote_id` as forward-looking schema for now.
+
+**Decision (2026-06):** reviewed and kept out of scope. Wiring bound
+quotes into portfolio exposure is a deliberate future feature, not a
+defect — when it lands it must create/feed a `contract` row so the
+existing dashboard aggregation picks it up automatically.
 
 On the client, quote mode is passed as `{ quote: true }`. API methods
 then select `/api/quotes/...` paths instead of `/api/treaties/...`.
