@@ -11,9 +11,9 @@
 //     its sockets force-closed, and every limiter store is cleared, so nothing
 //     leaks into or contends with the next test.
 // testTimeout is raised here (per-file), not globally.
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import express from 'express';
-import { createApiLimiter, createLoginLimiter } from './app.js';
+import { createApiLimiter, createLoginLimiter, rateLimitBypassed } from './app.js';
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 
@@ -35,6 +35,14 @@ afterEach(async () => {
   for (const s of servers.splice(0)) {
     await new Promise((resolve) => { s.close(resolve); s.closeAllConnections?.(); });
   }
+});
+
+// The vitest env sets ALLOW_DEMO_AUTH=true for the whole suite (so demo-header
+// auth works). These tests exercise the limiter itself, so clear the
+// load-test/demo bypass flags first; the per-test env snapshot restores them.
+beforeEach(() => {
+  delete process.env.ALLOW_DEMO_AUTH;
+  delete process.env.LOAD_TEST;
 });
 
 function boot(buildRoutes) {
@@ -113,5 +121,40 @@ describe('login limiter (IP + identity)', () => {
     // Same IP, different identity → separate bucket, not throttled.
     const other = await postJson(base, '/api/auth/login', { 'X-Forwarded-For': '7.7.7.7' }, { username: 'grace@x' });
     expect(other.status).toBe(200);
+  });
+});
+
+describe('load-test / demo bypass', () => {
+  it('reports bypassed when LOAD_TEST or ALLOW_DEMO_AUTH is set, otherwise not', () => {
+    expect(rateLimitBypassed()).toBe(false); // beforeEach cleared both flags
+    process.env.LOAD_TEST = 'true';
+    expect(rateLimitBypassed()).toBe(true);
+    delete process.env.LOAD_TEST;
+    process.env.ALLOW_DEMO_AUTH = 'true';
+    expect(rateLimitBypassed()).toBe(true);
+  });
+
+  it('LOAD_TEST=true skips the IP limiter (uncapped — measures real capacity)', async () => {
+    process.env.LOAD_TEST = 'true';
+    const limiter = track(createApiLimiter({ max: 1 }));
+    const base = await boot((app) => {
+      app.use('/api', limiter);
+      app.get('/api/x', (_req, res) => res.json({ ok: true }));
+    });
+    const a = await get(base, '/api/x', { 'X-Forwarded-For': '5.5.5.5' });
+    const b = await get(base, '/api/x', { 'X-Forwarded-For': '5.5.5.5' });
+    expect([a.status, b.status]).toEqual([200, 200]); // 2nd NOT throttled despite max:1
+  });
+
+  it('ALLOW_DEMO_AUTH=true skips the IP limiter too', async () => {
+    process.env.ALLOW_DEMO_AUTH = 'true';
+    const limiter = track(createApiLimiter({ max: 1 }));
+    const base = await boot((app) => {
+      app.use('/api', limiter);
+      app.get('/api/x', (_req, res) => res.json({ ok: true }));
+    });
+    const a = await get(base, '/api/x', { 'X-Forwarded-For': '6.6.6.6' });
+    const b = await get(base, '/api/x', { 'X-Forwarded-For': '6.6.6.6' });
+    expect([a.status, b.status]).toEqual([200, 200]);
   });
 });

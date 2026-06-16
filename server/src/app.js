@@ -165,9 +165,21 @@ function registerClient(app) {
   logger.info('[static] serving client', { clientDir });
 }
 
+// Load-test / demo bypass for the API limiters. When a load test is running
+// (LOAD_TEST=true) or demo auth is enabled (ALLOW_DEMO_AUTH=true — a dev/test
+// flag that is NEVER set in production), the IP + per-user API limiters are
+// skipped so the test measures real server capacity, not the limiter. With both
+// flags unset (i.e. production) the default 300/min IP + 600/min per-user
+// ceilings are unchanged.
+export function rateLimitBypassed() {
+  return process.env.LOAD_TEST === 'true' || process.env.ALLOW_DEMO_AUTH === 'true';
+}
+
 // Endpoints that must never be throttled at the IP layer (health probes and
-// our own crash-report telemetry, which has its own 20/min cap).
+// our own crash-report telemetry, which has its own 20/min cap) — plus the
+// load-test/demo bypass above.
 function skipRateLimit(req) {
+  if (rateLimitBypassed()) return true;
   const path = req.path || '';
   const original = req.originalUrl || req.url || '';
   return path.startsWith('/health') ||
@@ -378,6 +390,9 @@ export function createApp() {
   // throttled clients do not make the process spend CPU/memory parsing
   // a body that will be rejected anyway. In-memory store is fine for a
   // single Node process; swap to Redis when scaling horizontally.
+  if (rateLimitBypassed()) {
+    logger.warn('API rate limiters BYPASSED (LOAD_TEST or ALLOW_DEMO_AUTH set) — measuring uncapped capacity; never enable in production');
+  }
   app.use('/api', createApiLimiter());
 
   // Body parser — 1MB is plenty for any realistic pricing payload.
