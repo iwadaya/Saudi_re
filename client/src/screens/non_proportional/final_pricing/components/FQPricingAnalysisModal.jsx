@@ -364,6 +364,31 @@ export default function FQPricingAnalysisModal({
             </tbody>
           </table>
         </div>
+        {/* (b) Section Total — this peril's own bottom line. Sits OUTSIDE the
+            table's horizontal-scroll wrapper (like the blender/notes) so it
+            stays full-width and never slides sideways. Uses the same
+            componentTotals(scopeKey) as the header's Wtd ROL and the combined
+            Total Section's per-peril row. */}
+        {(() => {
+          const t = componentTotals(scopeKey);
+          const cell = (label, value) => (
+            <span style={{ color: 'rgba(226,232,240,0.92)' }}>
+              <span style={{ color: 'rgba(148,163,184,0.7)', fontWeight: 600 }}>{label} </span>{value}
+            </span>
+          );
+          return (
+            <div
+              data-testid={`fq-section-total-${scopeKey}`}
+              style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: '8px 14px', borderTop: `1px solid ${scope.color}40`, background: `${scope.color}16`, fontSize: 11, fontWeight: 800 }}
+            >
+              <span style={{ fontSize: 10, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: scope.color }}>{scope.label} Total</span>
+              {cell('Active', t.activeCount || '—')}
+              {cell('Limit', fmtMoney(t.totalLimit))}
+              {cell('Premium', fmtMoney(t.premium))}
+              <span style={{ marginLeft: 'auto', color: scope.color, fontWeight: 850 }}>Wtd ROL {fmtPct(t.wtdRol)}</span>
+            </div>
+          );
+        })()}
         {/* (c) Notes — persists on structure[`${scopeKey}Notes`] via the save path. */}
         <div style={{ padding: '10px 14px' }}>
           <textarea

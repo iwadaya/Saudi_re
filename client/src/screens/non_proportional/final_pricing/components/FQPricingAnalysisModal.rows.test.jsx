@@ -81,6 +81,32 @@ describe('FQPricingAnalysisModal — row rendering', () => {
     expect(scoped.getByText('Total')).toBeInTheDocument();
   });
 
+  it('renders a per-section total strip under each peril table (matching the header Wtd ROL)', () => {
+    renderModal();
+    const riskStrip = screen.getByTestId('fq-section-total-risk');
+    expect(screen.getByTestId('fq-section-total-cat')).toBeInTheDocument();
+
+    const riskSection = screen.getByText('Risk Pricing Analysis').closest('section');
+    // Inside the section card, but OUTSIDE the table's horizontal-scroll wrapper.
+    expect(riskSection.contains(riskStrip)).toBe(true);
+    const riskTableWrapper = within(riskSection).getAllByRole('table')[0].parentElement;
+    expect(riskTableWrapper.contains(riskStrip)).toBe(false);
+
+    // Risk-only summary: Active / Limit / Premium / Wtd ROL.
+    expect(riskStrip.textContent).toMatch(/Risk Total/);
+    expect(riskStrip.textContent).toMatch(/Active/);
+    expect(riskStrip.textContent).toMatch(/Limit/);
+    expect(riskStrip.textContent).toMatch(/Premium/);
+    const m = riskStrip.textContent.match(/Wtd ROL (\d+\.\d{2}%)/);
+    expect(m).toBeTruthy();
+    // The strip's Wtd ROL equals the section header's (same value appears in the
+    // section at least twice: the header line + the strip).
+    expect(riskSection.textContent.split(m[1]).length - 1).toBeGreaterThanOrEqual(2);
+
+    // The combined reconciliation Total Section is still rendered at the bottom.
+    expect(screen.getByText('Total Section')).toBeInTheDocument();
+  });
+
   it('shows a "no layers" note instead of a blank table when the structure has no layers', () => {
     renderModal({ clientStructures: [{ id: 'str-0', layers: [] }] });
     expect(screen.getByTestId('fq-analysis-no-layers')).toBeInTheDocument();
