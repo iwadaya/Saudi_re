@@ -78,7 +78,8 @@ function buildUnits(where, ccyDivisor, withLob) {
       NULL::numeric AS rol,
       COALESCE(pd.total_capacity,0) / NULLIF(COALESCE(pd.quota_share_epi,0)+COALESCE(pd.surplus_epi,0),0) AS balance,
       cpo.actuarial_margin AS margin,
-      c.inception_date AS inception_date
+      c.inception_date AS inception_date,
+      c.uw_year AS uw_year
     FROM public.contract c
     LEFT JOIN public.country cnt              ON cnt.country_id=c.country_id
     LEFT JOIN public.treaty_type tt           ON tt.treaty_type_id=c.treaty_type_id
@@ -100,7 +101,8 @@ function buildUnits(where, ccyDivisor, withLob) {
       l.uw_price AS rol,
       NULL::numeric AS balance,
       l.modelled_margin AS margin,
-      c.inception_date AS inception_date
+      c.inception_date AS inception_date,
+      c.uw_year AS uw_year
     FROM public.contract c
     JOIN public.contract_np_layers l          ON l.contract_id=c.contract_id
     LEFT JOIN public.country cnt              ON cnt.country_id=c.country_id
@@ -185,105 +187,14 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
   if (region)     { conds.push(`(${regionBucket}) = $${i++}`); params.push(region); }
   const where = `WHERE ${conds.join(' AND ')}`;
 
-  // NP layer rollup: total layer limit (exposure) and booked reinsurer premium
-  // = Σ(uw_price × layer_limit). NP premium is the booked reinsurer premium,
-  // NOT est_gnpi.
-  const nlSub = `(SELECT contract_id,
-                         COALESCE(SUM(layer_limit),0) AS total_layer_limit,
-                         COALESCE(SUM(COALESCE(uw_price,0) * COALESCE(layer_limit,0)),0) AS booked_premium
-                  FROM public.contract_np_layers GROUP BY contract_id) sum_nl`;
-
-  // Per-(contract, COB) allocation weights, so a treaty's premium/exposure is
-  // SPLIT across the lines of business it covers instead of being counted in
-  // full once per COB (which inflated every per-LOB total). prem_share and
-  // exp_share each sum to 1 across a contract's COBs:
-  //   premium  → each COB's share of the stored EPI split (contract_epi_split);
-  //              equal split when no split rows exist.
-  //   exposure → NP attributes each layer's limit to that layer's own COBs
-  //              (equal split among a layer's COBs); prop falls back to the
-  //              premium share; equal split when neither is available.
-  const allocSub = `(
-    SELECT
-      a.contract_id,
-      a.class_of_business_id,
-      CASE WHEN SUM(a.prem_raw) OVER w > 0
-           THEN a.prem_raw / SUM(a.prem_raw) OVER w
-           ELSE 1.0 / COUNT(*) OVER w END AS prem_share,
-      CASE WHEN SUM(a.exp_raw) OVER w > 0
-           THEN a.exp_raw / SUM(a.exp_raw) OVER w
-           ELSE 1.0 / COUNT(*) OVER w END AS exp_share
-    FROM (
-      SELECT
-        ccb.contract_id,
-        ccb.class_of_business_id,
-        COALESCE(es.premium, 0) AS prem_raw,
-        CASE WHEN COALESCE(hl.has_layers, false)
-             THEN COALESCE(lay.cob_limit, 0)
-             ELSE COALESCE(es.premium, 0) END AS exp_raw
-      FROM public.contract_class_of_business ccb
-      LEFT JOIN public.contract_epi_split es
-        ON es.contract_id = ccb.contract_id
-       AND es.class_of_business_id = ccb.class_of_business_id
-      LEFT JOIN (
-        SELECT l.contract_id, lcb.class_of_business_id,
-               SUM(COALESCE(l.layer_limit, 0) / NULLIF(lc.cnt, 0)) AS cob_limit
-        FROM public.contract_np_layers l
-        JOIN public.contract_np_layer_class_of_business lcb ON lcb.layer_id = l.layer_id
-        JOIN (SELECT layer_id, COUNT(*) AS cnt
-                FROM public.contract_np_layer_class_of_business GROUP BY layer_id) lc
-          ON lc.layer_id = l.layer_id
-        GROUP BY l.contract_id, lcb.class_of_business_id
-      ) lay ON lay.contract_id = ccb.contract_id
-           AND lay.class_of_business_id = ccb.class_of_business_id
-      LEFT JOIN (
-        SELECT contract_id, COUNT(*) > 0 AS has_layers
-        FROM public.contract_np_layers GROUP BY contract_id
-      ) hl ON hl.contract_id = ccb.contract_id
-    ) a
-    WINDOW w AS (PARTITION BY a.contract_id)
-  ) alloc`;
-
-  // Effective premium in display currency
-  const effPremUSD = `(
-    COALESCE(c.signed_line_pct,
-      (SELECT o.written_line_pct FROM public.contract_offer o
-       WHERE o.contract_id=c.contract_id ORDER BY o.updated_at DESC LIMIT 1),
-      100.0) / 100.0
-  ) * CASE
-      WHEN COALESCE(tt.category,'') ILIKE '%NP%' OR COALESCE(tt.category,'') ILIKE '%NON%'
-        THEN COALESCE(sum_nl.booked_premium, 0)
-      ELSE COALESCE(NULLIF(COALESCE(pd.quota_share_epi,0)+COALESCE(pd.surplus_epi,0),0), 0)
-    END
-  * COALESCE(fx.rate_to_usd, 1.0) / ${ccyDivisor}`;
-
-  // Effective limit in display currency
-  const effLimUSD = `(
-    COALESCE(c.signed_line_pct,
-      (SELECT o.written_line_pct FROM public.contract_offer o
-       WHERE o.contract_id=c.contract_id ORDER BY o.updated_at DESC LIMIT 1),
-      100.0) / 100.0
-  ) * CASE
-      WHEN COALESCE(tt.category,'') ILIKE '%NP%' OR COALESCE(tt.category,'') ILIKE '%NON%'
-        THEN COALESCE(sum_nl.total_layer_limit, 0)
-      ELSE COALESCE(pd.total_capacity, 0)
-    END
-  * COALESCE(fx.rate_to_usd, 1.0) / ${ccyDivisor}`;
-
-  // Base joins
-  // Portfolio exposure is sourced from public.contract ONLY. Quotes are a
-  // standalone artefact and do NOT bind to contracts (POST /api/quotes/:id/bind
-  // is intentionally disabled — see quoteLifecycle.js and docs/architecture.md),
-  // so a bound/SIGNED quote never contributes to portfolio exposure by design.
-  const baseJoins = `
-    FROM public.contract c
-    LEFT JOIN public.companies ced             ON ced.company_id=c.cedant_id
-    LEFT JOIN public.country cnt               ON cnt.country_id=c.country_id
-    LEFT JOIN public.treaty_type tt            ON tt.treaty_type_id=c.treaty_type_id
-    LEFT JOIN public.contract_prop_details pd  ON pd.contract_id=c.contract_id
-    LEFT JOIN public.contract_np_details nd    ON nd.contract_id=c.contract_id
-    LEFT JOIN ${nlSub}                         ON sum_nl.contract_id=c.contract_id
-    LEFT JOIN public.currency cur              ON cur.currency_id=c.currency_id
-    LEFT JOIN ${fxSub}                         ON fx.currency_code=cur.currency_code`;
+  // All tabs aggregate over the shared units / unitsLob CTEs, which source from
+  // public.contract ONLY — quotes are a standalone artefact and never feed
+  // portfolio exposure (POST /api/quotes/:id/bind is disabled; see
+  // quoteLifecycle.js and docs/architecture.md "Quote binding scope").
+  //
+  // Response coercion: keep a SQL NULL (e.g. a premium-weighted rate with no
+  // contributing rows) as null rather than turning it into 0.
+  const num = (v) => (v == null ? null : Number(v));
 
   // ── portfolio-overview ────────────────────────────────────────────────
   if (tab === 'portfolio-overview') {
@@ -353,7 +264,6 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
     ]);
 
     const kpi = kpiR.rows[0] || {};
-    const num = (v) => (v == null ? null : Number(v));
 
     // Region rows: drop the 'Other' bucket; portfolioPct is each region's share
     // of the shown region premium so the column sums to ~100%.
@@ -416,45 +326,85 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
 
   // ── portfolio-summary ─────────────────────────────────────────────────
   if (tab === 'portfolio-summary') {
+    const unitsW = unitsCte(where, ccyDivisor);
     const [byYearR, regionYearR] = await Promise.all([
-      pool.query(`SELECT c.uw_year AS "uwYear",
-        COUNT(DISTINCT c.contract_id)::int AS contracts,
-        COALESCE(SUM(${effPremUSD}),0) AS premium,
-        COALESCE(SUM(${effLimUSD}),0)  AS exposure
-        ${baseJoins} ${where} GROUP BY 1 ORDER BY 1`, params),
-      pool.query(`SELECT ${regionBucket} AS region, c.uw_year::text AS uw_year,
-        COALESCE(SUM(${effPremUSD}),0) AS premium
-        ${baseJoins} ${where} GROUP BY 1,2 ORDER BY 1,2`, params),
+      pool.query(`WITH ${unitsW}
+        SELECT uw_year AS "uwYear",
+          COUNT(DISTINCT contract_id)::int        AS contracts,
+          COALESCE(${UNIT_AGGREGATES.premium},0)  AS premium,
+          COALESCE(${UNIT_AGGREGATES.exposure},0) AS exposure,
+          ${UNIT_AGGREGATES.balance}              AS balance,
+          ${UNIT_AGGREGATES.avgRol}               AS rol,
+          ${UNIT_AGGREGATES.uwMargin}             AS "uwMargin"
+        FROM units GROUP BY uw_year ORDER BY uw_year`, params),
+      pool.query(`WITH ${unitsW}
+        SELECT region, uw_year::text AS uw_year, COALESCE(SUM(premium),0) AS premium
+        FROM units GROUP BY region, uw_year ORDER BY region, uw_year`, params),
     ]);
     return res.json({
       kpis: {},
-      byYear:     byYearR.rows.map(r => ({ ...r, premium: Number(r.premium), exposure: Number(r.exposure) })),
+      byYear: byYearR.rows.map(r => ({
+        ...r,
+        premium: Number(r.premium), exposure: Number(r.exposure),
+        balance: num(r.balance), rol: num(r.rol), uwMargin: num(r.uwMargin),
+      })),
       regionYear: buildPivot(regionYearR.rows, 'region', 'uw_year', 'premium'),
     });
   }
 
   // ── regional-analysis ────────────────────────────────────────────────
+  // Region-scoped: the region filter is already in `where`, so every unit
+  // here belongs to the selected region and portfolioPct is within-region.
   if (tab === 'regional-analysis') {
-    const [byYearR, byLobR] = await Promise.all([
-      pool.query(`SELECT c.uw_year AS "uwYear",
-        COUNT(DISTINCT c.contract_id)::int AS contracts,
-        COALESCE(SUM(${effPremUSD}),0) AS premium,
-        COALESCE(SUM(${effLimUSD}),0)  AS exposure
-        ${baseJoins} ${where} GROUP BY 1 ORDER BY 1`, params),
-      pool.query(`SELECT cob.class_of_business AS lob,
-        COUNT(DISTINCT c.contract_id)::int AS contracts,
-        COALESCE(SUM(${effPremUSD} * COALESCE(alloc.prem_share, 1.0)),0) AS premium,
-        COALESCE(SUM(${effLimUSD}  * COALESCE(alloc.exp_share,  1.0)),0) AS exposure
-        ${baseJoins}
-        JOIN public.contract_class_of_business ccb ON ccb.contract_id=c.contract_id
-        JOIN public.class_of_business cob ON cob.class_of_business_id=ccb.class_of_business_id
-        LEFT JOIN ${allocSub} ON alloc.contract_id=c.contract_id AND alloc.class_of_business_id=ccb.class_of_business_id
-        ${where} GROUP BY 1 ORDER BY 3 DESC`, params),
+    const unitsW   = unitsCte(where, ccyDivisor);
+    const unitsLob = unitsLobCte(where, ccyDivisor);
+    const mwNum = 'COALESCE(SUM(margin*premium) FILTER (WHERE margin IS NOT NULL),0) AS mw_num';
+    const mwDen = 'COALESCE(SUM(premium)        FILTER (WHERE margin IS NOT NULL),0) AS mw_den';
+    const [byYearR, byLobR, lobTreatyR] = await Promise.all([
+      pool.query(`WITH ${unitsW}
+        SELECT uw_year AS "uwYear",
+          COUNT(DISTINCT contract_id)::int        AS contracts,
+          COALESCE(${UNIT_AGGREGATES.premium},0)  AS premium,
+          COALESCE(${UNIT_AGGREGATES.exposure},0) AS exposure,
+          ${UNIT_AGGREGATES.balance}              AS balance,
+          ${UNIT_AGGREGATES.avgRol}               AS rol,
+          ${UNIT_AGGREGATES.uwMargin}             AS "uwMargin"
+        FROM units GROUP BY uw_year ORDER BY uw_year`, params),
+      pool.query(`WITH ${unitsLob}
+        SELECT lob,
+          COUNT(DISTINCT contract_id)::int        AS contracts,
+          COALESCE(${UNIT_AGGREGATES.premium},0)  AS premium,
+          COALESCE(${UNIT_AGGREGATES.exposure},0) AS exposure,
+          ${UNIT_AGGREGATES.balance}              AS balance,
+          ${UNIT_AGGREGATES.avgRol}               AS rol,
+          ${UNIT_AGGREGATES.uwMargin}             AS "uwMargin"
+        FROM units WHERE lob IS NOT NULL GROUP BY lob ORDER BY 3 DESC`, params),
+      pool.query(`WITH ${unitsLob}
+        SELECT lob, treaty_type,
+          COALESCE(SUM(premium),0)  AS premium,
+          COALESCE(SUM(exposure),0) AS exposure,
+          ${mwNum}, ${mwDen}
+        FROM units WHERE lob IS NOT NULL GROUP BY lob, treaty_type`, params),
     ]);
+    const totalLobPrem = byLobR.rows.reduce((s, r) => s + Number(r.premium), 0);
+    const lobTreatyPremium = buildPivot(lobTreatyR.rows, 'lob', 'treaty_type', 'premium');
     return res.json({
       kpis: {},
-      byYear: byYearR.rows.map(r => ({ ...r, premium: Number(r.premium), exposure: Number(r.exposure) })),
-      byLob:  byLobR.rows.map(r => ({ ...r, premium: Number(r.premium), exposure: Number(r.exposure) })),
+      byYear: byYearR.rows.map(r => ({
+        ...r,
+        premium: Number(r.premium), exposure: Number(r.exposure),
+        balance: num(r.balance), rol: num(r.rol), uwMargin: num(r.uwMargin),
+      })),
+      byLob: byLobR.rows.map(r => ({
+        lob: r.lob, contracts: r.contracts,
+        premium: Number(r.premium), exposure: Number(r.exposure),
+        rol: num(r.rol), balance: num(r.balance), uwMargin: num(r.uwMargin),
+        portfolioPct: totalLobPrem > 0 ? Number(r.premium) / totalLobPrem : 0,
+      })),
+      lobTreatyPremium,
+      lobTreatyExposure:    buildPivot(lobTreatyR.rows, 'lob', 'treaty_type', 'exposure'),
+      lobTreatyComposition: normalizePivot(lobTreatyPremium),
+      lobTreatyUwMargin:    buildWeightedPivot(lobTreatyR.rows, 'lob', 'treaty_type', 'mw_num', 'mw_den'),
     });
   }
 
