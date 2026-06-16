@@ -3,6 +3,7 @@ import {
   addMonthsClamped,
   dateInputValue,
   fmtPctPoints,
+  fmtX,
   sanitizeNumber,
   toN,
   toNullableN,
@@ -64,6 +65,20 @@ describe('fmtPctPoints', () => {
     expect(fmtPctPoints(12.345)).toBe('12.35%');
     expect(fmtPctPoints(12.345, 1)).toBe('12.3%');
     expect(fmtPctPoints(NaN)).toBe('—');
+  });
+});
+
+describe('fmtX — treaty balance multiplier', () => {
+  it('formats finite values with a × suffix to 2dp', () => {
+    expect(fmtX(2.5)).toBe('2.50×');
+    expect(fmtX(0)).toBe('0.00×');
+    expect(fmtX('1.234')).toBe('1.23×');
+  });
+  it('returns an em dash for non-finite input', () => {
+    expect(fmtX(null)).toBe('0.00×'); // Number(null) === 0 is finite
+    expect(fmtX(undefined)).toBe('—');
+    expect(fmtX(NaN)).toBe('—');
+    expect(fmtX('abc')).toBe('—');
   });
 });
 

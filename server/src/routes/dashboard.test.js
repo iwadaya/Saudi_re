@@ -120,6 +120,10 @@ describe('unitsCte', () => {
   it('non-LOB variant does not join class_of_business', () => {
     expect(sql).not.toContain('cob.class_of_business AS lob');
   });
+
+  it('exposes inception_date so premiumByMonth can group by month', () => {
+    expect(sql).toContain('c.inception_date AS inception_date');
+  });
 });
 
 describe('unitsLobCte', () => {

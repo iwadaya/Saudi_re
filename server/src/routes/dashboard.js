@@ -77,7 +77,8 @@ function buildUnits(where, ccyDivisor, withLob) {
       ${signedShare} * COALESCE(pd.total_capacity,0) * COALESCE(fx.rate_to_usd,1.0) / ${ccyDivisor} AS exposure,
       NULL::numeric AS rol,
       COALESCE(pd.total_capacity,0) / NULLIF(COALESCE(pd.quota_share_epi,0)+COALESCE(pd.surplus_epi,0),0) AS balance,
-      cpo.actuarial_margin AS margin
+      cpo.actuarial_margin AS margin,
+      c.inception_date AS inception_date
     FROM public.contract c
     LEFT JOIN public.country cnt              ON cnt.country_id=c.country_id
     LEFT JOIN public.treaty_type tt           ON tt.treaty_type_id=c.treaty_type_id
@@ -98,7 +99,8 @@ function buildUnits(where, ccyDivisor, withLob) {
       ${signedShare} * COALESCE(l.layer_limit,0) * COALESCE(fx.rate_to_usd,1.0) / ${ccyDivisor} AS exposure,
       l.uw_price AS rol,
       NULL::numeric AS balance,
-      l.modelled_margin AS margin
+      l.modelled_margin AS margin,
+      c.inception_date AS inception_date
     FROM public.contract c
     JOIN public.contract_np_layers l          ON l.contract_id=c.contract_id
     LEFT JOIN public.country cnt              ON cnt.country_id=c.country_id
@@ -285,108 +287,130 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
 
   // ── portfolio-overview ────────────────────────────────────────────────
   if (tab === 'portfolio-overview') {
-    const [kpiR, regionR, cobR, pivotR, cobPivotR, cobRegionR] = await Promise.all([
+    // Every metric is computed over the shared units / unitsLob CTEs so prop
+    // and NP roll up consistently. mw_num / mw_den are the premium-weighted
+    // margin numerator/denominator feeding buildWeightedPivot.
+    const unitsW   = unitsCte(where, ccyDivisor);
+    const unitsLob = unitsLobCte(where, ccyDivisor);
+    const mwNum = 'COALESCE(SUM(margin*premium) FILTER (WHERE margin IS NOT NULL),0) AS mw_num';
+    const mwDen = 'COALESCE(SUM(premium)        FILTER (WHERE margin IS NOT NULL),0) AS mw_den';
 
-      pool.query(`SELECT
-        COUNT(DISTINCT c.contract_id)::int AS contracts,
-        COALESCE(SUM(${effPremUSD}),0)     AS premium,
-        COALESCE(SUM(${effLimUSD}),0)      AS exposure
-        ${baseJoins} ${where}`, params),
+    const [kpiR, regionR, lobR, monthR, regTreatyR, lobTreatyR, lobRegionR] = await Promise.all([
 
-      pool.query(`SELECT
-        ${regionBucket}                         AS region,
-        COUNT(DISTINCT c.contract_id)::int      AS contracts,
-        COALESCE(SUM(${effPremUSD}),0)          AS premium,
-        COALESCE(SUM(${effLimUSD}),0)           AS exposure
-        ${baseJoins} ${where}
-        GROUP BY 1 ORDER BY 1`, params),
+      pool.query(`WITH ${unitsW}
+        SELECT
+          COUNT(DISTINCT contract_id)::int        AS contracts,
+          COALESCE(${UNIT_AGGREGATES.premium},0)  AS premium,
+          COALESCE(${UNIT_AGGREGATES.exposure},0) AS exposure,
+          ${UNIT_AGGREGATES.balance}              AS balance,
+          ${UNIT_AGGREGATES.avgRol}               AS "avgRol",
+          ${UNIT_AGGREGATES.uwMargin}             AS "avgUwMargin"
+        FROM units`, params),
 
-      pool.query(`SELECT
-        cob.class_of_business                        AS lob,
-        COUNT(DISTINCT c.contract_id)::int      AS contracts,
-        COALESCE(SUM(${effPremUSD} * COALESCE(alloc.prem_share, 1.0)),0)  AS premium,
-        COALESCE(SUM(${effLimUSD}  * COALESCE(alloc.exp_share,  1.0)),0)  AS exposure
-        ${baseJoins}
-        JOIN public.contract_class_of_business ccb ON ccb.contract_id=c.contract_id
-        JOIN public.class_of_business cob ON cob.class_of_business_id=ccb.class_of_business_id
-        LEFT JOIN ${allocSub} ON alloc.contract_id=c.contract_id AND alloc.class_of_business_id=ccb.class_of_business_id
-        ${where} GROUP BY 1 ORDER BY 3 DESC`, params),
+      pool.query(`WITH ${unitsW}
+        SELECT region,
+          COUNT(DISTINCT contract_id)::int        AS contracts,
+          COALESCE(${UNIT_AGGREGATES.premium},0)  AS premium,
+          COALESCE(${UNIT_AGGREGATES.exposure},0) AS exposure,
+          ${UNIT_AGGREGATES.avgRol}               AS rol,
+          ${UNIT_AGGREGATES.balance}              AS balance,
+          ${UNIT_AGGREGATES.uwMargin}             AS "uwMargin"
+        FROM units GROUP BY region ORDER BY 3 DESC`, params),
 
-      pool.query(`SELECT
-        ${regionBucket}                         AS region,
-        COALESCE(tt.treaty_type,'Unknown')      AS treaty_type,
-        COALESCE(SUM(${effPremUSD}),0)          AS premium,
-        COALESCE(SUM(${effLimUSD}),0)           AS exposure,
-        COUNT(DISTINCT c.contract_id)::int      AS contracts
-        ${baseJoins} ${where}
-        GROUP BY 1,2 ORDER BY 1,2`, params),
+      pool.query(`WITH ${unitsLob}
+        SELECT lob,
+          COUNT(DISTINCT contract_id)::int        AS contracts,
+          COALESCE(${UNIT_AGGREGATES.premium},0)  AS premium,
+          COALESCE(${UNIT_AGGREGATES.exposure},0) AS exposure,
+          ${UNIT_AGGREGATES.avgRol}               AS rol,
+          ${UNIT_AGGREGATES.balance}              AS balance,
+          ${UNIT_AGGREGATES.uwMargin}             AS "uwMargin"
+        FROM units WHERE lob IS NOT NULL GROUP BY lob ORDER BY 3 DESC`, params),
 
-      pool.query(`SELECT
-        cob.class_of_business                        AS lob,
-        COALESCE(tt.treaty_type,'Unknown')      AS treaty_type,
-        COALESCE(SUM(${effPremUSD} * COALESCE(alloc.prem_share, 1.0)),0)  AS premium,
-        COALESCE(SUM(${effLimUSD}  * COALESCE(alloc.exp_share,  1.0)),0)  AS exposure,
-        COUNT(DISTINCT c.contract_id)::int      AS contracts
-        ${baseJoins}
-        JOIN public.contract_class_of_business ccb ON ccb.contract_id=c.contract_id
-        JOIN public.class_of_business cob ON cob.class_of_business_id=ccb.class_of_business_id
-        LEFT JOIN ${allocSub} ON alloc.contract_id=c.contract_id AND alloc.class_of_business_id=ccb.class_of_business_id
-        ${where} GROUP BY 1,2 ORDER BY 1,2`, params),
+      pool.query(`WITH ${unitsW}
+        SELECT to_char(inception_date,'YYYY-MM') AS month, COALESCE(SUM(premium),0) AS value
+        FROM units WHERE inception_date IS NOT NULL GROUP BY 1 ORDER BY 1`, params),
 
-      pool.query(`SELECT
-        cob.class_of_business                        AS lob,
-        ${regionBucket}                         AS region,
-        COALESCE(SUM(${effPremUSD} * COALESCE(alloc.prem_share, 1.0)),0)  AS premium
-        ${baseJoins}
-        JOIN public.contract_class_of_business ccb ON ccb.contract_id=c.contract_id
-        JOIN public.class_of_business cob ON cob.class_of_business_id=ccb.class_of_business_id
-        LEFT JOIN ${allocSub} ON alloc.contract_id=c.contract_id AND alloc.class_of_business_id=ccb.class_of_business_id
-        ${where} GROUP BY 1,2 ORDER BY 1,2`, params),
+      pool.query(`WITH ${unitsW}
+        SELECT region, treaty_type,
+          COALESCE(SUM(premium),0)  AS premium,
+          COALESCE(SUM(exposure),0) AS exposure,
+          ${mwNum}, ${mwDen}
+        FROM units GROUP BY region, treaty_type`, params),
+
+      pool.query(`WITH ${unitsLob}
+        SELECT lob, treaty_type,
+          COALESCE(SUM(premium),0)  AS premium,
+          COALESCE(SUM(exposure),0) AS exposure,
+          ${mwNum}, ${mwDen}
+        FROM units WHERE lob IS NOT NULL GROUP BY lob, treaty_type`, params),
+
+      pool.query(`WITH ${unitsLob}
+        SELECT lob, region,
+          COALESCE(SUM(premium),0)  AS premium,
+          ${mwNum}, ${mwDen}
+        FROM units WHERE lob IS NOT NULL GROUP BY lob, region`, params),
     ]);
 
     const kpi = kpiR.rows[0] || {};
-    const totalPrem = regionR.rows
-      .filter(r => r.region && r.region !== 'Other')
-      .reduce((s, r) => s + Number(r.premium), 0);
+    const num = (v) => (v == null ? null : Number(v));
 
-    const regionMap = {};
-    for (const r of regionR.rows) {
-      if (!r.region || r.region === 'Other') continue;
-      if (!regionMap[r.region]) regionMap[r.region] = { region: r.region, contracts: 0, premium: 0, exposure: 0 };
-      regionMap[r.region].contracts += r.contracts;
-      regionMap[r.region].premium   += Number(r.premium);
-      regionMap[r.region].exposure  += Number(r.exposure);
-    }
-    const summaryByRegion = Object.values(regionMap).map(r => ({
-      ...r, rol: 0, uwMargin: 0,
-      portfolioPct: totalPrem > 0 ? r.premium / totalPrem : 0,
+    // Region rows: drop the 'Other' bucket; portfolioPct is each region's share
+    // of the shown region premium so the column sums to ~100%.
+    const regionRows = regionR.rows.filter(r => r.region && r.region !== 'Other');
+    const totalRegionPrem = regionRows.reduce((s, r) => s + Number(r.premium), 0);
+    const summaryByRegion = regionRows.map(r => ({
+      region:    r.region,
+      contracts: r.contracts,
+      premium:   Number(r.premium),
+      exposure:  Number(r.exposure),
+      rol:       num(r.rol),
+      balance:   num(r.balance),
+      uwMargin:  num(r.uwMargin),
+      portfolioPct: totalRegionPrem > 0 ? Number(r.premium) / totalRegionPrem : 0,
     }));
 
-    const summaryByLob = cobR.rows.map(r => ({
-      ...r, premium: Number(r.premium), exposure: Number(r.exposure),
-      rol: 0, uwMargin: 0,
-      portfolioPct: totalPrem > 0 ? Number(r.premium) / totalPrem : 0,
+    // LOB rows come from the fanned-out unitsLob CTE, so portfolioPct is a
+    // share of the LOB-fanned premium total (sums to ~100% across LOBs).
+    const totalLobPrem = lobR.rows.reduce((s, r) => s + Number(r.premium), 0);
+    const summaryByLob = lobR.rows.map(r => ({
+      lob:       r.lob,
+      contracts: r.contracts,
+      premium:   Number(r.premium),
+      exposure:  Number(r.exposure),
+      rol:       num(r.rol),
+      balance:   num(r.balance),
+      uwMargin:  num(r.uwMargin),
+      portfolioPct: totalLobPrem > 0 ? Number(r.premium) / totalLobPrem : 0,
     }));
 
-    // Composition/mix is a portfolio-share view of premium, not a contract
-    // count — normalise the premium pivot so each cell is its slice of total.
-    const premiumLobTreaty = buildPivot(cobPivotR.rows, 'lob', 'treaty_type', 'premium');
+    const premiumRegionTreaty = buildPivot(regTreatyR.rows, 'region', 'treaty_type', 'premium');
+    const premiumLobTreaty    = buildPivot(lobTreatyR.rows, 'lob',    'treaty_type', 'premium');
 
     return res.json({
       kpis: {
         contracts:   kpi.contracts || 0,
         premium:     Number(kpi.premium) || 0,
         exposure:    Number(kpi.exposure) || 0,
-        balance:     0, avgRol: 0, avgUwMargin: 0,
+        balance:     num(kpi.balance),
+        avgRol:      num(kpi.avgRol),
+        avgUwMargin: num(kpi.avgUwMargin),
       },
       summaryByRegion,
       summaryByLob,
-      premiumRegionTreaty:   buildPivot(pivotR.rows,     'region', 'treaty_type', 'premium'),
-      exposureRegionTreaty:  buildPivot(pivotR.rows,     'region', 'treaty_type', 'exposure'),
+      series: {
+        premiumByMonth: monthR.rows.map(r => ({ month: r.month, value: Number(r.value) || 0 })),
+      },
+      premiumRegionTreaty,
+      exposureRegionTreaty:    buildPivot(regTreatyR.rows, 'region', 'treaty_type', 'exposure'),
+      uwMarginRegionTreaty:    buildWeightedPivot(regTreatyR.rows, 'region', 'treaty_type', 'mw_num', 'mw_den'),
+      compositionRegionTreaty: normalizePivot(premiumRegionTreaty),
       premiumLobTreaty,
-      exposureLobTreaty:     buildPivot(cobPivotR.rows,  'lob',    'treaty_type', 'exposure'),
-      compositionLobTreaty:  normalizePivot(premiumLobTreaty),
-      premiumLobRegion:      buildPivot(cobRegionR.rows, 'lob',    'region',      'premium'),
+      exposureLobTreaty:       buildPivot(lobTreatyR.rows, 'lob', 'treaty_type', 'exposure'),
+      uwMarginLobTreaty:       buildWeightedPivot(lobTreatyR.rows, 'lob', 'treaty_type', 'mw_num', 'mw_den'),
+      compositionLobTreaty:    normalizePivot(premiumLobTreaty),
+      premiumLobRegion:        buildPivot(lobRegionR.rows, 'lob', 'region', 'premium'),
+      uwMarginLobRegion:       buildWeightedPivot(lobRegionR.rows, 'lob', 'region', 'mw_num', 'mw_den'),
     });
   }
 
