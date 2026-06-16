@@ -33,6 +33,9 @@ export default function WizardTabs({ activeKey }) {
           'NP_CLAIMS_PROFILE',
           'NP_EVENT_LOSS_TABLES',
           'NP_FINAL_PRICING',
+          // History/Audit is a contract-only trail; quotes carry their own
+          // negotiation history elsewhere.
+          'NP_HISTORY',
         ]);
         if (QUOTE_HIDDEN.has(key)) return false;
       } else {

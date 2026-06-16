@@ -765,6 +765,7 @@ export const api = {
   reassignContract(contractId: string, payload: { reassigned_by?: string; new_owner_id: string; comment?: string }, opts?: RequestOpts): Promise<unknown> { return request(`/api/contracts/${enc(contractId)}/reassign`, { method: 'POST', body: payload, ...opts }); },
   reassignQuote(quoteId: string, payload: { reassigned_by?: string; new_owner_id: string; comment?: string }, opts?: RequestOpts): Promise<unknown> { return request(`/api/quotes/${enc(quoteId)}/reassign`, { method: 'POST', body: payload, ...opts }); },
   getAssignmentHistory(contractId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/contracts/${enc(contractId)}/assignment-history`, opts); },
+  getContractHistory(contractId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/contracts/${enc(contractId)}/history`, opts); },
   getEditPermission(contractId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/contracts/${enc(contractId)}/edit-permission`, opts); },
   getQuoteEditPermission(quoteId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/quotes/${enc(quoteId)}/edit-permission`, opts); },
   getFacEditPermission(riskId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(riskId)}/edit-permission`, opts); },
