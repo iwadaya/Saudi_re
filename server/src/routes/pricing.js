@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { asyncHandler } from '../helpers.js';
 import { validateBody } from '../lib/validate.js';
-import { loadTreatyCategory, assertBodyCategoryMatches } from '../lib/treatyCategoryGuard.js';
+import { loadTreatyCategory, requireTreatyCategory, assertBodyCategoryMatches } from '../lib/treatyCategoryGuard.js';
 import {
   pricingOutputsPutSchema,
   pricingYearlyPutSchema,
@@ -61,8 +61,10 @@ router.get('/treaties/:id/pricing-yearly', asyncHandler(getPricingYearlyControll
 router.put('/treaties/:id/pricing-yearly', validateBody(pricingYearlyPutSchema), asyncHandler(putPricingYearlyController));
 router.post('/pricing/save', validateBody(compositePricingSaveSchema), lockContract(contractIdFromBody), asyncHandler(saveCompositePricingController));
 
-router.post('/straight-stats/save', validateBody(straightStatsSaveSchema), lockContract(contractIdFromBody), asyncHandler(saveStraightStatsController));
-router.get('/straight-stats/load/:id', asyncHandler(loadStraightStatsController));
+// Straight-line UW statistics are a proportional-only pricing input; fence
+// these so an NP treaty can't write/read them (the id is in the body on save).
+router.post('/straight-stats/save', validateBody(straightStatsSaveSchema), loadTreatyCategory, requireTreatyCategory('PROPORTIONAL'), lockContract(contractIdFromBody), asyncHandler(saveStraightStatsController));
+router.get('/straight-stats/load/:id', loadTreatyCategory, requireTreatyCategory('PROPORTIONAL'), asyncHandler(loadStraightStatsController));
 
 // Offer/approval endpoints work for both prop and NP treaties, but
 // every mutation runs through loadTreatyCategory + assertBodyCategoryMatches

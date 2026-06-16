@@ -68,7 +68,11 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
   END`;
 
   // WHERE
-  const conds = ["c.uw_status NOT IN ('DRAFT')"];
+  // Portfolio metrics count live business only: exclude DRAFT (not yet a real
+  // position) and the terminal dead states DECLINED/NTU (never on risk). This
+  // matches the "active portfolio" filter used in home.js and the pricing
+  // aggregates; previously DECLINED/NTU leaked into premium/exposure totals.
+  const conds = ["c.uw_status NOT IN ('DRAFT','DECLINED','NTU')"];
   const params = [];
   let i = 1;
   if (uwYear)     { conds.push(`c.uw_year = $${i++}`);         params.push(Number(uwYear)); }
@@ -85,6 +89,56 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
                     currency_code, COALESCE(rate_to_usd, 1.0) AS rate_to_usd
                   FROM public.ref_exchange_rate
                   ORDER BY currency_code, effective_date DESC) fx`;
+
+  // Per-(contract, COB) allocation weights, so a treaty's premium/exposure is
+  // SPLIT across the lines of business it covers instead of being counted in
+  // full once per COB (which inflated every per-LOB total). prem_share and
+  // exp_share each sum to 1 across a contract's COBs:
+  //   premium  → each COB's share of the stored EPI split (contract_epi_split);
+  //              equal split when no split rows exist.
+  //   exposure → NP attributes each layer's limit to that layer's own COBs
+  //              (equal split among a layer's COBs); prop falls back to the
+  //              premium share; equal split when neither is available.
+  const allocSub = `(
+    SELECT
+      a.contract_id,
+      a.class_of_business_id,
+      CASE WHEN SUM(a.prem_raw) OVER w > 0
+           THEN a.prem_raw / SUM(a.prem_raw) OVER w
+           ELSE 1.0 / COUNT(*) OVER w END AS prem_share,
+      CASE WHEN SUM(a.exp_raw) OVER w > 0
+           THEN a.exp_raw / SUM(a.exp_raw) OVER w
+           ELSE 1.0 / COUNT(*) OVER w END AS exp_share
+    FROM (
+      SELECT
+        ccb.contract_id,
+        ccb.class_of_business_id,
+        COALESCE(es.premium, 0) AS prem_raw,
+        CASE WHEN COALESCE(hl.has_layers, false)
+             THEN COALESCE(lay.cob_limit, 0)
+             ELSE COALESCE(es.premium, 0) END AS exp_raw
+      FROM public.contract_class_of_business ccb
+      LEFT JOIN public.contract_epi_split es
+        ON es.contract_id = ccb.contract_id
+       AND es.class_of_business_id = ccb.class_of_business_id
+      LEFT JOIN (
+        SELECT l.contract_id, lcb.class_of_business_id,
+               SUM(COALESCE(l.layer_limit, 0) / NULLIF(lc.cnt, 0)) AS cob_limit
+        FROM public.contract_np_layers l
+        JOIN public.contract_np_layer_class_of_business lcb ON lcb.layer_id = l.layer_id
+        JOIN (SELECT layer_id, COUNT(*) AS cnt
+                FROM public.contract_np_layer_class_of_business GROUP BY layer_id) lc
+          ON lc.layer_id = l.layer_id
+        GROUP BY l.contract_id, lcb.class_of_business_id
+      ) lay ON lay.contract_id = ccb.contract_id
+           AND lay.class_of_business_id = ccb.class_of_business_id
+      LEFT JOIN (
+        SELECT contract_id, COUNT(*) > 0 AS has_layers
+        FROM public.contract_np_layers GROUP BY contract_id
+      ) hl ON hl.contract_id = ccb.contract_id
+    ) a
+    WINDOW w AS (PARTITION BY a.contract_id)
+  ) alloc`;
 
   // Effective premium in display currency
   const effPremUSD = `(
@@ -113,6 +167,10 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
   * COALESCE(fx.rate_to_usd, 1.0) / ${ccyDivisor}`;
 
   // Base joins
+  // Portfolio exposure is sourced from public.contract ONLY. Quotes are a
+  // standalone artefact and do NOT bind to contracts (POST /api/quotes/:id/bind
+  // is intentionally disabled — see quoteLifecycle.js and docs/architecture.md),
+  // so a bound/SIGNED quote never contributes to portfolio exposure by design.
   const baseJoins = `
     FROM public.contract c
     LEFT JOIN public.companies ced             ON ced.company_id=c.cedant_id
@@ -145,11 +203,12 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
       pool.query(`SELECT
         cob.class_of_business                        AS lob,
         COUNT(DISTINCT c.contract_id)::int      AS contracts,
-        COALESCE(SUM(${effPremUSD}),0)          AS premium,
-        COALESCE(SUM(${effLimUSD}),0)           AS exposure
+        COALESCE(SUM(${effPremUSD} * COALESCE(alloc.prem_share, 1.0)),0)  AS premium,
+        COALESCE(SUM(${effLimUSD}  * COALESCE(alloc.exp_share,  1.0)),0)  AS exposure
         ${baseJoins}
         JOIN public.contract_class_of_business ccb ON ccb.contract_id=c.contract_id
         JOIN public.class_of_business cob ON cob.class_of_business_id=ccb.class_of_business_id
+        LEFT JOIN ${allocSub} ON alloc.contract_id=c.contract_id AND alloc.class_of_business_id=ccb.class_of_business_id
         ${where} GROUP BY 1 ORDER BY 3 DESC`, params),
 
       pool.query(`SELECT
@@ -164,21 +223,23 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
       pool.query(`SELECT
         cob.class_of_business                        AS lob,
         COALESCE(tt.treaty_type,'Unknown')      AS treaty_type,
-        COALESCE(SUM(${effPremUSD}),0)          AS premium,
-        COALESCE(SUM(${effLimUSD}),0)           AS exposure,
+        COALESCE(SUM(${effPremUSD} * COALESCE(alloc.prem_share, 1.0)),0)  AS premium,
+        COALESCE(SUM(${effLimUSD}  * COALESCE(alloc.exp_share,  1.0)),0)  AS exposure,
         COUNT(DISTINCT c.contract_id)::int      AS contracts
         ${baseJoins}
         JOIN public.contract_class_of_business ccb ON ccb.contract_id=c.contract_id
         JOIN public.class_of_business cob ON cob.class_of_business_id=ccb.class_of_business_id
+        LEFT JOIN ${allocSub} ON alloc.contract_id=c.contract_id AND alloc.class_of_business_id=ccb.class_of_business_id
         ${where} GROUP BY 1,2 ORDER BY 1,2`, params),
 
       pool.query(`SELECT
         cob.class_of_business                        AS lob,
         ${regionBucket}                         AS region,
-        COALESCE(SUM(${effPremUSD}),0)          AS premium
+        COALESCE(SUM(${effPremUSD} * COALESCE(alloc.prem_share, 1.0)),0)  AS premium
         ${baseJoins}
         JOIN public.contract_class_of_business ccb ON ccb.contract_id=c.contract_id
         JOIN public.class_of_business cob ON cob.class_of_business_id=ccb.class_of_business_id
+        LEFT JOIN ${allocSub} ON alloc.contract_id=c.contract_id AND alloc.class_of_business_id=ccb.class_of_business_id
         ${where} GROUP BY 1,2 ORDER BY 1,2`, params),
     ]);
 
@@ -253,11 +314,12 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
         ${baseJoins} ${where} GROUP BY 1 ORDER BY 1`, params),
       pool.query(`SELECT cob.class_of_business AS lob,
         COUNT(DISTINCT c.contract_id)::int AS contracts,
-        COALESCE(SUM(${effPremUSD}),0) AS premium,
-        COALESCE(SUM(${effLimUSD}),0)  AS exposure
+        COALESCE(SUM(${effPremUSD} * COALESCE(alloc.prem_share, 1.0)),0) AS premium,
+        COALESCE(SUM(${effLimUSD}  * COALESCE(alloc.exp_share,  1.0)),0) AS exposure
         ${baseJoins}
         JOIN public.contract_class_of_business ccb ON ccb.contract_id=c.contract_id
         JOIN public.class_of_business cob ON cob.class_of_business_id=ccb.class_of_business_id
+        LEFT JOIN ${allocSub} ON alloc.contract_id=c.contract_id AND alloc.class_of_business_id=ccb.class_of_business_id
         ${where} GROUP BY 1 ORDER BY 3 DESC`, params),
     ]);
     return res.json({

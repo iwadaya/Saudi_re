@@ -269,6 +269,10 @@ router.post('/quotes/:id/amend', asyncHandler(async (req, res) => {
 // standalone artefact. The previous implementation (transactional copy of
 // the quote into a new SIGNED contract row, with all sub-tables) is
 // preserved in git history and can be restored when this is re-wired.
+// Consequence: bound quotes do NOT feed portfolio exposure (the dashboard
+// aggregates contracts only). Scope decision recorded in docs/architecture.md
+// ("Quote binding scope"); re-wiring must create a contract row so the
+// existing accumulation picks it up.
 router.post('/quotes/:id/bind', asyncHandler(async (_req, res) => {
   return res.status(410).json({
     error: 'Quote-to-contract binding is disabled in this build.',

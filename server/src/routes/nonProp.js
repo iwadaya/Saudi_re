@@ -17,14 +17,24 @@ import {
 import { verifyNpPricingOutputs, summariseDrifts, isStrictMode, pricingDriftStats } from '../lib/pricingVerifier.js';
 import { logger } from '../lib/logger.js';
 import { buildBatchInsert } from '../db/batchInsert.js';
+import {
+  loadTreatyCategory,
+  requireTreatyCategory,
+  loadQuoteCategory,
+  requireQuoteCategory,
+} from '../lib/treatyCategoryGuard.js';
 const router = Router();
+// Category fences for the NP-only routes below: reject (409) a request that
+// targets a proportional treaty/quote before the handler reads empty NP tables.
+const npTreatyGuard = [loadTreatyCategory, requireTreatyCategory('NON_PROPORTIONAL')];
+const npQuoteGuard = [loadQuoteCategory, requireQuoteCategory('NON_PROPORTIONAL')];
 // "UNLIMITED" reinstatements stays null in numeric column; preserved in JSONB
 function reinstatInt(v){if(String(v||'').trim().toUpperCase()==='UNLIMITED')return null;return numOrNull(v);}
 
 // ── GET /api/treaties/:id/non-prop ──
 // Returns: detail row, layers (each with their COB ids), cob UW limits, JSONB terms,
 //          uw_status + offer_status from live DB (authoritative for approval workflow)
-router.get("/treaties/:id/non-prop", asyncHandler(async (req, res) => {
+router.get("/treaties/:id/non-prop", ...npTreatyGuard, asyncHandler(async (req, res) => {
   const {id}=req.params;
   const [detailR, layersR, termsR, cobLimitsR, contractR, offerR] = await Promise.all([
     pool.query(`SELECT * FROM public.contract_np_details WHERE contract_id=$1`, [id]),
@@ -76,7 +86,7 @@ router.get("/treaties/:id/non-prop", asyncHandler(async (req, res) => {
 // Now also saves:
 //   - contract_np_layer_class_of_business  (COB participation per layer)
 //   - contract_underwriting_limit           (UW limit per COB)
-router.post("/treaties/:id/non-prop/save", validateBody(npSaveSchema), asyncHandler(async (req, res) => {
+router.post("/treaties/:id/non-prop/save", ...npTreatyGuard, validateBody(npSaveSchema), asyncHandler(async (req, res) => {
   const {id}=req.params;
   const {detail, layers, terms, cob_underwriting_limits} = req.body;
   const cl = await pool.connect();
@@ -215,11 +225,11 @@ router.post("/treaties/:id/non-prop/save", validateBody(npSaveSchema), asyncHand
 }));
 
 // ── EGNPI Year ──
-router.get("/treaties/:id/np/egnpi-year", asyncHandler(async (req, res) => {
+router.get("/treaties/:id/np/egnpi-year", ...npTreatyGuard, asyncHandler(async (req, res) => {
   const {rows}=await pool.query(`SELECT * FROM public.contract_np_egnpi_year WHERE contract_id=$1 ORDER BY uw_year`,[req.params.id]);
   res.json(rows);
 }));
-router.put("/treaties/:id/np/egnpi-year", validateBody(egnpiYearPutSchema), asyncHandler(async (req, res) => {
+router.put("/treaties/:id/np/egnpi-year", ...npTreatyGuard, validateBody(egnpiYearPutSchema), asyncHandler(async (req, res) => {
   const {id}=req.params;const inputRows=req.body.rows??[];const cl=await pool.connect();
   try{await cl.query("BEGIN");await cl.query(`DELETE FROM public.contract_np_egnpi_year WHERE contract_id=$1`,[id]);
   const egnpiInsert = buildBatchInsert({
@@ -243,7 +253,7 @@ router.put("/treaties/:id/np/egnpi-year", validateBody(egnpiYearPutSchema), asyn
 }));
 
 // ── NP Pricing ──
-router.get("/treaties/:id/np-pricing", asyncHandler(async (req, res) => {
+router.get("/treaties/:id/np-pricing", ...npTreatyGuard, asyncHandler(async (req, res) => {
   const {id}=req.params;
   const [inputsR,layerInputsR,outputsR]=await Promise.all([
     pool.query(`SELECT * FROM public.contract_np_pricing_inputs WHERE contract_id=$1`,[id]),
@@ -252,7 +262,7 @@ router.get("/treaties/:id/np-pricing", asyncHandler(async (req, res) => {
   ]);
   res.json({inputs:inputsR.rows[0]||null,layer_inputs:layerInputsR.rows,outputs:outputsR.rows});
 }));
-router.put("/treaties/:id/np-pricing", validateBody(npPricingPutSchema), asyncHandler(async (req, res) => {
+router.put("/treaties/:id/np-pricing", ...npTreatyGuard, validateBody(npPricingPutSchema), asyncHandler(async (req, res) => {
   const {id}=req.params;
   const {inputs, layer_inputs=[], outputs=[], layer_margins=[]} = req.body;
 
@@ -356,10 +366,10 @@ router.put("/treaties/:id/np-pricing", validateBody(npPricingPutSchema), asyncHa
 
 // ── NP Expiring Structure ──
 // Quote aliases — same handler, isQuote forced true
-router.get("/quotes/:id/np/expiring",  asyncHandler(async (req, res) => { req.query.quote = 'true'; req.params = { id: req.params.id }; return npExpiringGet(req, res); }));
-router.put("/quotes/:id/np/expiring",   validateBody(npExpiringPutSchema), asyncHandler(async (req, res) => { req.query.quote = 'true'; return npExpiringPut(req, res); }));
-router.get("/treaties/:id/np/expiring", asyncHandler(async (req, res) => { return npExpiringGet(req, res); }));
-router.put("/treaties/:id/np/expiring", validateBody(npExpiringPutSchema), asyncHandler(async (req, res) => { return npExpiringPut(req, res); }));
+router.get("/quotes/:id/np/expiring",  ...npQuoteGuard, asyncHandler(async (req, res) => { req.query.quote = 'true'; req.params = { id: req.params.id }; return npExpiringGet(req, res); }));
+router.put("/quotes/:id/np/expiring",   ...npQuoteGuard, validateBody(npExpiringPutSchema), asyncHandler(async (req, res) => { req.query.quote = 'true'; return npExpiringPut(req, res); }));
+router.get("/treaties/:id/np/expiring", ...npTreatyGuard, asyncHandler(async (req, res) => { return npExpiringGet(req, res); }));
+router.put("/treaties/:id/np/expiring", ...npTreatyGuard, validateBody(npExpiringPutSchema), asyncHandler(async (req, res) => { return npExpiringPut(req, res); }));
 
 async function npExpiringGet(req, res) {
   const { id } = req.params;
@@ -550,20 +560,28 @@ router.get("/ref/swiss-re-curves/:name", asyncHandler(async (req, res) => {
 router.get("/treaties/:id/cedant-programme-limits", asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  // 1. Get current contract's cedant and COBs
+  // 1. Get current contract's cedant and COBs. For NP accumulation we scope by
+  //    the programme's LAYER-level COBs (the classes its layers actually
+  //    expose), which can differ from the contract-level COB list; fall back to
+  //    contract-level COBs when no layer COBs are recorded.
   const contractR = await pool.query(
     `SELECT c.cedant_id,
-            array_agg(DISTINCT ccb.class_of_business_id) FILTER (WHERE ccb.class_of_business_id IS NOT NULL) AS cob_ids
+            array_agg(DISTINCT ccb.class_of_business_id) FILTER (WHERE ccb.class_of_business_id IS NOT NULL) AS contract_cob_ids,
+            array_agg(DISTINCT lc.class_of_business_id)  FILTER (WHERE lc.class_of_business_id  IS NOT NULL) AS layer_cob_ids
      FROM public.contract c
      LEFT JOIN public.contract_class_of_business ccb ON ccb.contract_id = c.contract_id
+     LEFT JOIN public.contract_np_layers l           ON l.contract_id = c.contract_id
+     LEFT JOIN public.contract_np_layer_class_of_business lc ON lc.layer_id = l.layer_id
      WHERE c.contract_id = $1
      GROUP BY c.cedant_id`, [id]
   );
   if (!contractR.rows.length || !contractR.rows[0].cedant_id) {
     return res.json({ contracts: [], totalLimit: 0, cedantId: null });
   }
-  const { cedant_id, cob_ids } = contractR.rows[0];
-  const cobIds = (cob_ids || []).filter(Boolean);
+  const { cedant_id, contract_cob_ids, layer_cob_ids } = contractR.rows[0];
+  const layerCobs = (layer_cob_ids || []).filter(Boolean);
+  const contractCobs = (contract_cob_ids || []).filter(Boolean);
+  const cobIds = layerCobs.length ? layerCobs : contractCobs;
 
   // 2. Introspect class_of_business PK column name (live DB may differ from dump)
   const cobColRes = await pool.query(
@@ -574,15 +592,31 @@ router.get("/treaties/:id/cedant-programme-limits", asyncHandler(async (req, res
   const cobIdCol   = cobCols.find(c => c === 'class_of_business_id') || cobCols.find(c => c.endsWith('_id')) || cobCols[0];
   const cobNameCol = cobCols.find(c => c === 'class_of_business') || cobCols.find(c => c.includes('name')) || cobCols[1] || cobCols[0];
 
-  // Find ALL active NP contracts for same cedant that share at least one COB
+  // Find ALL active NP contracts for the same cedant that expose at least one
+  // in-scope COB, accumulating per LAYER by the layer's own COBs. When a
+  // contract's layers carry no COBs (legacy/unset), fall back to summing all
+  // its layers and matching on contract-level COBs so nothing is dropped.
   const otherR = await pool.query(
     `SELECT
        c.contract_id,
        c.uw_year,
        c.uw_status,
        c.signed_line_pct,
-       string_agg(DISTINCT cob.${cobNameCol}, ', ' ORDER BY cob.${cobNameCol}) AS cob_names,
-       COALESCE(SUM(nl.layer_limit), 0)                                         AS total_structure_limit,
+       COALESCE(
+         (SELECT string_agg(DISTINCT cob.${cobNameCol}, ', ' ORDER BY cob.${cobNameCol})
+            FROM public.contract_np_layers l
+            JOIN public.contract_np_layer_class_of_business lc ON lc.layer_id = l.layer_id
+            JOIN public.class_of_business cob ON cob.${cobIdCol} = lc.class_of_business_id
+           WHERE l.contract_id = c.contract_id
+             AND (NOT sc.has_scope OR lc.class_of_business_id = ANY(sc.cobs))),
+         (SELECT string_agg(DISTINCT cob.${cobNameCol}, ', ' ORDER BY cob.${cobNameCol})
+            FROM public.contract_class_of_business ccb
+            JOIN public.class_of_business cob ON cob.${cobIdCol} = ccb.class_of_business_id
+           WHERE ccb.contract_id = c.contract_id)
+       )                                                                          AS cob_names,
+       CASE WHEN COALESCE(lim.has_any_layer_cob, false)
+            THEN lim.match_layer_limit
+            ELSE lim.all_layer_limit END                                          AS total_structure_limit,
        COALESCE(c.signed_line_pct,
          (SELECT o.written_line_pct
           FROM public.contract_offer o
@@ -590,18 +624,40 @@ router.get("/treaties/:id/cedant-programme-limits", asyncHandler(async (req, res
           ORDER BY o.updated_at DESC LIMIT 1)
        )                                                                          AS effective_line_pct
      FROM public.contract c
-     JOIN public.contract_class_of_business ccb ON ccb.contract_id = c.contract_id
-     JOIN public.class_of_business cob          ON cob.${cobIdCol} = ccb.class_of_business_id
-     LEFT JOIN public.contract_np_layers nl      ON nl.contract_id = c.contract_id
+     CROSS JOIN (SELECT $2::uuid[] AS cobs,
+                        ($2::uuid[] IS NOT NULL AND array_length($2::uuid[], 1) > 0) AS has_scope) sc
+     LEFT JOIN LATERAL (
+       SELECT
+         COALESCE(SUM(ml.layer_limit) FILTER (WHERE ml.matches), 0) AS match_layer_limit,
+         COALESCE(SUM(ml.layer_limit), 0)                           AS all_layer_limit,
+         bool_or(ml.has_cob)                                        AS has_any_layer_cob
+       FROM (
+         SELECT
+           l.layer_id,
+           l.layer_limit,
+           EXISTS (SELECT 1 FROM public.contract_np_layer_class_of_business lc
+                    WHERE lc.layer_id = l.layer_id) AS has_cob,
+           EXISTS (SELECT 1 FROM public.contract_np_layer_class_of_business lc
+                    WHERE lc.layer_id = l.layer_id
+                      AND (NOT sc.has_scope OR lc.class_of_business_id = ANY(sc.cobs))) AS matches
+         FROM public.contract_np_layers l
+         WHERE l.contract_id = c.contract_id
+       ) ml
+     ) lim ON TRUE
      WHERE c.cedant_id = $1
        AND c.uw_status NOT IN ('DECLINED','NTU')
-       AND EXISTS (
-         SELECT 1 FROM public.contract_class_of_business x
-         WHERE x.contract_id = c.contract_id
-           AND ($2::uuid[] IS NULL OR array_length($2::uuid[], 1) = 0
-                OR x.class_of_business_id = ANY($2::uuid[]))
+       AND (
+         (COALESCE(lim.has_any_layer_cob, false) AND lim.match_layer_limit IS NOT NULL AND EXISTS (
+            SELECT 1 FROM public.contract_np_layers l
+            JOIN public.contract_np_layer_class_of_business lc ON lc.layer_id = l.layer_id
+            WHERE l.contract_id = c.contract_id
+              AND (NOT sc.has_scope OR lc.class_of_business_id = ANY(sc.cobs))))
+         OR (NOT COALESCE(lim.has_any_layer_cob, false)
+             AND (NOT sc.has_scope
+                  OR EXISTS (SELECT 1 FROM public.contract_class_of_business x
+                              WHERE x.contract_id = c.contract_id
+                                AND x.class_of_business_id = ANY(sc.cobs))))
        )
-     GROUP BY c.contract_id, c.uw_year, c.uw_status, c.signed_line_pct
      ORDER BY c.uw_year DESC`,
     [cedant_id, cobIds.length ? cobIds : null]
   );
@@ -633,7 +689,7 @@ router.get("/treaties/:id/cedant-programme-limits", asyncHandler(async (req, res
 // ── NP Excess LDF Factors ──────────────────────────────────────────────────
 // GET: returns chosen LDF/CDF factors for the NP excess layer
 // Used by NpFinalPricing to compute developed ultimate excess losses
-router.get("/treaties/:id/np/excess-ldfs", asyncHandler(async (req, res) => {
+router.get("/treaties/:id/np/excess-ldfs", ...npTreatyGuard, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { rows } = await pool.query(
     `SELECT * FROM public.contract_np_excess_ldf WHERE contract_id=$1 ORDER BY dev_month`,
@@ -641,7 +697,7 @@ router.get("/treaties/:id/np/excess-ldfs", asyncHandler(async (req, res) => {
   );
   res.json(rows);
 }));
-router.get("/quotes/:id/np/excess-ldfs", asyncHandler(async (req, res) => {
+router.get("/quotes/:id/np/excess-ldfs", ...npQuoteGuard, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { rows } = await pool.query(
     `SELECT * FROM public.quote_np_excess_ldf WHERE quote_id=$1 ORDER BY dev_month`,
@@ -652,7 +708,7 @@ router.get("/quotes/:id/np/excess-ldfs", asyncHandler(async (req, res) => {
 
 // PUT: save chosen factors (called by NpExcessDevFactors saveDevFactors path
 //      AND directly here for a clean dedicated endpoint)
-router.put("/treaties/:id/np/excess-ldfs", validateBody(excessLdfsPutSchema), asyncHandler(async (req, res) => {
+router.put("/treaties/:id/np/excess-ldfs", ...npTreatyGuard, validateBody(excessLdfsPutSchema), asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { factors = [], tail_factor = 1.0 } = req.body;
   const cl = await pool.connect();
@@ -679,7 +735,7 @@ router.put("/treaties/:id/np/excess-ldfs", validateBody(excessLdfsPutSchema), as
     throw e;
   } finally { cl.release(); }
 }));
-router.put("/quotes/:id/np/excess-ldfs", validateBody(excessLdfsPutSchema), asyncHandler(async (req, res) => {
+router.put("/quotes/:id/np/excess-ldfs", ...npQuoteGuard, validateBody(excessLdfsPutSchema), asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { factors = [], tail_factor = 1.0 } = req.body;
   const cl = await pool.connect();
@@ -717,7 +773,7 @@ function makeLossLdfRoutes(lossType) {
   const path         = lossType.replace('_loss', '-loss'); // large_loss → large-loss
 
   // GET LDFs
-  router.get(`/treaties/:id/np/${path}-ldfs`, asyncHandler(async (req, res) => {
+  router.get(`/treaties/:id/np/${path}-ldfs`, ...npTreatyGuard, asyncHandler(async (req, res) => {
     const { id } = req.params;
     const [ldfs, ults] = await Promise.all([
       pool.query(`SELECT * FROM public.${contractTbl} WHERE contract_id=$1 ORDER BY dev_month`, [id]),
@@ -726,7 +782,7 @@ function makeLossLdfRoutes(lossType) {
     res.json({ ldfs: ldfs.rows, ultimates: ults.rows });
   }));
 
-  router.get(`/quotes/:id/np/${path}-ldfs`, asyncHandler(async (req, res) => {
+  router.get(`/quotes/:id/np/${path}-ldfs`, ...npQuoteGuard, asyncHandler(async (req, res) => {
     const { id } = req.params;
     const [ldfs, ults] = await Promise.all([
       pool.query(`SELECT * FROM public.${quoteTbl} WHERE quote_id=$1 ORDER BY dev_month`, [id]),
@@ -736,7 +792,7 @@ function makeLossLdfRoutes(lossType) {
   }));
 
   // PUT LDFs + ultimates
-  router.put(`/treaties/:id/np/${path}-ldfs`, asyncHandler(async (req, res) => {
+  router.put(`/treaties/:id/np/${path}-ldfs`, ...npTreatyGuard, asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { ldfs = [], ultimates = [], tail_factor = 1.0 } = req.body;
     const cl = await pool.connect();
@@ -769,7 +825,7 @@ function makeLossLdfRoutes(lossType) {
     } finally { cl.release(); }
   }));
 
-  router.put(`/quotes/:id/np/${path}-ldfs`, asyncHandler(async (req, res) => {
+  router.put(`/quotes/:id/np/${path}-ldfs`, ...npQuoteGuard, asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { ldfs = [], ultimates = [], tail_factor = 1.0 } = req.body;
     const cl = await pool.connect();
@@ -848,10 +904,10 @@ async function historicalPerformancePut(req, res) {
 }
 
 // ── GET/PUT /api/{treaties|quotes}/:id/np/historical-performance ──
-router.get("/treaties/:id/np/historical-performance", asyncHandler(historicalPerformanceGet));
-router.get("/quotes/:id/np/historical-performance", asyncHandler(historicalPerformanceGet));
-router.put("/treaties/:id/np/historical-performance", validateBody(historicalPerfPutSchema), asyncHandler(historicalPerformancePut));
-router.put("/quotes/:id/np/historical-performance", validateBody(historicalPerfPutSchema), asyncHandler(historicalPerformancePut));
+router.get("/treaties/:id/np/historical-performance", ...npTreatyGuard, asyncHandler(historicalPerformanceGet));
+router.get("/quotes/:id/np/historical-performance", ...npQuoteGuard, asyncHandler(historicalPerformanceGet));
+router.put("/treaties/:id/np/historical-performance", ...npTreatyGuard, validateBody(historicalPerfPutSchema), asyncHandler(historicalPerformancePut));
+router.put("/quotes/:id/np/historical-performance", ...npQuoteGuard, validateBody(historicalPerfPutSchema), asyncHandler(historicalPerformancePut));
 
 // ── Stop Loss / Aggregate XL pricing ────────────────────────────────────────
 // One row per contract/quote in {contract|quote}_np_stop_loss_pricing —
@@ -901,9 +957,9 @@ async function stopLossPricingPut(req, res) {
   finally { cl.release(); }
 }
 
-router.get("/treaties/:id/np/stop-loss-pricing", asyncHandler(stopLossPricingGet));
-router.get("/quotes/:id/np/stop-loss-pricing",  asyncHandler(stopLossPricingGet));
-router.put("/treaties/:id/np/stop-loss-pricing", validateBody(stopLossPricingPutSchema), asyncHandler(stopLossPricingPut));
-router.put("/quotes/:id/np/stop-loss-pricing",  validateBody(stopLossPricingPutSchema), asyncHandler(stopLossPricingPut));
+router.get("/treaties/:id/np/stop-loss-pricing", ...npTreatyGuard, asyncHandler(stopLossPricingGet));
+router.get("/quotes/:id/np/stop-loss-pricing",  ...npQuoteGuard, asyncHandler(stopLossPricingGet));
+router.put("/treaties/:id/np/stop-loss-pricing", ...npTreatyGuard, validateBody(stopLossPricingPutSchema), asyncHandler(stopLossPricingPut));
+router.put("/quotes/:id/np/stop-loss-pricing",  ...npQuoteGuard, validateBody(stopLossPricingPutSchema), asyncHandler(stopLossPricingPut));
 
 export default router;

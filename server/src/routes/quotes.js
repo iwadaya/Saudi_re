@@ -21,10 +21,14 @@ import { approveQuote, returnToUnderwriter, recallOffer, markNotTakenUp } from '
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
 import { verifyNpPricingOutputs, summariseDrifts, isStrictMode, pricingDriftStats } from '../lib/pricingVerifier.js';
 import { getWordingChecklist, runWordingChecklistAi, saveWordingChecklist } from '../services/wordingChecklist.js';
+import { loadQuoteCategory, requireQuoteCategory } from '../lib/treatyCategoryGuard.js';
 import multer from 'multer';
 import { randomUUID } from 'node:crypto';
 
 const router = Router();
+// Category fence for the NP-only quote routes: a proportional quote has no
+// quote_np_* rows, so reject (409) rather than silently returning empties.
+const npQuoteGuard = [loadQuoteCategory, requireQuoteCategory('NON_PROPORTIONAL')];
 
 // Triangle variant (migration 116). Reads/writes default to MODIFIED so all
 // pre-variant behaviour is unchanged unless ACTUAL is explicitly requested.
@@ -1033,7 +1037,7 @@ router.get("/quotes/:id/pricing-yearly", asyncHandler(async (req, res) => {
 }));
 
 // NP
-router.get("/quotes/:id/non-prop", asyncHandler(async (req, res) => {
+router.get("/quotes/:id/non-prop", ...npQuoteGuard, asyncHandler(async (req, res) => {
   const {id}=req.params;
   const [dR,lR,tR,uwR,qR,offerR]=await Promise.all([
     pool.query(`SELECT * FROM public.quote_np_details WHERE quote_id=$1`,[id]),
@@ -1078,7 +1082,7 @@ router.get("/quotes/:id/non-prop", asyncHandler(async (req, res) => {
     updated_at: qR.rows[0]?.updated_at || null,
   });
 }));
-router.get("/quotes/:id/np-pricing", asyncHandler(async (req, res) => {
+router.get("/quotes/:id/np-pricing", ...npQuoteGuard, asyncHandler(async (req, res) => {
   const {id}=req.params;
   const [i,li,o]=await Promise.all([pool.query(`SELECT * FROM public.quote_np_pricing_inputs WHERE quote_id=$1`,[id]),pool.query(`SELECT * FROM public.quote_np_pricing_layer_inputs WHERE quote_id=$1 ORDER BY layer_number`,[id]),pool.query(`SELECT * FROM public.quote_np_pricing_outputs WHERE quote_id=$1 ORDER BY layer_number,section`,[id])]);
   res.json({inputs:i.rows[0]||null,layer_inputs:li.rows,outputs:o.rows});
@@ -1210,7 +1214,7 @@ router.post("/quotes/:id/renew", asyncHandler(async (req, res) => {
 }));
 
 // NP save — writes all layer columns, COB UW limits, and JSONB terms
-router.post("/quotes/:id/non-prop/save", asyncHandler(async (req, res) => {
+router.post("/quotes/:id/non-prop/save", ...npQuoteGuard, asyncHandler(async (req, res) => {
   const {id}=req.params;
   const {detail={}, layers=[], terms={}, cob_underwriting_limits=[]} = req.body;
   const cl=await pool.connect();
@@ -1341,11 +1345,11 @@ router.post("/quotes/:id/non-prop/save", asyncHandler(async (req, res) => {
 }));
 
 // NP EGNPI year
-router.get("/quotes/:id/np/egnpi-year", asyncHandler(async (req, res) => {
+router.get("/quotes/:id/np/egnpi-year", ...npQuoteGuard, asyncHandler(async (req, res) => {
   const {rows}=await pool.query(`SELECT * FROM public.quote_np_egnpi_year WHERE quote_id=$1 ORDER BY uw_year`,[req.params.id]);
   res.json(rows);
 }));
-router.put("/quotes/:id/np/egnpi-year", asyncHandler(async (req, res) => {
+router.put("/quotes/:id/np/egnpi-year", ...npQuoteGuard, asyncHandler(async (req, res) => {
   const {id}=req.params;const inputRows=req.body.rows??[];const cl=await pool.connect();
   try{await cl.query("BEGIN");await cl.query(`DELETE FROM public.quote_np_egnpi_year WHERE quote_id=$1`,[id]);
   const egnpiInsert = buildBatchInsert({
@@ -1371,7 +1375,7 @@ router.put("/quotes/:id/np/egnpi-year", asyncHandler(async (req, res) => {
 }));
 
 // NP pricing save
-router.put("/quotes/:id/np-pricing", asyncHandler(async (req, res) => {
+router.put("/quotes/:id/np-pricing", ...npQuoteGuard, asyncHandler(async (req, res) => {
   const {id}=req.params;
   await assertCanEdit(req, 'QUOTE', id);
   const {inputs, layer_inputs=[], outputs=[], layer_margins=[]} = req.body;
