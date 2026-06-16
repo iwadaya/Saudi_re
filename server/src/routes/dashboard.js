@@ -237,8 +237,8 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
       pool.query(`WITH ${unitsW}
         SELECT
           COUNT(DISTINCT contract_id)::int        AS contracts,
-          COALESCE(${UNIT_AGGREGATES.premium},0)  AS premium,
-          COALESCE(${UNIT_AGGREGATES.exposure},0) AS exposure,
+          ${UNIT_AGGREGATES.premium}  AS premium,
+          ${UNIT_AGGREGATES.exposure} AS exposure,
           ${UNIT_AGGREGATES.balance}              AS balance,
           ${UNIT_AGGREGATES.avgRol}               AS "avgRol",
           ${UNIT_AGGREGATES.uwMargin}             AS "avgUwMargin"
@@ -247,8 +247,8 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
       pool.query(`WITH ${unitsW}
         SELECT region,
           COUNT(DISTINCT contract_id)::int        AS contracts,
-          COALESCE(${UNIT_AGGREGATES.premium},0)  AS premium,
-          COALESCE(${UNIT_AGGREGATES.exposure},0) AS exposure,
+          ${UNIT_AGGREGATES.premium}  AS premium,
+          ${UNIT_AGGREGATES.exposure} AS exposure,
           ${UNIT_AGGREGATES.avgRol}               AS rol,
           ${UNIT_AGGREGATES.balance}              AS balance,
           ${UNIT_AGGREGATES.uwMargin}             AS "uwMargin"
@@ -257,8 +257,8 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
       pool.query(`WITH ${unitsLob}
         SELECT lob,
           COUNT(DISTINCT contract_id)::int        AS contracts,
-          COALESCE(${UNIT_AGGREGATES.premium},0)  AS premium,
-          COALESCE(${UNIT_AGGREGATES.exposure},0) AS exposure,
+          ${UNIT_AGGREGATES.premium}  AS premium,
+          ${UNIT_AGGREGATES.exposure} AS exposure,
           ${UNIT_AGGREGATES.avgRol}               AS rol,
           ${UNIT_AGGREGATES.balance}              AS balance,
           ${UNIT_AGGREGATES.uwMargin}             AS "uwMargin"
@@ -357,8 +357,8 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
       pool.query(`WITH ${unitsW}
         SELECT uw_year AS "uwYear",
           COUNT(DISTINCT contract_id)::int        AS contracts,
-          COALESCE(${UNIT_AGGREGATES.premium},0)  AS premium,
-          COALESCE(${UNIT_AGGREGATES.exposure},0) AS exposure,
+          ${UNIT_AGGREGATES.premium}  AS premium,
+          ${UNIT_AGGREGATES.exposure} AS exposure,
           ${UNIT_AGGREGATES.balance}              AS balance,
           ${UNIT_AGGREGATES.avgRol}               AS rol,
           ${UNIT_AGGREGATES.uwMargin}             AS "uwMargin"
@@ -390,8 +390,8 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
       pool.query(`WITH ${unitsW}
         SELECT uw_year AS "uwYear",
           COUNT(DISTINCT contract_id)::int        AS contracts,
-          COALESCE(${UNIT_AGGREGATES.premium},0)  AS premium,
-          COALESCE(${UNIT_AGGREGATES.exposure},0) AS exposure,
+          ${UNIT_AGGREGATES.premium}  AS premium,
+          ${UNIT_AGGREGATES.exposure} AS exposure,
           ${UNIT_AGGREGATES.balance}              AS balance,
           ${UNIT_AGGREGATES.avgRol}               AS rol,
           ${UNIT_AGGREGATES.uwMargin}             AS "uwMargin"
@@ -399,8 +399,8 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
       pool.query(`WITH ${unitsLob}
         SELECT lob,
           COUNT(DISTINCT contract_id)::int        AS contracts,
-          COALESCE(${UNIT_AGGREGATES.premium},0)  AS premium,
-          COALESCE(${UNIT_AGGREGATES.exposure},0) AS exposure,
+          ${UNIT_AGGREGATES.premium}  AS premium,
+          ${UNIT_AGGREGATES.exposure} AS exposure,
           ${UNIT_AGGREGATES.balance}              AS balance,
           ${UNIT_AGGREGATES.avgRol}               AS rol,
           ${UNIT_AGGREGATES.uwMargin}             AS "uwMargin"
@@ -557,11 +557,12 @@ export function buildPivot(rows, rowKey, colKey, valKey) {
 
 // ── Weighted pivot ──────────────────────────────────────────────────────────
 // Like buildPivot but each cell is a premium-weighted ratio Σnum / Σden (den 0
-// → 0). Crucially the row total and grand totals are ALSO Σnum / Σden over the
-// cell's members — never a sum or average of per-cell ratios. Use for ROL /
-// margin / balance pivots where summing rates would be meaningless.
+// → NULL, surfaced as N/A — never 0). Crucially the row total and grand totals
+// are ALSO Σnum / Σden over the cell's members — never a sum or average of
+// per-cell ratios. Use for ROL / margin / balance pivots where summing rates
+// would be meaningless.
 export function buildWeightedPivot(rows, rowKey, colKey, numKey, denKey) {
-  const div = (n, d) => (d ? n / d : 0);
+  const div = (n, d) => (d ? n / d : null);
   const colSet = new Set();
   const rowMap = {};               // rv -> { cells: {cv:{num,den}}, num, den }
   const colTotals = {};            // cv -> { num, den }
@@ -584,14 +585,14 @@ export function buildWeightedPivot(rows, rowKey, colKey, numKey, denKey) {
   const pivotRows = Object.entries(rowMap)
     .map(([key, r]) => {
       const values = {};
-      for (const c of columns) values[c] = r.cells[c] ? div(r.cells[c].num, r.cells[c].den) : 0;
+      for (const c of columns) values[c] = r.cells[c] ? div(r.cells[c].num, r.cells[c].den) : null;
       const out = { key, values, total: div(r.num, r.den) };
       out[rowKey === 'lob' ? 'lob' : 'region'] = key;
       return out;
     })
-    .sort((a, b) => b.total - a.total);
+    .sort((a, b) => (b.total || 0) - (a.total || 0));
   const totals = { values: {}, total: div(grandNum, grandDen) };
-  for (const c of columns) totals.values[c] = colTotals[c] ? div(colTotals[c].num, colTotals[c].den) : 0;
+  for (const c of columns) totals.values[c] = colTotals[c] ? div(colTotals[c].num, colTotals[c].den) : null;
   return { columns, rows: pivotRows, totals };
 }
 

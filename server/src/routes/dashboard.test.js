@@ -42,17 +42,18 @@ describe('buildWeightedPivot', () => {
   const rows = [
     { region: 'Europe', tt: 'QS', n: 10, d: 100 }, // 0.10
     { region: 'Europe', tt: 'XL', n: 90, d: 300 }, // 0.30
-    { region: 'Asia',   tt: 'QS', n: 5,  d: 0   }, // den 0 → 0, no NaN
+    { region: 'Asia',   tt: 'QS', n: 5,  d: 0   }, // den 0 → NULL (N/A), no NaN
   ];
   const p = buildWeightedPivot(rows, 'region', 'tt', 'n', 'd');
 
-  it('computes each cell as Σnum / Σden (den 0 → 0)', () => {
+  it('computes each cell as Σnum / Σden, NULL when den is 0 or absent', () => {
     const europe = p.rows.find(r => r.region === 'Europe');
     expect(europe.values.QS).toBeCloseTo(0.1, 10);
     expect(europe.values.XL).toBeCloseTo(0.3, 10);
     const asia = p.rows.find(r => r.region === 'Asia');
-    expect(asia.values.QS).toBe(0);
-    expect(asia.total).toBe(0);
+    expect(asia.values.QS).toBeNull();   // den 0 → NULL, not 0
+    expect(asia.values.XL).toBeNull();   // absent cell → NULL
+    expect(asia.total).toBeNull();       // whole-row den 0 → NULL
   });
 
   it('weights the row total by denominator (not a mean of cell ratios)', () => {
