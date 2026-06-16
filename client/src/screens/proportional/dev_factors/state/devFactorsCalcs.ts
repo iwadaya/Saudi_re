@@ -31,10 +31,6 @@ export interface ExclusionsSummary {
   proxyPlaced: number;
 }
 
-export const ZERO_EXCLUSIONS: ExclusionsSummary = Object.freeze({
-  largeLossCount: 0, catLossCount: 0, applies: false, proxyPlaced: 0,
-});
-
 export type Matrix = Array<Array<number | null>>;
 
 export interface ClProjectionRow {

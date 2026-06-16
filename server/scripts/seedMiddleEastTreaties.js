@@ -40,7 +40,7 @@ const CAT_TYPE_NAMES = new Set(['CAT XL', 'Risk & CAT XL', 'Aggregate XL']);
 const STATUS_MIX = [
   { status: 'SIGNED', uw: 'SIGNED', w: 30 },
   { status: 'BOUND', uw: 'AWAITING_SIGNED_LINE', w: 10 },
-  { status: 'QUOTED', uw: 'WAITING_APPROVAL', w: 25 },
+  { status: 'QUOTED', uw: 'AWAITING_APPROVAL', w: 25 },
   { status: 'NTU', uw: 'NTU', w: 20 },
   { status: 'DECLINED', uw: 'DECLINED', w: 15 },
 ];

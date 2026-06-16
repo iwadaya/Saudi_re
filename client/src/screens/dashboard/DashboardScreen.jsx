@@ -287,7 +287,7 @@ export default function DashboardScreen() {
                 <PivotTable title="Premium (Region × Treaty Type)" data={data?.premiumRegionTreaty} cellFmt={fm} rowLabel="Region" />
                 <PivotTable title="Exposure (Region × Treaty Type)" data={data?.exposureRegionTreaty} cellFmt={fm} rowLabel="Region" />
                 <PivotTable title="UW Margin (Region × Treaty Type)" data={data?.uwMarginRegionTreaty} cellFmt={fp} rowLabel="Region" />
-                <PivotTable title="Portfolio Composition (Region × Treaty Type)" data={data?.compositionRegionTreaty || data?.matrix} cellFmt={fp} rowLabel="Region" />
+                <PivotTable title="Portfolio Composition (Region × Treaty Type)" data={data?.compositionRegionTreaty} cellFmt={fp} rowLabel="Region" />
                 <PivotTable title="Premium (LOB × Treaty Type)" data={data?.premiumLobTreaty} cellFmt={fm} rowLabel="Line of Business" />
                 <PivotTable title="Exposure (LOB × Treaty Type)" data={data?.exposureLobTreaty} cellFmt={fm} rowLabel="Line of Business" />
                 <PivotTable title="Portfolio Mix (LOB × Treaty Type)" data={data?.compositionLobTreaty} cellFmt={fp} rowLabel="Line of Business" />

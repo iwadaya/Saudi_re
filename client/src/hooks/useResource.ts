@@ -15,7 +15,7 @@
 //     off, and on unmount — a late response can never clobber newer state.
 //   • Errors are reported through the existing errorReporter path
 //     (rate-limited + deduped server-side log line), never swallowed.
-//   • STALE_WRITE (412 optimistic lock) and PRICING_DRIFT errors are
+//   • STALE_WRITE (409 optimistic lock) and PRICING_DRIFT errors are
 //     recognised via the shared extractors so every screen surfaces them
 //     with the same language (see describeResourceError / AsyncBoundary).
 //

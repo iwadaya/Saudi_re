@@ -6,7 +6,7 @@
 //                         or loss driver chip on rows that contribute a
 //                         dominant share of the absolute portfolio technical
 //                         result (threshold below)
-//   • Metrics           — placeholder
+//   • Metrics           — AI portfolio line-size recommendations with staging & commit
 //
 // The cedant summary is fetched on mount. NP layer detail is fetched lazily on
 // the first switch to In-depth and re-used across renders. The Overview tab is

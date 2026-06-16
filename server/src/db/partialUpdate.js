@@ -61,7 +61,6 @@ export function buildPartialUpdate(spec) {
 
   if (!sets.length && !touchUpdatedAt) return null;
   if (touchUpdatedAt) sets.push('updated_at = now()');
-  if (!sets.length) return null; // caller sent empty patch AND told us not to touch updated_at
 
   // Renumber '$?' placeholders in the WHERE clause so they don't
   // collide with the SET params.

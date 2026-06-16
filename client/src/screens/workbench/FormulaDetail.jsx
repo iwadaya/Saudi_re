@@ -266,7 +266,7 @@ export default function FormulaDetail() {
                       disabled={!canEdit || busy}
                       onChange={e => setEditValues(v => ({
                         ...v,
-                        [p.key]: p.kind === 'array-number' ? e.target.value : e.target.value,
+                        [p.key]: e.target.value,
                       }))}
                     />
                     {p.defaultMeta?.source && (

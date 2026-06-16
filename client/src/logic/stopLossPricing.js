@@ -115,8 +115,8 @@ function samplePareto(rand, alpha, theta) {
 
 /**
  * Poisson sample. Knuth's product method for λ < 30 (exact); for
- * larger λ we use Atkinson's PA method via the rejection on a normal
- * proposal — accurate and O(1) per draw.
+ * larger λ we use a Normal approximation (λ + √λ·Z, floored at 0)
+ * — O(1) per draw; mean preserved, higher moments approximate.
  *
  * @param {() => number} rand
  * @param {number} lambda

@@ -663,9 +663,7 @@ function marketMetricsFromReport(report) {
     loss_ratio_pct: pctish(mb.loss_ratio_market_avg),
     commission_pct: toNumOrNull(mb.commission_market_norm_pct),
     retention_pct:  toNumOrNull(mb.retention_market_norm_pct),
-    margin_pct: mb.roe_market_avg_pct != null
-      ? null  // margin not separately reported; we surface ROE in roe_pct
-      : null,
+    margin_pct: null,  // margin not separately reported; we surface ROE in roe_pct
     roe_pct: toNumOrNull(mb.roe_market_avg_pct),
     // Source landscape passthrough so the UI doesn't need a second call.
     market_growth_pct: toNumOrNull(ml.market_growth_pct),
@@ -719,7 +717,7 @@ function deltaOrNull(a, b) {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// 8.4 — per-treaty AI recommendations (Claude, no web_search)
+// 8.4 — per-treaty AI recommendations (OpenAI gpt-4o, no web_search)
 // ──────────────────────────────────────────────────────────────────
 
 const TREATY_REC_SYSTEM_PROMPT = `You are a reinsurance underwriter. Given a treaty's key metrics and a market intelligence report, generate 2-4 specific recommendations for this treaty. Respond ONLY with a JSON object:

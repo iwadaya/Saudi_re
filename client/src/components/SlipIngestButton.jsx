@@ -190,7 +190,7 @@ export default function SlipIngestButton({
 
       setStatus('calling');
 
-      // Call server-side proxy so the OpenAI API key stays on the server.
+      // Call the server-side proxy so LLM provider keys (Gemini/OpenAI) stay on the server.
       const { text: rawText, provider } = await api.aiSlipIngest({ base64, mode });
 
       // 3. Parse JSON (strip any accidental markdown fences)

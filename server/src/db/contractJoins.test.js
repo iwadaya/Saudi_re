@@ -28,6 +28,6 @@ describe('contractContextJoins', () => {
   it('exposes a leaner list-projection for /quotes and /treaties indexes', () => {
     expect(contractContextListColumns).toContain('ced.company_name  AS name');
     expect(contractContextListColumns).toContain('cnt.country_name  AS country');
-    expect(contractContextListColumns).toContain('tt.treaty_type');
+    expect(contractContextListColumns).toContain('tt.treaty_type    AS treaty_type_name');
   });
 });

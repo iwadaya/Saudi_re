@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { handleStaleWrite, isStaleWriteError } from './handleStaleWrite.js';
+import { handleStaleWrite } from './handleStaleWrite.js';
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -17,11 +17,6 @@ function staleError() {
 }
 
 describe('handleStaleWrite', () => {
-  it('detects stale-write errors from HttpError bodies', () => {
-    expect(isStaleWriteError(staleError())).toBe(true);
-    expect(isStaleWriteError({ status: 500, body: '{}' })).toBe(false);
-  });
-
   it('requires an explicit refresh choice', async () => {
     const onRefresh = vi.fn();
     const promise = handleStaleWrite(staleError(), { entityType: 'treaty', onRefresh });

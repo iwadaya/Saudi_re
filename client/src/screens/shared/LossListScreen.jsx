@@ -446,7 +446,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                 <thead>
                   <tr>
                     <th className="ll-th ll-th--num">#</th>
-                    {COLS.map(c => <th key={c.key} className="ll-th" style={{ minWidth: c.w }} title={c.title}>{c.label}</th>)}
+                    {COLS.map(c => <th key={c.key} className="ll-th" style={{ minWidth: c.w }}>{c.label}</th>)}
                     <th className="ll-th ll-th--calc">Incurred</th>
                     <th className="ll-th" style={{ minWidth: 100 }} title="Saved in Universe — mirrors the loss-list report date. Set automatically on save.">Saved</th>
                   </tr>
