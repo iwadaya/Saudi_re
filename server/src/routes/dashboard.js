@@ -47,7 +47,11 @@ export const UNIT_AGGREGATES = {
   premium:  'SUM(premium)',
   exposure: 'SUM(exposure)',
   avgRol:   'SUM(rol*premium)     FILTER (WHERE rol     IS NOT NULL) / NULLIF(SUM(premium) FILTER (WHERE rol     IS NOT NULL),0)',
-  balance:  'SUM(balance*premium) FILTER (WHERE balance IS NOT NULL) / NULLIF(SUM(premium) FILTER (WHERE balance IS NOT NULL),0)',
+  // Balance = Σexposure ÷ Σpremium over PROPORTIONAL units only. Restricting
+  // BOTH sides to kind='PROP' keeps NP premium out of the denominator; a group
+  // with no prop units yields NULL → "—". (Intentionally prop-only, unlike the
+  // headline Exposure/Premium which include NP.)
+  balance:  "SUM(exposure) FILTER (WHERE kind = 'PROP') / NULLIF(SUM(premium) FILTER (WHERE kind = 'PROP'),0)",
   uwMargin: 'SUM(margin*premium)  FILTER (WHERE margin  IS NOT NULL) / NULLIF(SUM(premium) FILTER (WHERE margin  IS NOT NULL),0)',
 };
 
@@ -470,8 +474,8 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
       pool.query(`WITH ${unitsW}
         SELECT treaty_type, uw_year::text AS uw_year,
           COALESCE(SUM(premium),0) AS premium,
-          COALESCE(SUM(balance*premium) FILTER (WHERE balance IS NOT NULL),0) AS bal_num,
-          COALESCE(SUM(premium)         FILTER (WHERE balance IS NOT NULL),0) AS bal_den,
+          COALESCE(SUM(exposure) FILTER (WHERE kind = 'PROP'),0) AS bal_num,
+          COALESCE(SUM(premium)  FILTER (WHERE kind = 'PROP'),0) AS bal_den,
           COALESCE(SUM(rol*premium)     FILTER (WHERE rol     IS NOT NULL),0) AS rol_num,
           COALESCE(SUM(premium)         FILTER (WHERE rol     IS NOT NULL),0) AS rol_den,
           COALESCE(SUM(margin*premium)  FILTER (WHERE margin  IS NOT NULL),0) AS mw_num,
