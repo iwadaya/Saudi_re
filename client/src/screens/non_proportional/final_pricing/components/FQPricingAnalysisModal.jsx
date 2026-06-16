@@ -34,7 +34,6 @@ const G = {
  * @param {{
  *   pricingAnalysisModal: { open: boolean, structureIndex: number | null },
  *   clientStructures: Array<object>,
- *   currency: string,
  *   isQuote: boolean,
  *   riskDisabled: boolean,
  *   catDisabled: boolean,
@@ -53,7 +52,6 @@ const G = {
 export default function FQPricingAnalysisModal({
   pricingAnalysisModal,
   clientStructures,
-  currency,
   isQuote,
   riskDisabled,
   catDisabled,
@@ -168,9 +166,10 @@ export default function FQPricingAnalysisModal({
   }
 
   const layers = structure.layers || [];
+  // Table numbers show bare (no currency code): "10,000,000", not "USD 10,000,000".
   const fmtMoney = (value) => {
     const n = toN(value);
-    return n > 0 ? `${currency ? `${currency} ` : ''}${formatWithCommas(String(Math.round(n)))}` : '—';
+    return n > 0 ? formatWithCommas(String(Math.round(n))) : '—';
   };
   const fmtPct = (n) => (n > 0 ? `${n.toFixed(2)}%` : '—');
   // Curve-predicted ROL% for a layer under a peer-scope fit: a·x^b·100, where
@@ -228,35 +227,49 @@ export default function FQPricingAnalysisModal({
     const prAttachField  = scopeKey === 'risk' ? 'riskPrAttach'  : 'catPrAttach';
     const prExhaustField = scopeKey === 'risk' ? 'riskPrExhaust' : 'catPrExhaust';
     const noteField      = `${scopeKey}LayerNote`;
-    // Fixed column widths (table-layout: fixed) so the 17 columns don't crush;
+    // Fixed column widths (table-layout: fixed) so the 22 columns don't crush;
     // the table scrolls horizontally inside its own wrapper when narrower.
-    const COLW = [56, 64, 116, 116, 124, 92, 80, 92, 80, 116, 108, 108, 108, 104, 92, 96, 190];
+    // Order: Layer, Active, Limit, Deductible, EGNPI, Reinst., % Reinst.,
+    //   Pure Burn, Pareto, Exposure, Wt Burn, Wt Pareto, Wt Exp, Blend,
+    //   Implied·Expiring/Country/Region/Global, UW Price, P(Attach), P(Exhaust), Note.
+    const COLW = [52, 56, 110, 110, 120, 80, 92, 88, 80, 88, 78, 84, 78, 84, 112, 104, 104, 104, 100, 88, 92, 180];
     const TABLE_MIN_W = COLW.reduce((s, w) => s + w, 0);
     const disabledByMode = scopeKey === 'risk' ? riskDisabled : catDisabled;
-    const layer0 = layers[0] || {};
-    // Blender weights live at peril level (read from layer 0); defaults 50/0/50.
-    const wOf = (field, dflt) => (layer0[field] != null && layer0[field] !== '' ? toN(layer0[field]) : dflt);
-    const burnW = wOf(f.wtBurn, 50);
-    const paretoW = wOf(f.wtPareto, 0);
-    const expW = wOf(f.wtExp, 50);
-    const wSum = burnW + paretoW + expW;
-    const valid = Math.round(wSum * 100) / 100 === 100;
-    // Any weight change writes to EVERY layer of this peril so the engine and
-    // the main-table footer stay consistent.
-    const setWeight = (field, raw) => {
-      const value = raw.replace(/[^0-9.]/g, '');
-      layers.forEach((_, lIdx) => updateClientStructureLayer(sIdx, lIdx, field, value));
-    };
+    // Blend uses THIS row's own weights (Wt Burn/Pareto/Exp columns), divided
+    // by the actual weight sum so it stays valid even if they don't total 100.
     const blendOf = (layer) => {
-      const denom = burnW + paretoW + expW;
-      return denom > 0 ? (burnW * toN(layer[f.pureBurn]) + paretoW * toN(layer[f.pareto]) + expW * toN(layer[f.exposure])) / denom : 0;
+      const wB = toN(layer[f.wtBurn]);
+      const wP = toN(layer[f.wtPareto]);
+      const wE = toN(layer[f.wtExp]);
+      const denom = wB + wP + wE;
+      return denom > 0 ? (wB * toN(layer[f.pureBurn]) + wP * toN(layer[f.pareto]) + wE * toN(layer[f.exposure])) / denom : 0;
     };
-    const wInput = (label, val, field) => (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 10, color: 'rgba(148,163,184,0.7)', whiteSpace: 'nowrap' }}>{label}</span>
-        <input type="text" inputMode="decimal" className="bm-cell bm-cell--sm" style={{ width: 60, opacity: disabledByMode ? 0.5 : 1 }}
-          value={val} disabled={disabledByMode} onChange={(e) => setWeight(field, e.target.value)} />
-      </div>
+    const impliedExpOf = (layer) => {
+      const priced = fqPriceLayerOnCurve(layer, quoteCurve?.fit, quoteCurve?.baseEgnpi);
+      return priced ? priced.y * 100 : null;
+    };
+    // Per-section totals: amount columns sum; rate columns are LIMIT-weighted
+    // averages over the scope's active layers (so every numeric column gets a
+    // value). getVal returns null to exclude a layer (e.g. uncalibrated implied).
+    const activeLayers = layers.filter((l) => !!l[scopeKey]);
+    const sumLimit = activeLayers.reduce((s, l) => s + toN(l.limit), 0);
+    const sumEgnpi = activeLayers.reduce((s, l) => s + toN(l.egnpi), 0);
+    const lwAvg = (getVal) => {
+      let wSum = 0; let acc = 0;
+      for (const l of activeLayers) {
+        const lim = toN(l.limit);
+        const v = getVal(l);
+        if (lim > 0 && v != null && Number.isFinite(v)) { wSum += lim; acc += lim * v; }
+      }
+      return wSum > 0 ? acc / wSum : 0;
+    };
+    // Small editable numeric cell for the per-row weight columns.
+    const wtCell = (lIdx, field, layer) => (
+      <input type="text" inputMode="decimal" className="bm-cell bm-cell--sm"
+        aria-label={`${scope.label} Structure ${sIdx + 1} Layer ${lIdx + 1} ${field}`}
+        value={layer[field] ?? ''} disabled={disabledByMode}
+        onChange={(e) => updateClientStructureLayer(sIdx, lIdx, field, e.target.value.replace(/[^0-9.]/g, ''))}
+        style={{ width: '100%', boxSizing: 'border-box', opacity: disabledByMode ? 0.5 : 1 }} />
     );
     return (
       <section key={scopeKey} style={{ background: 'rgba(8,14,30,0.72)', border: `1px solid ${scope.color}35`, borderRadius: 12 }}>
@@ -267,19 +280,9 @@ export default function FQPricingAnalysisModal({
           </div>
           <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.75)', fontWeight: 750 }}>Wtd ROL {fmtPct(componentTotals(scopeKey).wtdRol)}</div>
         </div>
-        {/* (a) Blender bar — three directly-editable weights + live Σ. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: G.modelled }}>
-          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.6)' }}>Blend weights</span>
-          {wInput('Pure Burn %', burnW, f.wtBurn)}
-          {wInput('Pareto %', paretoW, f.wtPareto)}
-          {wInput('Exposure %', expW, f.wtExp)}
-          <span style={{ fontSize: 11, fontWeight: 800, color: valid ? '#23d18b' : '#f87171' }}>Σ = {Math.round(wSum)}%</span>
-          {!valid && <span style={{ fontSize: 10, color: '#f87171' }}>weights must total 100%</span>}
-        </div>
-        {/* ONLY the table scrolls — horizontally. The section header/Wtd ROL
-            line and the BLEND WEIGHTS bar sit ABOVE this wrapper (full-width,
-            never sideways); the notes textarea sits BELOW it. overflowY:visible
-            + no height on table/wrapper ⇒ no stray inner vertical scrollbar. */}
+        {/* Weights are now per-row columns (Wt Burn/Pareto/Exp) — no top blender.
+            ONLY the table scrolls horizontally; the section header sits above
+            (full-width), the notes textarea below. */}
         <div style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: TABLE_MIN_W, tableLayout: 'fixed', fontSize: 11 }}>
             <colgroup>{COLW.map((w, ci) => (<col key={`col-${ci}`} style={{ width: w }} />))}</colgroup>
@@ -290,9 +293,14 @@ export default function FQPricingAnalysisModal({
                 <th style={th}>Limit</th>
                 <th style={th}>Deductible</th>
                 <th style={th}>EGNPI</th>
+                <th style={groupTh(G.note, 'rgba(148,163,184,0.45)')}>Reinst.</th>
+                <th style={groupTh(G.note, 'rgba(148,163,184,0.45)')}>% Reinst.</th>
                 <th style={groupTh(G.modelled, '#4ade80')}>Pure Burn</th>
                 <th style={groupTh(G.modelled, '#4ade80')}>Pareto</th>
                 <th style={groupTh(G.modelled, '#4ade80')}>Exposure</th>
+                <th style={groupTh(G.modelled, '#4ade80')}>Wt Burn</th>
+                <th style={groupTh(G.modelled, '#4ade80')}>Wt Pareto</th>
+                <th style={groupTh(G.modelled, '#4ade80')}>Wt Exp</th>
                 <th style={groupTh(G.modelled, '#4ade80')}>Blend</th>
                 <th style={groupTh(G.exp, '#f59e0b')}>Implied · Expiring</th>
                 {/* NOTE: Implied · Country/Region/Global placeholders — populated in the next prompt. */}
@@ -324,10 +332,23 @@ export default function FQPricingAnalysisModal({
                     <td style={td}><FQReadCell value={fmtMoney(layer.limit)} className="bm-cell bm-cell--display bm-cell--foot" /></td>
                     <td style={td}><FQReadCell value={fmtMoney(layer.attachment)} className="bm-cell bm-cell--display bm-cell--foot" /></td>
                     <td style={td}><FQReadCell value={fmtMoney(layer.egnpi)} className="bm-cell bm-cell--display bm-cell--foot" /></td>
+                    {/* Reinstatement terms — layer-level (same value in Risk & Cat tables), always editable. */}
+                    <td style={{ ...td, background: G.note }}>
+                      <input type="text" inputMode="numeric"
+                        aria-label={`Structure ${sIdx + 1} Layer ${lIdx + 1} reinstatements`}
+                        value={layer.reinstatements ?? ''}
+                        onChange={(e) => updateClientStructureLayer(sIdx, lIdx, 'reinstatements', e.target.value.replace(/[^0-9.]/g, ''))}
+                        style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(5,8,16,0.6)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: 'rgba(226,232,240,0.9)', fontSize: 10, padding: '4px 6px', textAlign: 'right', fontFamily: 'inherit' }} />
+                    </td>
+                    <td style={{ ...td, background: G.note }}><FQPctCell value={layer.pctReinst} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, 'pctReinst', v)} /></td>
                     <td style={{ ...td, background: G.modelled }}>{editorWrap(<FQPctCell value={layer[f.pureBurn]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.pureBurn, v)} />)}</td>
                     <td style={{ ...td, background: G.modelled }}>{editorWrap(<FQPctCell value={layer[f.pareto]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.pareto, v)} />)}</td>
                     <td style={{ ...td, background: G.modelled }}>{editorWrap(<FQPctCell value={layer[f.exposure]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.exposure, v)} />)}</td>
-                    <td style={{ ...td, background: G.modelled, opacity: valid ? 1 : 0.5 }}><FQReadCell value={blendTxt} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" /></td>
+                    {/* Per-row blend weights — drive THIS row's Blend (no top blender). */}
+                    <td style={{ ...td, background: G.modelled }}>{editorWrap(wtCell(lIdx, f.wtBurn, layer))}</td>
+                    <td style={{ ...td, background: G.modelled }}>{editorWrap(wtCell(lIdx, f.wtPareto, layer))}</td>
+                    <td style={{ ...td, background: G.modelled }}>{editorWrap(wtCell(lIdx, f.wtExp, layer))}</td>
+                    <td style={{ ...td, background: G.modelled }}><FQReadCell value={blendTxt} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" /></td>
                     <td style={{ ...td, background: G.exp }}><FQReadCell value={impliedExp != null ? `${impliedExp.toFixed(2)}%` : '—'} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" /></td>
                     {/* Implied · Country / Region / Global — peer-curve-predicted ROL ("—" when no calibrated pool). */}
                     {[
@@ -362,33 +383,44 @@ export default function FQPricingAnalysisModal({
                 );
               })}
             </tbody>
+            {/* (b) Section Total — per-COLUMN aggregates as the table <tfoot> so
+                they stay aligned and scroll horizontally WITH the columns.
+                Amounts sum (Limit, EGNPI); rate/% columns are LIMIT-weighted
+                averages; non-summable terms show "—". */}
+            <tfoot>
+              {(() => {
+                const ft = { ...td, background: `${scope.color}16`, borderTop: `2px solid ${scope.color}55`, fontWeight: 800, color: 'rgba(226,232,240,0.95)' };
+                const dash = '—';
+                return (
+                  <tr data-testid={`fq-section-total-${scopeKey}`}>
+                    <td style={{ ...ft, textAlign: 'center', color: scope.color, letterSpacing: '.08em' }}>TOTAL</td>
+                    <td style={{ ...ft, textAlign: 'center' }}>{activeLayers.length || dash}</td>
+                    <td style={ft}>{fmtMoney(sumLimit)}</td>
+                    <td style={ft}>{dash}</td>
+                    <td style={ft}>{fmtMoney(sumEgnpi)}</td>
+                    <td style={ft}>{dash}</td>
+                    <td style={ft}>{dash}</td>
+                    <td style={ft}>{fmtPct(lwAvg((l) => toN(l[f.pureBurn])))}</td>
+                    <td style={ft}>{fmtPct(lwAvg((l) => toN(l[f.pareto])))}</td>
+                    <td style={ft}>{fmtPct(lwAvg((l) => toN(l[f.exposure])))}</td>
+                    <td style={ft}>{dash}</td>
+                    <td style={ft}>{dash}</td>
+                    <td style={ft}>{dash}</td>
+                    <td style={ft}>{fmtPct(lwAvg((l) => blendOf(l)))}</td>
+                    <td style={ft}>{fmtPct(lwAvg(impliedExpOf))}</td>
+                    <td style={ft}>{fmtPct(lwAvg((l) => impliedScopeRol(l, scopeFits.country)))}</td>
+                    <td style={ft}>{fmtPct(lwAvg((l) => impliedScopeRol(l, scopeFits.region)))}</td>
+                    <td style={ft}>{fmtPct(lwAvg((l) => impliedScopeRol(l, scopeFits.global)))}</td>
+                    <td style={ft}>{fmtPct(lwAvg((l) => toN(l[f.uwPrice])))}</td>
+                    <td style={ft}>{fmtPct(lwAvg((l) => toN(l[prAttachField])))}</td>
+                    <td style={ft}>{fmtPct(lwAvg((l) => toN(l[prExhaustField])))}</td>
+                    <td style={{ ...ft, textAlign: 'left' }}>{dash}</td>
+                  </tr>
+                );
+              })()}
+            </tfoot>
           </table>
         </div>
-        {/* (b) Section Total — this peril's own bottom line. Sits OUTSIDE the
-            table's horizontal-scroll wrapper (like the blender/notes) so it
-            stays full-width and never slides sideways. Uses the same
-            componentTotals(scopeKey) as the header's Wtd ROL and the combined
-            Total Section's per-peril row. */}
-        {(() => {
-          const t = componentTotals(scopeKey);
-          const cell = (label, value) => (
-            <span style={{ color: 'rgba(226,232,240,0.92)' }}>
-              <span style={{ color: 'rgba(148,163,184,0.7)', fontWeight: 600 }}>{label} </span>{value}
-            </span>
-          );
-          return (
-            <div
-              data-testid={`fq-section-total-${scopeKey}`}
-              style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: '8px 14px', borderTop: `1px solid ${scope.color}40`, background: `${scope.color}16`, fontSize: 11, fontWeight: 800 }}
-            >
-              <span style={{ fontSize: 10, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: scope.color }}>{scope.label} Total</span>
-              {cell('Active', t.activeCount || '—')}
-              {cell('Limit', fmtMoney(t.totalLimit))}
-              {cell('Premium', fmtMoney(t.premium))}
-              <span style={{ marginLeft: 'auto', color: scope.color, fontWeight: 850 }}>Wtd ROL {fmtPct(t.wtdRol)}</span>
-            </div>
-          );
-        })()}
         {/* (c) Notes — persists on structure[`${scopeKey}Notes`] via the save path. */}
         <div style={{ padding: '10px 14px' }}>
           <textarea
