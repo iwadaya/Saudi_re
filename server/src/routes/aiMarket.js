@@ -27,6 +27,7 @@ import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { validateBody } from '../lib/validate.js';
 import { logAudit } from '../services/audit.js';
+import { actorFromReq } from '../middleware/requestContext.js';
 import { checkPortfolioCompliance } from '../lib/portfolioCompliance.js';
 import { fetchMarketSnapshot as fetchAxcoSnapshot } from '../lib/axcoClient.js';
 import { fetchWorldBankSnapshot } from '../lib/worldBankClient.js';
@@ -415,7 +416,7 @@ router.post(
         entityType: 'MARKET_INTELLIGENCE_REPORT',
         entityId:   rows[0].report_id,
         eventType:  'REPORT_REFRESHED',
-        actor:      userId,
+        actor:      actorFromReq(req),
         payload: {
           report_id:           rows[0].report_id,
           prior_report_id:     priorReport.report_id,
@@ -433,7 +434,7 @@ router.post(
         entityType: 'MARKET_INTELLIGENCE_REPORT',
         entityId:   rows[0].report_id,
         eventType:  'REPORT_GENERATED',
-        actor:      userId,
+        actor:      actorFromReq(req),
         payload: {
           country_id:          countryId,
           class_of_business_id: cobId,
@@ -1096,7 +1097,7 @@ router.post(
         entityType: 'MARKET_INTELLIGENCE_RECOMMENDATION',
         entityId:   recId,
         eventType:  'RECOMMENDATION_STAGED',
-        actor:      userId,
+        actor:      actorFromReq(req),
         payload: {
           rec_id:                recId,
           contract_id:           rec.contract_id,
@@ -1144,7 +1145,7 @@ router.post(
       entityType: 'MARKET_INTELLIGENCE_RECOMMENDATION',
       entityId:   recId,
       eventType:  'RECOMMENDATION_REJECTED',
-      actor:      userId,
+      actor:      actorFromReq(req),
       payload: {
         rec_id:      recId,
         contract_id: rows[0].contract_id,
@@ -1172,7 +1173,7 @@ router.post(
       entityType: 'MARKET_INTELLIGENCE_REPORT',
       entityId:   reportId,
       eventType:  'REPORT_VIEWED',
-      actor:      userId,
+      actor:      actorFromReq(req),
       payload: { report_id: reportId, contract_id: contractId },
     });
     res.status(204).end();

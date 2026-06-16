@@ -7,6 +7,7 @@ import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from
 import { stripTriangleCells, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from '../lib/triangleStripping.js';
 import { suggestLossQuarters } from '../lib/lossQuarterMapper.js';
 import { logAudit, resolveAuditActor } from '../services/audit.js';
+import { actorFromReq } from '../middleware/requestContext.js';
 import { contractContextJoins } from '../db/contractJoins.js';
 import { assertEntityUnchanged, optimisticLockOverrideRequested } from '../db/optimisticLock.js';
 import { buildBatchInsert } from '../db/batchInsert.js';
@@ -673,22 +674,22 @@ router.put("/quotes/:id", validateBody(quotePutBodySchema), asyncHandler(async (
     `UPDATE public.quote SET updated_at=now() WHERE quote_id=$1 RETURNING updated_at`,
     [id],
   );
-  await cl.query("COMMIT");
-  const actor = terms._actor || req.user?.displayName || req.user?.email || "SYSTEM";
+  const actor = actorFromReq(req);
   if (staleWriteOverride) {
-    await logAudit(pool, {
+    await logAudit(cl, {
       entityType: 'QUOTE',
       entityId: id,
       eventType: 'STALE_WRITE_OVERRIDE',
       actor,
       payload: {
         overrideHeader: 'If-Unmodified-Since: *',
-        overwrittenBy: actor,
+        overwrittenBy: actor.id ?? actor.name ?? 'SYSTEM',
         overwrittenAt: new Date().toISOString(),
         ...staleWriteContext,
       },
-    });
+    }, { critical: true });
   }
+  await cl.query("COMMIT");
   res.json({ok:true,quote_id:id,updated_at:updatedR.rows[0]?.updated_at||null});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
@@ -845,14 +846,14 @@ router.post("/quotes/:id/triangles/:type", asyncHandler(async (req, res) => {
         ]
       );
     }
-    await cl.query("COMMIT");
     // Quote audit falls through to the generic audit_log table since
     // logAudit only routes CONTRACT entityType to contract_audit_event.
-    await logAudit(pool, {
+    await logAudit(cl, {
       entityType: 'QUOTE', entityId: id, eventType: 'TRIANGLE_SAVED',
-      actor: req.body?._actor || req.user?.displayName || 'SYSTEM',
+      actor: actorFromReq(req),
       payload: { triangle_type: t, variant, saved: cells.length, dropped: rawCells.length - cells.length },
-    });
+    }, { critical: true });
+    await cl.query("COMMIT");
     res.json({ ok: true, saved: cells.length, dropped: rawCells.length - cells.length });
   } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }
 }));
@@ -932,12 +933,12 @@ router.put("/quotes/:id/dev-factors/:type", validateBody(devFactorPutSchema), as
         params,
       );
     }
-    await cl.query("COMMIT");
-    await logAudit(pool, {
+    await logAudit(cl, {
       entityType: 'QUOTE', entityId: id, eventType: 'DEV_FACTORS_SAVED',
-      actor: req.body?._actor || req.user?.displayName || 'SYSTEM',
+      actor: actorFromReq(req),
       payload: { triangle_type: t, count: factors.length, method: req.body?.method || null, basis: req.body?.basis || null },
-    });
+    }, { critical: true });
+    await cl.query("COMMIT");
     res.json({ ok: true });
   } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }
 }));

@@ -41,7 +41,7 @@ import { env } from '../../config/env.js';
  * @param {{ type: 'quote'|'contract', id: string }} args.entity
  * @param {object} args.document - { document_id, file_name, storage_path }
  * @param {'PROPORTIONAL'|'NON_PROPORTIONAL'} args.treatyCategory
- * @param {string} args.actor - display name / user id for the audit row
+ * @param {object} args.actor - audit actor (actorFromReq shape) for the audit row + provenance
  * @param {Function} [args.crestaLookup] - injected for tests; falls back to defaultCrestaLookup
  */
 export async function runImportJob({ jobId, entity, document, treatyCategory, actor, crestaLookup }) {
@@ -102,7 +102,7 @@ export async function runImportJob({ jobId, entity, document, treatyCategory, ac
       const provenance = {
         source: 'renewal_pack_import',
         source_filename: filename,
-        imported_by: actor,
+        imported_by: actor?.name ?? actor?.id ?? 'SYSTEM',
         imported_at: new Date().toISOString(),
         type: treatyCategory === 'NON_PROPORTIONAL' ? 'non_proportional' : 'proportional',
         provider: extractionResult.provider,

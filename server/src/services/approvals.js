@@ -1099,5 +1099,5 @@ async function logOfferEvent({contractId,quoteId,eventType,actorUserId,actorName
     `INSERT INTO public.offer_approval_event (contract_id,quote_id,event_type,actor_user_id,actor_name,actor_role,payload,comment) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
     [contractId||null,quoteId||null,eventType,actorUserId||null,actorName||'SYSTEM',actorRole||null,payload?JSON.stringify(payload):null,comment||null]
   );
-  if (contractId) await logAudit(pool,{entityType:'CONTRACT',entityId:contractId,eventType,actor:actorName||'SYSTEM',payload,comment}).catch(()=>{});
+  if (contractId) await logAudit(pool,{entityType:'CONTRACT',entityId:contractId,eventType,actor:{id:actorUserId,name:actorName,role:actorRole},payload,comment}).catch(()=>{});
 }

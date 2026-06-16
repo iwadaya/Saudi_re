@@ -17,6 +17,7 @@ import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { asyncHandler } from '../helpers.js';
 import { logAudit } from '../services/audit.js';
+import { actorFromReq } from '../middleware/requestContext.js';
 
 const router = Router();
 
@@ -139,13 +140,12 @@ router.post('/workbench/parameters', requireActuary, asyncHandler(async (req, re
        req.user.userId, req.user.displayName, comment || null]
     );
 
-    await client.query('COMMIT');
-
-    await logAudit(pool, {
+    await logAudit(client, {
       entityType: 'FORMULA_PARAMETER', entityId: param.id,
-      eventType: 'SUBMIT', actor: req.user.displayName,
+      eventType: 'SUBMIT', actor: actorFromReq(req),
       payload: { module: mod, formula_name, parameter_key, proposed_value },
-    }).catch(() => {});
+    }, { critical: true });
+    await client.query('COMMIT');
 
     res.status(201).json({ id: param.id, status: 'PENDING' });
   } catch (e) {
@@ -205,13 +205,12 @@ router.put('/workbench/parameters/:id/approve', requireApprover, asyncHandler(as
        req.user.userId, req.user.displayName, comment || null]
     );
 
-    await client.query('COMMIT');
-
-    await logAudit(pool, {
+    await logAudit(client, {
       entityType: 'FORMULA_PARAMETER', entityId: id,
-      eventType: 'APPROVE', actor: req.user.displayName,
+      eventType: 'APPROVE', actor: actorFromReq(req),
       payload: { new_value: existing.pending_value },
-    }).catch(() => {});
+    }, { critical: true });
+    await client.query('COMMIT');
 
     res.json(updRows[0]);
   } catch (e) {
@@ -273,13 +272,12 @@ router.put('/workbench/parameters/:id/reject', requireApprover, asyncHandler(asy
        req.user.userId, req.user.displayName, comment || null]
     );
 
-    await client.query('COMMIT');
-
-    await logAudit(pool, {
+    await logAudit(client, {
       entityType: 'FORMULA_PARAMETER', entityId: id,
-      eventType: 'REJECT', actor: req.user.displayName,
+      eventType: 'REJECT', actor: actorFromReq(req),
       payload: { rejected_value: existing.pending_value },
-    }).catch(() => {});
+    }, { critical: true });
+    await client.query('COMMIT');
 
     res.json({ id, status: newStatus });
   } catch (e) {
