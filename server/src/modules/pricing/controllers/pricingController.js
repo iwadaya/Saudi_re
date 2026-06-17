@@ -102,6 +102,7 @@ export async function saveCompositePricingController(req, res) {
     share_scenarios,
     comment,
     ifUnmodifiedSince: req.headers['if-unmodified-since'],
+    actor: await resolveActor(req), // "who modelled" — verified identity for the PRICED audit
   });
   res.json({ ok: true, updated_at: result?.updated_at || null });
 }

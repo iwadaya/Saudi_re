@@ -1,7 +1,46 @@
 import { pool } from '../../../db/pool.js';
 import { logger } from '../../../lib/logger.js';
 import { assertParentEntityUnchanged, touchParentEntity } from '../../../lib/parentEntityPersistence.js';
+import { logAudit, SYSTEM_ACTOR } from '../../../services/audit.js';
 import { getPricingSchemaFlags, numOrNull, upsertPricingOutputsWithClient, withTransaction } from './repositoryUtils.js';
+
+// "Who modelled" — the scalar outputs summarised in the PRICED audit payload.
+const PRICED_OUTPUT_KEYS = [
+  'epi', 'attritional_ratio', 'large_loss_load', 'cat_loss_load',
+  'commission_ratio', 'brokerage_ratio', 'tax_ratio', 'technical_result',
+  'max_commission', 'target_margin',
+];
+
+/**
+ * Build the PRICED audit payload: a compact summary of the key outputs the
+ * modeller saved, plus a diff vs the prior pricing snapshot so the trail shows
+ * what actually moved. NP saves arrive as an array of layer rows; prop saves as a
+ * scalar outputs object.
+ */
+function buildPricedPayload({ outputs, priorOutputs }) {
+  if (Array.isArray(outputs)) {
+    return {
+      type: 'NP',
+      layer_count: outputs.length,
+      layers: outputs.slice(0, 12).map((l) => ({
+        layer: l.layer_number ?? l.layer ?? null,
+        section: l.section ?? null,
+        rol: numOrNull(l.rate_on_line ?? l.rol),
+        premium: numOrNull(l.premium ?? l.layer_premium),
+      })),
+    };
+  }
+  const out = outputs || {};
+  const summary = {};
+  const changed = {};
+  for (const k of PRICED_OUTPUT_KEYS) {
+    const cur = numOrNull(out[k]);
+    if (cur != null) summary[k] = cur;
+    const before = priorOutputs ? numOrNull(priorOutputs[k]) : null;
+    if (before !== cur && (before != null || cur != null)) changed[k] = { from: before, to: cur };
+  }
+  return { type: 'PROP', outputs: summary, ...(Object.keys(changed).length ? { changed } : {}) };
+}
 
 export async function getTreatyPricing(contractId) {
   const [outputs, yearly, components, leads, shareScenarios] = await Promise.all([
@@ -59,7 +98,7 @@ export async function upsertPricingOutputs(contractId, data) {
 }
 
 export async function saveCompositePricing(payload) {
-  const { contractId, outputs, yearly, components, leads, share_scenarios, comment, ifUnmodifiedSince } = payload;
+  const { contractId, outputs, yearly, components, leads, share_scenarios, comment, ifUnmodifiedSince, actor } = payload;
   const { rows: contractCheck } = await pool.query('SELECT contract_id FROM public.contract WHERE contract_id=$1', [contractId]);
   if (!contractCheck.length) {
     const error = new Error(`Contract ${contractId} not found`);
@@ -68,6 +107,8 @@ export async function saveCompositePricing(payload) {
   }
 
   const schemaFlags = await getPricingSchemaFlags();
+  // Snapshot the prior outputs BEFORE the write so the PRICED audit can diff them.
+  const priorOutputs = await getPricingOutputs(contractId).catch(() => null);
 
   const updatedAt = await withTransaction(async (client) => {
     await assertParentEntityUnchanged(client, {
@@ -226,6 +267,16 @@ export async function saveCompositePricing(payload) {
         );
       }
     }
+
+    // "Who modelled" — record the modeller + a summary/diff of what they saved.
+    // Best-effort (non-critical): a pricing save must not fail on an audit hiccup,
+    // but it commits in the same transaction so it never becomes a phantom row.
+    await logAudit(client, {
+      entityType: 'CONTRACT', entityId: contractId, eventType: 'PRICED',
+      actor: actor || SYSTEM_ACTOR,
+      payload: buildPricedPayload({ outputs, priorOutputs }),
+      comment: comment || null,
+    });
 
     return touchParentEntity(client, {
       parentTable: 'contract',

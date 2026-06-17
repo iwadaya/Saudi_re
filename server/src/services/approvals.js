@@ -13,6 +13,7 @@ import { pool } from '../db/pool.js';
 import { logger } from '../lib/logger.js';
 import { logAudit } from './audit.js';
 import { withTransaction as withTxn } from '../db/withTransaction.js';
+import { changeUwStatus } from './workflow.js';
 import { assertLegalTransition, InvalidTransitionError } from '../lib/statusMachine.js';
 import { refreshBenchmarks } from './ldf/benchmark.js';
 
@@ -409,7 +410,7 @@ export async function submitForApproval({ contractId, quoteId, submittedByUserId
       [contractId||null,quoteId||null,resolvedBreachType,submittedByUserId,writtenLinePct||null,
        epiUsd||null,peer1UserId||null,requiredRole,JSON.stringify(approverOptions)]
     );
-    if (contractId) await client.query(`UPDATE public.contract SET uw_status='AWAITING_APPROVAL',status='AWAITING_APPROVAL',updated_at=now() WHERE contract_id=$1`,[contractId]);
+    if (contractId) await changeUwStatus(client, { contractId, to:'AWAITING_APPROVAL', actor:{ id:submittedByUserId, name:submittedByName, role:submittedByRole }, comment });
     await logOfferEvent({contractId,quoteId,eventType:'SUBMITTED',actorUserId:submittedByUserId,actorName:submittedByName,actorRole:submittedByRole,payload:{breachType:resolvedBreachType,requiredRole,epiUsd,peer1UserId},comment,client});
     return res.rows[0]?.offer_id;
   });
@@ -424,6 +425,59 @@ export async function submitForApproval({ contractId, quoteId, submittedByUserId
 
 const httpError = (status, message, code) =>
   Object.assign(new Error(message), code ? { status, code } : { status });
+
+// ── Authoritative approval record ────────────────────────────────────────────
+// approval_decision is the record of truth for WHO approved/declined WHAT:
+// request_id is the offer/quote id (the approval request), decided_by is ALWAYS
+// the verified user UUID. offer_approval_event (logOfferEvent) and contract_approval
+// (the dashboard mirror) are kept in sync, but approval_decision is authoritative.
+
+/**
+ * Resolve a role_code (e.g. 'CU') to its uw_role.role_id UUID, since
+ * approval_decision.decided_by_role is a uuid column. Returns null when it can't
+ * be resolved (demo roster, missing role) — the column is nullable and decided_by
+ * remains the authoritative actor.
+ */
+async function resolveRoleId(db, roleCode) {
+  if (!roleCode) return null;
+  try {
+    const { rows } = await db.query('SELECT role_id FROM public.uw_role WHERE role_code=$1 LIMIT 1', [roleCode]);
+    return rows[0]?.role_id ?? null;
+  } catch { return null; }
+}
+
+/**
+ * Write the authoritative approval_decision row on the transaction client. Upserts
+ * on (request_id, decided_by) so a re-decision updates rather than tripping the
+ * unique constraint. decided_by MUST be the real user UUID.
+ */
+async function recordApprovalDecision(db, { requestId, decidedBy, decidedByRole, decision, comment }) {
+  if (!requestId || !decidedBy) return; // no authoritative key — caller still audits
+  const roleId = await resolveRoleId(db, decidedByRole);
+  await db.query(
+    `INSERT INTO public.approval_decision (request_id, decided_by, decided_by_role, decision, comment)
+     VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (request_id, decided_by)
+       DO UPDATE SET decision=EXCLUDED.decision, decided_by_role=EXCLUDED.decided_by_role,
+                     comment=EXCLUDED.comment, decided_at=now()`,
+    [requestId, decidedBy, roleId, decision, comment || null]
+  );
+}
+
+/**
+ * Mirror a FINALIZED decision into contract_approval, which the dashboard
+ * (routes/home.js) reads for the latest-approver column. Best-effort on the pool,
+ * AFTER the decision transaction commits — approval_decision is authoritative, so
+ * a mirror hiccup must never roll the decision back.
+ */
+async function syncContractApproval({ contractId, requestedBy, decidedByName, decision, comment }) {
+  if (!contractId) return;
+  await pool.query(
+    `INSERT INTO public.contract_approval (contract_id, requested_by, decision, decided_by, decided_at, note)
+     VALUES ($1,$2,$3,$4,now(),$5)`,
+    [contractId, requestedBy || 'SYSTEM', decision, decidedByName || null, comment || null]
+  ).catch(() => {});
+}
 
 // ── Workflow-transition gate ─────────────────────────────────────────────────
 // A privileged state (APPROVED / AWAITING_SIGNED_LINE / SIGNED / BOUND) may be
@@ -774,11 +828,20 @@ async function applyPeerOutcome({ offer, slot, actorUserId, actorName, actorRole
     }
   }
 
+  // 1. Authoritative record of THIS approver's individual decision.
+  await recordApprovalDecision(db, { requestId: offer.offer_id, decidedBy: actorUserId, decidedByRole: actorRole, decision, comment });
+  // 2. Offer status mirror, then the contract transition through changeUwStatus
+  //    (DISPUTE_PENDING / a non-final AWAITING_APPROVAL self-save pass the guard).
   await db.query(`UPDATE public.contract_offer SET status=$2,updated_at=now() WHERE offer_id=$1`, [offer.offer_id, nextStatus]);
   if (contractId) {
-    await db.query(`UPDATE public.contract SET uw_status=$2::public.uw_workflow_status,updated_at=now() WHERE contract_id=$1`, [contractId, nextStatus]);
+    await changeUwStatus(db, { contractId, from: 'AWAITING_APPROVAL', to: nextStatus, actor: { id: actorUserId, name: actorName, role: actorRole }, comment });
   }
   await logOfferEvent({ contractId, quoteId, eventType, actorUserId, actorName, actorRole, payload: { decision, slot, finalDecision, arbiterRequired }, comment, client: db });
+  // 3. Critical APPROVED/DECLINED audit for this decision.
+  await logAudit(db, {
+    entityType: contractId ? 'CONTRACT' : 'QUOTE', entityId: contractId || quoteId, eventType: decision,
+    actor: { id: actorUserId, name: actorName, role: actorRole }, payload: { slot, finalDecision, arbiterRequired }, comment,
+  }, { critical: true });
   return { nextStatus, finalDecision, arbiterRequired, eventType, complete: !!finalDecision };
 }
 
@@ -798,8 +861,15 @@ async function recordArbiterSlot({ offer, contractId, quoteId, actorUserId, acto
     [offer.offer_id, actorUserId, decision, comment || null, nextStatus]
   );
   if (!rows.length) throw httpError(409, 'That dispute was already resolved', 'DISPUTE_RESOLVED');
-  if (contractId) await db.query(`UPDATE public.contract SET uw_status=$2,updated_at=now() WHERE contract_id=$1`, [contractId, nextStatus]);
+  await recordApprovalDecision(db, { requestId: offer.offer_id, decidedBy: actorUserId, decidedByRole: actorRole, decision, comment });
+  if (contractId) {
+    await changeUwStatus(db, { contractId, from: 'DISPUTE_PENDING', to: nextStatus, actor: { id: actorUserId, name: actorName, role: actorRole }, comment });
+  }
   await logOfferEvent({ contractId, quoteId, eventType: decision === 'APPROVED' ? 'ARBITER_APPROVED' : 'ARBITER_DECLINED', actorUserId, actorName, actorRole, payload: { decision }, comment, client: db });
+  await logAudit(db, {
+    entityType: contractId ? 'CONTRACT' : 'QUOTE', entityId: contractId || quoteId, eventType: decision,
+    actor: { id: actorUserId, name: actorName, role: actorRole }, payload: { slot: 'arbiter' }, comment,
+  }, { critical: true });
   return { nextStatus, decision, complete: true };
 }
 
@@ -833,7 +903,9 @@ export async function recordDecision({ offerId, actorUserId, actorName, actorRol
   const quoteId = offer.quote_id || null;
 
   if (slot === 'arbiter') {
-    return withTxn((client) => recordArbiterSlot({ offer, contractId, quoteId, actorUserId, actorName, actorRole, decision, comment, client }));
+    const result = await withTxn((client) => recordArbiterSlot({ offer, contractId, quoteId, actorUserId, actorName, actorRole, decision, comment, client }));
+    await syncContractApproval({ contractId, requestedBy: offer.submitted_by_id, decidedByName: actorName, decision: result.decision, comment });
+    return result;
   }
 
   // ── peer1 / peer2 ──────────────────────────────────────────────────────────
@@ -855,13 +927,19 @@ export async function recordDecision({ offerId, actorUserId, actorName, actorRol
   }
   if (!liveIds.has(String(actorUserId))) throw httpError(403, 'Not an eligible approver for this offer');
 
-  // Atomic slot claim + outcome in ONE transaction: the claim, the status
-  // transition, the event and the critical audit commit together or roll back.
-  return withTxn(async (client) => {
+  // Atomic slot claim + outcome in ONE transaction: the claim, the authoritative
+  // approval_decision, the status transition, the events and the critical audits
+  // commit together or roll back.
+  const result = await withTxn(async (client) => {
     const claimed = await claimPeerSlot({ offerId, slot, actorUserId, decision, comment, client });
     if (!claimed) throw httpError(409, 'That approval slot was just taken', 'SLOT_TAKEN');
     return applyPeerOutcome({ offer, slot, actorUserId, actorName, actorRole, decision, comment, contractId, quoteId, client });
   });
+  // Mirror a finalized decision to contract_approval (dashboard) — best-effort, post-commit.
+  if (result.finalDecision && contractId) {
+    await syncContractApproval({ contractId, requestedBy: offer.submitted_by_id, decidedByName: actorName, decision: result.finalDecision, comment });
+  }
+  return result;
 }
 
 /**
@@ -929,12 +1007,12 @@ export async function approveContract({ contractId, actorUserId, actorName, acto
  * authority → 403.
  */
 export async function markContractSigned({ contractId, actorUserId, actorName, actorRole, signedLinePct }) {
-  await assertWorkflowTransition({ entityType: 'CONTRACT', entityId: contractId, to: 'SIGNED', action: 'SIGN', actorUserId, actorRole });
+  const ctx = await assertWorkflowTransition({ entityType: 'CONTRACT', entityId: contractId, to: 'SIGNED', action: 'SIGN', actorUserId, actorRole });
   await withTxn(async (client) => {
-    await client.query(
-      `UPDATE public.contract SET uw_status='SIGNED',status='SIGNED',signed_line_pct=$2,signed_at=now(),updated_at=now() WHERE contract_id=$1`,
-      [contractId, signedLinePct ?? null]
-    );
+    // changeUwStatus writes uw_status/status='SIGNED' + signed_at + the workflow
+    // event + STATUS_CHANGED audit; signed_line_pct is the only extra column.
+    await changeUwStatus(client, { contractId, from: ctx.from, to: 'SIGNED', actor: { id: actorUserId, name: actorName, role: actorRole } });
+    await client.query(`UPDATE public.contract SET signed_line_pct=$2 WHERE contract_id=$1`, [contractId, signedLinePct ?? null]);
     await client.query(
       `UPDATE public.contract_offer SET status='SIGNED',signed_at=now(),written_line_pct=COALESCE(written_line_pct,$2) WHERE contract_id=$1`,
       [contractId, signedLinePct ?? null]
@@ -954,13 +1032,11 @@ export async function markContractSigned({ contractId, actorUserId, actorName, a
 export async function markNotTakenUp({ contractId, quoteId, actorUserId, actorName, actorRole, reason }) {
   const entityType = contractId ? 'CONTRACT' : 'QUOTE';
   const entityId = contractId || quoteId;
-  await assertWorkflowTransition({ entityType, entityId, action: 'NTU', actorUserId, actorRole });
+  const ctx = await assertWorkflowTransition({ entityType, entityId, action: 'NTU', actorUserId, actorRole });
   await withTxn(async (client) => {
     if (contractId) {
-      await client.query(
-        `UPDATE public.contract SET uw_status='NTU',status='NTU',ntu_reason=$2,ntu_at=now(),updated_at=now() WHERE contract_id=$1`,
-        [contractId, reason ?? null]
-      );
+      await changeUwStatus(client, { contractId, from: ctx.from, to: 'NTU', actor: { id: actorUserId, name: actorName, role: actorRole }, comment: reason ?? null });
+      await client.query(`UPDATE public.contract SET ntu_reason=$2 WHERE contract_id=$1`, [contractId, reason ?? null]);
     } else {
       await client.query(
         `UPDATE public.quote SET status='NTU',ntu_reason=$2,ntu_at=now(),updated_at=now() WHERE quote_id=$1`,
@@ -1012,8 +1088,13 @@ export async function approveQuote({ quoteId, actorUserId, actorName, actorRole,
   }
   await assertWorkflowTransition({ entityType: 'QUOTE', entityId: quoteId, to: 'AWAITING_SIGNED_LINE', actorUserId, decision: ENGINE_TOKEN });
   await withTxn(async (client) => {
+    await recordApprovalDecision(client, { requestId: quoteId, decidedBy: actorUserId, decidedByRole: actorRole, decision: 'APPROVED', comment });
     await client.query(`UPDATE public.quote SET status='AWAITING_SIGNED_LINE', updated_at=now() WHERE quote_id=$1`, [quoteId]);
     await logOfferEvent({ quoteId, eventType: 'APPROVED', actorUserId, actorName, actorRole, payload: { decision: 'APPROVED' }, comment, client });
+    await logAudit(client, {
+      entityType: 'QUOTE', entityId: quoteId, eventType: 'APPROVED',
+      actor: { id: actorUserId, name: actorName, role: actorRole }, payload: { decision: 'APPROVED' }, comment,
+    }, { critical: true });
   });
   // Best-effort denormalised mirror on the quote_offer table — never blocks the action.
   await pool.query(
@@ -1071,11 +1152,11 @@ const RESET_CONTRACT_OFFER = `
 export async function returnToUnderwriter({ contractId, quoteId, actorUserId, actorName, actorRole, reason }) {
   const entityType = contractId ? 'CONTRACT' : 'QUOTE';
   const entityId = contractId || quoteId;
-  await assertWorkflowTransition({ entityType, entityId, action: 'RETURN', actorUserId, actorRole });
+  const ctx = await assertWorkflowTransition({ entityType, entityId, action: 'RETURN', actorUserId, actorRole });
   await withTxn(async (client) => {
     if (contractId) {
       await client.query(`UPDATE public.contract_offer SET ${RESET_CONTRACT_OFFER} WHERE contract_id=$1`, [contractId]);
-      await client.query(`UPDATE public.contract SET uw_status='DRAFT', status='DRAFT', updated_at=now() WHERE contract_id=$1`, [contractId]);
+      await changeUwStatus(client, { contractId, from: ctx.from, to: 'DRAFT', actor: { id: actorUserId, name: actorName, role: actorRole }, comment: reason ?? null });
     } else {
       await client.query(`UPDATE public.quote SET status='DRAFT', updated_at=now() WHERE quote_id=$1`, [quoteId]);
     }
@@ -1101,11 +1182,11 @@ export async function returnToUnderwriter({ contractId, quoteId, actorUserId, ac
 export async function recallOffer({ contractId, quoteId, actorUserId, actorName, actorRole, reason }) {
   const entityType = contractId ? 'CONTRACT' : 'QUOTE';
   const entityId = contractId || quoteId;
-  await assertWorkflowTransition({ entityType, entityId, action: 'RECALL', actorUserId, actorRole });
+  const ctx = await assertWorkflowTransition({ entityType, entityId, action: 'RECALL', actorUserId, actorRole });
   await withTxn(async (client) => {
     if (contractId) {
       await client.query(`UPDATE public.contract_offer SET ${RESET_CONTRACT_OFFER} WHERE contract_id=$1`, [contractId]);
-      await client.query(`UPDATE public.contract SET uw_status='DRAFT', status='DRAFT', updated_at=now() WHERE contract_id=$1`, [contractId]);
+      await changeUwStatus(client, { contractId, from: ctx.from, to: 'DRAFT', actor: { id: actorUserId, name: actorName, role: actorRole }, comment: reason ?? null });
     } else {
       await client.query(`UPDATE public.quote SET status='DRAFT', updated_at=now() WHERE quote_id=$1`, [quoteId]);
     }
