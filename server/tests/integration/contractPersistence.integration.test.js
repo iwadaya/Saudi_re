@@ -150,7 +150,11 @@ describe.skipIf(shouldSkipDb)('integration: contract save and rehydrate every ro
           treaty_type_id: refs.treatyTypeId,
           uw_year: 2026,
           status: 'OFFERED',
-          uw_status: 'APPROVED',
+          // uw_status is omitted on purpose: a header save routes any uw_status
+          // through the changeUwStatus chokepoint, which also syncs the legacy
+          // `status` column — so setting it here would clobber status='OFFERED'.
+          // The contract keeps its default DRAFT workflow state; privileged
+          // states are reached via the approval engine, not a raw header save.
           experience_source: 'TRIANGLE',
           inception_date: '2026-01-01',
           renewal_date: '2027-01-01',
@@ -230,7 +234,7 @@ describe.skipIf(shouldSkipDb)('integration: contract save and rehydrate every ro
 
     const loaded = await jsonOk(await harness.fetchApp('GET', `/api/treaties/${contractId}`), 'load treaty');
     expect(loaded.header.status).toBe('OFFERED');
-    expect(loaded.header.uw_status).toBe('APPROVED');
+    expect(loaded.header.uw_status).toBe('DRAFT');
     expect(loaded.header.contract_description).toBe('full persistence audit treaty');
     expect(loaded.header.alt_contract_id).toBe('EXT-AUDIT-001');
     expect(n(loaded.header.signed_line_pct)).toBeCloseTo(37.5);
