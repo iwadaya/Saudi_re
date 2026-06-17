@@ -135,25 +135,25 @@ export function useNpPricingActions({
     applyQuoteEngineResults,
   ]);
 
-  // Per-scope (Risk OR Cat) engine run for ONE structure — backs the Pricing
-  // Analysis modal's per-scope CALCULATE button. Prices ONLY that scope's ACTIVE
-  // layers (mode RISK/CAT, so calcLayerPricing returns just that component), then
-  // merges its pure burn / Pareto / exposure ROL% via the same applyQuoteEngineResults
-  // path (the other scope's fields are untouched because the result carries no data
-  // for it). Returns a per-component "was anything priced?" summary so the modal can
-  // flag missing inputs ("no loss data — burn not calculated") instead of writing 0.
-  // Does NOT touch the global engine-running state — the modal shows a local
-  // "Calculating…" on the pressed button.
-  const runQuoteCalcScope = useCallback(async (structureIndex, scopeKey) => {
+  // Both-scope engine run for ONE structure — backs the Pricing Analysis modal's
+  // single tab-level CALCULATE button. Prices every layer ACTIVE in either scope
+  // (its own risk/cat flags, screen `mode`), so calcLayerPricing returns risk +
+  // cat together, and merges them in ONE applyQuoteEngineResults dispatch so both
+  // sections' pure burn / Pareto / exposure cells (and Wtd ROL) refresh together.
+  // Returns a per-scope, per-component "was anything priced?" summary so the modal
+  // can flag missing inputs ("no loss data — burn not calculated") on the affected
+  // scope instead of writing 0 (the merge keeps the prior value for a 0 result).
+  // Does NOT touch the global engine-running state — the modal shows one local
+  // "Calculating…" covering both.
+  const runQuoteCalcStructure = useCallback(async (structureIndex) => {
     if (!contractId || !Number.isInteger(structureIndex)) return { ran: false };
-    if (scopeKey !== 'risk' && scopeKey !== 'cat') return { ran: false };
     const structure = clientStructures[structureIndex];
     if (!structure) return { ran: false };
     const scope = structure.id || `str-${structureIndex}`;
     const pricingLayers = [];
     const refs = [];
     (structure.layers || []).forEach((layer, lIdx) => {
-      if (!layer[scopeKey]) return;   // only this scope's ACTIVE layers
+      if (!layer.risk && !layer.cat) return;   // only layers active in SOME scope
       const classOfBusinessIds = selectedCobs
         .filter((cob) => !!getCobFlags(scope, cob.id, structure.layers)[lIdx])
         .map((cob) => cob.id);
@@ -163,35 +163,38 @@ export function useNpPricingActions({
         layer: `S${structureIndex + 1}L${lIdx + 1}`,
         deductible: layer.attachment || layer.deductible,
         egnpi: layer.egnpi || quoteCurve.baseEgnpi || npDetail.estGnpi || npDetail.egnpi || '',
-        riskCover: scopeKey === 'risk',
-        catCover: scopeKey === 'cat',
+        riskCover: !!layer.risk,
+        catCover: !!layer.cat,
         classOfBusinessIds,
       });
     });
-    if (!pricingLayers.length) return { ran: true, layerCount: 0, burn: false, pareto: false, exposure: false };
+    const emptyScope = () => ({ layerCount: 0, burn: false, pareto: false, exposure: false });
+    if (!pricingLayers.length) return { ran: true, risk: emptyScope(), cat: emptyScope() };
     try {
       const results = await calcLayerPricing(
         api,
         contractId,
         pricingLayers,
         { ...npDetail, estGnpi: quoteCurve.baseEgnpi || npDetail.estGnpi || npDetail.egnpi },
-        scopeKey === 'risk' ? 'RISK' : 'CAT',
+        mode,
         quoteMode,
       );
       const byKey = new Map();
-      let burn = false; let pareto = false; let exposure = false;
+      const summary = { risk: emptyScope(), cat: emptyScope() };
       results.forEach((result) => {
         const key = refs[result.idx];
         if (key) byKey.set(key, result);
-        const comp = result[scopeKey];
-        if (comp) {
-          if (toN(comp.pureBurn) > 0) burn = true;
-          if (toN(comp.pareto) > 0) pareto = true;
-          if (toN(comp.exposureRating) > 0) exposure = true;
-        }
+        ['risk', 'cat'].forEach((sk) => {
+          const comp = result[sk];
+          if (!comp) return;
+          summary[sk].layerCount += 1;
+          if (toN(comp.pureBurn) > 0) summary[sk].burn = true;
+          if (toN(comp.pareto) > 0) summary[sk].pareto = true;
+          if (toN(comp.exposureRating) > 0) summary[sk].exposure = true;
+        });
       });
       applyQuoteEngineResults(byKey);
-      return { ran: true, layerCount: pricingLayers.length, burn, pareto, exposure };
+      return { ran: true, ...summary };
     } catch (e) {
       // Surface the failure through the returned summary (the modal renders it as an
       // inline note) rather than a console call — keeps the screens console budget flat.
@@ -204,6 +207,7 @@ export function useNpPricingActions({
     getCobFlags,
     quoteCurve.baseEgnpi,
     npDetail,
+    mode,
     quoteMode,
     applyQuoteEngineResults,
   ]);
@@ -567,7 +571,7 @@ export function useNpPricingActions({
 
   return {
     runQuoteCalcEngine,
-    runQuoteCalcScope,
+    runQuoteCalcStructure,
     runCalcEngine,
     save,
     doSubmitForApproval,

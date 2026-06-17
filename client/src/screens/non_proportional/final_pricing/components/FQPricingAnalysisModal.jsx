@@ -81,7 +81,7 @@ const G = {
  *   contractId?: string,   // reserved for the Implied · Country/Region/Global columns (next prompt)
  *   cobIds?: string[],     // reserved (peer fetch) for the implied-market columns
  *   runQuoteCalcEngine?: (structureIndex?: number | null) => void,
- *   runQuoteCalcScope?: (structureIndex: number, scopeKey: 'risk' | 'cat') => Promise<{ ran: boolean, layerCount?: number, burn?: boolean, pareto?: boolean, exposure?: boolean, error?: string }>,
+ *   runQuoteCalcStructure?: (structureIndex: number) => Promise<{ ran: boolean, risk?: { layerCount: number, burn: boolean, pareto: boolean, exposure: boolean }, cat?: { layerCount: number, burn: boolean, pareto: boolean, exposure: boolean }, error?: string }>,
  *   calcEngineRunning?: boolean,
  *   runningStructures?: Record<string, boolean>,
  *   calcEngineError?: string,
@@ -100,7 +100,7 @@ export default function FQPricingAnalysisModal({
   contractId,
   cobIds,
   runQuoteCalcEngine,
-  runQuoteCalcScope,
+  runQuoteCalcStructure,
   calcEngineRunning,
   runningStructures,
   calcEngineError,
@@ -113,11 +113,13 @@ export default function FQPricingAnalysisModal({
   const [tab, setTab] = useState('pricing');
   // Per-scope "Final Price" modal (null = closed, else 'risk' | 'cat').
   const [finalPriceScope, setFinalPriceScope] = useState(null);
-  // Per-scope CALCULATE state: { risk?: { running, note }, cat?: { running, note } }.
-  // Driven only by the per-scope Calculate button — the underwriter controls when
-  // the engine overwrites the locked component cells (weights / Final Price never
-  // trigger it). `note` flags components the engine couldn't price (missing inputs).
-  const [scopeCalc, setScopeCalc] = useState({});
+  // CALCULATE state — one tab-level run covering BOTH scopes. `calculating` is the
+  // single in-flight flag; `scopeNotes` ({ risk?, cat? }) flags components the
+  // engine couldn't price (missing inputs) per scope. Driven only by the Calculate
+  // button — the underwriter controls when the engine overwrites the locked
+  // component cells (weight / Final Price edits never trigger it).
+  const [calculating, setCalculating] = useState(false);
+  const [scopeNotes, setScopeNotes] = useState({});
   // Published severity fits (one per scope) so the FrequencySimPanel can run
   // the Monte-Carlo off the same losses / threshold / family the fit shows.
   const [riskSevFit, setRiskSevFit] = useState(null);
@@ -180,7 +182,7 @@ export default function FQPricingAnalysisModal({
   const [autoRan, setAutoRan] = useState(false);
   // Reset the one-shot guard when the modal closes so the next open re-evaluates.
   useEffect(() => {
-    if (!modalOpen) { autoRunKeyRef.current = null; setAutoRan(false); setScopeCalc({}); }
+    if (!modalOpen) { autoRunKeyRef.current = null; setAutoRan(false); setCalculating(false); setScopeNotes({}); }
   }, [modalOpen]);
   useEffect(() => {
     if (!modalOpen || !isQuote || typeof runQuoteCalcEngine !== 'function') return;
@@ -265,30 +267,38 @@ export default function FQPricingAnalysisModal({
   const groupTh = (bg, underline) => ({ ...th, background: bg, borderBottom: `2px solid ${underline}` });
   const tabBtn = (active) => ({ padding: '10px 16px', background: active ? 'rgba(0,212,255,0.08)' : 'transparent', border: 'none', borderBottom: active ? '2px solid #00d4ff' : '2px solid transparent', color: active ? '#00d4ff' : 'rgba(226,232,240,0.65)', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', cursor: 'pointer' });
 
-  // Per-scope CALCULATE: run the canonical engine for THIS scope's active layers
-  // and write the resulting pure burn / Pareto / exposure ROL% into the locked
-  // cells (the merge re-blends, so Blend / Wtd ROL update). The components only
-  // change here (or on the on-open auto-run) — never on a weight / Final Price
-  // edit. Missing inputs surface an inline note rather than writing 0 silently.
-  const handleCalculate = async (scopeKey) => {
-    if (typeof runQuoteCalcScope !== 'function' || !Number.isInteger(sIdx)) return;
-    setScopeCalc((prev) => ({ ...prev, [scopeKey]: { running: true, note: '' } }));
-    let note = '';
+  // Per-scope missing-input note from a Calculate run's summary. A scope with no
+  // active layers gets no note; otherwise list the components the engine couldn't
+  // price (so the cell keeps its prior value rather than showing a silent 0).
+  const noteFromScope = (s) => {
+    if (!s || !s.layerCount) return '';
+    const missing = [];
+    if (!s.burn) missing.push('no loss data — pure burn not calculated');
+    if (!s.pareto) missing.push('no Pareto fit — Pareto not calculated');
+    if (!s.exposure) missing.push('no exposure data — exposure not calculated');
+    return missing.join('; ');
+  };
+
+  // ONE tab-level CALCULATE: run the canonical engine for BOTH scopes' active
+  // layers in a single action and write the resulting pure burn / Pareto /
+  // exposure ROL% into the locked cells (the merge re-blends, so both Wtd ROL
+  // readouts update). The components change ONLY here (or on the on-open auto-run)
+  // — never on a weight / Final Price edit. Missing inputs for a scope surface an
+  // inline note on that scope; the other scope still calculates.
+  const handleCalculateAll = async () => {
+    if (typeof runQuoteCalcStructure !== 'function' || !Number.isInteger(sIdx)) return;
+    setCalculating(true);
+    setScopeNotes({});
     try {
-      const r = await runQuoteCalcScope(sIdx, scopeKey);
+      const r = await runQuoteCalcStructure(sIdx);
       if (!r || r.ran === false) {
-        note = r && r.error ? `Calculation failed: ${r.error}` : '';
-      } else if (!r.layerCount) {
-        note = 'No active layers in this scope to calculate.';
+        const msg = r && r.error ? `Calculation failed: ${r.error}` : '';
+        setScopeNotes({ risk: msg, cat: msg });
       } else {
-        const missing = [];
-        if (!r.burn) missing.push('no loss data — pure burn not calculated');
-        if (!r.pareto) missing.push('no Pareto fit — Pareto not calculated');
-        if (!r.exposure) missing.push('no exposure data — exposure not calculated');
-        note = missing.join('; ');
+        setScopeNotes({ risk: noteFromScope(r.risk), cat: noteFromScope(r.cat) });
       }
     } finally {
-      setScopeCalc((prev) => ({ ...prev, [scopeKey]: { running: false, note } }));
+      setCalculating(false);
     }
   };
 
@@ -311,7 +321,7 @@ export default function FQPricingAnalysisModal({
     const COLW = [52, 56, 110, 110, 120, 80, 101, 97, 88, 97, 86, 92, 86, 84, 96, 96, 96, 96, 114, 88, 92, 180];
     const TABLE_MIN_W = COLW.reduce((s, w) => s + w, 0);
     const disabledByMode = scopeKey === 'risk' ? riskDisabled : catDisabled;
-    const calc = scopeCalc[scopeKey] || {};
+    const scopeNote = scopeNotes[scopeKey];
     // Blend uses THIS row's own weights (Wt Burn/Pareto/Exp columns), divided
     // by the actual weight sum so it stays valid even if they don't total 100.
     const blendOf = (layer) => {
@@ -360,16 +370,6 @@ export default function FQPricingAnalysisModal({
             <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.75)', fontWeight: 750 }}>Wtd ROL {fmtPct(componentTotals(scopeKey).wtdRol)}</div>
             <button
               type="button"
-              data-testid={`fq-calculate-${scopeKey}`}
-              onClick={() => handleCalculate(scopeKey)}
-              disabled={!!calc.running}
-              title="Run the actuarial engine for this scope's active layers and refresh pure burn / Pareto / exposure"
-              style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid rgba(56,189,248,0.55)', background: 'rgba(56,189,248,0.12)', color: '#38bdf8', fontSize: 10, fontWeight: 850, letterSpacing: '.08em', textTransform: 'uppercase', cursor: calc.running ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: calc.running ? 0.7 : 1 }}
-            >
-              {calc.running ? 'Calculating…' : 'Calculate'}
-            </button>
-            <button
-              type="button"
               data-testid={`fq-final-price-open-${scopeKey}`}
               onClick={() => setFinalPriceScope(scopeKey)}
               style={{ padding: '5px 12px', borderRadius: 8, border: `1px solid ${scope.color}66`, background: `${scope.color}1f`, color: scope.color, fontSize: 10, fontWeight: 850, letterSpacing: '.08em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap' }}
@@ -380,9 +380,9 @@ export default function FQPricingAnalysisModal({
         </div>
         {/* Missing-input note from the last Calculate — flags components the engine
             couldn't price (no selected losses / no profiles) instead of writing 0. */}
-        {calc.note && (
+        {scopeNote && (
           <div data-testid={`fq-calc-note-${scopeKey}`} style={{ padding: '6px 14px', fontSize: 10, lineHeight: 1.5, color: 'rgba(251,191,36,0.95)', background: 'rgba(245,158,11,0.08)', borderBottom: '1px solid rgba(245,158,11,0.2)' }}>
-            {calc.note}
+            {scopeNote}
           </div>
         )}
         {/* Weights are now per-row columns (Wt Burn/Pareto/Exp) — no top blender.
@@ -609,6 +609,27 @@ export default function FQPricingAnalysisModal({
         <div className="bm-modal-body" style={{ minHeight: 0, height: '100%', maxHeight: 'none', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 12, padding: '18px 20px' }}>
           {tab === 'pricing' && (
             <>
+              {/* ONE tab-level Calculate — runs BOTH Risk + Cat in a single action
+                  (not per-section). Pure burn / Pareto / exposure are model outputs;
+                  they refresh only here (or the on-open auto-run), so the underwriter
+                  controls the overwrite. Weight / Final Price edits never need it. */}
+              {layers.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.7)', lineHeight: 1.45 }}>
+                    Pure burn, Pareto and exposure are model outputs. Run the engine to refresh both the Risk and Cat sections from the latest losses, Pareto params and profiles.
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="fq-calculate-all"
+                    onClick={handleCalculateAll}
+                    disabled={calculating}
+                    title="Run the actuarial engine for every active Risk and Cat layer, then re-blend both sections"
+                    style={{ padding: '7px 16px', borderRadius: 8, border: '1px solid rgba(56,189,248,0.55)', background: 'rgba(56,189,248,0.14)', color: '#38bdf8', fontSize: 11, fontWeight: 850, letterSpacing: '.08em', textTransform: 'uppercase', cursor: calculating ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: calculating ? 0.7 : 1 }}
+                  >
+                    {calculating ? 'Calculating…' : 'Calculate'}
+                  </button>
+                </div>
+              )}
               {showCalculating && (
                 <div data-testid="fq-analysis-calculating" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(0,212,255,0.08)', border: '1px solid rgba(0,212,255,0.28)', color: '#7dd3fc', fontSize: 11, fontWeight: 700, letterSpacing: '.04em' }}>
                   <span aria-hidden="true">⟳</span> Calculating pure burn &amp; exposure…
