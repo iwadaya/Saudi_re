@@ -41,13 +41,6 @@ export function fmtPctPoints(n, decimals = 2) {
   return `${v.toFixed(decimals)}%`;
 }
 
-export function formatNumber(v) {
-  if (v === '' || v === null || v === undefined) return '';
-  const n = parseFloat(String(v).replace(/,/g, ''));
-  if (isNaN(n)) return '';
-  return n.toLocaleString('en-GB');
-}
-
 export function sanitizeNumber(v) {
   let s = String(v ?? '').trim();
   if (!s) return '';

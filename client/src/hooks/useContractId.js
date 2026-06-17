@@ -101,9 +101,4 @@ export function setActiveFacRiskId(id, opts = {}) {
   }
 }
 
-export function clearActiveFacRiskId() {
-  safeRemove(ACTIVE_FAC_RISK_ID);
-  safeRemove(FAC_QUOTE_MODE);
-}
-
 export default useContractId;

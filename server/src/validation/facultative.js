@@ -256,14 +256,6 @@ export const facSubmitForApprovalSchema = z.object({
   comment: optionalText,
 }).passthrough();
 
-/** POST /decline — reason is mandatory, min 5 chars after trimming. */
-export const facDeclineSchema = z.object({
-  reason: z.preprocess(
-    (v) => (v == null ? '' : String(v).trim()),
-    z.string().min(5, 'reason must be at least 5 characters'),
-  ),
-}).passthrough();
-
 /** POST /bind — effective_date optional, in ISO YYYY-MM-DD form. */
 export const facBindSchema = z.object({
   effective_date: isoDate,
