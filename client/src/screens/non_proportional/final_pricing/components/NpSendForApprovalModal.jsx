@@ -191,7 +191,7 @@ export default function NpSendForApprovalModal({
                       <th style={th}>EGNPI</th>
                       <th style={th}>Rate</th>
                       <th style={th}>Earned Premium</th>
-                      <th style={th}>MDP %</th>
+                      <th style={{ ...th, width: 88, minWidth: 88 }}>MDP %</th>
                       <th style={th}>MDP Amount</th>
                       <th style={th}>UW ROL</th>
                     </tr>
@@ -208,7 +208,7 @@ export default function NpSendForApprovalModal({
                         <td style={td}>{fmtMoney(c.egnpi)}</td>
                         <td style={td}>{fmtPct(c.rate)}</td>
                         <td style={td}>{fmtMoney(c.earnedPremium)}</td>
-                        <td style={{ ...td, padding: '4px 6px' }}>
+                        <td style={{ ...td, width: 88, minWidth: 88, padding: '4px 6px' }}>
                           <FQPctCell value={String(c.mdpPct)} onChange={(v) => onMdpPctChange(lIdx, c, v)} />
                         </td>
                         <td style={td}>{fmtMoney(c.mdpAmount)}</td>
