@@ -62,7 +62,7 @@ const percentile = (sorted, p) => {
   return sorted[idx];
 };
 
-export default function SeverityFitPanel({ scopeKey, structure, sIdx, contractId, isQuote, updateClientStructureLayer }) {
+export default function SeverityFitPanel({ scopeKey, structure, sIdx, contractId, isQuote, updateClientStructureLayer, onFitChange }) {
   const scope = QUOTE_COMPONENT_SCOPES[scopeKey];
   const accent = scope.color;
   const lossType = scopeKey === 'risk' ? 'large' : 'cat';
@@ -160,6 +160,13 @@ export default function SeverityFitPanel({ scopeKey, structure, sIdx, contractId
       ks: ksStatistic(severities, family, pNum, thr),
     };
   }, [pNum, severities, threshold, family]);
+
+  // Publish the fit inputs upward so the FrequencySimPanel can run the
+  // Monte-Carlo off the same losses / threshold / family the user sees here.
+  useEffect(() => {
+    if (typeof onFitChange !== 'function') return;
+    onFitChange({ scopeKey, family, threshold: toN(threshold), severities, years, n: fit?.n ?? 0 });
+  }, [onFitChange, scopeKey, family, threshold, severities, years, fit]);
 
   const onThreshold = (v) => { touchedRef.current = true; setThreshold(v.replace(/[^0-9.]/g, '')); };
   const onFamily = (k) => { touchedRef.current = true; setFamily(k); };

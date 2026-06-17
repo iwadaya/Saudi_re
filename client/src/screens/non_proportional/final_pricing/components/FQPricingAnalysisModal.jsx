@@ -15,6 +15,7 @@ import { api } from '../../../../api';
 import { FQPctCell, FQReadCell } from './FQCells.jsx';
 import FQFinalPriceModal from './FQFinalPriceModal.jsx';
 import SeverityFitPanel from './SeverityFitPanel.jsx';
+import FrequencySimPanel from './FrequencySimPanel.jsx';
 
 const TOP_TABS = [
   { k: 'pricing', label: 'Pricing Analysis' },
@@ -75,6 +76,10 @@ export default function FQPricingAnalysisModal({
   const [tab, setTab] = useState('pricing');
   // Per-scope "Final Price" modal (null = closed, else 'risk' | 'cat').
   const [finalPriceScope, setFinalPriceScope] = useState(null);
+  // Published severity fits (one per scope) so the FrequencySimPanel can run
+  // the Monte-Carlo off the same losses / threshold / family the fit shows.
+  const [riskSevFit, setRiskSevFit] = useState(null);
+  const [catSevFit, setCatSevFit] = useState(null);
   // ── Peer pools per scope → power-law fits for the Implied · Country/Region/
   //    Global columns (same fits the benchmark modal uses). Fetched on open and
   //    whenever contractId/cobIds change; failures degrade to an empty pool. ──
@@ -603,24 +608,32 @@ export default function FQPricingAnalysisModal({
                 </div>
               )}
               {layers.length > 0 && showRisk && (
-                <SeverityFitPanel
-                  scopeKey="risk"
-                  structure={structure}
-                  sIdx={sIdx}
-                  contractId={contractId}
-                  isQuote={isQuote}
-                  updateClientStructureLayer={updateClientStructureLayer}
-                />
+                <>
+                  <SeverityFitPanel
+                    scopeKey="risk"
+                    structure={structure}
+                    sIdx={sIdx}
+                    contractId={contractId}
+                    isQuote={isQuote}
+                    updateClientStructureLayer={updateClientStructureLayer}
+                    onFitChange={setRiskSevFit}
+                  />
+                  <FrequencySimPanel scopeKey="risk" structure={structure} sevFit={riskSevFit} />
+                </>
               )}
               {layers.length > 0 && showCat && (
-                <SeverityFitPanel
-                  scopeKey="cat"
-                  structure={structure}
-                  sIdx={sIdx}
-                  contractId={contractId}
-                  isQuote={isQuote}
-                  updateClientStructureLayer={updateClientStructureLayer}
-                />
+                <>
+                  <SeverityFitPanel
+                    scopeKey="cat"
+                    structure={structure}
+                    sIdx={sIdx}
+                    contractId={contractId}
+                    isQuote={isQuote}
+                    updateClientStructureLayer={updateClientStructureLayer}
+                    onFitChange={setCatSevFit}
+                  />
+                  <FrequencySimPanel scopeKey="cat" structure={structure} sevFit={catSevFit} />
+                </>
               )}
             </>
           )}
