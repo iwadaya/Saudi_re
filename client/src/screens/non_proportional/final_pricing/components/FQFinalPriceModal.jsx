@@ -9,23 +9,12 @@
 import { useState, useEffect } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
 import { toN } from '../formatters.js';
-import { QUOTE_COMPONENT_SCOPES } from '../fqQuoteMath.js';
+import { QUOTE_COMPONENT_SCOPES, reinstLabel } from '../fqQuoteMath.js';
 import { FQPctCell } from './FQCells.jsx';
 
 // Bare numbers — no currency code (matches the Pricing Analysis tables).
 const fmtNum = (n) => (Number.isFinite(n) && n > 0 ? formatWithCommas(String(Math.round(n))) : '—');
 const fmtPct = (n, dp = 2) => (n != null && Number.isFinite(n) && n > 0 ? `${n.toFixed(dp)}%` : '—');
-
-// "{count}@{pct}%" (e.g. "1@100%"); "Unlimited" for the UNLIMITED sentinel;
-// "—" when there are no reinstatements. Exported for reuse by the pricing-
-// analysis modal's combined per-layer table.
-export const reinstLabel = (count, pct) => {
-  if (String(count ?? '').trim().toUpperCase() === 'UNLIMITED') return 'Unlimited';
-  const n = toN(count);
-  if (!(n > 0)) return '—';
-  const p = toN(pct);
-  return `${Math.round(n)}@${Number.isInteger(p) ? p : Number(p.toFixed(2))}%`;
-};
 
 /**
  * @param {{

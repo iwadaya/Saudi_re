@@ -544,6 +544,44 @@ export const normalizeQuoteStructures = (structures = [], opts = {}) => (
   (Array.isArray(structures) ? structures : []).map((structure, index) => normalizeQuoteStructure(structure, index, opts))
 );
 
+// "{count}@{pct}%" (e.g. "1@100%"); "Unlimited" for the UNLIMITED sentinel;
+// "—" when there are no reinstatements.
+export const reinstLabel = (count, pct) => {
+  if (String(count ?? '').trim().toUpperCase() === 'UNLIMITED') return 'Unlimited';
+  const n = toN(count);
+  if (!(n > 0)) return '—';
+  const p = toN(pct);
+  return `${Math.round(n)}@${Number.isInteger(p) ? p : Number(p.toFixed(2))}%`;
+};
+
+// Combined per-layer pricing — fuse the risk + cat components of ONE layer:
+// ADD the active components' ROLs (risk-only → risk, cat-only → cat, both →
+// sum), then derive premium and rate. Reuses quoteComponentDerived — no pricing
+// is recomputed. Returns null for layers with no active component so callers can
+// skip them. Shared by the Pricing Analysis Total Section and the Send-for-
+// Approval review so both fuse risk+cat identically.
+export const layerCombinedPricing = (layer = {}) => {
+  const riskActive = !!layer.risk;
+  const catActive = !!layer.cat;
+  if (!riskActive && !catActive) return null;
+  const riskRol = riskActive ? quoteComponentDerived(layer, 'risk').totalRol : 0;
+  const catRol = catActive ? quoteComponentDerived(layer, 'cat').totalRol : 0;
+  const uwRol = riskRol + catRol;
+  const limit = toN(layer.limit);
+  const egnpi = toN(layer.egnpi);
+  const earnedPremium = limit * uwRol / 100;
+  const rate = egnpi > 0 ? (earnedPremium / egnpi) * 100 : 0;
+  return {
+    limit,
+    deductible: layer.deductible ?? layer.attachment,
+    egnpi,
+    rate,
+    earnedPremium,
+    uwRol,
+    reinst: reinstLabel(layer.reinstatements, layer.pctReinst),
+  };
+};
+
 export const updateQuotePricingLayer = (layer = {}, field, value, opts = {}) => {
   const autoUw = quoteLayerAutoTracksUw(layer);
   let next = { ...layer, [field]: value };
