@@ -58,6 +58,25 @@
   justify-content: center !important;
 }
 
+/* ── Pricing-Analysis modal: flat editable component cells ──
+   The data-entry inputs (Pure Burn / Pareto / Exposure / Wt Burn / Wt Pareto /
+   Wt Exp / % Reinst. / UW Price) drop their pill border for a flat look — they
+   stay fully editable (still normal <input>s, no readOnly/disabled). Read-only /
+   derived cells (.bm-cell--display: Implied, Blend, totals) and every other
+   table / modal are unaffected (scoped to .fq-pa-modal, input only). A thin
+   underline marks the focused cell instead of a full border. */
+.fq-pa-modal input.bm-cell {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+.fq-pa-modal input.bm-cell:focus {
+  outline: none;
+  border: none;
+  background: transparent;
+  box-shadow: inset 0 -1px 0 rgba(0, 232, 184, 0.5);
+}
+
 .np-final-shell--quote .bm-np-th--cob,
 .np-final-shell--quote .bm-np-td--cob,
 .np-final-shell--quote .tm-col-metric {

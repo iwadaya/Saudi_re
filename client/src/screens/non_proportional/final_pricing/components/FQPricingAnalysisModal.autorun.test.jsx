@@ -1,10 +1,12 @@
 // FQPricingAnalysisModal.autorun.test.jsx
 //
-// Part 3 of the quote-mode pure-burn / exposure task: the modal must run the
-// shared actuarial engine ON OPEN when a quote structure has no engine-computed
-// pricing yet, so the risk/cat cells aren't blank. Guards: don't re-run when a
-// calc is already in flight or results already exist; show "Calculating…" while
-// it runs; show an inline hint when there are no saved inputs to price from.
+// Part 3 of the quote-mode pure-burn / exposure task: the modal SEEDS the
+// risk/cat component cells from the shared actuarial engine ON OPEN — they are
+// model values, so opening re-runs the engine to reflect the latest selected
+// losses / saved params (manual overrides are protected in the merge, not by
+// skipping the run). Guards: don't re-run when a calc is already in flight;
+// show "Calculating…" while it runs; show an inline hint when there are no
+// saved inputs to price from.
 
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -54,15 +56,17 @@ describe('FQPricingAnalysisModal — auto-run engine on open', () => {
     expect(runQuoteCalcEngine).toHaveBeenCalledTimes(1);
   });
 
-  it('does NOT run when the structure already has engine results', async () => {
+  it('re-seeds on open even when prior results exist (recompute from latest losses/params)', async () => {
     const runQuoteCalcEngine = vi.fn();
     renderModal({
       runQuoteCalcEngine,
       clientStructures: [{ id: 'str-0', layers: [baseLayer({ riskPureBurn: '4.00%', riskExposure: '5.00%' })] }],
     });
-    // give effects a tick to (not) fire
-    await new Promise((r) => setTimeout(r, 0));
-    expect(runQuoteCalcEngine).not.toHaveBeenCalled();
+    // The component cells are MODEL values — opening re-runs the engine so they
+    // track the latest selected losses / saved params. (Manual overrides are
+    // protected in mergeQuoteEngineResult, not by skipping the run.)
+    await waitFor(() => expect(runQuoteCalcEngine).toHaveBeenCalledWith(0));
+    expect(runQuoteCalcEngine).toHaveBeenCalledTimes(1);
   });
 
   it('does NOT run when a calc for this structure is already in flight, and shows Calculating…', async () => {
