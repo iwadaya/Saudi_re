@@ -8,12 +8,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
 import { toN } from '../formatters.js';
-import { QUOTE_COMPONENT_SCOPES, quoteComponentDerived } from '../fqQuoteMath.js';
+import { QUOTE_COMPONENT_SCOPES, quoteComponentDerived, layerCombinedPricing } from '../fqQuoteMath.js';
 import { fqPriceLayerOnCurve, fqFitPowerLaw, fqPeerToXY, fqGeomean } from '../fqHelpers.js';
 import { REINSTATEMENT_OPTIONS } from '../../reinstatementOptions';
 import { api } from '../../../../api';
 import { FQPctCell, FQReadCell } from './FQCells.jsx';
-import FQFinalPriceModal, { reinstLabel } from './FQFinalPriceModal.jsx';
+import FQFinalPriceModal from './FQFinalPriceModal.jsx';
 
 const TOP_TABS = [
   { k: 'pricing', label: 'Pricing Analysis' },
@@ -209,32 +209,9 @@ export default function FQPricingAnalysisModal({
     }, 0);
     return { activeCount: activeLayers.length, totalLimit, premium, wtdRol: totalLimit > 0 ? (premium / totalLimit) * 100 : 0 };
   };
-  // ── Combined per-layer pricing for the Total Section ──
-  // Fuse the risk + cat components of ONE layer: ADD the active components'
-  // ROLs (risk-only → risk, cat-only → cat, both → sum), then derive premium
-  // and rate. Reuses quoteComponentDerived — no pricing is recomputed here.
-  // Returns null for layers with no active component (skipped from the table).
-  const layerCombined = (layer) => {
-    const riskActive = !!layer.risk;
-    const catActive = !!layer.cat;
-    if (!riskActive && !catActive) return null;
-    const riskRol = riskActive ? quoteComponentDerived(layer, 'risk').totalRol : 0;
-    const catRol = catActive ? quoteComponentDerived(layer, 'cat').totalRol : 0;
-    const uwRol = riskRol + catRol;
-    const limit = toN(layer.limit);
-    const egnpi = toN(layer.egnpi);
-    const earnedPremium = limit * uwRol / 100;
-    const rate = egnpi > 0 ? (earnedPremium / egnpi) * 100 : 0;
-    return {
-      limit,
-      deductible: layer.deductible ?? layer.attachment,
-      egnpi,
-      rate,
-      earnedPremium,
-      uwRol,
-      reinst: reinstLabel(layer.reinstatements, layer.pctReinst),
-    };
-  };
+  // Combined per-layer pricing (risk + cat fused) for the Total Section —
+  // shared with the Send-for-Approval review via layerCombinedPricing.
+  const layerCombined = layerCombinedPricing;
 
   const th = { padding: '8px 10px', textAlign: 'right', fontSize: 9, fontWeight: 850, letterSpacing: '.11em', color: 'rgba(148,163,184,0.68)', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap' };
   const td = { padding: '7px 8px', textAlign: 'right', verticalAlign: 'middle' };

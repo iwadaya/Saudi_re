@@ -8,7 +8,7 @@
 // out, no logic changes. All state arrives through the `pricing`
 // reducer surface (hooks/useNpPricingState.ts).
 
-import React, { useId } from 'react';
+import React, { useId, useState } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
 import { toN } from '../formatters.js';
 import { FQ_STRUCTURE_COLORS, fqGeomean, fqPriceLayerOnCurve } from '../fqHelpers.js';
@@ -19,6 +19,7 @@ import {
   QM_MAX_STRUCTURES,
 } from '../fqQuoteMath.js';
 import FQCobSelectModal from './FQCobSelectModal.jsx';
+import NpSendForApprovalModal from './NpSendForApprovalModal.jsx';
 import { FQNumCell, FQPctCell, FQReadCell } from './FQCells.jsx';
 import FQCobParticipationTable from './FQCobParticipationTable.jsx';
 
@@ -62,10 +63,12 @@ export default function FQQuotePricingPanel({
     quoteCurve, expLayers, numExpLayers, applyNumExpLayers, editExpLayer,
     clientStructures, approvedStructures, setApprovedQuoteStructure,
     addQuoteStructure, addClientStructureLayer, removeClientStructureLayer,
-    removeClientStructure, updateClientStructureLayer,
+    removeClientStructure, updateClientStructureLayer, updateClientStructure,
     openBenchmark, openPricingGraph, openPricingAnalysis,
     getCobFlags, getCobUwLimit, updateUwLimit, setCobToggle,
   } = pricing;
+  // Which structure (if any) has the read-only "Send for Approval" review open.
+  const [sendApprovalIdx, setSendApprovalIdx] = useState(null);
 
   return (
                 /* ═══════ QUOTE PRICING — QuickBenchmark-style topbar ═══════
@@ -345,21 +348,15 @@ export default function FQQuotePricingPanel({
                               >
                                 Market Analysis
                               </button>
-                              <label
+                              <button
                                 className={`bbg-ib ${isApprovedStructure ? 'bbg-ib--green' : 'bbg-ib--ghost'}`}
-                                style={{ ...quoteInsightButtonStyle, gap: 7, cursor: 'pointer' }}
-                                title="Include this structure in the Chief Underwriter approval submission"
+                                style={quoteInsightButtonStyle}
+                                aria-label={`Send Structure ${sIdx + 1} for Approval`}
+                                title="Review this structure and add it to the Chief Underwriter approval submission"
+                                onClick={() => setSendApprovalIdx(sIdx)}
                               >
-                                <input
-                                  type="checkbox"
-                                  className="np-check"
-                                  aria-label={`Send Structure ${sIdx + 1} for Approval`}
-                                  checked={isApprovedStructure}
-                                  onChange={(e) => setApprovedQuoteStructure(sIdx, e.target.checked)}
-                                  style={{ margin: 0 }}
-                                />
-                                Send for Approval
-                              </label>
+                                {isApprovedStructure ? '✓ In Submission' : 'Send for Approval'}
+                              </button>
                             </div>
                             <button
                               className="bbg-ib bbg-ib--cyan"
@@ -548,6 +545,21 @@ export default function FQQuotePricingPanel({
                       onClose={() => setShowCobModal(false)}
                     />
                   )}
+
+                  <NpSendForApprovalModal
+                    open={sendApprovalIdx != null}
+                    sIdx={sendApprovalIdx}
+                    structure={sendApprovalIdx != null ? clientStructures[sendApprovalIdx] : null}
+                    currency={currency}
+                    selectedCobs={selectedCobs}
+                    getCobFlags={getCobFlags}
+                    getCobUwLimit={getCobUwLimit}
+                    approvedStructures={approvedStructures}
+                    setApprovedQuoteStructure={setApprovedQuoteStructure}
+                    updateClientStructure={updateClientStructure}
+                    save={save}
+                    onClose={() => setSendApprovalIdx(null)}
+                  />
                 </>
   );
 }

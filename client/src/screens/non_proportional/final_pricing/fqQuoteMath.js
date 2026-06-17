@@ -530,6 +530,12 @@ export const normalizeQuoteStructure = (structure = {}, index = 0, opts = {}) =>
   return {
     ...structure,
     id: structure.id || structure.structureId || `str-${index}`,
+    // Per-structure quote type (LEAD/INDICATIVE) + a single lead/follow line
+    // "across" the structure (not per layer). Defaults keep legacy/loaded
+    // structures consistent; they round-trip via the save path.
+    quoteType: structure.quoteType === 'INDICATIVE' ? 'INDICATIVE' : 'LEAD',
+    leadLinePct: structure.leadLinePct ?? '',
+    followLinePct: structure.followLinePct ?? '',
     layers: cascadeQuoteAttachments(layers.map((layer, layerIndex) => normalizeQuotePricingLayer(layer, layerIndex, opts))),
   };
 };
@@ -537,6 +543,63 @@ export const normalizeQuoteStructure = (structure = {}, index = 0, opts = {}) =>
 export const normalizeQuoteStructures = (structures = [], opts = {}) => (
   (Array.isArray(structures) ? structures : []).map((structure, index) => normalizeQuoteStructure(structure, index, opts))
 );
+
+// "{count}@{pct}%" (e.g. "1@100%"); "Unlimited" for the UNLIMITED sentinel;
+// "—" when there are no reinstatements.
+export const reinstLabel = (count, pct) => {
+  if (String(count ?? '').trim().toUpperCase() === 'UNLIMITED') return 'Unlimited';
+  const n = toN(count);
+  if (!(n > 0)) return '—';
+  const p = toN(pct);
+  return `${Math.round(n)}@${Number.isInteger(p) ? p : Number(p.toFixed(2))}%`;
+};
+
+// Combined per-layer pricing — fuse the risk + cat components of ONE layer:
+// ADD the active components' ROLs (risk-only → risk, cat-only → cat, both →
+// sum), then derive premium and rate. Reuses quoteComponentDerived — no pricing
+// is recomputed. Returns null for layers with no active component so callers can
+// skip them. Shared by the Pricing Analysis Total Section and the Send-for-
+// Approval review so both fuse risk+cat identically.
+export const layerCombinedPricing = (layer = {}) => {
+  const riskActive = !!layer.risk;
+  const catActive = !!layer.cat;
+  if (!riskActive && !catActive) return null;
+  const riskRol = riskActive ? quoteComponentDerived(layer, 'risk').totalRol : 0;
+  const catRol = catActive ? quoteComponentDerived(layer, 'cat').totalRol : 0;
+  const uwRol = riskRol + catRol;
+  const limit = toN(layer.limit);
+  const egnpi = toN(layer.egnpi);
+  const earnedPremium = limit * uwRol / 100;
+  const rate = egnpi > 0 ? (earnedPremium / egnpi) * 100 : 0;
+  return {
+    limit,
+    deductible: layer.deductible ?? layer.attachment,
+    egnpi,
+    rate,
+    earnedPremium,
+    uwRol,
+    reinst: reinstLabel(layer.reinstatements, layer.pctReinst),
+  };
+};
+
+// Structure-level combined totals (risk + cat fused), summed over active layers:
+// total limit, total premium (sum of earned premium), and limit-weighted UW ROL
+// (sum premium / sum limit). Used by the Submit-Quotes summary so structure
+// totals match the per-layer combined pricing shown elsewhere.
+export const structureCombinedTotals = (structure = {}) => {
+  const layers = Array.isArray(structure.layers) ? structure.layers : [];
+  let totalLimit = 0;
+  let totalPremium = 0;
+  let activeCount = 0;
+  for (const layer of layers) {
+    const c = layerCombinedPricing(layer);
+    if (!c) continue;
+    activeCount += 1;
+    totalLimit += c.limit;
+    totalPremium += c.earnedPremium;
+  }
+  return { totalLimit, totalPremium, activeCount, wtdRol: totalLimit > 0 ? (totalPremium / totalLimit) * 100 : 0 };
+};
 
 export const updateQuotePricingLayer = (layer = {}, field, value, opts = {}) => {
   const autoUw = quoteLayerAutoTracksUw(layer);

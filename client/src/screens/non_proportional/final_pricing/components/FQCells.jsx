@@ -6,9 +6,10 @@ import { formatWithCommas } from '../../../../utils/format';
    FQNumCell: shows commas when not focused, raw digits while editing.
    Stores raw strings (no commas) in state so totals math stays trivial
    via toN(). Percent cells use the canonical PctInput. */
-export function FQNumCell({ value, onChange, className = 'bm-cell', placeholder = '—', style }) {
+export function FQNumCell({ value, onChange, className = 'bm-cell', placeholder = '—', style, readOnly = false, disabled = false }) {
   const [editing, setEditing] = useState(false);
   const [raw, setRaw] = useState('');
+  const locked = readOnly || disabled;
   const display = (() => {
     const s = String(value ?? '').replace(/,/g, '').trim();
     if (!s) return '';
@@ -21,9 +22,11 @@ export function FQNumCell({ value, onChange, className = 'bm-cell', placeholder 
       style={style}
       value={editing ? raw : display}
       placeholder={placeholder}
-      onFocus={(e) => { setEditing(true); setRaw(String(value ?? '').replace(/,/g, '')); e.target.select(); }}
-      onChange={(e) => { setRaw(e.target.value); onChange(e.target.value.replace(/,/g, '')); }}
-      onBlur={() => setEditing(false)}
+      readOnly={readOnly}
+      disabled={disabled}
+      onFocus={(e) => { if (locked) return; setEditing(true); setRaw(String(value ?? '').replace(/,/g, '')); e.target.select(); }}
+      onChange={(e) => { if (locked) return; setRaw(e.target.value); onChange?.(e.target.value.replace(/,/g, '')); }}
+      onBlur={() => { if (locked) return; setEditing(false); }}
     />
   );
 }

@@ -561,7 +561,7 @@ export function pricingReducer(state: NpPricingState, action: PricingAction): Np
           ...state.fq,
           clientStructures: [
             ...state.fq.clientStructures,
-            { id: `str-${action.idBase}-${state.fq.clientStructures.length}`, layers: [emptyStrLayer(0, action.defaults)] },
+            { id: `str-${action.idBase}-${state.fq.clientStructures.length}`, quoteType: 'LEAD', leadLinePct: '', followLinePct: '', layers: [emptyStrLayer(0, action.defaults)] },
           ],
           approvedStructures: [...state.fq.approvedStructures, false],
         },

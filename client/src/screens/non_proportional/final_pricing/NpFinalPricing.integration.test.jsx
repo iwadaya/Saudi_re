@@ -195,9 +195,13 @@ describe('NpFinalPricing integration', () => {
     expect(screen.getByText(/Total Section/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Close/i }));
 
-    const approveBox = structure.querySelector('input[aria-label="Send Structure 1 for Approval"]');
-    fireEvent.click(approveBox);
-    expect(approveBox).toBeChecked();
+    // "Send for Approval" now opens a read-only review modal; "Add to Submission"
+    // marks the structure for approval, persists via save(), and closes.
+    fireEvent.click(structure.querySelector('button[aria-label="Send Structure 1 for Approval"]'));
+    expect(await screen.findByTestId('np-send-approval-title')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('np-send-approval-add'));
+    await waitFor(() => expect(screen.queryByTestId('np-send-approval-title')).not.toBeInTheDocument());
+    expect(structure.querySelector('button[aria-label="Send Structure 1 for Approval"]').textContent).toMatch(/In Submission/i);
 
     const analysisButton = Array.from(structure.querySelectorAll('button')).find(button => /^Market Analysis$/i.test((button.textContent || '').trim()));
     fireEvent.click(analysisButton);

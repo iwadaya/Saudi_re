@@ -19,6 +19,7 @@ import { FQNumCell } from './FQCells.jsx';
  *   getCobUwLimit: (scope: string, cobId: string|number) => string,
  *   updateUwLimit: (scope: string, cobId: string|number, value: string) => void,
  *   setCobToggle: (scope: string, cobId: string|number, layerIdx: number, currentFlag: boolean) => void,
+ *   readOnly?: boolean,                  // review mode: limits + ticks shown but not editable
  * }} props
  */
 export default function FQCobParticipationTable({
@@ -32,6 +33,7 @@ export default function FQCobParticipationTable({
   getCobUwLimit,
   updateUwLimit,
   setCobToggle,
+  readOnly = false,
 }) {
   const options = { title: titleProp, hint: hintProp };
     const safeLayers = Array.isArray(tableLayers) ? tableLayers : [];
@@ -68,6 +70,7 @@ export default function FQCobParticipationTable({
                           className="bm-np-limit-input"
                           value={getCobUwLimit(scope, cob.id)}
                           onChange={(v) => updateUwLimit(scope, cob.id, v)}
+                          readOnly={readOnly}
                         />
                         <span className="bm-np-limit-suffix">{currency || ''}</span>
                       </div>
@@ -78,7 +81,8 @@ export default function FQCobParticipationTable({
                           type="checkbox"
                           className="np-check"
                           checked={!!flags[lIdx]}
-                          onChange={() => setCobToggle(scope, cob.id, lIdx, !!flags[lIdx])}
+                          disabled={readOnly}
+                          onChange={() => { if (readOnly) return; setCobToggle(scope, cob.id, lIdx, !!flags[lIdx]); }}
                         />
                       </td>
                     ))}
