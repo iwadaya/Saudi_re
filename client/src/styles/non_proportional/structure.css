@@ -98,7 +98,7 @@
 /* Body cells */
 .np-struct-table tbody td,
 .np-struct-table tbody th {
-  padding: 8px 6px;
+  padding: 5px 6px;
   border-bottom: 1px solid rgba(255,255,255,0.05);
   color: rgba(255,255,255,0.85);
   text-align: center;
@@ -109,7 +109,7 @@
 .np-struct-table tbody tr:last-child td,
 .np-struct-table tbody tr:last-child th { border-bottom: 0; }
 .np-struct-table--tight tbody td,
-.np-struct-table--tight tbody th { padding-top: 9px; padding-bottom: 9px; }
+.np-struct-table--tight tbody th { padding-top: 6px; padding-bottom: 6px; }
 
 /* Sticky layer # column */
 .np-table-sticky {
@@ -193,9 +193,9 @@
 .np-mini-input {
   width: 100%;
   min-width: 80px;
-  height: 30px;
+  height: 26px;
   border-radius: 6px;
-  padding: 0 10px;
+  padding: 0 8px;
   border: 1px solid rgba(255,255,255,0.09);
   background: rgba(255,255,255,0.03);
   color: rgba(226,232,240,0.90);
@@ -214,7 +214,7 @@
   color: rgba(255,255,255,0.50); flex-shrink: 0; white-space: nowrap;
 }
 
-.np-mini-select { appearance: none; -webkit-appearance: none; -moz-appearance: none; padding-right: 28px; box-sizing: border-box; height: 32px; line-height: 32px; }
+.np-mini-select { appearance: none; -webkit-appearance: none; -moz-appearance: none; padding-right: 28px; box-sizing: border-box; height: 26px; line-height: 26px; }
 .np-mini-select::-ms-expand { display: none; }
 .np-check {
   -webkit-appearance: none;

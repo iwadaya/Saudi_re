@@ -124,13 +124,15 @@
 .np-final-table, .np-final-wide-table { border-collapse:separate; border-spacing:0; font-size:.82rem; }
 .np-final-table thead th, .np-final-wide-table thead th { background:#050810; color:rgba(255,255,255,.55); text-align:center; vertical-align:middle; padding:11px 10px; font-size:.68rem; letter-spacing:.16em; text-transform:uppercase; white-space:normal; line-height:1.15; border-bottom: 1px solid rgba(255,255,255,0.08); }
 .np-final-table th,.np-final-table td,.np-final-wide-table th,.np-final-wide-table td { border:none; border-bottom: 1px solid rgba(255,255,255,0.05); padding:8px 10px; white-space:nowrap; vertical-align:middle; text-align:center; }
+/* Data (non-header) cells a bit thinner; thead th padding above stays as-is. */
+.np-final-table td,.np-final-wide-table td { padding:5px 10px; }
 .np-final-table tbody td, .np-final-wide-table tbody td { background:#080f23; transition:background 140ms ease; text-align: center;
 }
 .np-final-table tbody tr:nth-child(even) td, .np-final-wide-table tbody tr:nth-child(even) td { background:#0a1125; }
 .np-final-table tbody tr:hover td, .np-final-wide-table tbody tr:hover td { background:#0c1428; }
 
 /* Table inputs */
-.np-final-wide-table td input,.np-final-wide-table td select,.np-final-table td input,.np-final-table td select { border-radius:6px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); color:rgba(226,232,240,.90); padding:6px 10px; height:30px; min-width:90px; outline:none; text-align:center; margin:0 auto; display:block; transition:border-color 140ms ease; }
+.np-final-wide-table td input,.np-final-wide-table td select,.np-final-table td input,.np-final-table td select { border-radius:6px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); color:rgba(226,232,240,.90); padding:4px 10px; height:26px; min-width:90px; outline:none; text-align:center; margin:0 auto; display:block; transition:border-color 140ms ease; }
 .np-final-wide-table td input:hover,.np-final-table td input:hover { border-color:rgba(255,255,255,0.15); }
 .np-final-wide-table td input:focus,.np-final-table td input:focus { border-color:rgba(var(--accent-rgb),0.45); background:rgba(var(--accent-rgb),0.04); box-shadow:none; }
 .np-final-wide-table td input[readonly],.np-final-table td input[readonly] { border-color:transparent; background:transparent; opacity:1; }
@@ -320,7 +322,7 @@
   min-width: 100%; width: 100%;
   --pr-w-layer:70px; --pr-w-limit:130px; --pr-w-deductible:130px; --pr-w-reinst:110px; --pr-w-pct:120px;
 }
-.np-final-table--pricing th,.np-final-table--pricing td { padding:6px 8px; font-size:12px; }
+.np-final-table--pricing th,.np-final-table--pricing td { padding:4px 8px; font-size:12px; }
 .np-final-table--pricing thead th { white-space:normal; line-height:1.15; }
 .np-final-table--pricing .col-layer { width:var(--pr-w-layer); min-width:var(--pr-w-layer); }
 .np-final-table--pricing .col-limit { min-width:var(--pr-w-limit); }
@@ -341,7 +343,7 @@
   min-width: 100%; width: 100%;
   --pl-w-layer:70px; --pl-w-share:90px; --pl-w-other:120px;
 }
-.np-final-wide-table--programme th,.np-final-wide-table--programme td { padding:6px 8px; font-size:12px; }
+.np-final-wide-table--programme th,.np-final-wide-table--programme td { padding:4px 8px; font-size:12px; }
 .np-final-wide-table--programme thead th { white-space:normal; line-height:1.15; }
 .np-final-wide-table--programme .col-layer { width:var(--pl-w-layer); min-width:var(--pl-w-layer); }
 .np-final-wide-table--programme .col-share { min-width:var(--pl-w-share); }
@@ -352,7 +354,7 @@
 
 /* ═══ SETUP TABLE ═══ */
 .np-final-table--setup { width:100%; }
-.np-final-table--setup select,.np-final-table--setup input { height:34px; }
+.np-final-table--setup select,.np-final-table--setup input { height:28px; }
 
 /* ── Totals ── */
 .np-row-total td,.np-struct-total td { 
