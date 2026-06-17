@@ -36,7 +36,7 @@ export async function declineTreatyAction(contractId, actor, reason) {
   // DECLINED: status change, offer_approval_event and the (critical) audit row
   // are one atomic unit.
   await withTransaction(async (client) => {
-    await markDeclined(contractId, reason, client);
+    await markDeclined(contractId, reason, client, actor);
     await logAudit(client, { entityType: 'CONTRACT', entityId: contractId, eventType: 'DECLINED', actor, payload: { reason }, comment: reason || null }, { critical: true });
     await insertApprovalEvent(contractId, 'DECLINED', actor, reason || null, client);
   });

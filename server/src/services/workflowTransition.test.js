@@ -59,11 +59,16 @@ describe('no privileged workflow-state write lives outside the approval service'
     expect(offenders, `Quote sign/NTU must go through approveQuote / markNotTakenUp:\n${offenders.join('\n')}`).toEqual([]);
   });
 
-  it('the approval service itself is where these writes now live (sanity)', () => {
+  it('the approval service drives every contract transition through changeUwStatus, and still owns the offer/quote mirror writes (sanity)', () => {
     const body = readFileSync(path.join(SRC, APPROVAL_SERVICE), 'utf8');
-    expect(body).toMatch(/uw_status='SIGNED'/);                 // markContractSigned
-    expect(body).toMatch(/uw_status='NTU'/);                    // markNotTakenUp (treaty)
-    expect(body).toMatch(/status='NTU'/);                       // markNotTakenUp (quote)
+    // The privileged contract uw_status write no longer lives here as a literal —
+    // it goes through the changeUwStatus chokepoint (workflow.js), so a transition
+    // can never happen without a workflow event + STATUS_CHANGED audit.
+    expect(body).toMatch(/changeUwStatus\(/);
+    expect(body).not.toMatch(/uw_status\s*=\s*'(SIGNED|NTU|DRAFT|AWAITING_APPROVAL|AWAITING_SIGNED_LINE)'/);
+    // The offer/quote status MIRRORS are still written directly in the service.
+    expect(body).toMatch(/status='SIGNED'/);                    // markContractSigned (offer mirror)
+    expect(body).toMatch(/status='NTU'/);                       // markNotTakenUp (offer/quote)
     expect(body).toMatch(/status='AWAITING_SIGNED_LINE'/);      // approveQuote
     expect(body).toMatch(/assertWorkflowTransition/);
   });

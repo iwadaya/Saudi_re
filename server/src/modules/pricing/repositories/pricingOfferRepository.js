@@ -1,6 +1,7 @@
 import { pool } from '../../../db/pool.js';
 import { numOrNull } from './repositoryUtils.js';
 import { assertLegalTransition } from '../../../lib/statusMachine.js';
+import { changeUwStatus } from '../../../services/workflow.js';
 import { refreshBenchmarks } from '../../../services/ldf/benchmark.js';
 
 // Fire-and-forget — benchmark refresh can take seconds on a big dataset
@@ -56,16 +57,17 @@ export async function replaceOffer(contractId, offer, client) {
   return rows[0];
 }
 
-export async function markDeclined(contractId, reason, client) {
+export async function markDeclined(contractId, reason, client, actor) {
   const db = client || pool;
   // Decline is legal from any non-terminal state; the machine blocks
   // only SIGNED → DECLINED and NTU → DECLINED (can't un-sign a treaty).
   const current = await loadCurrentStatus(contractId, client);
   assertLegalTransition(current, 'DECLINED');
-  await db.query(
-    `UPDATE public.contract SET uw_status='DECLINED',status='DECLINED',decline_reason=$2,declined_at=now(),updated_at=now() WHERE contract_id=$1`,
-    [contractId, reason]
-  );
+  // The DECLINED transition (uw_status + status + declined_at + workflow event +
+  // STATUS_CHANGED audit) goes through the changeUwStatus chokepoint with the
+  // acting modeller as actor; decline_reason is the only extra column.
+  await changeUwStatus(db, { contractId, from: current, to: 'DECLINED', actor, comment: reason ?? null });
+  await db.query(`UPDATE public.contract SET decline_reason=$2 WHERE contract_id=$1`, [contractId, reason ?? null]);
   // Offer-table mirror — a 0-row update (no offer yet) is a no-op, so this is
   // safe to keep inside the caller's transaction (atomic with the decline).
   await db.query(
