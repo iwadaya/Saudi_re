@@ -8,6 +8,7 @@
 
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { useState, useCallback } from 'react';
 
 vi.mock('recharts', () => {
   const Stub = ({ children }) => <div data-recharts-stub>{children}</div>;
@@ -121,5 +122,41 @@ describe('FrequencySimPanel', () => {
     expect(screen.getByTestId('fq-frequency-model-risk')).toHaveValue('NEGBIN');
     expect(screen.getByTestId('fq-frequency-loadmethod-risk')).toHaveValue('TVAR');
     expect(screen.getByTestId('fq-frequency-estrisk-risk')).toBeChecked();
+  });
+
+  // Regression for React #185 (max update depth): the real hook's
+  // updateClientStructureLayer changes identity whenever clientStructures
+  // change (it closes over quoteCurve). Writing the priced Pareto ROL back
+  // mutates a structure, so an effect that lists the setter in its deps would
+  // re-fire forever. This harness reproduces that instability.
+  it('does not infinite-loop when the layer setter identity changes per write (React #185)', async () => {
+    const writes = vi.fn();
+    function LoopHarness() {
+      const [structures, setStructures] = useState([{
+        id: 's0',
+        layers: [{ id: 0, risk: true, cat: false, limit: '3000000', attachment: '2000000', riskUwPrice: '10', reinstatements: '1', pctReinst: '100' }],
+      }]);
+      // Unstable on purpose — reads `structures` directly so its identity
+      // changes whenever they do (mirrors the real hook closing over quoteCurve).
+      const updateClientStructureLayer = useCallback((si, li, field, val) => {
+        writes(field);
+        setStructures(structures.map((s, i) => (i !== si ? s : { ...s, layers: s.layers.map((l, j) => (j !== li ? l : { ...l, [field]: val })) })));
+      }, [structures]);
+      const updateClientStructure = useCallback((si, field, val) => {
+        setStructures((prev) => prev.map((s, i) => (i !== si ? s : { ...s, [field]: val })));
+      }, []);
+      return (
+        <FrequencySimPanel
+          scopeKey="risk" structure={structures[0]} sIdx={0} sevFit={sevFit}
+          updateClientStructure={updateClientStructure} updateClientStructureLayer={updateClientStructureLayer}
+        />
+      );
+    }
+    render(<LoopHarness />);
+    await waitFor(() => expect(screen.getByTestId('fq-frequency-row-risk-0')).toBeInTheDocument(), { timeout: 2000 });
+    const settled = writes.mock.calls.length;
+    await new Promise((r) => setTimeout(r, 300));
+    // After the initial price the writes must STOP (no runaway re-pricing).
+    expect(writes.mock.calls.length - settled).toBeLessThanOrEqual(1);
   });
 });

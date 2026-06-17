@@ -140,22 +140,31 @@ export default function FrequencySimPanel({ scopeKey, structure, sIdx, sevFit, s
   //    re-price without re-simulating). Never re-triggers the run effect. ──
   const cfgRef = useRef(null);
   cfgRef.current = { family: sevFit?.family, params: sevFit?.params, threshold: sevFit?.threshold, freqType, lambda, dispersion, nSims: sims, seed, resampleParams };
+  // The write setters are deliberately read through a ref, NOT listed in the
+  // effect deps. The real updateClientStructureLayer changes identity whenever
+  // clientStructures change (it closes over quoteCurve) — and this effect
+  // mutates a structure (writing the priced Pareto ROL). Listing it would make
+  // every write re-fire the effect → infinite render loop (React #185).
+  const writeRef = useRef(null);
+  writeRef.current = { writeLayer: updateClientStructureLayer, writeStruct: updateClientStructure };
   useEffect(() => {
     if (!results || !results.length) return;
     const load = { method: loadMethod, factor: toN(loadFactor), tvarRp: TVAR_RP };
+    const { writeLayer, writeStruct } = writeRef.current;
     results.forEach(({ i, layer, r }) => {
       const { loadedRol } = paretoTechnicalRol(r.aggregate, toN(layer.limit), load);
-      updateClientStructureLayer(sIdx, i, scope.fields.pareto, loadedRol > 0 ? String(Number(loadedRol.toFixed(4))) : '');
+      writeLayer(sIdx, i, scope.fields.pareto, loadedRol > 0 ? String(Number(loadedRol.toFixed(4))) : '');
     });
-    if (typeof updateClientStructure === 'function') {
+    if (typeof writeStruct === 'function') {
       const c = cfgRef.current;
-      updateClientStructure(sIdx, `${scopeKey}ParetoSim`, {
+      writeStruct(sIdx, `${scopeKey}ParetoSim`, {
         family: c.family, params: c.params, threshold: c.threshold,
         freqType: c.freqType, lambda: toN(c.lambda), dispersion: toN(c.dispersion),
         loadMethod, loadFactor: toN(loadFactor), nSims: toN(c.nSims), seed: toN(c.seed), resampleParams: c.resampleParams,
       });
     }
-  }, [results, loadMethod, loadFactor, sIdx, scopeKey, scope.fields.pareto, updateClientStructureLayer, updateClientStructure]);
+    // Setters intentionally omitted (read via writeRef) — see comment above.
+  }, [results, loadMethod, loadFactor, sIdx, scopeKey, scope.fields.pareto]);
 
   // Histogram + ECDF data for the first active layer's aggregate distribution.
   const distData = useMemo(() => {
