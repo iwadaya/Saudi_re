@@ -135,19 +135,19 @@ export default function FQPricingAnalysisModal({
   const structure = Number.isInteger(sIdx) ? clientStructures[sIdx] : null;
 
   // ── Auto-run the shared actuarial engine on open ─────────────────────────
-  // The modal reads engine-computed pure burn / exposure straight off the
-  // layer rows (riskPureBurn/catPureBurn, riskExposure/catExposure). Those
-  // only populate after a calc run, so a freshly-opened structure that hasn't
-  // been calc'd yet would show blank cells. When the modal opens for a quote
-  // structure whose layers carry no engine results yet, kick `runQuoteCalcEngine`
-  // ONCE so the same numbers a bound treaty computes land here too. Guards:
+  // The pricing-analysis component cells (pure burn / Pareto / exposure ROL%)
+  // are MODEL values — computed by the SAME calcLayerPricing the NP assessment /
+  // loss-selection screens use, never free-typed. Seed them from the engine on
+  // every open for a quote structure, so they reflect the latest SELECTED
+  // losses, saved Pareto params and layer terms (re-fetched each run) — and so a
+  // stale/raw saved value (e.g. Pareto "82.822") can't linger. The merge
+  // protects any underwriter override (a component edit is marked manual), so
+  // re-seeding never clobbers a hand-entered value. Guards:
   //   • only quote mode, only when an engine fn is wired in
   //   • skip if a calc for this structure is already in flight
-  //   • skip if results already exist (don't clobber / re-run)
   //   • one shot per open (autoRunKeyRef), reset when the modal closes
   // If the run finds no saved inputs the cells stay "—" and an inline hint
-  // points the user at the earlier NP steps. We never auto-run on keystrokes —
-  // only on open while the structure is stale/empty.
+  // points the user at the earlier NP steps. We never auto-run on keystrokes.
   const modalOpen = !!pricingAnalysisModal.open;
   const calcRunningForStructure = !!calcEngineRunning
     || !!(runningStructures && Number.isInteger(sIdx) && runningStructures[sIdx]);
@@ -166,13 +166,12 @@ export default function FQPricingAnalysisModal({
     if (!modalOpen || !isQuote || typeof runQuoteCalcEngine !== 'function') return;
     if (!Number.isInteger(sIdx) || !structure) return;
     const key = String(sIdx);
-    if (autoRunKeyRef.current === key) return;       // already handled this open/target
+    if (autoRunKeyRef.current === key) return;       // already seeded this open/target
     if (calcRunningForStructure) return;             // a calc is in flight — let it finish
-    if (hasEngineResults) { autoRunKeyRef.current = key; return; } // results exist — no run
     autoRunKeyRef.current = key;
     setAutoRan(true);
     runQuoteCalcEngine(sIdx);
-  }, [modalOpen, isQuote, runQuoteCalcEngine, sIdx, structure, hasEngineResults, calcRunningForStructure]);
+  }, [modalOpen, isQuote, runQuoteCalcEngine, sIdx, structure, calcRunningForStructure]);
   // "Calculating…" while the engine runs; the stale hint only after our own
   // auto-run came back empty (i.e. no saved losses / profile to price from).
   const showCalculating = isQuote && calcRunningForStructure;

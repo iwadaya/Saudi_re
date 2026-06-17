@@ -196,6 +196,14 @@ const QUOTE_COMPONENT_FIELD_TO_SCOPE = Object.entries(QUOTE_COMPONENT_SCOPES).re
   return acc;
 }, {});
 
+// The per-scope component ROL% fields (risk/cat × pure burn / Pareto / exposure)
+// that the actuarial engine SEEDS. Editing one marks it `${field}Manual` so a
+// recompute won't clobber the underwriter's override (see updateQuotePricingLayer
+// + mergeQuoteEngineResult).
+const QUOTE_COMPONENT_ROL_FIELDS = new Set(
+  Object.values(QUOTE_COMPONENT_SCOPES).flatMap((scope) => [scope.fields.pureBurn, scope.fields.pareto, scope.fields.exposure]),
+);
+
 const pickQuoteField = (layer = {}, keys = [], fallback = '') => {
   for (const key of keys) {
     const value = layer[key];
@@ -467,6 +475,18 @@ const sanePctOrEmpty = (raw) => {
   return isUwPriceSane(n) ? String(raw) : '';
 };
 
+// Stricter guard for the component ROL% fields (pure burn / Pareto / exposure):
+// a component ROL above 100% is almost certainly NOT a rate-on-line — it's a
+// stale raw value (e.g. an expected-layer-loss amount, or a rate written into
+// the wrong field). Treat it as unset so the engine recompute reseeds it rather
+// than the screen rendering the raw number (e.g. Pareto "82.822").
+const ROL_PCT_MAX = 100;
+const saneRolOrEmpty = (raw) => {
+  if (raw == null || raw === '') return '';
+  const n = toN(raw);
+  return n > 0 && n <= ROL_PCT_MAX ? String(raw) : '';
+};
+
 export const normalizeQuotePricingLayer = (layer = {}, index = 0, opts = {}) => {
   const hasExplicitRiskFlag = layer.risk != null || layer.riskCover != null || layer.isRisk != null;
   const explicitCatFlag = pickQuoteBool(layer, ['cat', 'catCover', 'isCat'], false);
@@ -479,25 +499,25 @@ export const normalizeQuotePricingLayer = (layer = {}, index = 0, opts = {}) => 
     limit: pickQuoteField(layer, ['limit', 'layer_limit']),
     attachment: pickQuoteField(layer, ['attachment', 'deductible']),
     egnpi: pickQuoteField(layer, ['egnpi']),
-    pureBurn: sanePctOrEmpty(pickQuoteField(layer, ['pureBurn', 'pure_burning_cost', 'riskPureBurn', 'catPureBurn'])),
-    pareto: sanePctOrEmpty(pickQuoteField(layer, ['pareto', 'pareto_pricing', 'riskPareto', 'catPareto'])),
-    exposure: sanePctOrEmpty(pickQuoteField(layer, ['exposure', 'exposure_rating', 'riskExposure', 'catExposure'])),
+    pureBurn: saneRolOrEmpty(pickQuoteField(layer, ['pureBurn', 'pure_burning_cost', 'riskPureBurn', 'catPureBurn'])),
+    pareto: saneRolOrEmpty(pickQuoteField(layer, ['pareto', 'pareto_pricing', 'riskPareto', 'catPareto'])),
+    exposure: saneRolOrEmpty(pickQuoteField(layer, ['exposure', 'exposure_rating', 'riskExposure', 'catExposure'])),
     wtBurn: pickQuoteField(layer, ['wtBurn', 'burn_weight_pct', 'riskWeightBurn', 'catWeightBurn'], '50'),
     wtPareto: pickQuoteField(layer, ['wtPareto', 'pareto_weight_pct', 'riskWeightPareto', 'catWeightPareto'], '0'),
     loading: pickQuoteField(layer, ['loading', 'pricing_loading_pct', 'riskLoading', 'catLoading'], '15'),
     uwPrice: sanePctOrEmpty(pickQuoteField(layer, ['uwPrice', 'uw_price', 'reinsurerPricing', 'riskUwPrice', 'catUwPrice'])),
     pAttach: pickQuoteField(layer, ['pAttach', 'prob_attach']),
     pExhaust: pickQuoteField(layer, ['pExhaust', 'prob_exhaust']),
-    riskPureBurn: sanePctOrEmpty(pickQuoteField(layer, ['riskPureBurn'])),
-    riskPareto: sanePctOrEmpty(pickQuoteField(layer, ['riskPareto'])),
-    riskExposure: sanePctOrEmpty(pickQuoteField(layer, ['riskExposure'])),
+    riskPureBurn: saneRolOrEmpty(pickQuoteField(layer, ['riskPureBurn'])),
+    riskPareto: saneRolOrEmpty(pickQuoteField(layer, ['riskPareto'])),
+    riskExposure: saneRolOrEmpty(pickQuoteField(layer, ['riskExposure'])),
     riskWeightBurn: pickQuoteField(layer, ['riskWeightBurn', 'riskWtBurn']),
     riskWeightPareto: pickQuoteField(layer, ['riskWeightPareto', 'riskWtPareto']),
     riskLoading: pickQuoteField(layer, ['riskLoading']),
     riskUwPrice: sanePctOrEmpty(pickQuoteField(layer, ['riskUwPrice', 'riskTotalPrice'])),
-    catPureBurn: sanePctOrEmpty(pickQuoteField(layer, ['catPureBurn'])),
-    catPareto: sanePctOrEmpty(pickQuoteField(layer, ['catPareto'])),
-    catExposure: sanePctOrEmpty(pickQuoteField(layer, ['catExposure'])),
+    catPureBurn: saneRolOrEmpty(pickQuoteField(layer, ['catPureBurn'])),
+    catPareto: saneRolOrEmpty(pickQuoteField(layer, ['catPareto'])),
+    catExposure: saneRolOrEmpty(pickQuoteField(layer, ['catExposure'])),
     catWeightBurn: pickQuoteField(layer, ['catWeightBurn', 'catWtBurn']),
     catWeightPareto: pickQuoteField(layer, ['catWeightPareto', 'catWtPareto']),
     catLoading: pickQuoteField(layer, ['catLoading']),
@@ -645,6 +665,9 @@ export const paretoTechnicalRol = (aggregate, limit, load = {}) => {
 export const updateQuotePricingLayer = (layer = {}, field, value, opts = {}) => {
   const autoUw = quoteLayerAutoTracksUw(layer);
   let next = { ...layer, [field]: value };
+  // Editing a component ROL% (pure burn / Pareto / exposure) is an underwriter
+  // override: flag it so an engine recompute won't clobber the manual value.
+  if (QUOTE_COMPONENT_ROL_FIELDS.has(field)) next[`${field}Manual`] = true;
   if (field === 'risk' || field === 'cat') {
     return syncQuoteLayerFromComponents(next);
   }
@@ -673,8 +696,12 @@ export const updateQuotePricingLayer = (layer = {}, field, value, opts = {}) => 
 
 const quoteEnginePct = (value, fallback = '') => {
   const n = toN(value);
-  if (!Number.isFinite(n)) return fallback;
-  return n > 0 ? fmtAutoPct(n) : '0';
+  // The engine returning 0 means "nothing to price from" (e.g. no selected
+  // losses / profile) — keep the existing value rather than wiping it to 0, so
+  // a recompute with missing data never blanks a previously-priced cell. A real
+  // (> 0) engine value still overwrites a stale one.
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return fmtAutoPct(n);
 };
 
 export const mergeQuoteEngineResult = (layer = {}, result = {}) => {
@@ -684,9 +711,11 @@ export const mergeQuoteEngineResult = (layer = {}, result = {}) => {
     if (!scope || !component) return;
     const f = scope.fields;
     const uwWasAuto = quoteComponentAutoTracksUw(next, scopeKey);
-    next[f.pureBurn] = quoteEnginePct(component.pureBurn, next[f.pureBurn]);
-    next[f.pareto] = quoteEnginePct(component.pareto, next[f.pareto]);
-    next[f.exposure] = quoteEnginePct(component.exposureRating, next[f.exposure]);
+    // Seed each component from the engine UNLESS the underwriter has overridden
+    // it (`${field}Manual`) — a manual value must survive recompute.
+    if (!next[`${f.pureBurn}Manual`]) next[f.pureBurn] = quoteEnginePct(component.pureBurn, next[f.pureBurn]);
+    if (!next[`${f.pareto}Manual`]) next[f.pareto] = quoteEnginePct(component.pareto, next[f.pareto]);
+    if (!next[`${f.exposure}Manual`]) next[f.exposure] = quoteEnginePct(component.exposureRating, next[f.exposure]);
     const pAttachField = scopeKey === 'risk' ? 'riskPrAttach' : 'catPrAttach';
     const pExhaustField = scopeKey === 'risk' ? 'riskPrExhaust' : 'catPrExhaust';
     next[pAttachField] = quoteEnginePct(component.prAttach, next[pAttachField]);

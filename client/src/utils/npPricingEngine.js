@@ -338,7 +338,10 @@ export function calcPureBurningCost(losses, deductible, limit, egnpi, obsYears, 
  * Fits a Pareto to selected losses above a threshold xm (defaults to 25th
  * percentile of loss distribution).  Uses LEV to price the layer.
  *
- * Returns ROL as a fraction of EGNPI.
+ * Returns rol = expectedAnnualLayerLoss / limit (a fraction) — the true
+ * Rate-on-Line, the SAME ÷ limit basis as calcPureBurningCost and the
+ * exposure-rating functions, so the three are unit-consistent and blend
+ * directly. (NOT ÷ EGNPI — that would be a rate, a different unit.)
  *
  * @param {LossLike[]} losses     - same as above
  * @param {number} deductible
