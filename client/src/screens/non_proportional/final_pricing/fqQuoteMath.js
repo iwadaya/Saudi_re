@@ -716,7 +716,15 @@ export const mergeQuoteEngineResult = (layer = {}, result = {}) => {
     const uwWasAuto = quoteComponentAutoTracksUw(next, scopeKey);
     // Seed each component from the engine UNLESS the underwriter has overridden
     // it (`${field}Manual`) — a manual value must survive recompute.
-    if (!next[`${f.pureBurn}Manual`]) next[f.pureBurn] = quoteEnginePct(component.pureBurn, next[f.pureBurn]);
+    // Pure burn: when the engine had losses for this scope, the burn (0 included)
+    // is a real result → write it, so a layer covering a class with zero losses
+    // reads 0%, not blank. With NO losses loaded at all it's "no data" → keep the
+    // existing/seeded value (don't wipe a previously-priced cell).
+    if (!next[`${f.pureBurn}Manual`]) {
+      next[f.pureBurn] = Number(component.scopeLossCount) > 0
+        ? fmtAutoPct(toN(component.pureBurn))
+        : quoteEnginePct(component.pureBurn, next[f.pureBurn]);
+    }
     if (!next[`${f.pareto}Manual`]) next[f.pareto] = quoteEnginePct(component.pareto, next[f.pareto]);
     if (!next[`${f.exposure}Manual`]) next[f.exposure] = quoteEnginePct(component.exposureRating, next[f.exposure]);
     const pAttachField = scopeKey === 'risk' ? 'riskPrAttach' : 'catPrAttach';

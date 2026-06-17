@@ -168,7 +168,7 @@ export function useNpPricingActions({
         classOfBusinessIds,
       });
     });
-    const emptyScope = () => ({ layerCount: 0, burn: false, pareto: false, exposure: false });
+    const emptyScope = () => ({ layerCount: 0, burn: false, pareto: false, exposure: false, lossCount: 0 });
     if (!pricingLayers.length) return { ran: true, risk: emptyScope(), cat: emptyScope() };
     try {
       const results = await calcLayerPricing(
@@ -188,6 +188,8 @@ export function useNpPricingActions({
           const comp = result[sk];
           if (!comp) return;
           summary[sk].layerCount += 1;
+          // scopeLossCount is constant per scope — "were any losses loaded?".
+          summary[sk].lossCount = Math.max(summary[sk].lossCount, Number(comp.scopeLossCount) || 0);
           if (toN(comp.pureBurn) > 0) summary[sk].burn = true;
           if (toN(comp.pareto) > 0) summary[sk].pareto = true;
           if (toN(comp.exposureRating) > 0) summary[sk].exposure = true;
