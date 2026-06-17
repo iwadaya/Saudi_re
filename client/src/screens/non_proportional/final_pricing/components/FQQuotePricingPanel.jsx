@@ -12,6 +12,7 @@ import React, { useId } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
 import { toN } from '../formatters.js';
 import { FQ_STRUCTURE_COLORS, fqGeomean, fqPriceLayerOnCurve } from '../fqHelpers.js';
+import { REINSTATEMENT_OPTIONS } from '../../reinstatementOptions';
 import {
   expLayerEarnedPremium,
   QM_MAX_LAYERS,
@@ -262,7 +263,7 @@ export default function FQQuotePricingPanel({
                                 <td className="bm-calc bm-calc--hi">{toN(l.rol) > 0 ? `${toN(l.rol).toFixed(2)}%` : '—'}</td>
                                 <td className="bm-calc">{l.earnedPremium ? formatWithCommas(String(Math.round(toN(l.earnedPremium)))) : '—'}</td>
                                 <td><input className="bm-cell bm-cell--sm" value={l.mdp} onChange={(e) => setField('mdp', e.target.value)} placeholder="—" /></td>
-                                <td><input className="bm-cell bm-cell--sm" value={l.reinstatements} onChange={(e) => setField('reinstatements', e.target.value)} placeholder="—" /></td>
+                                <td><select className="bm-cell bm-cell--sm" value={l.reinstatements ?? ''} onChange={(e) => setField('reinstatements', e.target.value)}>{REINSTATEMENT_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}</select></td>
                                 <td className="bm-calc bm-calc--dim">{geomean > 0 ? formatWithCommas(String(Math.round(geomean))) : '—'}</td>
                                 <td className="bm-calc bm-calc--dim">{xGE > 0 ? xGE.toFixed(4) : '—'}</td>
                                 <td style={{ textAlign: 'center' }}><input type="checkbox" className="np-check" checked={!!l.risk} onChange={() => setField('risk', !l.risk)} /></td>

@@ -2,16 +2,18 @@
 //
 // Tab 1 "Pricing Analysis": per-peril sections (Risk above Cat) stacked
 // vertically, each with a weight Blender bar, a metrics table, and a notes
-// box; a reconciled Total Section is shown only when both perils are active.
+// box; below them a combined per-layer Total Section (risk + cat fused) shows
+// whenever any component is active.
 // Tabs 2/3 ("Pareto Simulation", "Inflation & Loss") are placeholders.
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
 import { toN } from '../formatters.js';
 import { QUOTE_COMPONENT_SCOPES, quoteComponentDerived } from '../fqQuoteMath.js';
 import { fqPriceLayerOnCurve, fqFitPowerLaw, fqPeerToXY, fqGeomean } from '../fqHelpers.js';
+import { REINSTATEMENT_OPTIONS } from '../../reinstatementOptions';
 import { api } from '../../../../api';
 import { FQPctCell, FQReadCell } from './FQCells.jsx';
-import FQFinalPriceModal from './FQFinalPriceModal.jsx';
+import FQFinalPriceModal, { reinstLabel } from './FQFinalPriceModal.jsx';
 
 const TOP_TABS = [
   { k: 'pricing', label: 'Pricing Analysis' },
@@ -195,9 +197,8 @@ export default function FQPricingAnalysisModal({
   const bothAllowedNoneFlagged = !riskDisabled && !catDisabled && !riskFlagged && !catFlagged;
   const showRisk = (!riskDisabled && riskFlagged) || bothAllowedNoneFlagged;
   const showCat = (!catDisabled && catFlagged) || bothAllowedNoneFlagged;
-  const bothShown = showRisk && showCat;
 
-  // ── Total Section (reconciled) — unchanged from the prior modal. ──
+  // ── Per-section Wtd ROL (used in each section header) ──
   const componentTotals = (scopeKey) => {
     const activeLayers = layers.filter((layer) => !!layer[scopeKey]);
     const totalLimit = activeLayers.reduce((s, layer) => s + toN(layer.limit), 0);
@@ -208,15 +209,31 @@ export default function FQPricingAnalysisModal({
     }, 0);
     return { activeCount: activeLayers.length, totalLimit, premium, wtdRol: totalLimit > 0 ? (premium / totalLimit) * 100 : 0 };
   };
-  const riskTotal = componentTotals('risk');
-  const catTotal = componentTotals('cat');
-  const grandLimit = riskTotal.totalLimit + catTotal.totalLimit;
-  const grandPremium = riskTotal.premium + catTotal.premium;
-  const grandTotal = {
-    activeCount: riskTotal.activeCount + catTotal.activeCount,
-    totalLimit: grandLimit,
-    premium: grandPremium,
-    wtdRol: grandLimit > 0 ? (grandPremium / grandLimit) * 100 : 0,
+  // ── Combined per-layer pricing for the Total Section ──
+  // Fuse the risk + cat components of ONE layer: ADD the active components'
+  // ROLs (risk-only → risk, cat-only → cat, both → sum), then derive premium
+  // and rate. Reuses quoteComponentDerived — no pricing is recomputed here.
+  // Returns null for layers with no active component (skipped from the table).
+  const layerCombined = (layer) => {
+    const riskActive = !!layer.risk;
+    const catActive = !!layer.cat;
+    if (!riskActive && !catActive) return null;
+    const riskRol = riskActive ? quoteComponentDerived(layer, 'risk').totalRol : 0;
+    const catRol = catActive ? quoteComponentDerived(layer, 'cat').totalRol : 0;
+    const uwRol = riskRol + catRol;
+    const limit = toN(layer.limit);
+    const egnpi = toN(layer.egnpi);
+    const earnedPremium = limit * uwRol / 100;
+    const rate = egnpi > 0 ? (earnedPremium / egnpi) * 100 : 0;
+    return {
+      limit,
+      deductible: layer.deductible ?? layer.attachment,
+      egnpi,
+      rate,
+      earnedPremium,
+      uwRol,
+      reinst: reinstLabel(layer.reinstatements, layer.pctReinst),
+    };
   };
 
   const th = { padding: '8px 10px', textAlign: 'right', fontSize: 9, fontWeight: 850, letterSpacing: '.11em', color: 'rgba(148,163,184,0.68)', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap' };
@@ -357,13 +374,18 @@ export default function FQPricingAnalysisModal({
                     <td style={td}><FQReadCell value={fmtMoney(layer.limit)} className="bm-cell bm-cell--display bm-cell--foot" /></td>
                     <td style={td}><FQReadCell value={fmtMoney(layer.attachment)} className="bm-cell bm-cell--display bm-cell--foot" /></td>
                     <td style={td}><FQReadCell value={fmtMoney(layer.egnpi)} className="bm-cell bm-cell--display bm-cell--foot" /></td>
-                    {/* Reinstatement terms — layer-level (same value in Risk & Cat tables), always editable. */}
+                    {/* Reinstatement terms — layer-level (same value in Risk & Cat tables), always
+                        editable. <select> matching the structure screen: blank / 1–10 / Unlimited.
+                        Value 'UNLIMITED' must pass through verbatim (no numeric strip) so the save
+                        path can preserve the sentinel. */}
                     <td style={{ ...td, background: G.note }}>
-                      <input type="text" inputMode="numeric"
+                      <select
                         aria-label={`Structure ${sIdx + 1} Layer ${lIdx + 1} reinstatements`}
                         value={layer.reinstatements ?? ''}
-                        onChange={(e) => updateClientStructureLayer(sIdx, lIdx, 'reinstatements', e.target.value.replace(/[^0-9.]/g, ''))}
-                        style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(5,8,16,0.6)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: 'rgba(226,232,240,0.9)', fontSize: 10, padding: '4px 6px', textAlign: 'right', fontFamily: 'inherit' }} />
+                        onChange={(e) => updateClientStructureLayer(sIdx, lIdx, 'reinstatements', e.target.value)}
+                        style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(5,8,16,0.6)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: 'rgba(226,232,240,0.9)', fontSize: 10, padding: '4px 6px', textAlign: 'right', fontFamily: 'inherit' }}>
+                        {REINSTATEMENT_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                      </select>
                     </td>
                     <td style={{ ...td, background: G.note }}><FQPctCell value={layer.pctReinst} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, 'pctReinst', v)} /></td>
                     <td style={{ ...td, background: G.modelled }}>{editorWrap(<FQPctCell value={layer[f.pureBurn]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.pureBurn, v)} />)}</td>
@@ -524,36 +546,71 @@ export default function FQPricingAnalysisModal({
               )}
               {layers.length > 0 && showRisk && renderScopeSection('risk')}
               {layers.length > 0 && showCat && renderScopeSection('cat')}
-              {layers.length > 0 && bothShown && (
+              {layers.length > 0 && (showRisk || showCat) && (
                 <section style={{ background: 'rgba(8,14,30,0.72)', border: '1px solid rgba(35,209,139,0.28)', borderRadius: 12 }}>
                   <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
                     <div style={{ fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: '#23d18b' }}>Total Section</div>
-                    <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.58)', marginTop: 2 }}>Combined component premium and weighted ROL used by the main structure table.</div>
+                    <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.58)', marginTop: 2 }}>Combined per-layer pricing (risk + cat) used by the main structure table.</div>
                   </div>
                   <div style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760, fontSize: 11 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820, fontSize: 11 }}>
                       <thead style={{ background: '#050810' }}>
                         <tr>
-                          {['Component', 'Active Layers', 'Limit', 'Premium', 'Weighted ROL'].map((h, i) => (
-                            <th key={`total-${h}`} style={{ ...th, textAlign: i === 0 ? 'left' : 'right' }}>{h}</th>
-                          ))}
+                          <th style={{ ...th, textAlign: 'center' }}>Layer</th>
+                          <th style={th}>Limit</th>
+                          <th style={th}>Deductible</th>
+                          <th style={th}>Reinstatements</th>
+                          <th style={th}>EGNPI</th>
+                          <th style={th}>Rate</th>
+                          <th style={th}>Earned Premium</th>
+                          <th style={th}>ROL</th>
                         </tr>
                       </thead>
-                      <tbody>
-                        {[
-                          { label: 'Risk', color: QUOTE_COMPONENT_SCOPES.risk.color, ...riskTotal },
-                          { label: 'Cat', color: QUOTE_COMPONENT_SCOPES.cat.color, ...catTotal },
-                          { label: 'Total', color: '#23d18b', ...grandTotal },
-                        ].map((row) => (
-                          <tr key={`total-${row.label}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.045)' }}>
-                            <td style={{ padding: '8px 10px', color: row.color, fontWeight: 850 }}>{row.label}</td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right' }}>{row.activeCount || '—'}</td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right' }}>{fmtMoney(row.totalLimit)}</td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right' }}>{fmtMoney(row.premium)}</td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right', color: row.color, fontWeight: 850 }}>{row.wtdRol > 0 ? `${row.wtdRol.toFixed(2)}%` : '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
+                      {(() => {
+                        // One row per layer with an active component; limit/egnpi are
+                        // counted ONCE per layer (not risk+cat doubled) in the totals.
+                        const rows = layers
+                          .map((layer, lIdx) => ({ lIdx, c: layerCombined(layer) }))
+                          .filter((r) => r.c);
+                        const sumLimit = rows.reduce((s, r) => s + r.c.limit, 0);
+                        const sumEgnpi = rows.reduce((s, r) => s + r.c.egnpi, 0);
+                        const sumEP = rows.reduce((s, r) => s + r.c.earnedPremium, 0);
+                        const totRol = sumLimit > 0 ? (sumEP / sumLimit) * 100 : 0;
+                        const totRate = sumEgnpi > 0 ? (sumEP / sumEgnpi) * 100 : 0;
+                        const ft = { ...td, background: 'rgba(35,209,139,0.12)', borderTop: '2px solid rgba(35,209,139,0.5)', fontWeight: 800, color: 'rgba(226,232,240,0.95)' };
+                        return (
+                          <>
+                            <tbody>
+                              {rows.map(({ lIdx, c }) => (
+                                <tr key={`combined-${layers[lIdx].id || lIdx}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.045)', background: lIdx % 2 ? 'rgba(255,255,255,0.012)' : 'transparent' }}>
+                                  <td style={{ ...td, textAlign: 'center' }}>
+                                    <span className="bm-badge" style={{ background: '#23d18b14', borderColor: '#23d18b35', color: '#23d18b' }}>{lIdx + 1}</span>
+                                  </td>
+                                  <td style={td}>{fmtMoney(c.limit)}</td>
+                                  <td style={td}>{fmtMoney(c.deductible)}</td>
+                                  <td style={td}>{c.reinst}</td>
+                                  <td style={td}>{fmtMoney(c.egnpi)}</td>
+                                  <td style={td}>{`${c.rate.toFixed(2)}%`}</td>
+                                  <td style={td}>{fmtMoney(c.earnedPremium)}</td>
+                                  <td style={td}>{`${c.uwRol.toFixed(2)}%`}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr data-testid="fq-total-section-combined">
+                                <td style={{ ...ft, textAlign: 'center', color: '#23d18b', letterSpacing: '.08em' }}>TOTAL</td>
+                                <td style={ft}>{fmtMoney(sumLimit)}</td>
+                                <td style={ft}>—</td>
+                                <td style={ft}>—</td>
+                                <td style={ft}>{fmtMoney(sumEgnpi)}</td>
+                                <td style={ft}>{`${totRate.toFixed(2)}%`}</td>
+                                <td style={ft}>{fmtMoney(sumEP)}</td>
+                                <td style={ft}>{`${totRol.toFixed(2)}%`}</td>
+                              </tr>
+                            </tfoot>
+                          </>
+                        );
+                      })()}
                     </table>
                   </div>
                 </section>

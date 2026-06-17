@@ -290,7 +290,10 @@ export function useNpPricingActions({
             earned_premium:        expLayerEarnedPremium(l),
             rate:                  toN(l.rate),
             rol:                   toN(l.rol),
-            num_reinstatements:    toN(l.reinstatements),
+            // Preserve the 'UNLIMITED' sentinel verbatim; toN() would discard it
+            // (server reinstatInt() keeps it in JSONB with the numeric column null).
+            num_reinstatements:    String(l.reinstatements ?? '').trim().toUpperCase() === 'UNLIMITED'
+                                     ? 'UNLIMITED' : toN(l.reinstatements),
             reinstatement_pct:     toN(l.pctReinst),
             annual_agg_deductible: null,
             peril_scope:           peril(l),

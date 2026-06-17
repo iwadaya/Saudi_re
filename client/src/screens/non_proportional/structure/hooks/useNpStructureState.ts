@@ -22,6 +22,7 @@ import { useGlobalToast } from '../../../../hooks/useToast';
 import { useAppState } from '../../../../context/AppContext';
 import { ACTIVE_QUOTE_ID } from '../../../../constants/storageKeys';
 import { handleStaleWrite } from '../../../../utils/handleStaleWrite';
+import { REINSTATEMENT_OPTIONS } from '../../reinstatementOptions';
 
 /* handleStaleWrite is a plain-JS util; its inferred options type collapses
    to `{ entityType?: string }`, so give the call site an honest signature. */
@@ -715,11 +716,9 @@ export function useNpStructureState() {
   const riskPillOn = mode === 'RISK' || mode === 'BOTH';
   const catPillOn  = mode === 'CAT'  || mode === 'BOTH';
 
-  const reinstatementOptions = useMemo(() => [
-    { v: '', l: '—' },
-    ...Array.from({ length: 10 }, (_, i) => ({ v: String(i + 1), l: String(i + 1) })),
-    { v: 'UNLIMITED', l: 'Unlimited' },
-  ], []);
+  // Shared with the final-pricing quote panel + pricing-analysis modal so every
+  // NP reinstatement dropdown offers the same blank / 1–10 / Unlimited choices.
+  const reinstatementOptions = REINSTATEMENT_OPTIONS;
 
   // Stop Loss + Aggregate XL each have their own structure surfaces
   // (different shapes from the Risk XL / Cat XL layer grid). The
