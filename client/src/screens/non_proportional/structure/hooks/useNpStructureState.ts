@@ -715,12 +715,11 @@ export function useNpStructureState() {
   const riskPillOn = mode === 'RISK' || mode === 'BOTH';
   const catPillOn  = mode === 'CAT'  || mode === 'BOTH';
 
-  const reinstatementOptions = useMemo(() => {
-    const opts = [{ v: '', l: '—' }];
-    for (let i = 1; i <= 10; i++) opts.push({ v: String(i), l: String(i) });
-    opts.push({ v: 'UNLIMITED', l: 'Unlimited' });
-    return opts;
-  }, []);
+  const reinstatementOptions = useMemo(() => [
+    { v: '', l: '—' },
+    ...Array.from({ length: 10 }, (_, i) => ({ v: String(i + 1), l: String(i + 1) })),
+    { v: 'UNLIMITED', l: 'Unlimited' },
+  ], []);
 
   // Stop Loss + Aggregate XL each have their own structure surfaces
   // (different shapes from the Risk XL / Cat XL layer grid). The

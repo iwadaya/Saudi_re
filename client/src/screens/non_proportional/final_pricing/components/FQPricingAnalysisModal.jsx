@@ -237,7 +237,7 @@ export default function FQPricingAnalysisModal({
     // Order: Layer, Active, Limit, Deductible, EGNPI, Reinst., % Reinst.,
     //   Pure Burn, Pareto, Exposure, Wt Burn, Wt Pareto, Wt Exp, Blend,
     //   Implied·Expiring/Country/Region/Global, UW Price, P(Attach), P(Exhaust), Note.
-    const COLW = [52, 56, 110, 110, 120, 80, 92, 88, 80, 88, 78, 84, 78, 84, 112, 104, 104, 104, 100, 88, 92, 180];
+    const COLW = [52, 56, 110, 110, 120, 80, 92, 88, 80, 88, 78, 84, 78, 84, 96, 96, 96, 96, 104, 88, 92, 180];
     const TABLE_MIN_W = COLW.reduce((s, w) => s + w, 0);
     const disabledByMode = scopeKey === 'risk' ? riskDisabled : catDisabled;
     // Blend uses THIS row's own weights (Wt Burn/Pareto/Exp columns), divided
@@ -302,30 +302,40 @@ export default function FQPricingAnalysisModal({
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: TABLE_MIN_W, tableLayout: 'fixed', fontSize: 11 }}>
             <colgroup>{COLW.map((w, ci) => (<col key={`col-${ci}`} style={{ width: w }} />))}</colgroup>
             <thead style={{ background: '#050810' }}>
+              {/* Two-tier header: a single IMPLIED banner (colSpan=4) sits above its
+                  four short sub-labels (Expiring/Country/Region/Global) so each reads
+                  on one line instead of repeating "IMPLIED ·" inside a narrow column.
+                  Every other column uses rowSpan=2 to span both header rows, bottom-
+                  aligned so its label lines up with the sub-labels. The column COUNT is
+                  unchanged (22), so tbody/tfoot cells stay aligned. */}
               <tr>
-                <th style={{ ...th, textAlign: 'center' }}>Layer</th>
-                <th style={{ ...th, textAlign: 'center' }}>Active</th>
-                <th style={th}>Limit</th>
-                <th style={th}>Deductible</th>
-                <th style={th}>EGNPI</th>
-                <th style={groupTh(G.note, 'rgba(148,163,184,0.45)')}>Reinst.</th>
-                <th style={groupTh(G.note, 'rgba(148,163,184,0.45)')}>% Reinst.</th>
-                <th style={groupTh(G.modelled, '#4ade80')}>Pure Burn</th>
-                <th style={groupTh(G.modelled, '#4ade80')}>Pareto</th>
-                <th style={groupTh(G.modelled, '#4ade80')}>Exposure</th>
-                <th style={groupTh(G.modelled, '#4ade80')}>Wt Burn</th>
-                <th style={groupTh(G.modelled, '#4ade80')}>Wt Pareto</th>
-                <th style={groupTh(G.modelled, '#4ade80')}>Wt Exp</th>
-                <th style={groupTh(G.modelled, '#4ade80')}>Blend</th>
-                <th style={groupTh(G.exp, '#f59e0b')}>Implied · Expiring</th>
-                {/* NOTE: Implied · Country/Region/Global placeholders — populated in the next prompt. */}
-                <th style={groupTh(G.country, '#00d4ff')}>Implied · Country</th>
-                <th style={groupTh(G.region, '#a78bfa')}>Implied · Region</th>
-                <th style={groupTh(G.global, '#4ade80')}>Implied · Global</th>
-                <th style={groupTh(G.uw, '#00d4ff')}>UW Price</th>
-                <th style={groupTh(G.modelled, '#4ade80')}>P(Attach)</th>
-                <th style={groupTh(G.modelled, '#4ade80')}>P(Exhaust)</th>
-                <th style={{ ...groupTh(G.note, 'rgba(148,163,184,0.45)'), textAlign: 'left' }}>Note</th>
+                <th rowSpan={2} style={{ ...th, textAlign: 'center', verticalAlign: 'bottom' }}>Layer</th>
+                <th rowSpan={2} style={{ ...th, textAlign: 'center', verticalAlign: 'bottom' }}>Active</th>
+                <th rowSpan={2} style={{ ...th, verticalAlign: 'bottom' }}>Limit</th>
+                <th rowSpan={2} style={{ ...th, verticalAlign: 'bottom' }}>Deductible</th>
+                <th rowSpan={2} style={{ ...th, verticalAlign: 'bottom' }}>EGNPI</th>
+                <th rowSpan={2} style={{ ...groupTh(G.note, 'rgba(148,163,184,0.45)'), verticalAlign: 'bottom' }}>Reinst.</th>
+                <th rowSpan={2} style={{ ...groupTh(G.note, 'rgba(148,163,184,0.45)'), verticalAlign: 'bottom' }}>% Reinst.</th>
+                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>Pure Burn</th>
+                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>Pareto</th>
+                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>Exposure</th>
+                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>Wt Burn</th>
+                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>Wt Pareto</th>
+                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>Wt Exp</th>
+                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>Blend</th>
+                {/* IMPLIED group banner — spans the Expiring/Country/Region/Global peer columns. */}
+                <th colSpan={4} style={{ ...groupTh(G.exp, '#f59e0b'), textAlign: 'center' }}>Implied</th>
+                <th rowSpan={2} style={{ ...groupTh(G.uw, '#00d4ff'), verticalAlign: 'bottom' }}>UW Price</th>
+                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>P(Attach)</th>
+                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>P(Exhaust)</th>
+                <th rowSpan={2} style={{ ...groupTh(G.note, 'rgba(148,163,184,0.45)'), textAlign: 'left', verticalAlign: 'bottom' }}>Note</th>
+              </tr>
+              <tr>
+                {/* Short IMPLIED sub-labels — keep their per-scope column tints. */}
+                <th style={groupTh(G.exp, '#f59e0b')}>Expiring</th>
+                <th style={groupTh(G.country, '#00d4ff')}>Country</th>
+                <th style={groupTh(G.region, '#a78bfa')}>Region</th>
+                <th style={groupTh(G.global, '#4ade80')}>Global</th>
               </tr>
             </thead>
             <tbody>
