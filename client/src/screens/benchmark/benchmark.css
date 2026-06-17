@@ -192,7 +192,7 @@
 }
 .bm-curve-badge span {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 10px;
   opacity: 0.85;
 }
 
@@ -675,7 +675,7 @@
   color: #23d18b; font-size: 11px; font-weight: 600;
   white-space: nowrap;
 }
-.bm-cob-tag--sm { font-size: 10.5px; padding: 2px 8px; }
+.bm-cob-tag--sm { font-size: 10px; padding: 2px 8px; }
 
 /* ── COB Modal ────────────────────────────────────────────────────────── */
 .bm-modal-backdrop {

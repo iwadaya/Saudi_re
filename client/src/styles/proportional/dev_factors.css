@@ -985,13 +985,6 @@
   border-color: rgba(249,115,22,.90);
 }
 
-/* Compact chosen toggle pill ~30% smaller */
-.DEV_FACTORS_PAGE .df-chosen-toggle{
-  transform: scale(.70);
-  transform-origin: left top;
-  margin-top: 4px;
-}
-
 /* Underwriter section card already orange tint in your theme block;
    this focuses on the editable cells (inputs) */
 .DEV_FACTORS_PAGE .df-section--underwriter .df-input{
