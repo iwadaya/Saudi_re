@@ -134,7 +134,8 @@ async function loadQuoteFinalWorkflowState(db, quoteId) {
   try {
     const [structureR, layerR, cobR, probabilityR] = await Promise.all([
       db.query(
-        `SELECT structure_no, structure_key, structure_label, selected_for_approval, raw_structure
+        `SELECT structure_no, structure_key, structure_label, selected_for_approval,
+                quote_type, lead_line_pct, follow_line_pct, raw_structure
            FROM public.quote_np_final_structure
           WHERE quote_id=$1
           ORDER BY structure_no`,
@@ -201,6 +202,11 @@ async function loadQuoteFinalWorkflowState(db, quoteId) {
         id: raw.id || row.structure_key || `quote-structure-${row.structure_no}`,
         label: raw.label || row.structure_label || undefined,
         layers: layersByStructure.get(row.structure_no) || arr(raw.layers),
+        // Per-structure quote type + single lead/follow line. The dedicated
+        // columns are authoritative; raw_structure JSONB is the fallback.
+        quoteType: row.quote_type || raw.quoteType || 'LEAD',
+        leadLinePct: row.lead_line_pct != null ? String(row.lead_line_pct) : (raw.leadLinePct ?? ''),
+        followLinePct: row.follow_line_pct != null ? String(row.follow_line_pct) : (raw.followLinePct ?? ''),
       };
     });
 
@@ -284,16 +290,23 @@ async function saveQuoteFinalWorkflowState(db, quoteId, npFinalPricing, req) {
     const structureNo = i + 1;
     const structureKey = structure.id ? String(structure.id) : `quote-structure-${structureNo}`;
     scopeToStructureNo.set(structureKey, structureNo);
+    // Quote type is per structure; lead/follow line is a single value across
+    // the structure (lead_line_pct for LEAD, follow_line_pct for INDICATIVE).
+    const quoteType = String(structure.quoteType || 'LEAD').toUpperCase() === 'INDICATIVE' ? 'INDICATIVE' : 'LEAD';
     await db.query(
       `INSERT INTO public.quote_np_final_structure
-         (quote_id, structure_no, structure_key, structure_label, selected_for_approval, raw_structure)
-       VALUES ($1,$2,$3,$4,$5,$6::jsonb)`,
+         (quote_id, structure_no, structure_key, structure_label, selected_for_approval,
+          quote_type, lead_line_pct, follow_line_pct, raw_structure)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)`,
       [
         quoteId,
         structureNo,
         structureKey,
         structure.label || null,
         !!approved[i],
+        quoteType,
+        pctNum(structure.leadLinePct),
+        pctNum(structure.followLinePct),
         json({ ...structure, layers: arr(structure.layers).map((layer) => ({ ...layer })) }),
       ],
     );

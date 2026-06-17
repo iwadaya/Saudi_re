@@ -530,6 +530,12 @@ export const normalizeQuoteStructure = (structure = {}, index = 0, opts = {}) =>
   return {
     ...structure,
     id: structure.id || structure.structureId || `str-${index}`,
+    // Per-structure quote type (LEAD/INDICATIVE) + a single lead/follow line
+    // "across" the structure (not per layer). Defaults keep legacy/loaded
+    // structures consistent; they round-trip via the save path.
+    quoteType: structure.quoteType === 'INDICATIVE' ? 'INDICATIVE' : 'LEAD',
+    leadLinePct: structure.leadLinePct ?? '',
+    followLinePct: structure.followLinePct ?? '',
     layers: cascadeQuoteAttachments(layers.map((layer, layerIndex) => normalizeQuotePricingLayer(layer, layerIndex, opts))),
   };
 };

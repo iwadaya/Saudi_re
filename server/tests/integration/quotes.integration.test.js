@@ -189,6 +189,9 @@ describe.skipIf(shouldSkipDb)('integration: /api/quotes end-to-end', () => {
               clientStructures: [
                 {
                   id: 'structure-a',
+                  quoteType: 'INDICATIVE',
+                  leadLinePct: '',
+                  followLinePct: '12.5',
                   layers: [
                     {
                       id: 'layer-a1',
@@ -223,9 +226,15 @@ describe.skipIf(shouldSkipDb)('integration: /api/quotes end-to-end', () => {
     expect(Number(loaded.detail.structures_to_quote)).toBe(2);
     expect(loaded.terms.np_final_pricing.fqScaffolding.clientStructures[0].id).toBe('structure-a');
     expect(loaded.terms.np_final_pricing.fqScaffolding.approvedStructures).toEqual([true]);
+    // Per-structure quote type + single lead/follow line round-trip.
+    const loadedStructure = loaded.terms.np_final_pricing.fqScaffolding.clientStructures[0];
+    expect(loadedStructure.quoteType).toBe('INDICATIVE');
+    expect(loadedStructure.followLinePct).toBe('12.5');
+    expect(loadedStructure.leadLinePct).toBe('');
 
     const { rows: structureRows } = await pool.query(
-      `SELECT s.structure_no, s.selected_for_approval, l.layer_limit, l.attachment, l.risk, l.cat
+      `SELECT s.structure_no, s.selected_for_approval, s.quote_type, s.lead_line_pct, s.follow_line_pct,
+              l.layer_limit, l.attachment, l.risk, l.cat
          FROM public.quote_np_final_structure s
          JOIN public.quote_np_final_structure_layer l
            ON l.quote_id=s.quote_id AND l.structure_no=s.structure_no
@@ -238,6 +247,10 @@ describe.skipIf(shouldSkipDb)('integration: /api/quotes end-to-end', () => {
     expect(Number(structureRows[0].attachment)).toBe(250000);
     expect(structureRows[0].risk).toBe(true);
     expect(structureRows[0].cat).toBe(false);
+    // Dedicated per-structure columns: INDICATIVE → follow_line_pct set, lead null.
+    expect(structureRows[0].quote_type).toBe('INDICATIVE');
+    expect(Number(structureRows[0].follow_line_pct)).toBe(12.5);
+    expect(structureRows[0].lead_line_pct).toBeNull();
 
     const history = await harness.fetchApp('GET', `/api/quotes/${created.quote_id}/negotiation-history`).then((r) => r.json());
     expect(history.events.some((event) => event.event_type === 'QUOTE_FINAL_PRICING_SAVED')).toBe(true);
