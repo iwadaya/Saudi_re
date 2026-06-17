@@ -21,13 +21,24 @@ export default function PctInput({
   inputMode = 'decimal',
   onBlur,
   onFocus,
+  displayMaxDp,
   ...rest
 }) {
   const [editing, setEditing] = useState(false);
   const [raw, setRaw] = useState('');
 
   const bare = String(value ?? '').replace(/%/g, '').trim();
-  const display = editing ? raw : (bare ? `${bare}%` : '');
+  // Idle display can be capped to a max number of decimals (display only —
+  // editing shows the full-precision `bare` value, and onChange/onBlur pass the
+  // untouched entry, so stored precision is never lost).
+  const idle = (() => {
+    if (displayMaxDp == null || bare === '') return bare;
+    const n = Number(bare);
+    if (!Number.isFinite(n)) return bare;
+    const f = 10 ** displayMaxDp;
+    return String(Math.round(n * f) / f);
+  })();
+  const display = editing ? raw : (idle ? `${idle}%` : '');
 
   return (
     <input

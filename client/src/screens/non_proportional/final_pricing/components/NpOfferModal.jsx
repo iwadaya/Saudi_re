@@ -10,7 +10,7 @@
 
 import { api } from '../../../../api';
 import PctInput from '../../../../components/PctInput';
-import { fmtC } from '../formatters.js';
+import { fmtC, capPct2 } from '../formatters.js';
 import { structureCombinedTotals, layerCombinedPricing } from '../fqQuoteMath.js';
 
 /**
@@ -211,7 +211,7 @@ export default function NpOfferModal({
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                                                   <span style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0' }}>{s.label || `Structure ${i + 1}`}</span>
                                                   <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', padding: '2px 8px', borderRadius: 6, color: indicative ? '#fbbf24' : '#23d18b', background: indicative ? 'rgba(251,191,36,0.12)' : 'rgba(35,209,139,0.12)', border: `1px solid ${indicative ? 'rgba(251,191,36,0.35)' : 'rgba(35,209,139,0.35)'}` }}>{indicative ? 'Indicative' : 'Lead'}</span>
-                                                  <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.75)' }}>{lineVal > 0 ? `${lineVal}% ${indicative ? 'follow' : 'lead'} line` : 'No line set'}</span>
+                                                  <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.75)' }}>{lineVal > 0 ? `${capPct2(lineVal)}% ${indicative ? 'follow' : 'lead'} line` : 'No line set'}</span>
                                                 </div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
                                                   {[

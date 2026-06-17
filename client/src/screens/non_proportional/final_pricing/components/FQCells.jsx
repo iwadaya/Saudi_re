@@ -32,7 +32,8 @@ export function FQNumCell({ value, onChange, className = 'bm-cell', placeholder 
 }
 
 export function FQPctCell({ value, onChange, className = 'bm-cell bm-cell--sm', placeholder = '—%' }) {
-  return <PctInput value={value} onChange={onChange} className={className} placeholder={placeholder} />;
+  // Quote tables show percentages to a MAX of 2 dp; entry keeps full precision.
+  return <PctInput value={value} onChange={onChange} className={className} placeholder={placeholder} displayMaxDp={2} />;
 }
 
 export function FQReadCell({ value, className = 'bm-cell bm-cell--sm bm-cell--display', placeholder = '—', style, title }) {

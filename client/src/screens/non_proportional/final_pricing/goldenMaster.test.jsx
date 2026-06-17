@@ -300,7 +300,7 @@ describe('NpFinalPricing golden master (quote mode)', () => {
 
     expect(rowsOf(screen.getByText(/^Structure 1$/i).closest('section').querySelector('table'))).toEqual([
       ['#', 'Limit', 'Attachment', 'EGNPI', 'Geomean', 'x=G/E', 'ROL % ↗', 'Premium ↗', 'Rate % ↗', 'Risk', 'Cat', ''],
-      ['1', '[750,000]', '[100,000]', '[1,500,000]', '291,548', '0.1944', '62.73%', '470,445', '31.3630%', '[x]', '[x]', '✕'],
+      ['1', '[750,000]', '[100,000]', '[1,500,000]', '291,548', '0.1944', '62.73%', '470,445', '31.36%', '[x]', '[x]', '✕'],
       ['TOTAL', '750,000', '', '1,500,000', '', '', '62.73%', '470,445', '', '', '', ''],
     ]);
   });
@@ -332,11 +332,11 @@ describe('NpFinalPricing golden master (quote mode)', () => {
     const componentRows = (scope) => [
       ['Layer', 'Active', 'Limit', 'Deductible', 'EGNPI', 'Reinst.', '% Reinst.', 'Pure Burn', 'Pareto', 'Exposure', 'Wt Burn', 'Wt Pareto', 'Wt Exp', 'Blend', 'Implied', 'UW Price', 'P(Attach)', 'P(Exhaust)', 'Note'],
       ['Expiring', 'Country', 'Region', 'Global'],
-      ['1', '[x]', '750,000', '100,000', '1,500,000', '[]', '[]', `[${scope}]`, '[0%]', `[${scope}]`, '[50]', '[0]', '[50]', '53.32%', '62.73%', '—', '—', '—', '[62.726%]', '—', '—', '[]'],
+      ['1', '[x]', '750,000', '100,000', '1,500,000', '[]', '[]', `[${scope}]`, '[0%]', `[${scope}]`, '[50]', '[0]', '[50]', '53.32%', '62.73%', '—', '—', '—', '[62.73%]', '—', '—', '[]'],
       ['TOTAL', '1', '750,000', '—', '1,500,000', '—', '—', '53.32%', '—', '53.32%', '—', '—', '—', '53.32%', '62.73%', '—', '—', '—', '62.73%', '—', '—', '—'],
     ];
-    expect(rowsOf(paTables[0])).toEqual(componentRows('53.3171%'));
-    expect(rowsOf(paTables[1])).toEqual(componentRows('53.3171%'));
+    expect(rowsOf(paTables[0])).toEqual(componentRows('53.32%'));
+    expect(rowsOf(paTables[1])).toEqual(componentRows('53.32%'));
     // Total Section is now a combined PER-LAYER table fusing risk + cat: the
     // single layer is risk+cat active, so UW ROL = risk ROL + cat ROL
     // (62.73% + 62.73% = 125.45%), EP = limit × ROL = 940,890, rate = EP ÷ EGNPI.

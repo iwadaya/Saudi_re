@@ -45,6 +45,37 @@ export function fmtPctV(v, d = 2) {
   return n ? `${n.toFixed(d)}%` : '—';
 }
 
+/**
+ * Canonical percentage DISPLAY for the quote tables — the single source of
+ * truth for rendered percentages. Caps the string at a MAXIMUM of 2 decimals
+ * (trailing zeros trimmed): 12.38% / 0.74% / 13.4% / 85%. Returns '—' for
+ * non-finite input.
+ *
+ * DISPLAY ONLY: never round the stored/computed value. Pass the full-precision
+ * number; only the rendered string is capped. Pricing math, ROL, rates, MDP%
+ * and weights keep full precision internally.
+ */
+export function fmtPct(v) {
+  if (v == null || v === '') return '—';
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '—';
+  return `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+}
+
+/**
+ * Cap a numeric string at a MAX of 2 decimals for plain / editable-cell idle
+ * display (no "%", no thousands separators). Empty / non-numeric pass through
+ * untouched so placeholders and in-progress entry are preserved. The stored
+ * value keeps full precision; only this rendered string is capped.
+ */
+export function capPct2(v) {
+  const s = String(v ?? '').replace(/%/g, '').trim();
+  if (s === '') return '';
+  const n = Number(s);
+  if (!Number.isFinite(n)) return s;
+  return String(Math.round(n * 100) / 100);
+}
+
 // ── Pricing math ────────────────────────────────────────────────────
 
 /**

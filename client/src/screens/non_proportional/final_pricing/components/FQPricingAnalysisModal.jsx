@@ -7,7 +7,7 @@
 // Tabs 2/3 ("Pareto Simulation", "Inflation & Loss") are placeholders.
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
-import { toN } from '../formatters.js';
+import { toN, capPct2 } from '../formatters.js';
 import { QUOTE_COMPONENT_SCOPES, quoteComponentDerived, layerCombinedPricing } from '../fqQuoteMath.js';
 import { fqPriceLayerOnCurve, fqFitPowerLaw, fqPeerToXY, fqGeomean } from '../fqHelpers.js';
 import { REINSTATEMENT_OPTIONS } from '../../reinstatementOptions';
@@ -22,6 +22,28 @@ const TOP_TABS = [
   { k: 'pareto', label: 'Pareto Simulation' },
   { k: 'loss', label: 'Inflation & Loss' },
 ];
+
+// Editable weight cell: shows the value capped at 2 dp while idle, full
+// precision while editing. Entry keeps full precision (onChange passes the raw
+// digits); only the idle display is capped.
+function WtInput({ value, disabled, ariaLabel, onChange }) {
+  const [editing, setEditing] = useState(false);
+  const [raw, setRaw] = useState('');
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      className="bm-cell bm-cell--sm"
+      aria-label={ariaLabel}
+      value={editing ? raw : capPct2(value)}
+      disabled={disabled}
+      onFocus={() => { setEditing(true); setRaw(String(value ?? '')); }}
+      onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ''); setRaw(v); onChange(v); }}
+      onBlur={() => setEditing(false)}
+      style={{ width: '100%', boxSizing: 'border-box', opacity: disabled ? 0.5 : 1 }}
+    />
+  );
+}
 
 // Subtle background tints that band the table into Modelled / Implied-Expiring /
 // Implied-Market / UW groups.
@@ -268,13 +290,14 @@ export default function FQPricingAnalysisModal({
       }
       return wSum > 0 ? acc / wSum : 0;
     };
-    // Small editable numeric cell for the per-row weight columns.
+    // Small editable numeric cell for the per-row weight columns (2 dp display).
     const wtCell = (lIdx, field, layer) => (
-      <input type="text" inputMode="decimal" className="bm-cell bm-cell--sm"
-        aria-label={`${scope.label} Structure ${sIdx + 1} Layer ${lIdx + 1} ${field}`}
-        value={layer[field] ?? ''} disabled={disabledByMode}
-        onChange={(e) => updateClientStructureLayer(sIdx, lIdx, field, e.target.value.replace(/[^0-9.]/g, ''))}
-        style={{ width: '100%', boxSizing: 'border-box', opacity: disabledByMode ? 0.5 : 1 }} />
+      <WtInput
+        ariaLabel={`${scope.label} Structure ${sIdx + 1} Layer ${lIdx + 1} ${field}`}
+        value={layer[field]}
+        disabled={disabledByMode}
+        onChange={(v) => updateClientStructureLayer(sIdx, lIdx, field, v)}
+      />
     );
     return (
       <section key={scopeKey} style={{ background: 'rgba(8,14,30,0.72)', border: `1px solid ${scope.color}35`, borderRadius: 12 }}>
