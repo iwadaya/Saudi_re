@@ -14,6 +14,8 @@ import { REINSTATEMENT_OPTIONS } from '../../reinstatementOptions';
 import { api } from '../../../../api';
 import { FQPctCell, FQReadCell } from './FQCells.jsx';
 import FQFinalPriceModal from './FQFinalPriceModal.jsx';
+import SeverityFitPanel from './SeverityFitPanel.jsx';
+import FrequencySimPanel from './FrequencySimPanel.jsx';
 
 const TOP_TABS = [
   { k: 'pricing', label: 'Pricing Analysis' },
@@ -74,6 +76,10 @@ export default function FQPricingAnalysisModal({
   const [tab, setTab] = useState('pricing');
   // Per-scope "Final Price" modal (null = closed, else 'risk' | 'cat').
   const [finalPriceScope, setFinalPriceScope] = useState(null);
+  // Published severity fits (one per scope) so the FrequencySimPanel can run
+  // the Monte-Carlo off the same losses / threshold / family the fit shows.
+  const [riskSevFit, setRiskSevFit] = useState(null);
+  const [catSevFit, setCatSevFit] = useState(null);
   // ── Peer pools per scope → power-law fits for the Implied · Country/Region/
   //    Global columns (same fits the benchmark modal uses). Fetched on open and
   //    whenever contractId/cobIds change; failures degrade to an empty pool. ──
@@ -594,7 +600,57 @@ export default function FQPricingAnalysisModal({
               )}
             </>
           )}
-          {tab === 'pareto' && placeholderTab('Pareto Simulation', 'Adjust large-loss and cat Pareto parameters (alpha, threshold, severity) and see pricing update live — coming soon.')}
+          {tab === 'pareto' && (
+            <>
+              {layers.length === 0 && (
+                <div data-testid="fq-pareto-no-layers" style={{ padding: '18px 14px', borderRadius: 8, background: 'rgba(8,14,30,0.6)', border: '1px solid rgba(255,255,255,0.09)', fontSize: 12, color: 'rgba(148,163,184,0.78)' }}>
+                  This structure has no layers yet.
+                </div>
+              )}
+              {layers.length > 0 && showRisk && (
+                <>
+                  <SeverityFitPanel
+                    scopeKey="risk"
+                    structure={structure}
+                    contractId={contractId}
+                    isQuote={isQuote}
+                    onFitChange={setRiskSevFit}
+                    savedConfig={structure.riskParetoSim}
+                  />
+                  <FrequencySimPanel
+                    scopeKey="risk"
+                    structure={structure}
+                    sIdx={sIdx}
+                    sevFit={riskSevFit}
+                    savedConfig={structure.riskParetoSim}
+                    updateClientStructure={updateClientStructure}
+                    updateClientStructureLayer={updateClientStructureLayer}
+                  />
+                </>
+              )}
+              {layers.length > 0 && showCat && (
+                <>
+                  <SeverityFitPanel
+                    scopeKey="cat"
+                    structure={structure}
+                    contractId={contractId}
+                    isQuote={isQuote}
+                    onFitChange={setCatSevFit}
+                    savedConfig={structure.catParetoSim}
+                  />
+                  <FrequencySimPanel
+                    scopeKey="cat"
+                    structure={structure}
+                    sIdx={sIdx}
+                    sevFit={catSevFit}
+                    savedConfig={structure.catParetoSim}
+                    updateClientStructure={updateClientStructure}
+                    updateClientStructureLayer={updateClientStructureLayer}
+                  />
+                </>
+              )}
+            </>
+          )}
           {tab === 'loss' && placeholderTab('Inflation & Loss Manipulation', 'Apply inflation and adjust large/cat loss inputs to stress pricing — coming soon.')}
         </div>
       </div>
