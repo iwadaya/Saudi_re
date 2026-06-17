@@ -5,7 +5,8 @@
 // from existing state — no pricing is recomputed here:
 //   • Final structure + pricing: one row per active layer using the SAME
 //     combined risk+cat derivation as the Pricing Analysis Total Section
-//     (layerCombinedPricing), plus the structure total.
+//     (layerCombinedPricing), plus the structure total. MDP % is the one
+//     EDITABLE cell (default 85); MDP Amount = EP x MDP % / 100 (read-only).
 //   • Underwriting limits + COB×layer coverage via FQCobParticipationTable in
 //     read-only mode (which classes participate in which layer, each COB limit).
 //
@@ -23,6 +24,7 @@ import { toN } from '../formatters.js';
 import { formatWithCommas } from '../../../../utils/format';
 import { layerCombinedPricing } from '../fqQuoteMath.js';
 import FQCobParticipationTable from './FQCobParticipationTable.jsx';
+import { FQPctCell } from './FQCells.jsx';
 
 const ACCENT = '#23d18b';
 const noop = () => {};
@@ -48,6 +50,7 @@ const sanitizePct = (raw) => {
  *   approvedStructures: boolean[],
  *   setApprovedQuoteStructure: (index: number, checked: boolean) => void,
  *   updateClientStructure: (sIdx: number, field: string, value: unknown) => void,
+ *   updateClientStructureLayer: (sIdx: number, lIdx: number, field: string, value: unknown) => void,
  *   save: (options?: object) => Promise<boolean>,
  *   onClose: () => void,
  * }} props
@@ -63,6 +66,7 @@ export default function NpSendForApprovalModal({
   approvedStructures,
   setApprovedQuoteStructure,
   updateClientStructure,
+  updateClientStructureLayer,
   save,
   onClose,
 }) {
@@ -110,8 +114,18 @@ export default function NpSendForApprovalModal({
   const sumLimit = rows.reduce((s, r) => s + r.c.limit, 0);
   const sumEgnpi = rows.reduce((s, r) => s + r.c.egnpi, 0);
   const sumEP = rows.reduce((s, r) => s + r.c.earnedPremium, 0);
+  const sumMdp = rows.reduce((s, r) => s + r.c.mdpAmount, 0);
   const totRol = sumLimit > 0 ? (sumEP / sumLimit) * 100 : 0;
   const totRate = sumEgnpi > 0 ? (sumEP / sumEgnpi) * 100 : 0;
+  const totMdpPct = sumEP > 0 ? (sumMdp / sumEP) * 100 : 0;   // weighted, like LayerTableCard
+
+  // The one editable cell in this read-only table: set mdp_pct AND keep mdp in
+  // sync (mdp = EP x mdp_pct / 100) on the layer, mirroring LayerTableCard.
+  const onMdpPctChange = (lIdx, c, raw) => {
+    updateClientStructureLayer(sIdx, lIdx, 'mdpPct', raw);
+    const amt = c.earnedPremium * toN(raw) / 100;
+    updateClientStructureLayer(sIdx, lIdx, 'mdp', amt > 0 ? String(Math.round(amt)) : '');
+  };
 
   const onAddToSubmission = () => {
     if (submitting) return;
@@ -142,8 +156,8 @@ export default function NpSendForApprovalModal({
   );
 
   return (
-    <div className="bm-modal-backdrop" role="presentation" style={{ display: 'flex' }} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="bm-modal" style={{ width: 'min(1120px, 95vw)', display: 'grid', gridTemplateRows: 'auto minmax(0,1fr) auto' }}>
+    <div className="bm-modal-backdrop bm-modal-backdrop--fullscreen" role="presentation" style={{ display: 'flex' }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="bm-modal bm-modal--fullscreen" style={{ display: 'grid', gridTemplateRows: 'auto minmax(0,1fr) auto', overflow: 'hidden' }}>
         <div className="bm-modal-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
             <div data-testid="np-send-approval-title">Send for Approval · <span style={{ color: ACCENT }}>Structure {sIdx + 1}</span></div>
@@ -167,7 +181,7 @@ export default function NpSendForApprovalModal({
                   No active layers in this structure.
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820, fontSize: 11 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 980, fontSize: 11 }}>
                   <thead>
                     <tr>
                       <th style={{ ...th, textAlign: 'center' }}>Layer</th>
@@ -177,6 +191,8 @@ export default function NpSendForApprovalModal({
                       <th style={th}>EGNPI</th>
                       <th style={th}>Rate</th>
                       <th style={th}>Earned Premium</th>
+                      <th style={th}>MDP %</th>
+                      <th style={th}>MDP Amount</th>
                       <th style={th}>UW ROL</th>
                     </tr>
                   </thead>
@@ -192,6 +208,10 @@ export default function NpSendForApprovalModal({
                         <td style={td}>{fmtMoney(c.egnpi)}</td>
                         <td style={td}>{fmtPct(c.rate)}</td>
                         <td style={td}>{fmtMoney(c.earnedPremium)}</td>
+                        <td style={{ ...td, padding: '4px 6px' }}>
+                          <FQPctCell value={String(c.mdpPct)} onChange={(v) => onMdpPctChange(lIdx, c, v)} />
+                        </td>
+                        <td style={td}>{fmtMoney(c.mdpAmount)}</td>
                         <td style={td}>{fmtPct(c.uwRol)}</td>
                       </tr>
                     ))}
@@ -205,6 +225,8 @@ export default function NpSendForApprovalModal({
                       <td style={ft}>{fmtMoney(sumEgnpi)}</td>
                       <td style={ft}>{fmtPct(totRate)}</td>
                       <td style={ft}>{fmtMoney(sumEP)}</td>
+                      <td style={ft}>{fmtPct(totMdpPct)}</td>
+                      <td style={ft}>{fmtMoney(sumMdp)}</td>
                       <td style={ft}>{fmtPct(totRol)}</td>
                     </tr>
                   </tfoot>

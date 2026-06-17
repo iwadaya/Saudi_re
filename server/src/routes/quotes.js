@@ -189,6 +189,10 @@ async function loadQuoteFinalWorkflowState(db, quoteId) {
         uwPrice: raw.uwPrice ?? row.uw_price_pct ?? '',
         pAttach: raw.pAttach ?? row.risk_prob_attach_pct ?? row.cat_prob_attach_pct ?? '',
         pExhaust: raw.pExhaust ?? row.risk_prob_exhaust_pct ?? row.cat_prob_exhaust_pct ?? '',
+        // MDP round-trips through raw_layer (saved as json(layer)); this table has
+        // no dedicated mdp columns, so surface them explicitly from the JSONB.
+        mdp: raw.mdp ?? '',
+        mdpPct: raw.mdpPct ?? '',
       };
       const list = layersByStructure.get(row.structure_no) || [];
       list.push(layer);

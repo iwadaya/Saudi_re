@@ -557,6 +557,7 @@ export default function FQQuotePricingPanel({
                     approvedStructures={approvedStructures}
                     setApprovedQuoteStructure={setApprovedQuoteStructure}
                     updateClientStructure={updateClientStructure}
+                    updateClientStructureLayer={updateClientStructureLayer}
                     save={save}
                     onClose={() => setSendApprovalIdx(null)}
                   />
