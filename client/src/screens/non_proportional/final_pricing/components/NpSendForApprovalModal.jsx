@@ -119,6 +119,23 @@ export default function NpSendForApprovalModal({
   const totRate = sumEgnpi > 0 ? (sumEP / sumEgnpi) * 100 : 0;
   const totMdpPct = sumEP > 0 ? (sumMdp / sumEP) * 100 : 0;   // weighted, like LayerTableCard
 
+  // ── Defined-share participation summary ──
+  // share = the entered line as a fraction (follow when INDICATIVE, else lead);
+  // 0 when no line → the amounts below render "—". Computed in render, so it
+  // recomputes live whenever the line %, quote type or MDP changes.
+  const sharePct = toN(isIndicative ? structure.followLinePct : structure.leadLinePct);
+  const share = sharePct / 100;
+  const exposureAtShare = share * sumLimit;   // full vertical max liability at share
+  const premiumAtShare = share * sumEP;
+  const layerLimits = layers.map((l) => toN(l?.limit));
+  const cobShareRows = (selectedCobs || []).map((cob) => {
+    const flags = getCobFlags(scope, cob.id, layers) || [];
+    const coveredIdx = layers.reduce((acc, _l, i) => (flags[i] ? [...acc, i] : acc), []);
+    const maxExposure = share * coveredIdx.reduce((s, i) => s + (layerLimits[i] || 0), 0);
+    const uwLimit = toN(getCobUwLimit(scope, cob.id));
+    return { id: cob.id, name: cob.name, coveredIdx, maxExposure, uwLimit, over: uwLimit > 0 && maxExposure > uwLimit };
+  });
+
   // The one editable cell in this read-only table: set mdp_pct AND keep mdp in
   // sync (mdp = EP x mdp_pct / 100) on the layer, mirroring LayerTableCard.
   const onMdpPctChange = (lIdx, c, raw) => {
@@ -278,6 +295,51 @@ export default function NpSendForApprovalModal({
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.8)' }}>Follow Line</span>
                   {lineInput(structure.followLinePct, false, (v) => updateClientStructure(sIdx, 'followLinePct', v))}
+                </div>
+              )}
+            </div>
+
+            {/* ── Defined-share summary — live with the line % / quote type / MDP ── */}
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 24, flexWrap: 'wrap', marginBottom: 10 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.10em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.7)' }}>
+                  At {sharePct}% {isIndicative ? 'follow' : 'lead'} line
+                </div>
+                <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.6)' }}>Total Exposure</span>
+                  <span data-testid="np-share-exposure" style={{ fontSize: 14, fontWeight: 850, color: '#e2e8f0' }}>{fmtMoney(exposureAtShare)}</span>
+                </div>
+                <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.6)' }}>Total Premium</span>
+                  <span data-testid="np-share-premium" style={{ fontSize: 14, fontWeight: 850, color: ACCENT }}>{fmtMoney(premiumAtShare)}</span>
+                </div>
+              </div>
+
+              {cobShareRows.length > 0 && (
+                <div style={{ overflowX: 'auto', width: '100%' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ ...th, textAlign: 'left' }}>Class of Business</th>
+                        <th style={th}>UW Limit</th>
+                        <th style={{ ...th, textAlign: 'left' }}>Covered Layers</th>
+                        <th style={th}>Max Exposure @ {sharePct}%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cobShareRows.map((r) => (
+                        <tr key={`share-${r.id}`} data-testid={`np-share-cob-${r.id}`}>
+                          <td style={{ ...td, textAlign: 'left', color: 'rgba(226,232,240,0.9)', fontWeight: 700 }}>{r.name}</td>
+                          <td style={td}>{fmtMoney(r.uwLimit)}</td>
+                          <td style={{ ...td, textAlign: 'left', color: 'rgba(148,163,184,0.85)' }}>{r.coveredIdx.length ? r.coveredIdx.map((i) => `L${i + 1}`).join(', ') : '—'}</td>
+                          <td style={{ ...td, color: r.over ? '#fbbf24' : 'rgba(226,232,240,0.9)', fontWeight: r.over ? 850 : 600 }}>
+                            {fmtMoney(r.maxExposure)}
+                            {r.over && <span style={{ display: 'block', fontSize: 9, fontWeight: 700, color: '#fbbf24', letterSpacing: '.02em' }}>exceeds UW limit</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
