@@ -228,6 +228,9 @@ export default function FQPricingAnalysisModal({
     return n > 0 ? formatWithCommas(String(Math.round(n))) : '—';
   };
   const fmtPct = (n) => (n > 0 ? `${n.toFixed(2)}%` : '—');
+  // Read-only MODEL cell: blank ⇒ not-calculated (—); a present value (incl. a
+  // calculated 0% for a covered class with no losses) shows its % — never a dash.
+  const fmtModelPct = (raw) => (raw === '' || raw == null ? '—' : `${toN(raw).toFixed(2)}%`);
   // Curve-predicted ROL% for a layer under a peer-scope fit: a·x^b·100, where
   // x = geomean(limit, attachment) / egnpi. "—" when uncalibrated or x ≤ 0.
   const impliedScopeRol = (layer, fit) => {
@@ -268,13 +271,15 @@ export default function FQPricingAnalysisModal({
   const tabBtn = (active) => ({ padding: '10px 16px', background: active ? 'rgba(var(--accent-blue-rgb),0.08)' : 'transparent', border: 'none', borderBottom: active ? '2px solid var(--accent-blue)' : '2px solid transparent', color: active ? 'var(--accent-blue)' : 'rgba(226,232,240,0.65)', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', cursor: 'pointer' });
 
   // Per-scope missing-input note from a Calculate run's summary. A scope with no
-  // active layers gets no note; otherwise list the components the engine couldn't
-  // price (so the cell keeps its prior value rather than showing a silent 0).
+  // active layers gets no note. When losses ARE loaded (lossCount > 0) but none
+  // routed to a covered class, that's a legitimate 0% → say "no losses for the
+  // covered class"; with no losses at all it's genuinely "not calculated".
   const noteFromScope = (s) => {
     if (!s || !s.layerCount) return '';
+    const haveData = Number(s.lossCount) > 0;
     const missing = [];
-    if (!s.burn) missing.push('no loss data — pure burn not calculated');
-    if (!s.pareto) missing.push('no Pareto fit — Pareto not calculated');
+    if (!s.burn) missing.push(haveData ? 'no losses for the covered class — pure burn 0%' : 'no loss data — pure burn not calculated');
+    if (!s.pareto) missing.push(haveData ? 'no losses for the covered class — Pareto 0%' : 'no Pareto fit — Pareto not calculated');
     if (!s.exposure) missing.push('no exposure data — exposure not calculated');
     return missing.join('; ');
   };
@@ -472,7 +477,7 @@ export default function FQPricingAnalysisModal({
                         rendered READ-ONLY (the engine ROL%, "—" when zero). The underwriter
                         edits only the weights + final price; the values still round-trip and
                         the Blend below reads these same fields, so the blend math is unchanged. */}
-                    <td style={{ ...td, background: COMP.pureBurn.tint }}>{editorWrap(<FQReadCell value={fmtPct(toN(layer[f.pureBurn]))} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" />)}</td>
+                    <td style={{ ...td, background: COMP.pureBurn.tint }}>{editorWrap(<FQReadCell value={fmtModelPct(layer[f.pureBurn])} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" />)}</td>
                     <td style={{ ...td, background: COMP.pareto.tint }}>{editorWrap(<FQReadCell value={fmtPct(toN(layer[f.pareto]))} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" />)}</td>
                     <td style={{ ...td, background: COMP.exposure.tint }}>{editorWrap(<FQReadCell value={fmtPct(toN(layer[f.exposure]))} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" />)}</td>
                     {/* Per-row blend weights — drive THIS row's Blend (no top blender).

@@ -22,6 +22,7 @@ import {
   calcRiskExposureRating,
   calcCatExposureRating,
   buildCobTokenMap,
+  buildCobNameToId,
   filterLossesForLayer,
   calcLayerPricing,
 } from './npPricingEngine.js';
@@ -631,6 +632,42 @@ describe('filterLossesForLayer', () => {
     expect(filterLossesForLayer(null,      ['motor-id'], cobMap)).toEqual([]);
     expect(filterLossesForLayer(undefined, ['motor-id'], cobMap)).toEqual([]);
   });
+
+  it('matches on cob_id when present — id is authoritative over the text name', () => {
+    const losses = [
+      { loss_id: 'A', cob_id: 'motor-id',             class_of_business: 'Property' }, // id Motor wins over name
+      { loss_id: 'B', cob_id: 'property-id',          class_of_business: 'Motor' },    // id Property — excluded
+      { loss_id: 'C', class_of_business_id: 'eng-id', class_of_business: 'Motor' },    // id Engineering — excluded
+      { loss_id: 'D', class_of_business: 'Motor' },                                    // no id → name fallback
+    ];
+    const out = filterLossesForLayer(losses, ['motor-id'], cobMap).map(l => l.loss_id);
+    expect(out).toContain('A');     // cob_id motor-id ∈ layer
+    expect(out).not.toContain('B'); // cob_id property-id ∉ layer (name ignored)
+    expect(out).not.toContain('C'); // class_of_business_id eng-id ∉ layer
+    expect(out).toContain('D');     // no id → name 'Motor' routes
+  });
+
+  it('name fallback normalises punctuation / whitespace / case identically on both sides', () => {
+    const pvMap = buildCobTokenMap([{ class_of_business_id: 'pv-id', class_of_business: 'Political Violence' }]);
+    const losses = [
+      { loss_id: 'A', class_of_business: 'political-violence' }, // punctuation
+      { loss_id: 'B', class_of_business: 'POLITICAL  VIOLENCE' }, // case + double space
+      { loss_id: 'C', class_of_business: 'Marine' },             // unrelated
+    ];
+    expect(filterLossesForLayer(losses, ['pv-id'], pvMap).map(l => l.loss_id)).toEqual(['A', 'B']);
+  });
+});
+
+describe('buildCobNameToId', () => {
+  it('maps every normalised name/code variant → the COB id', () => {
+    const m = buildCobNameToId([
+      { class_of_business_id: 'pv-id',  class_of_business: 'Political Violence', code: 'PV' },
+      { id:                   'mot-id', name:              'Motor' },
+    ]);
+    expect(m.get('political violence')).toBe('pv-id');
+    expect(m.get('pv')).toBe('pv-id');
+    expect(m.get('motor')).toBe('mot-id');
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -717,5 +754,50 @@ describe('calcLayerPricing — quote mode', () => {
     await calcLayerPricing(mockApi, 'contract-1', [layer], { estGnpi: 50_000_000 }, 'RISK', false);
     expect(mockApi.getLargeLosses).toHaveBeenCalledWith('contract-1', undefined);
     expect(mockApi.getRiskProfile).toHaveBeenCalledWith('contract-1', 'cob-1', undefined);
+  });
+
+  // ── Loss → layer routing by class of business (the reported bug) ──────────
+  const twoCobs = [
+    { class_of_business_id: 'cob-1', class_of_business: 'Motor',    code: 'MOT' },
+    { class_of_business_id: 'cob-2', class_of_business: 'Property', code: 'PROP' },
+  ];
+
+  it('routes covered-class losses to a layer (burn > 0) and resolves the text name to an id', async () => {
+    const mockApi = makeApi({ listClassOfBusiness: vi.fn(async () => twoCobs) });
+    const motorLayer = { ...layer, classOfBusinessIds: ['cob-1'] };
+    const [res] = await calcLayerPricing(mockApi, 'q', [motorLayer], { estGnpi: 50_000_000 }, 'RISK', true);
+    expect(pctToNum(res.risk.pureBurn)).toBeGreaterThan(0);
+    expect(res.risk.coveredLossCount).toBe(seededLargeLosses.length); // all Motor losses routed
+  });
+
+  it('a class NOT covered by the layer does not burn it → 0.00% (never blank) + coveredLossCount 0', async () => {
+    // Same Motor layer, but every loss is Property → none route.
+    const propLosses = seededLargeLosses.map((l) => ({ ...l, class_of_business: 'Property' }));
+    const mockApi = makeApi({
+      listClassOfBusiness: vi.fn(async () => twoCobs),
+      getLargeLosses: vi.fn(async () => ({ report: { report_id: 'r1' }, losses: propLosses })),
+    });
+    const motorLayer = { ...layer, classOfBusinessIds: ['cob-1'] };
+    const [res] = await calcLayerPricing(mockApi, 'q', [motorLayer], { estGnpi: 50_000_000 }, 'RISK', true);
+    expect(res.risk.pureBurn).toBe('0.00%');        // a real 0, NEVER blank/undefined
+    expect(res.risk.coveredLossCount).toBe(0);      // no losses for the covered class
+    expect(res.risk.scopeLossCount).toBe(propLosses.length); // but losses DID exist for the scope
+  });
+
+  it('a covered-class loss burns EVERY covering layer; lower attachment ⇒ burn ≥ higher attachment', async () => {
+    const pvCob = [{ class_of_business_id: 'pv-id', class_of_business: 'Political Violence', code: 'PV' }];
+    const pvLosses = seededLargeLosses.map((l) => ({ ...l, class_of_business: 'Political Violence' }));
+    const mockApi = makeApi({
+      listClassOfBusiness: vi.fn(async () => pvCob),
+      getLargeLosses: vi.fn(async () => ({ report: { report_id: 'r1' }, losses: pvLosses })),
+    });
+    const layerLo = { ...layer, deductible: 500_000,   classOfBusinessIds: ['pv-id'] };
+    const layerHi = { ...layer, deductible: 2_000_000, classOfBusinessIds: ['pv-id'] };
+    const res = await calcLayerPricing(mockApi, 'q', [layerLo, layerHi], { estGnpi: 50_000_000 }, 'RISK', true);
+    expect(pctToNum(res[0].risk.pureBurn)).toBeGreaterThan(0); // PV loss burns layer 1 …
+    expect(pctToNum(res[1].risk.pureBurn)).toBeGreaterThan(0); // … AND layer 2
+    expect(pctToNum(res[0].risk.pureBurn)).toBeGreaterThanOrEqual(pctToNum(res[1].risk.pureBurn));
+    expect(res[0].risk.coveredLossCount).toBe(pvLosses.length); // all routed to both covering layers
+    expect(res[1].risk.coveredLossCount).toBe(pvLosses.length);
   });
 });

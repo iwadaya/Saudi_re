@@ -632,9 +632,30 @@ function interpOEP(points, loss) {
  */
 
 /**
+ * Normalise a class-of-business label/code for matching: lowercase, strip
+ * punctuation to spaces, collapse internal whitespace, trim. Applied IDENTICALLY
+ * to the catalog tokens and the loss's text so "Political Violence",
+ * "political-violence" and "Political  Violence" all compare equal.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function normCob(value) {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+// COB id field aliases (a catalog row / loss may carry any of these) and the
+// name/code fields we tokenize. listClassOfBusiness aliases the id to `id`.
+const COB_ID_KEYS = ['class_of_business_id', 'id', 'cob_id', 'class_id'];
+const COB_NAME_KEYS = ['class_of_business', 'class_name', 'name', 'code', 'class_code'];
+
+/**
  * Build a map of `cobId → Set<match token>` from the reference
- * `class_of_business` list. Each token is a lowercased name / code
- * that a loss row might carry in its `class_of_business` column.
+ * `class_of_business` list. Each token is a NORMALISED name / code that a loss
+ * row might carry, keyed under every id alias the row exposes.
  * Exposed so filterLossesForLayer can be unit-tested in isolation.
  * @param {unknown} cobList
  * @returns {Record<string, Set<string>>}
@@ -642,26 +663,59 @@ function interpOEP(points, loss) {
 export function buildCobTokenMap(cobList) {
   const map = /** @type {Record<string, Set<string>>} */ ({});
   for (const c of (Array.isArray(cobList) ? cobList : [])) {
-    const id = String(c?.class_of_business_id || c?.id || '').trim();
-    if (!id) continue;
     const tokens = new Set();
-    for (const key of ['class_of_business', 'class_name', 'name', 'code']) {
-      if (c[key]) tokens.add(String(c[key]).trim().toLowerCase());
+    for (const key of COB_NAME_KEYS) {
+      const t = normCob(c?.[key]);
+      if (t) tokens.add(t);
     }
-    if (tokens.size) map[id] = tokens;
+    if (!tokens.size) continue;
+    // Key under EVERY id alias the row exposes so the lookup hits whichever id
+    // space the layers carry. listClassOfBusiness aliases class_of_business_id →
+    // `id`, and selectedCobs[].id / layer class_of_business_ids are that same id.
+    for (const idKey of COB_ID_KEYS) {
+      const id = String(c?.[idKey] ?? '').trim();
+      if (!id) continue;
+      if (!map[id]) map[id] = new Set();
+      for (const t of tokens) map[id].add(t);
+    }
   }
   return map;
 }
 
 /**
- * Filter losses so only those whose class_of_business matches one of
- * the layer's covered COBs remain. Conservative fall-throughs:
- *   - layer with no classOfBusinessIds → pass all (contract hasn't
- *     set up layer-COB linkage; full list preserves old behaviour)
- *   - layer COB ids didn't resolve in the catalog → pass all
- *   - loss row with no class_of_business label → pass through (we
- *     can't exclude without info; safer to include than silently drop
- *     burn-cost signal)
+ * Reverse index: normalised COB name/code → COB id, built from the same catalog.
+ * Lets us resolve a loss's free-text class_of_business to a COB id at load, so
+ * routing is id-based (loss tables store only the text name today). First id wins
+ * on a token collision.
+ * @param {unknown} cobList
+ * @returns {Map<string, string>}
+ */
+export function buildCobNameToId(cobList) {
+  const map = new Map();
+  for (const c of (Array.isArray(cobList) ? cobList : [])) {
+    let id = '';
+    for (const idKey of COB_ID_KEYS) {
+      const v = String(c?.[idKey] ?? '').trim();
+      if (v) { id = v; break; }
+    }
+    if (!id) continue;
+    for (const key of COB_NAME_KEYS) {
+      const t = normCob(c?.[key]);
+      if (t && !map.has(t)) map.set(t, id);
+    }
+  }
+  return map;
+}
+
+/**
+ * Filter losses so only those whose class-of-business matches one of the layer's
+ * covered COBs remain. A loss burns a layer when its COB **id** ∈ layerCobIds
+ * (authoritative — the id is native or resolved from text at load). The
+ * normalised-NAME match is a fallback used ONLY when the loss carries no id.
+ * Conservative fall-throughs (never silently drop burn signal):
+ *   - layer with no classOfBusinessIds → pass all (no layer-COB linkage set up)
+ *   - loss with no id AND no name → pass through
+ *   - loss with no id and a name, but the catalog resolved no tokens → pass through
  *
  * @param {LossLike[]} losses
  * @param {Array<string>} layerCobIds
@@ -671,16 +725,22 @@ export function buildCobTokenMap(cobList) {
 export function filterLossesForLayer(losses, layerCobIds, cobIdToTokens) {
   if (!Array.isArray(losses) || !losses.length) return losses || [];
   if (!Array.isArray(layerCobIds) || !layerCobIds.length) return losses;
-  const allowed = new Set();
-  for (const id of layerCobIds) {
-    const tokens = cobIdToTokens[String(id)];
-    if (tokens) for (const t of tokens) allowed.add(t);
+  const allowedIds = new Set(layerCobIds.map((id) => String(id).trim()).filter(Boolean));
+  const allowedTokens = new Set();
+  for (const id of allowedIds) {
+    const tokens = cobIdToTokens?.[id];
+    if (tokens) for (const t of tokens) allowedTokens.add(t);
   }
-  if (!allowed.size) return losses;
-  return losses.filter(l => {
-    const key = String(l.class_of_business || l.classOfBusiness || '').trim().toLowerCase();
-    if (!key) return true;
-    return allowed.has(key);
+  return losses.filter((l) => {
+    // 1) ID match is authoritative — a loss carrying a COB id (native or resolved
+    //    at load via _cobId) burns ONLY layers whose covered COBs include that id.
+    const lossId = String(l?.cob_id ?? l?.class_of_business_id ?? l?._cobId ?? '').trim();
+    if (lossId) return allowedIds.has(lossId);
+    // 2) Name fallback — ONLY when the loss has no id.
+    const name = normCob(l?.class_of_business ?? l?.classOfBusiness);
+    if (!name) return true;                 // no id, no name → can't exclude
+    if (!allowedTokens.size) return true;   // catalog miss → don't silently drop
+    return allowedTokens.has(name);
   });
 }
 
@@ -735,6 +795,27 @@ export async function calcLayerPricing(api, contractId, layers, npDetail, mode, 
   // cheap-filter its losses without re-walking the COB catalog.
   const cobIdToTokens = buildCobTokenMap(cobList);
 
+  // Resolve each loss's free-text class_of_business → a COB id at load, so routing
+  // is id-based (loss tables store only the text name today). A loss already
+  // carrying a native id keeps it; an unresolved name falls back to token matching
+  // inside filterLossesForLayer. _cobId is an internal tag the engine ignores.
+  const cobNameToId = buildCobNameToId(cobList);
+  /** @param {LossLike} l @returns {LossLike} */
+  const tagLossCob = (l) => {
+    if (!l) return l;
+    const native = String(l.cob_id ?? l.class_of_business_id ?? '').trim();
+    if (native) return l;
+    const id = cobNameToId.get(normCob(l.class_of_business ?? l.classOfBusiness));
+    return id ? { ...l, _cobId: id } : l;
+  };
+  const largeLossesTagged = largeLosses.map(tagLossCob);
+  const catLossesTagged   = catLosses.map(tagLossCob);
+  // "Were any losses loaded for this scope?" — drives the legitimate-zero vs
+  // not-calculated distinction downstream (covered class with 0 losses → 0%,
+  // not blank). Counts SELECTED losses (the ones that would contribute).
+  const largeLossCount = largeLossesTagged.filter((l) => l && l.is_selected !== false).length;
+  const catLossCount   = catLossesTagged.filter((l) => l && l.is_selected !== false).length;
+
   // Build per-year EGNPI map { year(number) -> egnpi(number) } for Clark-aligned burn cost
   const egnpiRows = Array.isArray(egnpiYearData)
     ? egnpiYearData
@@ -747,9 +828,9 @@ export async function calcLayerPricing(api, contractId, layers, npDetail, mode, 
   }
 
   const obsYearsRisk = cn(llSavedParams.observation_years)
-    || Math.max(5, new Set(largeLosses.map(l => l.uw_year)).size) || 10;
+    || Math.max(5, new Set(largeLossesTagged.map(l => l.uw_year)).size) || 10;
   const obsYearsCat  = cn(catSavedParams.observation_years)
-    || Math.max(5, new Set(catLosses.map(l => l.uw_year)).size) || 10;
+    || Math.max(5, new Set(catLossesTagged.map(l => l.uw_year)).size) || 10;
 
   // Risk profiles for MBBEFD exposure rating
   // NP treaties store COBs at the layer level (contract_np_layer_class_of_business),
@@ -831,6 +912,12 @@ export async function calcLayerPricing(api, contractId, layers, npDetail, mode, 
       _pureBurnRol: burnResult.rol,
       _paretoRol:   paretoResult.rol,
       _exposureRol: expResult.rol,
+      // Selected losses that ROUTED to this layer's covered class. 0 ⇒ the covered
+      // class has no losses → a legitimate 0.00% (not "not calculated"); the caller
+      // pairs this with scopeLossCount to show 0% + a note instead of blank.
+      coveredLossCount: Array.isArray(losses) ? losses.filter((x) => x && x.is_selected !== false).length : 0,
+      // Total selected losses loaded for the scope — set by the caller per layer.
+      scopeLossCount: 0,
     };
   }
 
@@ -868,8 +955,8 @@ export async function calcLayerPricing(api, contractId, layers, npDetail, mode, 
     // the case above via `riskProfiles`). When the layer has no COB
     // linkage, filterLossesForLayer returns the full list — preserves
     // the old behaviour on contracts without layer-COB setup.
-    const layerLargeLosses = filterLossesForLayer(largeLosses, layerCobIds, cobIdToTokens);
-    const layerCatLosses   = filterLossesForLayer(catLosses,   layerCobIds, cobIdToTokens);
+    const layerLargeLosses = filterLossesForLayer(largeLossesTagged, layerCobIds, cobIdToTokens);
+    const layerCatLosses   = filterLossesForLayer(catLossesTagged,   layerCobIds, cobIdToTokens);
 
     const riskResult = isRisk ? priceComponent(
       deductible, limit, egnpi,
@@ -884,6 +971,12 @@ export async function calcLayerPricing(api, contractId, layers, npDetail, mode, 
       (d, lim, eg) => calcCatExposureRating(crestaRows, d, lim, eg, catSavedParams, layerCatLosses, obsYearsCat),
       obsYearsCat,
     ) : null;
+
+    // scopeLossCount = total SELECTED losses loaded for the scope (not just this
+    // layer's class). coveredLossCount === 0 with scopeLossCount > 0 means "losses
+    // exist, but none for this layer's covered class" → 0%, not blank.
+    if (riskResult) riskResult.scopeLossCount = largeLossCount;
+    if (catResult)  catResult.scopeLossCount  = catLossCount;
 
     return { idx, risk: riskResult, cat: catResult };
   });
