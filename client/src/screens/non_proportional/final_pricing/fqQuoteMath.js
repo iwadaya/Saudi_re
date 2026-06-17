@@ -582,6 +582,25 @@ export const layerCombinedPricing = (layer = {}) => {
   };
 };
 
+// Structure-level combined totals (risk + cat fused), summed over active layers:
+// total limit, total premium (sum of earned premium), and limit-weighted UW ROL
+// (sum premium / sum limit). Used by the Submit-Quotes summary so structure
+// totals match the per-layer combined pricing shown elsewhere.
+export const structureCombinedTotals = (structure = {}) => {
+  const layers = Array.isArray(structure.layers) ? structure.layers : [];
+  let totalLimit = 0;
+  let totalPremium = 0;
+  let activeCount = 0;
+  for (const layer of layers) {
+    const c = layerCombinedPricing(layer);
+    if (!c) continue;
+    activeCount += 1;
+    totalLimit += c.limit;
+    totalPremium += c.earnedPremium;
+  }
+  return { totalLimit, totalPremium, activeCount, wtdRol: totalLimit > 0 ? (totalPremium / totalLimit) * 100 : 0 };
+};
+
 export const updateQuotePricingLayer = (layer = {}, field, value, opts = {}) => {
   const autoUw = quoteLayerAutoTracksUw(layer);
   let next = { ...layer, [field]: value };

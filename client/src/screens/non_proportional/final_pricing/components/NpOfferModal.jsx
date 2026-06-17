@@ -11,6 +11,7 @@
 import { api } from '../../../../api';
 import PctInput from '../../../../components/PctInput';
 import { fmtC } from '../formatters.js';
+import { structureCombinedTotals } from '../fqQuoteMath.js';
 
 /**
  * @param {{
@@ -54,6 +55,7 @@ export default function NpOfferModal({
 }) {
   const {
     layers, offerStatus, snap, techRatioAvg, approvedStructures,
+    clientStructures, selectedCobs, getCobFlags,
     layerWrittenLines, signedLinePcts, setLayerWrittenLines, setSignedLinePcts,
     offerApprover, setOfferApprover, eligibleApprovers,
     offerComment, setOfferComment, returnReason, setReturnReason,
@@ -111,7 +113,7 @@ export default function NpOfferModal({
                       {/* ── HEADER ── */}
                       <div className="bbg-modal-head" style={{ flexShrink: 0 }}>
                         <span className="bbg-modal-title">
-                          {isCU && offerStatus === 'AWAITING_APPROVAL' ? '🔐 Chief Underwriter Review' : 'Offer Treaty'}
+                          {isCU && offerStatus === 'AWAITING_APPROVAL' ? '🔐 Chief Underwriter Review' : isQuote ? 'Submit Quotes for Approval' : 'Offer Treaty'}
                         </span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
@@ -164,7 +166,60 @@ export default function NpOfferModal({
                         </div>
 
 
-                        {/* ── AI + CLASSIFIER ── */}
+                        {/* ── QUOTE SUBMISSION SUMMARY (quote mode) ── */}
+                        {isQuote && (
+                          <div className="off-card" style={{ marginBottom: 20, padding: 0, overflow: 'hidden' }}>
+                            <div className="off-card-title" style={{ padding: '12px 14px', color: '#23d18b' }}>Quotes for Submission</div>
+                            <div style={{ overflowX: 'auto' }}>
+                              {(() => {
+                                const sTh = { padding: '8px 12px', fontSize: 9, fontWeight: 700, letterSpacing: '.10em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap', borderBottom: '1px solid rgba(255,255,255,0.08)', textAlign: 'right' };
+                                const sTd = { padding: '8px 12px', textAlign: 'right', fontSize: 12, color: 'rgba(255,255,255,0.8)', borderBottom: '1px solid rgba(255,255,255,0.05)', fontVariantNumeric: 'tabular-nums' };
+                                const pct = (n) => (Number.isFinite(n) && n > 0 ? `${n.toFixed(2)}%` : '—');
+                                const queued = (clientStructures || []).map((s, i) => ({ s, i })).filter(({ i }) => approvedStructures[i]);
+                                const cobsFor = (s) => (selectedCobs || []).filter((c) => getCobFlags(String(s.id), c.id, s.layers || []).some(Boolean)).map((c) => c.name);
+                                return (
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                    <thead>
+                                      <tr>
+                                        <th style={{ ...sTh, textAlign: 'left' }}>Structure</th>
+                                        <th style={sTh}>Total Limit</th>
+                                        <th style={sTh}>Total Premium</th>
+                                        <th style={sTh}>Wtd UW ROL</th>
+                                        <th style={{ ...sTh, textAlign: 'left' }}>COBs Covered</th>
+                                        <th style={{ ...sTh, textAlign: 'center' }}>Quote Type</th>
+                                        <th style={sTh}>Line %</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {queued.length === 0 ? (
+                                        <tr><td colSpan={7} style={{ ...sTd, textAlign: 'center', color: 'rgba(255,255,255,0.4)', padding: 20 }}>No structures queued — use “Send for Approval” on a structure first.</td></tr>
+                                      ) : queued.map(({ s, i }) => {
+                                        const t = structureCombinedTotals(s);
+                                        const cobs = cobsFor(s);
+                                        const indicative = s.quoteType === 'INDICATIVE';
+                                        const lineVal = toN(indicative ? s.followLinePct : s.leadLinePct);
+                                        return (
+                                          <tr key={s.id || i} data-testid={`np-submit-summary-row-${i}`}>
+                                            <td style={{ ...sTd, textAlign: 'left', fontWeight: 700, color: '#e2e8f0' }}>{s.label || `Structure ${i + 1}`}</td>
+                                            <td style={sTd}>{t.totalLimit > 0 ? fmtC(t.totalLimit) : '—'}</td>
+                                            <td style={sTd}>{t.totalPremium > 0 ? fmtC(Math.round(t.totalPremium)) : '—'}</td>
+                                            <td style={{ ...sTd, color: '#00d4ff', fontWeight: 700 }}>{pct(t.wtdRol)}</td>
+                                            <td style={{ ...sTd, textAlign: 'left', whiteSpace: 'normal', color: 'rgba(255,255,255,0.65)' }}>{cobs.length ? cobs.join(', ') : '—'}</td>
+                                            <td style={{ ...sTd, textAlign: 'center', fontWeight: 700, color: indicative ? '#fbbf24' : '#23d18b' }}>{indicative ? 'Indicative' : 'Lead'}</td>
+                                            <td style={{ ...sTd, fontWeight: 700 }}>{lineVal > 0 ? `${lineVal}% ${indicative ? 'follow' : 'lead'}` : '—'}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── AI + CLASSIFIER (treaty offer only; quotes show the summary above) ── */}
+                        {!isQuote && (
                         <div style={{ marginBottom: 20 }}>
                         {(() => {
                           const egnpiBlock = toN(npDetail.estGnpi);
@@ -223,8 +278,10 @@ export default function NpOfferModal({
                           );
                         })()}
                         </div>
+                        )}
 
-                        {/* ── PER-LAYER TABLE ── */}
+                        {/* ── PER-LAYER TABLE (treaty offer only) ── */}
+                        {!isQuote && (
                         <div style={{ marginBottom: 20 }}>
                         {(() => {
                           const egnpiTotal = toN(npDetail.estGnpi);
@@ -329,6 +386,7 @@ export default function NpOfferModal({
                           );
                         })()}
                         </div>
+                        )}
 
                         {/* ── WORKFLOW CARDS ── */}
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, alignItems:'start' }}>
@@ -350,8 +408,8 @@ export default function NpOfferModal({
                                 <textarea className="bbg-textarea" rows={2} value={offerComment} onChange={e=>setOfferComment(e.target.value)}
                                   placeholder="Optional note to the approver…" style={{ width:'100%', boxSizing:'border-box', resize:'vertical' }}/>
                               </div>
-                              <button className="bbg-btn bbg-btn--offer" style={{ width:'100%', justifyContent:'center', opacity:(!offerApprover||!hasAnyWritten)?0.42:1 }} onClick={doSubmitForApproval}>
-                                Submit for Approval →
+                              <button className="bbg-btn bbg-btn--offer" disabled={!offerApprover || !hasAnyWritten} style={{ width:'100%', justifyContent:'center', opacity:(!offerApprover||!hasAnyWritten)?0.42:1, cursor:(!offerApprover||!hasAnyWritten)?'not-allowed':'pointer' }} onClick={doSubmitForApproval}>
+                                {isQuote ? 'Submit Quotes →' : 'Submit for Approval →'}
                               </button>
                               {!offerApprover && <div style={{ fontSize:11, color:'rgba(255,255,255,0.32)', marginTop:6, textAlign:'center' }}>Select an approver to proceed</div>}
                               {offerApprover && !hasAnyWritten && (

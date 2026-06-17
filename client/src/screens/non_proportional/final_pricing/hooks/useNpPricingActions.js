@@ -394,15 +394,34 @@ export function useNpPricingActions({
     if (!isQuote && !hasAnyLine) { showToast('Please enter a written line % for at least one layer before submitting.'); return; }
     const ok = await save();
     if (!ok) { showToast('Cannot submit: the latest pricing failed to save. Retry save first.'); return; }
+    // Quote mode: each approved structure carries its own quote type + the single
+    // line that applies (lead for LEAD, follow for INDICATIVE). The submission's
+    // written line is the mean of those structure lines — NOT the per-layer
+    // layerWrittenLines average (that path stays for the non-quote Offer flow).
+    const linePctNum = (v) => { const n = toN(v); return Number.isFinite(n) && n > 0 ? n : null; };
+    const approvedStructureDetails = approvedStructureIndices.map((index) => {
+      const s = clientStructures[index] || {};
+      return {
+        id: s.id ?? null,
+        structure_no: index + 1,
+        quote_type: s.quoteType === 'INDICATIVE' ? 'INDICATIVE' : 'LEAD',
+        lead_line_pct: linePctNum(s.leadLinePct),
+        follow_line_pct: linePctNum(s.followLinePct),
+      };
+    });
+    const quoteLineVals = approvedStructureDetails
+      .map((d) => (d.quote_type === 'INDICATIVE' ? d.follow_line_pct : d.lead_line_pct))
+      .filter((v) => Number.isFinite(v) && v > 0);
+    const quoteWrittenPct = quoteLineVals.length ? quoteLineVals.reduce((a, b) => a + b, 0) / quoteLineVals.length : null;
     try {
       await api.submitOfferForApproval(contractId, {
         line_pct: JSON.stringify(layerWrittenLines), peer1_user_id: offerApprover, comment: offerComment, _actor: actorName,
-        written_line_pct: aggWrittenPct,
+        written_line_pct: isQuote ? quoteWrittenPct : aggWrittenPct,
         selected_structure_index: isQuote ? approvedStructureIndices[0] : undefined,
         selected_structure_id: isQuote ? clientStructures[approvedStructureIndices[0]]?.id : undefined,
         selected_structure_indices: isQuote ? approvedStructureIndices : undefined,
         selected_structure_ids: isQuote ? approvedStructureIndices.map((index) => clientStructures[index]?.id).filter(Boolean) : undefined,
-        approved_structures: isQuote ? JSON.stringify(approvedStructures) : undefined,
+        approved_structures: isQuote ? JSON.stringify(approvedStructureDetails) : undefined,
       }, quoteMode ? { quote: true } : undefined);
       setOfferStatus('AWAITING_APPROVAL');
       api.getApprovalTrail(contractId, quoteMode ? { quote: true } : undefined).then(setApprovalTrail).catch(() => {});
