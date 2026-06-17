@@ -53,21 +53,21 @@ function WtInput({ value, disabled, ariaLabel, onChange }) {
 // column (Wt Burn / Wt Pareto / Wt Exp) reuses the SAME colour so the blend
 // weights read visually paired with the component they weight.
 const COMP = {
-  pureBurn: { line: '#4ade80', tint: 'rgba(74,222,128,0.10)' },   // green
-  pareto:   { line: '#f59e0b', tint: 'rgba(245,158,11,0.10)' },   // amber
-  exposure: { line: '#a78bfa', tint: 'rgba(167,139,250,0.10)' },  // violet
+  pureBurn: { line: 'var(--accent)',       tint: 'rgba(var(--accent-rgb),0.10)' },        // green
+  pareto:   { line: 'var(--accent-amber)', tint: 'rgba(var(--accent-amber-rgb),0.10)' },  // amber
+  exposure: { line: 'var(--accent-rose)',  tint: 'rgba(var(--accent-rose-rgb),0.10)' },   // violet → rose (no violet token)
 };
 
 // Subtle background tints that band the table into Modelled / Implied-Expiring /
 // Implied-Market / UW groups.
 const G = {
-  modelled: 'rgba(74,222,128,0.06)',
-  exp: 'rgba(245,158,11,0.08)',
-  country: 'rgba(0,212,255,0.08)',
-  region: 'rgba(167,139,250,0.08)',
-  global: 'rgba(74,222,128,0.08)',
-  uw: 'rgba(0,212,255,0.08)',
-  note: 'rgba(148,163,184,0.06)',
+  modelled: 'rgba(var(--accent-rgb),0.06)',
+  exp: 'rgba(var(--accent-amber-rgb),0.08)',
+  country: 'rgba(var(--accent-blue-rgb),0.08)',
+  region: 'rgba(var(--accent-rose-rgb),0.08)',   // violet → rose (no violet token)
+  global: 'rgba(var(--accent-rgb),0.08)',
+  uw: 'rgba(var(--accent-blue-rgb),0.08)',
+  note: 'var(--surface-hover)',
 };
 
 /**
@@ -265,7 +265,7 @@ export default function FQPricingAnalysisModal({
   const th = { padding: '8px 10px', textAlign: 'right', fontSize: 9, fontWeight: 850, letterSpacing: '.11em', color: 'rgba(148,163,184,0.68)', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap' };
   const td = { padding: '7px 8px', textAlign: 'right', verticalAlign: 'middle' };
   const groupTh = (bg, underline) => ({ ...th, background: bg, borderBottom: `2px solid ${underline}` });
-  const tabBtn = (active) => ({ padding: '10px 16px', background: active ? 'rgba(0,212,255,0.08)' : 'transparent', border: 'none', borderBottom: active ? '2px solid #00d4ff' : '2px solid transparent', color: active ? '#00d4ff' : 'rgba(226,232,240,0.65)', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', cursor: 'pointer' });
+  const tabBtn = (active) => ({ padding: '10px 16px', background: active ? 'rgba(var(--accent-blue-rgb),0.08)' : 'transparent', border: 'none', borderBottom: active ? '2px solid var(--accent-blue)' : '2px solid transparent', color: active ? 'var(--accent-blue)' : 'rgba(226,232,240,0.65)', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', cursor: 'pointer' });
 
   // Per-scope missing-input note from a Calculate run's summary. A scope with no
   // active layers gets no note; otherwise list the components the engine couldn't
@@ -405,21 +405,21 @@ export default function FQPricingAnalysisModal({
                 <th rowSpan={2} style={{ ...th, verticalAlign: 'bottom' }}>Limit</th>
                 <th rowSpan={2} style={{ ...th, verticalAlign: 'bottom' }}>Deductible</th>
                 <th rowSpan={2} style={{ ...th, verticalAlign: 'bottom' }}>EGNPI</th>
-                <th rowSpan={2} style={{ ...groupTh(G.note, 'rgba(148,163,184,0.45)'), verticalAlign: 'bottom' }}>Reinst.</th>
-                <th rowSpan={2} style={{ ...groupTh(G.note, 'rgba(148,163,184,0.45)'), verticalAlign: 'bottom' }}>% Reinst.</th>
+                <th rowSpan={2} style={{ ...groupTh(G.note, 'var(--stroke)'), verticalAlign: 'bottom' }}>Reinst.</th>
+                <th rowSpan={2} style={{ ...groupTh(G.note, 'var(--stroke)'), verticalAlign: 'bottom' }}>% Reinst.</th>
                 <th rowSpan={2} style={{ ...groupTh(COMP.pureBurn.tint, COMP.pureBurn.line), verticalAlign: 'bottom' }}>Pure Burn</th>
                 <th rowSpan={2} style={{ ...groupTh(COMP.pareto.tint, COMP.pareto.line), verticalAlign: 'bottom' }}>Pareto</th>
                 <th rowSpan={2} style={{ ...groupTh(COMP.exposure.tint, COMP.exposure.line), verticalAlign: 'bottom' }}>Exposure</th>
                 {/* WEIGHTING group banner — spans the Wt Burn/Pareto/Exp columns,
                     mirroring the IMPLIED two-tier treatment. */}
-                <th colSpan={3} style={{ ...groupTh(G.modelled, '#4ade80'), textAlign: 'center' }}>Weighting</th>
-                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>Blend</th>
+                <th colSpan={3} style={{ ...groupTh(G.modelled, 'var(--accent)'), textAlign: 'center' }}>Weighting</th>
+                <th rowSpan={2} style={{ ...groupTh(G.modelled, 'var(--accent)'), verticalAlign: 'bottom' }}>Blend</th>
                 {/* IMPLIED group banner — spans the Expiring/Country/Region/Global peer columns. */}
-                <th colSpan={4} style={{ ...groupTh(G.exp, '#f59e0b'), textAlign: 'center' }}>Implied</th>
-                <th rowSpan={2} style={{ ...groupTh(G.uw, '#00d4ff'), verticalAlign: 'bottom' }}>UW Price</th>
-                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>P(Attach)</th>
-                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>P(Exhaust)</th>
-                <th rowSpan={2} style={{ ...groupTh(G.note, 'rgba(148,163,184,0.45)'), textAlign: 'left', verticalAlign: 'bottom' }}>Note</th>
+                <th colSpan={4} style={{ ...groupTh(G.exp, 'var(--accent-amber)'), textAlign: 'center' }}>Implied</th>
+                <th rowSpan={2} style={{ ...groupTh(G.uw, 'var(--accent-blue)'), verticalAlign: 'bottom' }}>UW Price</th>
+                <th rowSpan={2} style={{ ...groupTh(G.modelled, 'var(--accent)'), verticalAlign: 'bottom' }}>P(Attach)</th>
+                <th rowSpan={2} style={{ ...groupTh(G.modelled, 'var(--accent)'), verticalAlign: 'bottom' }}>P(Exhaust)</th>
+                <th rowSpan={2} style={{ ...groupTh(G.note, 'var(--stroke)'), textAlign: 'left', verticalAlign: 'bottom' }}>Note</th>
               </tr>
               <tr>
                 {/* WEIGHTING sub-labels — component-matched tints (Burn/Pareto/Exp),
@@ -428,10 +428,10 @@ export default function FQPricingAnalysisModal({
                 <th style={groupTh(COMP.pareto.tint, COMP.pareto.line)}>Pareto</th>
                 <th style={groupTh(COMP.exposure.tint, COMP.exposure.line)}>Exp</th>
                 {/* Short IMPLIED sub-labels — keep their per-scope column tints. */}
-                <th style={groupTh(G.exp, '#f59e0b')}>Expiring</th>
-                <th style={groupTh(G.country, '#00d4ff')}>Country</th>
-                <th style={groupTh(G.region, '#a78bfa')}>Region</th>
-                <th style={groupTh(G.global, '#4ade80')}>Global</th>
+                <th style={groupTh(G.exp, 'var(--accent-amber)')}>Expiring</th>
+                <th style={groupTh(G.country, 'var(--accent-blue)')}>Country</th>
+                <th style={groupTh(G.region, 'var(--accent-rose)')}>Region</th>
+                <th style={groupTh(G.global, 'var(--accent)')}>Global</th>
               </tr>
             </thead>
             <tbody>
