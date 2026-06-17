@@ -31,6 +31,17 @@ export default defineConfig({
           if (id.includes('node_modules/pdf-parse')) {
             return 'pdf-parse';
           }
+          // recharts + its d3 / victory-vendor dependency tree is only used by
+          // the NP final-pricing Pareto-simulation charts — keep it out of the
+          // always-loaded vendor chunk (same rationale as exceljs/pdf-parse).
+          if (id.includes('node_modules/recharts')
+            || id.includes('node_modules/react-smooth')
+            || id.includes('node_modules/victory-vendor')
+            || id.includes('node_modules/d3-')
+            || id.includes('node_modules/internmap')
+            || id.includes('node_modules/decimal.js-light')) {
+            return 'recharts';
+          }
           // All other node_modules into one vendor chunk (stable hash)
           if (id.includes('node_modules')) {
             return 'vendor';
