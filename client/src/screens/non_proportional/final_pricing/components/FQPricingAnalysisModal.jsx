@@ -612,13 +612,20 @@ export default function FQPricingAnalysisModal({
                   <SeverityFitPanel
                     scopeKey="risk"
                     structure={structure}
-                    sIdx={sIdx}
                     contractId={contractId}
                     isQuote={isQuote}
-                    updateClientStructureLayer={updateClientStructureLayer}
                     onFitChange={setRiskSevFit}
+                    savedConfig={structure.riskParetoSim}
                   />
-                  <FrequencySimPanel scopeKey="risk" structure={structure} sevFit={riskSevFit} />
+                  <FrequencySimPanel
+                    scopeKey="risk"
+                    structure={structure}
+                    sIdx={sIdx}
+                    sevFit={riskSevFit}
+                    savedConfig={structure.riskParetoSim}
+                    updateClientStructure={updateClientStructure}
+                    updateClientStructureLayer={updateClientStructureLayer}
+                  />
                 </>
               )}
               {layers.length > 0 && showCat && (
@@ -626,13 +633,20 @@ export default function FQPricingAnalysisModal({
                   <SeverityFitPanel
                     scopeKey="cat"
                     structure={structure}
-                    sIdx={sIdx}
                     contractId={contractId}
                     isQuote={isQuote}
-                    updateClientStructureLayer={updateClientStructureLayer}
                     onFitChange={setCatSevFit}
+                    savedConfig={structure.catParetoSim}
                   />
-                  <FrequencySimPanel scopeKey="cat" structure={structure} sevFit={catSevFit} />
+                  <FrequencySimPanel
+                    scopeKey="cat"
+                    structure={structure}
+                    sIdx={sIdx}
+                    sevFit={catSevFit}
+                    savedConfig={structure.catParetoSim}
+                    updateClientStructure={updateClientStructure}
+                    updateClientStructureLayer={updateClientStructureLayer}
+                  />
                 </>
               )}
             </>

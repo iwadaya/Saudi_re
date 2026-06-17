@@ -216,6 +216,18 @@ describe('runParetoMonteCarlo — severity families', () => {
     const r = runParetoMonteCarlo(baseParams({ losses: [1_000_000, 2_000_000], threshold: 1_000_000, severity: { family: 'GPD' } }));
     expect(r.warnings.length).toBeGreaterThan(0);
   });
+
+  it('honours a severity.params override (reproducible from stored params)', () => {
+    const base = baseParams({ nSims: 30000 });
+    const fitted = runParetoMonteCarlo(base);
+    const heavierAlpha = fitted.severity.params.alpha * 0.5;   // smaller α ⇒ heavier tail
+    const overridden = runParetoMonteCarlo({ ...base, severity: { family: 'PARETO', params: { alpha: heavierAlpha } } });
+    expect(overridden.severity.params.alpha).toBeCloseTo(heavierAlpha, 6);
+    expect(overridden.aggregate.mean).toBeGreaterThan(fitted.aggregate.mean);
+    // Same override + seed ⇒ byte-identical (the audit-trail guarantee).
+    const again = runParetoMonteCarlo({ ...base, severity: { family: 'PARETO', params: { alpha: heavierAlpha } } });
+    expect(JSON.stringify(again)).toBe(JSON.stringify(overridden));
+  });
 });
 
 describe('severity fit + diagnostics (UI helpers)', () => {

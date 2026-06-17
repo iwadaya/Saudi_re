@@ -430,7 +430,24 @@ export function runParetoMonteCarlo(params = /** @type {any} */ ({})) {
   const fitRng = mulberry32((seed + 0x9e3779b9) >>> 0);
   const simRng = mulberry32(seed);
 
-  const fit = fitSeverity(family, losses, threshold, bootstrapB, fitRng, warnings);
+  let fit = fitSeverity(family, losses, threshold, bootstrapB, fitRng, warnings);
+
+  // Optional caller override of the fitted point params (underwriter edits in
+  // the UI, or params restored from a saved quote). When present they REPLACE
+  // the data fit's point estimate — so the sim reproduces exactly from stored
+  // params + seed even if the underlying losses later change. The bootstrap
+  // arrays (estimation risk) still come from the data.
+  const override = params.severity?.params;
+  if (override && typeof override === 'object') {
+    const merged = { ...fit.params };
+    let any = false;
+    for (const key of (PARAM_KEYS[family] || PARAM_KEYS.GPD)) {
+      const v = toN(override[key]);
+      if (override[key] != null && override[key] !== '' && Number.isFinite(v)) { merged[key] = v; any = true; }
+    }
+    if (family === 'PARETO') merged.xm = threshold;
+    if (any) fit = { ...fit, params: merged };
+  }
 
   const freq = {
     type: String(params.frequency?.type || 'POISSON').toUpperCase(),

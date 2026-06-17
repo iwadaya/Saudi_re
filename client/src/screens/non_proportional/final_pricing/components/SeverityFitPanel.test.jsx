@@ -46,17 +46,16 @@ const structure = {
 };
 
 function renderPanel(over = {}) {
-  const updateClientStructureLayer = vi.fn();
+  const onFitChange = vi.fn();
   const props = {
     scopeKey: 'risk',
     structure,
-    sIdx: 0,
     contractId: 'c1',
     isQuote: true,
-    updateClientStructureLayer,
+    onFitChange,
     ...over,
   };
-  return { ...render(<SeverityFitPanel {...props} />), updateClientStructureLayer };
+  return { ...render(<SeverityFitPanel {...props} />), onFitChange };
 }
 
 beforeEach(() => {
@@ -86,31 +85,31 @@ describe('SeverityFitPanel', () => {
     expect(await screen.findByTestId('fq-severity-param-risk-alpha')).toBeInTheDocument();
   });
 
-  it('re-prices the scope Pareto column (debounced) when the threshold is edited', async () => {
-    const { updateClientStructureLayer } = renderPanel();
+  it('publishes the fit (family/threshold/params) upward for the simulation', async () => {
+    const { onFitChange } = renderPanel();
+    await screen.findByTestId('fq-severity-threshold-risk');
+    await waitFor(() => {
+      const last = onFitChange.mock.calls.at(-1)?.[0];
+      expect(last).toBeTruthy();
+      expect(last.family).toBe('GPD');
+      expect(last.threshold).toBe(1000000);
+      expect(last.params).toBeTruthy();
+      expect(Number.isFinite(last.params.sigma)).toBe(true);
+    });
+  });
+
+  it('hydrates family/threshold from a saved sim config (reproducible reload)', async () => {
+    renderPanel({ savedConfig: { family: 'PARETO', threshold: 2000000, params: { alpha: 1.8 } } });
     const thr = await screen.findByTestId('fq-severity-threshold-risk');
-    fireEvent.change(thr, { target: { value: '1500000' } });
-    await waitFor(() => expect(updateClientStructureLayer).toHaveBeenCalled(), { timeout: 2000 });
-    // Writes the risk Pareto field for the active layer (index 0).
-    const call = updateClientStructureLayer.mock.calls.find((c) => c[2] === 'riskPareto');
-    expect(call).toBeTruthy();
-    expect(call[0]).toBe(0);
-    expect(call[1]).toBe(0);
-    expect(typeof call[3]).toBe('string');
+    expect(thr).toHaveValue('2000000');
+    expect(screen.getByTestId('fq-severity-family-risk')).toHaveValue('PARETO');
+    await waitFor(() => expect(screen.getByTestId('fq-severity-param-risk-alpha').value).toBe('1.8'));
   });
 
   it('shows an empty state when the scope has no losses', async () => {
     api.getLargeLosses.mockResolvedValue({ losses: [] });
     renderPanel();
     expect(await screen.findByTestId('fq-severity-empty-risk')).toBeInTheDocument();
-  });
-
-  it('does not re-price before any user edit (touch-gated)', async () => {
-    const { updateClientStructureLayer } = renderPanel();
-    await screen.findByTestId('fq-severity-threshold-risk');
-    // Give the debounce window a chance — nothing should fire without an edit.
-    await new Promise((r) => setTimeout(r, 600));
-    expect(updateClientStructureLayer).not.toHaveBeenCalled();
   });
 
   it('cat scope reads cat losses and renders its own panel', async () => {

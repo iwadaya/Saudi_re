@@ -608,6 +608,40 @@ export const structureCombinedTotals = (structure = {}) => {
   return { totalLimit, totalPremium, activeCount, wtdRol: totalLimit > 0 ? (totalPremium / totalLimit) * 100 : 0 };
 };
 
+// Pareto pricing FROM the Monte-Carlo aggregate-loss simulation. The pure
+// premium is the simulated mean ceded loss expressed as a ROL% — mean / limit
+// × 100 — i.e. the SAME base the riskPareto/catPareto blend component already
+// uses (expected annual layer loss / limit), so it slots straight into the
+// Pure-Burn/Pareto/Exposure blend. The technical (loaded) ROL adds an
+// underwriter-driven risk load: θ·SD, or a multiple of the TVaR excess over
+// the mean. Returns both pure and loaded so the UI can show the markup.
+// @param {{ mean?:number, sd?:number, tail?:Array<{rp:number,tvar:number}> }} aggregate
+// @param {number|string} limit
+// @param {{ method?:string, factor?:number|string, tvarRp?:number }} load
+export const paretoTechnicalRol = (aggregate, limit, load = {}) => {
+  const lim = toN(limit);
+  if (!aggregate || !(lim > 0)) return { purePremium: 0, riskLoad: 0, pureRol: 0, loadedRol: 0 };
+  const mean = toN(aggregate.mean);
+  const sd = toN(aggregate.sd);
+  const factor = toN(load.factor);
+  let riskLoad;
+  if (String(load.method || '').toUpperCase() === 'TVAR') {
+    const rp = load.tvarRp || 100;
+    const row = (Array.isArray(aggregate.tail) ? aggregate.tail : []).find((t) => t.rp === rp);
+    const tvar = row ? toN(row.tvar) : mean;
+    riskLoad = factor * Math.max(0, tvar - mean);   // multiple × expected shortfall over the mean
+  } else {
+    riskLoad = factor * sd;                          // θ · SD
+  }
+  const loadedPremium = mean + riskLoad;
+  return {
+    purePremium: mean,
+    riskLoad,
+    pureRol: (mean / lim) * 100,
+    loadedRol: (loadedPremium / lim) * 100,
+  };
+};
+
 export const updateQuotePricingLayer = (layer = {}, field, value, opts = {}) => {
   const autoUw = quoteLayerAutoTracksUw(layer);
   let next = { ...layer, [field]: value };

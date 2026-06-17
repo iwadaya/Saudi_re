@@ -17,7 +17,7 @@
 //   • Bootstrap confidence intervals sit beside every fitted value so small-
 //     sample estimation uncertainty is always visible.
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ResponsiveContainer, ScatterChart, LineChart,
   Line, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
@@ -26,7 +26,7 @@ import { api } from '../../../../api';
 import { toN } from '../formatters.js';
 import { QUOTE_COMPONENT_SCOPES } from '../fqQuoteMath.js';
 import {
-  fitSeverityWithCI, severityLayerMean,
+  fitSeverityWithCI,
   buildMeanExcess, buildSurvivalLogLog, buildQQ, ksStatistic,
 } from '../paretoMonteCarlo.js';
 
@@ -62,7 +62,7 @@ const percentile = (sorted, p) => {
   return sorted[idx];
 };
 
-export default function SeverityFitPanel({ scopeKey, structure, sIdx, contractId, isQuote, updateClientStructureLayer, onFitChange }) {
+export default function SeverityFitPanel({ scopeKey, contractId, isQuote, onFitChange, savedConfig }) {
   const scope = QUOTE_COMPONENT_SCOPES[scopeKey];
   const accent = scope.color;
   const lossType = scopeKey === 'risk' ? 'large' : 'cat';
@@ -71,10 +71,15 @@ export default function SeverityFitPanel({ scopeKey, structure, sIdx, contractId
   const [error, setError] = useState('');
   const [severities, setSeverities] = useState([]);
   const [years, setYears] = useState(0);
-  const [threshold, setThreshold] = useState('');
-  const [family, setFamily] = useState('GPD');
+  // Initialise from a saved sim config (reproducible reload) when present.
+  const [threshold, setThreshold] = useState(savedConfig?.threshold != null ? String(savedConfig.threshold) : '');
+  const [family, setFamily] = useState(savedConfig?.family || 'GPD');
   const [params, setParams] = useState(null);          // editable string map, seeded from the fit
-  const touchedRef = useRef(false);                    // re-price only after a user edit
+  const touchedRef = useRef(false);                    // distinguishes user edits from hydration
+  // One-shot: apply saved (fitted+overridden) params after the first fit so a
+  // reloaded quote shows the exact severity it was priced on.
+  const savedParamsRef = useRef(savedConfig?.params || null);
+  const hydratedThresholdRef = useRef(savedConfig?.threshold != null);
   const mountedRef = useRef(true);
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 
@@ -99,7 +104,8 @@ export default function SeverityFitPanel({ scopeKey, structure, sIdx, contractId
       setSeverities(sev);
       setYears(obsYears);
       touchedRef.current = false;                        // a fresh dataset is not a user edit
-      setThreshold(defThr > 0 ? String(Math.round(defThr)) : '');
+      // Keep a hydrated (saved) threshold; only seed the default for a fresh fit.
+      if (!hydratedThresholdRef.current) setThreshold(defThr > 0 ? String(Math.round(defThr)) : '');
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -112,10 +118,25 @@ export default function SeverityFitPanel({ scopeKey, structure, sIdx, contractId
   }, [severities, threshold, family]);
 
   // Reseed the editable params from each fresh fit (drops prior manual edits).
+  // On the very first fit after a reload, apply the SAVED params instead so the
+  // quote re-prices to the exact number it was saved with.
   useEffect(() => {
-    if (!fit) { setParams(null); return; }
+    const saved = savedParamsRef.current;
+    // No data fit yet (losses still loading, or unavailable on reload): surface
+    // the saved params so the sim can reproduce from them — but KEEP the ref so
+    // the real fit (when it lands) still applies them once, then consumes it.
+    if (!fit) {
+      if (!saved) { setParams(null); return; }
+      const seeded = {};
+      for (const { key } of FAMILY_PARAMS[family]) seeded[key] = fmtParam(toN(saved[key]));
+      setParams(seeded);
+      return;
+    }
     const seeded = {};
-    for (const { key } of FAMILY_PARAMS[family]) seeded[key] = fmtParam(fit.params[key]);
+    for (const { key } of FAMILY_PARAMS[family]) {
+      seeded[key] = saved && Number.isFinite(toN(saved[key])) && saved[key] !== '' ? fmtParam(toN(saved[key])) : fmtParam(fit.params[key]);
+    }
+    savedParamsRef.current = null;   // one-shot — later refits seed from the data
     setParams(seeded);
   }, [fit, family]);
 
@@ -126,28 +147,6 @@ export default function SeverityFitPanel({ scopeKey, structure, sIdx, contractId
     for (const { key } of FAMILY_PARAMS[family]) out[key] = toN(params[key]);
     return out;
   }, [params, family, threshold]);
-
-  // ── Live re-price: write the scope's Pareto ROL for every active layer ──
-  const reprice = useCallback((p) => {
-    const thr = toN(threshold);
-    if (!p || !(thr > 0)) return;
-    const n = severities.filter((x) => x >= thr).length;
-    const lambda = years > 0 ? n / years : 0;
-    (structure?.layers || []).forEach((layer, lIdx) => {
-      if (!layer[scopeKey]) return;
-      const limit = toN(layer.limit);
-      if (limit <= 0) return;
-      const expLoss = lambda * severityLayerMean(family, p, thr, toN(layer.attachment), limit);
-      const rol = (expLoss / limit) * 100;
-      updateClientStructureLayer(sIdx, lIdx, scope.fields.pareto, rol > 0 ? String(Number(rol.toFixed(4))) : '');
-    });
-  }, [threshold, severities, years, structure, scopeKey, family, sIdx, updateClientStructureLayer, scope.fields.pareto]);
-
-  useEffect(() => {
-    if (!touchedRef.current || !pNum) return undefined;
-    const id = setTimeout(() => reprice(pNum), 400);   // debounce keystrokes
-    return () => clearTimeout(id);
-  }, [pNum, reprice]);
 
   // ── Diagnostics (recompute as the fit / overrides change) ──
   const diag = useMemo(() => {
@@ -161,12 +160,13 @@ export default function SeverityFitPanel({ scopeKey, structure, sIdx, contractId
     };
   }, [pNum, severities, threshold, family]);
 
-  // Publish the fit inputs upward so the FrequencySimPanel can run the
-  // Monte-Carlo off the same losses / threshold / family the user sees here.
+  // Publish the fit upward so the FrequencySimPanel runs the Monte-Carlo off the
+  // same losses / threshold / family / params the underwriter sees here. The
+  // (possibly overridden) params travel too, so the sim prices from them.
   useEffect(() => {
     if (typeof onFitChange !== 'function') return;
-    onFitChange({ scopeKey, family, threshold: toN(threshold), severities, years, n: fit?.n ?? 0 });
-  }, [onFitChange, scopeKey, family, threshold, severities, years, fit]);
+    onFitChange({ scopeKey, family, threshold: toN(threshold), severities, years, n: fit?.n ?? 0, params: pNum });
+  }, [onFitChange, scopeKey, family, threshold, severities, years, fit, pNum]);
 
   const onThreshold = (v) => { touchedRef.current = true; setThreshold(v.replace(/[^0-9.]/g, '')); };
   const onFamily = (k) => { touchedRef.current = true; setFamily(k); };
