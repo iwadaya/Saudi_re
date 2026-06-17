@@ -32,6 +32,7 @@ function renderModal(over = {}) {
     approvedStructures: [false],
     setApprovedQuoteStructure: vi.fn(),
     updateClientStructure: vi.fn(),
+    updateClientStructureLayer: vi.fn(),
     save: vi.fn(async () => true),
     onClose: vi.fn(),
     ...over,
@@ -43,7 +44,7 @@ describe('NpSendForApprovalModal', () => {
   it('renders the read-only combined per-layer pricing table with a total', () => {
     const { container } = renderModal();
     expect(screen.getByTestId('np-send-approval-title')).toBeInTheDocument();
-    ['Layer', 'Limit', 'Deductible', 'Reinstatements', 'EGNPI', 'Rate', 'Earned Premium', 'UW ROL'].forEach((h) => {
+    ['Layer', 'Limit', 'Deductible', 'Reinstatements', 'EGNPI', 'Rate', 'Earned Premium', 'MDP %', 'MDP Amount', 'UW ROL'].forEach((h) => {
       expect(screen.getByText(h)).toBeInTheDocument();
     });
     // Both layers have an active component → 2 body rows + TOTAL.
@@ -54,6 +55,26 @@ describe('NpSendForApprovalModal', () => {
     const cobLimit = container.querySelector('.bm-cob-section input.bm-np-limit-input');
     expect(cobLimit).toHaveAttribute('readonly');
     container.querySelectorAll('.bm-cob-section input[type="checkbox"]').forEach((cb) => expect(cb).toBeDisabled());
+  });
+
+  it('MDP %: defaults to 85 and editing writes mdp_pct + mdp to the layer', () => {
+    const updateClientStructureLayer = vi.fn();
+    renderModal({ updateClientStructureLayer });
+    const firstRow = screen.getByTestId('np-send-approval-total').closest('table').querySelectorAll('tbody tr')[0];
+    const mdpInput = firstRow.querySelector('input');   // the one editable cell in the row
+    expect(mdpInput.value).toBe('85%');                 // default 85 when layer.mdpPct is empty
+    fireEvent.change(mdpInput, { target: { value: '90' } });
+    expect(updateClientStructureLayer).toHaveBeenCalledWith(0, 0, 'mdpPct', '90');
+    // mdp is kept in sync (mdp = EP x mdp_pct / 100).
+    expect(updateClientStructureLayer.mock.calls.some((call) => call[2] === 'mdp')).toBe(true);
+  });
+
+  it('renders fullscreen (bm-modal--fullscreen) with a pinned footer', () => {
+    const { container } = renderModal();
+    expect(container.querySelector('.bm-modal.bm-modal--fullscreen')).toBeInTheDocument();
+    expect(container.querySelector('.bm-modal-backdrop--fullscreen')).toBeInTheDocument();
+    // Footer action stays present (pinned outside the scrollable body).
+    expect(screen.getByTestId('np-send-approval-add')).toBeInTheDocument();
   });
 
   it('LEAD (default): Lead Line enabled, Follow Line hidden', () => {

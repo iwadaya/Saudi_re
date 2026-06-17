@@ -571,6 +571,11 @@ export const layerCombinedPricing = (layer = {}) => {
   const egnpi = toN(layer.egnpi);
   const earnedPremium = limit * uwRol / 100;
   const rate = egnpi > 0 ? (earnedPremium / egnpi) * 100 : 0;
+  // MDP (minimum deposit premium): mdp_pct defaults to 85 when unset; the amount
+  // is EP x mdp_pct / 100 (so mdp_pct = mdp / EP, matching LayerTableCard).
+  const mdpPctRaw = layer.mdpPct;
+  const mdpPct = (mdpPctRaw == null || String(mdpPctRaw).trim() === '') ? 85 : toN(mdpPctRaw);
+  const mdpAmount = earnedPremium * mdpPct / 100;
   return {
     limit,
     deductible: layer.deductible ?? layer.attachment,
@@ -578,6 +583,8 @@ export const layerCombinedPricing = (layer = {}) => {
     rate,
     earnedPremium,
     uwRol,
+    mdpPct,
+    mdpAmount,
     reinst: reinstLabel(layer.reinstatements, layer.pctReinst),
   };
 };
