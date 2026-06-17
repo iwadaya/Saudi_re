@@ -15,27 +15,27 @@
 
 .np-structure-step .np-hero { margin: 8px 0 14px; }
 .np-structure-step .np-hero-title { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.2px; }
-.np-structure-step .np-hero-subtitle { margin-top: 6px; font-size: 0.92rem; color: rgba(255,255,255,0.68); max-width: 980px; }
+.np-structure-step .np-hero-subtitle { margin-top: 6px; font-size: 0.92rem; color: var(--muted); max-width: 980px; }
 
 /* ── Card ── */
-.np-struct-card { border-radius: 18px; padding: 16px 16px 14px; margin-top: 16px; border: 1px solid rgba(255,255,255,0.10); background: rgba(8,12,20,0.55); box-shadow: 0 12px 40px rgba(0,0,0,0.35); }
+.np-struct-card { border-radius: 18px; padding: 16px 16px 14px; margin-top: 16px; border: 1px solid var(--hairline); background: var(--surface-2); box-shadow: 0 12px 40px rgba(0,0,0,0.35); }
 .np-struct-card-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 2px 2px 10px; }
 .np-struct-card-header--plain { padding-bottom: 12px; }
-.np-struct-card-title { font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(255,255,255,0.65); }
+.np-struct-card-title { font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); }
 .np-struct-card-actions { display: flex; align-items: center; gap: 10px; }
 .np-struct-card-h2 { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.2px; }
-.np-struct-card-hint { margin-top: 4px; font-size: 0.86rem; color: rgba(255,255,255,0.65); }
+.np-struct-card-hint { margin-top: 4px; font-size: 0.86rem; color: var(--muted); }
 
 /* ── Pills / Tags ── */
-.np-green-pill { appearance: none; border: 0; border-radius: 999px; padding: 9px 16px; font-weight: 700; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; cursor: pointer; color: rgba(0,0,0,0.88); background: linear-gradient(180deg, rgba(0,255,170,0.95), rgba(0,200,140,0.92)); box-shadow: 0 10px 28px rgba(0,255,170,0.18); }
+.np-green-pill { appearance: none; border: 0; border-radius: 999px; padding: 9px 16px; font-weight: 700; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; cursor: pointer; color: var(--accent-contrast); background: linear-gradient(180deg, rgba(var(--accent-rgb),0.95), rgba(var(--accent2-rgb),0.92)); box-shadow: 0 10px 28px rgba(var(--accent-rgb),0.18); }
 .np-green-pill:hover { filter: brightness(1.03); transform: translateY(-0.5px); }
-.np-tag { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,0.70); border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.18); backdrop-filter: blur(8px); }
+.np-tag { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text); border: 1px solid var(--hairline-strong); background: var(--surface-muted); backdrop-filter: blur(8px); }
 
 /* Treaty type pills */
 .np-type-pills { display: inline-flex; gap: 8px; align-items: center; }
-.np-type-pill { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(226,232,240,0.75); border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.18); backdrop-filter: blur(8px); user-select: none; }
-.np-type-pill.is-on { border: 1px solid rgba(var(--accent-rgb),0.65); color: #bbf7d0; background: rgba(var(--accent-rgb),0.10); box-shadow: 0 0 0 2px rgba(var(--accent-rgb),0.10), 0 0 16px rgba(var(--accent-rgb),0.35); }
-.np-type-pill.is-off { border: 1px solid rgba(148,163,184,0.25); color: rgba(226,232,240,0.52); background: rgba(15,23,42,0.35); box-shadow: none; }
+.np-type-pill { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text); border: 1px solid var(--hairline-strong); background: var(--surface-muted); backdrop-filter: blur(8px); user-select: none; }
+.np-type-pill.is-on { border: 1px solid rgba(var(--accent-rgb),0.65); color: var(--accent); background: rgba(var(--accent-rgb),0.10); box-shadow: 0 0 0 2px rgba(var(--accent-rgb),0.10), 0 0 16px rgba(var(--accent-rgb),0.35); }
+.np-type-pill.is-off { border: 1px solid var(--stroke-soft); color: var(--text-subtle); background: var(--surface-muted); box-shadow: none; }
 .np-cover-cell.is-off { opacity: 0.6; }
 .np-cover-cell.is-locked input[disabled] { cursor: not-allowed; opacity: 0.6; }
 
@@ -48,8 +48,8 @@
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.07);
-  background: rgba(0,0,0,0.08);
+  border: 1px solid var(--hairline);
+  background: var(--surface-muted);
 }
 .np-table-wrap--scroll { overflow: auto; }
 
@@ -89,9 +89,9 @@
   padding: 11px 14px;
   font-size: 0.68rem; font-weight: 800;
   letter-spacing: 0.16em; text-transform: uppercase;
-  color: rgba(255,255,255,0.52);
-  background: rgba(5,8,16,0.92);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  color: var(--text-subtle);
+  background: var(--table-head-bg);
+  border-bottom: 1px solid var(--hairline);
   white-space: nowrap;
 }
 
@@ -99,13 +99,13 @@
 .np-struct-table tbody td,
 .np-struct-table tbody th {
   padding: 5px 6px;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  color: rgba(255,255,255,0.85);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text);
   text-align: center;
   white-space: nowrap;
 }
 .np-struct-table tbody tr:hover td,
-.np-struct-table tbody tr:hover th { background: rgba(255,255,255,0.02); }
+.np-struct-table tbody tr:hover th { background: var(--table-row-hover); }
 .np-struct-table tbody tr:last-child td,
 .np-struct-table tbody tr:last-child th { border-bottom: 0; }
 .np-struct-table--tight tbody td,
@@ -116,7 +116,7 @@
   position: sticky; left: 0; z-index: 2;
   width: 56px !important; min-width: 56px !important; max-width: 56px !important;
   text-align: center !important; font-weight: 800;
-  background: rgba(8,16,40,0.92);
+  background: var(--surface-solid);
 }
 
 /* ─────────────────────────────────────────────
@@ -196,22 +196,22 @@
   height: 26px;
   border-radius: 6px;
   padding: 0 8px;
-  border: 1px solid rgba(255,255,255,0.09);
-  background: rgba(255,255,255,0.03);
-  color: rgba(226,232,240,0.90);
+  border: 1px solid var(--hairline);
+  background: var(--surface-hover);
+  color: var(--text);
   text-align: center;
   outline: none;
   font-size: 0.82rem;
   transition: border-color .13s, background .13s;
 }
-.np-mini-input::placeholder { color: rgba(255,255,255,0.28); }
+.np-mini-input::placeholder { color: var(--text-subtle); }
 .np-mini-input:focus { border-color: rgba(var(--accent-rgb),0.45); background: rgba(var(--accent-rgb),0.04); box-shadow: none; }
 .np-mini-input--readonly { opacity: 1; border-color: transparent; background: transparent; cursor: default; }
 .np-mini-input--center { text-align: center; }
 
 .np-sfx {
   font-size: 0.72rem; letter-spacing: 0.10em; text-transform: uppercase;
-  color: rgba(255,255,255,0.50); flex-shrink: 0; white-space: nowrap;
+  color: var(--text-subtle); flex-shrink: 0; white-space: nowrap;
 }
 
 .np-mini-select { appearance: none; -webkit-appearance: none; -moz-appearance: none; padding-right: 28px; box-sizing: border-box; height: 26px; line-height: 26px; }
@@ -220,20 +220,20 @@
   -webkit-appearance: none;
   appearance: none;
   width: 18px; height: 18px;
-  border: 1px solid rgba(255,255,255,0.28);
+  border: 1px solid var(--stroke);
   border-radius: 4px;
-  background: rgba(255,255,255,0.06);
+  background: var(--surface-hover);
   cursor: pointer;
   position: relative;
   transition: border-color 120ms ease, background 120ms ease;
 }
 .np-check:hover {
-  border-color: rgba(255,255,255,0.45);
-  background: rgba(255,255,255,0.10);
+  border-color: var(--stroke);
+  background: var(--surface-hover);
 }
 .np-check:checked {
-  border-color: rgba(22,163,74,0.85);
-  background: rgba(22,163,74,0.85);
+  border-color: rgba(var(--accent-rgb),0.85);
+  background: rgba(var(--accent-rgb),0.85);
 }
 .np-check:checked::after {
   /* thin CSS-drawn tick, not a bold glyph */
@@ -241,26 +241,26 @@
   position: absolute;
   top: 46%; left: 50%;
   width: 4px; height: 8px;
-  border: solid #fff;
+  border: solid var(--accent-contrast);
   border-width: 0 1.5px 1.5px 0;
   transform: translate(-50%, -55%) rotate(45deg);
 }
 .np-check:checked:hover {
-  background: rgba(21,128,61,0.9);
-  border-color: rgba(21,128,61,0.9);
+  background: rgba(var(--accent2-rgb),0.9);
+  border-color: rgba(var(--accent2-rgb),0.9);
 }
 .np-check:disabled {
   cursor: not-allowed;
   opacity: 0.5;
   border-width: 1px;
-  border-color: rgba(255,255,255,0.2);
-  background: rgba(255,255,255,0.04);
+  border-color: var(--stroke-soft);
+  background: var(--surface-hover);
 }
 .np-check:disabled:checked {
   opacity: 0.6;
   border-width: 1px;
-  background: rgba(22,163,74,0.5);
-  border-color: rgba(22,163,74,0.5);
+  background: rgba(var(--accent-rgb),0.5);
+  border-color: rgba(var(--accent-rgb),0.5);
 }
 
 /* Utilities */
@@ -268,11 +268,11 @@
 .cell-right  { text-align: right !important; }
 
 /* Footnotes */
-.np-struct-footnote { margin-top: 10px; font-size: 0.78rem; color: rgba(255,255,255,0.55); }
+.np-struct-footnote { margin-top: 10px; font-size: 0.78rem; color: var(--text-subtle); }
 .np-struct-footnote--right { text-align: center; }
 
 /* COB pill */
-.np-cob-pill { width: 100%; display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(148,163,184,.22); background: rgba(8,16,40,.35); color: rgba(226,232,240,.92); cursor: pointer; text-align: center; }
+.np-cob-pill { width: 100%; display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--stroke-soft); background: var(--surface-2); color: var(--text); cursor: pointer; text-align: center; }
 .np-cob-pill:hover { border-color: rgba(var(--accent-rgb),.35); box-shadow: 0 0 0 6px rgba(var(--accent-rgb),.06); }
 .np-cob-pill-sfx { opacity: .7; font-size: 12px; }
 
@@ -281,17 +281,17 @@
 /* ── Modal ── */
 body.np-modal-open { overflow: hidden; }
 .np-modal-backdrop { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 22px; background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); }
-.np-modal { width: min(980px, 100%); max-height: min(78vh, 760px); position: relative; overflow: auto; border-radius: 18px; border: 1px solid rgba(255,255,255,0.12); background: rgba(8,12,20,0.78); box-shadow: 0 20px 70px rgba(0,0,0,0.55); }
+.np-modal { width: min(980px, 100%); max-height: min(78vh, 760px); position: relative; overflow: auto; border-radius: 18px; border: 1px solid var(--hairline-strong); background: var(--surface-elevated); box-shadow: 0 20px 70px rgba(0,0,0,0.55); }
 .np-modal-inner { padding: 14px; }
-.np-modal-close { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.25); color: rgba(255,255,255,0.86); cursor: pointer; font-size: 18px; line-height: 1; }
-.np-modal-close:hover { border-color: rgba(0,255,170,0.38); box-shadow: 0 0 0 3px rgba(0,255,170,0.10); }
+.np-modal-close { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--hairline-strong); background: var(--surface-muted); color: var(--text); cursor: pointer; font-size: 18px; line-height: 1; }
+.np-modal-close:hover { border-color: rgba(var(--accent-rgb),0.38); box-shadow: 0 0 0 3px rgba(var(--accent-rgb),0.10); }
 
 /* ── Glow cells ── */
-.np-glow-input { border-color: rgba(56,189,248,0.22) !important; box-shadow: inset 0 0 0 1px rgba(56,189,248,0.10), 0 0 0 2px rgba(56,189,248,0.06); background: rgba(6,18,38,0.55) !important; }
-.np-glow-input:focus { border-color: rgba(56,189,248,0.40) !important; box-shadow: inset 0 0 0 1px rgba(56,189,248,0.20), 0 0 0 3px rgba(56,189,248,0.14) !important; }
+.np-glow-input { border-color: rgba(var(--accent-blue-rgb),0.22) !important; box-shadow: inset 0 0 0 1px rgba(var(--accent-blue-rgb),0.10), 0 0 0 2px rgba(var(--accent-blue-rgb),0.06); background: var(--control-bg) !important; }
+.np-glow-input:focus { border-color: rgba(var(--accent-blue-rgb),0.40) !important; box-shadow: inset 0 0 0 1px rgba(var(--accent-blue-rgb),0.20), 0 0 0 3px rgba(var(--accent-blue-rgb),0.14) !important; }
 .np-struct-table tbody td, .np-struct-table tbody th,
 .np-premiums-table tbody td, .np-premiums-table tbody th,
-.np-final-table tbody td, .np-final-table tbody th { box-shadow: inset 0 0 0 1px rgba(56,189,248,0.06); }
+.np-final-table tbody td, .np-final-table tbody th { box-shadow: inset 0 0 0 1px rgba(var(--accent-blue-rgb),0.06); }
 
 /* ── Totals row (tfoot) — neon blue ── */
 .np-struct-table tfoot tr td,
@@ -300,29 +300,29 @@ body.np-modal-open { overflow: hidden; }
 }
 .np-struct-table tfoot .np-mini-input,
 .np-struct-table tfoot .np-sfx {
-  color: #00d4ff !important;
+  color: var(--accent-blue) !important;
   font-weight: 700;
 }
 .np-struct-table tfoot .np-mini-input--readonly {
-  border-color: rgba(0, 212, 255, 0.30);
+  border-color: rgba(var(--accent-blue-rgb), 0.30);
 }
 
 /* ── Structure action buttons ── */
 .np-struct-btn {
   height: 32px; padding: 0 14px; border-radius: 8px;
-  border: 1px solid rgba(148,163,184,.3);
-  background: rgba(15,23,42,.55); color: #e2e8f0;
+  border: 1px solid var(--stroke);
+  background: var(--control-bg); color: var(--text);
   font-size: 12px; font-weight: 600; cursor: pointer; letter-spacing: .04em;
   transition: background .15s, border-color .15s;
 }
-.np-struct-btn:hover { background: rgba(15,23,42,.8); }
+.np-struct-btn:hover { background: var(--surface-2); }
 .np-struct-btn--accent {
-  border-color: rgba(0,212,255,.45);
-  background: rgba(0,212,255,.08);
-  color: #00d4ff;
+  border-color: rgba(var(--accent-blue-rgb),.45);
+  background: rgba(var(--accent-blue-rgb),.08);
+  color: var(--accent-blue);
 }
-.np-struct-btn--accent:hover { background: rgba(0,212,255,.15); }
-.np-struct-btn--ghost { background: transparent; border-color: rgba(255,255,255,.15); }
+.np-struct-btn--accent:hover { background: rgba(var(--accent-blue-rgb),.15); }
+.np-struct-btn--ghost { background: transparent; border-color: var(--hairline-strong); }
 
 /* ── Quote structure table — expiring structure minus Rate/EP/MDP/MDP%/ROL (11 cols) ── */
 /* Expiring is 3100px for 16 cols. Removed cols: rate(150)+EP(220)+MDP(220)+MDP%(120)+ROL(120)=830. */
@@ -351,32 +351,32 @@ body.np-modal-open { overflow: hidden; }
   justify-content: space-between;
   gap: 16px;
   padding: 14px 18px 14px;
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  border-bottom: 1px solid var(--hairline);
   flex-wrap: wrap;
 }
 .qss-struct-badge {
   width: 36px; height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, rgba(0,212,255,0.18), rgba(0,255,170,0.10));
-  border: 1px solid rgba(0,212,255,0.30);
+  background: linear-gradient(135deg, rgba(var(--accent-blue-rgb),0.18), rgba(var(--accent-rgb),0.10));
+  border: 1px solid rgba(var(--accent-blue-rgb),0.30);
   display: flex; align-items: center; justify-content: center;
   font-size: 0.78rem; font-weight: 900; letter-spacing: 0.04em;
-  color: #00d4ff;
+  color: var(--accent-blue);
   flex-shrink: 0;
 }
 .qss-struct-title {
-  font-size: 0.95rem; font-weight: 700; color: rgba(255,255,255,0.92);
+  font-size: 0.95rem; font-weight: 700; color: var(--text);
 }
 .qss-struct-sub {
-  margin-top: 2px; font-size: 0.78rem; color: rgba(255,255,255,0.45);
+  margin-top: 2px; font-size: 0.78rem; color: var(--text-subtle);
 }
 .qss-cover-pill {
   display: inline-flex; align-items: center;
   height: 28px; padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.14);
+  border: 1px solid var(--hairline-strong);
   font-size: 0.70rem; font-weight: 800; letter-spacing: 0.16em;
-  text-transform: uppercase; color: rgba(255,255,255,0.75);
+  text-transform: uppercase; color: var(--text);
   white-space: nowrap;
 }
 
@@ -385,7 +385,7 @@ body.np-modal-open { overflow: hidden; }
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.40);
+  color: var(--text-subtle);
   white-space: nowrap;
   flex-shrink: 0;
   width: 130px;
@@ -396,8 +396,8 @@ body.np-modal-open { overflow: hidden; }
    the bm-card aesthetic used in the Quick Benchmark screen.
    ─────────────────────────────────────────────────────────────────── */
 .qss-section.np-struct-card {
-  background:    rgba(8, 14, 30, 0.72) !important;
-  border:        1px solid rgba(255, 255, 255, 0.09) !important;
+  background:    var(--surface-2) !important;
+  border:        1px solid var(--hairline) !important;
   border-radius: 14px !important;
   box-shadow:    0 8px 32px rgba(0, 0, 0, 0.40) !important;
   padding:       0 !important;
@@ -406,8 +406,8 @@ body.np-modal-open { overflow: hidden; }
 
 /* Header bar */
 .qss-section .qss-header {
-  background:    rgba(5, 8, 16, 0.60);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background:    var(--surface-muted);
+  border-bottom: 1px solid var(--hairline);
   padding:       14px 18px;
 }
 
@@ -416,9 +416,9 @@ body.np-modal-open { overflow: hidden; }
   width:         36px;
   height:        36px;
   border-radius: 10px;
-  background:    linear-gradient(135deg, rgba(0, 212, 255, 0.20), rgba(0, 255, 170, 0.10));
-  border:        1px solid rgba(0, 212, 255, 0.35);
-  color:         #00d4ff;
+  background:    linear-gradient(135deg, rgba(var(--accent-blue-rgb), 0.20), rgba(var(--accent-rgb), 0.10));
+  border:        1px solid rgba(var(--accent-blue-rgb), 0.35);
+  color:         var(--accent-blue);
   font-size:     0.80rem;
   font-weight:   900;
   letter-spacing:.04em;
@@ -431,11 +431,11 @@ body.np-modal-open { overflow: hidden; }
 .qss-section .qss-struct-title {
   font-size:   0.95rem;
   font-weight: 700;
-  color:       rgba(226, 232, 240, 0.95);
+  color:       var(--text);
 }
 .qss-section .qss-struct-sub {
   font-size: 0.78rem;
-  color:     rgba(148, 163, 184, 0.50);
+  color:     var(--text-subtle);
   margin-top: 2px;
 }
 
@@ -445,15 +445,15 @@ body.np-modal-open { overflow: hidden; }
   font-weight:    800;
   letter-spacing: .14em;
   text-transform: uppercase;
-  color:          rgba(148, 163, 184, 0.50);
+  color:          var(--text-subtle);
 }
 
 /* NUMBER OF LAYERS select */
 .qss-section .np-mini-select {
-  background:    rgba(255, 255, 255, 0.04);
-  border:        1px solid rgba(255, 255, 255, 0.12);
+  background:    var(--surface-hover);
+  border:        1px solid var(--hairline-strong);
   border-radius: 8px;
-  color:         rgba(226, 232, 240, 0.90);
+  color:         var(--text);
   font-size:     13px;
   font-weight:   600;
   padding:       7px 12px;
@@ -462,34 +462,34 @@ body.np-modal-open { overflow: hidden; }
 
 /* Table headers — match bm-np-table exactly */
 .qss-section .bm-np-table thead th {
-  background:     rgba(5, 8, 16, 0.85);
-  color:          rgba(148, 163, 184, 0.60);
+  background:     var(--table-head-bg);
+  color:          var(--muted);
   font-size:      9px;
   font-weight:    800;
   letter-spacing: .14em;
   padding:        11px 14px;
-  border-bottom:  1px solid rgba(255, 255, 255, 0.08);
+  border-bottom:  1px solid var(--hairline);
 }
 
 /* Body rows */
 .qss-section .bm-np-table tbody tr:nth-child(even) td {
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--table-row-alt);
 }
 .qss-section .bm-np-table tbody tr:hover td {
-  background: rgba(0, 212, 255, 0.04);
+  background: var(--table-row-hover);
 }
 .qss-section .bm-np-row td {
   padding:       11px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--hairline);
 }
 
 /* Totals row */
 .qss-section .bm-np-table tfoot tr {
-  background: rgba(0, 212, 255, 0.05);
-  border-top: 2px solid rgba(0, 212, 255, 0.35);
+  background: rgba(var(--accent-blue-rgb), 0.05);
+  border-top: 2px solid rgba(var(--accent-blue-rgb), 0.35);
 }
 .qss-section .bm-np-table tfoot td {
-  color:       #00d4ff;
+  color:       var(--accent-blue);
   font-weight: 700;
   padding:     10px 10px;
 }
@@ -503,9 +503,9 @@ body.np-modal-open { overflow: hidden; }
   min-width:       28px;
   padding:         3px 8px;
   border-radius:   6px;
-  border:          1px solid rgba(0, 212, 255, 0.35);
-  background:      rgba(0, 212, 255, 0.10);
-  color:           #00d4ff;
+  border:          1px solid rgba(var(--accent-blue-rgb), 0.35);
+  background:      rgba(var(--accent-blue-rgb), 0.10);
+  color:           var(--accent-blue);
   font-size:       10px;
   font-weight:     900;
   letter-spacing:  .06em;
@@ -513,10 +513,10 @@ body.np-modal-open { overflow: hidden; }
 
 /* Cell inputs inside the table */
 .qss-section .np-mini-input:not(.np-mini-select) {
-  background:    rgba(255, 255, 255, 0.03);
-  border:        1px solid rgba(255, 255, 255, 0.09);
+  background:    var(--surface-hover);
+  border:        1px solid var(--hairline);
   border-radius: 7px;
-  color:         rgba(226, 232, 240, 0.90);
+  color:         var(--text);
   font-size:     12px;
   height:        32px;
   padding:       0 10px;
@@ -530,16 +530,16 @@ body.np-modal-open { overflow: hidden; }
 /* COB section header */
 .qss-section .bm-cob-section-header {
   padding:       16px 18px 10px;
-  border-top:    1px solid rgba(255, 255, 255, 0.07);
+  border-top:    1px solid var(--hairline);
 }
 .qss-section .bm-cob-section-title {
   font-size:   13px;
   font-weight: 700;
-  color:       rgba(226, 232, 240, 0.85);
+  color:       var(--text);
 }
 .qss-section .bm-cob-section-hint {
   font-size:  11px;
-  color:      rgba(148, 163, 184, 0.45);
+  color:      var(--text-subtle);
   margin-top: 3px;
 }
 
@@ -547,8 +547,8 @@ body.np-modal-open { overflow: hidden; }
 .qss-section .np-struct-footnote {
   padding:    8px 18px 12px;
   font-size:  11px;
-  color:      rgba(148, 163, 184, 0.40);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  color:      var(--text-subtle);
+  border-top: 1px solid var(--hairline);
 }
 
 /* Cover pill (RISK XL / CAT XL) */
