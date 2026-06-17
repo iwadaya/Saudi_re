@@ -256,3 +256,33 @@ describe('FQPricingAnalysisModal — row rendering', () => {
     expect(updateClientStructureLayer).toHaveBeenCalledWith(0, 0, 'riskLayerNote', 'cap at 2x');
   });
 });
+
+describe('FQPricingAnalysisModal — flat editable cells + widened columns', () => {
+  it('scopes the flat-cell look with fq-pa-modal; component cells stay editable inputs', () => {
+    const updateClientStructureLayer = vi.fn();
+    const { container } = renderModal({ updateClientStructureLayer });
+    // The scoping hook the borderless-cell CSS targets.
+    expect(container.querySelector('.fq-pa-modal')).toBeInTheDocument();
+    // A component cell is a normal editable <input> (no readOnly/disabled) that
+    // carries the bm-cell class the flat CSS flattens — and still updates pricing.
+    const wtBurn = screen.getByLabelText('Risk Structure 1 Layer 1 riskWeightBurn');
+    expect(wtBurn.tagName).toBe('INPUT');
+    expect(wtBurn).not.toHaveAttribute('readonly');
+    expect(wtBurn).not.toBeDisabled();
+    expect(wtBurn.className).toContain('bm-cell');
+    fireEvent.change(wtBurn, { target: { value: '60' } });
+    expect(updateClientStructureLayer).toHaveBeenCalledWith(0, 0, 'riskWeightBurn', '60');
+  });
+
+  it('widens the data-entry component columns by ~10% (others unchanged)', () => {
+    const { container } = renderModal();
+    const cols = container.querySelector('table colgroup').querySelectorAll('col');
+    // % Reinst / Pure Burn / Exposure / UW Price grew 10% (92→101, 88→97, 104→114).
+    expect(cols[6].style.width).toBe('101px');
+    expect(cols[7].style.width).toBe('97px');
+    expect(cols[9].style.width).toBe('97px');
+    expect(cols[18].style.width).toBe('114px');
+    // Non-data columns (Layer) are untouched.
+    expect(cols[0].style.width).toBe('52px');
+  });
+});

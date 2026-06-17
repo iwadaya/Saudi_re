@@ -258,7 +258,10 @@ export default function FQPricingAnalysisModal({
     // Order: Layer, Active, Limit, Deductible, EGNPI, Reinst., % Reinst.,
     //   Pure Burn, Pareto, Exposure, Wt Burn, Wt Pareto, Wt Exp, Blend,
     //   Implied·Expiring/Country/Region/Global, UW Price, P(Attach), P(Exhaust), Note.
-    const COLW = [52, 56, 110, 110, 120, 80, 92, 88, 80, 88, 78, 84, 78, 84, 96, 96, 96, 96, 104, 88, 92, 180];
+    // The data-entry component columns (% Reinst., Pure Burn, Pareto, Exposure,
+    // Wt Burn/Pareto/Exp, UW Price) are ~10% wider than the rest so a value like
+    // "56.56%" isn't clipped; the table keeps its horizontal scroll.
+    const COLW = [52, 56, 110, 110, 120, 80, 101, 97, 88, 97, 86, 92, 86, 84, 96, 96, 96, 96, 114, 88, 92, 180];
     const TABLE_MIN_W = COLW.reduce((s, w) => s + w, 0);
     const disabledByMode = scopeKey === 'risk' ? riskDisabled : catDisabled;
     // Blend uses THIS row's own weights (Wt Burn/Pareto/Exp columns), divided
@@ -500,7 +503,7 @@ export default function FQPricingAnalysisModal({
     <>
     <div className={`bm-modal-backdrop${isQuote ? ' bm-modal-backdrop--fullscreen' : ''}`} role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div
-        className={`bm-modal${isQuote ? ' bm-modal--fullscreen' : ''}`}
+        className={`bm-modal fq-pa-modal${isQuote ? ' bm-modal--fullscreen' : ''}`}
         style={isQuote
           ? { display: 'grid', gridTemplateRows: 'auto auto 1fr', overflow: 'hidden', background: 'rgb(4, 8, 19)' }
           : { width: '96vw', maxWidth: '1500px', height: '100dvh', maxHeight: '92vh', display: 'grid', gridTemplateRows: 'auto auto 1fr', overflow: 'hidden' }}
