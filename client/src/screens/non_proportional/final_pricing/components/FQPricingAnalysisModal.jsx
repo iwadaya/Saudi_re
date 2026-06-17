@@ -23,27 +23,40 @@ const TOP_TABS = [
   { k: 'loss', label: 'Inflation & Loss' },
 ];
 
-// Editable weight cell: shows the value capped at 2 dp while idle, full
-// precision while editing. Entry keeps full precision (onChange passes the raw
-// digits); only the idle display is capped.
+// Editable weight cell: shows the value with a "%" suffix while idle (capped at
+// 2 dp), bare full-precision digits while editing. Entry keeps full precision
+// and strips any "%" (onChange passes the raw number); only the idle display is
+// capped and suffixed — the stored weight stays a bare number, so the Σ=100
+// blend math reads it unchanged.
 function WtInput({ value, disabled, ariaLabel, onChange }) {
   const [editing, setEditing] = useState(false);
   const [raw, setRaw] = useState('');
+  const idle = capPct2(value);
   return (
     <input
       type="text"
       inputMode="decimal"
       className="bm-cell bm-cell--sm"
       aria-label={ariaLabel}
-      value={editing ? raw : capPct2(value)}
+      value={editing ? raw : (idle === '' ? '' : `${idle}%`)}
       disabled={disabled}
-      onFocus={() => { setEditing(true); setRaw(String(value ?? '')); }}
+      onFocus={() => { setEditing(true); setRaw(String(value ?? '').replace(/%/g, '')); }}
       onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ''); setRaw(v); onChange(v); }}
       onBlur={() => setEditing(false)}
       style={{ width: '100%', boxSizing: 'border-box', opacity: disabled ? 0.5 : 1 }}
     />
   );
 }
+
+// Per-component colours for the modelled block. Each component (Pure Burn /
+// Pareto / Exposure) gets a distinct line + faint tint, and its matching weight
+// column (Wt Burn / Wt Pareto / Wt Exp) reuses the SAME colour so the blend
+// weights read visually paired with the component they weight.
+const COMP = {
+  pureBurn: { line: '#4ade80', tint: 'rgba(74,222,128,0.10)' },   // green
+  pareto:   { line: '#f59e0b', tint: 'rgba(245,158,11,0.10)' },   // amber
+  exposure: { line: '#a78bfa', tint: 'rgba(167,139,250,0.10)' },  // violet
+};
 
 // Subtle background tints that band the table into Modelled / Implied-Expiring /
 // Implied-Market / UW groups.
@@ -341,12 +354,12 @@ export default function FQPricingAnalysisModal({
                 <th rowSpan={2} style={{ ...th, verticalAlign: 'bottom' }}>EGNPI</th>
                 <th rowSpan={2} style={{ ...groupTh(G.note, 'rgba(148,163,184,0.45)'), verticalAlign: 'bottom' }}>Reinst.</th>
                 <th rowSpan={2} style={{ ...groupTh(G.note, 'rgba(148,163,184,0.45)'), verticalAlign: 'bottom' }}>% Reinst.</th>
-                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>Pure Burn</th>
-                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>Pareto</th>
-                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>Exposure</th>
-                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>Wt Burn</th>
-                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>Wt Pareto</th>
-                <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>Wt Exp</th>
+                <th rowSpan={2} style={{ ...groupTh(COMP.pureBurn.tint, COMP.pureBurn.line), verticalAlign: 'bottom' }}>Pure Burn</th>
+                <th rowSpan={2} style={{ ...groupTh(COMP.pareto.tint, COMP.pareto.line), verticalAlign: 'bottom' }}>Pareto</th>
+                <th rowSpan={2} style={{ ...groupTh(COMP.exposure.tint, COMP.exposure.line), verticalAlign: 'bottom' }}>Exposure</th>
+                <th rowSpan={2} style={{ ...groupTh(COMP.pureBurn.tint, COMP.pureBurn.line), verticalAlign: 'bottom' }}>Wt Burn</th>
+                <th rowSpan={2} style={{ ...groupTh(COMP.pareto.tint, COMP.pareto.line), verticalAlign: 'bottom' }}>Wt Pareto</th>
+                <th rowSpan={2} style={{ ...groupTh(COMP.exposure.tint, COMP.exposure.line), verticalAlign: 'bottom' }}>Wt Exp</th>
                 <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>Blend</th>
                 {/* IMPLIED group banner — spans the Expiring/Country/Region/Global peer columns. */}
                 <th colSpan={4} style={{ ...groupTh(G.exp, '#f59e0b'), textAlign: 'center' }}>Implied</th>
@@ -388,21 +401,27 @@ export default function FQPricingAnalysisModal({
                         path can preserve the sentinel. */}
                     <td style={{ ...td, background: G.note }}>
                       <select
+                        className="bm-cell bm-cell--flat"
                         aria-label={`Structure ${sIdx + 1} Layer ${lIdx + 1} reinstatements`}
                         value={layer.reinstatements ?? ''}
                         onChange={(e) => updateClientStructureLayer(sIdx, lIdx, 'reinstatements', e.target.value)}
-                        style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(5,8,16,0.6)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: 'rgba(226,232,240,0.9)', fontSize: 10, padding: '4px 6px', textAlign: 'right', fontFamily: 'inherit' }}>
+                        style={{ width: '100%', boxSizing: 'border-box', color: 'rgba(226,232,240,0.9)', fontSize: 10, padding: '4px 6px', textAlign: 'right', fontFamily: 'inherit' }}>
                         {REINSTATEMENT_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
                       </select>
                     </td>
                     <td style={{ ...td, background: G.note }}><FQPctCell value={layer.pctReinst} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, 'pctReinst', v)} /></td>
-                    <td style={{ ...td, background: G.modelled }}>{editorWrap(<FQPctCell value={layer[f.pureBurn]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.pureBurn, v)} />)}</td>
-                    <td style={{ ...td, background: G.modelled }}>{editorWrap(<FQPctCell value={layer[f.pareto]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.pareto, v)} />)}</td>
-                    <td style={{ ...td, background: G.modelled }}>{editorWrap(<FQPctCell value={layer[f.exposure]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.exposure, v)} />)}</td>
-                    {/* Per-row blend weights — drive THIS row's Blend (no top blender). */}
-                    <td style={{ ...td, background: G.modelled }}>{editorWrap(wtCell(lIdx, f.wtBurn, layer))}</td>
-                    <td style={{ ...td, background: G.modelled }}>{editorWrap(wtCell(lIdx, f.wtPareto, layer))}</td>
-                    <td style={{ ...td, background: G.modelled }}>{editorWrap(wtCell(lIdx, f.wtExp, layer))}</td>
+                    {/* Pure burn / Pareto / exposure are MODEL outputs (engine-calculated):
+                        rendered READ-ONLY (the engine ROL%, "—" when zero). The underwriter
+                        edits only the weights + final price; the values still round-trip and
+                        the Blend below reads these same fields, so the blend math is unchanged. */}
+                    <td style={{ ...td, background: COMP.pureBurn.tint }}>{editorWrap(<FQReadCell value={fmtPct(toN(layer[f.pureBurn]))} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" />)}</td>
+                    <td style={{ ...td, background: COMP.pareto.tint }}>{editorWrap(<FQReadCell value={fmtPct(toN(layer[f.pareto]))} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" />)}</td>
+                    <td style={{ ...td, background: COMP.exposure.tint }}>{editorWrap(<FQReadCell value={fmtPct(toN(layer[f.exposure]))} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" />)}</td>
+                    {/* Per-row blend weights — drive THIS row's Blend (no top blender).
+                        Each weight is tinted to MATCH the component it weights. */}
+                    <td style={{ ...td, background: COMP.pureBurn.tint }}>{editorWrap(wtCell(lIdx, f.wtBurn, layer))}</td>
+                    <td style={{ ...td, background: COMP.pareto.tint }}>{editorWrap(wtCell(lIdx, f.wtPareto, layer))}</td>
+                    <td style={{ ...td, background: COMP.exposure.tint }}>{editorWrap(wtCell(lIdx, f.wtExp, layer))}</td>
                     <td style={{ ...td, background: G.modelled }}><FQReadCell value={blendTxt} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" /></td>
                     <td style={{ ...td, background: G.exp }}><FQReadCell value={impliedExp != null ? `${impliedExp.toFixed(2)}%` : '—'} className="bm-cell bm-cell--sm bm-cell--display bm-cell--muted bm-calc" /></td>
                     {/* Implied · Country / Region / Global — peer-curve-predicted ROL ("—" when no calibrated pool). */}

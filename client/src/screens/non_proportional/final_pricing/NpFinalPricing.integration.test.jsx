@@ -260,12 +260,13 @@ describe('NpFinalPricing integration', () => {
     fireEvent.click(paButton);
     await screen.findByText(/Risk Pricing Analysis/i);
     await waitFor(() => {
-      // In-table editable bm-cell inputs, in column order:
-      //   [0] % Reinst · [1] Pure Burn · [2] Pareto · [3] Exposure · [4-6] Wt · [7] UW Price
-      const riskInputs = container.querySelector('.bm-modal').querySelectorAll('table')[0].querySelectorAll('input.bm-cell');
-      expect(riskInputs[1].value).toMatch(/^40/);   // Pure Burn populated by the engine
-      expect(riskInputs[3].value).toMatch(/%$/);    // Exposure populated by the engine
-      expect(riskInputs[3].value).not.toBe('');
+      // Pure burn / Pareto / exposure are READ-ONLY model text now (td 7 / 8 / 9
+      // of the first body row); only the weights + UW Price stay editable inputs.
+      const riskTable = container.querySelector('.bm-modal').querySelectorAll('table')[0];
+      const cells = riskTable.querySelector('tbody tr').querySelectorAll('td');
+      expect(cells[7].textContent).toMatch(/^40/);  // Pure Burn populated by the engine
+      expect(cells[9].textContent).toMatch(/%$/);   // Exposure populated by the engine
+      expect(cells[9].textContent).not.toBe('—');
     });
     expect(apiMock.getLargeLosses).toHaveBeenCalledWith(bindIds.quote, { quote: true });
     expect(apiMock.getRiskProfile).toHaveBeenCalled();
@@ -321,12 +322,13 @@ describe('NpFinalPricing integration', () => {
     fireEvent.click(paButton);
     await screen.findByText(/Risk Pricing Analysis/i);
     await waitFor(() => {
-      // In-table editable bm-cell inputs, in column order:
-      //   [0] % Reinst · [1] Pure Burn · [2] Pareto · [3] Exposure · [4-6] Wt · [7] UW Price
-      const riskInputs = container.querySelector('.bm-modal').querySelectorAll('table')[0].querySelectorAll('input.bm-cell');
-      expect(riskInputs[1].value).toMatch(/^40/);   // Pure Burn populated by the engine
-      expect(riskInputs[3].value).toMatch(/%$/);    // Exposure populated by the engine
-      expect(riskInputs[3].value).not.toBe('');
+      // Pure burn / Pareto / exposure are READ-ONLY model text now (td 7 / 8 / 9
+      // of the first body row); only the weights + UW Price stay editable inputs.
+      const riskTable = container.querySelector('.bm-modal').querySelectorAll('table')[0];
+      const cells = riskTable.querySelector('tbody tr').querySelectorAll('td');
+      expect(cells[7].textContent).toMatch(/^40/);  // Pure Burn populated by the engine
+      expect(cells[9].textContent).toMatch(/%$/);   // Exposure populated by the engine
+      expect(cells[9].textContent).not.toBe('—');
     });
   });
 });

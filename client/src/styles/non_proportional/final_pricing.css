@@ -77,6 +77,26 @@
   box-shadow: inset 0 -1px 0 rgba(0, 232, 184, 0.5);
 }
 
+/* ── Flat cell modifier (element-agnostic) ──
+   Borderless / transparent editable cell that works for an <input> OR a
+   <select>, in or out of a modal. Used by the expiring-structure "Rate %"
+   input and the pricing-analysis "Reinst." dropdown so they read as plain
+   text until focused — a thin underline (not a full border) marks focus.
+   Specificity (.bm-cell.bm-cell--flat = 0,2,0; :focus = 0,3,0) beats the
+   base .bm-cell / .bm-cell:focus without needing !important. */
+.bm-cell.bm-cell--flat,
+.bm-cell.bm-cell--flat:hover {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+.bm-cell.bm-cell--flat:focus {
+  outline: none;
+  border: none;
+  background: transparent;
+  box-shadow: inset 0 -1px 0 rgba(0, 232, 184, 0.5);
+}
+
 .np-final-shell--quote .bm-np-th--cob,
 .np-final-shell--quote .bm-np-td--cob,
 .np-final-shell--quote .tm-col-metric {

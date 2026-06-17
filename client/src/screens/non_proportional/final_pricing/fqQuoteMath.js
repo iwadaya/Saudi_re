@@ -145,7 +145,10 @@ export const syncExpLayerPricing = (layer, editedField) => {
   return next;
 };
 
-export const QUOTE_PRICING_INPUT_FIELDS = new Set(['pureBurn', 'pareto', 'exposure', 'wtBurn', 'wtPareto', 'loading']);
+// Pure burn / Pareto / exposure are MODEL outputs (engine-calculated) and are
+// rendered read-only in the pricing analysis — only the weights and loading are
+// underwriter-editable here, so only those remain typeable pricing inputs.
+export const QUOTE_PRICING_INPUT_FIELDS = new Set(['wtBurn', 'wtPareto', 'loading']);
 
 export const QUOTE_COMPONENT_SCOPES = {
   risk: {
