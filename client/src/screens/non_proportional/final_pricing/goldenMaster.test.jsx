@@ -65,6 +65,8 @@ const rowsOf = (table) => Array.from(table.querySelectorAll('tr')).map((tr) =>
   Array.from(tr.querySelectorAll('th,td')).map((cell) => {
     const input = cell.querySelector('input');
     if (input) return input.type === 'checkbox' ? `[${input.checked ? 'x' : ' '}]` : `[${input.value}]`;
+    const select = cell.querySelector('select');
+    if (select) return `[${select.value}]`;
     return (cell.textContent || '').trim();
   }));
 

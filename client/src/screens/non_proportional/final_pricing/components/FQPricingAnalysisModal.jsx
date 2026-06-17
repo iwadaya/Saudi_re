@@ -9,6 +9,7 @@ import { formatWithCommas } from '../../../../utils/format';
 import { toN } from '../formatters.js';
 import { QUOTE_COMPONENT_SCOPES, quoteComponentDerived } from '../fqQuoteMath.js';
 import { fqPriceLayerOnCurve, fqFitPowerLaw, fqPeerToXY, fqGeomean } from '../fqHelpers.js';
+import { REINSTATEMENT_OPTIONS } from '../../reinstatementOptions';
 import { api } from '../../../../api';
 import { FQPctCell, FQReadCell } from './FQCells.jsx';
 import FQFinalPriceModal from './FQFinalPriceModal.jsx';
@@ -357,13 +358,18 @@ export default function FQPricingAnalysisModal({
                     <td style={td}><FQReadCell value={fmtMoney(layer.limit)} className="bm-cell bm-cell--display bm-cell--foot" /></td>
                     <td style={td}><FQReadCell value={fmtMoney(layer.attachment)} className="bm-cell bm-cell--display bm-cell--foot" /></td>
                     <td style={td}><FQReadCell value={fmtMoney(layer.egnpi)} className="bm-cell bm-cell--display bm-cell--foot" /></td>
-                    {/* Reinstatement terms — layer-level (same value in Risk & Cat tables), always editable. */}
+                    {/* Reinstatement terms — layer-level (same value in Risk & Cat tables), always
+                        editable. <select> matching the structure screen: blank / 1–10 / Unlimited.
+                        Value 'UNLIMITED' must pass through verbatim (no numeric strip) so the save
+                        path can preserve the sentinel. */}
                     <td style={{ ...td, background: G.note }}>
-                      <input type="text" inputMode="numeric"
+                      <select
                         aria-label={`Structure ${sIdx + 1} Layer ${lIdx + 1} reinstatements`}
                         value={layer.reinstatements ?? ''}
-                        onChange={(e) => updateClientStructureLayer(sIdx, lIdx, 'reinstatements', e.target.value.replace(/[^0-9.]/g, ''))}
-                        style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(5,8,16,0.6)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: 'rgba(226,232,240,0.9)', fontSize: 10, padding: '4px 6px', textAlign: 'right', fontFamily: 'inherit' }} />
+                        onChange={(e) => updateClientStructureLayer(sIdx, lIdx, 'reinstatements', e.target.value)}
+                        style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(5,8,16,0.6)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: 'rgba(226,232,240,0.9)', fontSize: 10, padding: '4px 6px', textAlign: 'right', fontFamily: 'inherit' }}>
+                        {REINSTATEMENT_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                      </select>
                     </td>
                     <td style={{ ...td, background: G.note }}><FQPctCell value={layer.pctReinst} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, 'pctReinst', v)} /></td>
                     <td style={{ ...td, background: G.modelled }}>{editorWrap(<FQPctCell value={layer[f.pureBurn]} onChange={(v) => updateClientStructureLayer(sIdx, lIdx, f.pureBurn, v)} />)}</td>

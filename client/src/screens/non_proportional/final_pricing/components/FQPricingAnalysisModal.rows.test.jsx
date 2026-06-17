@@ -140,6 +140,20 @@ describe('FQPricingAnalysisModal — row rendering', () => {
     expect(screen.getByText('Total Section')).toBeInTheDocument();
   });
 
+  it('reinstatements is a <select> (blank / 1–10 / Unlimited) that passes UNLIMITED through verbatim', () => {
+    const updateClientStructureLayer = vi.fn();
+    renderModal({ updateClientStructureLayer });
+    const riskSection = screen.getByText('Risk Pricing Analysis').closest('section');
+    const sel = within(riskSection).getByLabelText('Structure 1 Layer 1 reinstatements');
+    expect(sel.tagName).toBe('SELECT');
+    // Shared options: blank, 1..10, Unlimited (value is the 'UNLIMITED' sentinel).
+    expect(within(sel).getByRole('option', { name: 'Unlimited' }).value).toBe('UNLIMITED');
+    expect(within(sel).getByRole('option', { name: '10' })).toBeInTheDocument();
+    // The old numeric strip is gone — 'UNLIMITED' reaches the update handler intact.
+    fireEvent.change(sel, { target: { value: 'UNLIMITED' } });
+    expect(updateClientStructureLayer).toHaveBeenCalledWith(0, 0, 'reinstatements', 'UNLIMITED');
+  });
+
   it('shows a "no layers" note instead of a blank table when the structure has no layers', () => {
     renderModal({ clientStructures: [{ id: 'str-0', layers: [] }] });
     expect(screen.getByTestId('fq-analysis-no-layers')).toBeInTheDocument();
