@@ -288,7 +288,7 @@ describe('FQPricingAnalysisModal — flat editable cells + widened columns', () 
   });
 });
 
-describe('FQPricingAnalysisModal — per-scope Calculate + WEIGHTING header', () => {
+describe('FQPricingAnalysisModal — tab-level Calculate + WEIGHTING header', () => {
   it('groups the weight columns under a WEIGHTING two-tier banner (Burn/Pareto/Exp)', () => {
     renderModal();
     // One banner per peril table (risk + cat both render here).
@@ -298,39 +298,62 @@ describe('FQPricingAnalysisModal — per-scope Calculate + WEIGHTING header', ()
     expect(screen.getAllByText('Exp').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('runs the engine for that scope on Calculate, showing a transient Calculating… state', async () => {
+  it('has ONE tab-level Calculate (no per-section Calculate buttons)', () => {
+    renderModal();
+    expect(screen.getByTestId('fq-calculate-all')).toBeInTheDocument();
+    // The per-section variants are gone; Final Price buttons stay.
+    expect(screen.queryByTestId('fq-calculate-risk')).toBeNull();
+    expect(screen.queryByTestId('fq-calculate-cat')).toBeNull();
+    expect(screen.getByTestId('fq-final-price-open-risk')).toBeInTheDocument();
+    expect(screen.getByTestId('fq-final-price-open-cat')).toBeInTheDocument();
+  });
+
+  it('runs the engine for BOTH scopes in one action, with a transient Calculating… state', async () => {
     let resolveRun;
-    const runQuoteCalcScope = vi.fn(() => new Promise((r) => { resolveRun = r; }));
-    renderModal({ runQuoteCalcScope });
-    const btn = screen.getByTestId('fq-calculate-risk');
+    const runQuoteCalcStructure = vi.fn(() => new Promise((r) => { resolveRun = r; }));
+    renderModal({ runQuoteCalcStructure });
+    const btn = screen.getByTestId('fq-calculate-all');
     expect(btn.textContent).toBe('Calculate');
 
     fireEvent.click(btn);
-    expect(runQuoteCalcScope).toHaveBeenCalledWith(0, 'risk');
-    // Pending → the button reads "Calculating…" and is disabled (state set on click).
-    expect(screen.getByTestId('fq-calculate-risk').textContent).toMatch(/Calculating/);
-    expect(screen.getByTestId('fq-calculate-risk')).toBeDisabled();
+    expect(runQuoteCalcStructure).toHaveBeenCalledWith(0);
+    // Pending → the single button reads "Calculating…" and is disabled.
+    expect(screen.getByTestId('fq-calculate-all').textContent).toMatch(/Calculating/);
+    expect(screen.getByTestId('fq-calculate-all')).toBeDisabled();
 
-    // A fully-priced run clears the state with no missing-input note.
-    await act(async () => { resolveRun({ ran: true, layerCount: 1, burn: true, pareto: true, exposure: true }); });
-    expect(screen.getByTestId('fq-calculate-risk').textContent).toBe('Calculate');
+    // A fully-priced run (both scopes) clears the state with no missing-input notes.
+    await act(async () => {
+      resolveRun({
+        ran: true,
+        risk: { layerCount: 2, burn: true, pareto: true, exposure: true },
+        cat: { layerCount: 1, burn: true, pareto: true, exposure: true },
+      });
+    });
+    expect(screen.getByTestId('fq-calculate-all').textContent).toBe('Calculate');
     expect(screen.queryByTestId('fq-calc-note-risk')).toBeNull();
+    expect(screen.queryByTestId('fq-calc-note-cat')).toBeNull();
   });
 
-  it('surfaces an inline note for a component the engine could not price', async () => {
-    const runQuoteCalcScope = vi.fn(async () => ({ ran: true, layerCount: 1, burn: false, pareto: true, exposure: true }));
-    renderModal({ runQuoteCalcScope });
-    await act(async () => { fireEvent.click(screen.getByTestId('fq-calculate-risk')); });
-    const note = screen.getByTestId('fq-calc-note-risk');
-    expect(note.textContent).toMatch(/pure burn not calculated/i);
+  it('notes a missing component on the affected scope while the other scope still computes', async () => {
+    // Risk has no loss data (burn false); Cat is fully priced.
+    const runQuoteCalcStructure = vi.fn(async () => ({
+      ran: true,
+      risk: { layerCount: 2, burn: false, pareto: true, exposure: true },
+      cat: { layerCount: 1, burn: true, pareto: true, exposure: true },
+    }));
+    renderModal({ runQuoteCalcStructure });
+    await act(async () => { fireEvent.click(screen.getByTestId('fq-calculate-all')); });
+    expect(screen.getByTestId('fq-calc-note-risk').textContent).toMatch(/pure burn not calculated/i);
+    // The other scope priced cleanly → no note.
+    expect(screen.queryByTestId('fq-calc-note-cat')).toBeNull();
   });
 
   it('does NOT run the engine when a weight is edited — Calculate is the only trigger', () => {
-    const runQuoteCalcScope = vi.fn(async () => ({ ran: true }));
+    const runQuoteCalcStructure = vi.fn(async () => ({ ran: true }));
     const updateClientStructureLayer = vi.fn();
-    renderModal({ runQuoteCalcScope, updateClientStructureLayer });
+    renderModal({ runQuoteCalcStructure, updateClientStructureLayer });
     fireEvent.change(screen.getByLabelText('Risk Structure 1 Layer 1 riskWeightBurn'), { target: { value: '60' } });
     expect(updateClientStructureLayer).toHaveBeenCalledWith(0, 0, 'riskWeightBurn', '60');
-    expect(runQuoteCalcScope).not.toHaveBeenCalled();
+    expect(runQuoteCalcStructure).not.toHaveBeenCalled();
   });
 });
