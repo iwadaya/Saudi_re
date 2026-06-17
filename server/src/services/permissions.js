@@ -8,9 +8,6 @@
 // requester from req, and throws 403 READ_ONLY when editing isn't allowed.
 
 import { pool } from '../db/pool.js';
-import { getHierarchyLevel } from './assignments.js';
-
-export { getHierarchyLevel };
 
 const ENTITY = {
   CONTRACT: { table: 'public.contract',  idCol: 'contract_id' },
@@ -22,16 +19,6 @@ function entityMeta(entityType) {
   const m = ENTITY[entityType];
   if (!m) throw Object.assign(new Error(`Invalid entity type: ${entityType}`), { status: 400 });
   return m;
-}
-
-/**
- * Hierarchy level of an entity's owner (its assigned_to user). Returns null when
- * the entity is unassigned (no owner ⇒ claim-to-edit). `ownerUserId` is the
- * assigned_to_user_id resolved by the caller.
- */
-export async function getOwnerLevel(ownerUserId) {
-  if (!ownerUserId) return null;
-  return getHierarchyLevel(ownerUserId);
 }
 
 /**
