@@ -12,6 +12,14 @@ import {
   fitGpdPwm,
   invNormCdf,
   normCdf,
+  fitSeverityWithCI,
+  severityQuantile,
+  severitySurvival,
+  severityLayerMean,
+  buildMeanExcess,
+  buildSurvivalLogLog,
+  buildQQ,
+  ksStatistic,
 } from './paretoMonteCarlo.js';
 
 // Deterministic loss generators (seeded, so the tests never flicker).
@@ -207,5 +215,77 @@ describe('runParetoMonteCarlo — severity families', () => {
   it('warns when too few losses clear the threshold', () => {
     const r = runParetoMonteCarlo(baseParams({ losses: [1_000_000, 2_000_000], threshold: 1_000_000, severity: { family: 'GPD' } }));
     expect(r.warnings.length).toBeGreaterThan(0);
+  });
+});
+
+describe('severity fit + diagnostics (UI helpers)', () => {
+  const losses = paretoSample(300, { alpha: 2.0, xm: 1_000_000, seed: 33 });
+  const threshold = 1_000_000;
+
+  it('fitSeverityWithCI returns params + ordered bootstrap CI bands', () => {
+    const f = fitSeverityWithCI('PARETO', losses, threshold, { bootstrap: 200, seed: 1 });
+    expect(f.family).toBe('PARETO');
+    expect(f.n).toBeGreaterThan(0);
+    expect(f.params.alpha).toBeGreaterThan(0);
+    const [lo, hi] = f.ci.alpha;
+    expect(lo).toBeLessThanOrEqual(hi);
+    expect(lo).toBeLessThanOrEqual(f.params.alpha + 1e-9);
+    expect(hi).toBeGreaterThanOrEqual(f.params.alpha - 1e-9);
+  });
+
+  it('fitSeverityWithCI is deterministic in its seed', () => {
+    const a = fitSeverityWithCI('GPD', losses, threshold, { bootstrap: 150, seed: 7 });
+    const b = fitSeverityWithCI('GPD', losses, threshold, { bootstrap: 150, seed: 7 });
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+
+  it('severityQuantile is increasing in p and severitySurvival its inverse-ish', () => {
+    const params = { alpha: 2, xm: threshold };
+    const q50 = severityQuantile('PARETO', params, threshold, 0.5);
+    const q90 = severityQuantile('PARETO', params, threshold, 0.9);
+    expect(q90).toBeGreaterThan(q50);
+    // S(Q(p)) ≈ 1 − p for the same family.
+    expect(severitySurvival('PARETO', params, threshold, q90)).toBeCloseTo(0.1, 2);
+    // Below threshold nothing has "exceeded" yet.
+    expect(severitySurvival('PARETO', params, threshold, threshold * 0.5)).toBe(1);
+  });
+
+  it('severityLayerMean is bounded by the limit and rises with limit', () => {
+    const params = { alpha: 2, xm: threshold };
+    const small = severityLayerMean('PARETO', params, threshold, 2_000_000, 1_000_000);
+    const big = severityLayerMean('PARETO', params, threshold, 2_000_000, 5_000_000);
+    expect(small).toBeGreaterThan(0);
+    expect(small).toBeLessThanOrEqual(1_000_000);
+    expect(big).toBeGreaterThan(small);
+  });
+
+  it('buildMeanExcess returns an increasing curve for a heavy tail', () => {
+    const me = buildMeanExcess(losses, 20);
+    expect(me.length).toBeGreaterThan(2);
+    expect(me[me.length - 1].e).toBeGreaterThan(me[0].e);   // Pareto mean-excess increases
+  });
+
+  it('buildSurvivalLogLog returns positive empirical + fitted survival points', () => {
+    const f = fitSeverityWithCI('PARETO', losses, threshold, { bootstrap: 0 });
+    const s = buildSurvivalLogLog(losses, 'PARETO', f.params, threshold);
+    expect(s.empirical.length).toBeGreaterThan(0);
+    expect(s.fitted.length).toBeGreaterThan(0);
+    for (const pt of s.empirical) { expect(pt.s).toBeGreaterThan(0); expect(pt.s).toBeLessThanOrEqual(1); }
+  });
+
+  it('buildQQ lines up theoretical vs empirical (monotone, finite)', () => {
+    const f = fitSeverityWithCI('PARETO', losses, threshold, { bootstrap: 0 });
+    const qq = buildQQ(losses, 'PARETO', f.params, threshold);
+    expect(qq.length).toBeGreaterThan(10);
+    expect(qq[qq.length - 1].empirical).toBeGreaterThan(qq[0].empirical);
+    for (const pt of qq) expect(Number.isFinite(pt.theoretical)).toBe(true);
+  });
+
+  it('ksStatistic is small when the fitted family matches the data', () => {
+    const f = fitSeverityWithCI('PARETO', losses, threshold, { bootstrap: 0 });
+    const { d, n } = ksStatistic(losses, 'PARETO', f.params, threshold);
+    expect(n).toBeGreaterThan(0);
+    expect(d).toBeGreaterThanOrEqual(0);
+    expect(d).toBeLessThan(0.15);   // Pareto fit to Pareto data ⇒ tight K-S
   });
 });

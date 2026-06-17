@@ -14,6 +14,7 @@ import { REINSTATEMENT_OPTIONS } from '../../reinstatementOptions';
 import { api } from '../../../../api';
 import { FQPctCell, FQReadCell } from './FQCells.jsx';
 import FQFinalPriceModal from './FQFinalPriceModal.jsx';
+import SeverityFitPanel from './SeverityFitPanel.jsx';
 
 const TOP_TABS = [
   { k: 'pricing', label: 'Pricing Analysis' },
@@ -594,7 +595,35 @@ export default function FQPricingAnalysisModal({
               )}
             </>
           )}
-          {tab === 'pareto' && placeholderTab('Pareto Simulation', 'Adjust large-loss and cat Pareto parameters (alpha, threshold, severity) and see pricing update live — coming soon.')}
+          {tab === 'pareto' && (
+            <>
+              {layers.length === 0 && (
+                <div data-testid="fq-pareto-no-layers" style={{ padding: '18px 14px', borderRadius: 8, background: 'rgba(8,14,30,0.6)', border: '1px solid rgba(255,255,255,0.09)', fontSize: 12, color: 'rgba(148,163,184,0.78)' }}>
+                  This structure has no layers yet.
+                </div>
+              )}
+              {layers.length > 0 && showRisk && (
+                <SeverityFitPanel
+                  scopeKey="risk"
+                  structure={structure}
+                  sIdx={sIdx}
+                  contractId={contractId}
+                  isQuote={isQuote}
+                  updateClientStructureLayer={updateClientStructureLayer}
+                />
+              )}
+              {layers.length > 0 && showCat && (
+                <SeverityFitPanel
+                  scopeKey="cat"
+                  structure={structure}
+                  sIdx={sIdx}
+                  contractId={contractId}
+                  isQuote={isQuote}
+                  updateClientStructureLayer={updateClientStructureLayer}
+                />
+              )}
+            </>
+          )}
           {tab === 'loss' && placeholderTab('Inflation & Loss Manipulation', 'Apply inflation and adjust large/cat loss inputs to stress pricing — coming soon.')}
         </div>
       </div>

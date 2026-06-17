@@ -230,11 +230,35 @@ function gpdQuantile(p, xi, sigma, threshold) {
   return threshold + (sigma / xi) * (Math.pow(s, -xi) - 1);
 }
 
-/** Inverse-transform one severity draw from a U[0,1) value u. */
-function sampleSeverity(family, params, threshold, u) {
-  if (family === 'PARETO') return paretoQ(u, params.alpha, params.xm);
-  if (family === 'LOGNORMAL') return Math.exp(params.mu + params.sigma * invNormCdf(u));
-  return gpdQuantile(u, params.xi, params.sigma, threshold);
+/**
+ * Severity quantile at probability p for the fitted family (full loss value,
+ * incl. threshold). Also the inverse-transform sampler — pass a U[0,1) draw.
+ */
+export function severityQuantile(family, params, threshold, p) {
+  if (family === 'PARETO') return paretoQ(p, params.alpha, params.xm);
+  if (family === 'LOGNORMAL') return Math.exp(params.mu + params.sigma * invNormCdf(p));
+  return gpdQuantile(p, params.xi, params.sigma, threshold);
+}
+
+/** Survival S(x) = P(X > x) for the fitted family (1 below threshold/support). */
+export function severitySurvival(family, params, threshold, x) {
+  if (!(x > 0)) return 1;
+  if (family === 'PARETO') {
+    const { alpha, xm } = params;
+    if (!(alpha > 0) || !(xm > 0) || x <= xm) return 1;
+    return Math.pow(xm / x, alpha);
+  }
+  if (family === 'LOGNORMAL') {
+    if (!(params.sigma > 0)) return x >= Math.exp(params.mu) ? 0 : 1;
+    return 1 - normCdf((Math.log(x) - params.mu) / params.sigma);
+  }
+  const y = x - threshold;                       // GPD excess
+  if (y <= 0) return 1;
+  const { xi, sigma } = params;
+  if (!(sigma > 0)) return 1;
+  if (Math.abs(xi) < 1e-8) return Math.exp(-y / sigma);
+  const base = 1 + (xi * y) / sigma;
+  return base <= 0 ? 0 : Math.pow(base, -1 / xi);
 }
 
 /** E[min(X,c)] for a lognormal(μ,σ). */
@@ -262,7 +286,7 @@ function gpdLayerMean(xi, sigma, a, b) {
 }
 
 /** Analytic E[ceded per loss] = E[min(max(X−A,0), L)] for the fitted family. */
-function severityLayerMean(family, params, threshold, attachment, limit) {
+export function severityLayerMean(family, params, threshold, attachment, limit) {
   if (limit <= 0) return 0;
   if (family === 'PARETO') {
     const { alpha, xm } = params;
@@ -431,7 +455,7 @@ export function runParetoMonteCarlo(params = /** @type {any} */ ({})) {
     const count = sampleFrequency(simRng, freq, lambdaT);
     let aggCeded = 0;
     for (let i = 0; i < count; i++) {
-      const loss = sampleSeverity(family, sevParams, threshold, u01(simRng));
+      const loss = severityQuantile(family, sevParams, threshold, u01(simRng));
       aggCeded += Math.min(Math.max(loss - attachment, 0), limit);
     }
     const capped = unlimited ? aggCeded : Math.min(aggCeded, aggLimit);
@@ -510,6 +534,114 @@ export function runParetoMonteCarlo(params = /** @type {any} */ ({})) {
     },
     warnings,
   };
+}
+
+// ── Severity fit + diagnostics (consumed by the SeverityFitPanel UI) ───
+/**
+ * Fit one severity family to losses ≥ threshold and return the point
+ * estimate plus bootstrap CI bands — the lightweight path the UI uses
+ * (no simulation). Deterministic in `seed`.
+ * @returns {{ family: string, threshold: number, n: number,
+ *             params: Record<string,number>, ci: Record<string,[number,number]>,
+ *             warnings: string[] }}
+ */
+export function fitSeverityWithCI(family, values, threshold, opts = {}) {
+  const fam = String(family || 'GPD').toUpperCase();
+  const B = Math.max(0, Math.floor(opts.bootstrap == null ? 500 : opts.bootstrap));
+  const seed = Number.isFinite(opts.seed) ? (Number(opts.seed) >>> 0) : 12345;
+  const rng = mulberry32((seed + 0x9e3779b9) >>> 0);
+  const warnings = [];
+  const losses = (Array.isArray(values) ? values : []).map(toN).filter((x) => x > 0);
+  const fit = fitSeverity(fam, losses, toN(threshold), B, rng, warnings);
+  return { family: fit.family, threshold: fit.threshold, n: fit.n, params: fit.params, ci: fit.ci, warnings };
+}
+
+/**
+ * Empirical mean-excess curve e(u) = mean(X − u | X > u) over a grid of
+ * thresholds. Used to defend the fit threshold: above a good threshold a
+ * heavy (GPD) tail plots roughly linearly. Threshold-independent of the fit.
+ * @returns {{ u: number, e: number, n: number }[]}
+ */
+export function buildMeanExcess(values, points = 40) {
+  const data = (values || []).map(toN).filter((x) => x > 0).sort((a, b) => a - b);
+  const n = data.length;
+  if (n < 3) return [];
+  const out = [];
+  const maxIdx = Math.max(1, Math.floor(n * 0.9));   // stop at ~90th pct (tail too noisy)
+  const step = Math.max(1, Math.floor(maxIdx / points));
+  for (let i = 0; i < maxIdx; i += step) {
+    const u = data[i];
+    let sum = 0;
+    let cnt = 0;
+    for (let j = i + 1; j < n; j++) { if (data[j] > u) { sum += data[j] - u; cnt += 1; } }
+    if (cnt > 0) out.push({ u, e: sum / cnt, n: cnt });
+  }
+  return out;
+}
+
+/**
+ * Log-log survival data: empirical survival points for losses ≥ threshold
+ * plus the fitted survival curve on a log-spaced grid. A Pareto/GPD tail is
+ * a straight line on log-log axes — the eye sees an honest fit.
+ * @returns {{ empirical: {x:number,s:number}[], fitted: {x:number,s:number}[] }}
+ */
+export function buildSurvivalLogLog(values, family, params, threshold, points = 80) {
+  const thr = toN(threshold);
+  const tail = (values || []).map(toN).filter((x) => x >= thr && x > 0).sort((a, b) => a - b);
+  const m = tail.length;
+  const empirical = [];
+  for (let i = 0; i < m; i++) empirical.push({ x: tail[i], s: (m - i - 0.5) / m });
+  const fitted = [];
+  const xMax = m ? tail[m - 1] : thr;
+  if (xMax > thr && thr > 0) {
+    const lo = Math.log(thr);
+    const hi = Math.log(xMax);
+    for (let k = 0; k <= points; k++) {
+      const x = Math.exp(lo + (hi - lo) * (k / points));
+      const s = severitySurvival(family, params, thr, x);
+      if (s > 0) fitted.push({ x, s });
+    }
+  }
+  return { empirical, fitted };
+}
+
+/**
+ * Q-Q data: fitted-family theoretical quantiles vs the empirical order
+ * statistics of losses ≥ threshold. On a good fit the points hug y = x.
+ * (Pareto/GPD quantiles are conditional on ≥ threshold; lognormal is
+ * unconditional, so its low-tail points sit below the line — expected.)
+ * @returns {{ theoretical: number, empirical: number }[]}
+ */
+export function buildQQ(values, family, params, threshold) {
+  const thr = toN(threshold);
+  const tail = (values || []).map(toN).filter((x) => x >= thr && x > 0).sort((a, b) => a - b);
+  const m = tail.length;
+  const out = [];
+  for (let i = 0; i < m; i++) {
+    const p = (i + 0.5) / m;
+    out.push({ theoretical: severityQuantile(family, params, thr, p), empirical: tail[i] });
+  }
+  return out;
+}
+
+/**
+ * Kolmogorov–Smirnov goodness-of-fit: the max gap between the empirical CDF
+ * of losses ≥ threshold and the fitted (threshold-conditional) CDF. Smaller
+ * is better. Returns NaN for fewer than 2 tail points.
+ * @returns {{ d: number, n: number }}
+ */
+export function ksStatistic(values, family, params, threshold) {
+  const thr = toN(threshold);
+  const tail = (values || []).map(toN).filter((x) => x >= thr && x > 0).sort((a, b) => a - b);
+  const m = tail.length;
+  if (m < 2) return { d: NaN, n: m };
+  const sThr = severitySurvival(family, params, thr, thr) || 1;   // ~1 for Pareto/GPD
+  let d = 0;
+  for (let i = 0; i < m; i++) {
+    const fFit = 1 - severitySurvival(family, params, thr, tail[i]) / sThr;   // conditional CDF
+    d = Math.max(d, Math.abs(fFit - i / m), Math.abs(fFit - (i + 1) / m));
+  }
+  return { d, n: m };
 }
 
 export default runParetoMonteCarlo;
