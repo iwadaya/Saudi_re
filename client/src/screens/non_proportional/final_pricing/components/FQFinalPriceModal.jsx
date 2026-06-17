@@ -16,8 +16,11 @@ import { FQPctCell } from './FQCells.jsx';
 const fmtNum = (n) => (Number.isFinite(n) && n > 0 ? formatWithCommas(String(Math.round(n))) : '—');
 const fmtPct = (n, dp = 2) => (n != null && Number.isFinite(n) && n > 0 ? `${n.toFixed(dp)}%` : '—');
 
-// "{count}@{pct}%" (e.g. "1@100%"); "—" when there are no reinstatements.
-const reinstLabel = (count, pct) => {
+// "{count}@{pct}%" (e.g. "1@100%"); "Unlimited" for the UNLIMITED sentinel;
+// "—" when there are no reinstatements. Exported for reuse by the pricing-
+// analysis modal's combined per-layer table.
+export const reinstLabel = (count, pct) => {
+  if (String(count ?? '').trim().toUpperCase() === 'UNLIMITED') return 'Unlimited';
   const n = toN(count);
   if (!(n > 0)) return '—';
   const p = toN(pct);

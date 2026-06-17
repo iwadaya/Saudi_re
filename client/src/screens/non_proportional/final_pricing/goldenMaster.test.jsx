@@ -337,11 +337,14 @@ describe('NpFinalPricing golden master (quote mode)', () => {
     ];
     expect(rowsOf(paTables[0])).toEqual(componentRows('53.3171%'));
     expect(rowsOf(paTables[1])).toEqual(componentRows('53.3171%'));
+    // Total Section is now a combined PER-LAYER table fusing risk + cat: the
+    // single layer is risk+cat active, so UW ROL = risk ROL + cat ROL
+    // (62.73% + 62.73% = 125.45%), EP = limit × ROL = 940,890, rate = EP ÷ EGNPI.
+    // Limit/EGNPI are counted once per layer (not risk+cat doubled).
     expect(rowsOf(paTables[2])).toEqual([
-      ['Component', 'Active Layers', 'Limit', 'Premium', 'Weighted ROL'],
-      ['Risk', '1', '750,000', '470,445', '62.73%'],
-      ['Cat', '1', '750,000', '470,445', '62.73%'],
-      ['Total', '2', '1,500,000', '940,890', '62.73%'],
+      ['Layer', 'Limit', 'Deductible', 'Reinstatements', 'EGNPI', 'Rate', 'Earned Premium', 'ROL'],
+      ['1', '750,000', '100,000', '—', '1,500,000', '62.73%', '940,890', '125.45%'],
+      ['TOTAL', '750,000', '—', '—', '1,500,000', '62.73%', '940,890', '125.45%'],
     ]);
   });
 });

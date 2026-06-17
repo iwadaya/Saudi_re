@@ -73,15 +73,33 @@ describe('FQPricingAnalysisModal — row rendering', () => {
     expect(screen.queryByText('USD 1,000,000')).toBeNull();
   });
 
-  it('renders the Total Section with Risk / Cat / Total rows when both perils are active', () => {
+  it('renders the Total Section as a combined per-layer table (one row per active layer + TOTAL)', () => {
     renderModal();
-    const totalHeading = screen.getByText('Total Section');
-    const section = totalHeading.closest('section');
+    const section = screen.getByText('Total Section').closest('section');
     expect(section).toBeTruthy();
     const scoped = within(section);
-    expect(scoped.getByText('Risk')).toBeInTheDocument();
-    expect(scoped.getByText('Cat')).toBeInTheDocument();
-    expect(scoped.getByText('Total')).toBeInTheDocument();
+    // Combined per-layer columns (fusing risk + cat).
+    ['Layer', 'Limit', 'Deductible', 'Reinstatements', 'EGNPI', 'Rate', 'Earned Premium', 'ROL'].forEach((h) => {
+      expect(scoped.getByText(h)).toBeInTheDocument();
+    });
+    // L1 (risk+cat) and L2 (risk-only) both have an active component → 2 body
+    // rows + a TOTAL row (limit counted once per layer, not risk+cat doubled).
+    expect(section.querySelectorAll('tbody tr').length).toBe(2);
+    expect(scoped.getByText('TOTAL')).toBeInTheDocument();
+    // The old per-component layout (Active Layers / Weighted ROL) is gone.
+    expect(scoped.queryByText('Weighted ROL')).toBeNull();
+  });
+
+  it('shows the Total Section for a single-component (risk-only) structure too', () => {
+    const riskOnly = {
+      id: 'str-0',
+      layers: [{ id: 0, risk: true, cat: false, limit: '1000000', attachment: '500000', egnpi: '50000000', riskUwPrice: '10' }],
+    };
+    renderModal({ clientStructures: [riskOnly], catDisabled: true });
+    const section = screen.getByText('Total Section').closest('section');
+    // A single active component still gets a total (it equals that component).
+    expect(section.querySelectorAll('tbody tr').length).toBe(1);
+    expect(within(section).getByText('TOTAL')).toBeInTheDocument();
   });
 
   it('opens the per-scope Final Price modal from each peril section header', () => {
