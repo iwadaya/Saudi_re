@@ -12,6 +12,7 @@ import { logger } from "../lib/logger.js";
 import { buildBatchInsert } from "../db/batchInsert.js";
 import { assertCanEdit, computeEditPermission } from "../services/permissions.js";
 import { getAssignmentHistory } from "../services/assignments.js";
+import { getContractHistory } from "../services/contractHistory.js";
 const router = Router();
 
 
@@ -549,6 +550,15 @@ router.delete("/treaties/:id", asyncHandler(async (req, res) => {
   if(!rowCount) return res.status(404).json({error:"Contract not found"});
   await logAudit(pool,{entityType:"CONTRACT",entityId:req.params.id,eventType:"DELETED",actor:actorFromReq(req)});
   res.json({ok:true,deleted:req.params.id});
+}));
+
+// ── GET /api/contracts/:id/history ──
+// Read-only, merged audit/history timeline for a contract: contract_audit_event
+// + contract_workflow_event + approval_decision (names resolved via uw_user) +
+// any field-diff payloads, newest-first. Powers the treaty "History" tab.
+router.get("/contracts/:id/history", asyncHandler(async (req, res) => {
+  const items = await getContractHistory(req.params.id, { limit: req.query.limit });
+  res.json(items);
 }));
 
 export default router;

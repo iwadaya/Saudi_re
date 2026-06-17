@@ -53,6 +53,8 @@ const NpCrestaAggregates = lazy(() => import('../screens/non_proportional/cresta
 const NpEventLossTables = lazy(() => import('../screens/non_proportional/event_loss_tables/NpEventLossTables'));
 const NpFinalPricing    = lazy(() => import('../screens/non_proportional/final_pricing/NpFinalPricing'));
 const NpStopLossPricing = lazy(() => import('../screens/non_proportional/stop_loss_pricing/NpStopLossPricing'));
+const PropHistory       = lazy(() => import('../screens/proportional/history/PropHistory'));
+const NpHistory         = lazy(() => import('../screens/non_proportional/history/NpHistory'));
 const ExcelImportAgent  = lazy(() => import('../screens/shared/ExcelImportAgent'));
 const QuickBenchmark    = lazy(() => import('../screens/benchmark/QuickBenchmark'));
 const UserManagementScreen = lazy(() => import('../screens/admin/UserManagementScreen'));
@@ -106,6 +108,7 @@ export const appRoutes = [
   { path: '/prop/cresta-aggregates', component: PropCrestaAggregates },
   { path: '/prop/event-loss-tables', component: PropEventLossTables },
   { path: '/prop/pricing', component: PropPricing },
+  { path: '/prop/history', component: PropHistory },
 
   { path: '/np/treaty-detail', component: NpTreatyDetail },
   { path: '/np/documents', component: NpDocuments },
@@ -129,6 +132,7 @@ export const appRoutes = [
   { path: '/np/stop-loss-pricing', component: NpStopLossPricing },
   { path: '/np/final-pricing', component: NpFinalPricing },
   { path: '/np/final-quote', component: NpFinalPricing },
+  { path: '/np/history', component: NpHistory },
   { path: '/benchmark', component: QuickBenchmark },
 
   // Facultative wizard

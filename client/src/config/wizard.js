@@ -114,6 +114,7 @@ export const STEP_LABELS = {
   PROP_CRESTA_AGGREGATES: 'CRESTA Aggregates',
   PROP_EVENT_LOSS_TABLES: 'Event Loss Tables',
   PROP_PRICING: 'Pricing',
+  PROP_HISTORY: 'History',
   NP_TREATY_DETAIL: 'Treaty Detail',
   NP_TREATY_DOCUMENTS: 'Documents',
   NP_EXPIRING_STRUCTURE: 'Expiring Structure',
@@ -136,6 +137,7 @@ export const STEP_LABELS = {
   NP_STOP_LOSS_PRICING: 'Stop Loss Pricing',
   NP_FINAL_PRICING: 'Final Pricing',
   NP_FINAL_QUOTE: 'Final Quote',
+  NP_HISTORY: 'History',
   // Facultative
   FAC_RISK_DETAIL: 'Risk Detail',
   FAC_LOCATIONS: 'Locations & SI',
@@ -178,6 +180,7 @@ export const ROUTE_PATHS = {
   PROP_CRESTA_AGGREGATES: '/prop/cresta-aggregates',
   PROP_EVENT_LOSS_TABLES: '/prop/event-loss-tables',
   PROP_PRICING: '/prop/pricing',
+  PROP_HISTORY: '/prop/history',
   NP_TREATY_DETAIL: '/np/treaty-detail',
   NP_TREATY_DOCUMENTS: '/np/documents',
   NP_EXPIRING_STRUCTURE: '/np/expiring-structure',
@@ -200,6 +203,7 @@ export const ROUTE_PATHS = {
   NP_STOP_LOSS_PRICING: '/np/stop-loss-pricing',
   NP_FINAL_PRICING: '/np/final-pricing',
   NP_FINAL_QUOTE: '/np/final-quote',
+  NP_HISTORY: '/np/history',
   // Facultative
   FAC_RISK_DETAIL: '/fac/risk/detail',
   FAC_LOCATIONS: '/fac/risk/locations',
@@ -279,6 +283,7 @@ export const PROP_TAB_GROUPS = [
   { label: 'Profiles', keys: ['PROP_RISK_PROFILE', 'PROP_CLAIMS_PROFILE'] },
   { label: 'Exposure', keys: ['PROP_CRESTA_AGGREGATES', 'PROP_EVENT_LOSS_TABLES'] },
   { label: 'Pricing', keys: ['PROP_PRICING'] },
+  { label: 'Audit', keys: ['PROP_HISTORY'] },
 ];
 
 export const NP_TAB_GROUPS = [
@@ -290,6 +295,7 @@ export const NP_TAB_GROUPS = [
   { label: 'Profiles', keys: ['NP_RISK_PROFILE', 'NP_CLAIMS_PROFILE'] },
   { label: 'Exposure', keys: ['NP_CRESTA_AGGREGATES', 'NP_EVENT_LOSS_TABLES'] },
   { label: 'Pricing', keys: ['NP_STOP_LOSS_PRICING', 'NP_FINAL_PRICING', 'NP_FINAL_QUOTE'] },
+  { label: 'Audit', keys: ['NP_HISTORY'] },
 ];
 
 // ── Facultative Wizard ────────────────────────────────────────────────────────
