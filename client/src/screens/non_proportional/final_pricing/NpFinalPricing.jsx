@@ -101,7 +101,7 @@ export default function NpFinalPricing() {
   // ── Imperative handlers (engine runs, dual save, offer workflow) ──
   // moved verbatim to hooks/useNpPricingActions.js in Phase 4.1.
   const {
-    runQuoteCalcEngine, runCalcEngine, save,
+    runQuoteCalcEngine, runQuoteCalcScope, runCalcEngine, save,
     doSubmitForApproval, doMarkApproved, doMarkSigned,
     doMarkNTU, doReturnToUW, doDecline,
   } = useNpPricingActions({
@@ -198,6 +198,7 @@ export default function NpFinalPricing() {
                 contractId={contractId}
                 cobIds={selectedCobs.map((c) => c.id).filter(Boolean)}
                 runQuoteCalcEngine={runQuoteCalcEngine}
+                runQuoteCalcScope={runQuoteCalcScope}
                 calcEngineRunning={calcEngineRunning}
                 runningStructures={runningStructures}
                 calcEngineError={calcEngineError}
