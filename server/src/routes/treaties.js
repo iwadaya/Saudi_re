@@ -3,6 +3,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { asyncHandler, numOrNull, dateOrNull, boolOrDefault } from '../helpers.js';
 import { logAudit } from "../services/audit.js";
+import { changeUwStatus } from "../services/workflow.js";
 import { actorFromReq } from "../middleware/requestContext.js";
 import { contractContextJoins } from "../db/contractJoins.js";
 import { assertEntityUnchanged, optimisticLockOverrideRequested } from "../db/optimisticLock.js";
@@ -204,6 +205,7 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
     // moved on. No header = no check (backwards-compatible).
     await assertEntityUnchanged(client, { table: 'public.contract', idColumn: 'contract_id', id, ifUnmodifiedSince });
     await client.query("BEGIN");
+    const actor = actorFromReq(req);
 
     // ── Header (only if explicitly provided) ──
     const h=terms.header;
@@ -217,14 +219,20 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
          inception_date=COALESCE($10,inception_date),primary_class_of_business_id=COALESCE($11,primary_class_of_business_id),
          contract_description=COALESCE($12,contract_description),alt_contract_id=COALESCE($13,alt_contract_id),
          status=COALESCE($14::public.contract_status,status),
-         uw_status=COALESCE($15::public.uw_workflow_status,uw_status),
-         signed_line_pct=COALESCE($16,signed_line_pct),
+         signed_line_pct=COALESCE($15,signed_line_pct),
          updated_at=now() WHERE contract_id=$1`,
         [id,h.cedant_id||null,h.broker_id||null,h.currency_id||null,h.country_id||null,
          h.treaty_type_id||null,numOrNull(h.uw_year??h.underwriting_year??d.start_year),
          h.experience_source||null,dateOrNull(d.renewal_date??h.renewal_date),dateOrNull(d.inception_date??h.inception_date),
          h.primary_class_of_business_id||null,h.contract_description??null,h.alt_contract_id??null,
-         h.status||null,h.uw_status||null,numOrNull(h.signed_line_pct)]);
+         h.status||null,numOrNull(h.signed_line_pct)]);
+      // uw_status is NOT written by the raw header UPDATE: a workflow-state move
+      // must leave a workflow event + STATUS_CHANGED audit and clear the transition
+      // guard. Route any requested change through changeUwStatus — a re-save of the
+      // same status is a no-op, an illegal jump (e.g. SIGNED→DRAFT) is a clean 422.
+      if (h.uw_status) {
+        await changeUwStatus(client, { contractId: id, to: h.uw_status, actor, comment: 'treaty header edit' });
+      }
     }
 
     // ── Prop details (only if detail section provided) ──
@@ -361,8 +369,7 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
 
     // Audit BEFORE COMMIT, on the transaction client, so a failed
     // compliance-critical write rolls the whole save back rather than
-    // committing a field-diff with no audit record.
-    const actor = actorFromReq(req);
+    // committing a field-diff with no audit record. (actor resolved above.)
     if (staleWriteOverride) {
       await logAudit(client,{
         entityType:"CONTRACT",
