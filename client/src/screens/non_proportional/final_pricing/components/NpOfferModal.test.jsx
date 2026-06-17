@@ -1,8 +1,10 @@
 // NpOfferModal.test.jsx
 //
-// Quote-mode "Submit Quotes" summary: lists each queued structure (label, total
-// limit, COBs covered, quote type, lead/follow line) and gates the Submit button
-// on an approver + at least one queued structure, then calls doSubmitForApproval.
+// Quote-mode "Submit Quotes" summary: one GROUP per queued structure — a header
+// row with the structure-level attributes (label, quote type, lead/follow line)
+// and totals, then a per-layer row beneath (limit, deductible, reinstatements,
+// UW ROL, the COBs covered on that layer). Gates the Submit button on an approver
+// + at least one queued structure, then calls doSubmitForApproval.
 
 import { render, screen, within, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -46,15 +48,49 @@ function renderModal(over = {}, pricingOver = {}) {
 }
 
 describe('NpOfferModal — quote submission summary', () => {
-  it('lists each queued structure with total limit, COBs, quote type and line', () => {
+  it('renders a per-structure group header (totals, quote type, line) with layer rows beneath', () => {
     renderModal();
     expect(screen.getByText('Quotes for Submission')).toBeInTheDocument();
-    const row = within(screen.getByTestId('np-submit-summary-row-0'));
-    expect(row.getByText('Structure 1')).toBeInTheDocument();
-    expect(row.getByText('1,000,000')).toBeInTheDocument();   // combined total limit
-    expect(row.getByText('Motor')).toBeInTheDocument();        // COBs covered
-    expect(row.getByText('Lead')).toBeInTheDocument();         // quote type
-    expect(row.getByText(/25% lead/)).toBeInTheDocument();     // single structure line
+    // Group header: structure-level attributes + totals (one per structure).
+    const header = within(screen.getByTestId('np-submit-group-0'));
+    expect(header.getByText('Structure 1')).toBeInTheDocument();
+    expect(header.getByText('Lead')).toBeInTheDocument();        // quote type
+    expect(header.getByText(/25% lead/)).toBeInTheDocument();    // single line across the structure
+    expect(header.getByText('1,000,000')).toBeInTheDocument();   // Σ limit
+    // Layer row: 1-based pill, fused per-layer pricing, COBs covered on that layer.
+    const layer = within(screen.getByTestId('np-submit-layer-0-0'));
+    expect(layer.getByText('1')).toBeInTheDocument();            // layer index pill
+    expect(layer.getByText('1,000,000')).toBeInTheDocument();    // layer limit
+    expect(layer.getByText('500,000')).toBeInTheDocument();      // deductible
+    expect(layer.getByText('10.00%')).toBeInTheDocument();       // UW ROL (risk 10 + cat 0)
+    expect(layer.getByText('Motor')).toBeInTheDocument();        // COBs covered (this layer)
+  });
+
+  it('renders one row per active layer with per-layer COBs, reinstatements and fused pricing', () => {
+    renderModal({}, {
+      selectedCobs: [{ id: 'cob-1', name: 'Motor' }, { id: 'cob-2', name: 'Property' }],
+      getCobFlags: (_scope, cobId) => (cobId === 'cob-1' ? [true, false] : [false, true]),
+      clientStructures: [
+        {
+          id: 'str-0', label: 'Structure 1', quoteType: 'LEAD', leadLinePct: '25', followLinePct: '',
+          layers: [
+            { id: 0, risk: true, cat: false, limit: '1000000', attachment: '500000', egnpi: '50000000', riskUwPrice: '10', reinstatements: '1', pctReinst: '100' },
+            { id: 1, risk: true, cat: false, limit: '2000000', attachment: '1500000', egnpi: '50000000', riskUwPrice: '8' },
+          ],
+        },
+      ],
+    });
+    // L1: Motor only, 1@100% reinstatements, its own limit.
+    const l1 = within(screen.getByTestId('np-submit-layer-0-0'));
+    expect(l1.getByText('Motor')).toBeInTheDocument();
+    expect(l1.queryByText('Property')).toBeNull();
+    expect(l1.getByText('1@100%')).toBeInTheDocument();
+    expect(l1.getByText('1,000,000')).toBeInTheDocument();
+    // L2: Property only, no reinstatements, its own limit.
+    const l2 = within(screen.getByTestId('np-submit-layer-0-1'));
+    expect(l2.getByText('Property')).toBeInTheDocument();
+    expect(l2.queryByText('Motor')).toBeNull();
+    expect(l2.getByText('2,000,000')).toBeInTheDocument();
   });
 
   it('shows an empty-state row when nothing is queued', () => {
@@ -69,9 +105,9 @@ describe('NpOfferModal — quote submission summary', () => {
           layers: [{ id: 0, risk: true, cat: false, limit: '1000000', attachment: '500000', egnpi: '50000000', riskUwPrice: '10' }] },
       ],
     });
-    const row = within(screen.getByTestId('np-submit-summary-row-0'));
-    expect(row.getByText('Indicative')).toBeInTheDocument();
-    expect(row.getByText(/12\.5% follow/)).toBeInTheDocument();
+    const header = within(screen.getByTestId('np-submit-group-0'));
+    expect(header.getByText('Indicative')).toBeInTheDocument();
+    expect(header.getByText(/12\.5% follow/)).toBeInTheDocument();
   });
 
   it('gates Submit on an approver + queued structure, then calls doSubmitForApproval', () => {

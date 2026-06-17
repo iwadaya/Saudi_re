@@ -11,7 +11,7 @@
 import { api } from '../../../../api';
 import PctInput from '../../../../components/PctInput';
 import { fmtC } from '../formatters.js';
-import { structureCombinedTotals } from '../fqQuoteMath.js';
+import { structureCombinedTotals, layerCombinedPricing } from '../fqQuoteMath.js';
 
 /**
  * @param {{
@@ -175,42 +175,80 @@ export default function NpOfferModal({
                                 const sTh = { padding: '8px 12px', fontSize: 9, fontWeight: 700, letterSpacing: '.10em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap', borderBottom: '1px solid rgba(255,255,255,0.08)', textAlign: 'right' };
                                 const sTd = { padding: '8px 12px', textAlign: 'right', fontSize: 12, color: 'rgba(255,255,255,0.8)', borderBottom: '1px solid rgba(255,255,255,0.05)', fontVariantNumeric: 'tabular-nums' };
                                 const pct = (n) => (Number.isFinite(n) && n > 0 ? `${n.toFixed(2)}%` : '—');
+                                const fmtMoney = (n) => (n > 0 ? fmtC(Math.round(n)) : '—');
                                 const queued = (clientStructures || []).map((s, i) => ({ s, i })).filter(({ i }) => approvedStructures[i]);
-                                const cobsFor = (s) => (selectedCobs || []).filter((c) => getCobFlags(String(s.id), c.id, s.layers || []).some(Boolean)).map((c) => c.name);
                                 return (
                                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                                     <thead>
                                       <tr>
-                                        <th style={{ ...sTh, textAlign: 'left' }}>Structure</th>
-                                        <th style={sTh}>Total Limit</th>
-                                        <th style={sTh}>Total Premium</th>
-                                        <th style={sTh}>Wtd UW ROL</th>
+                                        <th style={{ ...sTh, textAlign: 'center' }}>Layer</th>
+                                        <th style={sTh}>Limit</th>
+                                        <th style={sTh}>Deductible</th>
+                                        <th style={{ ...sTh, textAlign: 'center' }}>Reinstatements</th>
+                                        <th style={sTh}>UW ROL</th>
                                         <th style={{ ...sTh, textAlign: 'left' }}>COBs Covered</th>
-                                        <th style={{ ...sTh, textAlign: 'center' }}>Quote Type</th>
-                                        <th style={sTh}>Line %</th>
                                       </tr>
                                     </thead>
-                                    <tbody>
-                                      {queued.length === 0 ? (
-                                        <tr><td colSpan={7} style={{ ...sTd, textAlign: 'center', color: 'rgba(255,255,255,0.4)', padding: 20 }}>No structures queued — use “Send for Approval” on a structure first.</td></tr>
-                                      ) : queued.map(({ s, i }) => {
-                                        const t = structureCombinedTotals(s);
-                                        const cobs = cobsFor(s);
-                                        const indicative = s.quoteType === 'INDICATIVE';
-                                        const lineVal = toN(indicative ? s.followLinePct : s.leadLinePct);
-                                        return (
-                                          <tr key={s.id || i} data-testid={`np-submit-summary-row-${i}`}>
-                                            <td style={{ ...sTd, textAlign: 'left', fontWeight: 700, color: '#e2e8f0' }}>{s.label || `Structure ${i + 1}`}</td>
-                                            <td style={sTd}>{t.totalLimit > 0 ? fmtC(t.totalLimit) : '—'}</td>
-                                            <td style={sTd}>{t.totalPremium > 0 ? fmtC(Math.round(t.totalPremium)) : '—'}</td>
-                                            <td style={{ ...sTd, color: '#00d4ff', fontWeight: 700 }}>{pct(t.wtdRol)}</td>
-                                            <td style={{ ...sTd, textAlign: 'left', whiteSpace: 'normal', color: 'rgba(255,255,255,0.65)' }}>{cobs.length ? cobs.join(', ') : '—'}</td>
-                                            <td style={{ ...sTd, textAlign: 'center', fontWeight: 700, color: indicative ? '#fbbf24' : '#23d18b' }}>{indicative ? 'Indicative' : 'Lead'}</td>
-                                            <td style={{ ...sTd, fontWeight: 700 }}>{lineVal > 0 ? `${lineVal}% ${indicative ? 'follow' : 'lead'}` : '—'}</td>
+                                    {queued.length === 0 ? (
+                                      <tbody>
+                                        <tr><td colSpan={6} style={{ ...sTd, textAlign: 'center', color: 'rgba(255,255,255,0.4)', padding: 20 }}>No structures queued — use “Send for Approval” on a structure first.</td></tr>
+                                      </tbody>
+                                    ) : queued.map(({ s, i }) => {
+                                      const scope = String(s.id);
+                                      const t = structureCombinedTotals(s);
+                                      const indicative = s.quoteType === 'INDICATIVE';
+                                      const lineVal = toN(indicative ? s.followLinePct : s.leadLinePct);
+                                      const sLayers = Array.isArray(s.layers) ? s.layers : [];
+                                      // COB × layer coverage, sliced per layer (the class names whose flag is set on that layer).
+                                      const cobCoverage = (selectedCobs || []).map((c) => ({ name: c.name, flags: getCobFlags(scope, c.id, sLayers) }));
+                                      const layerRows = sLayers.map((l, lIdx) => ({ lIdx, c: layerCombinedPricing(l) })).filter((r) => r.c);
+                                      return (
+                                        <tbody key={s.id || i}>
+                                          {/* Group header — structure-level attributes (one value "across" the structure) + totals. */}
+                                          <tr data-testid={`np-submit-group-${i}`}>
+                                            <td colSpan={6} style={{ padding: 0, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', padding: '10px 12px', background: 'rgba(35,209,139,0.06)' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                                                  <span style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0' }}>{s.label || `Structure ${i + 1}`}</span>
+                                                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', padding: '2px 8px', borderRadius: 6, color: indicative ? '#fbbf24' : '#23d18b', background: indicative ? 'rgba(251,191,36,0.12)' : 'rgba(35,209,139,0.12)', border: `1px solid ${indicative ? 'rgba(251,191,36,0.35)' : 'rgba(35,209,139,0.35)'}` }}>{indicative ? 'Indicative' : 'Lead'}</span>
+                                                  <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.75)' }}>{lineVal > 0 ? `${lineVal}% ${indicative ? 'follow' : 'lead'} line` : 'No line set'}</span>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+                                                  {[
+                                                    { k: 'Total Limit', v: fmtMoney(t.totalLimit), col: 'rgba(255,255,255,0.85)' },
+                                                    { k: 'Total Premium', v: fmtMoney(t.totalPremium), col: 'rgba(255,255,255,0.85)' },
+                                                    { k: 'Wtd UW ROL', v: pct(t.wtdRol), col: '#00d4ff' },
+                                                  ].map((stat) => (
+                                                    <div key={stat.k} style={{ textAlign: 'right' }}>
+                                                      <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '.10em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)' }}>{stat.k}</div>
+                                                      <div style={{ fontSize: 13, fontWeight: 800, color: stat.col, fontVariantNumeric: 'tabular-nums' }}>{stat.v}</div>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            </td>
                                           </tr>
-                                        );
-                                      })}
-                                    </tbody>
+                                          {/* Per-layer rows — risk + cat fused via layerCombinedPricing; COBs sliced per layer. */}
+                                          {layerRows.length === 0 ? (
+                                            <tr><td colSpan={6} style={{ ...sTd, textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>No active layers in this structure.</td></tr>
+                                          ) : layerRows.map(({ lIdx, c }) => {
+                                            const cobs = cobCoverage.filter((f) => f.flags[lIdx]).map((f) => f.name);
+                                            return (
+                                              <tr key={`${s.id || i}-${lIdx}`} data-testid={`np-submit-layer-${i}-${lIdx}`}>
+                                                <td style={{ ...sTd, textAlign: 'center' }}>
+                                                  <span style={{ display: 'inline-block', minWidth: 22, padding: '2px 7px', borderRadius: 6, fontSize: 11, fontWeight: 800, color: '#23d18b', background: 'rgba(35,209,139,0.10)', border: '1px solid rgba(35,209,139,0.30)' }}>{lIdx + 1}</span>
+                                                </td>
+                                                <td style={sTd}>{fmtMoney(c.limit)}</td>
+                                                <td style={sTd}>{fmtMoney(toN(c.deductible))}</td>
+                                                <td style={{ ...sTd, textAlign: 'center' }}>{c.reinst}</td>
+                                                <td style={{ ...sTd, color: '#00d4ff', fontWeight: 700 }}>{`${c.uwRol.toFixed(2)}%`}</td>
+                                                <td style={{ ...sTd, textAlign: 'left', whiteSpace: 'normal', color: 'rgba(255,255,255,0.65)' }}>{cobs.length ? cobs.join(', ') : '—'}</td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      );
+                                    })}
                                   </table>
                                 );
                               })()}
