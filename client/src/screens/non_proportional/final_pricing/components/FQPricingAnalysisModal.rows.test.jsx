@@ -5,7 +5,7 @@
 // BOTH peril sections (active or not), and the Total Section must show the
 // Risk / Cat / Total rows. Rows are read from clientStructures[sIdx].layers.
 
-import { render, screen, within, fireEvent } from '@testing-library/react';
+import { render, screen, within, fireEvent, act } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import FQPricingAnalysisModal from './FQPricingAnalysisModal.jsx';
 
@@ -142,8 +142,9 @@ describe('FQPricingAnalysisModal — row rendering', () => {
     renderModal({ updateClientStructureLayer });
     // The old top "BLEND WEIGHTS" bar is gone.
     expect(screen.queryByText('Blend weights')).toBeNull();
-    // New headers appear (once per peril table).
-    ['Wt Burn', 'Wt Pareto', 'Wt Exp', 'Reinst.', '% Reinst.'].forEach((h) => {
+    // New headers appear (once per peril table): the weights now sit under a
+    // "Weighting" group banner with Burn/Pareto/Exp sub-labels.
+    ['Weighting', 'Burn', 'Exp', 'Reinst.', '% Reinst.'].forEach((h) => {
       expect(screen.getAllByText(h).length).toBeGreaterThanOrEqual(1);
     });
     // Per-row Wt Burn drives the scope weight field.
@@ -284,5 +285,52 @@ describe('FQPricingAnalysisModal — flat editable cells + widened columns', () 
     expect(cols[18].style.width).toBe('114px');
     // Non-data columns (Layer) are untouched.
     expect(cols[0].style.width).toBe('52px');
+  });
+});
+
+describe('FQPricingAnalysisModal — per-scope Calculate + WEIGHTING header', () => {
+  it('groups the weight columns under a WEIGHTING two-tier banner (Burn/Pareto/Exp)', () => {
+    renderModal();
+    // One banner per peril table (risk + cat both render here).
+    expect(screen.getAllByText('Weighting').length).toBe(2);
+    // The sub-labels sit beneath it.
+    expect(screen.getAllByText('Burn').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Exp').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('runs the engine for that scope on Calculate, showing a transient Calculating… state', async () => {
+    let resolveRun;
+    const runQuoteCalcScope = vi.fn(() => new Promise((r) => { resolveRun = r; }));
+    renderModal({ runQuoteCalcScope });
+    const btn = screen.getByTestId('fq-calculate-risk');
+    expect(btn.textContent).toBe('Calculate');
+
+    fireEvent.click(btn);
+    expect(runQuoteCalcScope).toHaveBeenCalledWith(0, 'risk');
+    // Pending → the button reads "Calculating…" and is disabled (state set on click).
+    expect(screen.getByTestId('fq-calculate-risk').textContent).toMatch(/Calculating/);
+    expect(screen.getByTestId('fq-calculate-risk')).toBeDisabled();
+
+    // A fully-priced run clears the state with no missing-input note.
+    await act(async () => { resolveRun({ ran: true, layerCount: 1, burn: true, pareto: true, exposure: true }); });
+    expect(screen.getByTestId('fq-calculate-risk').textContent).toBe('Calculate');
+    expect(screen.queryByTestId('fq-calc-note-risk')).toBeNull();
+  });
+
+  it('surfaces an inline note for a component the engine could not price', async () => {
+    const runQuoteCalcScope = vi.fn(async () => ({ ran: true, layerCount: 1, burn: false, pareto: true, exposure: true }));
+    renderModal({ runQuoteCalcScope });
+    await act(async () => { fireEvent.click(screen.getByTestId('fq-calculate-risk')); });
+    const note = screen.getByTestId('fq-calc-note-risk');
+    expect(note.textContent).toMatch(/pure burn not calculated/i);
+  });
+
+  it('does NOT run the engine when a weight is edited — Calculate is the only trigger', () => {
+    const runQuoteCalcScope = vi.fn(async () => ({ ran: true }));
+    const updateClientStructureLayer = vi.fn();
+    renderModal({ runQuoteCalcScope, updateClientStructureLayer });
+    fireEvent.change(screen.getByLabelText('Risk Structure 1 Layer 1 riskWeightBurn'), { target: { value: '60' } });
+    expect(updateClientStructureLayer).toHaveBeenCalledWith(0, 0, 'riskWeightBurn', '60');
+    expect(runQuoteCalcScope).not.toHaveBeenCalled();
   });
 });

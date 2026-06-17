@@ -81,6 +81,7 @@ const G = {
  *   contractId?: string,   // reserved for the Implied · Country/Region/Global columns (next prompt)
  *   cobIds?: string[],     // reserved (peer fetch) for the implied-market columns
  *   runQuoteCalcEngine?: (structureIndex?: number | null) => void,
+ *   runQuoteCalcScope?: (structureIndex: number, scopeKey: 'risk' | 'cat') => Promise<{ ran: boolean, layerCount?: number, burn?: boolean, pareto?: boolean, exposure?: boolean, error?: string }>,
  *   calcEngineRunning?: boolean,
  *   runningStructures?: Record<string, boolean>,
  *   calcEngineError?: string,
@@ -99,6 +100,7 @@ export default function FQPricingAnalysisModal({
   contractId,
   cobIds,
   runQuoteCalcEngine,
+  runQuoteCalcScope,
   calcEngineRunning,
   runningStructures,
   calcEngineError,
@@ -111,6 +113,11 @@ export default function FQPricingAnalysisModal({
   const [tab, setTab] = useState('pricing');
   // Per-scope "Final Price" modal (null = closed, else 'risk' | 'cat').
   const [finalPriceScope, setFinalPriceScope] = useState(null);
+  // Per-scope CALCULATE state: { risk?: { running, note }, cat?: { running, note } }.
+  // Driven only by the per-scope Calculate button — the underwriter controls when
+  // the engine overwrites the locked component cells (weights / Final Price never
+  // trigger it). `note` flags components the engine couldn't price (missing inputs).
+  const [scopeCalc, setScopeCalc] = useState({});
   // Published severity fits (one per scope) so the FrequencySimPanel can run
   // the Monte-Carlo off the same losses / threshold / family the fit shows.
   const [riskSevFit, setRiskSevFit] = useState(null);
@@ -173,7 +180,7 @@ export default function FQPricingAnalysisModal({
   const [autoRan, setAutoRan] = useState(false);
   // Reset the one-shot guard when the modal closes so the next open re-evaluates.
   useEffect(() => {
-    if (!modalOpen) { autoRunKeyRef.current = null; setAutoRan(false); }
+    if (!modalOpen) { autoRunKeyRef.current = null; setAutoRan(false); setScopeCalc({}); }
   }, [modalOpen]);
   useEffect(() => {
     if (!modalOpen || !isQuote || typeof runQuoteCalcEngine !== 'function') return;
@@ -258,6 +265,33 @@ export default function FQPricingAnalysisModal({
   const groupTh = (bg, underline) => ({ ...th, background: bg, borderBottom: `2px solid ${underline}` });
   const tabBtn = (active) => ({ padding: '10px 16px', background: active ? 'rgba(0,212,255,0.08)' : 'transparent', border: 'none', borderBottom: active ? '2px solid #00d4ff' : '2px solid transparent', color: active ? '#00d4ff' : 'rgba(226,232,240,0.65)', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', cursor: 'pointer' });
 
+  // Per-scope CALCULATE: run the canonical engine for THIS scope's active layers
+  // and write the resulting pure burn / Pareto / exposure ROL% into the locked
+  // cells (the merge re-blends, so Blend / Wtd ROL update). The components only
+  // change here (or on the on-open auto-run) — never on a weight / Final Price
+  // edit. Missing inputs surface an inline note rather than writing 0 silently.
+  const handleCalculate = async (scopeKey) => {
+    if (typeof runQuoteCalcScope !== 'function' || !Number.isInteger(sIdx)) return;
+    setScopeCalc((prev) => ({ ...prev, [scopeKey]: { running: true, note: '' } }));
+    let note = '';
+    try {
+      const r = await runQuoteCalcScope(sIdx, scopeKey);
+      if (!r || r.ran === false) {
+        note = r && r.error ? `Calculation failed: ${r.error}` : '';
+      } else if (!r.layerCount) {
+        note = 'No active layers in this scope to calculate.';
+      } else {
+        const missing = [];
+        if (!r.burn) missing.push('no loss data — pure burn not calculated');
+        if (!r.pareto) missing.push('no Pareto fit — Pareto not calculated');
+        if (!r.exposure) missing.push('no exposure data — exposure not calculated');
+        note = missing.join('; ');
+      }
+    } finally {
+      setScopeCalc((prev) => ({ ...prev, [scopeKey]: { running: false, note } }));
+    }
+  };
+
   const renderScopeSection = (scopeKey) => {
     const scope = QUOTE_COMPONENT_SCOPES[scopeKey];
     const f = scope.fields;
@@ -277,6 +311,7 @@ export default function FQPricingAnalysisModal({
     const COLW = [52, 56, 110, 110, 120, 80, 101, 97, 88, 97, 86, 92, 86, 84, 96, 96, 96, 96, 114, 88, 92, 180];
     const TABLE_MIN_W = COLW.reduce((s, w) => s + w, 0);
     const disabledByMode = scopeKey === 'risk' ? riskDisabled : catDisabled;
+    const calc = scopeCalc[scopeKey] || {};
     // Blend uses THIS row's own weights (Wt Burn/Pareto/Exp columns), divided
     // by the actual weight sum so it stays valid even if they don't total 100.
     const blendOf = (layer) => {
@@ -325,6 +360,16 @@ export default function FQPricingAnalysisModal({
             <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.75)', fontWeight: 750 }}>Wtd ROL {fmtPct(componentTotals(scopeKey).wtdRol)}</div>
             <button
               type="button"
+              data-testid={`fq-calculate-${scopeKey}`}
+              onClick={() => handleCalculate(scopeKey)}
+              disabled={!!calc.running}
+              title="Run the actuarial engine for this scope's active layers and refresh pure burn / Pareto / exposure"
+              style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid rgba(56,189,248,0.55)', background: 'rgba(56,189,248,0.12)', color: '#38bdf8', fontSize: 10, fontWeight: 850, letterSpacing: '.08em', textTransform: 'uppercase', cursor: calc.running ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: calc.running ? 0.7 : 1 }}
+            >
+              {calc.running ? 'Calculating…' : 'Calculate'}
+            </button>
+            <button
+              type="button"
               data-testid={`fq-final-price-open-${scopeKey}`}
               onClick={() => setFinalPriceScope(scopeKey)}
               style={{ padding: '5px 12px', borderRadius: 8, border: `1px solid ${scope.color}66`, background: `${scope.color}1f`, color: scope.color, fontSize: 10, fontWeight: 850, letterSpacing: '.08em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap' }}
@@ -333,6 +378,13 @@ export default function FQPricingAnalysisModal({
             </button>
           </div>
         </div>
+        {/* Missing-input note from the last Calculate — flags components the engine
+            couldn't price (no selected losses / no profiles) instead of writing 0. */}
+        {calc.note && (
+          <div data-testid={`fq-calc-note-${scopeKey}`} style={{ padding: '6px 14px', fontSize: 10, lineHeight: 1.5, color: 'rgba(251,191,36,0.95)', background: 'rgba(245,158,11,0.08)', borderBottom: '1px solid rgba(245,158,11,0.2)' }}>
+            {calc.note}
+          </div>
+        )}
         {/* Weights are now per-row columns (Wt Burn/Pareto/Exp) — no top blender.
             ONLY the table scrolls horizontally; the section header sits above
             (full-width), the notes textarea below. */}
@@ -340,12 +392,13 @@ export default function FQPricingAnalysisModal({
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: TABLE_MIN_W, tableLayout: 'fixed', fontSize: 11 }}>
             <colgroup>{COLW.map((w, ci) => (<col key={`col-${ci}`} style={{ width: w }} />))}</colgroup>
             <thead style={{ background: '#050810' }}>
-              {/* Two-tier header: a single IMPLIED banner (colSpan=4) sits above its
-                  four short sub-labels (Expiring/Country/Region/Global) so each reads
-                  on one line instead of repeating "IMPLIED ·" inside a narrow column.
-                  Every other column uses rowSpan=2 to span both header rows, bottom-
-                  aligned so its label lines up with the sub-labels. The column COUNT is
-                  unchanged (22), so tbody/tfoot cells stay aligned. */}
+              {/* Two-tier header: group banners (WEIGHTING colSpan=3 over Wt Burn/
+                  Pareto/Exp, IMPLIED colSpan=4 over Expiring/Country/Region/Global)
+                  sit above their short sub-labels so each reads on one line. Every
+                  other column uses rowSpan=2 to span both header rows, bottom-aligned
+                  so its label lines up with the sub-labels. The column COUNT is
+                  unchanged (22), so tbody/tfoot cells stay aligned — and the row-2
+                  sub-labels run in column order: WEIGHTING's three, then IMPLIED's four. */}
               <tr>
                 <th rowSpan={2} style={{ ...th, textAlign: 'center', verticalAlign: 'bottom' }}>Layer</th>
                 <th rowSpan={2} style={{ ...th, textAlign: 'center', verticalAlign: 'bottom' }}>Active</th>
@@ -357,9 +410,9 @@ export default function FQPricingAnalysisModal({
                 <th rowSpan={2} style={{ ...groupTh(COMP.pureBurn.tint, COMP.pureBurn.line), verticalAlign: 'bottom' }}>Pure Burn</th>
                 <th rowSpan={2} style={{ ...groupTh(COMP.pareto.tint, COMP.pareto.line), verticalAlign: 'bottom' }}>Pareto</th>
                 <th rowSpan={2} style={{ ...groupTh(COMP.exposure.tint, COMP.exposure.line), verticalAlign: 'bottom' }}>Exposure</th>
-                <th rowSpan={2} style={{ ...groupTh(COMP.pureBurn.tint, COMP.pureBurn.line), verticalAlign: 'bottom' }}>Wt Burn</th>
-                <th rowSpan={2} style={{ ...groupTh(COMP.pareto.tint, COMP.pareto.line), verticalAlign: 'bottom' }}>Wt Pareto</th>
-                <th rowSpan={2} style={{ ...groupTh(COMP.exposure.tint, COMP.exposure.line), verticalAlign: 'bottom' }}>Wt Exp</th>
+                {/* WEIGHTING group banner — spans the Wt Burn/Pareto/Exp columns,
+                    mirroring the IMPLIED two-tier treatment. */}
+                <th colSpan={3} style={{ ...groupTh(G.modelled, '#4ade80'), textAlign: 'center' }}>Weighting</th>
                 <th rowSpan={2} style={{ ...groupTh(G.modelled, '#4ade80'), verticalAlign: 'bottom' }}>Blend</th>
                 {/* IMPLIED group banner — spans the Expiring/Country/Region/Global peer columns. */}
                 <th colSpan={4} style={{ ...groupTh(G.exp, '#f59e0b'), textAlign: 'center' }}>Implied</th>
@@ -369,6 +422,11 @@ export default function FQPricingAnalysisModal({
                 <th rowSpan={2} style={{ ...groupTh(G.note, 'rgba(148,163,184,0.45)'), textAlign: 'left', verticalAlign: 'bottom' }}>Note</th>
               </tr>
               <tr>
+                {/* WEIGHTING sub-labels — component-matched tints (Burn/Pareto/Exp),
+                    sitting at the Wt columns (left of Blend, before the IMPLIED group). */}
+                <th style={groupTh(COMP.pureBurn.tint, COMP.pureBurn.line)}>Burn</th>
+                <th style={groupTh(COMP.pareto.tint, COMP.pareto.line)}>Pareto</th>
+                <th style={groupTh(COMP.exposure.tint, COMP.exposure.line)}>Exp</th>
                 {/* Short IMPLIED sub-labels — keep their per-scope column tints. */}
                 <th style={groupTh(G.exp, '#f59e0b')}>Expiring</th>
                 <th style={groupTh(G.country, '#00d4ff')}>Country</th>

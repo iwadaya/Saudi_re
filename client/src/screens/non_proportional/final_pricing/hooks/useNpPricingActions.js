@@ -135,6 +135,79 @@ export function useNpPricingActions({
     applyQuoteEngineResults,
   ]);
 
+  // Per-scope (Risk OR Cat) engine run for ONE structure — backs the Pricing
+  // Analysis modal's per-scope CALCULATE button. Prices ONLY that scope's ACTIVE
+  // layers (mode RISK/CAT, so calcLayerPricing returns just that component), then
+  // merges its pure burn / Pareto / exposure ROL% via the same applyQuoteEngineResults
+  // path (the other scope's fields are untouched because the result carries no data
+  // for it). Returns a per-component "was anything priced?" summary so the modal can
+  // flag missing inputs ("no loss data — burn not calculated") instead of writing 0.
+  // Does NOT touch the global engine-running state — the modal shows a local
+  // "Calculating…" on the pressed button.
+  const runQuoteCalcScope = useCallback(async (structureIndex, scopeKey) => {
+    if (!contractId || !Number.isInteger(structureIndex)) return { ran: false };
+    if (scopeKey !== 'risk' && scopeKey !== 'cat') return { ran: false };
+    const structure = clientStructures[structureIndex];
+    if (!structure) return { ran: false };
+    const scope = structure.id || `str-${structureIndex}`;
+    const pricingLayers = [];
+    const refs = [];
+    (structure.layers || []).forEach((layer, lIdx) => {
+      if (!layer[scopeKey]) return;   // only this scope's ACTIVE layers
+      const classOfBusinessIds = selectedCobs
+        .filter((cob) => !!getCobFlags(scope, cob.id, structure.layers)[lIdx])
+        .map((cob) => cob.id);
+      refs.push(`${scope}:${layer.id ?? lIdx}`);
+      pricingLayers.push({
+        ...layer,
+        layer: `S${structureIndex + 1}L${lIdx + 1}`,
+        deductible: layer.attachment || layer.deductible,
+        egnpi: layer.egnpi || quoteCurve.baseEgnpi || npDetail.estGnpi || npDetail.egnpi || '',
+        riskCover: scopeKey === 'risk',
+        catCover: scopeKey === 'cat',
+        classOfBusinessIds,
+      });
+    });
+    if (!pricingLayers.length) return { ran: true, layerCount: 0, burn: false, pareto: false, exposure: false };
+    try {
+      const results = await calcLayerPricing(
+        api,
+        contractId,
+        pricingLayers,
+        { ...npDetail, estGnpi: quoteCurve.baseEgnpi || npDetail.estGnpi || npDetail.egnpi },
+        scopeKey === 'risk' ? 'RISK' : 'CAT',
+        quoteMode,
+      );
+      const byKey = new Map();
+      let burn = false; let pareto = false; let exposure = false;
+      results.forEach((result) => {
+        const key = refs[result.idx];
+        if (key) byKey.set(key, result);
+        const comp = result[scopeKey];
+        if (comp) {
+          if (toN(comp.pureBurn) > 0) burn = true;
+          if (toN(comp.pareto) > 0) pareto = true;
+          if (toN(comp.exposureRating) > 0) exposure = true;
+        }
+      });
+      applyQuoteEngineResults(byKey);
+      return { ran: true, layerCount: pricingLayers.length, burn, pareto, exposure };
+    } catch (e) {
+      // Surface the failure through the returned summary (the modal renders it as an
+      // inline note) rather than a console call — keeps the screens console budget flat.
+      return { ran: false, error: e.message || 'calculation failed' };
+    }
+  }, [
+    contractId,
+    clientStructures,
+    selectedCobs,
+    getCobFlags,
+    quoteCurve.baseEgnpi,
+    npDetail,
+    quoteMode,
+    applyQuoteEngineResults,
+  ]);
+
   // ── Actuarial Engine: run all three methods for all layers ────────
   // The per-layer merge (component totals, UW-price seeding) lives in the
   // reducer ('layers/applyEngineResults') — moved verbatim in Phase 4.1.
@@ -494,6 +567,7 @@ export function useNpPricingActions({
 
   return {
     runQuoteCalcEngine,
+    runQuoteCalcScope,
     runCalcEngine,
     save,
     doSubmitForApproval,
