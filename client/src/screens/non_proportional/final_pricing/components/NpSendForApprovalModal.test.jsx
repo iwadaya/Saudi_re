@@ -1,9 +1,10 @@
 // NpSendForApprovalModal.test.jsx
 //
 // Read-only per-structure approval review: the combined per-layer pricing table,
-// the LEAD/INDICATIVE participation toggle (lead vs follow line), and the
-// "Add to Submission" flow that marks the structure approved then saves + closes
-// once the approval commits.
+// the LEAD/INDICATIVE participation toggle (lead vs follow line), the
+// defined-share summary (exposure/premium + per-COB max exposure at the entered
+// line), and the "Add to Submission" flow that marks the structure approved then
+// saves + closes once the approval commits.
 
 import { render, screen, within, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -82,6 +83,45 @@ describe('NpSendForApprovalModal', () => {
     expect(screen.getByTestId('np-send-approval-indicative')).not.toBeChecked();
     expect(screen.getByText('Lead Line')).toBeInTheDocument();
     expect(screen.queryByText('Follow Line')).toBeNull();
+  });
+
+  it('defined-share summary: exposure = share × ΣLimit, premium = share × ΣEP', () => {
+    // LEAD 25%: ΣLimit 3,000,000 → 750,000; ΣEP 310,000 (L1 150k + L2 160k) → 77,500.
+    renderModal();
+    expect(screen.getByText('At 25% lead line')).toBeInTheDocument();
+    expect(screen.getByTestId('np-share-exposure')).toHaveTextContent('750,000');
+    expect(screen.getByTestId('np-share-premium')).toHaveTextContent('77,500');
+  });
+
+  it('defined-share summary: per-COB row shows covered layers + max exposure at the share', () => {
+    // getCobFlags → [true,false] → L1 only; 0.25 × 1,000,000 = 250,000 vs 1,000,000 UW limit.
+    renderModal();
+    const row = screen.getByTestId('np-share-cob-cob-1');
+    expect(row).toHaveTextContent('Motor');
+    expect(row).toHaveTextContent('L1');
+    expect(row).toHaveTextContent('250,000');
+    expect(row).not.toHaveTextContent('exceeds UW limit');
+  });
+
+  it('defined-share summary: max exposure over the UW limit is flagged', () => {
+    // Both layers covered → 0.25 × 3,000,000 = 750,000 against a 100,000 UW limit.
+    renderModal({ getCobFlags: () => [true, true], getCobUwLimit: () => '100000' });
+    const row = screen.getByTestId('np-share-cob-cob-1');
+    expect(row).toHaveTextContent('L1, L2');
+    expect(row).toHaveTextContent('750,000');
+    expect(row).toHaveTextContent('exceeds UW limit');
+  });
+
+  it('defined-share summary: INDICATIVE drives the share off the follow line', () => {
+    renderModal({ structure: { ...baseStructure, quoteType: 'INDICATIVE', followLinePct: '50' } });
+    expect(screen.getByText('At 50% follow line')).toBeInTheDocument();
+    expect(screen.getByTestId('np-share-exposure')).toHaveTextContent('1,500,000');   // 0.5 × 3,000,000
+  });
+
+  it('defined-share summary: no line → exposure/premium render "—"', () => {
+    renderModal({ structure: { ...baseStructure, leadLinePct: '' } });
+    expect(screen.getByTestId('np-share-exposure')).toHaveTextContent('—');
+    expect(screen.getByTestId('np-share-premium')).toHaveTextContent('—');
   });
 
   it('ticking "Indicative quote" sets quoteType INDICATIVE → Follow Line shows', () => {
