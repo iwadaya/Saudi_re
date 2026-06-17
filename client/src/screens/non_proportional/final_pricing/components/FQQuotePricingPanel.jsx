@@ -262,7 +262,7 @@ export default function FQQuotePricingPanel({
                                     : <FQNumCell value={l.attachment} onChange={(v) => setField('attachment', v)} />}
                                 </td>
                                 <td><FQNumCell value={l.egnpi}          onChange={(v) => setField('egnpi', v)} /></td>
-                                <td><FQPctCell value={l.rate}           onChange={(v) => setField('rate', v)} /></td>
+                                <td><FQPctCell value={l.rate}           onChange={(v) => setField('rate', v)} className="bm-cell bm-cell--sm bm-cell--flat" /></td>
                                 <td className="bm-calc bm-calc--hi">{toN(l.rol) > 0 ? `${toN(l.rol).toFixed(2)}%` : '—'}</td>
                                 <td className="bm-calc">{l.earnedPremium ? formatWithCommas(String(Math.round(toN(l.earnedPremium)))) : '—'}</td>
                                 <td><input className="bm-cell bm-cell--sm" value={l.mdp} onChange={(e) => setField('mdp', e.target.value)} placeholder="—" /></td>
