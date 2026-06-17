@@ -10,7 +10,7 @@
 
 import React, { useId, useState } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
-import { toN } from '../formatters.js';
+import { toN, fmtPct } from '../formatters.js';
 import { FQ_STRUCTURE_COLORS, fqGeomean, fqPriceLayerOnCurve } from '../fqHelpers.js';
 import { REINSTATEMENT_OPTIONS } from '../../reinstatementOptions';
 import {
@@ -447,7 +447,7 @@ export default function FQQuotePricingPanel({
                                     <td className="bm-calc bm-calc--dim">{xGE > 0 ? xGE.toFixed(4) : '—'}</td>
                                     <td className="bm-calc" style={{ color, fontWeight: 800 }}>{priced ? `${(priced.y * 100).toFixed(2)}%` : '—'}</td>
                                     <td className="bm-calc" style={{ color }}>{priced ? formatWithCommas(String(Math.round(priced.premium))) : '—'}</td>
-                                    <td className="bm-calc" style={{ color, opacity: 0.8 }}>{priced ? `${(priced.rate * 100).toFixed(4)}%` : '—'}</td>
+                                    <td className="bm-calc" style={{ color, opacity: 0.8 }}>{priced ? fmtPct(priced.rate * 100) : '—'}</td>
                                     <td style={{ textAlign: 'center' }}>
                                       <input
                                         type="checkbox"

@@ -20,7 +20,7 @@
 // quoteType + the active line via save(), then closes.
 
 import { useState, useRef, useEffect } from 'react';
-import { toN } from '../formatters.js';
+import { toN, capPct2 } from '../formatters.js';
 import { formatWithCommas } from '../../../../utils/format';
 import { layerCombinedPricing } from '../fqQuoteMath.js';
 import FQCobParticipationTable from './FQCobParticipationTable.jsx';
@@ -37,6 +37,29 @@ const sanitizePct = (raw) => {
   const n = parseFloat(cleaned);
   return Number.isFinite(n) && n > 100 ? '100' : cleaned;
 };
+
+// Lead/follow line input: idle display caps at 2 dp; focusing reveals the full
+// value to edit (entry keeps full precision — only the rendered string caps).
+function LineInput({ value, disabled, onChange }) {
+  const [editing, setEditing] = useState(false);
+  const [raw, setRaw] = useState('');
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, opacity: disabled ? 0.45 : 1 }}>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={editing ? raw : capPct2(value)}
+        disabled={disabled}
+        placeholder="—"
+        onFocus={() => { setEditing(true); setRaw(String(value ?? '').replace(/%/g, '')); }}
+        onChange={(e) => { const v = sanitizePct(e.target.value); setRaw(v); onChange(v); }}
+        onBlur={() => setEditing(false)}
+        style={{ width: 90, boxSizing: 'border-box', background: 'rgba(5,8,16,0.6)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 6, color: 'rgba(226,232,240,0.95)', fontSize: 13, fontWeight: 700, padding: '6px 9px', textAlign: 'right', fontFamily: 'inherit' }}
+      />
+      <span style={{ fontSize: 12, color: 'rgba(148,163,184,0.7)', fontWeight: 700 }}>%</span>
+    </span>
+  );
+}
 
 /**
  * @param {{
@@ -157,20 +180,6 @@ export default function NpSendForApprovalModal({
   const td = { padding: '7px 9px', textAlign: 'right', verticalAlign: 'middle', borderBottom: '1px solid rgba(255,255,255,0.045)' };
   const ft = { ...td, background: 'rgba(35,209,139,0.12)', borderTop: `2px solid ${ACCENT}80`, fontWeight: 800, color: 'rgba(226,232,240,0.95)' };
   const sectionTitle = { fontSize: 12, fontWeight: 850, letterSpacing: '.12em', textTransform: 'uppercase', color: ACCENT };
-  const lineInput = (value, disabled, onChange) => (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, opacity: disabled ? 0.45 : 1 }}>
-      <input
-        type="text"
-        inputMode="decimal"
-        value={value ?? ''}
-        disabled={disabled}
-        placeholder="—"
-        onChange={(e) => onChange(sanitizePct(e.target.value))}
-        style={{ width: 90, boxSizing: 'border-box', background: 'rgba(5,8,16,0.6)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 6, color: 'rgba(226,232,240,0.95)', fontSize: 13, fontWeight: 700, padding: '6px 9px', textAlign: 'right', fontFamily: 'inherit' }}
-      />
-      <span style={{ fontSize: 12, color: 'rgba(148,163,184,0.7)', fontWeight: 700 }}>%</span>
-    </span>
-  );
 
   return (
     <div className="bm-modal-backdrop bm-modal-backdrop--fullscreen" role="presentation" style={{ display: 'flex' }} onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -288,13 +297,13 @@ export default function NpSendForApprovalModal({
 
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: isIndicative ? 'rgba(148,163,184,0.45)' : 'rgba(148,163,184,0.8)' }}>Lead Line</span>
-                {lineInput(structure.leadLinePct, isIndicative, (v) => updateClientStructure(sIdx, 'leadLinePct', v))}
+                <LineInput value={structure.leadLinePct} disabled={isIndicative} onChange={(v) => updateClientStructure(sIdx, 'leadLinePct', v)} />
               </div>
 
               {isIndicative && (
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.8)' }}>Follow Line</span>
-                  {lineInput(structure.followLinePct, false, (v) => updateClientStructure(sIdx, 'followLinePct', v))}
+                  <LineInput value={structure.followLinePct} disabled={false} onChange={(v) => updateClientStructure(sIdx, 'followLinePct', v)} />
                 </div>
               )}
             </div>
@@ -303,7 +312,7 @@ export default function NpSendForApprovalModal({
             <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 24, flexWrap: 'wrap', marginBottom: 10 }}>
                 <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.10em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.7)' }}>
-                  At {sharePct}% {isIndicative ? 'follow' : 'lead'} line
+                  At {capPct2(sharePct)}% {isIndicative ? 'follow' : 'lead'} line
                 </div>
                 <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
                   <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.6)' }}>Total Exposure</span>
@@ -323,7 +332,7 @@ export default function NpSendForApprovalModal({
                         <th style={{ ...th, textAlign: 'left' }}>Class of Business</th>
                         <th style={th}>UW Limit</th>
                         <th style={{ ...th, textAlign: 'left' }}>Covered Layers</th>
-                        <th style={th}>Max Exposure @ {sharePct}%</th>
+                        <th style={th}>Max Exposure @ {capPct2(sharePct)}%</th>
                       </tr>
                     </thead>
                     <tbody>

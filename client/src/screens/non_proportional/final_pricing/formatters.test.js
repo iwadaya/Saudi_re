@@ -5,11 +5,41 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  toN, fmtC, pct, fmtM, money, fmtPctV,
+  toN, fmtC, pct, fmtM, money, fmtPctV, fmtPct, capPct2,
   emptyLayerPricing,
   deriveCombinedUwPrice,
   deriveComponentTotal,
 } from './formatters.js';
+
+describe('fmtPct (canonical percentage display — max 2 dp)', () => {
+  it('caps at 2 dp and trims trailing zeros', () => {
+    expect(fmtPct(12.3849)).toBe('12.38%');
+    expect(fmtPct(0.74)).toBe('0.74%');
+    expect(fmtPct(13.4)).toBe('13.4%');
+    expect(fmtPct(85)).toBe('85%');
+    expect(fmtPct(85.004)).toBe('85%');
+  });
+  it('em-dash for non-finite input', () => {
+    expect(fmtPct(NaN)).toBe('—');
+    expect(fmtPct(undefined)).toBe('—');
+    expect(fmtPct('')).toBe('—');
+  });
+});
+
+describe('capPct2 (bare numeric display cap — no %, no commas)', () => {
+  it('caps at 2 dp, trims zeros, no percent sign', () => {
+    expect(capPct2('12.3456')).toBe('12.35');
+    expect(capPct2(50)).toBe('50');
+    expect(capPct2('33.3333')).toBe('33.33');
+    expect(capPct2('85.00')).toBe('85');
+  });
+  it('passes empty / in-progress entry through untouched', () => {
+    expect(capPct2('')).toBe('');
+    expect(capPct2(null)).toBe('');
+    expect(capPct2('12.')).toBe('12');   // numeric — capped
+    expect(capPct2('abc')).toBe('abc');  // non-numeric — preserved
+  });
+});
 
 describe('toN', () => {
   it('parses plain numbers', () => {
