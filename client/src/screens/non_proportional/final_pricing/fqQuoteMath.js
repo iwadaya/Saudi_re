@@ -56,23 +56,23 @@ export const emptyStrLayer = (i, { riskDisabled = false, catDisabled = false } =
     pareto: '',
     exposure: '',
     wtBurn: '50',
-    wtPareto: '0',
+    wtPareto: '25',
     loading: '15',
     uwPrice: '',
     riskPureBurn: '',
     riskPareto: '',
     riskExposure: '',
     riskWeightBurn: '50',
-    riskWeightPareto: '0',
-    riskWeightExp: '50',
+    riskWeightPareto: '25',
+    riskWeightExp: '25',
     riskLoading: '15',
     riskUwPrice: '',
     catPureBurn: '',
     catPareto: '',
     catExposure: '',
     catWeightBurn: '50',
-    catWeightPareto: '0',
-    catWeightExp: '50',
+    catWeightPareto: '25',
+    catWeightExp: '25',
     catLoading: '15',
     catUwPrice: '',
     pAttach: '',
@@ -237,6 +237,21 @@ export const quoteActiveScopes = (layer = {}) => (
   Object.keys(QUOTE_COMPONENT_SCOPES).filter((scope) => !!layer[scope])
 );
 
+// Active layers whose component weights (Burn + Pareto + Exposure) don't total
+// 100% — returned as display strings ("Layer 2: 105%") for the warning banner.
+// The default split is Burn 50 / Pareto 25 / Exposure 25; this flags any layer
+// an underwriter has knocked off 100%.
+export const quoteWeightIssues = (layers = [], scopeKey, fields) => {
+  if (!fields) return [];
+  const out = [];
+  (Array.isArray(layers) ? layers : []).forEach((l, i) => {
+    if (!l || !l[scopeKey]) return;
+    const sum = toN(l[fields.wtBurn]) + toN(l[fields.wtPareto]) + toN(l[fields.wtExp]);
+    if (Math.abs(sum - 100) > 0.01) out.push(`Layer ${i + 1}: ${sum.toFixed(0)}%`);
+  });
+  return out;
+};
+
 const quoteComponentBaseDerived = (layer = {}, scopeKey) => {
   const scope = QUOTE_COMPONENT_SCOPES[scopeKey];
   if (!scope) return fqQuoteLayerDerived(layer);
@@ -245,7 +260,7 @@ const quoteComponentBaseDerived = (layer = {}, scopeKey) => {
   const pareto = toN(layer[f.pareto]);
   const exposure = toN(layer[f.exposure]);
   const wtBurn = toN(layer[f.wtBurn] || '50');
-  const wtPareto = toN(layer[f.wtPareto] || '0');
+  const wtPareto = toN(layer[f.wtPareto] || '25');
   const loading = toN(layer[f.loading] || '15');
   const wtExp = Math.max(0, 100 - wtBurn - wtPareto);
   const burnPlusPareto = pureBurn + pareto;
@@ -304,7 +319,7 @@ const seedQuoteLayerComponents = (layer = {}) => {
     next[f.pareto] = pickQuoteField(next, [f.pareto], next.pareto || '0');
     next[f.exposure] = pickQuoteField(next, [f.exposure], next.exposure || '');
     next[f.wtBurn] = pickQuoteField(next, [f.wtBurn], next.wtBurn || '50');
-    next[f.wtPareto] = pickQuoteField(next, [f.wtPareto], next.wtPareto || '0');
+    next[f.wtPareto] = pickQuoteField(next, [f.wtPareto], next.wtPareto || '25');
     next[f.loading] = pickQuoteField(next, [f.loading], next.loading || '15');
     next[f.uwPrice] = pickQuoteField(next, [f.uwPrice], next.uwPrice || '');
   });
@@ -338,7 +353,7 @@ export const quoteComponentSummary = (layer = {}) => {
     components.length ? components.reduce((s, component) => s + (component[key] || 0), 0) / components.length : fallback
   );
   const wtBurn = avg('wtBurn', 50);
-  const wtPareto = avg('wtPareto', 0);
+  const wtPareto = avg('wtPareto', 25);
   const wtExp = Math.max(0, 100 - wtBurn - wtPareto);
   const loading = avg('loading', 15);
   const pureBurn = sum('pureBurn');
@@ -506,7 +521,7 @@ export const normalizeQuotePricingLayer = (layer = {}, index = 0, opts = {}) => 
     pareto: saneRolOrEmpty(pickQuoteField(layer, ['pareto', 'pareto_pricing', 'riskPareto', 'catPareto'])),
     exposure: saneRolOrEmpty(pickQuoteField(layer, ['exposure', 'exposure_rating', 'riskExposure', 'catExposure'])),
     wtBurn: pickQuoteField(layer, ['wtBurn', 'burn_weight_pct', 'riskWeightBurn', 'catWeightBurn'], '50'),
-    wtPareto: pickQuoteField(layer, ['wtPareto', 'pareto_weight_pct', 'riskWeightPareto', 'catWeightPareto'], '0'),
+    wtPareto: pickQuoteField(layer, ['wtPareto', 'pareto_weight_pct', 'riskWeightPareto', 'catWeightPareto'], '25'),
     loading: pickQuoteField(layer, ['loading', 'pricing_loading_pct', 'riskLoading', 'catLoading'], '15'),
     uwPrice: sanePctOrEmpty(pickQuoteField(layer, ['uwPrice', 'uw_price', 'reinsurerPricing', 'riskUwPrice', 'catUwPrice'])),
     pAttach: pickQuoteField(layer, ['pAttach', 'prob_attach']),
@@ -514,15 +529,17 @@ export const normalizeQuotePricingLayer = (layer = {}, index = 0, opts = {}) => 
     riskPureBurn: saneRolOrEmpty(pickQuoteField(layer, ['riskPureBurn'])),
     riskPareto: saneRolOrEmpty(pickQuoteField(layer, ['riskPareto'])),
     riskExposure: saneRolOrEmpty(pickQuoteField(layer, ['riskExposure'])),
-    riskWeightBurn: pickQuoteField(layer, ['riskWeightBurn', 'riskWtBurn']),
-    riskWeightPareto: pickQuoteField(layer, ['riskWeightPareto', 'riskWtPareto']),
+    riskWeightBurn: pickQuoteField(layer, ['riskWeightBurn', 'riskWtBurn'], '50'),
+    riskWeightPareto: pickQuoteField(layer, ['riskWeightPareto', 'riskWtPareto'], '25'),
+    riskWeightExp: pickQuoteField(layer, ['riskWeightExp', 'riskWtExp'], '25'),
     riskLoading: pickQuoteField(layer, ['riskLoading']),
     riskUwPrice: sanePctOrEmpty(pickQuoteField(layer, ['riskUwPrice', 'riskTotalPrice'])),
     catPureBurn: saneRolOrEmpty(pickQuoteField(layer, ['catPureBurn'])),
     catPareto: saneRolOrEmpty(pickQuoteField(layer, ['catPareto'])),
     catExposure: saneRolOrEmpty(pickQuoteField(layer, ['catExposure'])),
-    catWeightBurn: pickQuoteField(layer, ['catWeightBurn', 'catWtBurn']),
-    catWeightPareto: pickQuoteField(layer, ['catWeightPareto', 'catWtPareto']),
+    catWeightBurn: pickQuoteField(layer, ['catWeightBurn', 'catWtBurn'], '50'),
+    catWeightPareto: pickQuoteField(layer, ['catWeightPareto', 'catWtPareto'], '25'),
+    catWeightExp: pickQuoteField(layer, ['catWeightExp', 'catWtExp'], '25'),
     catLoading: pickQuoteField(layer, ['catLoading']),
     catUwPrice: sanePctOrEmpty(pickQuoteField(layer, ['catUwPrice', 'catTotalPrice'])),
   };

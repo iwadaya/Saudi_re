@@ -331,14 +331,14 @@ describe('NpFinalPricing golden master (quote mode)', () => {
     // data row + the per-column <tfoot> total. Money cells are bare (no "SAR"). Pure
     // burn / Pareto / exposure are MODEL outputs rendered READ-ONLY (plain text, NOT
     // inputs): pure burn + exposure show the engine ROL% (`scope`), Pareto is 0 → "—".
-    // Only the weights stay editable and now render with a "%" suffix ([50%]/[0%]).
-    // Blend, UW Price and the totals are unchanged — locking the model cells changes
-    // neither the values nor the blend math.
+    // Only the weights stay editable and render with a "%" suffix; the default
+    // split is Burn 50 / Pareto 25 / Exposure 25 ([50%]/[25%]/[25%]), so the
+    // blend = 0.50·burn + 0.25·0 + 0.25·exposure = 39.99%.
     const componentRows = (scope) => [
       ['Layer', 'Active', 'Limit', 'Deductible', 'EGNPI', 'Reinst.', '% Reinst.', 'Pure Burn', 'Pareto', 'Exposure', 'Weighting', 'Blend', 'Implied', 'UW Price', 'P(Attach)', 'P(Exhaust)', 'Note'],
       ['Burn', 'Pareto', 'Exp', 'Expiring', 'Country', 'Region', 'Global'],
-      ['1', '[x]', '750,000', '100,000', '1,500,000', '[]', '[]', scope, '—', scope, '[50%]', '[0%]', '[50%]', '53.32%', '62.73%', '—', '—', '—', '[62.73%]', '—', '—', '[]'],
-      ['TOTAL', '1', '750,000', '—', '1,500,000', '—', '—', '53.32%', '—', '53.32%', '—', '—', '—', '53.32%', '62.73%', '—', '—', '—', '62.73%', '—', '—', '—'],
+      ['1', '[x]', '750,000', '100,000', '1,500,000', '[]', '[]', scope, '—', scope, '[50%]', '[25%]', '[25%]', '39.99%', '62.73%', '—', '—', '—', '[62.73%]', '—', '—', '[]'],
+      ['TOTAL', '1', '750,000', '—', '1,500,000', '—', '—', '53.32%', '—', '53.32%', '—', '—', '—', '39.99%', '62.73%', '—', '—', '—', '62.73%', '—', '—', '—'],
     ];
     expect(rowsOf(paTables[0])).toEqual(componentRows('53.32%'));
     expect(rowsOf(paTables[1])).toEqual(componentRows('53.32%'));
