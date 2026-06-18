@@ -49,6 +49,36 @@ if (!window.matchMedia) {
   });
 }
 
+// jsdom doesn't implement navigation, so any component that reaches for
+// window.location.reload() — e.g. the stale-write refresh path in
+// handleStaleWrite.js → onRefresh — prints a noisy
+// "Error: Not implemented: navigation (except hash changes)" to stderr
+// even though the test passes. `reload` is a non-configurable own property
+// of Location, so it can't be redefined directly; instead front the whole
+// (configurable) window.location with a Proxy that forwards every real
+// property and only swaps reload for a spy. Tests can assert a reload was
+// requested via window.location.reload; nothing relies on real navigation.
+const realLocation = window.location;
+const reloadSpy = vi.fn();
+// Proxy over an empty target (not realLocation) so the Proxy get-invariant
+// for reload's non-configurable data property doesn't apply — every read is
+// forwarded to the real location except reload, which returns the spy.
+const locationProxy = new Proxy({}, {
+  get(_target, prop) {
+    if (prop === 'reload') return reloadSpy;
+    const value = realLocation[prop];
+    return typeof value === 'function' ? value.bind(realLocation) : value;
+  },
+  set(_target, prop, value) {
+    realLocation[prop] = value;
+    return true;
+  },
+});
+Object.defineProperty(window, 'location', {
+  configurable: true,
+  get() { return locationProxy; },
+});
+
 // IntersectionObserver is also missing from jsdom
 if (!globalThis.IntersectionObserver) {
   globalThis.IntersectionObserver = class IO {
