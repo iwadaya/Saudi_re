@@ -18,7 +18,7 @@ function fakeQuery(sql) {
     return P({ rows: scenario.documentRows });
   }
   if (sql.includes('FROM public.contract_document') && sql.includes('WHERE contract_id=$1')) {
-    return P({ rows: scenario.documentRows.map(({ storage_path, ...row }) => row) });
+    return P({ rows: scenario.documentRows.map(({ storage_path: _storage_path, ...row }) => row) });
   }
   if (sql.includes('owner_level')) {
     return P({ rows: scenario.ownershipRows });
