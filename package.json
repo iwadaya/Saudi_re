@@ -49,11 +49,11 @@
     "globals": "^15.14.0",
     "jsdom": "^25.0.1",
     "pm2": "^7.0.1",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.8"
   },
   "optionalDependencies": {
     "@rolldown/binding-darwin-arm64": "1.0.1",
-    "@rolldown/binding-darwin-x64": "1.0.1",
+    "@rolldown/binding-darwin-x64": "1.0.3",
     "@rolldown/binding-linux-x64-gnu": "1.0.1"
   }
 }
