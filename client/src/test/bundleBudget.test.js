@@ -19,26 +19,33 @@ const DIST = resolve('client/dist/assets');
 // the initial-load app-core chunk (the rest below stay raw; only app-core grew
 // enough to need re-baselining).
 //
-// 2026-06-14 measurement (fresh production build):
-//   app-core = 760.9 KB raw / 201.3 KB gzip.
-// It grew with the auth-token client + DB-backed identity (role/level re-read
-// from v_user_mandate per request) and the ownership/assignment UX shell now
-// mounted in the global app frame. Budget = measured gzip + ~12% headroom.
-// TODO: revisit — trim or lazy-split app-core — if it needs another +15%.
-const APP_CORE_BUDGET_KB = 226;                          // 201.3 KB gzip + ~12%
+// 2026-06-18 RE-BASELINE after the manual-chunk fix (see client/vite.config.js).
+// The old manualChunks matched the generic /components/, /hooks/, /utils/
+// patterns BEFORE the screen patterns, so ~93 screen-local files (each screen's
+// own components/, hooks/, config/ subfolders) were pulled into app-core —
+// inflating the eagerly-loaded core to 760.9 KB raw / 201.3 KB gzip AND creating
+// circular chunks (app-core <-> prop-/shared-/np-final-pricing). With screens
+// matched first, that code now lives in its (lazy, per-route) screen chunk and
+// app-core is a true shared core: 265.3 KB raw / 73.8 KB gzip — a net
+// initial-load win. Budget = measured gzip + headroom, deliberately far below
+// the old 226 so the gate actually catches app-core creep again.
+const APP_CORE_BUDGET_KB = 95;                           // 73.8 KB gzip + ~29%
 const APP_CORE_CEILING_KB = APP_CORE_BUDGET_KB * 1.20;   // hard ceiling: budget + 20%
 
-// ── Other chunks: raw budgets (unchanged; each carries ~10% headroom) ─────────
+// ── Other chunks: raw budgets (each carries ~10% headroom) ───────────────────
+// Re-baselined alongside the app-core fix: the screen-local code that used to
+// inflate app-core now lands in these per-route chunks, so they are larger but
+// only load when their screen is visited (net initial-load improvement). Raw
+// measurements (KiB) from the 2026-06-18 production build in parentheses.
 const RAW_BUDGETS_KB = {
-  vendor: 300,             // React + router, plus non-lazy deps
-  'np-final-pricing': 250, // the big screen — still the biggest after the split
-  // 260 covers the Aggregate XL structure (NpAggregateXlStructure + read-only
-  // mount on Final Pricing) and the Stop Loss workflow (NpStopLossStructure,
-  // NpStopLossExpiring, rate-changes modal, burning-cost restructure).
-  'np-screens': 260,
-  'prop-screens': 240,
-  'shared-screens': 200,
-  'fac-screens': 180,      // facultative AI doc-ingest + reference data + clauses
+  vendor: 300,             // React + router, plus non-lazy deps      (285.4)
+  'np-final-pricing': 330, // the big screen — still the biggest       (296.5)
+  // np-screens covers the Aggregate XL structure (NpAggregateXlStructure +
+  // read-only mount on Final Pricing) and the Stop Loss workflow.
+  'np-screens': 280,       //                                          (254.1)
+  'prop-screens': 405,     // proportional treaty + pricing screens    (367.1)
+  'shared-screens': 265,   // loss/pareto + cross-tier shared screens  (237.6)
+  'fac-screens': 180,      // facultative AI doc-ingest + clauses      (161.8)
   // exceljs is a lazy-loaded, pay-on-click chunk — generous on purpose.
   exceljs: 1100,
 };
