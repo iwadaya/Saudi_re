@@ -14,6 +14,31 @@ Scope: every server `PUT`/`POST` that calls `assertEntityUnchanged`.
 
 No `POST` endpoint currently calls `assertEntityUnchanged`.
 
+### Subresource coverage (added 2026-06-18)
+
+High-value quote subresource saves now run the **opt-in** parent stale check
+(`assertParentEntityUnchanged`) **inside their transaction** and bump the parent
+quote's `updated_at` via `touchParentEntity`, returning it as `updated_at` so the
+client can carry a fresh token. The guard is dormant unless the client sends
+`If-Unmodified-Since`, so existing callers are unaffected; when sent, a
+concurrent parent edit yields `409 STALE_WRITE` (or honours the `*` override).
+
+| Endpoint | Server guard |
+| --- | --- |
+| `PUT /api/quotes/:id/np-pricing`   | `quotes.js` (pre-existing) |
+| `PUT /api/quotes/:id` NP structure | `quotes.js` (pre-existing) |
+| `PUT /api/quotes/:id/large-losses`    | `quotes.js` — assert + touch in txn |
+| `PUT /api/quotes/:id/cat-losses`      | `quotes.js` — assert + touch in txn |
+| `PUT /api/quotes/:id/pricing-outputs` | `quotes.js` — wrapped in txn; assert + touch |
+| `PUT /api/quotes/:id/pricing-yearly`  | `quotes.js` — assert + touch in txn |
+
+Covered by `server/tests/integration/quoteSubresourceLocking.integration.test.js`
+(opt-in no-op, 409 on a stale token, `*` override, fresh-token save).
+
+Remaining quote subresources (`risk-profiles`, `claims-profiles`, `cresta`,
+`cobs`, `dev-factors`, `loss-selection/snapshot`, `np/egnpi-year`) and the treaty
+twins are lower-frequency edits and can adopt the same pattern incrementally.
+
 ## Handling Contract
 
 - `api.saveContract` accepts `opts.ifUnmodifiedSince` and sends it as `If-Unmodified-Since`.
