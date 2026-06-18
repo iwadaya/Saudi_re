@@ -78,6 +78,28 @@ function statusBucket() {
   return STATUS_DISTRIBUTION[STATUS_DISTRIBUTION.length - 1];
 }
 
+// Lead reinsurer panel for NP treaties. Names mirror public.reinsurers as
+// seeded in 005_ref_data / ensureReferenceData so the reinsurer-analysis
+// feature resolves real panel members. Weights bias the panel toward the big
+// global leads while still spreading a long tail across regional carriers.
+const REINSURER_PANEL = [
+  ['Swiss Re', 10], ['Munich Re', 10], ['Hannover Re', 8], ['SCOR', 7],
+  ['Lloyds', 6], ['Everest Re', 5], ['PartnerRe', 5], ['RGA', 4],
+  ['Transatlantic Re', 4], ['Korean Re', 3], ['Africa Re', 3], ['Qatar Re', 3],
+  ['CCR Re', 2], ['Trust Re', 2],
+];
+
+// Weighted pick of a lead reinsurer using the file's seeded RNG.
+function pickReinsurer() {
+  const total = REINSURER_PANEL.reduce((s, [, w]) => s + w, 0);
+  let r = rand() * total;
+  for (const [name, w] of REINSURER_PANEL) {
+    r -= w;
+    if (r <= 0) return name;
+  }
+  return REINSURER_PANEL[REINSURER_PANEL.length - 1][0];
+}
+
 // ─── Pure helpers (mirroring shared/pricingMath where possible) ──────────────
 function buildSlidingTable(min, max, minComm, maxComm, steps = 8) {
   const span = max - min;
@@ -583,6 +605,21 @@ async function insertOne(ref, idx, parentContractId = null) {
     );
 
     await insertNpPricing(contractId, layers);
+
+    // Lead-reinsurer attribution — drives the portfolio reinsurer-analysis
+    // feature. The expiring lead usually equals the current lead (renewed with
+    // the same panel leader); occasionally it rotates to model a lead change.
+    const leadReinsurer = pickReinsurer();
+    const expiringReinsurer = rand() < 0.85 ? leadReinsurer : pickReinsurer();
+    await pool.query(
+      `INSERT INTO pricing_leads (contract_id, lead_reinsurer, expiring_reinsurer, lead_share_pct)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (contract_id) DO UPDATE
+         SET lead_reinsurer = EXCLUDED.lead_reinsurer,
+             expiring_reinsurer = EXCLUDED.expiring_reinsurer,
+             lead_share_pct = EXCLUDED.lead_share_pct`,
+      [contractId, leadReinsurer, expiringReinsurer, roundTo(between(25, 60), 2)],
+    );
   }
 
   // Approval/offer record for non-DRAFT statuses

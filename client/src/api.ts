@@ -486,6 +486,11 @@ export const api = {
     if (Array.isArray(cobIds) && cobIds.length) qs.set('cobIds', cobIds.join(','));
     return request(`/api/treaties/${enc(contractId)}/peer-structures?${qs.toString()}`, opts);
   },
+  // Portfolio-wide reinsurer pricing cloud (one point per NP layer, attributed
+  // to the treaty's lead reinsurer). Feeds the reinsurer power-law analysis.
+  getReinsurerAnalysis(opts?: RequestOpts): Promise<unknown> {
+    return request('/api/reinsurer-analysis', opts);
+  },
   // Optional AI commentary on a single structure's positioning vs the
   // peer pool. The peer fetch above must succeed first; this endpoint
   // is fire-on-demand so we don't burn OpenAI tokens on every modal open.
