@@ -78,6 +78,30 @@ describe('mergeQuoteEngineResult — component mapping', () => {
     expect(summary.totalRol).toBeGreaterThan(0);
   });
 
+  it('writes a real 0% burn (not blank) when losses were loaded but the layer\'s class had none', () => {
+    // scopeLossCount > 0 ⇒ losses exist for the scope; this layer's covered
+    // class simply had no losses, so the engine returns burn 0.00%. That is a
+    // legitimate zero and must render as "0" (→ "0.00%"), not blank — otherwise
+    // the cell reads as "not calculated" (the first-layer symptom).
+    const layer = { risk: true, limit: '1000000', attachment: '500000', egnpi: '50000000' };
+    const merged = mergeQuoteEngineResult(layer, {
+      risk: { pureBurn: '0.00%', pareto: '1.10%', exposureRating: '0.90%', scopeLossCount: 7 },
+    });
+    expect(merged.riskPureBurn).toBe('0');
+    expect(toN(merged.riskPureBurn)).toBe(0);
+    expect(merged.riskPureBurn).not.toBe('');
+  });
+
+  it('keeps the prior burn (does not wipe to 0) when NO losses were loaded for the scope', () => {
+    // scopeLossCount 0 ⇒ "no data" — a 0 from the engine must not blank a
+    // previously-priced cell.
+    const layer = { risk: true, riskPureBurn: '3.20', limit: '1000000', attachment: '500000', egnpi: '50000000' };
+    const merged = mergeQuoteEngineResult(layer, {
+      risk: { pureBurn: '0.00%', pareto: '0.00%', exposureRating: '0.00%', scopeLossCount: 0 },
+    });
+    expect(toN(merged.riskPureBurn)).toBeCloseTo(3.2, 6);
+  });
+
   it('only touches the scope whose component is present', () => {
     const layer = { risk: true, cat: true };
     const merged = mergeQuoteEngineResult(layer, { risk: syntheticResult.risk /* no cat */ });
