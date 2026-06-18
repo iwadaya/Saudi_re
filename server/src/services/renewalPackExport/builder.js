@@ -182,6 +182,25 @@ async function addContractRegisterSheet(workbook, pool) {
 
 // ---------- triangles ----------
 
+// Development axis for the aggregate run-off triangle. A run-off triangle is
+// anchored at the OLDEST origin year and each row develops out to the latest
+// calendar period, so the number of development years should equal the
+// underwriting-year span (oldest → latest origin) — NOT the deepest single
+// contract's experience window. Aggregating treaties with rolling ~N-year
+// windows otherwise clips every older row to that window (e.g. 13 UW years but
+// only 8 DY columns). Returns a dense DY1…DYn month axis (n = span), unioned
+// with any dev periods actually present so no observed cell is ever dropped.
+// Older rows then show their full width, with unobserved cells left blank.
+export function triangleDevColumns(minY, maxY, devSet) {
+  const present = [...(devSet || [])].map(Number).filter((d) => Number.isFinite(d) && d > 0);
+  if (minY == null || maxY == null) return present.sort((a, b) => a - b);
+  const spanYears = Number(maxY) - Number(minY) + 1;
+  const maxDevPresent = present.length ? Math.max(...present) : 0;
+  const devCount = Math.max(spanYears, Math.round(maxDevPresent / 12));
+  const dense = Array.from({ length: Math.max(0, devCount) }, (_, i) => (i + 1) * 12);
+  return [...new Set([...dense, ...present])].sort((a, b) => a - b);
+}
+
 async function addTriangleSheets(workbook, pool) {
   const typeSheets = TRIANGLE_TYPES.map(({ type, sheet }) => ({ type, ws: workbook.addWorksheet(sheet) }));
   const incurredWs = workbook.addWorksheet('Incurred Triangle');
@@ -229,7 +248,7 @@ async function addTriangleSheets(workbook, pool) {
       grids[type] = null;
     }
   }
-  const devCols = [...devSet].sort((a, b) => a - b);
+  const devCols = triangleDevColumns(minY, maxY, devSet);
 
   for (const { type, ws } of typeSheets) {
     writeTriangle(ws, grids[type], minY, maxY, devCols);
