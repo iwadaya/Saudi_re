@@ -166,7 +166,7 @@ export default function CedantSummaryTabs(props) {
         if (!Array.isArray(data)) data = [];
 
         if (!data.length) {
-          const home = await api.getHomeSummary().catch(() => ({}));
+          const home = await api.getHomeSummary({ scope: 'all' }).catch(() => ({}));
           const all = [...(home.drafts || []), ...(home.submitted || []), ...(home.renewals || [])];
           data = all.filter(r => String(r.cedant_id || r.cedantId || '') === String(cid));
         }

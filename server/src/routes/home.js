@@ -24,12 +24,20 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
   if (qUserId && qUserId !== 'all' && !UUID_RE.test(String(qUserId))) {
     return res.status(400).json({ error: 'Invalid user_id', code: 'BAD_REQUEST' });
   }
-  // Demo mode: Chief Underwriter and Treaty Underwriter home views are
-  // portfolio-wide by default. Show all work by status regardless of
-  // assigned_to_user_id so drafts, quotes, and history remain visible after
-  // login/logout cycles.
-  // A specific user_id query can still request a user-scoped view.
-  const filterUserId = qUserId && qUserId !== 'all' ? qUserId : null;
+  // Home lists default to the caller's own work; calculations stay
+  // whole-portfolio (statusCounts, region_premiums, portfolio-export below
+  // never read filterUserId). The Settings "View treaties" toggle sends
+  // scope=all to widen the lists to the whole book.
+  const scope = String(req.query.scope || '').toLowerCase();
+  // List-filter precedence:
+  //   1. an explicit user_id → cross-user "view others" (auth-checked below);
+  //   2. scope==='all' (or legacy user_id==='all') → null = portfolio-wide lists;
+  //   3. otherwise → the caller's own work.
+  const filterUserId = qUserId && qUserId !== 'all'
+    ? qUserId
+    : (scope === 'all' || qUserId === 'all')
+      ? null
+      : myUserId;
 
   // Authorization: a caller may view their own home, OR someone at or below
   // them in the hierarchy. The level header is client-controllable, so we
