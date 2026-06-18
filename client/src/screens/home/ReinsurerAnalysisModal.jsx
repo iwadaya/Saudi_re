@@ -572,10 +572,19 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 12 }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(226,232,240,0.75)' }}>Implied Pricing Curves · y = a·x^b</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 10, color: 'rgba(148,163,184,0.55)' }}>x = √((L+A)·A) / EGNPI · y = ROL % · {logScale ? 'log–log' : 'linear'}</span>
-                      <button className="bm-pill" onClick={() => setLogScale((v) => !v)} style={{ fontSize: 10 }}>
-                        {logScale ? 'Log–log' : 'Linear'}
-                      </button>
+                      <span style={{ fontSize: 10, color: 'rgba(148,163,184,0.55)' }}>x = √((L+A)·A) / EGNPI · y = ROL %</span>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        {[
+                          { k: true, label: 'Log–log' },
+                          { k: false, label: 'Linear' },
+                        ].map((o) => (
+                          <button key={o.label} className="bm-pill" onClick={() => setLogScale(o.k)}
+                            aria-pressed={logScale === o.k}
+                            style={{ fontSize: 10, ...(logScale === o.k ? { borderColor: '#00d4ff', color: '#00d4ff' } : undefined) }}>
+                            {o.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                   <div style={{ position: 'relative', width: '100%', height: 'min(52vh, 460px)', minHeight: 360 }}>
