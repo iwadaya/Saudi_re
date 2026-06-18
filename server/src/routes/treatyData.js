@@ -13,6 +13,7 @@ import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
 import { validateBody } from '../lib/validate.js';
+import { assertParentEntityUnchanged, touchParentEntity } from '../lib/parentEntityPersistence.js';
 import { getWordingChecklist, runWordingChecklistAi, saveWordingChecklist } from '../services/wordingChecklist.js';
 import {
   storeUploadedFile,
@@ -29,6 +30,23 @@ import { createRequire } from "module";
 const _require = createRequire(import.meta.url);
 const router = Router();
 function parseDateFlex(v){return dateOrNull(v);}
+
+async function assertContractFresh(db, contractId, req) {
+  await assertParentEntityUnchanged(db, {
+    parentTable: 'contract',
+    idColumn: 'contract_id',
+    id: contractId,
+    ifUnmodifiedSince: req.headers['if-unmodified-since'],
+  });
+}
+
+async function touchContract(db, contractId) {
+  return await touchParentEntity(db, {
+    parentTable: 'contract',
+    idColumn: 'contract_id',
+    id: contractId,
+  });
+}
 
 // Triangle variant (migration 116). Reads/writes default to MODIFIED so all
 // pre-variant behaviour is unchanged unless ACTUAL is explicitly requested.
@@ -131,6 +149,7 @@ router.post("/treaties/:id/triangles/:type", asyncHandler(async (req, res) => {
   const cl = await pool.connect();
   try {
     await cl.query("BEGIN");
+    await assertContractFresh(cl, id, req);
     // Scope the delete to this variant — saving one variant must never wipe
     // the other's cells.
     await cl.query(`DELETE FROM public.contract_triangle_cells WHERE contract_id=$1 AND type=$2::public.triangle_type AND variant=$3::public.triangle_variant`, [id, t, variant]);
@@ -155,8 +174,9 @@ router.post("/treaties/:id/triangles/:type", asyncHandler(async (req, res) => {
       actor: actorFromReq(req),
       payload: { triangle_type: t, variant, saved: cells.length, dropped: rawCells.length - cells.length },
     }, { critical: true });
+    const updatedAt = await touchContract(cl, id);
     await cl.query("COMMIT");
-    res.json({ ok: true, saved: cells.length, dropped: rawCells.length - cells.length });
+    res.json({ ok: true, saved: cells.length, dropped: rawCells.length - cells.length, updated_at: updatedAt });
   } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }
 }));
 
@@ -202,6 +222,7 @@ router.put("/treaties/:id/dev-factors/:type", validateBody(devFactorPutSchema), 
   const cl = await pool.connect();
   try {
     await cl.query("BEGIN");
+    await assertContractFresh(cl, id, req);
     await cl.query(
       `DELETE FROM public.contract_dev_factor WHERE contract_id=$1 AND triangle_type=$2::public.triangle_type`,
       [id, t]
@@ -238,8 +259,9 @@ router.put("/treaties/:id/dev-factors/:type", validateBody(devFactorPutSchema), 
       actor: actorFromReq(req),
       payload: { triangle_type: t, count: factors.length, method: req.body?.method || null, basis: req.body?.basis || null },
     }, { critical: true });
+    const updatedAt = await touchContract(cl, id);
     await cl.query("COMMIT");
-    res.json({ ok: true });
+    res.json({ ok: true, updated_at: updatedAt });
   } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }
 }));
 
@@ -254,6 +276,7 @@ router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
   const {id}=req.params;const {report_date,losses=[]}=req.body;const cl=await pool.connect();
   try{await cl.query("BEGIN");
   await assertExists(cl, 'public.contract', 'contract_id', id, 'Treaty');
+  await assertContractFresh(cl, id, req);
   const {rows:rr}=await cl.query(`INSERT INTO public.contract_large_loss_report (contract_id,report_date) VALUES ($1,$2) ON CONFLICT (contract_id) DO UPDATE SET report_date=EXCLUDED.report_date,updated_at=now() RETURNING report_id`,[id,dateOrNull(report_date)]);
   const rid=rr[0].report_id;
   // Snapshot existing reported_date / is_selected / inflation_factor per loss_id
@@ -304,7 +327,8 @@ router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
   });
   if (largeLossesInsert) await cl.query(largeLossesInsert.sql, largeLossesInsert.params);
   const savedLosses = largeLossesWithIds.map((l) => l._loss_id);
-  await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
+  const updatedAt = await touchContract(cl, id);
+  await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses,updated_at:updatedAt});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
 // ── CAT LOSSES ──
@@ -318,6 +342,7 @@ router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
   const {id}=req.params;const {report_date,losses=[]}=req.body;const cl=await pool.connect();
   try{await cl.query("BEGIN");
   await assertExists(cl, 'public.contract', 'contract_id', id, 'Treaty');
+  await assertContractFresh(cl, id, req);
   const {rows:rr}=await cl.query(`INSERT INTO public.contract_cat_loss_report (contract_id,report_date) VALUES ($1,$2) ON CONFLICT (contract_id) DO UPDATE SET report_date=EXCLUDED.report_date,updated_at=now() RETURNING report_id`,[id,dateOrNull(report_date)]);
   const rid=rr[0].report_id;
   const {rows:prev}=await cl.query(`SELECT loss_id,reported_date,is_selected,inflation_factor FROM public.contract_cat_losses WHERE report_id=$1`,[rid]);
@@ -360,7 +385,8 @@ router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
   });
   if (catLossesInsert) await cl.query(catLossesInsert.sql, catLossesInsert.params);
   const savedLosses = catLossesWithIds.map((l) => l._loss_id);
-  await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
+  const updatedAt = await touchContract(cl, id);
+  await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses,updated_at:updatedAt});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
 // ── PORTFOLIO FALLBACK LOSSES ──
@@ -721,8 +747,10 @@ router.put("/treaties/:id/cresta", asyncHandler(async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: 'Invalid CRESTA payload', details: parsed.error.issues });
   const { rows: cRows, treaty_type, cob_id: cobId, cob_name: cobName, country_id: countryId } = parsed.data;
   const treatyType = treaty_type || 'Both';
+  await assertContractFresh(pool, id, req);
   await saveCrestaSlice({ kind: 'contract', id, rows: cRows, treatyType, cobId: cobId || null, cobName: cobName || null, countryId: countryId || null });
-  res.json({ ok: true });
+  const updatedAt = await touchContract(pool, id);
+  res.json({ ok: true, updated_at: updatedAt });
 }));
 
 // ── CEDANT EXPOSURE ──

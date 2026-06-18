@@ -49,6 +49,14 @@ function defaultTitle(docType) {
   return map[docType] || '';
 }
 
+function describeDocumentError(error, fallback) {
+  const code = error?.body?.code || error?.code;
+  if (code === 'READ_ONLY') return 'Only the current assignee can change this document. Ask for the treaty or quote to be assigned to you.';
+  if (code === 'FORBIDDEN') return 'You do not have access to this document. Ask the assignee or a supervisor for access.';
+  if (code === 'CSRF_FAILED') return 'Your session security token expired. Refresh the page and try again.';
+  return `${fallback}: ${error?.message || error || 'Unknown error'}`;
+}
+
 export default function DocumentsScreen({ routeKey, headerPill, quoteMode = false }) {
   const contractId = useContractId();
   const showToast = useGlobalToast();
@@ -62,6 +70,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
   const [analyzing,   setAnalyzing]   = useState(null); // { docId, doc } | null
   const [parentId,    setParentId]    = useState(null);
   const [dragFile,    setDragFile]    = useState(null); // file from drag — no hidden input needed
+  const [loadError,   setLoadError]   = useState('');
   const fileRef = useRef(null);
 
   // ── Renewal-pack import state ─────────────────────────────────────────────
@@ -86,14 +95,20 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
     try {
       const d = await api.getDocuments(contractId, apiOpts);
       setDocs(Array.isArray(d) ? d : []);
+      setLoadError('');
       if (!quoteMode) {
         try {
           const c = await api.getContract(contractId);
           setParentId(c?.header?.parent_contract_id || null);
         } catch (e) { console.warn('[DocumentsScreen] getContract failed:', e?.message); }
       }
-    } catch (e) { console.error('[DocumentsScreen] getDocuments failed:', e); }
-  }, [apiOpts, contractId, quoteMode]);
+    } catch (e) {
+      const msg = describeDocumentError(e, 'Could not load documents');
+      setLoadError(msg);
+      showToast(msg, 5000);
+      console.error('[DocumentsScreen] getDocuments failed:', e);
+    }
+  }, [apiOpts, contractId, quoteMode, showToast]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -253,7 +268,13 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
 
   const del = async (docId) => {
     if (!confirm('Delete this document?')) return;
-    try { await api.deleteDocument(docId); await load(); } catch {}
+    try {
+      await api.deleteDocument(docId);
+      showToast('Document deleted.', 3000);
+      await load();
+    } catch (e) {
+      showToast(describeDocumentError(e, 'Delete failed'), 6000);
+    }
   };
 
   const openPreview = (d) => {
@@ -312,6 +333,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
   const fillBtnDisabled = { ...fillBtn, opacity: 0.45, cursor: 'not-allowed' };
 
   const currentFile = dragFile || (fileRef.current?.files?.[0]);
+  const entityLabel = quoteMode ? 'Quote' : 'Treaty';
 
   return (
     // uploads are fire-and-forget — no onBeforeNext needed
@@ -321,11 +343,17 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
           {/* Header */}
           <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'6px 12px', borderRadius:999, background:'var(--surface-muted)', border:'1px solid var(--stroke-soft)', marginBottom:6 }}>
             <span style={{ width:8, height:8, borderRadius:999, background:'var(--accent)', boxShadow:'0 0 0 4px rgba(var(--accent-rgb), 0.10)' }}/>
-            <span style={{ fontSize:11, fontWeight:800, letterSpacing:'.10em', textTransform:'uppercase', color:'var(--text)' }}>Files for Treaty</span>
+            <span style={{ fontSize:11, fontWeight:800, letterSpacing:'.10em', textTransform:'uppercase', color:'var(--text)' }}>Files for {entityLabel}</span>
           </div>
           <div style={{ fontSize:12, color:'var(--muted)', marginBottom:16, marginTop:4 }}>
-            <span style={{ fontWeight:700 }}>CONTRACT ID:</span>{' '}<span style={{ fontFamily:'var(--font-mono)', opacity:0.8 }}>{contractId||'—'}</span>
+            <span style={{ fontWeight:700 }}>{entityLabel.toUpperCase()} ID:</span>{' '}<span style={{ fontFamily:'var(--font-mono)', opacity:0.8 }}>{contractId||'—'}</span>
           </div>
+
+          {loadError && (
+            <div role="alert" style={{ borderRadius:14, border:'1px solid rgba(var(--accent-rose-rgb), 0.40)', background:'rgba(var(--accent-rose-rgb), 0.08)', color:'var(--text)', padding:'10px 12px', marginBottom:16, fontSize:12, fontWeight:700 }}>
+              {loadError}
+            </div>
+          )}
 
           {/* Dropzone */}
           {/* Drag-and-drop is a pointer-only convenience — keyboard users attach via the "+ Select Files" / browse buttons below. */}

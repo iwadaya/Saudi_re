@@ -123,9 +123,13 @@ const MIN_SECRET_LEN = 32;
  * empty means OK. Secrets are only enforced in production. SESSION_SECRET is
  * validated only when present (it's required only if cookies/sessions use it).
  */
-export function checkSecretsConfig({ nodeEnv: ne, authJwtSecret: auth, sessionSecret: sess } = {}) {
+export function checkSecretsConfig({ nodeEnv: ne, authJwtSecret: auth, sessionSecret: sess, allowDemoAuth } = {}) {
   const errors = [];
   if (ne !== 'production') return errors;
+
+  if (String(allowDemoAuth || '').toLowerCase() === 'true') {
+    errors.push('ALLOW_DEMO_AUTH must not be true in production.');
+  }
 
   if (!auth) {
     errors.push('AUTH_JWT_SECRET is required in production (set it as a secret env var).');
@@ -155,6 +159,7 @@ export function validateEnv() {
     nodeEnv: process.env.NODE_ENV || 'development',
     authJwtSecret: process.env.AUTH_JWT_SECRET || '',
     sessionSecret: process.env.SESSION_SECRET || '',
+    allowDemoAuth: process.env.ALLOW_DEMO_AUTH || '',
   });
   if (errors.length) {
     console.error('[env] Refusing to start with an insecure configuration:\n  - ' + errors.join('\n  - '));

@@ -38,11 +38,11 @@ afterEach(async () => {
 });
 
 // The vitest env sets ALLOW_DEMO_AUTH=true for the whole suite (so demo-header
-// auth works). These tests exercise the limiter itself, so clear the
-// load-test/demo bypass flags first; the per-test env snapshot restores them.
+// auth works). Demo auth must not bypass throttling, so these tests clear only
+// the actual bypass flags first; the per-test env snapshot restores them.
 beforeEach(() => {
-  delete process.env.ALLOW_DEMO_AUTH;
   delete process.env.LOAD_TEST;
+  delete process.env.RATE_LIMIT_BYPASS;
 });
 
 function boot(buildRoutes) {
@@ -124,14 +124,19 @@ describe('login limiter (IP + identity)', () => {
   });
 });
 
-describe('load-test / demo bypass', () => {
-  it('reports bypassed when LOAD_TEST or ALLOW_DEMO_AUTH is set, otherwise not', () => {
+describe('load-test bypass', () => {
+  it('reports bypassed when LOAD_TEST or RATE_LIMIT_BYPASS is set, otherwise not', () => {
     expect(rateLimitBypassed()).toBe(false); // beforeEach cleared both flags
     process.env.LOAD_TEST = 'true';
     expect(rateLimitBypassed()).toBe(true);
     delete process.env.LOAD_TEST;
-    process.env.ALLOW_DEMO_AUTH = 'true';
+    process.env.RATE_LIMIT_BYPASS = 'true';
     expect(rateLimitBypassed()).toBe(true);
+  });
+
+  it('ALLOW_DEMO_AUTH=true does not bypass the limiter', () => {
+    process.env.ALLOW_DEMO_AUTH = 'true';
+    expect(rateLimitBypassed()).toBe(false);
   });
 
   it('LOAD_TEST=true skips the IP limiter (uncapped — measures real capacity)', async () => {
@@ -146,8 +151,8 @@ describe('load-test / demo bypass', () => {
     expect([a.status, b.status]).toEqual([200, 200]); // 2nd NOT throttled despite max:1
   });
 
-  it('ALLOW_DEMO_AUTH=true skips the IP limiter too', async () => {
-    process.env.ALLOW_DEMO_AUTH = 'true';
+  it('RATE_LIMIT_BYPASS=true skips the IP limiter too', async () => {
+    process.env.RATE_LIMIT_BYPASS = 'true';
     const limiter = track(createApiLimiter({ max: 1 }));
     const base = await boot((app) => {
       app.use('/api', limiter);

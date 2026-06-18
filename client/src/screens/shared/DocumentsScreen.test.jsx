@@ -195,6 +195,28 @@ describe('DocumentsScreen — doc-fetch endpoint scoping', () => {
     render(<DocumentsScreen routeKey="NP_TREATY_DOCUMENTS" quoteMode />);
     await waitFor(() => expect(apiMock.getDocuments).toHaveBeenCalled());
     expect(apiMock.getDocuments).toHaveBeenCalledWith(QUOTE_ID, { quote: true });
+    expect(screen.getByText('Files for Quote')).toBeInTheDocument();
+    expect(screen.getByText('QUOTE ID:')).toBeInTheDocument();
+  });
+
+  it('surfaces document load failures with a clear inline alert and toast', async () => {
+    apiMock.getDocuments.mockRejectedValue(new FakeHttpError(403, { code: 'FORBIDDEN' }));
+    apiMock.getContract.mockResolvedValue({ header: { treaty_type_id: 'tt-1' } });
+    apiMock.getActiveRenewalPackImport.mockResolvedValue({ activeJob: null });
+    apiMock.listImportSnapshots.mockResolvedValue([]);
+    render(<DocumentsScreen routeKey="NP_TREATY_DOCUMENTS" quoteMode />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/do not have access/i);
+    expect(stableToast).toHaveBeenCalledWith(expect.stringMatching(/do not have access/i), 5000);
+  });
+
+  it('surfaces delete failures instead of swallowing them', async () => {
+    defaultMocks({ docs: [nonSlipDoc()] });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    apiMock.deleteDocument.mockRejectedValue(new FakeHttpError(403, { code: 'READ_ONLY' }));
+    render(<DocumentsScreen routeKey="PROP_TREATY_DOCUMENTS" quoteMode={false} />);
+    await screen.findByText('risks.pdf');
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+    await waitFor(() => expect(stableToast).toHaveBeenCalledWith(expect.stringMatching(/current assignee/i), 6000));
   });
 });
 
