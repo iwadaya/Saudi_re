@@ -707,6 +707,17 @@ const quoteEnginePct = (value, fallback = '') => {
   return fmtAutoPct(n);
 };
 
+// Pure-burn formatter for the "losses were loaded for this scope" path: a
+// computed 0 is a REAL result (the covered class simply had no losses) and must
+// render as "0" → "0.00%", not blank. fmtAutoPct collapses 0 → '' (it is meant
+// for the "nothing to price" case), which would otherwise leave the cell empty
+// and read as "not calculated" — notably on a layer whose class carries no
+// losses (often the first layer).
+const engineBurnWithLosses = (value) => {
+  const n = toN(value);
+  return Number.isFinite(n) && n > 0 ? fmtAutoPct(n) : '0';
+};
+
 export const mergeQuoteEngineResult = (layer = {}, result = {}) => {
   const next = { ...layer };
   const applyScope = (scopeKey, component) => {
@@ -722,7 +733,7 @@ export const mergeQuoteEngineResult = (layer = {}, result = {}) => {
     // existing/seeded value (don't wipe a previously-priced cell).
     if (!next[`${f.pureBurn}Manual`]) {
       next[f.pureBurn] = Number(component.scopeLossCount) > 0
-        ? fmtAutoPct(toN(component.pureBurn))
+        ? engineBurnWithLosses(component.pureBurn)
         : quoteEnginePct(component.pureBurn, next[f.pureBurn]);
     }
     if (!next[`${f.pareto}Manual`]) next[f.pareto] = quoteEnginePct(component.pareto, next[f.pareto]);
