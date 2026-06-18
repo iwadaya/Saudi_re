@@ -10,6 +10,36 @@
 export function toInt(v) { const n = parseInt(String(v ?? '').replace(/[^\d-]/g, ''), 10); return Number.isFinite(n) ? n : null; }
 export function yearFromDate(v) { if (!v) return null; const m = String(v).match(/(\d{4})/); return m ? parseInt(m[1], 10) : null; }
 
+export const sameYears = (a, b) =>
+  Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => v === b[i]);
+
+// Resolve the UW-year range from the authoritative treaty payload the premiums
+// screen fetches (contract header + non-prop detail + saved EGNPI rows). Used
+// as a fallback when appState.npTreatyDetail isn't hydrated in NP/quote mode,
+// which otherwise leaves the premiums + inflation tables empty until you
+// navigate away and back.
+export function resolveYearsFromServer(header, np, egnpiRows) {
+  const h = header || {};
+  const d = np?.detail || np?.terms?.treaty_detail || {};
+  const start =
+    toInt(d.experience_start_year) ?? toInt(d.experienceStartYear) ??
+    toInt(h.uw_year) ?? toInt(h.uwYear) ??
+    yearFromDate(h.inception_date) ?? yearFromDate(h.inceptionDate) ?? null;
+  const renew =
+    yearFromDate(h.renewal_date) ?? yearFromDate(h.renewalDate) ??
+    toInt(h.renewal_year) ?? toInt(h.uw_year) ?? null;
+  const set = new Set();
+  if (start) {
+    const end = (renew && renew >= start) ? renew : start;
+    for (let y = start; y <= end; y++) set.add(y);
+  }
+  for (const r of (Array.isArray(egnpiRows) ? egnpiRows : [])) {
+    const y = toInt(r.uwYear ?? r.uw_year);
+    if (y) set.add(y);
+  }
+  return [...set].sort((a, b) => a - b);
+}
+
 export function parseFlexNum(v) {
   let s = String(v ?? '').trim();
   if (!s) return null;
