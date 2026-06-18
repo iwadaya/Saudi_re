@@ -127,6 +127,7 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
   const [reinsurerSearch, setReinsurerSearch] = useState('');
   const [sortKey, setSortKey] = useState('limit');
   const [sortDir, setSortDir] = useState('desc');
+  const [logScale, setLogScale] = useState(true);
 
   // Mounted guard so a close mid-flight can't set state after unmount.
   const mountedRef = useRef(true);
@@ -230,28 +231,93 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
   };
   const allSeries = [...series, globalSeries];
 
-  // ── SVG geometry over the filtered pool (stable axis across selections) ──
-  const xs = filtered.map((p) => p.x);
-  const ys = filtered.map((p) => p.y);
-  const xMin = Math.max(1e-6, xs.length ? Math.min(...xs) : 1e-3);
-  const xMax = xs.length ? Math.max(...xs) : 1;
-  const rawYMax = Math.max(ys.length ? Math.max(...ys) : 0, 0.5);
-  const X = (v) => 8 + ((v - xMin) / (xMax - xMin || 1)) * 84;
+  // ── Chart geometry: log–log by default so the power-law y = a·x^b reads as a
+  //    straight line. On linear axes the steep small-x arm collapses every curve
+  //    into the bottom-left corner and the reinsurer lines overlap. ──
+  const PX0 = 8; const PX1 = 98; const PY0 = 6; const PY1 = 66;
+  const lg = (v) => Math.log10(Math.max(v, 1e-9));
+
+  // DATA x-range from the scatter points — fitted curves are sampled across it.
+  const xsData = filtered.map((p) => p.x);
+  const ysData = filtered.map((p) => p.y);
+  const xLoData = xsData.length ? Math.min(...xsData) : 1e-3;
+  const xHiData = xsData.length ? Math.max(...xsData) : 1;
+
   const sampleCurve = (fit) => {
     if (!fit || !Number.isFinite(fit.a) || !Number.isFinite(fit.b) || fit.a <= 0) return [];
+    const lo = Math.max(xLoData, 1e-9);
+    const hi = Math.max(xHiData, lo * 1.0001);
     const out = [];
-    for (let i = 0; i <= 50; i += 1) {
-      const x = xMin + (xMax - xMin) * (i / 50);
+    const STEPS = 60;
+    for (let i = 0; i <= STEPS; i += 1) {
+      const t = i / STEPS;
+      // Geometric stepping in log mode keeps samples even across the decades.
+      const x = logScale ? lo * Math.pow(hi / lo, t) : lo + (hi - lo) * t;
       const y = fit.a * Math.pow(x, fit.b);
-      if (y > 0 && y <= rawYMax * 3) out.push({ x, y });
+      if (x > 0 && y > 0 && Number.isFinite(y)) out.push({ x, y });
     }
     return out;
   };
   // Global drawn first (underneath), then each reinsurer curve.
   const sampled = [globalSeries, ...series].map((s) => ({ s, pts: sampleCurve(s.fit) }));
-  const sampledYs = sampled.flatMap((c) => c.pts.map((p) => p.y));
-  const yMax = Math.max(rawYMax, ...sampledYs, 0.01) * 1.12;
-  const Y = (v) => 66 - ((v - 0) / (yMax || 1)) * 60;
+  const curvePts = sampled.flatMap((c) => c.pts);
+
+  // Chart domain spans BOTH scatter + sampled-curve points so the steep small-x
+  // arm of the power law never clips off the top of the plot.
+  const allX = [...xsData, ...curvePts.map((p) => p.x)];
+  const allY = [...ysData, ...curvePts.map((p) => p.y)];
+  const xMinRaw = allX.length ? Math.min(...allX) : 1e-3;
+  const xMaxRaw = allX.length ? Math.max(...allX) : 1;
+  const yMinRaw = allY.length ? Math.min(...allY) : 1e-3;
+  const yMaxRaw = allY.length ? Math.max(...allY) : 0.5;
+
+  // Pad generously (multiplicative) in log mode; lightly in linear mode.
+  const xLo = logScale ? xMinRaw / 1.15 : xMinRaw / 1.02;
+  const xHi = logScale ? xMaxRaw * 1.15 : xMaxRaw * 1.02;
+  const yHi = logScale ? yMaxRaw * 1.25 : yMaxRaw * 1.12;
+  const yLo = logScale ? yMinRaw / 1.25 : 0;
+
+  const X = (v) => {
+    if (logScale) {
+      const a = lg(xLo); const b = lg(xHi);
+      return PX0 + ((lg(v) - a) / ((b - a) || 1)) * (PX1 - PX0);
+    }
+    return PX0 + ((v - xLo) / ((xHi - xLo) || 1)) * (PX1 - PX0);
+  };
+  const Y = (v) => {
+    if (logScale) {
+      const a = lg(yLo); const b = lg(yHi);
+      return PY1 - ((lg(v) - a) / ((b - a) || 1)) * (PY1 - PY0);
+    }
+    return PY1 - ((v - yLo) / ((yHi - yLo) || 1)) * (PY1 - PY0);
+  };
+
+  // Axis ticks: 1·2·5 per decade within range in log mode, even divisions
+  // (n steps) in linear mode.
+  const logTicks = (lo, hi) => {
+    const out = [];
+    for (let d = Math.floor(lg(lo)); d <= Math.ceil(lg(hi)); d += 1) {
+      for (const m of [1, 2, 5]) {
+        const v = m * (10 ** d);
+        if (v >= lo * 0.999 && v <= hi * 1.001) out.push(v);
+      }
+    }
+    return out;
+  };
+  const linTicks = (lo, hi, n = 5) => {
+    const step = (hi - lo) / n || 1;
+    return Array.from({ length: n + 1 }, (_, i) => lo + step * i);
+  };
+  const xTicks = logScale ? logTicks(xLo, xHi) : linTicks(xLo, xHi);
+  const yTicks = logScale ? logTicks(yLo, yHi) : linTicks(Math.max(yLo, 0), yHi);
+
+  // The SVG uses preserveAspectRatio="none", so any in-SVG <text> would stretch
+  // horizontally. Labels are rendered as an HTML overlay positioned in wrapper
+  // %; convert viewBox coords (100 wide × 72 tall) → percentages.
+  const pctX = (vb) => vb;                 // viewBox x is already 0..100
+  const pctY = (vb) => (vb / 72) * 100;
+  const fmtTickX = (v) => `${Number(v.toPrecision(2))}`;   // ~2 significant digits
+  const fmtTickY = (v) => `${Number((v * 100).toPrecision(2))}%`; // ROL %
 
   // ── Underlying treaties, rolled up from the selected reinsurers' layers ──
   const treatyRows = useMemo(() => {
@@ -503,29 +569,66 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
               {/* Multi-curve SVG + legend */}
               {selectedList.length > 0 && (
                 <section style={sectionStyle}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 12 }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(226,232,240,0.75)' }}>Implied Pricing Curves · y = a·x^b</span>
-                    <span style={{ fontSize: 10, color: 'rgba(148,163,184,0.55)' }}>x = √((L+A)·A) / EGNPI · y = ROL %</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 10, color: 'rgba(148,163,184,0.55)' }}>x = √((L+A)·A) / EGNPI · y = ROL %</span>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        {[
+                          { k: true, label: 'Log–log' },
+                          { k: false, label: 'Linear' },
+                        ].map((o) => (
+                          <button key={o.label} className="bm-pill" onClick={() => setLogScale(o.k)}
+                            aria-pressed={logScale === o.k}
+                            style={{ fontSize: 10, ...(logScale === o.k ? { borderColor: '#00d4ff', color: '#00d4ff' } : undefined) }}>
+                            {o.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                  <svg viewBox="0 0 100 72" style={{ width: '100%', height: 'min(52vh, 460px)', minHeight: 360, display: 'block', background: 'rgba(0,0,0,0.20)', borderRadius: 8 }} preserveAspectRatio="none">
-                    {[12, 24, 36, 48, 60].map((g) => (<line key={`gy${g}`} x1={6} y1={g} x2={98} y2={g} stroke="rgba(255,255,255,0.06)" strokeWidth="1" shapeRendering="crispEdges" vectorEffect="non-scaling-stroke" />))}
-                    {[20, 40, 60, 80].map((g) => (<line key={`gx${g}`} x1={g} y1={6} x2={g} y2={66} stroke="rgba(255,255,255,0.06)" strokeWidth="1" shapeRendering="crispEdges" vectorEffect="non-scaling-stroke" />))}
-                    {/* Faded per-reinsurer scatter */}
-                    {series.flatMap((s) => s.pts.map((p, i) => (
-                      <circle key={`${s.key}-${i}`} cx={X(p.x)} cy={Y(p.y)} r="0.55" fill={s.color} fillOpacity={0.4} />
-                    )))}
-                    {/* Fitted curves — Global drawn dashed/grey + thinner */}
-                    {sampled.map(({ s, pts }) => {
-                      const d = pts.length ? `M ${pts.map((p) => `${X(p.x).toFixed(2)} ${Y(p.y).toFixed(2)}`).join(' L ')}` : '';
-                      return (
-                        <path key={s.key} d={d} stroke={s.color}
-                          strokeWidth={s.isGlobal ? '1.4' : '2.2'}
-                          strokeDasharray={s.isGlobal ? '4 3' : '0'}
-                          strokeLinejoin="round" strokeLinecap="round" fill="none"
-                          strokeOpacity={s.isGlobal ? 0.8 : 1} vectorEffect="non-scaling-stroke" />
-                      );
-                    })}
-                  </svg>
+                  <div style={{ position: 'relative', width: '100%', height: 'min(52vh, 460px)', minHeight: 360 }}>
+                    <svg viewBox="0 0 100 72" style={{ width: '100%', height: '100%', display: 'block', background: 'rgba(0,0,0,0.20)', borderRadius: 8 }} preserveAspectRatio="none">
+                      <defs>
+                        <clipPath id="ra-plot-clip">
+                          <rect x={PX0} y={PY0} width={PX1 - PX0} height={PY1 - PY0} />
+                        </clipPath>
+                      </defs>
+                      {/* Gridlines at computed ticks */}
+                      {yTicks.map((t) => (
+                        <line key={`gy${t}`} x1={PX0} y1={Y(t)} x2={PX1} y2={Y(t)} stroke="rgba(255,255,255,0.06)" strokeWidth="1" shapeRendering="crispEdges" vectorEffect="non-scaling-stroke" />
+                      ))}
+                      {xTicks.map((t) => (
+                        <line key={`gx${t}`} x1={X(t)} y1={PY0} x2={X(t)} y2={PY1} stroke="rgba(255,255,255,0.06)" strokeWidth="1" shapeRendering="crispEdges" vectorEffect="non-scaling-stroke" />
+                      ))}
+                      {/* Plot contents clipped to the frame so they never spill past the axes */}
+                      <g clipPath="url(#ra-plot-clip)">
+                        {/* Faded per-reinsurer scatter */}
+                        {series.flatMap((s) => s.pts.map((p, i) => (
+                          <circle key={`${s.key}-${i}`} cx={X(p.x)} cy={Y(p.y)} r="0.55" fill={s.color} fillOpacity={0.4} />
+                        )))}
+                        {/* Fitted curves — Global drawn dashed/grey + thinner */}
+                        {sampled.map(({ s, pts }) => {
+                          const d = pts.length ? `M ${pts.map((p) => `${X(p.x).toFixed(2)} ${Y(p.y).toFixed(2)}`).join(' L ')}` : '';
+                          return (
+                            <path key={s.key} d={d} stroke={s.color}
+                              strokeWidth={s.isGlobal ? '1.4' : '2.2'}
+                              strokeDasharray={s.isGlobal ? '4 3' : '0'}
+                              strokeLinejoin="round" strokeLinecap="round" fill="none"
+                              strokeOpacity={s.isGlobal ? 0.8 : 1} vectorEffect="non-scaling-stroke" />
+                          );
+                        })}
+                      </g>
+                    </svg>
+                    {/* Axis tick labels — HTML overlay (in-SVG text would stretch under
+                        preserveAspectRatio="none"). y = ROL %, x = ~2 sig digits. */}
+                    {yTicks.map((t) => (
+                      <span key={`yl${t}`} style={{ position: 'absolute', top: `${pctY(Y(t))}%`, left: 0, width: `${pctX(PX0)}%`, transform: 'translateY(-50%)', paddingRight: 4, textAlign: 'right', fontSize: 9, lineHeight: 1, color: 'rgba(148,163,184,0.6)', fontVariantNumeric: 'tabular-nums', pointerEvents: 'none' }}>{fmtTickY(t)}</span>
+                    ))}
+                    {xTicks.map((t) => (
+                      <span key={`xl${t}`} style={{ position: 'absolute', top: `${pctY(PY1)}%`, left: `${pctX(X(t))}%`, transform: 'translate(-50%, 4px)', fontSize: 9, lineHeight: 1, color: 'rgba(148,163,184,0.6)', fontVariantNumeric: 'tabular-nums', pointerEvents: 'none', whiteSpace: 'nowrap' }}>{fmtTickX(t)}</span>
+                    ))}
+                  </div>
                   <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 10, fontSize: 10 }}>
                     {allSeries.map((s) => (
                       <span key={s.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
