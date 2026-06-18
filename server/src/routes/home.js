@@ -137,7 +137,9 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
     // Renewals panel: only treaties that are actually candidates for renewal —
     // active/signed contracts whose date falls inside the window AND that don't
     // already have a child renewal draft (otherwise clicking would create a
-    // duplicate).
+    // duplicate). Scoped to the resolved owner like drafts/submitted so the
+    // default "mine" view shows only the caller's upcoming renewals; scope=all
+    // (filterUserId null) leaves userFilter empty and shows everyone's.
     pool.query(`SELECT ${contractCols} ${contractJoins}
                  WHERE c.renewal_date BETWEEN CURRENT_DATE AND CURRENT_DATE+interval '60 days'
                    AND c.uw_status NOT IN ('DRAFT','DECLINED','NTU')
@@ -145,7 +147,8 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
                      SELECT 1 FROM public.contract child
                       WHERE child.parent_contract_id = c.contract_id
                         AND child.uw_status = 'DRAFT')
-                 ORDER BY c.renewal_date ASC LIMIT 50`),
+                   ${userFilter}
+                 ORDER BY c.renewal_date ASC LIMIT 50`, cParams),
     cobAgg(),
     cobAggQuote(),
     pool.query(`
