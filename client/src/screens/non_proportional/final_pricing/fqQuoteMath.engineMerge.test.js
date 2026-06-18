@@ -20,6 +20,7 @@ import {
   QUOTE_COMPONENT_SCOPES,
   emptyStrLayer,
   normalizeQuotePricingLayer,
+  quoteWeightIssues,
 } from './fqQuoteMath.js';
 
 // A synthetic engine result shaped exactly like calcLayerPricing's output:
@@ -62,12 +63,12 @@ describe('mergeQuoteEngineResult — component mapping', () => {
   it('feeds the per-component Blend/Total via quoteComponentDerived', () => {
     const layer = { risk: true, cat: true, limit: '1000000', attachment: '500000', egnpi: '50000000' };
     const merged = mergeQuoteEngineResult(layer, syntheticResult);
-    // Default weights: burn 50 / pareto 0 / exposure 50.
-    // Risk blended = 0.5*2.5 + 0.5*1.2 = 1.85 (before loading).
+    // Default weights: burn 50 / pareto 25 / exposure 25.
+    // Risk blended = 0.50*2.5 + 0.25*0 + 0.25*1.2 = 1.55 (before loading).
     const riskDerived = quoteComponentDerived(merged, 'risk', { ignoreUw: true });
     expect(riskDerived.pureBurn).toBeCloseTo(2.5, 6);
     expect(riskDerived.exposure).toBeCloseTo(1.2, 6);
-    expect(riskDerived.blendedRol).toBeCloseTo(1.85, 4);
+    expect(riskDerived.blendedRol).toBeCloseTo(1.55, 4);
     expect(riskDerived.modeledRol).toBeGreaterThan(0);
 
     // The summary rolls both active scopes into one structure total.
@@ -109,6 +110,27 @@ describe('mergeQuoteEngineResult — component mapping', () => {
     // Cat fields stay untouched (engine returned no cat component).
     expect(merged.catPureBurn ?? '').toBe('');
     expect(merged.catExposure ?? '').toBe('');
+  });
+});
+
+describe('default component weights + weight warning', () => {
+  const rf = QUOTE_COMPONENT_SCOPES.risk.fields;
+
+  it('defaults a fresh layer to Burn 50 / Pareto 25 / Exposure 25 (totals 100)', () => {
+    const l = emptyStrLayer(0);
+    expect(toN(l.riskWeightBurn)).toBe(50);
+    expect(toN(l.riskWeightPareto)).toBe(25);
+    expect(toN(l.riskWeightExp)).toBe(25);
+    expect(quoteWeightIssues([{ ...l, risk: true }], 'risk', rf)).toEqual([]);
+  });
+
+  it('flags an active layer whose weights do not total 100%', () => {
+    const layers = [
+      { risk: true, riskWeightBurn: '50', riskWeightPareto: '25', riskWeightExp: '25' }, // ok
+      { risk: true, riskWeightBurn: '50', riskWeightPareto: '30', riskWeightExp: '25' }, // 105%
+      { risk: false, riskWeightBurn: '10', riskWeightPareto: '10', riskWeightExp: '10' }, // inactive → ignored
+    ];
+    expect(quoteWeightIssues(layers, 'risk', rf)).toEqual(['Layer 2: 105%']);
   });
 });
 

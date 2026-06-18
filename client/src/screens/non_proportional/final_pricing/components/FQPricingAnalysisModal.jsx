@@ -8,7 +8,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
 import { toN, capPct2 } from '../formatters.js';
-import { QUOTE_COMPONENT_SCOPES, quoteComponentDerived, layerCombinedPricing } from '../fqQuoteMath.js';
+import { QUOTE_COMPONENT_SCOPES, quoteComponentDerived, layerCombinedPricing, quoteWeightIssues } from '../fqQuoteMath.js';
 import { fqPriceLayerOnCurve, fqFitPowerLaw, fqPeerToXY, fqGeomean } from '../fqHelpers.js';
 import { REINSTATEMENT_OPTIONS } from '../../reinstatementOptions';
 import { api } from '../../../../api';
@@ -344,6 +344,8 @@ export default function FQPricingAnalysisModal({
     // averages over the scope's active layers (so every numeric column gets a
     // value). getVal returns null to exclude a layer (e.g. uncalibrated implied).
     const activeLayers = layers.filter((l) => !!l[scopeKey]);
+    // Active layers whose Burn+Pareto+Exposure weights don't total 100%.
+    const weightIssues = quoteWeightIssues(layers, scopeKey, f);
     const sumLimit = activeLayers.reduce((s, l) => s + toN(l.limit), 0);
     const sumEgnpi = activeLayers.reduce((s, l) => s + toN(l.egnpi), 0);
     const lwAvg = (getVal) => {
@@ -364,6 +366,10 @@ export default function FQPricingAnalysisModal({
         onChange={(v) => updateClientStructureLayer(sIdx, lIdx, field, v)}
       />
     );
+    // Amber note bar (engine "couldn't price" note + weights warning).
+    const noteBar = (testid, text) => (
+      <div data-testid={testid} style={{ padding: '6px 14px', fontSize: 10, lineHeight: 1.5, color: 'rgba(251,191,36,0.95)', background: 'rgba(245,158,11,0.08)', borderBottom: '1px solid rgba(245,158,11,0.2)' }}>{text}</div>
+    );
     return (
       <section key={scopeKey} style={{ background: 'rgba(8,14,30,0.72)', border: `1px solid ${scope.color}35`, borderRadius: 12 }}>
         <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -383,13 +389,9 @@ export default function FQPricingAnalysisModal({
             </button>
           </div>
         </div>
-        {/* Missing-input note from the last Calculate — flags components the engine
-            couldn't price (no selected losses / no profiles) instead of writing 0. */}
-        {scopeNote && (
-          <div data-testid={`fq-calc-note-${scopeKey}`} style={{ padding: '6px 14px', fontSize: 10, lineHeight: 1.5, color: 'rgba(251,191,36,0.95)', background: 'rgba(245,158,11,0.08)', borderBottom: '1px solid rgba(245,158,11,0.2)' }}>
-            {scopeNote}
-          </div>
-        )}
+        {/* Engine "couldn't price" note, then the weights-≠-100 warning. */}
+        {scopeNote && noteBar(`fq-calc-note-${scopeKey}`, scopeNote)}
+        {weightIssues.length > 0 && noteBar(`fq-weight-warning-${scopeKey}`, `⚠ Component weights (Burn + Pareto + Exposure) should total 100%. ${weightIssues.join(' · ')}`)}
         {/* Weights are now per-row columns (Wt Burn/Pareto/Exp) — no top blender.
             ONLY the table scrolls horizontally; the section header sits above
             (full-width), the notes textarea below. */}
