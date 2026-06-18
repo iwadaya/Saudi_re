@@ -50,10 +50,17 @@ describe('ReinsurerAnalysisModal', () => {
     await waitFor(() => expect(apiMock.getReinsurerAnalysis).toHaveBeenCalledTimes(1));
 
     // Reinsurer panel + COB / type filters render from the fetched pool.
-    expect(await screen.findByText(/Reinsurers ·/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Property' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Cat XL' })).toBeInTheDocument();
-    expect(screen.getByText(/Market baseline/)).toBeInTheDocument();
+    // Default-selects the top 3 reinsurers → the reinsurer dropdown trigger
+    // reads "3 selected"; the COB / treaty-type dropdowns show their defaults.
+    expect(await screen.findByRole('button', { name: /\d+ selected/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /All COBs/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /All Types/ })).toBeInTheDocument();
+
+    // Opening the reinsurer dropdown reveals the multi-select list controls.
+    fireEvent.click(screen.getByRole('button', { name: /\d+ selected/ }));
+    expect(await screen.findByRole('button', { name: 'Select all' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Search reinsurers/)).toBeInTheDocument();
 
     // At least one fitted power-law equation (y = a · x^b) is shown.
     const eqs = await screen.findAllByText((t) => t.startsWith('y =') && t.includes('x^'));
@@ -69,7 +76,7 @@ describe('ReinsurerAnalysisModal', () => {
   it('calls onClose when the Close button is clicked', async () => {
     const onClose = vi.fn();
     render(<ReinsurerAnalysisModal open onClose={onClose} />);
-    await screen.findByText(/Reinsurers ·/);
+    await screen.findByRole('button', { name: /\d+ selected/ });
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });

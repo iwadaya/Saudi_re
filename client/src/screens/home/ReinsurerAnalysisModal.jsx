@@ -8,19 +8,18 @@ import { fqFitPowerLaw, fqGeomean } from '../non_proportional/final_pricing/fqHe
 import '../benchmark/benchmark.css';
 
 /* ─── Reinsurer Analysis Modal ───
-   Portfolio-wide implied pricing-curve view. For each lead reinsurer we fit a
-   single power-law curve y = a·x^b over its NP layers (one point per layer,
-   x = √((L+A)·A) / EGNPI, y = ROL fraction) and compare the fitted curves side
-   by side. The pool can be sliced by class of business and NP treaty type, and
-   a dashed grey "market" baseline fits the whole filtered pool for reference.
-   Data comes from /api/reinsurer-analysis (every NP layer carrying a lead
-   reinsurer); the curve maths reuse fqHelpers and the visual language mirrors
-   FQScopeCurvePanel / FQBenchmarkModal. */
+   Portfolio-wide implied pricing-curve view. For each selected lead reinsurer we
+   fit a single power-law curve y = a·x^b over its NP layers (one point per layer,
+   x = √((L+A)·A) / EGNPI, y = ROL fraction) and compare each against a Global
+   curve fitted over the entire filtered pool across all reinsurers. The pool can
+   be sliced by class of business and NP treaty type via three dropdown selectors.
+   Data comes from /api/reinsurer-analysis; the curve maths reuse fqHelpers and the
+   visual language mirrors FQScopeCurvePanel / FQBenchmarkModal. */
 
-// Up to six reinsurers can be compared at once; one palette colour each.
+// Up to six reinsurers can be drawn at once; one palette colour each.
 const PALETTE = ['#00d4ff', '#a78bfa', '#4ade80', '#f59e0b', '#f472b6', '#facc15'];
 const MAX_SELECTED = 6;
-const MARKET_COLOR = 'rgba(148,163,184,0.85)';
+const GLOBAL_COLOR = 'rgba(226,232,240,0.78)';
 
 const sectionStyle = {
   background: 'rgba(8,14,30,0.62)',
@@ -62,6 +61,60 @@ const eqStr = (a, b) => `y = ${fmtCoef(a)} · x^${Number.isFinite(b) ? b.toFixed
 // ROL the fitted curve predicts at a given x, in percent.
 const rolAt = (fit, x) => (fit ? fit.a * Math.pow(x, fit.b) * 100 : 0);
 
+// ── Reusable dropdown: a bm-pill trigger + an absolutely-positioned popover
+//    that closes on outside-click. Open/closed is controlled by the parent so
+//    Escape can close the active dropdown before the modal itself. ──
+function Dropdown({ open, onToggle, onClose, label, popoverWidth = 220, children }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open, onClose]);
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button className="bm-pill" onClick={onToggle}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, ...(open ? { borderColor: 'rgba(0,212,255,0.55)', color: '#00d4ff' } : undefined) }}>
+        {label}
+        <span style={{ fontSize: 9, opacity: 0.7 }}>▾</span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 50,
+          width: popoverWidth, maxWidth: '90vw',
+          background: 'rgba(10,16,32,0.98)', border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: 10, boxShadow: '0 12px 32px rgba(0,0,0,0.45)', padding: 8,
+        }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Single-select option list shared by the COB and treaty-type dropdowns.
+function OptionList({ options, value, onPick }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 280, overflowY: 'auto' }}>
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button key={o.value} onClick={() => onPick(o.value)}
+            style={{
+              appearance: 'none', textAlign: 'left', padding: '7px 10px', borderRadius: 7,
+              border: '1px solid transparent', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+              background: active ? 'rgba(0,212,255,0.12)' : 'transparent',
+              color: active ? '#00d4ff' : 'rgba(226,232,240,0.85)',
+            }}>
+            {active ? '✓ ' : ''}{o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ReinsurerAnalysisModal({ open, onClose }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -70,7 +123,8 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
   const [selected, setSelected] = useState(() => new Set()); // reinsurer names
   const [cobFilter, setCobFilter] = useState('all');
   const [ttFilter, setTtFilter] = useState('all');
-  const [showMarket, setShowMarket] = useState(true);
+  const [openKey, setOpenKey] = useState(null);   // 'reinsurer' | 'cob' | 'type' | null
+  const [reinsurerSearch, setReinsurerSearch] = useState('');
   const [sortKey, setSortKey] = useState('limit');
   const [sortDir, setSortDir] = useState('desc');
 
@@ -88,6 +142,8 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
     setData(null);
     setCobFilter('all');
     setTtFilter('all');
+    setOpenKey(null);
+    setReinsurerSearch('');
     api.getReinsurerAnalysis()
       .then((res) => {
         if (cancelled || !mountedRef.current) return;
@@ -106,13 +162,17 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
     return () => { cancelled = true; };
   }, [open]);
 
-  // Escape closes.
+  // Escape closes the active dropdown first, then the modal.
   useEffect(() => {
     if (!open) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      if (openKey) { setOpenKey(null); return; }
+      onClose();
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open, openKey, onClose]);
 
   // Memoised because it feeds every downstream useMemo (eslint deps).
   const points = useMemo(() => data?.points || [], [data]);
@@ -130,7 +190,8 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
   }).filter(Boolean), [points]);
 
   // A COB filter matches a point when its parent treaty carries that class
-  // (cobs[]), so a multi-COB treaty shows under each of its classes.
+  // (cobs[]), so a multi-COB treaty shows under each of its classes. The Global
+  // curve fits this pool across ALL reinsurers (it ignores the selection).
   const filtered = useMemo(() => mapped.filter((p) => {
     if (cobFilter !== 'all' && !(Array.isArray(p.cobs) ? p.cobs : []).includes(cobFilter)) return false;
     if (ttFilter !== 'all' && p.treatyType !== ttFilter) return false;
@@ -138,15 +199,15 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
   }), [mapped, cobFilter, ttFilter]);
 
   // Stable, ranked order for the selected reinsurers so colours don't reshuffle
-  // as the user ticks chips on and off.
+  // as the user ticks rows on and off.
   const selectedList = useMemo(
     () => reinsurers.filter((r) => selected.has(r.name)).map((r) => r.name),
     [reinsurers, selected],
   );
 
-  // Market baseline: one fit over the entire filtered pool.
-  const marketFit = useMemo(() => fqFitPowerLaw(filtered), [filtered]);
-  const marketTreaties = useMemo(() => new Set(filtered.map((p) => p.contractId)).size, [filtered]);
+  // Global baseline: one fit over the entire filtered pool (all reinsurers).
+  const globalFit = useMemo(() => fqFitPowerLaw(filtered), [filtered]);
+  const globalTreaties = useMemo(() => new Set(filtered.map((p) => p.contractId)).size, [filtered]);
 
   // Per-reinsurer fitted series (curve + its own scatter + counts).
   const series = useMemo(() => selectedList.map((name, i) => {
@@ -162,12 +223,12 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
     };
   }), [selectedList, filtered]);
 
-  // Series feeding the legend, equation cards, and metrics table — market last.
-  const marketSeries = {
-    key: '__market__', label: 'Market', color: MARKET_COLOR, fit: marketFit,
-    pts: filtered, treaties: marketTreaties, layers: filtered.length, isMarket: true,
+  // Global series object — always present in legend / equation cards / table.
+  const globalSeries = {
+    key: '__global__', label: 'Global (all reinsurers)', color: GLOBAL_COLOR, fit: globalFit,
+    pts: filtered, treaties: globalTreaties, layers: filtered.length, isGlobal: true,
   };
-  const allSeries = showMarket ? [...series, marketSeries] : series;
+  const allSeries = [...series, globalSeries];
 
   // ── SVG geometry over the filtered pool (stable axis across selections) ──
   const xs = filtered.map((p) => p.x);
@@ -186,7 +247,8 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
     }
     return out;
   };
-  const sampled = allSeries.map((s) => ({ s, pts: sampleCurve(s.fit) }));
+  // Global drawn first (underneath), then each reinsurer curve.
+  const sampled = [globalSeries, ...series].map((s) => ({ s, pts: sampleCurve(s.fit) }));
   const sampledYs = sampled.flatMap((c) => c.pts.map((p) => p.y));
   const yMax = Math.max(rawYMax, ...sampledYs, 0.01) * 1.12;
   const Y = (v) => 66 - ((v - 0) / (yMax || 1)) * 60;
@@ -230,28 +292,44 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
     });
   }, [treatyRows, sortKey, sortDir]);
 
+  // Reinsurer rows shown in the dropdown, filtered by the search box.
+  const reinsurerMatches = useMemo(() => {
+    const q = reinsurerSearch.trim().toLowerCase();
+    return q ? reinsurers.filter((r) => r.name.toLowerCase().includes(q)) : reinsurers;
+  }, [reinsurers, reinsurerSearch]);
+
   if (!open) return null;
 
+  const atCap = selected.size >= MAX_SELECTED;
   const toggleReinsurer = (name) => setSelected((prev) => {
     const n = new Set(prev);
     if (n.has(name)) n.delete(name);
     else if (n.size < MAX_SELECTED) n.add(name);
     return n;
   });
+  // Select all = fill up to the cap from the currently-filtered (ranked) list.
+  const selectAll = () => setSelected(() => new Set(reinsurerMatches.slice(0, MAX_SELECTED).map((r) => r.name)));
+  const clearAll = () => setSelected(new Set());
+
   const headerSort = (k) => () => {
     if (sortKey === k) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
     else { setSortKey(k); setSortDir('desc'); }
   };
   const sortArrow = (k) => (sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '');
 
-  // Directional delta of a reinsurer's ROL @ x=0.10 vs the market baseline.
-  const marketRol10 = rolAt(marketFit, 0.10);
-  const vsMarket = (fit) => {
+  const colorOf = (name) => {
+    const idx = selectedList.indexOf(name);
+    return idx >= 0 ? PALETTE[idx % PALETTE.length] : 'rgba(148,163,184,0.55)';
+  };
+
+  // Directional delta of a reinsurer's ROL @ x=0.10 vs the Global baseline.
+  const globalRol10 = rolAt(globalFit, 0.10);
+  const vsGlobal = (fit) => {
     const r = rolAt(fit, 0.10);
-    if (!(marketRol10 > 0) || !(r > 0)) return null;
-    const pct = ((r - marketRol10) / marketRol10) * 100;
+    if (!(globalRol10 > 0) || !(r > 0)) return null;
+    const pct = ((r - globalRol10) / globalRol10) * 100;
     if (Math.abs(pct) < 0.05) return { flat: true };
-    const above = r > marketRol10;
+    const above = r > globalRol10;
     return { arrow: above ? '▲' : '▼', color: above ? '#f87171' : '#23d18b', text: `${Math.abs(pct).toFixed(1)}%` };
   };
 
@@ -280,10 +358,8 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
     { k: 'layers', label: 'Layers', align: 'right' },
   ];
 
-  const colorOf = (name) => {
-    const idx = selectedList.indexOf(name);
-    return idx >= 0 ? PALETTE[idx % PALETTE.length] : 'rgba(148,163,184,0.55)';
-  };
+  const cobOptions = [{ value: 'all', label: 'All COBs' }, ...cobs.map((c) => ({ value: c, label: c }))];
+  const ttOptions = [{ value: 'all', label: 'All Types' }, ...treatyTypes.map((t) => ({ value: t, label: t }))];
 
   return (
     <div className="bm-modal-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -293,7 +369,7 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
           <div>
             <div>Reinsurer Analysis · Implied Pricing Curves</div>
             <div style={{ fontSize: 11, fontWeight: 500, color: 'rgba(148,163,184,0.55)', marginTop: 2 }}>
-              y = a·x^b per lead reinsurer · x = √((L+A)·A) / EGNPI · y = ROL %
+              y = a·x^b per lead reinsurer vs Global · x = √((L+A)·A) / EGNPI · y = ROL %
             </div>
           </div>
           <button className="bm-pill" onClick={onClose}>Close</button>
@@ -312,72 +388,91 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
 
           {!loading && !error && points.length > 0 && (
             <>
-              {/* Controls: reinsurer chips, COB filter, treaty-type filter, market toggle */}
-              <section style={sectionStyle}>
-                <div style={{ ...sectionTitleStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                  <span>Reinsurers · {selected.size} of {reinsurers.length} selected (max {MAX_SELECTED})</span>
-                  <span style={{ fontWeight: 600, letterSpacing: 0, textTransform: 'none', color: 'rgba(148,163,184,0.6)' }}>
-                    {filtered.length} of {data?.pointCount ?? points.length} layers in scope
-                    {data?.truncated ? ' · pool truncated' : ''}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-                  {reinsurers.map((r) => {
-                    const on = selected.has(r.name);
-                    const disabled = !on && selected.size >= MAX_SELECTED;
-                    return (
-                      <button key={r.name} className="bm-pill" onClick={() => !disabled && toggleReinsurer(r.name)}
-                        title={disabled ? `Deselect one to add (max ${MAX_SELECTED})` : undefined}
-                        style={{
-                          ...(on ? { borderColor: `${colorOf(r.name)}99`, color: colorOf(r.name) } : undefined),
-                          ...(disabled ? { opacity: 0.4, cursor: 'not-allowed' } : undefined),
-                        }}>
-                        {on && <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: colorOf(r.name), marginRight: 6, verticalAlign: 'middle' }} />}
-                        {r.name} <span style={{ opacity: 0.6 }}>· {r.treatyCount}t / {r.layerCount}L</span>
-                      </button>
-                    );
-                  })}
+              {/* Controls — three dropdown selectors in a row */}
+              <section style={{ ...sectionStyle, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 850, letterSpacing: '.12em', color: 'rgba(148,163,184,0.6)', textTransform: 'uppercase', marginBottom: 5 }}>Reinsurer</div>
+                  <Dropdown
+                    label={`${selected.size} selected`} popoverWidth={300}
+                    open={openKey === 'reinsurer'}
+                    onToggle={() => setOpenKey((k) => (k === 'reinsurer' ? null : 'reinsurer'))}
+                    onClose={() => setOpenKey((k) => (k === 'reinsurer' ? null : k))}
+                  >
+                    <input
+                      type="text" value={reinsurerSearch} placeholder="Search reinsurers…"
+                      onChange={(e) => setReinsurerSearch(e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '7px 9px', marginBottom: 6, fontSize: 12, color: 'rgba(226,232,240,0.9)', background: 'rgba(5,8,16,0.7)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, outline: 'none' }}
+                    />
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                      <button className="bm-pill" onClick={selectAll} style={{ flex: 1, fontSize: 10 }}>Select all</button>
+                      <button className="bm-pill" onClick={clearAll} style={{ flex: 1, fontSize: 10 }}>Clear</button>
+                    </div>
+                    <div style={{ maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {reinsurerMatches.length === 0 && (
+                        <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.6)', padding: '8px 4px' }}>No matches.</div>
+                      )}
+                      {reinsurerMatches.map((r) => {
+                        const on = selected.has(r.name);
+                        const disabled = !on && atCap;
+                        return (
+                          <label key={r.name} title={disabled ? `Max ${MAX_SELECTED} on the chart — clear one to add another` : undefined}
+                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.45 : 1, background: on ? 'rgba(0,212,255,0.07)' : 'transparent' }}>
+                            <input type="checkbox" checked={on} disabled={disabled} onChange={() => toggleReinsurer(r.name)} style={{ verticalAlign: 'middle' }} />
+                            {on && <span style={{ width: 8, height: 8, borderRadius: 2, background: colorOf(r.name), flex: '0 0 auto' }} />}
+                            <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'rgba(226,232,240,0.88)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                            <span style={{ fontSize: 10, color: 'rgba(148,163,184,0.6)' }}>{r.treatyCount}t</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <div style={{ fontSize: 10, color: atCap ? '#f59e0b' : 'rgba(148,163,184,0.55)', marginTop: 8, paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                      {selected.size}/{MAX_SELECTED} drawn on chart{atCap ? ' · max reached' : ''}
+                    </div>
+                  </Dropdown>
                 </div>
 
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', color: 'rgba(148,163,184,0.55)', textTransform: 'uppercase' }}>COB</span>
-                    <button className="bm-pill" onClick={() => setCobFilter('all')}
-                      style={cobFilter === 'all' ? { borderColor: 'rgba(35,209,139,0.55)', color: '#23d18b' } : undefined}>All</button>
-                    {cobs.map((c) => (
-                      <button key={c} className="bm-pill" onClick={() => setCobFilter(c)}
-                        style={cobFilter === c ? { borderColor: 'rgba(0,212,255,0.55)', color: '#00d4ff' } : undefined}>{c}</button>
-                    ))}
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', color: 'rgba(148,163,184,0.55)', textTransform: 'uppercase' }}>Type</span>
-                    <button className="bm-pill" onClick={() => setTtFilter('all')}
-                      style={ttFilter === 'all' ? { borderColor: 'rgba(35,209,139,0.55)', color: '#23d18b' } : undefined}>All</button>
-                    {treatyTypes.map((t) => (
-                      <button key={t} className="bm-pill" onClick={() => setTtFilter(t)}
-                        style={ttFilter === t ? { borderColor: 'rgba(167,139,250,0.55)', color: '#a78bfa' } : undefined}>{t}</button>
-                    ))}
-                  </div>
-                  <button className="bm-pill" onClick={() => setShowMarket((v) => !v)}
-                    style={{ marginLeft: 'auto', ...(showMarket ? { borderColor: MARKET_COLOR, color: 'rgba(226,232,240,0.85)' } : { opacity: 0.6 }) }}>
-                    {showMarket ? '✓ ' : ''}Market baseline
-                  </button>
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 850, letterSpacing: '.12em', color: 'rgba(148,163,184,0.6)', textTransform: 'uppercase', marginBottom: 5 }}>Class of Business</div>
+                  <Dropdown
+                    label={cobFilter === 'all' ? 'All COBs' : cobFilter} popoverWidth={220}
+                    open={openKey === 'cob'}
+                    onToggle={() => setOpenKey((k) => (k === 'cob' ? null : 'cob'))}
+                    onClose={() => setOpenKey((k) => (k === 'cob' ? null : k))}
+                  >
+                    <OptionList options={cobOptions} value={cobFilter} onPick={(v) => { setCobFilter(v); setOpenKey(null); }} />
+                  </Dropdown>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 850, letterSpacing: '.12em', color: 'rgba(148,163,184,0.6)', textTransform: 'uppercase', marginBottom: 5 }}>NP Treaty Type</div>
+                  <Dropdown
+                    label={ttFilter === 'all' ? 'All Types' : ttFilter} popoverWidth={220}
+                    open={openKey === 'type'}
+                    onToggle={() => setOpenKey((k) => (k === 'type' ? null : 'type'))}
+                    onClose={() => setOpenKey((k) => (k === 'type' ? null : k))}
+                  >
+                    <OptionList options={ttOptions} value={ttFilter} onPick={(v) => { setTtFilter(v); setOpenKey(null); }} />
+                  </Dropdown>
+                </div>
+
+                <div style={{ marginLeft: 'auto', alignSelf: 'flex-end', fontSize: 11, color: 'rgba(148,163,184,0.6)', paddingBottom: 6 }}>
+                  {filtered.length} of {data?.pointCount ?? points.length} layers in scope{data?.truncated ? ' · pool truncated' : ''}
                 </div>
               </section>
 
               {selectedList.length === 0 && (
                 <section style={sectionStyle}>
-                  <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.65)' }}>Select one or more reinsurers above to fit and compare pricing curves.</div>
+                  <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.65)' }}>Select one or more reinsurers above to fit and compare pricing curves against the Global baseline.</div>
                 </section>
               )}
 
               {/* Summary cards per selected reinsurer */}
               {selectedList.length > 0 && (
                 <section style={sectionStyle}>
-                  <div style={sectionTitleStyle}>Curve Summary · ROL @ x = 0.10 vs market</div>
+                  <div style={sectionTitleStyle}>Curve Summary · ROL @ x = 0.10 vs Global</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 10 }}>
                     {series.map((s) => {
-                      const d = vsMarket(s.fit);
+                      const d = vsGlobal(s.fit);
                       return (
                         <div key={s.key} style={{ background: 'rgba(5,8,16,0.46)', border: `1px solid ${s.color}33`, borderRadius: 10, padding: '10px 12px' }}>
                           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.04em', color: s.color, marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</div>
@@ -397,7 +492,7 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
                               </span>
                             )}
                           </div>
-                          <div style={{ fontSize: 9, color: 'rgba(148,163,184,0.5)', marginTop: 2 }}>vs market {marketRol10 > 0 ? `${marketRol10.toFixed(2)}%` : '—'}</div>
+                          <div style={{ fontSize: 9, color: 'rgba(148,163,184,0.5)', marginTop: 2 }}>vs Global {globalRol10 > 0 ? `${globalRol10.toFixed(2)}%` : '—'}</div>
                         </div>
                       );
                     })}
@@ -419,22 +514,22 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
                     {series.flatMap((s) => s.pts.map((p, i) => (
                       <circle key={`${s.key}-${i}`} cx={X(p.x)} cy={Y(p.y)} r="0.55" fill={s.color} fillOpacity={0.4} />
                     )))}
-                    {/* Fitted curves — market drawn dashed/grey */}
+                    {/* Fitted curves — Global drawn dashed/grey + thinner */}
                     {sampled.map(({ s, pts }) => {
                       const d = pts.length ? `M ${pts.map((p) => `${X(p.x).toFixed(2)} ${Y(p.y).toFixed(2)}`).join(' L ')}` : '';
                       return (
                         <path key={s.key} d={d} stroke={s.color}
-                          strokeWidth={s.isMarket ? '1.6' : '2.2'}
-                          strokeDasharray={s.isMarket ? '4 3' : '0'}
+                          strokeWidth={s.isGlobal ? '1.4' : '2.2'}
+                          strokeDasharray={s.isGlobal ? '4 3' : '0'}
                           strokeLinejoin="round" strokeLinecap="round" fill="none"
-                          strokeOpacity={s.isMarket ? 0.85 : 1} vectorEffect="non-scaling-stroke" />
+                          strokeOpacity={s.isGlobal ? 0.8 : 1} vectorEffect="non-scaling-stroke" />
                       );
                     })}
                   </svg>
                   <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 10, fontSize: 10 }}>
                     {allSeries.map((s) => (
                       <span key={s.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ width: 16, height: 2, background: s.color, opacity: s.isMarket ? 0.75 : 1, borderRadius: 1 }} />
+                        <span style={{ width: 16, height: 0, borderTop: s.isGlobal ? `2px dashed ${s.color}` : `2px solid ${s.color}`, opacity: s.isGlobal ? 0.8 : 1 }} />
                         <b style={{ color: s.color, letterSpacing: '.04em' }}>{s.label}</b>
                         <span style={{ color: 'rgba(148,163,184,0.55)' }}>· {s.treaties}t / {s.layers}L</span>
                       </span>
@@ -462,7 +557,7 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
                           <tr key={row.k} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                             <td style={{ ...tdStyle, textAlign: 'left', color: 'rgba(226,232,240,0.85)' }}>{row.label}</td>
                             {allSeries.map((s) => (
-                              <td key={s.key} style={{ ...tdStyle, textAlign: 'right', fontFamily: 'var(--font-mono)', color: s.isMarket ? 'rgba(226,232,240,0.7)' : 'rgba(226,232,240,0.9)' }}>{row.cell(s)}</td>
+                              <td key={s.key} style={{ ...tdStyle, textAlign: 'right', fontFamily: 'var(--font-mono)', color: s.isGlobal ? 'rgba(226,232,240,0.7)' : 'rgba(226,232,240,0.9)' }}>{row.cell(s)}</td>
                             ))}
                           </tr>
                         ))}
@@ -470,7 +565,7 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
                     </table>
                   </div>
                   <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.45)', marginTop: 6 }}>
-                    ROL @ rows show each fitted curve&apos;s predicted rate-on-line at the listed x. Market is the fit over the whole filtered pool.
+                    ROL @ rows show each fitted curve&apos;s predicted rate-on-line at the listed x. Global is the fit over the whole filtered pool across all reinsurers.
                   </div>
                 </section>
               )}
