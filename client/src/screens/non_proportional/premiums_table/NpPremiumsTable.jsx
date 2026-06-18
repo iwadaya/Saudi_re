@@ -5,7 +5,7 @@ import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import { useGlobalToast } from '../../../hooks/useToast';
-import { toInt, yearFromDate, parseFlexNum, numOrZero, fmtMoney, fmtPct, computeCumulative } from './formatters';
+import { toInt, yearFromDate, parseFlexNum, numOrZero, fmtMoney, fmtPct, computeCumulative, resolveYearsFromServer, sameYears } from './formatters';
 
 const ROUTE_KEY = 'NP_PREMIUMS_TABLE';
 
@@ -42,6 +42,9 @@ export default function NpPremiumsTable() {
   const [countryPickerOpen, setCountryPickerOpen] = useState(false);
   const [countryOptions, setCountryOptions] = useState([]);
 
+  // Fallback range from the loaded treaty when npDetail isn't hydrated here.
+  const [serverYears, setServerYears] = useState(null);
+
   /* ── Build years from treaty detail ── */
   const years = useMemo(() => {
     const start =
@@ -50,12 +53,13 @@ export default function NpPremiumsTable() {
     const renewY =
       yearFromDate(npDetail.renewalDate) ?? yearFromDate(npDetail.renewal_date) ??
       toInt(npDetail.renewalYear) ?? toInt(npDetail.renewal_year) ?? null;
-    if (!start) return [];
+    // Fall back to the server-resolved range when npDetail gave no start year.
+    if (!start) return Array.isArray(serverYears) ? serverYears : [];
     const end = (renewY && renewY >= start) ? renewY : start;
     const yrs = [];
     for (let y = start; y <= end; y++) yrs.push(y);
     return yrs;
-  }, [npDetail]);
+  }, [npDetail, serverYears]);
 
   const cedantName = npDetail.cedantName || npDetail.cedant_name || '';
   const treatyLabel = npDetail.treatyTypeName || npDetail.treaty_type_name || '';
@@ -127,7 +131,8 @@ export default function NpPremiumsTable() {
 
   /* ── Load from server ── */
   useEffect(() => {
-    if (!contractId || !years.length) {
+    // Fetch whenever a contract is present, even if `years` is still empty.
+    if (!contractId) {
       const { uwRows: uw, inflationRows: inf, rateChangeRows: rate } = rebuildRows(years, [], [], []);
       setUwRows(uw); setInflationRows(inf); setRateChangeRows(rate);
       return;
@@ -213,7 +218,11 @@ export default function NpPremiumsTable() {
             .filter(r => r.uwYear);
         }
 
-        const { uwRows: uw, inflationRows: inf, rateChangeRows: rate } = rebuildRows(years, savedUw, savedInf, savedRate);
+        // When npDetail gave no range, resolve it from the loaded treaty.
+        const effYears = years.length ? years : resolveYearsFromServer(header, npData, egnpiRows);
+        if (!years.length && effYears.length) setServerYears(prev => (sameYears(prev, effYears) ? prev : effYears));
+
+        const { uwRows: uw, inflationRows: inf, rateChangeRows: rate } = rebuildRows(effYears, savedUw, savedInf, savedRate);
         setUwRows(uw);
         setRateChangeRows(rate);
 
