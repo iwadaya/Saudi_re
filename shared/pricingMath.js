@@ -127,6 +127,19 @@ export function clamp(n, min, max) {
   return Math.min(Math.max(n, min), max);
 }
 
+/**
+ * Parse the loose numeric strings that pricing screens persist while users
+ * edit grids ("10.00%", "1,250", "$2,000"). This is intentionally shared so
+ * server-side verification and client-side total derivation agree exactly.
+ *
+ * @param {unknown} v
+ * @returns {number}
+ */
+export function parsePricingNumber(v) {
+  const n = parseFloat(String(v ?? '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
 
 /**
  * Apply a pricing loading ("target loss ratio" multiplier). A 20%
@@ -186,10 +199,7 @@ export function deriveComponentTotal(pureBurn, pareto, exposure, weightBurn, wei
   // parse to 10 / 1250 instead of NaN. Number(v) without stripping
   // returns NaN for any string with a % or comma, silently zeroing
   // every input and making Total ROL always read 0%.
-  const toN = (/** @type {unknown} */ v) => {
-    const n = parseFloat(String(v ?? '').replace(/[^\d.-]/g, ''));
-    return Number.isFinite(n) ? n : 0;
-  };
+  const toN = parsePricingNumber;
   const wB = clamp(toN(weightBurn), 0, 100);
   const wP = clamp(toN(weightPareto), 0, 100);
   const wE = clamp(toN(weightExposure), 0, 100);

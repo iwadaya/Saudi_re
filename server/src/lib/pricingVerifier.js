@@ -46,7 +46,7 @@
 //      drifting.
 
 import { logger } from './logger.js';
-import { deriveComponentTotal } from '../../../shared/pricingMath.js';
+import { deriveComponentTotal, parsePricingNumber } from '../../../shared/pricingMath.js';
 
 // Absolute + relative tolerance combined so we're right near zero (where
 // relative tolerance is meaningless) AND at large rates.
@@ -59,9 +59,7 @@ const TOLERANCE_REL = 0.002;   // 0.2% of expected
 const TOLERANCE_WEIGHT = 0.5;
 
 function toN(v) {
-  if (v === null || v === undefined || v === '') return 0;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
+  return parsePricingNumber(v);
 }
 
 function withinTolerance(actual, expected) {

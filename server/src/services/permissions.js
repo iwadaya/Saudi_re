@@ -1,7 +1,7 @@
 // server/src/services/permissions.js
-// Edit-locking / ownership enforcement. Reads stay open to everyone; writes are
-// gated so only the owner (assigned_to), a claimer of an unassigned item, or
-// someone AT/ABOVE the owner in the hierarchy can mutate a treaty/quote/fac risk.
+// Edit-locking / ownership enforcement. Reads stay open to everyone by default;
+// sensitive routes can opt into read checks. Writes are gated so only the current
+// assignee can mutate a treaty/quote/fac risk.
 //
 // computeEditPermission is pure (unit-tested directly). assertCanEdit is the
 // route guard: it loads ownership + the owner's hierarchy level, resolves the
@@ -116,6 +116,8 @@ const WORKFLOW_SUFFIXES = [
 ];
 // Create-style actions: the creator becomes the assignee (or the route is disabled).
 const CREATE_SUFFIXES = ['/renew', '/amend', '/bind'];
+// Ownership-management actions enforce hierarchy/claim rules in assignments.js.
+const ASSIGNMENT_SUFFIXES = ['/assign', '/reassign', '/allocate'];
 
 function isWorkflowMutation(path) {
   return WORKFLOW_SUFFIXES.some((s) => path.endsWith(s));
@@ -123,12 +125,24 @@ function isWorkflowMutation(path) {
 function isCreateMutation(path) {
   return CREATE_SUFFIXES.some((s) => path.endsWith(s));
 }
+function isAssignmentMutation(path) {
+  return ASSIGNMENT_SUFFIXES.some((s) => path.endsWith(s));
+}
 
 // Out-of-tree resources whose owning entity needs a DB lookup.
 const PARENT_RESOLVERS = {
   facDocument:       { sql: 'SELECT fac_risk_id AS id FROM public.fac_document WHERE document_id=$1',            entityType: 'FAC_RISK' },
   facRecommendation: { sql: 'SELECT fac_risk_id AS id FROM public.fac_ai_recommendation WHERE recommendation_id=$1', entityType: 'FAC_RISK' },
   pricingSnapshot:   { sql: 'SELECT contract_id AS id FROM public.pricing_component_snapshots WHERE id=$1',      entityType: 'CONTRACT' },
+  contractDocument:  {
+    sql: `SELECT COALESCE(contract_id, quote_id) AS id,
+                 CASE
+                   WHEN contract_id IS NOT NULL THEN 'CONTRACT'
+                   WHEN quote_id    IS NOT NULL THEN 'QUOTE'
+                 END AS entity_type
+            FROM public.contract_document
+           WHERE document_id=$1`,
+  },
 };
 
 /** Map a nested resource to its owning {entityType, entityId} via a DB lookup. */
@@ -138,7 +152,9 @@ export async function resolveParentEntity(resourceType, id) {
   try {
     const { rows } = await pool.query(r.sql, [id]);
     if (!rows.length || !rows[0].id) return null;
-    return { entityType: r.entityType, entityId: rows[0].id };
+    const entityType = rows[0].entity_type || r.entityType;
+    if (!entityType) return null;
+    return { entityType, entityId: rows[0].id };
   } catch { return null; }
 }
 
@@ -155,12 +171,15 @@ export async function resolveParentEntity(resourceType, id) {
 export function classifyMutationPath(path) {
   if (isWorkflowMutation(path)) return 'workflow';
   if (isCreateMutation(path)) return 'create';
+  if (isAssignmentMutation(path)) return 'workflow';
   let m;
   if ((m = /^\/quotes\/([^/]+)/.exec(path))) return { entityType: 'QUOTE', entityId: m[1] };
   if ((m = /^\/treaties\/([^/]+)/.exec(path))) return { entityType: 'CONTRACT', entityId: m[1] };
   if ((m = /^\/fac\/risks\/([^/]+)/.exec(path))) return { entityType: 'FAC_RISK', entityId: m[1] };
   if ((m = /^\/fac\/documents\/([^/]+)/.exec(path))) return { resolve: 'facDocument', id: m[1] };
   if ((m = /^\/fac\/recommendation\/([^/]+)/.exec(path))) return { resolve: 'facRecommendation', id: m[1] };
+  if ((m = /^\/documents\/([^/]+)/.exec(path))) return { resolve: 'contractDocument', id: m[1] };
+  if ((m = /^\/contracts\/([^/]+)\/ldf-blend\/[^/]+$/.exec(path))) return { entityType: 'CONTRACT', entityId: m[1] };
   if (/^\/pricing\/save$/.test(path) || /^\/straight-stats\/save$/.test(path)) return { entityType: 'CONTRACT', entityId: '@body' };
   if ((m = /^\/pricing\/component-snapshot\/([^/]+)/.exec(path))) return { resolve: 'pricingSnapshot', id: m[1] };
   if ((m = /^\/pricing\/([^/]+)\/component-snapshot$/.exec(path))) return { entityType: 'CONTRACT', entityId: m[1] };

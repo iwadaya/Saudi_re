@@ -72,6 +72,29 @@ describe('verifyNpPricingOutputs', () => {
     expect(drifts.filter((d) => d.field === 'weights_sum')).toEqual([]);
   });
 
+  it('parses formatted pricing strings the same way as the canonical shared formula', () => {
+    const formatted = row({
+      pure_burning_cost: '3.00%',
+      pareto_pricing: '1.00%',
+      exposure_rating: '5.00%',
+      burn_weight_pct: '40%',
+      pareto_weight_pct: '20%',
+      exposure_weight_pct: '40%',
+      pricing_loading_pct: '20%',
+    });
+    formatted.total_price = deriveComponentTotal(
+      formatted.pure_burning_cost,
+      formatted.pareto_pricing,
+      formatted.exposure_rating,
+      formatted.burn_weight_pct,
+      formatted.pareto_weight_pct,
+      formatted.exposure_weight_pct,
+      formatted.pricing_loading_pct,
+    );
+
+    expect(verifyNpPricingOutputs([formatted])).toEqual([]);
+  });
+
   it('handles zero values cleanly (no false positive)', () => {
     const drifts = verifyNpPricingOutputs([row({
       pure_burning_cost: 0, pareto_pricing: 0, exposure_rating: 0, total_price: 0,

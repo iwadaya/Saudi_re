@@ -6,6 +6,7 @@ import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { asyncHandler } from '../helpers.js';
 import { validateBody } from '../lib/validate.js';
+import { assertCanEdit } from '../services/permissions.js';
 import {
   computeBlendedLdfCurve,
   saveContractLdfBlend,
@@ -119,6 +120,8 @@ router.put(
 
     const ctx = await loadContractContext(req.params.contractId);
     if (!ctx) return res.status(404).json({ error: 'Contract not found' });
+
+    await assertCanEdit(req, 'CONTRACT', req.params.contractId);
 
     const blendId = await saveContractLdfBlend(pool, {
       contractId: req.params.contractId,

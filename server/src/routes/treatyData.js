@@ -7,6 +7,7 @@ import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from
 import { stripTriangleCells, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from '../lib/triangleStripping.js';
 import { suggestLossQuarters } from '../lib/lossQuarterMapper.js';
 import { logAudit } from '../services/audit.js';
+import { assertCanEdit, getEditPermission } from '../services/permissions.js';
 import { actorFromReq } from '../middleware/requestContext.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
@@ -739,6 +740,36 @@ router.get("/treaties/:id/cedant-exposure", asyncHandler(async (req, res) => {
 // Always use memory storage — the helper decides where the bytes land.
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
+function documentEntity(doc) {
+  if (doc?.contract_id) return { entityType: 'CONTRACT', entityId: doc.contract_id };
+  if (doc?.quote_id) return { entityType: 'QUOTE', entityId: doc.quote_id };
+  return null;
+}
+
+async function loadDocumentForAccess(req, docId, { write = false } = {}) {
+  const { rows } = await pool.query(`SELECT * FROM public.contract_document WHERE document_id=$1`, [docId]);
+  if (!rows.length) return null;
+
+  const doc = rows[0];
+  const owner = documentEntity(doc);
+  if (!owner) {
+    throw Object.assign(new Error('Document has no owning treaty or quote'), { status: 404, code: 'DOCUMENT_OWNER_NOT_FOUND' });
+  }
+
+  if (write) {
+    await assertCanEdit(req, owner.entityType, owner.entityId);
+    return doc;
+  }
+
+  const isSupervisor = req.user?.isSupervisor === true || Number(req.user?.hierarchyLevel) <= 2;
+  if (isSupervisor) return doc;
+
+  const permission = await getEditPermission(req, owner.entityType, owner.entityId);
+  if (permission.canEdit) return doc;
+
+  throw Object.assign(new Error('You do not have access to this document.'), { status: 403, code: 'FORBIDDEN' });
+}
+
 router.get("/treaties/:id/documents", asyncHandler(async (req, res) => {
   const {rows}=await pool.query(`SELECT document_id,file_name,mime_type,size_bytes,description,doc_type,title,storage_path,uploaded_at FROM public.contract_document WHERE contract_id=$1 ORDER BY uploaded_at DESC`,[req.params.id]);
   res.json(rows);
@@ -786,10 +817,11 @@ router.post("/treaties/:id/wording-checklist/ai-check", asyncHandler(async (req,
 }));
 
 router.delete("/documents/:docId", asyncHandler(async (req, res) => {
-  const {rows}=await pool.query(`SELECT storage_path FROM public.contract_document WHERE document_id=$1`,[req.params.docId]);
+  const doc = await loadDocumentForAccess(req, req.params.docId, { write: true });
+  if (!doc) return res.status(404).json({error:"Document not found"});
   const {rowCount}=await pool.query(`DELETE FROM public.contract_document WHERE document_id=$1`,[req.params.docId]);
   if(!rowCount) return res.status(404).json({error:"Document not found"});
-  const sp = rows[0]?.storage_path || '';
+  const sp = doc.storage_path || '';
   // Best-effort cleanup — the DB row is already gone, so any failure
   // here is a logged disk-space leak, not a request failure.
   deleteUploadedFile(sp).catch((err) => {
@@ -799,9 +831,8 @@ router.delete("/documents/:docId", asyncHandler(async (req, res) => {
 }));
 
 async function serveDoc(req, res) {
-  const {rows}=await pool.query(`SELECT * FROM public.contract_document WHERE document_id=$1`,[req.params.docId]);
-  if(!rows.length) return res.status(404).json({error:"Document not found"});
-  const doc = rows[0];
+  const doc = await loadDocumentForAccess(req, req.params.docId);
+  if(!doc) return res.status(404).json({error:"Document not found"});
   const sp = doc.storage_path || '';
   // Cloudinary URL — redirect directly
   if (isRemoteStoragePath(sp)) {
@@ -828,11 +859,8 @@ router.get("/documents/:docId/view",     asyncHandler(serveDoc));
 
 // ── Document text extraction endpoint ──
 router.get("/documents/:docId/text", asyncHandler(async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT * FROM public.contract_document WHERE document_id=$1`, [req.params.docId]
-  );
-  if (!rows.length) return res.status(404).json({ error: "Document not found" });
-  const doc = rows[0];
+  const doc = await loadDocumentForAccess(req, req.params.docId);
+  if (!doc) return res.status(404).json({ error: "Document not found" });
   const sp = doc.storage_path || '';
   let buffer = null;
 

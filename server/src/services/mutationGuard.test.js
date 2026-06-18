@@ -18,6 +18,7 @@ poolMock.query.mockImplementation((sql) => {
   if (sql.includes('fac_document WHERE document_id')) return P([{ id: 'risk-9' }]);
   if (sql.includes('fac_ai_recommendation WHERE recommendation_id')) return P([{ id: 'risk-9' }]);
   if (sql.includes('pricing_component_snapshots WHERE id')) return P([{ id: 'contract-9' }]);
+  if (sql.includes('contract_document')) return P([{ id: 'contract-9', entity_type: 'CONTRACT' }]);
   if (sql.includes('owner_level')) return P([{ assigned_to_user_id: 'owner', owner_level: 5, assigned_to_name: 'Owner' }]);
   return P([]);
 });
@@ -60,6 +61,8 @@ const GUARDED = [
   ['POST', '/api/fac/risks/f1/clauses-checklist'],
   ['POST', '/api/fac/risks/f1/submit-for-approval'],
   ['DELETE', '/api/pricing/component-snapshot/s1'],
+  ['DELETE', '/api/documents/d1'],
+  ['PUT', '/api/contracts/c1/ldf-blend/CLAIMS_PAID'],
 ];
 
 describe('guardApiMutations — non-assignee is blocked', () => {
@@ -84,6 +87,7 @@ describe('guardApiMutations — assignee + reads + workflow pass', () => {
     expect((await send(ro, 'GET', '/api/quotes/q1/dev-factors/risk')).status).toBe(200);
     // approval-workflow decision is an approver action — not assignee-gated
     expect((await send(ro, 'POST', '/api/treaties/c1/offer/peer-decision', {})).status).toBe(200);
+    expect((await send(ro, 'POST', '/api/contracts/c1/assign', {})).status).toBe(200); // assignment service owns authority
     expect((await send(ro, 'POST', '/api/quotes/q1/renew', {})).status).toBe(200); // create
   });
 });
@@ -91,7 +95,55 @@ describe('guardApiMutations — assignee + reads + workflow pass', () => {
 describe('registry: no mutating route falls through unguarded', () => {
   const dir = path.dirname(fileURLToPath(import.meta.url));
   const routesDir = path.resolve(dir, '../routes');
-  const files = ['quotes.js', 'treaties.js', 'pricing.js', 'facultative.js'];
+  const files = [
+    'ai.js',
+    'aiCedant.js',
+    'aiMarket.js',
+    'assignments.js',
+    'clientEvents.js',
+    'facultative.js',
+    'lookups.js',
+    'ldfBlending.js',
+    'nonProp.js',
+    'pricing.js',
+    'quoteLifecycle.js',
+    'quotes.js',
+    'renewalPackImport.js',
+    'treaties.js',
+    'treatyData.js',
+    'workbench.js',
+  ];
+  const explicitlyOwnedElsewhere = new Set([
+    // Auth is registered before the blanket mutation guard and self-gates.
+    'POST /auth/users (auth.js)',
+    'PATCH /auth/users/:id (auth.js)',
+    'PUT /auth/mandates/:userId (auth.js)',
+    // Role-gated formula governance, not treaty/quote edit-lock territory.
+    'POST /workbench/parameters (workbench.js)',
+    'PUT /workbench/parameters/:id/approve (workbench.js)',
+    'PUT /workbench/parameters/:id/reject (workbench.js)',
+    'POST /workbench/comments (workbench.js)',
+    // Operational/reference endpoints with their own route-level semantics.
+    'POST /client-events (clientEvents.js)',
+    'DELETE /ref/cache (lookups.js)',
+    'PUT /ref/exchange-rates/:code (lookups.js)',
+    // AI/reference routes are authenticated tools, not direct entity mutators.
+    'POST /ai/slip-ingest (ai.js)',
+    'POST /ai/complete (ai.js)',
+    'POST /ai/analyse-json (ai.js)',
+    'POST /ai/fac/analyse-document (ai.js)',
+    'POST /ai/cedant/:cedantId/portfolio-recommendations (aiCedant.js)',
+    'POST /ai/cedant/recommendation/:rec_id/reject (aiCedant.js)',
+    'POST /cedants/:cedantId/staging (aiCedant.js)',
+    'POST /cedants/:cedantId/staging/:staging_id/discard (aiCedant.js)',
+    'POST /cedants/:cedantId/staging/commit-all (aiCedant.js)',
+    'POST /ai/market/generate-report (aiMarket.js)',
+    'POST /ai/market/treaty-recommendations (aiMarket.js)',
+    'POST /ai/market/recommendation/:rec_id/stage (aiMarket.js)',
+    'POST /ai/market/recommendation/:rec_id/reject (aiMarket.js)',
+    'POST /ai/market/log-view (aiMarket.js)',
+    'POST /ai/market/structure-commentary (aiMarket.js)',
+  ]);
   const re = /router\.(post|put|patch|delete)\(\s*['"]([^'"]+)['"]/g;
 
   it('every POST/PUT/PATCH/DELETE classifies as guarded, exempt, or create', () => {
@@ -101,7 +153,8 @@ describe('registry: no mutating route falls through unguarded', () => {
       let m;
       while ((m = re.exec(src)) !== null) {
         const cls = classifyMutationPath(m[2]);
-        if (cls === null) unmatched.push(`${m[1].toUpperCase()} ${m[2]} (${f})`);
+        const label = `${m[1].toUpperCase()} ${m[2]} (${f})`;
+        if (cls === null && !explicitlyOwnedElsewhere.has(label)) unmatched.push(label);
       }
     }
     expect(unmatched).toEqual([]);
