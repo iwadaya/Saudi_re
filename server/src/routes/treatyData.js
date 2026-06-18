@@ -577,30 +577,28 @@ router.put("/treaties/:id/loss-selection/:lossType/snapshot", asyncHandler(async
     );
     const snap=rows[0];
 
-    if(selected_losses.length){
-      for(const l of selected_losses){
-        await cl.query(
-          `INSERT INTO public.contract_loss_selection_snapshot_item
-            (snapshot_id, uw_year, insured_name, loss_name, date_of_loss, class_of_business,
-             paid, os, incurred, inflation_factor, inflated_incurred, source_loss_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-          [
-            snap.snapshot_id,
-            l.uw_year||null,
-            l.insured_name||null,
-            l.loss_name||null,
-            parseDateFlex(l.date_of_loss)||null,
-            l.class_of_business||null,
-            numOrNull(l.paid)||0,
-            numOrNull(l.os)||0,
-            numOrNull(l.incurred)||0,
-            numOrNull(l.inflation_factor)||1,
-            numOrNull(l.inflated)||numOrNull(l.inflated_incurred)||null,
-            l.loss_id||l.source_loss_id||null,
-          ]
-        );
-      }
-    }
+    const selectionItemsInsert = buildBatchInsert({
+      table: 'public.contract_loss_selection_snapshot_item',
+      columns: [
+        'snapshot_id', 'uw_year', 'insured_name', 'loss_name', 'date_of_loss', 'class_of_business',
+        'paid', 'os', 'incurred', 'inflation_factor', 'inflated_incurred', 'source_loss_id',
+      ],
+      rows: selected_losses.map((l) => [
+        l.uw_year || null,
+        l.insured_name || null,
+        l.loss_name || null,
+        parseDateFlex(l.date_of_loss) || null,
+        l.class_of_business || null,
+        numOrNull(l.paid) || 0,
+        numOrNull(l.os) || 0,
+        numOrNull(l.incurred) || 0,
+        numOrNull(l.inflation_factor) || 1,
+        numOrNull(l.inflated) || numOrNull(l.inflated_incurred) || null,
+        l.loss_id || l.source_loss_id || null,
+      ]),
+      leadingId: snap.snapshot_id,
+    });
+    if (selectionItemsInsert) await cl.query(selectionItemsInsert.sql, selectionItemsInsert.params);
     // Mark the selection as saved now so the staleness check can tell whether
     // losses have been edited since. Upsert so it persists even if Loss
     // Selection is reached before the detail screen created the row.

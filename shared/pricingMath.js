@@ -136,8 +136,48 @@ export function clamp(n, min, max) {
  * @returns {number}
  */
 export function parsePricingNumber(v) {
-  const n = parseFloat(String(v ?? '').replace(/[^\d.-]/g, ''));
-  return Number.isFinite(n) ? n : 0;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+
+  let s = String(v ?? '').trim();
+  if (!s) return 0;
+
+  const accountingNegative = /^\(.*\)$/.test(s);
+  s = s
+    .replace(/^\((.*)\)$/, '$1')
+    .replace(/[\s'_]/g, '')
+    .replace(/[^\d,.-]/g, '');
+
+  if (!s || s === '-' || s === '.' || s === ',') return 0;
+
+  const sign = s.startsWith('-') ? -1 : 1;
+  s = s.replace(/-/g, '');
+
+  const lastDot = s.lastIndexOf('.');
+  const lastComma = s.lastIndexOf(',');
+
+  if (lastDot !== -1 && lastComma !== -1) {
+    // Decimal separator is whichever appears last; the other separator is
+    // thousands. Handles both 1,234.56 and 1.234,56 deterministically.
+    const decimalSep = lastDot > lastComma ? '.' : ',';
+    const thousandsSep = decimalSep === '.' ? ',' : '.';
+    s = s.replaceAll(thousandsSep, '');
+    if (decimalSep === ',') s = s.replace(',', '.');
+  } else if (lastComma !== -1) {
+    const parts = s.split(',');
+    const tail = parts.at(-1) || '';
+    if (parts.length > 2 || tail.length === 3) {
+      s = parts.join('');
+    } else {
+      s = `${parts.slice(0, -1).join('')}.${tail}`;
+    }
+  } else if ((s.match(/\./g) || []).length > 1) {
+    const parts = s.split('.');
+    s = `${parts.slice(0, -1).join('')}.${parts.at(-1)}`;
+  }
+
+  const n = Number(s);
+  const signed = (accountingNegative ? -1 : sign) * n;
+  return Number.isFinite(signed) ? signed : 0;
 }
 
 

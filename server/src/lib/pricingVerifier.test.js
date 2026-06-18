@@ -95,6 +95,29 @@ describe('verifyNpPricingOutputs', () => {
     expect(verifyNpPricingOutputs([formatted])).toEqual([]);
   });
 
+  it('parses European decimal formatted strings without verifier drift', () => {
+    const formatted = row({
+      pure_burning_cost: '1,5',
+      pareto_pricing: '2,5',
+      exposure_rating: '3,5',
+      burn_weight_pct: '30',
+      pareto_weight_pct: '30',
+      exposure_weight_pct: '40',
+      pricing_loading_pct: '10',
+    });
+    formatted.total_price = deriveComponentTotal(
+      formatted.pure_burning_cost,
+      formatted.pareto_pricing,
+      formatted.exposure_rating,
+      formatted.burn_weight_pct,
+      formatted.pareto_weight_pct,
+      formatted.exposure_weight_pct,
+      formatted.pricing_loading_pct,
+    );
+
+    expect(verifyNpPricingOutputs([formatted])).toEqual([]);
+  });
+
   it('handles zero values cleanly (no false positive)', () => {
     const drifts = verifyNpPricingOutputs([row({
       pure_burning_cost: 0, pareto_pricing: 0, exposure_rating: 0, total_price: 0,

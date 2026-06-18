@@ -11,6 +11,7 @@ import {
   premiumFromRol,
   clamp,
   applyLoading,
+  parsePricingNumber,
   deriveComponentTotal,
   attachmentFromLossRatio,
   erf,
@@ -126,6 +127,24 @@ describe('applyLoading', () => {
   });
 });
 
+describe('parsePricingNumber', () => {
+  it('parses common US/UK formatted values', () => {
+    expect(parsePricingNumber('1,250')).toBe(1250);
+    expect(parsePricingNumber('$1,234.56')).toBeCloseTo(1234.56, 10);
+    expect(parsePricingNumber('10.00%')).toBe(10);
+  });
+
+  it('parses European decimal formats accurately', () => {
+    expect(parsePricingNumber('1.234,56')).toBeCloseTo(1234.56, 10);
+    expect(parsePricingNumber('1 234,56')).toBeCloseTo(1234.56, 10);
+  });
+
+  it('handles accounting negatives without producing NaN', () => {
+    expect(parsePricingNumber('(1,234.56)')).toBeCloseTo(-1234.56, 10);
+    expect(parsePricingNumber('n/a')).toBe(0);
+  });
+});
+
 describe('deriveComponentTotal (3-way blend)', () => {
   // 3-way blend: each component (burn / pareto / exposure) has its own
   // weight; the formula divides by Σ weights so weights need not sum
@@ -189,6 +208,10 @@ describe('deriveComponentTotal (3-way blend)', () => {
     // Same scenario as the integer test: 40·10 + 20·2 + 40·5 / 100 = 6.4
     // loaded = 6.4 / (1 - 0.20) = 8.0
     expect(deriveComponentTotal('10.00%', '2.00%', '5.00%', '40', '20', '40', '20')).toBeCloseTo(8.0, 6);
+  });
+
+  it('parses European decimal strings consistently before blending', () => {
+    expect(deriveComponentTotal('1,5', '2,5', '3,5', '30', '30', '40', '10')).toBeCloseTo(2.8888888889, 6);
   });
 });
 

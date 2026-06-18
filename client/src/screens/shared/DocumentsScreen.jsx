@@ -71,6 +71,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
   const [parentId,    setParentId]    = useState(null);
   const [dragFile,    setDragFile]    = useState(null); // file from drag — no hidden input needed
   const [loadError,   setLoadError]   = useState('');
+  const [loadingDocs, setLoadingDocs] = useState(false);
   const fileRef = useRef(null);
 
   // ── Renewal-pack import state ─────────────────────────────────────────────
@@ -92,6 +93,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
 
   const load = useCallback(async () => {
     if (!contractId) return;
+    setLoadingDocs(true);
     try {
       const d = await api.getDocuments(contractId, apiOpts);
       setDocs(Array.isArray(d) ? d : []);
@@ -107,6 +109,8 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
       setLoadError(msg);
       showToast(msg, 5000);
       console.error('[DocumentsScreen] getDocuments failed:', e);
+    } finally {
+      setLoadingDocs(false);
     }
   }, [apiOpts, contractId, quoteMode, showToast]);
 
@@ -334,6 +338,13 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
 
   const currentFile = dragFile || (fileRef.current?.files?.[0]);
   const entityLabel = quoteMode ? 'Quote' : 'Treaty';
+  const renewalPackCount = docs.filter(isRenewalPack).length;
+  const wordingCount = docs.filter((d) => WORDING_PRIORITY.includes(d.doc_type)).length;
+  const statChip = (label, value, accent = false) => (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 9px', borderRadius:999, border:`1px solid ${accent ? 'rgba(var(--accent-rgb), 0.35)' : 'var(--stroke-soft)'}`, background: accent ? 'rgba(var(--accent-rgb), 0.07)' : 'var(--surface-muted)', color: accent ? 'var(--accent)' : 'var(--muted)', fontSize:11, fontWeight:800 }}>
+      <span style={{ color:'var(--text)', fontVariantNumeric:'tabular-nums' }}>{value}</span>{label}
+    </span>
+  );
 
   return (
     // uploads are fire-and-forget — no onBeforeNext needed
@@ -348,10 +359,17 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
           <div style={{ fontSize:12, color:'var(--muted)', marginBottom:16, marginTop:4 }}>
             <span style={{ fontWeight:700 }}>{entityLabel.toUpperCase()} ID:</span>{' '}<span style={{ fontFamily:'var(--font-mono)', opacity:0.8 }}>{contractId||'—'}</span>
           </div>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:16 }}>
+            {statChip('documents', docs.length, docs.length > 0)}
+            {statChip('renewal packs', renewalPackCount)}
+            {statChip('wording slips', wordingCount)}
+            {loadingDocs && statChip('loading', '...', true)}
+          </div>
 
           {loadError && (
-            <div role="alert" style={{ borderRadius:14, border:'1px solid rgba(var(--accent-rose-rgb), 0.40)', background:'rgba(var(--accent-rose-rgb), 0.08)', color:'var(--text)', padding:'10px 12px', marginBottom:16, fontSize:12, fontWeight:700 }}>
-              {loadError}
+            <div role="alert" style={{ display:'flex', alignItems:'flex-start', gap:10, borderRadius:14, border:'1px solid rgba(var(--accent-rose-rgb), 0.40)', background:'rgba(var(--accent-rose-rgb), 0.08)', color:'var(--text)', padding:'10px 12px', marginBottom:16, fontSize:12, fontWeight:700 }}>
+              <span style={{ width:20, height:20, borderRadius:999, display:'grid', placeItems:'center', flexShrink:0, background:'rgba(var(--accent-rose-rgb), 0.14)', color:'var(--accent-rose)' }}>!</span>
+              <span>{loadError}</span>
             </div>
           )}
 
@@ -426,7 +444,11 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
             </div>
 
             {docs.length === 0 ? (
-              <div style={{ color:'var(--muted-2)', fontSize:13, padding:'10px 0' }}>No documents uploaded yet.</div>
+              <div style={{ borderRadius:16, border:'1px dashed var(--stroke-soft)', background:'var(--surface-muted)', color:'var(--muted)', fontSize:13, padding:'22px', display:'grid', gap:8, justifyItems:'center', textAlign:'center' }}>
+                <div style={{ width:42, height:42, borderRadius:14, display:'grid', placeItems:'center', border:'1px solid rgba(var(--accent-rgb), 0.25)', background:'rgba(var(--accent-rgb), 0.06)', color:'var(--accent)', fontWeight:900 }}>0</div>
+                <div style={{ fontWeight:900, color:'var(--text)' }}>{loadingDocs ? 'Loading documents...' : 'No documents uploaded yet'}</div>
+                <div style={{ maxWidth:460, color:'var(--muted-2)' }}>Drop a slip, wording, renewal pack, account, or bordereaux above to keep this {entityLabel.toLowerCase()} file set complete and review-ready.</div>
+              </div>
             ) : (
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                 <thead>
