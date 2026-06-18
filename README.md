@@ -27,6 +27,27 @@ npm start
 
 The Express server serves the built SPA from `client/dist` and exposes API routes under `/api`.
 
+## Testing
+```bash
+npm run test:server   # server unit tests (DB integration tests skip without TEST_WITH_DB=1)
+npm run build --prefix client && npm run test:client   # client tests need a built dist/
+npm run verify        # full gate: lint + typecheck + budget + server tests + build + client coverage
+```
+
+DB-backed integration tests (`server/tests/integration/*`) only run when
+`TEST_WITH_DB=1` and a `DATABASE_URL` points at a disposable Postgres. The
+easiest way is the helper script, which creates the DB if needed, runs the
+migrations, and runs the suite — the same steps CI's `integration` job uses:
+
+```bash
+scripts/test-db.sh
+# or point at an existing database:
+DATABASE_URL=postgres://user:pass@host:5432/reinsurance_tool_test scripts/test-db.sh
+```
+
+See `CONTRIBUTING.md` → _Database integration tests_ for the manual steps and
+conventions for adding new ones.
+
 ## Environment variables
 - `PORT`: HTTP port for the server
 - `DATABASE_URL`: PostgreSQL connection string

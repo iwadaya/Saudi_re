@@ -24,10 +24,16 @@ npm start             # serve client/dist via the express server
 | `npm run lint`        | ESLint on the whole tree, fails on errors only |
 | `npm run lint:fix`    | Auto-fix the easy ones |
 | `npm test`            | Both vitest suites (server + client) |
-| `npm run test:server` | Server suite only |
-| `npm run test:client` | Client suite only |
+| `npm run test:server` | Server suite only (DB integration tests skip unless `TEST_WITH_DB=1`) |
+| `npm run test:client` | Client suite only — **build the client first** (see below) |
 | `npm run test:watch`  | Server suite in watch mode |
-| `npm run verify`      | lint + test in one shot — what CI runs |
+| `scripts/test-db.sh`  | Stand up a local Postgres test DB, migrate, and run the server suite with `TEST_WITH_DB=1` |
+| `npm run verify`      | lint + typecheck + budget + server tests + build + client coverage — what CI runs |
+
+> `npm run verify` runs the **default** server suite, which skips the DB
+> integration tests. Run `scripts/test-db.sh` (or the manual steps under
+> _Database integration tests_ below) separately to exercise them — CI runs
+> them in a dedicated `integration` job against a `postgres:16` service.
 
 ## Where things live
 
@@ -85,6 +91,36 @@ server/
 - Use Vitest's `describe`/`it`/`expect`/`vi`. Don't add jest.
 - Pure helpers should have golden-file tests with hand-computed expected values.
 - Components that own form state should be tested via `@testing-library/react` for accessibility (roles + labels) more than for visual regression.
+
+#### Database integration tests
+Integration tests that hit a real Postgres live in `server/tests/integration/*.integration.test.js`.
+They are gated by `TEST_WITH_DB=1` (via `shouldSkipDb` in `helpers.js`) so the
+default `npm test` stays zero-infra — without the flag they **skip**, they do not
+fail. To run them:
+
+```bash
+# One command — creates the DB if needed, migrates, runs the suite:
+scripts/test-db.sh
+
+# …or manually, against any disposable Postgres:
+createdb reinsurance_tool_test
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/reinsurance_tool_test \
+  npm run migrate --prefix server
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/reinsurance_tool_test \
+  TEST_WITH_DB=1 npm run test:server
+```
+
+New integration tests should: gate with `describe.skipIf(shouldSkipDb)`, seed
+their own FK targets with `seedRefs()` from `helpers.js` (each call seeds fresh
+uniquely-named rows so parallel files never collide), boot the app with
+`bootApp()`, and `closePools()` in the last file's `afterAll`. Prefer asserting
+through the HTTP routes (round-trip a PUT then a GET) over poking tables directly.
+
+#### Build the client before running client tests
+`npm run test:client` includes `bundleBudget.test.js`, which asserts on the real
+`client/dist` bundle and **fails (not skips)** when `dist/` is absent. Always
+`npm run build --prefix client` first (this is exactly what `npm run verify` and
+the CI `lint + unit` job do).
 
 ### Logging
 - Server: import `logger` from `server/src/lib/logger.js`. Don't `console.log` in production code (lint warns).
