@@ -19,6 +19,7 @@ import { storeUploadedFile } from '../lib/uploadStorage.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
 import { assertCanEdit } from '../services/permissions.js';
 import { approveQuote, returnToUnderwriter, recallOffer, markNotTakenUp } from '../services/approvals.js';
+import { declineQuoteAction, submitQuoteForApprovalAction } from '../services/quoteWorkflow.js';
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
 import { verifyNpPricingOutputs, summariseDrifts, isStrictMode, pricingDriftStats } from '../lib/pricingVerifier.js';
 import { getWordingChecklist, runWordingChecklistAi, saveWordingChecklist } from '../services/wordingChecklist.js';
@@ -1499,60 +1500,23 @@ router.put("/quotes/:id/np-pricing", ...npQuoteGuard, asyncHandler(async (req, r
 
 // Offer workflow (decline, submit, approve, sign, NTU, return-to-UW)
 router.post("/quotes/:id/decline", asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { reason } = req.body;
-  const actor = await resolveAuditActor(req);
-  await pool.query(`UPDATE public.quote SET status='DECLINED',decline_reason=$2,declined_at=now(),updated_at=now() WHERE quote_id=$1`,[id,reason||null]);
-  await pool.query(`UPDATE public.quote_offer SET status='DECLINED',decline_reason=$2,updated_at=now() WHERE quote_id=$1`,[id,reason||null]).catch(()=>{});
-  await pool.query(`INSERT INTO public.offer_approval_event (quote_id,event_type,actor_user_id,actor_name,actor_role,comment) VALUES ($1,'DECLINED',$2,$3,$4,$5)`,[id,actor.actorUserId,actor.actorName,actor.actorRole,reason||null]).catch(()=>{});
-  res.json({ok:true});
-}));
-router.post("/quotes/:id/offer/submit-for-approval", asyncHandler(async (req, res) => {
+  // Parity with treaty decline: one transaction (status + quote_offer + event +
+  // critical audit), legal-transition guard (422 on a terminal pre-state),
+  // authority via assertCanEdit. Actor identity is the verified req.user.
   const { id } = req.params;
   await assertCanEdit(req, 'QUOTE', id);
-  const { comment, written_line_pct, line_pct } = req.body;
-  const approver = req.body.approver || req.body.peer1_user_id || null; // client sends peer1_user_id
-  // Parse line_pct: may be JSON per-layer map (NP) or plain number (PROP)
-  const wlPct = (() => {
-    if (written_line_pct != null) return numOrNull(written_line_pct);
-    if (line_pct == null) return null;
-    const n = numOrNull(line_pct);
-    if (n !== null) return n;
-    try {
-      const parsed = JSON.parse(line_pct);
-      if (typeof parsed === 'object') {
-        const vals = Object.values(parsed).map(v => parseFloat(String(v).replace(/%/g,''))).filter(n => Number.isFinite(n) && n > 0);
-        return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
-      }
-    } catch {}
-    return null;
-  })();
-  // Update quote status and next_approver
-  await pool.query(
-    `UPDATE public.quote SET status='AWAITING_APPROVAL', next_approver=$2, updated_at=now() WHERE quote_id=$1`,
-    [id, approver || null]
-  ).catch(() => pool.query(`UPDATE public.quote SET status='AWAITING_APPROVAL', updated_at=now() WHERE quote_id=$1`, [id]));
-  // Persist written line to quote_offer
-  await pool.query(
-    `INSERT INTO public.quote_offer (quote_id, written_line_pct, next_approver, status, updated_at)
-     VALUES ($1, $2, $3, 'AWAITING_APPROVAL', now())
-     ON CONFLICT (quote_id) DO UPDATE SET
-       written_line_pct = COALESCE(EXCLUDED.written_line_pct, quote_offer.written_line_pct),
-       next_approver    = EXCLUDED.next_approver,
-       status           = 'AWAITING_APPROVAL',
-       updated_at       = now()`,
-    [id, wlPct, approver || null]
-  ).catch(() => {});
-  // Write audit event — actor from verified identity, never client headers/body.
   const actor = await resolveAuditActor(req);
-  await pool.query(
-    `INSERT INTO public.offer_approval_event (quote_id,event_type,actor_user_id,actor_name,actor_role,comment,payload)
-     VALUES ($1,'SUBMITTED_FOR_APPROVAL',$2,$3,$4,$5,$6)`,
-    [id, actor.actorUserId, actor.actorName, actor.actorRole,
-     comment || null,
-     JSON.stringify({ written_line_pct: wlPct, approver: approver || null })]
-  ).catch(() => {});
-  res.json({ ok: true });
+  const result = await declineQuoteAction(id, actor, req.body?.reason);
+  res.json({ ok: true, ...result });
+}));
+router.post("/quotes/:id/offer/submit-for-approval", asyncHandler(async (req, res) => {
+  // Parity with treaty submit: one transaction (quote status + quote_offer +
+  // event + critical audit), legal-transition guard (422 unless DRAFT/re-submit).
+  const { id } = req.params;
+  await assertCanEdit(req, 'QUOTE', id);
+  const actor = await resolveAuditActor(req);
+  const result = await submitQuoteForApprovalAction(id, actor, req.body || {});
+  res.json({ ok: true, ...result });
 }));
 
 router.post("/quotes/:id/offer/mark-approved", asyncHandler(async (req, res) => {
