@@ -292,6 +292,33 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
     return PY1 - ((v - yLo) / ((yHi - yLo) || 1)) * (PY1 - PY0);
   };
 
+  // Axis ticks: 1·2·5 per decade within range in log mode, even divisions
+  // (n steps) in linear mode.
+  const logTicks = (lo, hi) => {
+    const out = [];
+    for (let d = Math.floor(lg(lo)); d <= Math.ceil(lg(hi)); d += 1) {
+      for (const m of [1, 2, 5]) {
+        const v = m * (10 ** d);
+        if (v >= lo * 0.999 && v <= hi * 1.001) out.push(v);
+      }
+    }
+    return out;
+  };
+  const linTicks = (lo, hi, n = 5) => {
+    const step = (hi - lo) / n || 1;
+    return Array.from({ length: n + 1 }, (_, i) => lo + step * i);
+  };
+  const xTicks = logScale ? logTicks(xLo, xHi) : linTicks(xLo, xHi);
+  const yTicks = logScale ? logTicks(yLo, yHi) : linTicks(Math.max(yLo, 0), yHi);
+
+  // The SVG uses preserveAspectRatio="none", so any in-SVG <text> would stretch
+  // horizontally. Labels are rendered as an HTML overlay positioned in wrapper
+  // %; convert viewBox coords (100 wide × 72 tall) → percentages.
+  const pctX = (vb) => vb;                 // viewBox x is already 0..100
+  const pctY = (vb) => (vb / 72) * 100;
+  const fmtTickX = (v) => `${Number(v.toPrecision(2))}`;   // ~2 significant digits
+  const fmtTickY = (v) => `${Number((v * 100).toPrecision(2))}%`; // ROL %
+
   // ── Underlying treaties, rolled up from the selected reinsurers' layers ──
   const treatyRows = useMemo(() => {
     const map = new Map();
@@ -551,25 +578,48 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
                       </button>
                     </div>
                   </div>
-                  <svg viewBox="0 0 100 72" style={{ width: '100%', height: 'min(52vh, 460px)', minHeight: 360, display: 'block', background: 'rgba(0,0,0,0.20)', borderRadius: 8 }} preserveAspectRatio="none">
-                    {[12, 24, 36, 48, 60].map((g) => (<line key={`gy${g}`} x1={6} y1={g} x2={98} y2={g} stroke="rgba(255,255,255,0.06)" strokeWidth="1" shapeRendering="crispEdges" vectorEffect="non-scaling-stroke" />))}
-                    {[20, 40, 60, 80].map((g) => (<line key={`gx${g}`} x1={g} y1={6} x2={g} y2={66} stroke="rgba(255,255,255,0.06)" strokeWidth="1" shapeRendering="crispEdges" vectorEffect="non-scaling-stroke" />))}
-                    {/* Faded per-reinsurer scatter */}
-                    {series.flatMap((s) => s.pts.map((p, i) => (
-                      <circle key={`${s.key}-${i}`} cx={X(p.x)} cy={Y(p.y)} r="0.55" fill={s.color} fillOpacity={0.4} />
-                    )))}
-                    {/* Fitted curves — Global drawn dashed/grey + thinner */}
-                    {sampled.map(({ s, pts }) => {
-                      const d = pts.length ? `M ${pts.map((p) => `${X(p.x).toFixed(2)} ${Y(p.y).toFixed(2)}`).join(' L ')}` : '';
-                      return (
-                        <path key={s.key} d={d} stroke={s.color}
-                          strokeWidth={s.isGlobal ? '1.4' : '2.2'}
-                          strokeDasharray={s.isGlobal ? '4 3' : '0'}
-                          strokeLinejoin="round" strokeLinecap="round" fill="none"
-                          strokeOpacity={s.isGlobal ? 0.8 : 1} vectorEffect="non-scaling-stroke" />
-                      );
-                    })}
-                  </svg>
+                  <div style={{ position: 'relative', width: '100%', height: 'min(52vh, 460px)', minHeight: 360 }}>
+                    <svg viewBox="0 0 100 72" style={{ width: '100%', height: '100%', display: 'block', background: 'rgba(0,0,0,0.20)', borderRadius: 8 }} preserveAspectRatio="none">
+                      <defs>
+                        <clipPath id="ra-plot-clip">
+                          <rect x={PX0} y={PY0} width={PX1 - PX0} height={PY1 - PY0} />
+                        </clipPath>
+                      </defs>
+                      {/* Gridlines at computed ticks */}
+                      {yTicks.map((t) => (
+                        <line key={`gy${t}`} x1={PX0} y1={Y(t)} x2={PX1} y2={Y(t)} stroke="rgba(255,255,255,0.06)" strokeWidth="1" shapeRendering="crispEdges" vectorEffect="non-scaling-stroke" />
+                      ))}
+                      {xTicks.map((t) => (
+                        <line key={`gx${t}`} x1={X(t)} y1={PY0} x2={X(t)} y2={PY1} stroke="rgba(255,255,255,0.06)" strokeWidth="1" shapeRendering="crispEdges" vectorEffect="non-scaling-stroke" />
+                      ))}
+                      {/* Plot contents clipped to the frame so they never spill past the axes */}
+                      <g clipPath="url(#ra-plot-clip)">
+                        {/* Faded per-reinsurer scatter */}
+                        {series.flatMap((s) => s.pts.map((p, i) => (
+                          <circle key={`${s.key}-${i}`} cx={X(p.x)} cy={Y(p.y)} r="0.55" fill={s.color} fillOpacity={0.4} />
+                        )))}
+                        {/* Fitted curves — Global drawn dashed/grey + thinner */}
+                        {sampled.map(({ s, pts }) => {
+                          const d = pts.length ? `M ${pts.map((p) => `${X(p.x).toFixed(2)} ${Y(p.y).toFixed(2)}`).join(' L ')}` : '';
+                          return (
+                            <path key={s.key} d={d} stroke={s.color}
+                              strokeWidth={s.isGlobal ? '1.4' : '2.2'}
+                              strokeDasharray={s.isGlobal ? '4 3' : '0'}
+                              strokeLinejoin="round" strokeLinecap="round" fill="none"
+                              strokeOpacity={s.isGlobal ? 0.8 : 1} vectorEffect="non-scaling-stroke" />
+                          );
+                        })}
+                      </g>
+                    </svg>
+                    {/* Axis tick labels — HTML overlay (in-SVG text would stretch under
+                        preserveAspectRatio="none"). y = ROL %, x = ~2 sig digits. */}
+                    {yTicks.map((t) => (
+                      <span key={`yl${t}`} style={{ position: 'absolute', top: `${pctY(Y(t))}%`, left: 0, width: `${pctX(PX0)}%`, transform: 'translateY(-50%)', paddingRight: 4, textAlign: 'right', fontSize: 9, lineHeight: 1, color: 'rgba(148,163,184,0.6)', fontVariantNumeric: 'tabular-nums', pointerEvents: 'none' }}>{fmtTickY(t)}</span>
+                    ))}
+                    {xTicks.map((t) => (
+                      <span key={`xl${t}`} style={{ position: 'absolute', top: `${pctY(PY1)}%`, left: `${pctX(X(t))}%`, transform: 'translate(-50%, 4px)', fontSize: 9, lineHeight: 1, color: 'rgba(148,163,184,0.6)', fontVariantNumeric: 'tabular-nums', pointerEvents: 'none', whiteSpace: 'nowrap' }}>{fmtTickX(t)}</span>
+                    ))}
+                  </div>
                   <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 10, fontSize: 10 }}>
                     {allSeries.map((s) => (
                       <span key={s.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
