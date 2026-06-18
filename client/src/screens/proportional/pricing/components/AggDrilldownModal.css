@@ -405,7 +405,7 @@
 .agg-td--w700 { font-weight: 700; }
 
 .agg-strong { font-weight: 600; color: rgba(255, 255, 255, 0.85); }
-.agg-cell-id { font-size: 10px; color: rgba(255, 255, 255, 0.35); }
+.agg-cell-id { font-size: 10px; color: rgba(255, 255, 255, 0.55); }
 
 /* Zebra rows (was: inline i % 2 background). nth-child matches the render
    index because rows are emitted post-sort/filter. */

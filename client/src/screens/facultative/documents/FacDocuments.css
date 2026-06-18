@@ -37,8 +37,8 @@
   align-items: end;
 }
 .facdoc-upload-name { font-size: 12px; font-weight: 700; color: rgba(226, 232, 240, 0.85); }
-.facdoc-upload-meta { font-size: 10px; color: rgba(148, 163, 184, 0.45); margin-top: 2px; }
-.facdoc-kind-label { font-size: 10px; color: rgba(148, 163, 184, 0.45); margin-bottom: 4px; }
+.facdoc-upload-meta { font-size: 10px; color: rgba(148, 163, 184, 0.55); margin-top: 2px; }
+.facdoc-kind-label { font-size: 10px; color: rgba(148, 163, 184, 0.55); margin-bottom: 4px; }
 
 /* ── Toast / poll hint ──────────────────────────────────────────────── */
 .facdoc-toast { padding: 8px 14px; margin-bottom: 12px; font-size: 12px; border-radius: 8px; }
@@ -62,7 +62,7 @@
 .facdoc-list-loading { padding: 30px; text-align: center; color: rgba(148, 163, 184, 0.40); font-size: 12px; }
 .facdoc-list-empty { padding: 30px; text-align: center; color: rgba(148, 163, 184, 0.30); font-size: 12px; }
 .facdoc-doc-name { font-weight: 600; color: rgba(226, 232, 240, 0.85); }
-.facdoc-doc-date { font-size: 10px; color: rgba(148, 163, 184, 0.40); margin-top: 2px; }
+.facdoc-doc-date { font-size: 10px; color: rgba(148, 163, 184, 0.55); margin-top: 2px; }
 .ui-table td.facdoc-td-dim { color: rgba(148, 163, 184, 0.55); }
 .ui-table td.facdoc-td-user { font-size: 11px; color: rgba(148, 163, 184, 0.65); }
 .ui-table td.facdoc-td-actions { white-space: nowrap; }
@@ -351,7 +351,7 @@
 }
 .facdoc-drawer-title { font-size: 14px; font-weight: 800; color: #e2e8f0; }
 .facdoc-drawer-meta { display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
-.facdoc-drawer-when { font-size: 10px; color: rgba(148, 163, 184, 0.45); }
+.facdoc-drawer-when { font-size: 10px; color: rgba(148, 163, 184, 0.55); }
 .facdoc-summary { padding: 16px 20px; }
 .facdoc-section-label {
   font-size: 9px;

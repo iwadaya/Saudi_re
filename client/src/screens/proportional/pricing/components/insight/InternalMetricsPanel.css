@@ -127,7 +127,7 @@
   letter-spacing: -.01em;
 }
 .imp-kpi--sm .imp-kpi__value { font-size: 20px; letter-spacing: normal; }
-.imp-kpi__sub { font-size: 10px; color: rgba(148, 163, 184, 0.45); margin-top: 2px; }
+.imp-kpi__sub { font-size: 10px; color: rgba(148, 163, 184, 0.55); margin-top: 2px; }
 
 /* ── Table add-ons (on top of the ui Table primitive) ───────────────── */
 .imp-tablewrap { border: none; border-radius: 0; }
