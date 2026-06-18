@@ -46,11 +46,24 @@ export default defineConfig({
           if (id.includes('node_modules')) {
             return 'vendor';
           }
-          // Logic/utilities — must come before screens to avoid circular dependency.
-          // straightProjections.js and other logic files are shared across prop/shared screens.
-          if (id.includes('/logic/') || id.includes('/utils/') ||
-              id.includes('/context/') || id.includes('/hooks/') ||
-              id.includes('/config/') || id.includes('/components/')) {
+          // Screen chunks come BEFORE app-core. Screens have their own
+          // components/hooks/utils/config/logic subfolders; matching the
+          // generic /components/ etc. patterns first would pull those
+          // screen-local files into app-core, leaving the rest of the
+          // screen in its own chunk and creating two-way (circular) chunk
+          // dependencies (e.g. prop-screens ↔ app-core). Anchoring screens
+          // first keeps each screen — subfolders and all — in one chunk, so
+          // only genuinely top-level shared code falls through to app-core.
+
+          // Shared FQ math helpers live under final_pricing/ for historical
+          // reasons but are pure logic (their only deps are utils/format +
+          // shared/pricingMath) and are imported across chunk boundaries —
+          // e.g. screens/home/ReinsurerAnalysisModal pulls fqHelpers. Keeping
+          // them in app-core stops app-core ↔ np-final-pricing back-references
+          // from forming a circular chunk. Treat them as shared math, not
+          // screen code.
+          if (id.includes('/final_pricing/fqHelpers')
+            || id.includes('/final_pricing/formatters')) {
             return 'app-core';
           }
           // NP final pricing (own chunk — largest screen)
@@ -72,6 +85,14 @@ export default defineConfig({
           // Proportional screens
           if (id.includes('/screens/proportional/')) {
             return 'prop-screens';
+          }
+          // Top-level shared code (src/logic, src/utils, src/context,
+          // src/hooks, src/config, src/components). Reached only after the
+          // screen checks above, so it never captures screen-local subfolders.
+          if (id.includes('/logic/') || id.includes('/utils/') ||
+              id.includes('/context/') || id.includes('/hooks/') ||
+              id.includes('/config/') || id.includes('/components/')) {
+            return 'app-core';
           }
         },
       },

@@ -24,7 +24,7 @@ This pass is flag-only. No pricing, reserving, curve-fitting, loading, or persis
 
 | Severity | Finding | Evidence | Recommendation |
 | --- | --- | --- | --- |
-| High | Server verifier does not parse the same numeric strings as the client. Client/shared `deriveComponentTotal` strips `%`, currency, and separators; server `toN` uses `Number(v)` first, so `"8.00%"`, `"$2,000"`, and `"1,000"` become zero before verification. | `shared/pricingMath.js:188-199`, `server/src/lib/pricingVerifier.js:61-65`, harness table below | Use the same canonical parser on server and client in a follow-up, then run strict-mode shadow validation before enforcing. |
+| ~~High~~ **Resolved (2026-06-18)** | ~~Server verifier does not parse the same numeric strings as the client.~~ Fixed: the loose-number parser was extracted to `parseLooseNumber` in `shared/pricingMath.js` and is now used by BOTH `deriveComponentTotal` and the server verifier's `toN`, so `"8.00%"`, `"$2,000"`, and `"1,000"` parse identically on both sides instead of being zeroed by `Number(v)` on the server. | `shared/pricingMath.js` (`parseLooseNumber`), `server/src/lib/pricingVerifier.js` (`toN = parseLooseNumber`); covered by `shared/pricingMath.test.js` (parseLooseNumber) and `server/src/lib/pricingVerifier.test.js` ("parses formatted strings … no phantom drift"). | Done — server verifier and client formula now share one parser. Strict-mode (`PRICING_STRICT=1`) drift checks are therefore safe to enforce on formatted fields. |
 | High | `deriveComponentTotal` JSDoc says loading >= 100 returns 0, but implementation clamps to 99 and returns a very large finite result. `applyLoading` throws on loading >= 100. | `shared/pricingMath.js:148-156`, `shared/pricingMath.js:180-199` | Credentialed actuary/product owner should choose one legal handling: reject, clamp, or explicit no-quote. |
 | High | Quote-mode helper `computeLayerDerived` still uses a legacy formula: denominator fixed at 100 and loading multiplied by `(1 + loading)` instead of grossing up by `1 / (1 - loading)`. | `NpFinalPricing.jsx:137-149` | Remove or align after actuarial review; this is not server-verified. |
 | High | The Swiss Re/MBBEFD code is labelled as MBBEFD but implements a one-parameter log curve `G(d,c)`, not the published two-parameter Bernegger MBBEFD class. The Y-curve mapping also differs from common published package references. | `npPricingEngine.js:56-65`, `propPricingConstants.js:57-63` | Add a source comment documenting this exact one-parameter variant, or replace with a sourced MBBEFD implementation after review. |
@@ -122,16 +122,20 @@ These are client-only calculations today; no server recomputation was found.
 Harness used:
 
 - Imported client/shared `deriveComponentTotal`.
-- Recreated server verifier pre-parse behavior from `pricingVerifier.js`.
+- Recreated server verifier pre-parse behavior from `pricingVerifier.js`. The
+  divergences in the table below were the original audit finding; as of
+  2026-06-18 the server verifier shares the client/shared `parseLooseNumber`,
+  so the "server zeros formatted strings" rows are now historical — both sides
+  produce the "Client/shared output" column.
 - Compared duplicated NP/Prop `mbbefdG`, `fitPareto`, and `paretoQ`.
 - Compared legacy quote helper formula to canonical shared formula.
 
 | Calculation | Input | Client/shared output | Server/duplicate output | Max divergence | Notes |
 | --- | --- | ---: | ---: | ---: | --- |
 | `deriveComponentTotal` | numeric rates: burn 0.03, pareto 0.01, exposure 0.05, weights 40/20/40, loading 20 | 0.0425 | 0.0425 | 0 | Same formula and numeric parse. |
-| `deriveComponentTotal` | percent strings: `"10.00%"`, `"2.00%"`, `"5.00%"`, weights `"40/20/40"`, loading `"20"` | 8 | 0 | 8 | Client/shared strips `%`; server `Number("10.00%")` -> NaN -> 0. |
-| `deriveComponentTotal` | comma/currency strings: `"1,000"`, `"$2,000"`, `"3,000"`, weights 25/25/50, loading 10 | 2500 | 0 | 2500 | Client/shared strips symbols; server zeros all formatted strings. |
-| `deriveComponentTotal` | European decimal `"1.234,56"`, weight 100 | 1.23456 | 0 | 1.23456 | Shared parser strips non-numeric chars rather than using the newer flexible parser, so it is not truly EU-aware; server zeros. |
+| `deriveComponentTotal` | percent strings: `"10.00%"`, `"2.00%"`, `"5.00%"`, weights `"40/20/40"`, loading `"20"` | 8 | ~~0~~ → **8** | ~~8~~ → **0** | FIXED 2026-06-18: server now uses `parseLooseNumber` and strips `%`; both sides return 8. |
+| `deriveComponentTotal` | comma/currency strings: `"1,000"`, `"$2,000"`, `"3,000"`, weights 25/25/50, loading 10 | 2500 | ~~0~~ → **2500** | ~~2500~~ → **0** | FIXED 2026-06-18: server shares the client parser; symbols stripped on both sides. |
+| `deriveComponentTotal` | European decimal `"1.234,56"`, weight 100 | 1.23456 | ~~0~~ → **1.23456** | ~~1.23456~~ → **0** | FIXED 2026-06-18: server parses identically. (Shared parser strips non-numeric chars, so still not truly EU-aware — a separate, lower-severity item.) |
 | `deriveComponentTotal` | loading 150 with numeric inputs | 3.3999999999999972 | 3.3999999999999972 | 0 | Both paths call shared math after numeric parse; both clamp loading to 99. |
 | Legacy `computeLayerDerived` vs canonical | burn 8, pareto 2, exposure 10, weights burn 50/pareto 0/exposure 50, loading 20 | canonical 11.25 | legacy 10.799999999999999 | 0.45000000000000107 | Loading formula differs: gross-up vs multiply-by-loading. |
 | Legacy `computeLayerDerived` vs canonical | burn 4, pareto 2, exposure 6, weights burn 80/pareto 0/exposure 20, loading 20 | canonical 5.5 | legacy 5.28 | 0.21999999999999975 | Same divergence cause. |

@@ -46,7 +46,7 @@
 //      drifting.
 
 import { logger } from './logger.js';
-import { deriveComponentTotal } from '../../../shared/pricingMath.js';
+import { deriveComponentTotal, parseLooseNumber } from '../../../shared/pricingMath.js';
 
 // Absolute + relative tolerance combined so we're right near zero (where
 // relative tolerance is meaningless) AND at large rates.
@@ -58,11 +58,12 @@ const TOLERANCE_REL = 0.002;   // 0.2% of expected
 // the stored values can be 40/59 if the user typed 40/60.
 const TOLERANCE_WEIGHT = 0.5;
 
-function toN(v) {
-  if (v === null || v === undefined || v === '') return 0;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
+// Use the SAME canonical parser the formula (deriveComponentTotal) uses, so the
+// verifier re-derives the expected total from identically-parsed inputs. The
+// old Number(v) zeroed any formatted string ("8.00%", "$2,000", "1,000") before
+// verification, producing phantom drift / missed drift on formatted fields.
+// See docs/actuarial-audit.md.
+const toN = parseLooseNumber;
 
 function withinTolerance(actual, expected) {
   const diff = Math.abs(actual - expected);

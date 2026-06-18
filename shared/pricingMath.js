@@ -180,16 +180,30 @@ export function applyLoading(pureRate, loadingPct) {
  * @param {number} loading        % internal loading (0..99).
  * @returns {number} Blended, loaded rate. 0 when Σ weights ≤ 0 (loading is clamped to ≤ 99%).
  */
+/**
+ * Canonical loose-number parser for pricing inputs. The client stores many
+ * numeric fields as formatted strings ("10.00%", "1,250", "$2,000"); a bare
+ * Number("10.00%") is NaN, which would silently zero the input. Stripping
+ * everything except digits / dot / minus before parseFloat recovers the value
+ * (10 / 1250 / 2000). Exported so BOTH the client/shared formula path and the
+ * server-side pricing verifier parse identically — otherwise the verifier
+ * re-derives a different "expected" total and flags phantom drift (or misses
+ * real drift) on any formatted field. See docs/actuarial-audit.md.
+ *
+ * @param {unknown} v
+ * @returns {number} parsed value, or 0 when not finite
+ */
+export function parseLooseNumber(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  const n = parseFloat(String(v ?? '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
 export function deriveComponentTotal(pureBurn, pareto, exposure, weightBurn, weightPareto, weightExposure, loading) {
-  // Strip non-numeric chars before parseFloat so that values like
-  // "10.00%" or "1,250" — which the client stores as formatted strings —
-  // parse to 10 / 1250 instead of NaN. Number(v) without stripping
-  // returns NaN for any string with a % or comma, silently zeroing
-  // every input and making Total ROL always read 0%.
-  const toN = (/** @type {unknown} */ v) => {
-    const n = parseFloat(String(v ?? '').replace(/[^\d.-]/g, ''));
-    return Number.isFinite(n) ? n : 0;
-  };
+  // Parse loose/formatted strings consistently with the server verifier — see
+  // parseLooseNumber. Number(v) without stripping returns NaN for any value
+  // with a % or comma, silently zeroing every input and making Total ROL read 0%.
+  const toN = parseLooseNumber;
   const wB = clamp(toN(weightBurn), 0, 100);
   const wP = clamp(toN(weightPareto), 0, 100);
   const wE = clamp(toN(weightExposure), 0, 100);

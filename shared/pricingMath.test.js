@@ -12,6 +12,7 @@ import {
   clamp,
   applyLoading,
   deriveComponentTotal,
+  parseLooseNumber,
   attachmentFromLossRatio,
   erf,
   normalCdf,
@@ -189,6 +190,29 @@ describe('deriveComponentTotal (3-way blend)', () => {
     // Same scenario as the integer test: 40·10 + 20·2 + 40·5 / 100 = 6.4
     // loaded = 6.4 / (1 - 0.20) = 8.0
     expect(deriveComponentTotal('10.00%', '2.00%', '5.00%', '40', '20', '40', '20')).toBeCloseTo(8.0, 6);
+  });
+});
+
+describe('parseLooseNumber (canonical client/server parser)', () => {
+  it('passes through finite numbers; non-finite → 0', () => {
+    expect(parseLooseNumber(0.0425)).toBe(0.0425);
+    expect(parseLooseNumber(-3)).toBe(-3);
+    expect(parseLooseNumber(NaN)).toBe(0);
+    expect(parseLooseNumber(Infinity)).toBe(0);
+  });
+
+  it('strips %, currency and thousands separators that Number() would zero', () => {
+    expect(parseLooseNumber('8.00%')).toBeCloseTo(8, 10);
+    expect(parseLooseNumber('$2,000')).toBeCloseTo(2000, 10);
+    expect(parseLooseNumber('1,000')).toBeCloseTo(1000, 10);
+    expect(parseLooseNumber('1,250')).toBeCloseTo(1250, 10);
+  });
+
+  it('nullish / empty / non-numeric → 0', () => {
+    expect(parseLooseNumber(null)).toBe(0);
+    expect(parseLooseNumber(undefined)).toBe(0);
+    expect(parseLooseNumber('')).toBe(0);
+    expect(parseLooseNumber('foo')).toBe(0);
   });
 });
 
