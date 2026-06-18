@@ -79,6 +79,24 @@ describe('verifyNpPricingOutputs', () => {
     expect(drifts).toEqual([]);
   });
 
+  it('parses formatted strings like the client/formula — no phantom drift', () => {
+    // The client can submit %-/currency-/comma-formatted strings. The verifier
+    // must parse them with the SAME canonical parser the formula uses, else it
+    // re-derives 0 (Number("10.00%") === NaN) and flags drift on a correct row.
+    // blended = (40·10 + 20·2 + 40·5)/100 = 6.4 → loaded = 6.4/(1-0.20) = 8.0
+    const drifts = verifyNpPricingOutputs([row({
+      pure_burning_cost:   '10.00%',
+      pareto_pricing:      '2.00%',
+      exposure_rating:     '5.00%',
+      burn_weight_pct:     '40',
+      pareto_weight_pct:   '20',
+      exposure_weight_pct: '40',
+      pricing_loading_pct: '20',
+      total_price:         '8.00',
+    })]);
+    expect(drifts).toEqual([]);
+  });
+
   it('returns [] for non-array input', () => {
     expect(verifyNpPricingOutputs(null)).toEqual([]);
     expect(verifyNpPricingOutputs(undefined)).toEqual([]);
