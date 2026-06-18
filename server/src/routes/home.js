@@ -24,12 +24,20 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
   if (qUserId && qUserId !== 'all' && !UUID_RE.test(String(qUserId))) {
     return res.status(400).json({ error: 'Invalid user_id', code: 'BAD_REQUEST' });
   }
-  // Demo mode: Chief Underwriter and Treaty Underwriter home views are
-  // portfolio-wide by default. Show all work by status regardless of
-  // assigned_to_user_id so drafts, quotes, and history remain visible after
-  // login/logout cycles.
-  // A specific user_id query can still request a user-scoped view.
-  const filterUserId = qUserId && qUserId !== 'all' ? qUserId : null;
+  // Home lists default to the caller's own work; calculations stay
+  // whole-portfolio (statusCounts, region_premiums, portfolio-export below
+  // never read filterUserId). The Settings "View treaties" toggle sends
+  // scope=all to widen the lists to the whole book.
+  const scope = String(req.query.scope || '').toLowerCase();
+  // List-filter precedence:
+  //   1. an explicit user_id → cross-user "view others" (auth-checked below);
+  //   2. scope==='all' (or legacy user_id==='all') → null = portfolio-wide lists;
+  //   3. otherwise → the caller's own work.
+  const filterUserId = qUserId && qUserId !== 'all'
+    ? qUserId
+    : (scope === 'all' || qUserId === 'all')
+      ? null
+      : myUserId;
 
   // Authorization: a caller may view their own home, OR someone at or below
   // them in the hierarchy. The level header is client-controllable, so we
@@ -129,7 +137,9 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
     // Renewals panel: only treaties that are actually candidates for renewal —
     // active/signed contracts whose date falls inside the window AND that don't
     // already have a child renewal draft (otherwise clicking would create a
-    // duplicate).
+    // duplicate). Scoped to the resolved owner like drafts/submitted so the
+    // default "mine" view shows only the caller's upcoming renewals; scope=all
+    // (filterUserId null) leaves userFilter empty and shows everyone's.
     pool.query(`SELECT ${contractCols} ${contractJoins}
                  WHERE c.renewal_date BETWEEN CURRENT_DATE AND CURRENT_DATE+interval '60 days'
                    AND c.uw_status NOT IN ('DRAFT','DECLINED','NTU')
@@ -137,7 +147,8 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
                      SELECT 1 FROM public.contract child
                       WHERE child.parent_contract_id = c.contract_id
                         AND child.uw_status = 'DRAFT')
-                 ORDER BY c.renewal_date ASC LIMIT 50`),
+                   ${userFilter}
+                 ORDER BY c.renewal_date ASC LIMIT 50`, cParams),
     cobAgg(),
     cobAggQuote(),
     pool.query(`

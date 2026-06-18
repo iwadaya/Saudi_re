@@ -410,7 +410,10 @@ export interface ImportSnapshot {
 // Public API object
 export const api = {
   // Home
-  getHomeSummary(opts?: RequestOpts): Promise<unknown> { return request(PATHS.homeSummary, opts); },
+  getHomeSummary(opts?: RequestOpts & { scope?: 'mine' | 'all' }): Promise<unknown> {
+    const { scope, ...rest } = opts || {};
+    return request(scope ? `${PATHS.homeSummary}?scope=${enc(scope)}` : PATHS.homeSummary, rest);
+  },
 
   // Lookups
   listCedants(opts: RequestOpts & { countryId?: string } = {}): Promise<unknown> {

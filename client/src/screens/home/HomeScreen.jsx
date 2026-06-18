@@ -432,7 +432,7 @@ export default function HomeScreen() {
     try {
       const raw = forUserId
         ? await api.getHomeSummaryFor(forUserId)
-        : await api.getHomeSummary();
+        : await api.getHomeSummary({ scope });
       // A newer load has been kicked off while we awaited — drop this reply.
       if (myToken !== loadToken.current) return;
       const next = {
@@ -455,7 +455,7 @@ export default function HomeScreen() {
         setBackgroundRefreshing(false);
       }
     }
-  }, []); // dataRef + loadToken are refs; normalizeRow is module-level
+  }, [scope]); // dataRef + loadToken are refs; normalizeRow is module-level
 
 
 
