@@ -62,7 +62,7 @@ export default function NpInsightModal({ pricing, open, contractId, isQuote, cur
                       )}
                       {insightKey === 'RISK_PROFILE' && (
                         <div className="bbg-embed-screen">
-                          <ProfileScreen routeKey="NP_RISK_PROFILE" title="Risk Profile" headerPill="" profileType="risk" embedded />
+                          <ProfileScreen routeKey="NP_RISK_PROFILE" title="Risk Profile" headerPill="" profileType="risk" embedded quoteMode={isQuote} />
                         </div>
                       )}
                       {insightKey === 'CHECKLIST' && <NpChecklistPanel contractId={contractId} isQuote={isQuote} />}

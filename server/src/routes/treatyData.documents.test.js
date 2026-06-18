@@ -17,6 +17,9 @@ function fakeQuery(sql) {
   if (sql.includes('FROM public.contract_document') && sql.includes('WHERE document_id=$1')) {
     return P({ rows: scenario.documentRows });
   }
+  if (sql.includes('FROM public.contract_document') && sql.includes('WHERE contract_id=$1')) {
+    return P({ rows: scenario.documentRows.map(({ storage_path, ...row }) => row) });
+  }
   if (sql.includes('owner_level')) {
     return P({ rows: scenario.ownershipRows });
   }
@@ -63,6 +66,22 @@ function boot(user) {
 }
 
 describe('contract document route authorization', () => {
+  it('blocks a non-assignee from listing treaty documents', async () => {
+    const base = await boot({ userId: 'other', hierarchyLevel: 5, isSupervisor: false });
+    const res = await fetch(`${base}/api/treaties/contract-1/documents`);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('lists treaty document metadata for the assignee without exposing storage_path', async () => {
+    const base = await boot({ userId: 'owner', hierarchyLevel: 5, isSupervisor: false });
+    const res = await fetch(`${base}/api/treaties/contract-1/documents`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveLength(1);
+    expect(body[0]).not.toHaveProperty('storage_path');
+  });
+
   it('blocks a non-assignee from viewing a document by id', async () => {
     const base = await boot({ userId: 'other', hierarchyLevel: 5, isSupervisor: false });
     const res = await fetch(`${base}/api/documents/doc-1/view`, { redirect: 'manual' });

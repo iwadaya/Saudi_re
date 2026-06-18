@@ -796,8 +796,20 @@ async function loadDocumentForAccess(req, docId, { write = false } = {}) {
   throw Object.assign(new Error('You do not have access to this document.'), { status: 403, code: 'FORBIDDEN' });
 }
 
+async function assertCanListDocuments(req, entityType, entityId) {
+  const isSupervisor = req.user?.isSupervisor === true || Number(req.user?.hierarchyLevel) <= 2;
+  if (isSupervisor) return;
+  const permission = await getEditPermission(req, entityType, entityId);
+  if (permission.canEdit) return;
+  if (permission.found === false) {
+    throw Object.assign(new Error('Not found'), { status: 404 });
+  }
+  throw Object.assign(new Error('You do not have access to these documents.'), { status: 403, code: 'FORBIDDEN' });
+}
+
 router.get("/treaties/:id/documents", asyncHandler(async (req, res) => {
-  const {rows}=await pool.query(`SELECT document_id,file_name,mime_type,size_bytes,description,doc_type,title,storage_path,uploaded_at FROM public.contract_document WHERE contract_id=$1 ORDER BY uploaded_at DESC`,[req.params.id]);
+  await assertCanListDocuments(req, 'CONTRACT', req.params.id);
+  const {rows}=await pool.query(`SELECT document_id,file_name,mime_type,size_bytes,description,doc_type,title,uploaded_at FROM public.contract_document WHERE contract_id=$1 ORDER BY uploaded_at DESC`,[req.params.id]);
   res.json(rows);
 }));
 

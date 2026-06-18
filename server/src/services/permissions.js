@@ -155,7 +155,13 @@ export async function resolveParentEntity(resourceType, id) {
     const entityType = rows[0].entity_type || r.entityType;
     if (!entityType) return null;
     return { entityType, entityId: rows[0].id };
-  } catch { return null; }
+  } catch (error) {
+    throw Object.assign(new Error('Could not resolve parent entity for mutation guard'), {
+      status: 500,
+      code: 'PARENT_RESOLUTION_FAILED',
+      cause: error,
+    });
+  }
 }
 
 /**
@@ -199,6 +205,9 @@ export async function guardApiMutations(req, res, next) {
     let target = cls;
     if (cls.resolve) target = await resolveParentEntity(cls.resolve, cls.id);
     else if (cls.entityId === '@body') target = { entityType: cls.entityType, entityId: req.body?.contractId || req.body?.contract_id };
+    if (cls.resolve && (!target || !target.entityId)) {
+      throw Object.assign(new Error('Parent entity not found'), { status: 404, code: 'PARENT_NOT_FOUND' });
+    }
     if (!target || !target.entityId) return next(); // unresolved/create → nothing to guard
 
     await assertCanEdit(req, target.entityType, target.entityId);

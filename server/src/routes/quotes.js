@@ -17,7 +17,7 @@ import { quotePutBodySchema } from '../validation/quote.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { storeUploadedFile } from '../lib/uploadStorage.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
-import { assertCanEdit } from '../services/permissions.js';
+import { assertCanEdit, getEditPermission } from '../services/permissions.js';
 import { approveQuote, returnToUnderwriter, recallOffer, markNotTakenUp } from '../services/approvals.js';
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
 import { verifyNpPricingOutputs, summariseDrifts, isStrictMode, pricingDriftStats } from '../lib/pricingVerifier.js';
@@ -30,6 +30,17 @@ const router = Router();
 // Category fence for the NP-only quote routes: a proportional quote has no
 // quote_np_* rows, so reject (409) rather than silently returning empties.
 const npQuoteGuard = [loadQuoteCategory, requireQuoteCategory('NON_PROPORTIONAL')];
+
+async function assertCanListQuoteDocuments(req, quoteId) {
+  const isSupervisor = req.user?.isSupervisor === true || Number(req.user?.hierarchyLevel) <= 2;
+  if (isSupervisor) return;
+  const permission = await getEditPermission(req, 'QUOTE', quoteId);
+  if (permission.canEdit) return;
+  if (permission.found === false) {
+    throw Object.assign(new Error('Not found'), { status: 404 });
+  }
+  throw Object.assign(new Error('You do not have access to these documents.'), { status: 403, code: 'FORBIDDEN' });
+}
 
 // Triangle variant (migration 116). Reads/writes default to MODIFIED so all
 // pre-variant behaviour is unchanged unless ACTUAL is explicitly requested.
@@ -1123,7 +1134,8 @@ router.get("/quotes/:id/offer", asyncHandler(async (req, res) => {
 
 // Documents (shared table)
 router.get("/quotes/:id/documents", asyncHandler(async (req, res) => {
-  const {rows}=await pool.query(`SELECT document_id,file_name,mime_type,size_bytes,description,doc_type,title,storage_path,uploaded_at FROM public.contract_document WHERE quote_id=$1 ORDER BY uploaded_at DESC`,[req.params.id]);
+  await assertCanListQuoteDocuments(req, req.params.id);
+  const {rows}=await pool.query(`SELECT document_id,file_name,mime_type,size_bytes,description,doc_type,title,uploaded_at FROM public.contract_document WHERE quote_id=$1 ORDER BY uploaded_at DESC`,[req.params.id]);
   res.json(rows);
 }));
 
@@ -1484,7 +1496,7 @@ router.put("/quotes/:id/np-pricing", ...npQuoteGuard, asyncHandler(async (req, r
         [id, m.layer_number,
          numOrNull(m.hist_margin), numOrNull(m.modelled_margin), numOrNull(m.tech_ratio),
          numOrNull(m.uw_price), numOrNull(m.expiring_price), numOrNull(m.lead_price)]
-      ).catch(() => {});
+      );
     }
     const updatedAt = await touchParentEntity(cl, {
       parentTable: 'quote',

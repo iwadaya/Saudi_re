@@ -124,8 +124,8 @@ export function PropInsightModal({
               {insightKey === 'CEDANT_SUMMARY' && <CedantSummaryTabs contractId={cid} currency={safeCcy} contract={contract} liveModelledMargin={marginAct} liveActualMargin={1 - calcCR('actual')} mode="PROP" />}
               {insightKey === 'LARGE_LOSSES' && <div className="bbg-embed-screen"><LossSelectionScreen routeKey="PROP_LARGE_LOSS_SELECTION" title="Large Loss Selection" headerPill="" lossType="large" embedded /></div>}
               {insightKey === 'CAT_LOSSES' && <div className="bbg-embed-screen"><LossSelectionScreen routeKey="PROP_CAT_LOSS_SELECTION" title="CAT Loss Selection" headerPill="" lossType="cat" embedded /></div>}
-              {insightKey === 'RISK_PROFILES' && <div className="bbg-embed-screen"><ProfileScreen routeKey="PROP_RISK_PROFILE" title="Risk Profile" headerPill="" profileType="risk" embedded /></div>}
-              {insightKey === 'CLAIMS_PROFILES' && <div className="bbg-embed-screen"><ProfileScreen routeKey="PROP_CLAIMS_PROFILE" title="Claims Profile" headerPill="" profileType="claims" embedded /></div>}
+              {insightKey === 'RISK_PROFILES' && <div className="bbg-embed-screen"><ProfileScreen routeKey="PROP_RISK_PROFILE" title="Risk Profile" headerPill="" profileType="risk" embedded quoteMode={!!appState.quoteMode} /></div>}
+              {insightKey === 'CLAIMS_PROFILES' && <div className="bbg-embed-screen"><ProfileScreen routeKey="PROP_CLAIMS_PROFILE" title="Claims Profile" headerPill="" profileType="claims" embedded quoteMode={!!appState.quoteMode} /></div>}
               {insightKey === 'COUNTRY_AGG' && <div className="bbg-embed-screen"><PropCrestaAggregates embedded /></div>}
             </div>
           </div>

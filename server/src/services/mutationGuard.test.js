@@ -92,6 +92,24 @@ describe('guardApiMutations — assignee + reads + workflow pass', () => {
   });
 });
 
+describe('guardApiMutations — resolved parents fail closed', () => {
+  it('404s a resolved-resource mutation when the parent cannot be found', async () => {
+    poolMock.query.mockImplementationOnce(() => P([]));
+    const base = await boot('attacker');
+    const res = await send(base, 'DELETE', '/api/documents/missing-doc', {});
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ code: 'PARENT_NOT_FOUND' });
+  });
+
+  it('500s a resolved-resource mutation when parent lookup fails', async () => {
+    poolMock.query.mockRejectedValueOnce(new Error('db down'));
+    const base = await boot('attacker');
+    const res = await send(base, 'DELETE', '/api/documents/d1', {});
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ code: 'PARENT_RESOLUTION_FAILED' });
+  });
+});
+
 describe('registry: no mutating route falls through unguarded', () => {
   const dir = path.dirname(fileURLToPath(import.meta.url));
   const routesDir = path.resolve(dir, '../routes');
