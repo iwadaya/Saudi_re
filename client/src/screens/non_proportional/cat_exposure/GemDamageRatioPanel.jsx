@@ -14,7 +14,7 @@
 // CSS-variable convention used across the FQ pricing workbench (no hard-coded
 // hex outside genuinely dynamic chart/series values).
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { api } from '../../../api';
 import { formatWithCommas } from '../../../utils/format';
 
@@ -59,6 +59,29 @@ const money = (v, ccy) => `${ccy ? `${ccy} ` : ''}${formatWithCommas(toNum(v))}`
 // Option label for a curve <select>: taxonomy + intensity measure type.
 const curveOptionLabel = (c) => `${c.taxonomy} (${c.imt})`;
 
+// Deterministic representative pick for a slot: prefer PGA-based functions,
+// sort by a stable key (taxonomy → IMT → id) and take the median entry. No
+// randomness — the same catalogue always yields the same default.
+function pickDefaultCurve(list) {
+  if (!Array.isArray(list) || !list.length) return null;
+  const pga = list.filter((c) => c.imt === 'PGA');
+  const pool = pga.length ? pga : list;
+  const sorted = [...pool].sort((a, b) => {
+    const ka = `${a.taxonomy || ''}|${a.imt || ''}`;
+    const kb = `${b.taxonomy || ''}|${b.imt || ''}`;
+    if (ka !== kb) return ka < kb ? -1 : 1;
+    return Number(a.id) - Number(b.id);
+  });
+  return sorted[Math.floor((sorted.length - 1) / 2)];
+}
+
+// HAZUS placeholder curves are seeded with a "HAZUS:" taxonomy prefix. Prefer a
+// real API flag if one is ever returned; until then key off that prefix.
+const isHazusPlaceholderCurve = (c) => c?.placeholder === true
+  || (typeof c?.taxonomy === 'string' && c.taxonomy.startsWith('HAZUS:'));
+
+const defaultTag = { marginLeft: 6, fontSize: 9, fontWeight: 700, color: 'var(--accent)', opacity: 0.85 };
+
 /**
  * @param {{
  *   contractId: string,
@@ -82,7 +105,16 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
   const [curvesError, setCurvesError] = useState(null);
 
   const [assignments, setAssignments] = useState({});   // slot → curve id
+  const [autoSlots, setAutoSlots] = useState(() => new Set()); // slots still on an auto-pick
   const [intensities, setIntensities] = useState({});   // IMT → number (string while editing)
+
+  // Refs let the stable loadCurves callback read current scenario/auto state
+  // without re-creating itself (and re-triggering the load effect).
+  const savedScenarioRef = useRef(false);
+  const autoSlotsRef = useRef(autoSlots);
+  const assignmentsRef = useRef(assignments);
+  useEffect(() => { autoSlotsRef.current = autoSlots; }, [autoSlots]);
+  useEffect(() => { assignmentsRef.current = assignments; }, [assignments]);
 
   const [computing, setComputing] = useState(false);
   const [computeError, setComputeError] = useState(null);
@@ -107,6 +139,7 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
         setZones(Array.isArray(scn?.zones) ? scn.zones : []);
 
         const saved = scn?.scenario || null;
+        savedScenarioRef.current = !!saved;
         if (saved) {
           // Source rides in curve_assignments.source (the engine ignores any
           // non-slot key); hydrate it so a reload restores the chosen provider.
@@ -152,17 +185,26 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
       }));
       const next = Object.fromEntries(results);
       setCurvesBySlot(next);
-      // Drop any assignment whose curve is absent from the freshly loaded list.
-      setAssignments((prev) => {
-        const out = {};
-        for (const meta of SLOTS) {
-          const id = prev[meta.slot];
-          if (id != null && (next[meta.slot] || []).some((c) => String(c.id) === String(id))) {
-            out[meta.slot] = id;
-          }
+      // Reconcile assignments against the freshly loaded lists: keep any that
+      // still resolve, drop the rest. With no saved scenario, seed each empty
+      // slot with a deterministic representative curve from the current
+      // source's list and flag it "(default)". We never auto-calculate.
+      const prev = assignmentsRef.current;
+      const out = {};
+      const nextAuto = new Set();
+      for (const meta of SLOTS) {
+        const id = prev[meta.slot];
+        const list = next[meta.slot] || [];
+        if (id != null && list.some((c) => String(c.id) === String(id))) {
+          out[meta.slot] = id;
+          if (autoSlotsRef.current.has(meta.slot)) nextAuto.add(meta.slot);
+        } else if (!savedScenarioRef.current) {
+          const pick = pickDefaultCurve(list);
+          if (pick) { out[meta.slot] = String(pick.id); nextAuto.add(meta.slot); }
         }
-        return out;
-      });
+      }
+      setAssignments(out);
+      setAutoSlots(nextAuto);
     } catch (err) {
       setCurvesError(err?.message || 'Failed to load vulnerability curves.');
       setCurvesBySlot({});
@@ -191,6 +233,17 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
   }, [assignments, curvesBySlot]);
 
   const totalEqAgg = useMemo(() => zones.reduce((s, z) => s + toNum(z.eq_agg), 0), [zones]);
+
+  // True when HAZUS is active and any assigned curve is placeholder data.
+  const hazusPlaceholderInUse = useMemo(() => {
+    if (source !== 'HAZUS') return false;
+    return SLOTS.some((meta) => {
+      const id = assignments[meta.slot];
+      if (id == null) return false;
+      const c = (curvesBySlot[meta.slot] || []).find((x) => String(x.id) === String(id));
+      return isHazusPlaceholderCurve(c);
+    });
+  }, [source, assignments, curvesBySlot]);
 
   const commitCountry = useCallback(() => {
     setCountry(countryDraft.trim());
@@ -324,6 +377,19 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
               </div>
             )}
 
+            {/* Placeholder-data guard: seeded HAZUS curves are not pricing-valid. */}
+            {hazusPlaceholderInUse && (
+              <div style={{
+                fontSize: 11, fontWeight: 700, lineHeight: 1.45, padding: '10px 12px', borderRadius: 8,
+                color: 'var(--accent-rose)',
+                background: 'rgba(var(--accent-rose-rgb),0.10)',
+                border: '1px solid rgba(var(--accent-rose-rgb),0.40)',
+              }}>
+                ⚠ HAZUS curves loaded from placeholder parameters — not valid for pricing until
+                replaced with FEMA Technical Manual values.
+              </div>
+            )}
+
             {/* ── Curve assignment per occupancy slot ── */}
             <div>
               <div style={{ ...sectionLabel, marginBottom: 8 }}>Vulnerability curve per occupancy</div>
@@ -332,7 +398,10 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
                   const list = curvesBySlot[meta.slot] || [];
                   return (
                     <label key={meta.slot}>
-                      <span style={fieldLabel}>{meta.label}</span>
+                      <span style={fieldLabel}>
+                        {meta.label}
+                        {autoSlots.has(meta.slot) && <span style={defaultTag}>(default)</span>}
+                      </span>
                       <select
                         style={selectStyle}
                         value={assignments[meta.slot] ?? ''}
@@ -343,6 +412,13 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
                             const next = { ...a };
                             if (v == null) delete next[meta.slot]; else next[meta.slot] = v;
                             return next;
+                          });
+                          // A manual choice takes the slot off its auto-pick.
+                          setAutoSlots((s) => {
+                            if (!s.has(meta.slot)) return s;
+                            const n = new Set(s);
+                            n.delete(meta.slot);
+                            return n;
                           });
                         }}
                       >
