@@ -1,9 +1,8 @@
-// components/FQPricingAnalysisModal.jsx — 3-tab pricing workbench.
-//
-// Tab 1 "Pricing Analysis": per-peril sections (Risk above Cat) stacked vertically,
-// each with a weight Blender bar, a metrics table, and a notes box; below them a
-// combined per-layer Total Section (risk + cat fused) shows whenever any component
-// is active. Tabs 2/3 ("Pareto Simulation", "Inflation & Loss") are placeholders.
+// components/FQPricingAnalysisModal.jsx — 4-tab pricing workbench.
+// Tab 1 "Pricing Analysis": per-peril sections (Risk/Cat) with weight blender,
+// metrics table and notes, plus a combined Total Section. Tab 2 "Pareto Simulation"
+// hosts the severity/frequency panels; tab 3 "Inflation & Loss" is a placeholder;
+// tab 4 "Aggregate Analysis" embeds the shared CRESTA-zone exposure panel.
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
 import { toN, capPct2 } from '../formatters.js';
@@ -15,11 +14,14 @@ import { FQPctCell, FQReadCell } from './FQCells.jsx';
 import FQFinalPriceModal from './FQFinalPriceModal.jsx';
 import SeverityFitPanel from './SeverityFitPanel.jsx';
 import FrequencySimPanel from './FrequencySimPanel.jsx';
+import FQPlaceholderTab from './FQPlaceholderTab.jsx';
+import AggregateAnalysisPanel from '../../../shared/aggregate_analysis/AggregateAnalysisPanel.jsx';
 
 const TOP_TABS = [
   { k: 'pricing', label: 'Pricing Analysis' },
   { k: 'pareto', label: 'Pareto Simulation' },
   { k: 'loss', label: 'Inflation & Loss' },
+  { k: 'agg', label: 'Aggregate Analysis' },
 ];
 
 // Editable weight cell: shows the value with a "%" suffix while idle (capped at
@@ -573,15 +575,6 @@ export default function FQPricingAnalysisModal({
     );
   };
 
-  const placeholderTab = (title, line) => (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 320 }}>
-      <div style={{ maxWidth: 480, textAlign: 'center', background: 'rgba(8,14,30,0.6)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 12, padding: '32px 28px' }}>
-        <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: '.06em', color: 'rgba(226,232,240,0.9)' }}>{title}</div>
-        <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.6)', marginTop: 8, lineHeight: 1.5 }}>{line}</div>
-      </div>
-    </div>
-  );
-
   return (
     <>
     <div className={`bm-modal-backdrop${isQuote ? ' bm-modal-backdrop--fullscreen' : ''}`} role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -780,7 +773,12 @@ export default function FQPricingAnalysisModal({
               )}
             </>
           )}
-          {tab === 'loss' && placeholderTab('Inflation & Loss Manipulation', 'Apply inflation and adjust large/cat loss inputs to stress pricing — coming soon.')}
+          {tab === 'loss' && <FQPlaceholderTab title="Inflation & Loss Manipulation" line="Apply inflation and adjust large/cat loss inputs to stress pricing — coming soon." />}
+          {tab === 'agg' && (contractId ? (
+            <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
+              <AggregateAnalysisPanel contractId={contractId} />
+            </div>
+          ) : <FQPlaceholderTab title="Aggregate Analysis" line="Save the treaty first to load its CRESTA-zone and class-of-business exposure aggregates." />)}
         </div>
       </div>
     </div>
