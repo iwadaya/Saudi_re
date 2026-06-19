@@ -120,10 +120,12 @@ describe('GemDamageRatioPanel', () => {
   it('renders the amber warnings callout when the result carries warnings', async () => {
     computeGemEqLoss.mockResolvedValueOnce({ ...RESULT, warnings: ['Commercial — building: missing PGA intensity'] });
     renderPanel();
-    await screen.findAllByRole('combobox');
+    await screen.findAllByText('CR/LFINF/H:1/COM (PGA)');
 
     fireEvent.change(await screen.findByLabelText('PGA'), { target: { value: '0.18' } });
-    fireEvent.click(screen.getByRole('button', { name: /Calculate/i }));
+    const calc = screen.getByRole('button', { name: /Calculate/i });
+    await waitFor(() => expect(calc).toBeEnabled());
+    fireEvent.click(calc);
 
     expect(await screen.findByText(/missing PGA intensity/i)).toBeInTheDocument();
   });

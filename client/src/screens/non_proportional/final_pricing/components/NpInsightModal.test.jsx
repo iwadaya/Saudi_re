@@ -71,7 +71,10 @@ describe('NpInsightModal — GEM insight', () => {
 
     const pga = await screen.findByLabelText('PGA');
     fireEvent.change(pga, { target: { value: '0.18' } });
-    fireEvent.click(screen.getByRole('button', { name: /Calculate/i }));
+    // Calculate is disabled until the per-slot curve lists finish loading.
+    const calc = screen.getByRole('button', { name: /Calculate/i });
+    await waitFor(() => expect(calc).toBeEnabled());
+    fireEvent.click(calc);
 
     const applyBtn = await screen.findByRole('button', { name: /Apply to cat burning cost/i });
     fireEvent.click(applyBtn);
