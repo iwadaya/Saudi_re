@@ -30,11 +30,6 @@ const SLOTS = [
   { slot: 'industrialCont', label: 'Industrial — contents', occ: 'IND', kind: 'cont' },
 ];
 
-const APPLY_TARGETS = [
-  { field: 'catExposure', label: 'Exposure (Dmg Ratio)' },
-  { field: 'catPureBurn', label: 'Pure Burn' },
-];
-
 // ── Shared style fragments (CSS-variable theming, matches the FQ workbench). ──
 const card = { background: 'rgba(8,14,30,0.72)', border: '1px solid rgba(var(--accent-rgb),0.22)', borderRadius: 12 };
 const sectionLabel = { fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.7)' };
@@ -87,14 +82,15 @@ function pickDefaultCurve(meta, curveList) {
 const defaultTag = { marginLeft: 6, fontSize: 9, fontWeight: 700, color: 'var(--accent)', opacity: 0.85 };
 
 /**
- * Host-agnostic: the panel computes the ground-up EQ loss and hands the chosen
- * cat layer + field + value back through `onApplyToCat` — the host owns how the
- * value is written (treaty `updateLayer` vs quote `updateClientStructureLayer`).
+ * Host-agnostic: the panel computes the ground-up EQ loss and hands it back
+ * through `onApplyToCat(groundUpEqLoss)` — the host writes it into the cat
+ * burning-cost field via its real setter (treaty `updateLayer` vs quote
+ * `updateClientStructureLayer`) and persists through the screen's normal save.
  *
  * @param {{
  *   contractId: string,
- *   catLayers: Array<object>,         // cat-covering layers, in host order
- *   onApplyToCat: (apply: { value: string, field: string, catLayerIndex: number }) => void,
+ *   catLayers: Array<object>,         // cat-covering layers (gates the apply button)
+ *   onApplyToCat: (groundUpEqLoss: number) => void,
  *   currency: string,
  *   disabled?: boolean,
  * }} props
@@ -114,9 +110,7 @@ export default function EqDamageRatioPanel({ contractId, catLayers = [], onApply
   const [computing, setComputing] = useState(false);
   const [computeError, setComputeError] = useState(null);
   const [result, setResult] = useState(null);
-
-  const [targetIdx, setTargetIdx] = useState(0);         // index into catLayers
-  const [targetField, setTargetField] = useState('catExposure');
+  const [applied, setApplied] = useState(false);        // brief "applied" confirmation
 
   // Load the saved scenario, the contract's CRESTA EQ zones, and the curve
   // catalogue (scoped to the contract's country) in parallel on mount.
@@ -200,6 +194,7 @@ export default function EqDamageRatioPanel({ contractId, catLayers = [], onApply
   const onCompute = useCallback(async (doPersist) => {
     setComputing(true);
     setComputeError(null);
+    setApplied(false);   // a fresh result invalidates the previous "applied" note
     try {
       const body = {
         curveAssignments: assignments,
@@ -218,15 +213,13 @@ export default function EqDamageRatioPanel({ contractId, catLayers = [], onApply
     }
   }, [assignments, intensities, contractId]);
 
-  // Hand the effective mean damage ratio (a unitless rate) back to the host to
-  // write into the chosen cat layer's chosen ROL% cell. The host's reducer
-  // recomputes the blended cat total.
+  // Hand the ground-up EQ loss back to the host, which writes it into the cat
+  // burning-cost field via its real setter (the host owns the save path).
   const onApply = useCallback(() => {
     if (!result || disabled || typeof onApplyToCat !== 'function') return;
-    if (!catLayers[targetIdx]) return;
-    const ratioPct = toN(result.effectiveMdr) * 100;
-    onApplyToCat({ value: `${ratioPct.toFixed(2)}%`, field: targetField, catLayerIndex: targetIdx });
-  }, [result, disabled, onApplyToCat, catLayers, targetIdx, targetField]);
+    onApplyToCat(toN(result.groundUpEqLoss));
+    setApplied(true);
+  }, [result, disabled, onApplyToCat]);
 
   if (!contractId) return null;
 
@@ -343,7 +336,7 @@ export default function EqDamageRatioPanel({ contractId, catLayers = [], onApply
             {/* ── Results ── */}
             {result && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch' }}>
                   <div style={{ ...card, padding: '12px 16px', flex: '1 1 200px' }}>
                     <div style={sectionLabel}>Ground-up EQ loss</div>
                     <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent)', marginTop: 4 }}>
@@ -355,6 +348,26 @@ export default function EqDamageRatioPanel({ contractId, catLayers = [], onApply
                     <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent-amber)', marginTop: 4 }}>
                       {(toN(result.effectiveMdr) * 100).toFixed(2)}%
                     </div>
+                  </div>
+                  {/* Headline apply: push the ground-up EQ loss into the cat
+                      burning-cost field. The host writes via its real layer
+                      setter; persistence rides the screen's normal save. */}
+                  <div style={{ ...card, padding: '12px 16px', flex: '1 1 200px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 8 }}>
+                    <button
+                      type="button"
+                      className="np-btn np-btn--primary"
+                      style={{ fontWeight: 700 }}
+                      disabled={disabled || catLayers.length === 0 || typeof onApplyToCat !== 'function'}
+                      onClick={onApply}
+                      title="Write the ground-up EQ loss into the cat burning-cost field"
+                    >
+                      Apply to cat burning cost
+                    </button>
+                    {applied && (
+                      <span data-testid="eq-applied" style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)' }}>
+                        ✓ Applied to cat burning cost
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -379,33 +392,6 @@ export default function EqDamageRatioPanel({ contractId, catLayers = [], onApply
                   </div>
                 )}
 
-                {/* ── Apply to cat pricing ── */}
-                <div style={{ ...card, padding: '12px 16px', display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
-                  <label style={{ flex: '1 1 160px' }}>
-                    <span style={fieldLabel}>Apply to cat layer</span>
-                    <select style={selectStyle} disabled={disabled} value={targetIdx} onChange={(e) => setTargetIdx(Number(e.target.value))}>
-                      {catLayers.map((l, i) => (
-                        <option key={l.layer ?? i} value={i}>{`Layer ${l.layer ?? i + 1}`}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label style={{ flex: '1 1 160px' }}>
-                    <span style={fieldLabel}>Target field</span>
-                    <select style={selectStyle} disabled={disabled} value={targetField} onChange={(e) => setTargetField(e.target.value)}>
-                      {APPLY_TARGETS.map((t) => <option key={t.field} value={t.field}>{t.label}</option>)}
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    className="np-btn np-btn--primary"
-                    style={{ minWidth: 150, fontWeight: 700 }}
-                    disabled={disabled || catLayers.length === 0}
-                    onClick={onApply}
-                    title={`Write ${(toN(result.effectiveMdr) * 100).toFixed(2)}% into the selected cat layer cell`}
-                  >
-                    Apply {(toN(result.effectiveMdr) * 100).toFixed(2)}%
-                  </button>
-                </div>
               </div>
             )}
           </>

@@ -56,7 +56,7 @@ describe('FQEqDamageRatioTab', () => {
     expect(getGemScenario).not.toHaveBeenCalled();
   });
 
-  it('renders the panel and maps the applied value to the structure cat layer index', async () => {
+  it('writes the ground-up EQ loss into the structure cat layer burning cost', async () => {
     const updateClientStructureLayer = vi.fn();
     render(<FQEqDamageRatioTab structure={structure} sIdx={3} contractId="c-1" currency="SAR" catDisabled={false} updateClientStructureLayer={updateClientStructureLayer} />);
 
@@ -64,10 +64,11 @@ describe('FQEqDamageRatioTab', () => {
     fireEvent.change(pga, { target: { value: '0.18' } });
     fireEvent.click(screen.getByRole('button', { name: /Compute EQ Loss/i }));
 
-    const applyBtn = await screen.findByRole('button', { name: /Apply 25\.00%/i });
+    const applyBtn = await screen.findByRole('button', { name: /Apply to cat burning cost/i });
     fireEvent.click(applyBtn);
 
-    // catLayerIndex 0 → the 2nd structure layer (lIdx 1); sIdx is threaded through.
-    await waitFor(() => expect(updateClientStructureLayer).toHaveBeenCalledWith(3, 1, 'catExposure', '25.00%'));
+    // First cat layer → the 2nd structure layer (lIdx 1); sIdx is threaded through,
+    // value is the ground-up EQ loss written to catPureBurn.
+    await waitFor(() => expect(updateClientStructureLayer).toHaveBeenCalledWith(3, 1, 'catPureBurn', 250000));
   });
 });

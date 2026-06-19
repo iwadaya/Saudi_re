@@ -34,10 +34,12 @@ export default function FQEqDamageRatioTab({
     );
   }
 
-  const onApplyToCat = ({ value, field, catLayerIndex }) => {
-    const layer = catLayers[catLayerIndex];
-    const lIdx = layers.indexOf(layer);
-    if (lIdx >= 0) updateClientStructureLayer(sIdx, lIdx, field, value);
+  // Push the GEM ground-up EQ loss into the (first) cat layer's burning-cost
+  // field via the quote per-layer setter; persistence rides the workbench's
+  // normal save path (no bespoke save here).
+  const onApplyToCat = (groundUpEqLoss) => {
+    const lIdx = layers.indexOf(catLayers[0]);
+    if (lIdx >= 0) updateClientStructureLayer(sIdx, lIdx, 'catPureBurn', Math.round(groundUpEqLoss));
   };
 
   return (

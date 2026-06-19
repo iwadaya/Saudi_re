@@ -85,7 +85,7 @@ describe('EqDamageRatioPanel', () => {
     await waitFor(() => expect(screen.getAllByText('(default)').length).toBe(4));
   });
 
-  it('computes and applies the effective damage ratio into the cat layer cell', async () => {
+  it('computes and applies the ground-up EQ loss to cat burning cost', async () => {
     const { onApplyToCat } = renderPanel();
 
     // Curve catalogue is scoped to the contract's country.
@@ -100,9 +100,9 @@ describe('EqDamageRatioPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Compute EQ Loss/i }));
 
-    // The Apply button (labelled with the effective ratio) appears once the
-    // compute resolves and the result renders.
-    const applyBtn = await screen.findByRole('button', { name: /Apply 25\.00%/i });
+    // The headline "Apply to cat burning cost" button appears once the result
+    // renders.
+    const applyBtn = await screen.findByRole('button', { name: /Apply to cat burning cost/i });
     expect(computeGemEqLoss).toHaveBeenCalledWith('c-1', expect.objectContaining({
       curveAssignments: expect.objectContaining({ commercialBldg: '7' }),
       intensities: { PGA: 0.18 },
@@ -110,8 +110,9 @@ describe('EqDamageRatioPanel', () => {
     }));
     expect(screen.getByText('Ground-up EQ loss')).toBeInTheDocument();
 
-    // Apply hands effectiveMdr as a ROL% back to the host for the selected layer.
+    // Apply hands the ground-up EQ loss back to the host and confirms.
     fireEvent.click(applyBtn);
-    expect(onApplyToCat).toHaveBeenCalledWith({ value: '25.00%', field: 'catExposure', catLayerIndex: 0 });
+    expect(onApplyToCat).toHaveBeenCalledWith(250000);
+    expect(screen.getByTestId('eq-applied')).toHaveTextContent(/Applied to cat burning cost/i);
   });
 });

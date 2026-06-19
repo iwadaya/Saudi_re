@@ -97,9 +97,12 @@ export default function NpTreatyPricingSections({
                   contractId={contractId}
                   catLayers={catLayers}
                   currency={currency}
-                  onApplyToCat={({ value, field, catLayerIndex }) => {
-                    const gi = layers.indexOf(catLayers[catLayerIndex]);
-                    if (gi >= 0) updateLayer(gi, field, value);
+                  onApplyToCat={(groundUpEqLoss) => {
+                    // Push the GEM ground-up EQ loss into the (first) cat layer's
+                    // burning-cost field via the normal layer setter; the screen's
+                    // existing Save persists it (no bespoke save path).
+                    const gi = layers.indexOf(catLayers[0]);
+                    if (gi >= 0) updateLayer(gi, 'catPureBurn', Math.round(groundUpEqLoss));
                   }}
                   disabled={isTerminal}
                 />
