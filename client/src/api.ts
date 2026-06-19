@@ -649,7 +649,7 @@ export const api = {
   getAggDrilldown(contractId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/pricing/agg-drilldown/${encodeURIComponent(contractId)}`, opts); },
 
   // GEM deterministic EQ exposure rating (Tier-B damage ratios).
-  getGemCurves(params: { country?: string; lossCategory?: string; occupancy?: string } = {}, opts?: RequestOpts): Promise<unknown> {
+  getGemCurves(params: { country?: string; lossCategory?: string; occupancy?: string; source?: string } = {}, opts?: RequestOpts): Promise<unknown> {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null) as [string, string][]).toString();
     return request(`/api/pricing/gem/curves${qs ? `?${qs}` : ''}`, opts);
   },

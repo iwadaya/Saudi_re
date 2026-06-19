@@ -1,0 +1,97 @@
+// server/src/db/seeds/generate_hazus_curves.js
+//
+// Generate HAZUS earthquake MDR curves from equivalent-PGA fragility + damage-
+// ratio parameters and upsert them into public.gem_vulnerability_function with
+// source='HAZUS', so they appear alongside GEM curves for selection.
+//
+// SAFETY: by default this REFUSES to run while the parameters are the shipped
+// illustrative placeholders (HAZUS_PARAMS_ARE_PLACEHOLDER). Replace the values
+// in hazusParameters.js with authoritative FEMA Technical Manual numbers, set
+// HAZUS_PARAMS_ARE_PLACEHOLDER=false, and re-run. To generate placeholder curves
+// for a NON-PRICING demo/dev DB only, pass ALLOW_PLACEHOLDER=1.
+//
+// Run:
+//   GEM_MODEL_VERSION=HAZUS-6.1 \
+//   HAZUS_COUNTRY=GENERIC \                 # or a country tag you map exposure to
+//   DATABASE_URL=postgres://… \
+//   node server/src/db/seeds/generate_hazus_curves.js
+//
+// Idempotent: ON CONFLICT (model_version, country_code, loss_category, taxonomy, imt).
+
+import pg from 'pg';
+import { buildHazusMdrCurve } from '../../modules/hazusVulnerability/hazusDamageRatio.js';
+import {
+  HAZUS_PLACEHOLDER_PARAMS, OCCUPANCY_TO_HAZUS, HAZUS_PARAMS_ARE_PLACEHOLDER,
+} from '../../modules/hazusVulnerability/hazusParameters.js';
+
+const { Pool } = pg;
+const DATABASE_URL = process.env.DATABASE_URL
+  || 'postgresql://universe:universe@localhost:5432/universe';
+const MODEL_VERSION = process.env.GEM_MODEL_VERSION || 'HAZUS-unknown';
+const COUNTRY = process.env.HAZUS_COUNTRY || 'GENERIC';
+const ALLOW_PLACEHOLDER = process.env.ALLOW_PLACEHOLDER === '1';
+
+// Which loss_category each occupancy bucket's curve represents (building →
+// structural; contents → contents) so the slot→curve routing in the engine and
+// UI lines up with GEM's loss-category filtering.
+const SLOT_LOSS_CATEGORY = {
+  residentialBldg: 'structural',
+  commercialBldg: 'structural',
+  commercialCont: 'contents',
+  industrialBldg: 'structural',
+  industrialCont: 'contents',
+};
+const SLOT_OCCUPANCY = {
+  residentialBldg: 'RES', commercialBldg: 'COM', commercialCont: 'COM',
+  industrialBldg: 'IND', industrialCont: 'IND',
+};
+
+async function main() {
+  if (HAZUS_PARAMS_ARE_PLACEHOLDER && !ALLOW_PLACEHOLDER) {
+    console.error(
+      'Refusing to generate: hazusParameters.js still holds ILLUSTRATIVE placeholders.\n'
+      + 'Replace them with FEMA Technical Manual values (set HAZUS_PARAMS_ARE_PLACEHOLDER=false),\n'
+      + 'or pass ALLOW_PLACEHOLDER=1 to seed a NON-PRICING demo/dev DB.',
+    );
+    process.exit(1);
+  }
+  const params = HAZUS_PLACEHOLDER_PARAMS; // swap to a real params source once populated
+  const pool = new Pool({ connectionString: DATABASE_URL, max: 6 });
+  const client = await pool.connect();
+  let upserted = 0;
+  try {
+    await client.query('BEGIN');
+    for (const [slot, paramKey] of Object.entries(OCCUPANCY_TO_HAZUS)) {
+      const entry = params[paramKey];
+      if (!entry) { console.warn(`  ! no params for ${paramKey} (${slot})`); continue; }
+      const taxonomy = `HAZUS:${paramKey}`;
+      const lossCategory = SLOT_LOSS_CATEGORY[slot];
+      const occupancy = SLOT_OCCUPANCY[slot];
+      const curve = buildHazusMdrCurve({ fragility: entry.fragility, damageRatios: entry.damageRatios, taxonomy });
+      await client.query(
+        `INSERT INTO public.gem_vulnerability_function
+           (source, model_version, region, country_code, country_name, loss_category,
+            asset_category, taxonomy, occupancy, dist, imt, imls, mean_lrs, cov_lrs,
+            source_license, updated_at)
+         VALUES ('HAZUS',$1,'HAZUS',$2,$2,$3,'buildings',$4,$5,'LN',$6,$7,$8,NULL,
+            'FEMA HAZUS (US Government work, public domain) — verify trademark/use', now())
+         ON CONFLICT (model_version, country_code, loss_category, taxonomy, imt)
+         DO UPDATE SET source='HAZUS', occupancy=EXCLUDED.occupancy, imls=EXCLUDED.imls,
+           mean_lrs=EXCLUDED.mean_lrs, updated_at=now()`,
+        [MODEL_VERSION, COUNTRY, lossCategory, taxonomy, occupancy, curve.imt, curve.imls, curve.meanLRs],
+      );
+      upserted += 1;
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch { /* noop */ }
+    console.error('HAZUS generate failed:', err.message);
+    process.exitCode = 1;
+  } finally {
+    client.release();
+  }
+  console.log(`HAZUS curves upserted: ${upserted} (country ${COUNTRY}, model ${MODEL_VERSION})${HAZUS_PARAMS_ARE_PLACEHOLDER ? ' — PLACEHOLDER data, NOT for pricing' : ''}.`);
+  await pool.end();
+}
+
+main();
