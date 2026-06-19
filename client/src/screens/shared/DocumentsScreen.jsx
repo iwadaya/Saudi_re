@@ -335,14 +335,74 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
   const smBtn     = { borderRadius: 999, padding: '6px 14px', border: '1px solid var(--stroke-soft)', background: 'var(--control-bg)', color: 'var(--text)', fontWeight: 800, fontSize: 12, cursor: 'pointer' };
   const fillBtn   = { ...smBtn, borderColor: 'rgba(var(--accent-rgb), 0.50)', color: 'var(--accent)', background: 'rgba(var(--accent-rgb), 0.06)' };
   const fillBtnDisabled = { ...fillBtn, opacity: 0.45, cursor: 'not-allowed' };
+  const statChipStyle = (accent) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 9px', borderRadius: 999, border: `1px solid ${accent ? 'rgba(var(--accent-rgb), 0.35)' : 'var(--stroke-soft)'}`, background: accent ? 'rgba(var(--accent-rgb), 0.07)' : 'var(--surface-muted)', color: accent ? 'var(--accent)' : 'var(--muted)', fontSize: 11, fontWeight: 800 });
+  const statChipValue = { color: 'var(--text)', fontVariantNumeric: 'tabular-nums' };
+  const headerBadge = { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 999, background: 'var(--surface-muted)', border: '1px solid var(--stroke-soft)', marginBottom: 6 };
+  const headerDot = { width: 8, height: 8, borderRadius: 999, background: 'var(--accent)', boxShadow: '0 0 0 4px rgba(var(--accent-rgb), 0.10)' };
+  const headerText = { fontSize: 11, fontWeight: 800, letterSpacing: '.10em', textTransform: 'uppercase', color: 'var(--text)' };
+  const metaLine = { fontSize: 12, color: 'var(--muted)', marginBottom: 16, marginTop: 4 };
+  const metaLabel = { fontWeight: 700 };
+  const metaId = { fontFamily: 'var(--font-mono)', opacity: 0.8 };
+  const statRow = { display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 };
+  const alertBox = { display: 'flex', alignItems: 'flex-start', gap: 10, borderRadius: 14, border: '1px solid rgba(var(--accent-rose-rgb), 0.40)', background: 'rgba(var(--accent-rose-rgb), 0.08)', color: 'var(--text)', padding: '10px 12px', marginBottom: 16, fontSize: 12, fontWeight: 700 };
+  const alertIcon = { width: 20, height: 20, borderRadius: 999, display: 'grid', placeItems: 'center', flexShrink: 0, background: 'rgba(var(--accent-rose-rgb), 0.14)', color: 'var(--accent-rose)' };
+  const dropContent = { display: 'flex', gap: 12, alignItems: 'flex-start' };
+  const dropIcon = { width: 50, height: 50, borderRadius: 16, display: 'grid', placeItems: 'center', border: '1px solid rgba(var(--accent-rgb), 0.35)', background: 'radial-gradient(circle at 30% 30%, rgba(var(--accent-rgb), 0.35), var(--surface-muted))', boxShadow: '0 0 26px rgba(var(--accent-rgb), 0.18)', flexShrink: 0 };
+  const dropTitle = { fontWeight: 800, fontSize: 13, color: 'var(--text)' };
+  const dropOr = { opacity: 0.65 };
+  const browseButton = { appearance: 'none', border: 0, background: 'transparent', padding: 0, color: 'var(--accent)', fontWeight: 900, cursor: 'pointer', font: 'inherit' };
+  const dropHint = { marginTop: 4, color: 'var(--muted-2)', fontSize: 12 };
+  const hiddenFile = { display: 'none' };
+  const uploadForm = { ...card, border: '1px dashed var(--stroke-soft)', background: 'var(--surface-muted)', marginTop: 16, display: 'grid', gridTemplateColumns: '160px 1fr 1.5fr auto', gap: 12, alignItems: 'end' };
+  const selectWrap = { position: 'relative' };
+  const selectChevron = { position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', opacity: 0.5, fontSize: 10 };
+  const uploadActions = { display: 'flex', flexDirection: 'column', gap: 6 };
+  const selectedFile = { fontSize: 11, color: 'var(--accent)', fontWeight: 700, padding: '4px 10px', borderRadius: 8, background: 'rgba(var(--accent-rgb), 0.08)', border: '1px solid rgba(var(--accent-rgb), 0.25)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 };
+  const uploadBtn = { ...greenBtn, padding: '8px 16px', fontSize: 12, opacity: uploading ? 0.6 : 1 };
+  const uploadNote = { gridColumn: '1 / -1', fontSize: 11, color: 'var(--muted-2)', marginTop: -4 };
+  const docsCard = { ...card, marginTop: 16 };
+  const docsHeader = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 10 };
+  const docsTitle = { fontWeight: 900, fontSize: 14, color: 'var(--text)' };
+  const docsActions = { display: 'flex', gap: 8, alignItems: 'center' };
+  const emptyState = { borderRadius: 16, border: '1px dashed var(--stroke-soft)', background: 'var(--surface-muted)', color: 'var(--muted)', fontSize: 13, padding: '22px', display: 'grid', gap: 8, justifyItems: 'center', textAlign: 'center' };
+  const emptyIcon = { width: 42, height: 42, borderRadius: 14, display: 'grid', placeItems: 'center', border: '1px solid rgba(var(--accent-rgb), 0.25)', background: 'rgba(var(--accent-rgb), 0.06)', color: 'var(--accent)', fontWeight: 900 };
+  const emptyTitle = { fontWeight: 900, color: 'var(--text)' };
+  const emptyCopy = { maxWidth: 460, color: 'var(--muted-2)' };
+  const tableStyle = { width: '100%', borderCollapse: 'collapse', fontSize: 12 };
+  const tableHeadRow = { borderBottom: '1px solid var(--hairline)', color: 'var(--text-subtle)', fontSize: 10, letterSpacing: '.14em', textTransform: 'uppercase' };
+  const thLeft = { textAlign: 'left', padding: '8px 4px' };
+  const thRight = { textAlign: 'right', padding: '8px 4px' };
+  const rowStyle = (isWording) => ({ borderBottom: '1px solid var(--hairline)', background: isWording ? 'rgba(var(--accent-rgb), 0.03)' : 'transparent' });
+  const fileCell = { padding: '10px 4px', fontWeight: 700, color: 'var(--text)' };
+  const fileLink = { cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'var(--stroke-soft)' };
+  const descriptionText = { marginTop: 2, fontSize: 11, color: 'var(--muted-2)', fontWeight: 400 };
+  const importMeta = { marginTop: 4, fontSize: 11, color: 'var(--muted)', fontWeight: 500 };
+  const undoBtn = { background: 'none', border: 'none', padding: 0, fontFamily: 'inherit', fontSize: 11, color: 'var(--accent-blue)', textDecoration: 'underline', cursor: 'pointer' };
+  const typeCell = { padding: '10px 4px' };
+  const typeBadge = (isWording) => ({ display: 'inline-flex', padding: '3px 9px', borderRadius: 999, border: `1px solid ${isWording ? 'rgba(var(--accent-rgb), 0.35)' : 'var(--stroke-soft)'}`, background: isWording ? 'rgba(var(--accent-rgb), 0.08)' : 'var(--control-bg)', fontSize: 11, fontWeight: 800, color: isWording ? 'var(--accent)' : 'inherit' });
+  const mutedCell = { padding: '10px 4px', color: 'var(--muted)' };
+  const actionsCell = { padding: '10px 4px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' };
+  const analyzeBtn = { ...smBtn, borderColor: 'rgba(var(--accent-rgb), 0.40)', color: 'var(--accent)', background: 'rgba(var(--accent-rgb), 0.06)' };
+  const viewBtn = { ...smBtn, borderColor: 'rgba(var(--accent-rgb), 0.35)', color: 'var(--accent)' };
+  const downloadBtn = { ...smBtn, display: 'inline-flex', alignItems: 'center', borderColor: 'rgba(var(--accent-blue-rgb), 0.35)', color: 'var(--accent-blue)', textDecoration: 'none' };
+  const deleteBtn = { ...smBtn, borderColor: 'rgba(var(--accent-rose-rgb), 0.35)', color: 'var(--accent-rose)' };
+  const previewBackdrop = { position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'stretch' };
+  const previewHeader = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', background: 'var(--surface-elevated)', borderBottom: '1px solid var(--hairline-strong)' };
+  const previewTitle = { color: 'var(--text)', fontWeight: 800, fontSize: 14 };
+  const previewActions = { display: 'flex', gap: 10 };
+  const previewDownload = { ...smBtn, borderColor: 'rgba(var(--accent-blue-rgb), 0.40)', color: 'var(--accent-blue)', fontSize: 12, textDecoration: 'none' };
+  const previewClose = { ...smBtn, borderColor: 'rgba(var(--accent-rose-rgb), 0.40)', color: 'var(--accent-rose)', fontSize: 12 };
+  const previewBody = { flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: 20 };
+  const previewFrame = { width: '100%', height: '100%', border: 'none', borderRadius: 8, background: '#fff', minHeight: '80vh' };
+  const previewImage = { maxWidth: '100%', maxHeight: '85vh', borderRadius: 8, objectFit: 'contain' };
 
   const currentFile = dragFile || (fileRef.current?.files?.[0]);
   const entityLabel = quoteMode ? 'Quote' : 'Treaty';
   const renewalPackCount = docs.filter(isRenewalPack).length;
   const wordingCount = docs.filter((d) => WORDING_PRIORITY.includes(d.doc_type)).length;
   const statChip = (label, value, accent = false) => (
-    <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 9px', borderRadius:999, border:`1px solid ${accent ? 'rgba(var(--accent-rgb), 0.35)' : 'var(--stroke-soft)'}`, background: accent ? 'rgba(var(--accent-rgb), 0.07)' : 'var(--surface-muted)', color: accent ? 'var(--accent)' : 'var(--muted)', fontSize:11, fontWeight:800 }}>
-      <span style={{ color:'var(--text)', fontVariantNumeric:'tabular-nums' }}>{value}</span>{label}
+    <span style={statChipStyle(accent)}>
+      <span style={statChipValue}>{value}</span>{label}
     </span>
   );
 
@@ -352,14 +412,14 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
       {() => (
         <div>
           {/* Header */}
-          <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'6px 12px', borderRadius:999, background:'var(--surface-muted)', border:'1px solid var(--stroke-soft)', marginBottom:6 }}>
-            <span style={{ width:8, height:8, borderRadius:999, background:'var(--accent)', boxShadow:'0 0 0 4px rgba(var(--accent-rgb), 0.10)' }}/>
-            <span style={{ fontSize:11, fontWeight:800, letterSpacing:'.10em', textTransform:'uppercase', color:'var(--text)' }}>Files for {entityLabel}</span>
+          <div style={headerBadge}>
+            <span style={headerDot}/>
+            <span style={headerText}>Files for {entityLabel}</span>
           </div>
-          <div style={{ fontSize:12, color:'var(--muted)', marginBottom:16, marginTop:4 }}>
-            <span style={{ fontWeight:700 }}>{entityLabel.toUpperCase()} ID:</span>{' '}<span style={{ fontFamily:'var(--font-mono)', opacity:0.8 }}>{contractId||'—'}</span>
+          <div style={metaLine}>
+            <span style={metaLabel}>{entityLabel.toUpperCase()} ID:</span>{' '}<span style={metaId}>{contractId||'—'}</span>
           </div>
-          <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:16 }}>
+          <div style={statRow}>
             {statChip('documents', docs.length, docs.length > 0)}
             {statChip('renewal packs', renewalPackCount)}
             {statChip('wording slips', wordingCount)}
@@ -367,8 +427,8 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
           </div>
 
           {loadError && (
-            <div role="alert" style={{ display:'flex', alignItems:'flex-start', gap:10, borderRadius:14, border:'1px solid rgba(var(--accent-rose-rgb), 0.40)', background:'rgba(var(--accent-rose-rgb), 0.08)', color:'var(--text)', padding:'10px 12px', marginBottom:16, fontSize:12, fontWeight:700 }}>
-              <span style={{ width:20, height:20, borderRadius:999, display:'grid', placeItems:'center', flexShrink:0, background:'rgba(var(--accent-rose-rgb), 0.14)', color:'var(--accent-rose)' }}>!</span>
+            <div role="alert" style={alertBox}>
+              <span style={alertIcon}>!</span>
               <span>{loadError}</span>
             </div>
           )}
@@ -376,39 +436,39 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
           {/* Dropzone */}
           {/* Drag-and-drop is a pointer-only convenience — keyboard users attach via the "+ Select Files" / browse buttons below. */}
           <div style={dropzone} role="presentation" onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)} onDrop={handleDrop}>
-            <div style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
-              <div style={{ width:50, height:50, borderRadius:16, display:'grid', placeItems:'center', border:'1px solid rgba(var(--accent-rgb), 0.35)', background:'radial-gradient(circle at 30% 30%, rgba(var(--accent-rgb), 0.35), var(--surface-muted))', boxShadow:'0 0 26px rgba(var(--accent-rgb), 0.18)', flexShrink:0 }}>
+            <div style={dropContent}>
+              <div style={dropIcon}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
               </div>
               <div>
-                <div style={{ fontWeight:800, fontSize:13, color:'var(--text)' }}>
-                  Drag & drop files here <span style={{ opacity:0.65 }}>or</span>{' '}
-                  <span
-                    role="button" tabIndex={0} style={{ color:'var(--accent)', fontWeight:900, cursor:'pointer' }}
+                <div style={dropTitle}>
+                  Drag & drop files here <span style={dropOr}>or</span>{' '}
+                  <button
+                    type="button" style={browseButton}
                     onClick={()=>fileRef.current?.click()}
                     onKeyDown={e=>{ if (e.key==='Enter'||e.key===' ') { e.preventDefault(); fileRef.current?.click(); } }}
-                  >browse</span>
+                  >browse</button>
                 </div>
-                <div style={{ marginTop:4, color:'var(--muted-2)', fontSize:12 }}>Attach treaties, slips, wordings, accounts and bordereaux.</div>
-                <div style={{ marginTop:4, color:'var(--muted-2)', fontSize:12 }}>PDF, XLSX, DOCX, CSV up to 50MB each.</div>
+                <div style={dropHint}>Attach treaties, slips, wordings, accounts and bordereaux.</div>
+                <div style={dropHint}>PDF, XLSX, DOCX, CSV up to 50MB each.</div>
               </div>
             </div>
             <button style={greenBtn} onClick={()=>fileRef.current?.click()}>+ Select Files</button>
           </div>
 
           {/* Hidden file input */}
-          <input type="file" ref={fileRef} onChange={handleFileSelect} style={{ display:'none' }}
+          <input type="file" ref={fileRef} onChange={handleFileSelect} style={hiddenFile}
             accept=".pdf,.xlsx,.xls,.docx,.doc,.csv,.txt,.png,.jpg,.jpeg" />
 
           {/* Upload form */}
-          <div style={{ ...card, border:'1px dashed var(--stroke-soft)', background:'var(--surface-muted)', marginTop:16, display:'grid', gridTemplateColumns:'160px 1fr 1.5fr auto', gap:12, alignItems:'end' }}>
+          <div style={uploadForm}>
             <div>
               <div style={lbl}>Document Type</div>
-              <div style={{ position:'relative' }}>
+              <div style={selectWrap}>
                 <select style={sel} value={docType} onChange={e=>handleDocTypeChange(e.target.value)}>
                   {DOC_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
                 </select>
-                <span style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', pointerEvents:'none', opacity:0.5, fontSize:10 }}>▾</span>
+                <span style={selectChevron}>▾</span>
               </div>
             </div>
             <div>
@@ -419,46 +479,46 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
               <div style={lbl}>Description (Optional)</div>
               <input style={inp} placeholder="Notes…" value={description} onChange={e=>setDescription(e.target.value)} />
             </div>
-            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+            <div style={uploadActions}>
               {currentFile && (
-                <div style={{ fontSize:11, color:'var(--accent)', fontWeight:700, padding:'4px 10px', borderRadius:8, background:'rgba(var(--accent-rgb), 0.08)', border:'1px solid rgba(var(--accent-rgb), 0.25)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:180 }}>
+                <div style={selectedFile}>
                   📎 {currentFile.name}
                 </div>
               )}
-              <button style={{ ...greenBtn, padding:'8px 16px', fontSize:12, opacity: uploading ? 0.6 : 1 }} onClick={handleUploadClick} disabled={uploading}>
+              <button style={uploadBtn} onClick={handleUploadClick} disabled={uploading}>
                 {uploading ? '⟳ Uploading…' : '↑ Upload'}
               </button>
             </div>
-            <div style={{ gridColumn:'1 / -1', fontSize:11, color:'var(--muted-2)', marginTop:-4 }}>
+            <div style={uploadNote}>
               Uploaded files are stored on the server and linked to this treaty.
             </div>
           </div>
 
           {/* Uploaded Documents */}
-          <div style={{ ...card, marginTop:16 }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10, gap:10 }}>
-              <div style={{ fontWeight:900, fontSize:14, color:'var(--text)' }}>Uploaded Documents</div>
-              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <div style={docsCard}>
+            <div style={docsHeader}>
+              <div style={docsTitle}>Uploaded Documents</div>
+              <div style={docsActions}>
                 <button style={smBtn} onClick={load}>↻ Reload</button>
               </div>
             </div>
 
             {docs.length === 0 ? (
-              <div style={{ borderRadius:16, border:'1px dashed var(--stroke-soft)', background:'var(--surface-muted)', color:'var(--muted)', fontSize:13, padding:'22px', display:'grid', gap:8, justifyItems:'center', textAlign:'center' }}>
-                <div style={{ width:42, height:42, borderRadius:14, display:'grid', placeItems:'center', border:'1px solid rgba(var(--accent-rgb), 0.25)', background:'rgba(var(--accent-rgb), 0.06)', color:'var(--accent)', fontWeight:900 }}>0</div>
-                <div style={{ fontWeight:900, color:'var(--text)' }}>{loadingDocs ? 'Loading documents...' : 'No documents uploaded yet'}</div>
-                <div style={{ maxWidth:460, color:'var(--muted-2)' }}>Drop a slip, wording, renewal pack, account, or bordereaux above to keep this {entityLabel.toLowerCase()} file set complete and review-ready.</div>
+              <div style={emptyState}>
+                <div style={emptyIcon}>0</div>
+                <div style={emptyTitle}>{loadingDocs ? 'Loading documents...' : 'No documents uploaded yet'}</div>
+                <div style={emptyCopy}>Drop a slip, wording, renewal pack, account, or bordereaux above to keep this {entityLabel.toLowerCase()} file set complete and review-ready.</div>
               </div>
             ) : (
-              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+              <table style={tableStyle}>
                 <thead>
-                  <tr style={{ borderBottom:'1px solid var(--hairline)', color:'var(--text-subtle)', fontSize:10, letterSpacing:'.14em', textTransform:'uppercase' }}>
-                    <th style={{ textAlign:'left', padding:'8px 4px' }}>File</th>
-                    <th style={{ textAlign:'left', padding:'8px 4px' }}>Type</th>
-                    <th style={{ textAlign:'left', padding:'8px 4px' }}>Title</th>
-                    <th style={{ textAlign:'left', padding:'8px 4px' }}>Size</th>
-                    <th style={{ textAlign:'left', padding:'8px 4px' }}>Uploaded</th>
-                    <th style={{ textAlign:'right', padding:'8px 4px' }}>Actions</th>
+                  <tr style={tableHeadRow}>
+                    <th style={thLeft}>File</th>
+                    <th style={thLeft}>Type</th>
+                    <th style={thLeft}>Title</th>
+                    <th style={thLeft}>Size</th>
+                    <th style={thLeft}>Uploaded</th>
+                    <th style={thRight}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -476,18 +536,18 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
                         ? 'Import in progress'
                         : 'Fill the remaining wizard pages from this renewal pack';
                     return (
-                      <tr key={docId} style={{ borderBottom:'1px solid var(--hairline)', background: isWording ? 'rgba(var(--accent-rgb), 0.03)' : 'transparent' }}>
-                        <td style={{ padding:'10px 4px', fontWeight:700, color:'var(--text)' }}>
+                      <tr key={docId} style={rowStyle(isWording)}>
+                        <td style={fileCell}>
                           <span
-                            role="button" tabIndex={0} style={{ cursor:'pointer', textDecoration:'underline', textDecorationColor:'var(--stroke-soft)' }}
+                            role="button" tabIndex={0} style={fileLink}
                             onClick={()=>openPreview(d)}
                             onKeyDown={e=>{ if (e.key==='Enter'||e.key===' ') { e.preventDefault(); openPreview(d); } }}
                           >
                             {d.file_name||d.name||'–'}
                           </span>
-                          {d.description && <div style={{ marginTop:2, fontSize:11, color:'var(--muted-2)', fontWeight:400 }}>{d.description}</div>}
+                          {d.description && <div style={descriptionText}>{d.description}</div>}
                           {isRP && snapshot && (
-                            <div style={{ marginTop:4, fontSize:11, color:'var(--muted)', fontWeight:500 }}>
+                            <div style={importMeta}>
                               Imported {fmtDate(snapshot.capturedAt)}
                               {snapshot.restorable && (
                                 <>
@@ -495,7 +555,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
                                   <button
                                     type="button"
                                     onClick={() => setRestoring({ snapshotId: snapshot.id, documentId: docId })}
-                                    style={{ background:'none', border:'none', padding:0, fontFamily:'inherit', fontSize:11, color:'var(--accent-blue)', textDecoration:'underline', cursor:'pointer' }}
+                                    style={undoBtn}
                                   >
                                     Undo
                                   </button>
@@ -507,15 +567,15 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
                             </div>
                           )}
                         </td>
-                        <td style={{ padding:'10px 4px' }}>
-                          <span style={{ display:'inline-flex', padding:'3px 9px', borderRadius:999, border:`1px solid ${isWording?'rgba(var(--accent-rgb), 0.35)':'var(--stroke-soft)'}`, background: isWording?'rgba(var(--accent-rgb), 0.08)':'var(--control-bg)', fontSize:11, fontWeight:800, color: isWording?'var(--accent)':'inherit' }}>
+                        <td style={typeCell}>
+                          <span style={typeBadge(isWording)}>
                             {d.doc_type||'–'}
                           </span>
                         </td>
-                        <td style={{ padding:'10px 4px', color:'var(--muted)' }}>{d.title||'–'}</td>
-                        <td style={{ padding:'10px 4px', color:'var(--muted)' }}>{fmtSize(d.size_bytes)}</td>
-                        <td style={{ padding:'10px 4px', color:'var(--muted)' }}>{(d.uploaded_at||'').slice(0,10)}</td>
-                        <td style={{ padding:'10px 4px', textAlign:'right', display:'flex', justifyContent:'flex-end', gap:6, flexWrap:'wrap' }}>
+                        <td style={mutedCell}>{d.title||'–'}</td>
+                        <td style={mutedCell}>{fmtSize(d.size_bytes)}</td>
+                        <td style={mutedCell}>{(d.uploaded_at||'').slice(0,10)}</td>
+                        <td style={actionsCell}>
                           {isRP && (
                             <button
                               type="button"
@@ -533,18 +593,18 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
                               type="button"
                               title="Analyze this slip's wording"
                               aria-label="Analyze wording"
-                              style={{ ...smBtn, borderColor: 'rgba(var(--accent-rgb), 0.40)', color: 'var(--accent)', background: 'rgba(var(--accent-rgb), 0.06)' }}
+                              style={analyzeBtn}
                               onClick={() => setAnalyzing({ docId, doc: d })}
                             >
                               🔍 Analyze
                             </button>
                           )}
                           {isViewable(d.mime_type) && (
-                            <button style={{ ...smBtn, borderColor:'rgba(var(--accent-rgb), 0.35)', color:'var(--accent)' }} onClick={()=>openPreview(d)}>View</button>
+                            <button style={viewBtn} onClick={()=>openPreview(d)}>View</button>
                           )}
                           <a href={api.getDocumentDownloadUrl(docId)} target="_blank" rel="noopener noreferrer"
-                            style={{ ...smBtn, display:'inline-flex', alignItems:'center', borderColor:'rgba(var(--accent-blue-rgb), 0.35)', color:'var(--accent-blue)', textDecoration:'none' }}>Download</a>
-                          <button style={{ ...smBtn, borderColor:'rgba(var(--accent-rose-rgb), 0.35)', color:'var(--accent-rose)' }} onClick={()=>del(docId)}>Delete</button>
+                            style={downloadBtn}>Download</a>
+                          <button style={deleteBtn} onClick={()=>del(docId)}>Delete</button>
                         </td>
                       </tr>
                     );
@@ -568,23 +628,23 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
 
           {/* Preview Modal — non-slip viewable docs only; slips open in a new tab */}
           {preview && (
-            <div className="modal-backdrop" role="presentation" style={{ position:'fixed', inset:0, zIndex:9999, background:'rgba(0,0,0,0.85)', display:'flex', flexDirection:'column', alignItems:'stretch', justifyContent:'stretch' }}
+            <div className="modal-backdrop" role="presentation" style={previewBackdrop}
               onClick={e=>{if(e.target===e.currentTarget)setPreview(null);}}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 20px', background:'var(--surface-elevated)', borderBottom:'1px solid var(--hairline-strong)' }}>
-                <div style={{ color:'var(--text)', fontWeight:800, fontSize:14 }}>{preview.name}</div>
-                <div style={{ display:'flex', gap:10 }}>
+              <div style={previewHeader}>
+                <div style={previewTitle}>{preview.name}</div>
+                <div style={previewActions}>
                   <a href={preview.url.replace('/view','/download')} target="_blank" rel="noopener noreferrer"
-                    style={{ ...smBtn, borderColor:'rgba(var(--accent-blue-rgb), 0.40)', color:'var(--accent-blue)', fontSize:12, textDecoration:'none' }}>↓ Download</a>
-                  <button type="button" aria-label="Close" style={{ ...smBtn, borderColor:'rgba(var(--accent-rose-rgb), 0.40)', color:'var(--accent-rose)', fontSize:12 }} onClick={()=>setPreview(null)}>✕ Close</button>
+                    style={previewDownload}>↓ Download</a>
+                  <button type="button" aria-label="Close" style={previewClose} onClick={()=>setPreview(null)}>✕ Close</button>
                 </div>
               </div>
-              <div style={{ flex:1, overflow:'auto', display:'flex', justifyContent:'center', alignItems:'flex-start', padding:20 }}>
+              <div style={previewBody}>
                 {preview.mime==='application/pdf' ? (
-                  <iframe src={preview.url} style={{ width:'100%', height:'100%', border:'none', borderRadius:8, background:'#fff', minHeight:'80vh' }} title="PDF Preview"/>
+                  <iframe src={preview.url} style={previewFrame} title="PDF Preview"/>
                 ) : preview.mime?.startsWith('image/') ? (
-                  <img src={preview.url} alt={preview.name} style={{ maxWidth:'100%', maxHeight:'85vh', borderRadius:8, objectFit:'contain' }}/>
+                  <img src={preview.url} alt={preview.name} style={previewImage}/>
                 ) : (
-                  <iframe src={preview.url} style={{ width:'100%', height:'100%', border:'none', borderRadius:8, background:'#fff', minHeight:'80vh' }} title="File Preview"/>
+                  <iframe src={preview.url} style={previewFrame} title="File Preview"/>
                 )}
               </div>
             </div>
