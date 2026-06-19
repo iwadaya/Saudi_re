@@ -86,6 +86,9 @@ export interface SaveLifecycleSlice {
 export interface UiSlice {
   loading: boolean;
   showUSD: boolean;
+  /** Set when the main pricing load fails (network / 5xx) so the screen can
+   *  show a retry panel instead of a blank pricing surface. */
+  error: unknown;
 }
 
 export interface RefDataSlice {
@@ -159,6 +162,7 @@ export function createInitialPropPricingState(): PropPricingState {
     ui: {
       loading: true,
       showUSD: false,
+      error: null,
     },
     refData: {
       contract: {},
@@ -223,7 +227,7 @@ function withSlice<K extends keyof PropPricingState>(
 function resetForContractSwitch(state: PropPricingState): PropPricingState {
   return {
     ...state,
-    ui: { ...state.ui, loading: true, showUSD: false },
+    ui: { ...state.ui, loading: true, showUSD: false, error: null },
     saveLifecycle: { ...state.saveLifecycle, dirty: false, saveMsg: null, lastUpdatedAt: null },
     refData: { ...state.refData, contract: {}, reinsurers: [] },
     grid: {

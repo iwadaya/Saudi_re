@@ -260,4 +260,23 @@ describe('TriangleScreen', () => {
       });
     });
   });
+
+  describe('load failure', () => {
+    it('shows an error panel with Retry on a load failure, then recovers', async () => {
+      apiMock.getTriangle.mockRejectedValue(new Error('network down'));
+      render(
+        <TriangleScreen routeKey="PROP_PREMIUM_TRIANGLES" title="Premium Triangle" headerPill="X" />,
+      );
+      // Error surfaced (no silent empty grid), Save affordance not offered.
+      const retry = await screen.findByRole('button', { name: 'Retry' });
+      expect(screen.getByRole('alert')).toHaveTextContent(/couldn’t load this triangle/i);
+      expect(screen.queryByText('Save Triangle')).not.toBeInTheDocument();
+
+      // Recover: fix the mock and click Retry → grid loads.
+      apiMock.getTriangle.mockResolvedValue({ cells: [{ origin_year: 2021, dev_months: 12, cum_value: 1000 }] });
+      await act(async () => { fireEvent.click(retry); });
+      await screen.findByDisplayValue('1,000');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+  });
 });

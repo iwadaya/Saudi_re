@@ -3,6 +3,7 @@ import { api } from '../../../api';
 import { useContractId } from '../../../hooks/useContractId';
 import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
+import LoadErrorPanel from '../../../components/LoadErrorPanel';
 
 const TYPE_MAP = {
   PROP_PREMIUM_TRIANGLES: 'PREMIUM',
@@ -63,6 +64,13 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
   // lands (effects run after paint). One of the load effects below always
   // clears it when contractId is truthy.
   const [loading, setLoading] = useState(() => Boolean(contractId));
+  // Real load failure (network / 5xx) vs the normal "no triangle yet" empty
+  // case: the per-fetch `.catch(()=>({cells:[]}))` below used to mask both, so
+  // a failed load silently showed an empty editable grid the user could save
+  // over real server data. loadError surfaces the failure; reloadNonce lets the
+  // Retry button re-run the load effects.
+  const [loadError, setLoadError] = useState(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [dirty, setDirty] = useState({ MODIFIED: false, ACTUAL: false });
   // MODIFIED is the projected triangle the tool prices off — default-active.
   // ACTUAL is the gross reference triangle the underwriter also enters.
@@ -75,6 +83,7 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
   useEffect(() => {
     if (!contractId || isDerived) return;
     setLoading(true);
+    setLoadError(null);
     setDirty({ MODIFIED: false, ACTUAL: false });
     // Index-based origin_year→row / dev_months→col mapping, shared by both
     // variants.
@@ -84,15 +93,18 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
       cells.forEach(c => { const r = years.indexOf(c.origin_year); const d = Math.round(c.dev_months / 12) - 1; if (r >= 0 && d >= 0 && d < devYears.length) newGrid[r][d] = fmtCell(c.cum_value); });
       return newGrid;
     };
+    // No per-fetch swallow: a real failure on either variant must surface as a
+    // load error (the empty "no data yet" case still returns 200 {cells:[]}).
     Promise.all([
-      api.getTriangle(contractId, triType, { ...apiOpts, variant: 'MODIFIED' }).catch(() => ({ cells: [] })),
-      api.getTriangle(contractId, triType, { ...apiOpts, variant: 'ACTUAL' }).catch(() => ({ cells: [] })),
-    ]).then(([m, a]) => ({ MODIFIED: mapCells(m), ACTUAL: mapCells(a) }))
-      .then(setGrids).catch(e => console.warn('Load triangle:', e)).finally(() => setLoading(false));
+      api.getTriangle(contractId, triType, { ...apiOpts, variant: 'MODIFIED' }),
+      api.getTriangle(contractId, triType, { ...apiOpts, variant: 'ACTUAL' }),
+    ]).then(([m, a]) => setGrids({ MODIFIED: mapCells(m), ACTUAL: mapCells(a) }))
+      .catch(e => { console.warn('Load triangle:', e); setLoadError(e); })
+      .finally(() => setLoading(false));
     // Re-run on year-window changes: triangleMeta arrives from PropTreatyDetail
     // asynchronously and sizes the grids; without these deps the index-based
     // mapping drops cells when startYear/numDevYears shift.
-  }, [contractId, triType, startYear, numDevYears, apiOpts, isDerived, years, devYears.length]);
+  }, [contractId, triType, startYear, numDevYears, apiOpts, isDerived, years, devYears.length, reloadNonce]);
 
   // ── Reset derived grids on shape change (INCURRED only) ──
   // The derive effect below recomputes only grids[variant], so on a shape
@@ -119,6 +131,7 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
   useEffect(() => {
     if (!contractId || !isDerived) return;
     setLoading(true);
+    setLoadError(null);
     const buildFromCells = (cells, target) => {
       cells.forEach(c => {
         const r = years.indexOf(c.origin_year);
@@ -130,16 +143,16 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
       });
     };
     Promise.all([
-      api.getTriangle(contractId, 'CLAIMS_PAID', { ...apiOpts, variant }).catch(() => ({ cells: [] })),
-      api.getTriangle(contractId, 'CLAIMS_OS', { ...apiOpts, variant }).catch(() => ({ cells: [] })),
+      api.getTriangle(contractId, 'CLAIMS_PAID', { ...apiOpts, variant }),
+      api.getTriangle(contractId, 'CLAIMS_OS', { ...apiOpts, variant }),
     ]).then(([p, o]) => {
       const sumGrid = years.map(() => new Array(devYears.length).fill(null));
       buildFromCells(p?.cells || (Array.isArray(p) ? p : []), sumGrid);
       buildFromCells(o?.cells || (Array.isArray(o) ? o : []), sumGrid);
       const derived = sumGrid.map(row => row.map(v => v == null ? '' : fmtCell(v)));
       setGrids(prev => ({ ...prev, [variant]: derived }));
-    }).catch(e => console.warn('Load incurred:', e)).finally(() => setLoading(false));
-  }, [contractId, triType, startYear, numDevYears, apiOpts, isDerived, years, devYears.length, variant]);
+    }).catch(e => { console.warn('Load incurred:', e); setLoadError(e); }).finally(() => setLoading(false));
+  }, [contractId, triType, startYear, numDevYears, apiOpts, isDerived, years, devYears.length, variant, reloadNonce]);
 
   // Note: the year window is owned by the load effect above (which re-runs
   // when startYear/numDevYears change). An index-based prev→current copy on
@@ -157,6 +170,8 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
   const save = useCallback(async () => {
     if (isDerived) return true;
     if (!contractId) return false;
+    // Never persist over a failed load — the grid may be empty/partial.
+    if (loadError) return false;
     const pending = ['MODIFIED', 'ACTUAL'].filter(v => dirty[v]);
     if (!pending.length) return true;
     for (const v of pending) {
@@ -173,7 +188,7 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
       setDirty(prev => ({ ...prev, [v]: false }));
     }
     return true;
-  }, [isDerived, contractId, dirty, grids, triType, apiOpts, inTriangle, years]);
+  }, [isDerived, contractId, dirty, grids, triType, apiOpts, inTriangle, years, loadError]);
 
   const handlePaste = useCallback((e, showToast) => {
     const text = e.clipboardData?.getData('text/plain');
@@ -249,7 +264,12 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
             <div style={{ color: 'var(--text-subtle)' }}>Inception Year: <b style={{ color: 'var(--text)' }}>{inceptionYear}</b></div>
             <div style={{ color: 'var(--text-subtle)' }}>Development Years: <b style={{ color: 'var(--accent)' }}>{numDevYears}</b></div>
           </div>
-          {loading ? <div className="muted">Loading…</div> : (
+          {loading ? <div className="muted">Loading…</div> : loadError ? (
+            <LoadErrorPanel
+              message="Couldn’t load this triangle. Editing is disabled to avoid saving over server data."
+              onRetry={() => setReloadNonce(n => n + 1)}
+            />
+          ) : (
             <>
               {/* ACTUAL | MODIFIED tab — shown for every triangle type. For the
                   editable types, switching only changes which grid is rendered;

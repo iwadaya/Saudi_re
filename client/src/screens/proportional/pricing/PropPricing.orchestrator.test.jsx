@@ -103,4 +103,14 @@ describe('PropPricing orchestrator interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Close$/ }));
     await waitFor(() => expect(screen.queryByRole('button', { name: /^Close$/ })).not.toBeInTheDocument());
   });
+
+  it('shows a retry panel instead of a blank pricing screen when the core load fails', async () => {
+    // A failed contract fetch must surface, not silently render empty pricing.
+    resetApi({ getContract: vi.fn().mockRejectedValue(new Error('network down')) });
+    renderScreen();
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn’t load pricing/i);
+    // The pricing surface never rendered.
+    expect(screen.queryByText(/Component Pricing Comparison/i)).not.toBeInTheDocument();
+  });
 });
