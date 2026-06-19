@@ -1,10 +1,9 @@
 // components/FQPricingAnalysisModal.jsx — 3-tab pricing workbench.
 //
-// Tab 1 "Pricing Analysis": per-peril sections (Risk above Cat) stacked
-// vertically, each with a weight Blender bar, a metrics table, and a notes
-// box; below them a combined per-layer Total Section (risk + cat fused) shows
-// whenever any component is active.
-// Tabs 2/3 ("Pareto Simulation", "Inflation & Loss") are placeholders.
+// Tab 1 "Pricing Analysis": per-peril sections (Risk above Cat) stacked vertically,
+// each with a weight Blender bar, a metrics table, and a notes box; below them a
+// combined per-layer Total Section (risk + cat fused) shows whenever any component
+// is active. Tabs 2/3 ("Pareto Simulation", "Inflation & Loss") are placeholders.
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
 import { toN, capPct2 } from '../formatters.js';

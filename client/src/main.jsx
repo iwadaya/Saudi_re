@@ -50,6 +50,7 @@ import './styles/non_proportional/treaty_detail.css';
 import './styles/non_proportional/structure.css';
 import './styles/non_proportional/premiums_table.css';
 import './styles/non_proportional/final_pricing.css';
+import './styles/facultative/facSummary.css';
 import './styles/cockpit.css';
 import './styles/modal-safety.css';
 // Must be last — canonical numeric typography that harmonizes number cells

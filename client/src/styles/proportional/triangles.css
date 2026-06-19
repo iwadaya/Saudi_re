@@ -492,3 +492,38 @@
   font-weight: 500;
   color: rgba(226,232,240,.85);
 }
+
+/* TriangleScreen layout — moved off inline styles (frontend-budget). */
+.PROP_TRIANGLES .tri-loading-msg{ padding: 32px; color: rgba(255,255,255,.5); }
+.PROP_TRIANGLES .tri-info-bar{
+  display: flex; gap: 24px; padding: 10px 16px; margin-bottom: 14px;
+  border-radius: 10px; background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.06); font-size: 13px; flex-wrap: wrap;
+}
+.PROP_TRIANGLES .tri-info-item{ color: var(--text-subtle); }
+.PROP_TRIANGLES .tri-info-item b{ color: var(--text); }
+.PROP_TRIANGLES .tri-info-item--accent b{ color: var(--accent); }
+.PROP_TRIANGLES .tri-variant-tabs{
+  display: inline-flex; margin-bottom: 12px; border-radius: 8px;
+  overflow: hidden; border: 1px solid rgba(255,255,255,.12);
+}
+.PROP_TRIANGLES .tri-variant-tab{
+  padding: 6px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
+  border: none; background: transparent; color: var(--text-subtle);
+}
+.PROP_TRIANGLES .tri-variant-tab[aria-selected="true"]{
+  background: var(--accent); color: var(--accent-contrast);
+}
+.PROP_TRIANGLES .tri-table-scroll{ overflow-x: auto; }
+.PROP_TRIANGLES .tri-inp--derived{ color: rgba(226,232,240,.88); }
+.PROP_TRIANGLES .tri-derived-note{
+  margin-top: 10px; padding: 8px 12px; border-radius: 8px;
+  background: rgba(34,197,94,.06); border: 1px solid rgba(34,197,94,.20);
+  color: rgba(167,243,208,.85); font-size: 12px;
+}
+.PROP_TRIANGLES .tri-save-row{ margin-top: 10px; display: flex; align-items: center; gap: 12px; }
+.PROP_TRIANGLES .tri-warn{
+  margin-top: 10px; padding: 8px 12px; border-radius: 8px;
+  background: rgba(251,146,60,.1); border: 1px solid rgba(251,146,60,.3);
+  color: #fb923c; font-size: 12px;
+}

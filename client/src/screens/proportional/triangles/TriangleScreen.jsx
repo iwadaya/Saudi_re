@@ -249,7 +249,7 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
   // triangleMeta not yet loaded (e.g. just after a hard reset, before
   // PropTreatyDetail re-fetches the contract). Avoid rendering with a bogus year range.
   // Guard must stay after all hooks — Rules of Hooks.
-  if (!startYear) return <div style={{ padding: 32, color: 'rgba(255,255,255,0.5)' }}>Loading triangle…</div>;
+  if (!startYear) return <div className="tri-loading-msg">Loading triangle…</div>;
 
   // The grid currently shown/edited. For INCURRED this is the derived sum in
   // the MODIFIED slot; otherwise it's whichever variant the tab selects.
@@ -259,10 +259,10 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
     <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill} onBeforeNext={save} onBeforeBack={save}>
       {({ showToast }) => (
         <div className="PROP_TRIANGLES">
-          <div style={{ display: 'flex', gap: 24, padding: '10px 16px', marginBottom: 14, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', fontSize: 13, flexWrap: 'wrap' }}>
-            <div style={{ color: 'var(--text-subtle)' }}>Start Year: <b style={{ color: 'var(--text)' }}>{startYear}</b></div>
-            <div style={{ color: 'var(--text-subtle)' }}>Inception Year: <b style={{ color: 'var(--text)' }}>{inceptionYear}</b></div>
-            <div style={{ color: 'var(--text-subtle)' }}>Development Years: <b style={{ color: 'var(--accent)' }}>{numDevYears}</b></div>
+          <div className="tri-info-bar">
+            <div className="tri-info-item">Start Year: <b>{startYear}</b></div>
+            <div className="tri-info-item">Inception Year: <b>{inceptionYear}</b></div>
+            <div className="tri-info-item tri-info-item--accent">Development Years: <b>{numDevYears}</b></div>
           </div>
           {loading ? <div className="muted">Loading…</div> : loadError ? (
             <LoadErrorPanel
@@ -276,15 +276,15 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
                   unsaved edits in the hidden variant stay in state and the •
                   marks a variant with unsaved edits. For derived INCURRED it
                   re-derives the displayed grid from that variant's paid + OS. */}
-              <div role="tablist" aria-label="Triangle variant" style={{ display: 'inline-flex', marginBottom: 12, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.12)' }}>
+              <div role="tablist" aria-label="Triangle variant" className="tri-variant-tabs">
                 {['MODIFIED', 'ACTUAL'].map(v => { const active = variant === v; return (
                   <button key={v} type="button" role="tab" aria-selected={active} onClick={() => setVariant(v)}
-                    style={{ padding: '6px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', background: active ? 'var(--accent)' : 'transparent', color: active ? 'var(--accent-contrast)' : 'var(--text-subtle)' }}>
+                    className="tri-variant-tab">
                     {v === 'MODIFIED' ? 'Modified' : 'Actual'}{!isDerived && dirty[v] ? ' •' : ''}
                   </button>
                 ); })}
               </div>
-            <div style={{ overflowX: 'auto' }}>
+            <div className="tri-table-scroll">
               <table className="tri-table">
                 <thead><tr><th className="tri-hdr tri-yr-hdr">YEAR</th>{devYears.map(d => <th key={d} className="tri-hdr">{d}</th>)}</tr></thead>
                 <tbody>{years.map((yr, r) => (
@@ -292,26 +292,26 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
                     <td className="tri-yr">{yr}</td>
                     {devYears.map((_, c) => { const maxCol = numDevYears - r - 1; const off = c > maxCol; return (
                       <td key={c} className={off ? 'tri-off' : 'tri-cell'}>{off ? '' : isDerived
-                        ? <div className="tri-inp" style={{ color: 'rgba(226,232,240,0.88)' }}>{activeGrid[r]?.[c] ?? ''}</div>
+                        ? <div className="tri-inp tri-inp--derived">{activeGrid[r]?.[c] ?? ''}</div>
                         : <input className="tri-inp" type="text" value={activeGrid[r]?.[c] ?? ''} data-row={r} data-col={c} onChange={e => updateCell(r, c, e.target.value)} onBlur={() => handleBlur(r, c)} onPaste={(e) => handlePaste(e, showToast)} />}</td>
                     ); })}
                   </tr>
                 ))}</tbody>
               </table>
               {isDerived && (
-                <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8, background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.20)', color: 'rgba(167,243,208,0.85)', fontSize: 12 }}>
+                <div className="tri-derived-note">
                   Read-only derived view — {variant === 'ACTUAL' ? 'Actual' : 'Modified'} incurred = {variant === 'ACTUAL' ? 'Actual' : 'Modified'} paid + outstanding. Edit the Claims Paid and OS Claims triangles (on their own tabs) to change these values.
                 </div>
               )}
               {!isDerived && (dirty.MODIFIED || dirty.ACTUAL) && (
-                <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div className="tri-save-row">
                   <button className="orange-gloss-btn" onClick={async () => {
                     try { await save(); showToast?.('Triangle saved'); }
                     catch (e) { showToast?.(`Save failed: ${e?.message || 'server error'}`); }
                   }}>Save Triangle</button>
                 </div>
               )}
-              {!contractId && <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8, background: 'rgba(251,146,60,0.1)', border: '1px solid rgba(251,146,60,0.3)', color: '#fb923c', fontSize: 12 }}>No contract ID — save treaty detail first.</div>}
+              {!contractId && <div className="tri-warn">No contract ID — save treaty detail first.</div>}
             </div>
             </>
           )}

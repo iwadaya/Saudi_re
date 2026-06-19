@@ -46,23 +46,17 @@ function gradeColor(grade) {
 
 function Row({ label, value, color }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0',
-                   borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-      <span style={{ fontSize: 12, color: 'rgba(148,163,184,0.60)' }}>{label}</span>
-      <span style={{ fontSize: 12, fontWeight: 600,
-                     color: color || 'rgba(226,232,240,0.85)',
-                     fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{value}</span>
+    <div className="fac-row">
+      <span className="fac-row-label">{label}</span>
+      <span className="fac-row-value" style={{ color: color || 'rgba(226,232,240,0.85)' }}>{value}</span>
     </div>
   );
 }
 
 function Sec({ title, color, children }) {
   return (
-    <div style={{ marginBottom: 22 }}>
-      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em',
-                    textTransform: 'uppercase', color: color || 'rgba(0,212,255,0.55)',
-                    marginBottom: 10, paddingBottom: 6,
-                    borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{title}</div>
+    <div className="fac-sec">
+      <div className="fac-sec-title" style={{ color: color || 'rgba(0,212,255,0.55)' }}>{title}</div>
       {children}
     </div>
   );
@@ -332,11 +326,11 @@ export default function FacSummary() {
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Summary & Approval" headerPill={headerRef}
                   onBeforeNext={save} onBeforeBack={save}>
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '8px 0 60px' }}>
+      <div className="fac-summary">
 
         {/* ── 1. Risk Snapshot ── */}
         <Sec title="Risk Snapshot">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+          <div className="fac-grid-2">
             <div>
               <Row label="Cedant"             value={risk.cedant_name || '—'} />
               <Row label="Insured"            value={risk.insured_name || '—'} />
@@ -356,37 +350,28 @@ export default function FacSummary() {
 
         {/* ── 2. Underwriting Score Panel ── */}
         <Sec title="Underwriting Score">
-          <div style={{ display: 'grid', gridTemplateColumns: '180px 80px 1fr', gap: 16,
-                         alignItems: 'center', padding: '14px 18px',
-                         background: 'rgba(8,14,30,0.40)', border: '1px solid rgba(255,255,255,0.08)',
-                         borderRadius: 10 }}>
+          <div className="fac-score-panel">
             <div>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                            textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>Score</div>
-              <div style={{ fontSize: 32, fontWeight: 900, color: '#e2e8f0',
-                            fontVariantNumeric: 'tabular-nums' }}>
+              <div className="fac-kicker">Score</div>
+              <div className="fac-score-val">
                 {Number(pricing.underwriting_score).toFixed(2)}
               </div>
             </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                            textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>Grade</div>
-              <div style={{ fontSize: 36, fontWeight: 900, color: gradeColor(grade) }}>
+            <div className="fac-grade-col">
+              <div className="fac-kicker">Grade</div>
+              <div className="fac-grade-val" style={{ color: gradeColor(grade) }}>
                 {grade || '—'}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                            textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>Action</div>
-              <div style={{ marginTop: 4 }}>
-                <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 20,
-                               background: `${gradeColor(grade)}26`, border: `1px solid ${gradeColor(grade)}66`,
-                               color: gradeColor(grade), fontSize: 11, fontWeight: 800,
-                               letterSpacing: '.08em' }}>
+              <div className="fac-kicker">Action</div>
+              <div className="fac-action-col">
+                <span className="fac-action-pill"
+                      style={{ background: `${gradeColor(grade)}26`, border: `1px solid ${gradeColor(grade)}66`, color: gradeColor(grade) }}>
                   {pricing.uw_action || '—'}
                 </span>
               </div>
-              <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.60)', marginTop: 8 }}>
+              <div className="fac-scheme-note">
                 Scheme {pricing.bi_rate_pm ? 'WITH_BI' : 'WITHOUT_BI'} ·
                 {' '}Market vs Tech {fmtPct(pricing.market_vs_tech_pct)} ({pricing.market_vs_tech_band || '—'})
               </div>
@@ -396,7 +381,7 @@ export default function FacSummary() {
 
         {/* ── 3. Capacity Panel ── */}
         <Sec title="Capacity" color="rgba(168,85,247,0.55)">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+          <div className="fac-grid-2">
             <div>
               <Row label="Territorial Cap (SAR)"        value={fmt0(territorialCap)} />
               <Row label="Top Location SI (SAR)"        value={fmt0(topLocation ? (Number(topLocation.pd_si) || 0) + (Number(topLocation.bi_si) || 0) : null)} />
@@ -411,21 +396,20 @@ export default function FacSummary() {
               <Row label="Premium Expected"             value={fmt0(pricing.expected_premium)} color="#23d18b" />
             </div>
           </div>
-          <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '220px 1fr', gap: 12, alignItems: 'center' }}>
-            <div style={{ fontSize: 12, color: 'rgba(168,85,247,0.70)', fontWeight: 700 }}>
+          <div className="fac-edit-row">
+            <div className="fac-edit-label" style={{ color: 'rgba(168,85,247,0.70)' }}>
               Capacity Proposed %
             </div>
-            <input className="fi" type="number" min={0} max={1} step={0.0001}
+            <input className="fi fac-edit-input" type="number" min={0} max={1} step={0.0001}
                    value={edits.capacity_proposed_pct}
                    onChange={(e) => setEdit('capacity_proposed_pct', e.target.value)}
-                   placeholder="e.g. 0.15 = 15% of the layer"
-                   style={{ width: 200, fontSize: 12 }} />
+                   placeholder="e.g. 0.15 = 15% of the layer" />
           </div>
         </Sec>
 
         {/* ── 4. Rate Panel ── */}
         <Sec title="Rate" color="rgba(35,209,139,0.55)">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+          <div className="fac-grid-2">
             <div>
               <Row label="Technical Rate (‰, no NatCat)" value={fmt4(pricing.technical_rate_pm)} />
               <Row label="Total Rate (‰)"                value={fmt4(pricing.total_rate_pm)} />
@@ -439,29 +423,27 @@ export default function FacSummary() {
               <Row label="Expected Premium"   value={fmt0(pricing.expected_premium)} color="#23d18b" />
             </div>
           </div>
-          <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '220px 1fr', gap: 12, alignItems: 'center' }}>
-            <div style={{ fontSize: 12, color: 'rgba(35,209,139,0.70)', fontWeight: 700 }}>
+          <div className="fac-edit-row">
+            <div className="fac-edit-label" style={{ color: 'rgba(35,209,139,0.70)' }}>
               Accepted Rate (‰)
             </div>
-            <input className="fi" type="number" min={0} step={0.0001}
+            <input className="fi fac-edit-input" type="number" min={0} step={0.0001}
                    value={edits.accepted_rate_pm}
                    onChange={(e) => setEdit('accepted_rate_pm', e.target.value)}
-                   placeholder="The rate actually agreed with the cedant"
-                   style={{ width: 200, fontSize: 12 }} />
+                   placeholder="The rate actually agreed with the cedant" />
           </div>
         </Sec>
 
         {/* ── 5. UW Note ── */}
         <Sec title="Underwriter Note">
-          <textarea className="fi" rows={4} value={edits.uw_note}
+          <textarea className="fi fac-note-input" rows={4} value={edits.uw_note}
                     onChange={(e) => setEdit('uw_note', e.target.value)}
-                    placeholder="Narrative on the proposed terms, conditions, or exceptions…"
-                    style={{ width: '100%', resize: 'vertical', fontSize: 12 }} />
+                    placeholder="Narrative on the proposed terms, conditions, or exceptions…" />
         </Sec>
 
         {/* ── 6. Reference Numbers ── */}
         <Sec title="Reference Numbers">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+          <div className="fac-grid-2">
             <Row label="FAC Reference"      value={risk.fac_ref || '—'} color="#00d4ff" />
             <Row label="Expiring Reference" value={risk.expiring_reference || '—'} />
             <Row label="Bound Reference"    value={risk.bound_reference || '—'} color={risk.bound_reference ? '#23d18b' : 'rgba(148,163,184,0.40)'} />
@@ -470,11 +452,8 @@ export default function FacSummary() {
         </Sec>
 
         {/* ── Action bar ── */}
-        <div style={{ marginTop: 20, padding: '14px 16px',
-                       background: 'rgba(8,14,30,0.50)',
-                       border: '1px solid rgba(255,255,255,0.08)',
-                       borderRadius: 12 }}>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="fac-action-bar">
+          <div className="fac-action-bar-row">
             <ActionButton onClick={onSaveDraft} busy={actionBusy === 'save'} kind="neutral">
               Save Draft
             </ActionButton>
