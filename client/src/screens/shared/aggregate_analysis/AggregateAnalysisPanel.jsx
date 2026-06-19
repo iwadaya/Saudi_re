@@ -76,7 +76,7 @@ export default function AggregateAnalysisPanel({ contractId, onMeta }) {
   useEffect(() => {
     api.getAggDrilldown(contractId).then(d => {
       setData(d);
-      onMetaRef.current(d?.contract || null);
+      onMetaRef.current?.(d?.contract || null);
       setLoading(false);
     }).catch(e => {
       setError(e.message);
