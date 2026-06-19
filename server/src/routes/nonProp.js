@@ -41,7 +41,9 @@ router.get("/treaties/:id/non-prop", ...npTreatyGuard, asyncHandler(async (req, 
     pool.query(`SELECT * FROM public.contract_np_layers WHERE contract_id=$1 ORDER BY layer_number`, [id]),
     pool.query(`SELECT * FROM public.contract_np_terms WHERE contract_id=$1`, [id]),
     pool.query(`SELECT class_of_business_id, limit_amount FROM public.contract_underwriting_limit WHERE contract_id=$1`, [id]),
-    pool.query(`SELECT uw_status, status, updated_at FROM public.contract WHERE contract_id=$1`, [id]),
+    pool.query(`SELECT c.uw_status, c.status, c.updated_at, c.uw_year, c.inception_date, c.renewal_date, c.country_id, cnt.country_name
+                  FROM public.contract c LEFT JOIN public.country cnt ON cnt.country_id = c.country_id
+                  WHERE c.contract_id=$1`, [id]),
     pool.query(`SELECT status AS offer_status, next_approver FROM public.contract_offer WHERE contract_id=$1 ORDER BY created_at DESC LIMIT 1`, [id]),
   ]);
 
@@ -78,6 +80,18 @@ router.get("/treaties/:id/non-prop", ...npTreatyGuard, asyncHandler(async (req, 
     offer_status: offerR.rows[0]?.offer_status || null,
     offer_approver: offerR.rows[0]?.next_approver || null,
     updated_at: contractR.rows[0]?.updated_at || null,
+    // Authoritative contract header (uw year range + country) so the premiums/
+    // inflation screen can resolve its UW-year range and country directly from
+    // this payload, without depending on a separate getContract call succeeding.
+    contract_header: contractR.rows[0]
+      ? {
+          uw_year: contractR.rows[0].uw_year,
+          inception_date: contractR.rows[0].inception_date,
+          renewal_date: contractR.rows[0].renewal_date,
+          country_id: contractR.rows[0].country_id,
+          country_name: contractR.rows[0].country_name,
+        }
+      : null,
   });
 }));
 

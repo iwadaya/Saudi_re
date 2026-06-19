@@ -45,21 +45,25 @@ export default function NpPremiumsTable() {
   // Fallback range from the loaded treaty when npDetail isn't hydrated here.
   const [serverYears, setServerYears] = useState(null);
 
-  /* ── Build years from treaty detail ── */
-  const years = useMemo(() => {
+  /* ── Build years from treaty detail (appState slice only) ── */
+  const npYears = useMemo(() => {
     const start =
       toInt(npDetail.experienceStartYear) ?? toInt(npDetail.experience_start_year) ??
       toInt(npDetail.startYear) ?? toInt(npDetail.start_year) ?? toInt(npDetail.uwYear) ?? toInt(npDetail.uw_year) ?? null;
     const renewY =
       yearFromDate(npDetail.renewalDate) ?? yearFromDate(npDetail.renewal_date) ??
       toInt(npDetail.renewalYear) ?? toInt(npDetail.renewal_year) ?? null;
-    // Fall back to the server-resolved range when npDetail gave no start year.
-    if (!start) return Array.isArray(serverYears) ? serverYears : [];
+    if (!start) return [];
     const end = (renewY && renewY >= start) ? renewY : start;
     const yrs = [];
     for (let y = start; y <= end; y++) yrs.push(y);
     return yrs;
-  }, [npDetail, serverYears]);
+  }, [npDetail]);
+
+  // Effective range: appState slice when hydrated, else the server fallback. The
+  // main load effect keys off `npYears` (not this) so its own setServerYears
+  // can't re-trigger it and wipe the freshly-loaded country curve on landing.
+  const years = useMemo(() => (npYears.length ? npYears : (Array.isArray(serverYears) ? serverYears : [])), [npYears, serverYears]);
 
   const cedantName = npDetail.cedantName || npDetail.cedant_name || '';
   const treatyLabel = npDetail.treatyTypeName || npDetail.treaty_type_name || '';
@@ -133,7 +137,7 @@ export default function NpPremiumsTable() {
   useEffect(() => {
     // Fetch whenever a contract is present, even if `years` is still empty.
     if (!contractId) {
-      const { uwRows: uw, inflationRows: inf, rateChangeRows: rate } = rebuildRows(years, [], [], []);
+      const { uwRows: uw, inflationRows: inf, rateChangeRows: rate } = rebuildRows(npYears, [], [], []);
       setUwRows(uw); setInflationRows(inf); setRateChangeRows(rate);
       return;
     }
@@ -153,11 +157,11 @@ export default function NpPremiumsTable() {
         // to state lets the country-inflation effect re-run once it resolves.
         const header = contractData?.header || {};
         const resolvedCountryId =
-          header.country_id ?? header.countryId ??
+          header.country_id ?? header.countryId ?? npData?.contract_header?.country_id ??
           npData?.detail?.country_id ?? npData?.country_id ?? npData?.terms?.treaty_detail?.countryId ??
           npCountryId ?? null;
         const resolvedCountryName =
-          header.country_name ?? header.countryName ??
+          header.country_name ?? header.countryName ?? npData?.contract_header?.country_name ??
           npData?.detail?.country_name ?? npData?.country ?? npData?.country_name ??
           npData?.terms?.treaty_detail?.country ?? npData?.terms?.treaty_detail?.countryName ??
           npCountryName ?? '';
@@ -219,8 +223,8 @@ export default function NpPremiumsTable() {
         }
 
         // When npDetail gave no range, resolve it from the loaded treaty.
-        const effYears = years.length ? years : resolveYearsFromServer(header, npData, egnpiRows);
-        if (!years.length && effYears.length) setServerYears(prev => (sameYears(prev, effYears) ? prev : effYears));
+        const effYears = npYears.length ? npYears : resolveYearsFromServer(header, npData, egnpiRows);
+        if (!npYears.length && effYears.length) setServerYears(prev => (sameYears(prev, effYears) ? prev : effYears));
 
         const { uwRows: uw, inflationRows: inf, rateChangeRows: rate } = rebuildRows(effYears, savedUw, savedInf, savedRate);
         setUwRows(uw);
@@ -239,7 +243,7 @@ export default function NpPremiumsTable() {
           setInflationRows(inf);
         }
       } catch {
-        const { uwRows: uw, inflationRows: inf, rateChangeRows: rate } = rebuildRows(years, [], [], []);
+        const { uwRows: uw, inflationRows: inf, rateChangeRows: rate } = rebuildRows(npYears, [], [], []);
         setUwRows(uw);
         setRateChangeRows(rate);
         setInflationRows(inf);
@@ -250,17 +254,15 @@ export default function NpPremiumsTable() {
     // neither refetches; re-running this effect on every toggle used to reset the
     // mode to the server's saved value. loadCountryInflation is excluded — the
     // dedicated country effect owns country fetching.
-  }, [applyAverageInflation, contractId, meanInflationPct, npCountryId, npCountryName, quoteMode, rebuildRows, years]);
+  }, [applyAverageInflation, contractId, meanInflationPct, npCountryId, npCountryName, npYears, quoteMode, rebuildRows]);
 
   /* ── Live ref of inflationRows so the country-inflation effect can read the
-        latest rows without taking them as a dependency (which would re-fire it
-        every time it fills values). ── */
+        latest rows without taking them as a dependency (which would re-fire it). ── */
   const inflationRowsRef = useRef(inflationRows);
   useEffect(() => { inflationRowsRef.current = inflationRows; }, [inflationRows]);
 
-  /* ── Previous inflation mode: lets the country-inflation effect tell an
-        average → country toggle (force-reload) from the id / years merely
-        resolving (onlyIfEmpty, never clobber saved values). ── */
+  /* ── Previous inflation mode: lets the country-inflation effect tell an average
+        → country toggle (force-reload) from the id / years merely resolving. ── */
   const prevInflationModeRef = useRef(inflationMode);
 
   /* ── Set by the country picker so the country-inflation effect can tell a
@@ -278,7 +280,6 @@ export default function NpPremiumsTable() {
         new country, where it refetches that country's curve and re-seeds the flat
         average from its mean — the "reload on new country" the user expects
         instead of having to leave and re-enter the screen.
-
         Force-reloads (onlyIfEmpty=false) only when coming straight from average
         or on a user pick (the displayed curve is for the OLD country); otherwise
         onlyIfEmpty=true so saved / hand-typed values survive initial mount, a

@@ -663,6 +663,13 @@ describe.skipIf(shouldSkipDb)('integration: contract save and rehydrate every ro
     expect(new Set(np.layers[0].class_of_business_ids)).toEqual(new Set([refs.cob1, refs.cob2]));
     expect(np.terms.auditTerm).toBe(true);
     expect(np.cob_underwriting_limits).toHaveLength(1);
+    // Authoritative contract header travels with the non-prop payload so the
+    // premiums/inflation screen can resolve its UW-year range + country without
+    // depending on a separate getContract call.
+    expect(np.contract_header).toBeTruthy();
+    expect(n(np.contract_header.uw_year)).toBe(2026);
+    expect('inception_date' in np.contract_header).toBe(true);
+    expect('country_id' in np.contract_header).toBe(true);
 
     await expectOk(
       await harness.fetchApp('PUT', `/api/treaties/${contractId}/np/egnpi-year`, {

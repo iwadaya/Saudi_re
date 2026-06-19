@@ -21,13 +21,20 @@ export const sameYears = (a, b) =>
 export function resolveYearsFromServer(header, np, egnpiRows) {
   const h = header || {};
   const d = np?.detail || np?.terms?.treaty_detail || {};
+  // The non-prop payload carries its own authoritative contract/quote header
+  // (uw_year + inception/renewal). Falling back to it means a failed or slow
+  // getContract no longer leaves the premiums + inflation tables stuck on
+  // "Waiting for years" — the range still resolves from the np payload alone.
+  const ch = np?.contract_header || {};
   const start =
     toInt(d.experience_start_year) ?? toInt(d.experienceStartYear) ??
-    toInt(h.uw_year) ?? toInt(h.uwYear) ??
-    yearFromDate(h.inception_date) ?? yearFromDate(h.inceptionDate) ?? null;
+    toInt(h.uw_year) ?? toInt(h.uwYear) ?? toInt(ch.uw_year) ??
+    yearFromDate(h.inception_date) ?? yearFromDate(h.inceptionDate) ??
+    yearFromDate(ch.inception_date) ?? null;
   const renew =
     yearFromDate(h.renewal_date) ?? yearFromDate(h.renewalDate) ??
-    toInt(h.renewal_year) ?? toInt(h.uw_year) ?? null;
+    yearFromDate(ch.renewal_date) ??
+    toInt(h.renewal_year) ?? toInt(h.uw_year) ?? toInt(ch.uw_year) ?? null;
   const set = new Set();
   if (start) {
     const end = (renew && renew >= start) ? renew : start;
