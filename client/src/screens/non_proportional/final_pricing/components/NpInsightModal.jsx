@@ -10,6 +10,7 @@ import ProfileScreen from '../../../shared/ProfileScreen';
 import NpCrestaAggregates from '../../cresta_zones/NpCrestaAggregates';
 import NpMarketAnalysis from '../NpMarketAnalysis';
 import NpChecklistPanel from './NpChecklistPanel.jsx';
+import EqDamageRatioPanel from './EqDamageRatioPanel.jsx';
 import CedantSummaryTabs from '../../../../components/cedant/CedantSummaryTabs';
 
 /**
@@ -18,19 +19,21 @@ import CedantSummaryTabs from '../../../../components/cedant/CedantSummaryTabs';
  *   open: boolean,
  *   contractId: string,
  *   isQuote: boolean,
+ *   isTerminal?: boolean,
  *   currency: string,
  *   npDetail: Record<string, any>,
  * }} props
  */
-export default function NpInsightModal({ pricing, open, contractId, isQuote, currency, npDetail }) {
+export default function NpInsightModal({ pricing, open, contractId, isQuote, isTerminal = false, currency, npDetail }) {
   const {
-    insightKey, setInsightOpen, layers, treatyMetrics, quotePricing, portfolioTreaties,
+    insightKey, setInsightOpen, layers, updateLayer, treatyMetrics, quotePricing, portfolioTreaties,
   } = pricing;
   if (!open) return null;
+  const catLayers = layers.filter((l) => l.cat);
   return (
 
                 <div className="bbg-modal-backdrop" role="presentation" onClick={e => { if (e.target === e.currentTarget) setInsightOpen(false); }}>
-                  <div className={`bbg-modal ${['LARGE_LOSSES','CAT_LOSSES','AGGREGATES','CEDANT','RISK_PROFILE','MKT_ANALYSIS','CHECKLIST'].includes(insightKey) ? 'bbg-modal--fullscreen' : 'bbg-modal--wide'}`}>
+                  <div className={`bbg-modal ${['LARGE_LOSSES','CAT_LOSSES','AGGREGATES','CEDANT','RISK_PROFILE','MKT_ANALYSIS','CHECKLIST','GEM'].includes(insightKey) ? 'bbg-modal--fullscreen' : 'bbg-modal--wide'}`}>
                     <div className="bbg-modal-head">
                       <span className="bbg-modal-title">
                         { insightKey === 'LARGE_LOSSES' ? 'Large Loss Selection'
@@ -39,6 +42,7 @@ export default function NpInsightModal({ pricing, open, contractId, isQuote, cur
                         : insightKey === 'MKT_ANALYSIS' ? 'Market Analysis'
                         : insightKey === 'RISK_PROFILE' ? 'Risk Profile'
                         : insightKey === 'CHECKLIST'    ? 'Underwriting Checklist'
+                        : insightKey === 'GEM'          ? 'GEM EQ Damage Ratios'
                         : insightKey === 'CEDANT'       ? 'Cedant Summary'
                         : insightKey }
                       </span>
@@ -66,6 +70,23 @@ export default function NpInsightModal({ pricing, open, contractId, isQuote, cur
                         </div>
                       )}
                       {insightKey === 'CHECKLIST' && <NpChecklistPanel contractId={contractId} isQuote={isQuote} />}
+                      {insightKey === 'GEM' && (
+                        <div className="bbg-embed-screen">
+                          <EqDamageRatioPanel
+                            contractId={contractId}
+                            catLayers={catLayers}
+                            currency={currency}
+                            onApplyToCat={(groundUpEqLoss) => {
+                              // Push the GEM ground-up EQ loss into the (first) cat
+                              // layer's burning-cost field via the normal layer
+                              // setter; the screen's existing Save persists it.
+                              const gi = layers.indexOf(catLayers[0]);
+                              if (gi >= 0) updateLayer(gi, 'catPureBurn', Math.round(groundUpEqLoss));
+                            }}
+                            disabled={isTerminal}
+                          />
+                        </div>
+                      )}
                       {insightKey === 'MKT_ANALYSIS' && (
                         <NpMarketAnalysis
                           layers={layers}

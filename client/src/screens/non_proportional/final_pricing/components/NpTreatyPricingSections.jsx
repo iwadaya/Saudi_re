@@ -10,7 +10,6 @@
 import PctInput from '../../../../components/PctInput';
 import { toN, fmtC } from '../formatters.js';
 import NpLayerTable from './NpLayerTable.jsx';
-import EqDamageRatioPanel from './EqDamageRatioPanel.jsx';
 
 /**
  * @param {{
@@ -37,8 +36,6 @@ export default function NpTreatyPricingSections({
   appState,
   structureLayers,
   runCalcEngine,
-  contractId,
-  currency,
 }) {
   const {
     layers, calcEngineRunning, calcEngineError, updateLayer,
@@ -89,24 +86,8 @@ export default function NpTreatyPricingSections({
               {/* Cat XL Layers — pure burn & pareto use cat losses; exposure uses damage ratio / CRESTA */}
               {!isQuote && layers.length > 0 && !catDisabled && <NpLayerTable section="CAT" rows={catLayers} layers={layers} updateLayer={updateLayer} disabled={isTerminal} />}
 
-              {/* GEM deterministic EQ exposure rating — computes a ground-up EQ
-                  loss from CRESTA aggregates × damage-ratio curves and applies
-                  the effective damage ratio into a cat layer's exposure cell. */}
-              {!isQuote && layers.length > 0 && !catDisabled && catLayers.length > 0 && (
-                <EqDamageRatioPanel
-                  contractId={contractId}
-                  catLayers={catLayers}
-                  currency={currency}
-                  onApplyToCat={(groundUpEqLoss) => {
-                    // Push the GEM ground-up EQ loss into the (first) cat layer's
-                    // burning-cost field via the normal layer setter; the screen's
-                    // existing Save persists it (no bespoke save path).
-                    const gi = layers.indexOf(catLayers[0]);
-                    if (gi >= 0) updateLayer(gi, 'catPureBurn', Math.round(groundUpEqLoss));
-                  }}
-                  disabled={isTerminal}
-                />
-              )}
+              {/* GEM deterministic EQ exposure rating lives behind the "GEM"
+                  insight button (NpTreatyInsightHeader → NpInsightModal). */}
 
               {/* Combined Pricing + Programme Limits (standard only) */}
               {!isQuote && layers.length > 0 && (<>
