@@ -1,0 +1,495 @@
+/* AggDrilldownModal.css — Phase 3.2 hardening.
+   Styles extracted 1:1 from AggDrilldownModal.jsx's inline styles; every
+   value is carried over verbatim so the rendered modal is pixel-identical.
+   Token vars are used only where the token's value matches the original
+   (radius-lg = 16px, num-cell-fs = 12px, num-th-letter-spacing = .08em,
+   modal-stack / modal-safe-* from modal-safety.css). The peril palette
+   (#f87171/#60a5fa/#34d399/#fbbf24/#a78bfa and derived #4ade80 tones)
+   intentionally stays literal: it must remain in lock-step with the
+   PERIL_COLORS map in the JSX, not with the theme accents. */
+
+/* ── Modal shell (on top of the ui/Modal primitive) ─────────────────── */
+/* Backdrop: the primitive's .ui-modal-backdrop defaults (z-index 1000,
+   --surface-muted wash) are lighter and stack lower than this full-screen
+   drill-down had. Re-apply the layering the old .modal-backdrop shell got
+   from modal-safety.css plus the original inline skin. :has() is supported
+   by every evergreen browser; without it the dialog still works, just on
+   the primitive's default backdrop. */
+.ui-modal-backdrop:has(> .agg-drilldown-modal) {
+  z-index: var(--modal-stack, 4000);
+  background: rgba(2, 6, 18, 0.88);
+  backdrop-filter: blur(8px);
+  padding:
+    max(var(--modal-safe-block, 10px), env(safe-area-inset-top))
+    max(var(--modal-safe-inline, 10px), env(safe-area-inset-right))
+    max(var(--modal-safe-block, 10px), env(safe-area-inset-bottom))
+    max(var(--modal-safe-inline, 10px), env(safe-area-inset-left));
+}
+
+/* Panel: full-screen sizing + the screen's blue-glass skin. The `glass`
+   class stays on the panel so modal-safety.css keeps clamping max-width /
+   max-height exactly as it did for the hand-rolled shell. */
+.ui-modal.agg-drilldown-modal {
+  width: calc(100vw - 20px);
+  height: calc(100vh - 20px);
+  max-width: 1400px;
+  max-height: none;
+  background: linear-gradient(160deg, #0b1628 0%, #060e1c 100%);
+  border: 1px solid rgba(96, 165, 250, 0.25);
+  border-radius: var(--radius-lg, 16px);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.7);
+}
+
+/* ── Header ── */
+.ui-modal.agg-drilldown-modal .ui-modal__header {
+  padding: 14px 20px;
+  gap: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+.ui-modal.agg-drilldown-modal .ui-modal__title {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+.agg-title__meta {
+  margin-left: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(96, 165, 250, 0.8);
+}
+.agg-title__sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;          /* body default — the h2 wrapper is 800 */
+  letter-spacing: -0.005em;  /* body default — the h2 wrapper is .02em */
+  color: rgba(255, 255, 255, 0.35);
+}
+/* The original close ✕ was a bare glyph, not a ghost pill */
+.ui-modal.agg-drilldown-modal .ui-modal__header .ui-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 20px;
+  font-weight: 500;
+  padding: 2px 8px;
+  min-height: 0;
+}
+.ui-modal.agg-drilldown-modal .ui-modal__header .ui-btn:hover:not(:disabled) {
+  background: none;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* ── Body: hosts the tab strip + the scrolling content pane ── */
+.ui-modal.agg-drilldown-modal .ui-modal__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* ── Tabs ── */
+.agg-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+.agg-tab {
+  padding: 10px 20px;
+  font-size: 12px;
+  font-weight: 700;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: all 0.15s;
+}
+.agg-tab--active {
+  background: rgba(96, 165, 250, 0.12);
+  color: #60a5fa;
+  border-bottom-color: #60a5fa;
+}
+
+/* ── Content pane ── */
+.agg-content {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 20px;
+}
+.agg-loading {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 13px;
+  padding: 40px;
+  text-align: center;
+}
+.agg-error {
+  color: #f87171;
+  font-size: 12px;
+  padding: 20px;
+}
+.agg-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Summary: country strip ── */
+.agg-hero {
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: rgba(96, 165, 250, 0.05);
+  border: 1px solid rgba(96, 165, 250, 0.2);
+}
+.agg-hero__label {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(96, 165, 250, 0.8);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.agg-hero__value {
+  font-size: 24px;
+  font-weight: 800;
+  color: #fff;
+  margin-top: 4px;
+}
+.agg-hero__sub {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 2px;
+}
+
+/* ── Shared soft panel ── */
+.agg-panel {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.agg-panel--grow {
+  flex: 1;
+  min-width: 320px;
+}
+.agg-panel__title {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.agg-panel__title--spaced { letter-spacing: 0.05em; }
+.agg-panel__title--mb12 { margin-bottom: 12px; }
+.agg-panel-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* ── Peril filter chips (real buttons now; active skin stays inline
+      because it derives from PERIL_COLORS) ── */
+.agg-chip-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.agg-chip {
+  appearance: none;
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: all 0.15s;
+  font: inherit;       /* render exactly like the former <div> chips */
+  text-align: left;
+}
+.agg-chip__label {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.agg-chip__value {
+  display: block;
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+}
+.agg-chip__sub {
+  display: block;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  margin-top: 2px;
+}
+
+/* ── Legend + peril-mix bar ── */
+.agg-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.agg-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+.agg-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.agg-mix {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  width: 100%;
+  gap: 1px;
+}
+.agg-mix__seg { min-width: 2px; }
+
+/* ── Peak exposure card / empty state / signed-line hint ── */
+.agg-peak {
+  padding: 18px 20px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  /* border + glow stay inline — they follow the peak peril's color */
+}
+.agg-peak__title {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.agg-peak__combo {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.agg-peak__value {
+  font-size: 28px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+.agg-peak__note {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 6px;
+}
+.agg-peak__note--tight { margin-top: 2px; }
+.agg-empty {
+  padding: 18px 20px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  text-align: center;
+}
+.agg-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+}
+
+/* ── Summary: top-zones preview list ── */
+.agg-zone-row { margin-bottom: 8px; }
+.agg-zone-row__head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 3px;
+}
+.agg-zone-row__name {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+}
+.agg-zone-row__val {
+  font-size: 12px;
+  color: #fff;
+  font-weight: 700;
+}
+.agg-link-btn {
+  font-size: 11px;
+  color: #60a5fa;
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+/* ── Table toolbar (zones / cob tabs) ── */
+.agg-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.agg-toolbar__note {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* ── Tables (kept as plain <table>: the sticky header + exact skin
+      predate the ui/Table primitive's bordered wrapper) ── */
+.agg-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.agg-th {
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: var(--num-th-letter-spacing, 0.08em);
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+  background: rgba(8, 14, 28, 0.98);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  cursor: pointer;
+  /* no text-align: keep the UA default (center), as before */
+}
+.agg-th--num { text-align: right; }
+.agg-th--center { text-align: center; }
+.agg-th--plain { cursor: default; }
+.agg-th--w160 { width: 160px; }
+.agg-th--w140 { width: 140px; }
+.agg-th--w120 { width: 120px; }
+
+.agg-td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: var(--num-cell-fs, 12px);
+  vertical-align: middle;
+}
+.agg-td--num { text-align: right; }
+.agg-td--center { text-align: center; }
+.agg-td--w160 { width: 160px; }
+.agg-td--w140 { width: 140px; }
+.agg-td--w120 { width: 120px; }
+.agg-td--total { font-weight: 700; color: #fff; }
+.agg-td--eq { color: #f87171; }
+.agg-td--ws { color: #60a5fa; }
+.agg-td--flood { color: #34d399; }
+.agg-td--srcc { color: #fbbf24; }
+.agg-td--other { color: #a78bfa; }
+.agg-td--dim { color: rgba(255, 255, 255, 0.55); }
+.agg-td--cur { color: rgba(255, 255, 255, 0.7); }
+.agg-td--share { font-weight: 600; color: #60a5fa; }
+.agg-td--share-empty { font-weight: 600; color: rgba(255, 255, 255, 0.35); }
+.agg-td--growth { font-weight: 700; }
+.agg-td--mid { color: rgba(255, 255, 255, 0.5); }
+.agg-td--cedant { font-weight: 500; color: rgba(255, 255, 255, 0.8); }
+.agg-td--cedant-this { font-weight: 700; color: #60a5fa; }
+.agg-td--foot { font-weight: 800; color: rgba(255, 255, 255, 0.9); }
+.agg-td--foot-num { font-weight: 800; color: #fff; }
+.agg-td--foot-dim { font-weight: 800; color: rgba(255, 255, 255, 0.85); }
+.agg-td--w700 { font-weight: 700; }
+
+.agg-strong { font-weight: 600; color: rgba(255, 255, 255, 0.85); }
+.agg-cell-id { font-size: 10px; color: rgba(255, 255, 255, 0.55); }
+
+/* Zebra rows (was: inline i % 2 background). nth-child matches the render
+   index because rows are emitted post-sort/filter. */
+.agg-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+/* Current-contract highlight wins over zebra (declared after, same specificity). */
+.agg-table tbody tr.agg-tr--this { background: rgba(96, 165, 250, 0.08); }
+.agg-tr--foot { background: rgba(255, 255, 255, 0.06); }
+
+/* ── "% + meter" cells ── */
+.agg-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.agg-pct__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #60a5fa;
+  width: 48px;
+  text-align: right;
+}
+.agg-pct__label--bold { font-weight: 700; }
+.agg-pct__label--hot { color: #f87171; }
+.agg-pct__label--ok { color: #4ade80; }
+.agg-pct__share {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  width: 36px;
+  text-align: right;
+}
+.agg-dash {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+}
+.agg-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.agg-bar--cap { max-width: 80px; }
+.agg-bar__fill {
+  height: 100%;
+  border-radius: 2px;
+  background: #60a5fa;
+}
+.agg-bar__fill--dim { background: rgba(255, 255, 255, 0.25); }
+
+/* ── Growth tones (was: growthColor()) ── */
+.agg-tone-up { color: #4ade80; }
+.agg-tone-down { color: #f87171; }
+.agg-tone-flat { color: rgba(255, 255, 255, 0.4); }
+
+/* ── Portfolio: share input bar ── */
+.agg-share-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: rgba(96, 165, 250, 0.05);
+  border: 1px solid rgba(96, 165, 250, 0.2);
+}
+.agg-share-bar__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(96, 165, 250, 0.85);
+}
+.agg-share-bar__input { width: 140px; }
+.agg-share-bar__note {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* ── "THIS" chip — ui/Badge restyled to the original micro-pill ── */
+.ui-badge.agg-badge-this {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: none;
+  border-radius: 10px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: inherit; /* the bare span had no tracking of its own */
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.15);
+}
