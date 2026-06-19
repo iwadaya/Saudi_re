@@ -60,7 +60,7 @@ beforeEach(() => {
 describe('NpInsightModal — GEM insight', () => {
   it('renders the EQ damage-ratio panel under a GEM title', async () => {
     render(<NpInsightModal pricing={makePricing()} open contractId="c-1" isQuote={false} currency="SAR" npDetail={{}} />);
-    expect(screen.getByText('GEM EQ Damage Ratios')).toBeInTheDocument();
+    expect(screen.getByText('CAT Modelling')).toBeInTheDocument();
     expect(await screen.findByText('EQ Damage Ratios')).toBeInTheDocument();
     await waitFor(() => expect(getGemScenario).toHaveBeenCalledWith('c-1'));
   });

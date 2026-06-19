@@ -42,7 +42,7 @@ export default function NpInsightModal({ pricing, open, contractId, isQuote, isT
                         : insightKey === 'MKT_ANALYSIS' ? 'Market Analysis'
                         : insightKey === 'RISK_PROFILE' ? 'Risk Profile'
                         : insightKey === 'CHECKLIST'    ? 'Underwriting Checklist'
-                        : insightKey === 'GEM'          ? 'GEM EQ Damage Ratios'
+                        : insightKey === 'GEM'          ? 'CAT Modelling'
                         : insightKey === 'CEDANT'       ? 'Cedant Summary'
                         : insightKey }
                       </span>

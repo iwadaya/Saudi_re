@@ -51,7 +51,7 @@ export default function NpTreatyInsightHeader({ pricing, npDetail, mode, currenc
                         // It opens on Country and lets the user switch scope inside.
                         onClick: () => openBenchmark('country', 'Layer Pricing', layers) },
                       { k:'CHECKLIST',      label:'Checklist',          color:'ghost' },
-                      { k:'GEM',            label:'GEM',                color:'amber',   disabled: mode === 'RISK' },
+                      { k:'GEM',            label:'CAT Modelling',      color:'amber',   disabled: mode === 'RISK' },
                     ].map(b => (
                       <button key={b.k}
                         className={`bbg-ib bbg-ib--${b.color}`}
