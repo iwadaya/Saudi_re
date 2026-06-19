@@ -23,6 +23,7 @@ import { buildHazusMdrCurve } from '../../modules/hazusVulnerability/hazusDamage
 import {
   HAZUS_PLACEHOLDER_PARAMS, OCCUPANCY_TO_HAZUS, HAZUS_PARAMS_ARE_PLACEHOLDER,
 } from '../../modules/hazusVulnerability/hazusParameters.js';
+import { loadHazusParametersFromFile } from '../../modules/hazusVulnerability/hazusParameterLoader.js';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL
@@ -30,6 +31,10 @@ const DATABASE_URL = process.env.DATABASE_URL
 const MODEL_VERSION = process.env.GEM_MODEL_VERSION || 'HAZUS-unknown';
 const COUNTRY = process.env.HAZUS_COUNTRY || 'GENERIC';
 const ALLOW_PLACEHOLDER = process.env.ALLOW_PLACEHOLDER === '1';
+// Authoritative parameters: a validated JSON the operator exports from the FEMA
+// Technical Manual / HAZUS DB (see hazus_parameters.template.json). When set,
+// it REPLACES the in-code placeholders and is validated before any insert.
+const PARAMS_FILE = process.env.HAZUS_PARAMS_FILE || '';
 
 // Which loss_category each occupancy bucket's curve represents (building →
 // structural; contents → contents) so the slot→curve routing in the engine and
@@ -47,21 +52,37 @@ const SLOT_OCCUPANCY = {
 };
 
 async function main() {
-  if (HAZUS_PARAMS_ARE_PLACEHOLDER && !ALLOW_PLACEHOLDER) {
-    console.error(
-      'Refusing to generate: hazusParameters.js still holds ILLUSTRATIVE placeholders.\n'
-      + 'Replace them with FEMA Technical Manual values (set HAZUS_PARAMS_ARE_PLACEHOLDER=false),\n'
-      + 'or pass ALLOW_PLACEHOLDER=1 to seed a NON-PRICING demo/dev DB.',
-    );
-    process.exit(1);
+  // Source of truth: a validated params file if supplied, else the in-code
+  // placeholders (which require the explicit dev override to proceed).
+  let params;
+  let occupancyToKey;
+  let modelVersion = MODEL_VERSION;
+  if (PARAMS_FILE) {
+    const loaded = loadHazusParametersFromFile(PARAMS_FILE); // throws on bad data
+    params = loaded.params;
+    occupancyToKey = loaded.occupancyMapping;
+    if (MODEL_VERSION === 'HAZUS-unknown' && loaded.modelVersion) modelVersion = loaded.modelVersion;
+    console.log(`Loaded + validated HAZUS parameters from ${PARAMS_FILE}.`);
+  } else {
+    if (HAZUS_PARAMS_ARE_PLACEHOLDER && !ALLOW_PLACEHOLDER) {
+      console.error(
+        'No HAZUS_PARAMS_FILE set and the in-code parameters are ILLUSTRATIVE placeholders.\n'
+        + 'Export authoritative values from the FEMA Technical Manual into a JSON file (see\n'
+        + 'hazus_parameters.template.json) and set HAZUS_PARAMS_FILE, or pass ALLOW_PLACEHOLDER=1\n'
+        + 'to seed a NON-PRICING demo/dev DB with placeholders.',
+      );
+      process.exit(1);
+    }
+    params = HAZUS_PLACEHOLDER_PARAMS;
+    occupancyToKey = OCCUPANCY_TO_HAZUS;
   }
-  const params = HAZUS_PLACEHOLDER_PARAMS; // swap to a real params source once populated
+  const usingPlaceholders = !PARAMS_FILE && HAZUS_PARAMS_ARE_PLACEHOLDER;
   const pool = new Pool({ connectionString: DATABASE_URL, max: 6 });
   const client = await pool.connect();
   let upserted = 0;
   try {
     await client.query('BEGIN');
-    for (const [slot, paramKey] of Object.entries(OCCUPANCY_TO_HAZUS)) {
+    for (const [slot, paramKey] of Object.entries(occupancyToKey)) {
       const entry = params[paramKey];
       if (!entry) { console.warn(`  ! no params for ${paramKey} (${slot})`); continue; }
       const taxonomy = `HAZUS:${paramKey}`;
@@ -78,7 +99,7 @@ async function main() {
          ON CONFLICT (model_version, country_code, loss_category, taxonomy, imt)
          DO UPDATE SET source='HAZUS', occupancy=EXCLUDED.occupancy, imls=EXCLUDED.imls,
            mean_lrs=EXCLUDED.mean_lrs, updated_at=now()`,
-        [MODEL_VERSION, COUNTRY, lossCategory, taxonomy, occupancy, curve.imt, curve.imls, curve.meanLRs],
+        [modelVersion, COUNTRY, lossCategory, taxonomy, occupancy, curve.imt, curve.imls, curve.meanLRs],
       );
       upserted += 1;
     }
@@ -90,7 +111,7 @@ async function main() {
   } finally {
     client.release();
   }
-  console.log(`HAZUS curves upserted: ${upserted} (country ${COUNTRY}, model ${MODEL_VERSION})${HAZUS_PARAMS_ARE_PLACEHOLDER ? ' — PLACEHOLDER data, NOT for pricing' : ''}.`);
+  console.log(`HAZUS curves upserted: ${upserted} (country ${COUNTRY}, model ${modelVersion})${usingPlaceholders ? ' — PLACEHOLDER data, NOT for pricing' : ''}.`);
   await pool.end();
 }
 

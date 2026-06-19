@@ -164,6 +164,9 @@ export function classifyMutationPath(path) {
   if (/^\/pricing\/save$/.test(path) || /^\/straight-stats\/save$/.test(path)) return { entityType: 'CONTRACT', entityId: '@body' };
   if ((m = /^\/pricing\/component-snapshot\/([^/]+)/.exec(path))) return { resolve: 'pricingSnapshot', id: m[1] };
   if ((m = /^\/pricing\/([^/]+)\/component-snapshot$/.exec(path))) return { entityType: 'CONTRACT', entityId: m[1] };
+  // GEM EQ compute persists a contract scenario only when persist=true; the
+  // runtime guard skips the edit-lock for preview (persist falsy) calls.
+  if ((m = /^\/pricing\/gem\/([^/]+)\/compute$/.exec(path))) return { entityType: 'CONTRACT', entityId: m[1], onlyWhenPersist: true };
   if (path === '/quotes' || path === '/treaties' || path === '/fac/risks') return 'create';
   return null;
 }
@@ -176,6 +179,9 @@ export async function guardApiMutations(req, res, next) {
     // 'workflow' (engine-authorized) and 'create' carry their own authority; only
     // entity-scoped classifications take the assignee edit-lock.
     if (cls === 'workflow' || cls === 'create' || cls === null) return next();
+    // Some entity-scoped routes only mutate conditionally (e.g. GEM compute
+    // persists a scenario only when persist=true); a pure preview is read-like.
+    if (cls.onlyWhenPersist && !req.body?.persist) return next();
 
     let target = cls;
     if (cls.resolve) target = await resolveParentEntity(cls.resolve, cls.id);
