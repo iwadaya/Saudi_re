@@ -1,8 +1,8 @@
-// components/FQPricingAnalysisModal.jsx — 4-tab pricing workbench.
+// components/FQPricingAnalysisModal.jsx — 5-tab pricing workbench.
 // Tab 1 "Pricing Analysis": per-peril sections (Risk/Cat) with weight blender,
 // metrics table and notes, plus a combined Total Section. Tab 2 "Pareto Simulation"
 // hosts the severity/frequency panels; tab 3 "Inflation & Loss" is a placeholder;
-// tab 4 "Aggregate Analysis" embeds the shared CRESTA-zone exposure panel.
+// tab 4 "CAT Modelling" rates GEM/HAZUS EQ damage ratios; tab 5 "Aggregate Analysis" embeds the shared CRESTA-zone exposure panel.
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
 import { toN, capPct2 } from '../formatters.js';
@@ -22,7 +22,7 @@ const TOP_TABS = [
   { k: 'pricing', label: 'Pricing Analysis' },
   { k: 'pareto', label: 'Pareto Simulation' },
   { k: 'loss', label: 'Inflation & Loss' },
-  { k: 'eq', label: 'EQ Damage Ratios' },
+  { k: 'eq', label: 'CAT Modelling' },
   { k: 'agg', label: 'Aggregate Analysis' },
 ];
 
