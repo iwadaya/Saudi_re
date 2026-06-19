@@ -88,6 +88,22 @@ describe('guardApiMutations — assignee + reads + workflow pass', () => {
   });
 });
 
+describe('guardApiMutations — GEM compute is guarded only when persisting', () => {
+  it('lets a non-assignee preview (persist falsy) but blocks a persisting write', async () => {
+    const attacker = await boot('attacker');
+    // preview compute writes nothing → read-like, not edit-locked
+    expect((await send(attacker, 'POST', '/api/pricing/gem/c1/compute', {})).status).toBe(200);
+    expect((await send(attacker, 'POST', '/api/pricing/gem/c1/compute', { persist: false })).status).toBe(200);
+    // persisting compute mutates the contract scenario → edit-locked
+    const blocked = await send(attacker, 'POST', '/api/pricing/gem/c1/compute', { persist: true });
+    expect(blocked.status).toBe(403);
+    expect((await blocked.json()).code).toBe('READ_ONLY');
+    // the assignee may persist
+    const owner = await boot('owner');
+    expect((await send(owner, 'POST', '/api/pricing/gem/c1/compute', { persist: true })).status).toBe(200);
+  });
+});
+
 describe('registry: no mutating route falls through unguarded', () => {
   const dir = path.dirname(fileURLToPath(import.meta.url));
   const routesDir = path.resolve(dir, '../routes');
