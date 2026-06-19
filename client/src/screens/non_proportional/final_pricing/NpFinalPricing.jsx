@@ -228,6 +228,8 @@ export default function NpFinalPricing() {
                 appState={appState}
                 structureLayers={structureLayers}
                 runCalcEngine={runCalcEngine}
+                contractId={contractId}
+                currency={currency}
               />
 
               <NpDecisionBar

@@ -647,6 +647,17 @@ export const api = {
   },
   getAggCobBreakdown(contractId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/pricing/agg-cob-breakdown/${encodeURIComponent(contractId)}`, opts); },
   getAggDrilldown(contractId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/pricing/agg-drilldown/${encodeURIComponent(contractId)}`, opts); },
+
+  // GEM deterministic EQ exposure rating (Tier-B damage ratios).
+  getGemCurves(params: { country?: string; lossCategory?: string; occupancy?: string } = {}, opts?: RequestOpts): Promise<unknown> {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null) as [string, string][]).toString();
+    return request(`/api/pricing/gem/curves${qs ? `?${qs}` : ''}`, opts);
+  },
+  getGemScenario(contractId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/pricing/gem/${encodeURIComponent(contractId)}/scenario`, opts); },
+  computeGemEqLoss(contractId: string, body: unknown, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/pricing/gem/${encodeURIComponent(contractId)}/compute`, { ...opts, method: 'POST', body });
+  },
+
   getApprovalTrail(contractId: string, opts?: RequestOpts): Promise<unknown> {
     const isQuote = isQuoteMode(opts);
     return request(isQuote ? `/api/quotes/${enc(contractId)}/approval-trail` : `/api/treaties/${enc(contractId)}/approval-trail`, opts);
