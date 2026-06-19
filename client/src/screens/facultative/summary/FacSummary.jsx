@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../api';
 import WizardLayout from '../../../components/WizardLayout';
+import LoadErrorPanel from '../../../components/LoadErrorPanel';
 import { useFacRiskId } from '../../../hooks/useContractId';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 
@@ -76,6 +77,7 @@ export default function FacSummary() {
   const [locations, setLocations] = useState([]);
   const [scoringTables, setScoringTables] = useState(null);
   const [loading, setLoading]     = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [auditEvents, setAuditEvents] = useState([]);
   const [actionBusy, setActionBusy] = useState(null);   // 'submit' | 'decline' | 'bind'
   const [declineModal, setDeclineModal] = useState({ open: false, reason: '', error: '' });
@@ -100,6 +102,7 @@ export default function FacSummary() {
   const load = useCallback(async () => {
     if (!riskId) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const [r, p, locs, ae] = await Promise.all([
         api.facGetRisk(riskId),
@@ -117,7 +120,12 @@ export default function FacSummary() {
         accepted_rate_pm:      p?.accepted_rate_pm      != null ? String(p.accepted_rate_pm)      : '',
         uw_note:               p?.uw_note || '',
       });
-    } catch (e) { console.error('[FacSummary] load failed:', e); }
+    } catch (e) {
+      // Without this the screen used to sit on the "Loading…" spinner forever
+      // (loading flips false but risk stays null). Surface it with a retry.
+      console.error('[FacSummary] load failed:', e);
+      setLoadError(e);
+    }
     setLoading(false);
   }, [riskId]);
 
@@ -200,6 +208,19 @@ export default function FacSummary() {
     const row = scoringTables.territorial_capacity.find((t) => t.region === risk.cedant_region);
     return row ? Number(row.max_capacity) : null;
   }, [risk, scoringTables]);
+
+  if (!loading && loadError && !risk) {
+    return (
+      <WizardLayout routeKey={ROUTE_KEY} title="Summary & Approval" headerPill="FACULTATIVE">
+        <LoadErrorPanel
+          variant="block"
+          title="Couldn’t load this risk"
+          message="The summary data failed to load. Check your connection and try again."
+          onRetry={load}
+        />
+      </WizardLayout>
+    );
+  }
 
   if (loading || !risk) {
     return (

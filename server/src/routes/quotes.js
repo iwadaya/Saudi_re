@@ -19,6 +19,7 @@ import { storeUploadedFile } from '../lib/uploadStorage.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
 import { assertCanEdit } from '../services/permissions.js';
 import { approveQuote, returnToUnderwriter, recallOffer, markNotTakenUp } from '../services/approvals.js';
+import { declineQuoteAction, submitQuoteForApprovalAction } from '../services/quoteWorkflow.js';
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
 import { verifyNpPricingOutputs, summariseDrifts, isStrictMode, pricingDriftStats } from '../lib/pricingVerifier.js';
 import { getWordingChecklist, runWordingChecklistAi, saveWordingChecklist } from '../services/wordingChecklist.js';
@@ -971,6 +972,9 @@ router.put("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
   const {id}=req.params;const {report_date,losses=[]}=req.body;const cl=await pool.connect();
   try{await cl.query("BEGIN");
   await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
+  // Opt-in optimistic lock (inside the txn): only enforced when the client
+  // sends If-Unmodified-Since; a concurrent parent edit → 409 STALE_WRITE.
+  await assertParentEntityUnchanged(cl, { parentTable: 'quote', idColumn: 'quote_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
   // No UNIQUE(quote_id) on contract_large_loss_report, so check existence first
   const {rows:existing}=await cl.query(`SELECT report_id FROM public.contract_large_loss_report WHERE quote_id=$1`,[id]);
   let rid;
@@ -1003,7 +1007,8 @@ router.put("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
     [rid,l.loss_id||null,uwy,l.insured_name,l.loss_name,dateOrNull(l.date_of_loss),l.class_of_business,numOrNull(l.paid),numOrNull(l.os),numOrNull(l.incurred),selected,infl,reported,actuarial,pinc]);
     savedLosses.push(ins[0]?.loss_id);
   }
-  await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
+  const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
+  await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses,updated_at:updatedAt});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
 // COBs, profiles, cresta, pricing, offer, NP — abbreviated for core patterns
@@ -1499,60 +1504,23 @@ router.put("/quotes/:id/np-pricing", ...npQuoteGuard, asyncHandler(async (req, r
 
 // Offer workflow (decline, submit, approve, sign, NTU, return-to-UW)
 router.post("/quotes/:id/decline", asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { reason } = req.body;
-  const actor = await resolveAuditActor(req);
-  await pool.query(`UPDATE public.quote SET status='DECLINED',decline_reason=$2,declined_at=now(),updated_at=now() WHERE quote_id=$1`,[id,reason||null]);
-  await pool.query(`UPDATE public.quote_offer SET status='DECLINED',decline_reason=$2,updated_at=now() WHERE quote_id=$1`,[id,reason||null]).catch(()=>{});
-  await pool.query(`INSERT INTO public.offer_approval_event (quote_id,event_type,actor_user_id,actor_name,actor_role,comment) VALUES ($1,'DECLINED',$2,$3,$4,$5)`,[id,actor.actorUserId,actor.actorName,actor.actorRole,reason||null]).catch(()=>{});
-  res.json({ok:true});
-}));
-router.post("/quotes/:id/offer/submit-for-approval", asyncHandler(async (req, res) => {
+  // Parity with treaty decline: one transaction (status + quote_offer + event +
+  // critical audit), legal-transition guard (422 on a terminal pre-state),
+  // authority via assertCanEdit. Actor identity is the verified req.user.
   const { id } = req.params;
   await assertCanEdit(req, 'QUOTE', id);
-  const { comment, written_line_pct, line_pct } = req.body;
-  const approver = req.body.approver || req.body.peer1_user_id || null; // client sends peer1_user_id
-  // Parse line_pct: may be JSON per-layer map (NP) or plain number (PROP)
-  const wlPct = (() => {
-    if (written_line_pct != null) return numOrNull(written_line_pct);
-    if (line_pct == null) return null;
-    const n = numOrNull(line_pct);
-    if (n !== null) return n;
-    try {
-      const parsed = JSON.parse(line_pct);
-      if (typeof parsed === 'object') {
-        const vals = Object.values(parsed).map(v => parseFloat(String(v).replace(/%/g,''))).filter(n => Number.isFinite(n) && n > 0);
-        return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
-      }
-    } catch {}
-    return null;
-  })();
-  // Update quote status and next_approver
-  await pool.query(
-    `UPDATE public.quote SET status='AWAITING_APPROVAL', next_approver=$2, updated_at=now() WHERE quote_id=$1`,
-    [id, approver || null]
-  ).catch(() => pool.query(`UPDATE public.quote SET status='AWAITING_APPROVAL', updated_at=now() WHERE quote_id=$1`, [id]));
-  // Persist written line to quote_offer
-  await pool.query(
-    `INSERT INTO public.quote_offer (quote_id, written_line_pct, next_approver, status, updated_at)
-     VALUES ($1, $2, $3, 'AWAITING_APPROVAL', now())
-     ON CONFLICT (quote_id) DO UPDATE SET
-       written_line_pct = COALESCE(EXCLUDED.written_line_pct, quote_offer.written_line_pct),
-       next_approver    = EXCLUDED.next_approver,
-       status           = 'AWAITING_APPROVAL',
-       updated_at       = now()`,
-    [id, wlPct, approver || null]
-  ).catch(() => {});
-  // Write audit event — actor from verified identity, never client headers/body.
   const actor = await resolveAuditActor(req);
-  await pool.query(
-    `INSERT INTO public.offer_approval_event (quote_id,event_type,actor_user_id,actor_name,actor_role,comment,payload)
-     VALUES ($1,'SUBMITTED_FOR_APPROVAL',$2,$3,$4,$5,$6)`,
-    [id, actor.actorUserId, actor.actorName, actor.actorRole,
-     comment || null,
-     JSON.stringify({ written_line_pct: wlPct, approver: approver || null })]
-  ).catch(() => {});
-  res.json({ ok: true });
+  const result = await declineQuoteAction(id, actor, req.body?.reason);
+  res.json({ ok: true, ...result });
+}));
+router.post("/quotes/:id/offer/submit-for-approval", asyncHandler(async (req, res) => {
+  // Parity with treaty submit: one transaction (quote status + quote_offer +
+  // event + critical audit), legal-transition guard (422 unless DRAFT/re-submit).
+  const { id } = req.params;
+  await assertCanEdit(req, 'QUOTE', id);
+  const actor = await resolveAuditActor(req);
+  const result = await submitQuoteForApprovalAction(id, actor, req.body || {});
+  res.json({ ok: true, ...result });
 }));
 
 router.post("/quotes/:id/offer/mark-approved", asyncHandler(async (req, res) => {
@@ -1689,6 +1657,8 @@ router.put("/quotes/:id/cat-losses", asyncHandler(async (req, res) => {
   const reportDateNorm=report_date?new Date(report_date).toISOString().slice(0,10):null;
   try{await cl.query("BEGIN");
   await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
+  // Opt-in optimistic lock (inside the txn) — see large-losses.
+  await assertParentEntityUnchanged(cl, { parentTable: 'quote', idColumn: 'quote_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
   const {rows:existing}=await cl.query(`SELECT report_id FROM public.contract_cat_loss_report WHERE quote_id=$1`,[id]);
   let rid;
   if(existing.length){rid=existing[0].report_id;await cl.query(`UPDATE public.contract_cat_loss_report SET report_date=$2,updated_at=now() WHERE report_id=$1`,[rid,reportDateNorm]);
@@ -1735,7 +1705,8 @@ router.put("/quotes/:id/cat-losses", asyncHandler(async (req, res) => {
   });
   if (lossesInsert) await cl.query(lossesInsert.sql, lossesInsert.params);
   const savedLosses = lossesWithIds.map((l) => l._loss_id);
-  await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
+  const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
+  await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses,updated_at:updatedAt});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
 // POST /quotes/:id/losses/suggest-quarters — AI loss-to-quarter mapping
@@ -1857,22 +1828,35 @@ router.put("/quotes/:id/cresta", asyncHandler(async (req, res) => {
 // PUT /quotes/:id/pricing-outputs
 router.put("/quotes/:id/pricing-outputs", asyncHandler(async (req, res) => {
   const {id}=req.params;const d=req.body||{};
-  await pool.query(
-    `INSERT INTO public.quote_pricing_outputs
-       (quote_id,epi,attritional_ratio,large_loss_load,cat_loss_load,
-        commission_ratio,brokerage_ratio,tax_ratio,technical_result,max_commission,target_margin)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-     ON CONFLICT (quote_id) DO UPDATE SET
-       epi=EXCLUDED.epi, attritional_ratio=EXCLUDED.attritional_ratio,
-       large_loss_load=EXCLUDED.large_loss_load, cat_loss_load=EXCLUDED.cat_loss_load,
-       commission_ratio=EXCLUDED.commission_ratio, brokerage_ratio=EXCLUDED.brokerage_ratio,
-       tax_ratio=EXCLUDED.tax_ratio, technical_result=EXCLUDED.technical_result,
-       max_commission=EXCLUDED.max_commission, target_margin=EXCLUDED.target_margin,
-       updated_at=now()`,
-    [id,numOrNull(d.epi),numOrNull(d.attritional_ratio),numOrNull(d.large_loss_load),
-     numOrNull(d.cat_loss_load),numOrNull(d.commission_ratio),numOrNull(d.brokerage_ratio),
-     numOrNull(d.tax_ratio),numOrNull(d.technical_result),numOrNull(d.max_commission),numOrNull(d.target_margin)]);
-  res.json({ok:true});
+  const cl=await pool.connect();
+  try {
+    await cl.query("BEGIN");
+    // Opt-in optimistic lock (inside the txn) — see large-losses.
+    await assertParentEntityUnchanged(cl, { parentTable: 'quote', idColumn: 'quote_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
+    await cl.query(
+      `INSERT INTO public.quote_pricing_outputs
+         (quote_id,epi,attritional_ratio,large_loss_load,cat_loss_load,
+          commission_ratio,brokerage_ratio,tax_ratio,technical_result,max_commission,target_margin)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       ON CONFLICT (quote_id) DO UPDATE SET
+         epi=EXCLUDED.epi, attritional_ratio=EXCLUDED.attritional_ratio,
+         large_loss_load=EXCLUDED.large_loss_load, cat_loss_load=EXCLUDED.cat_loss_load,
+         commission_ratio=EXCLUDED.commission_ratio, brokerage_ratio=EXCLUDED.brokerage_ratio,
+         tax_ratio=EXCLUDED.tax_ratio, technical_result=EXCLUDED.technical_result,
+         max_commission=EXCLUDED.max_commission, target_margin=EXCLUDED.target_margin,
+         updated_at=now()`,
+      [id,numOrNull(d.epi),numOrNull(d.attritional_ratio),numOrNull(d.large_loss_load),
+       numOrNull(d.cat_loss_load),numOrNull(d.commission_ratio),numOrNull(d.brokerage_ratio),
+       numOrNull(d.tax_ratio),numOrNull(d.technical_result),numOrNull(d.max_commission),numOrNull(d.target_margin)]);
+    const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
+    await cl.query("COMMIT");
+    res.json({ok:true, updated_at: updatedAt});
+  } catch(e) {
+    await cl.query("ROLLBACK").catch(()=>{});
+    throw e;
+  } finally {
+    cl.release();
+  }
 }));
 
 // PUT /quotes/:id/pricing-yearly
@@ -1880,6 +1864,8 @@ router.put("/quotes/:id/pricing-yearly", asyncHandler(async (req, res) => {
   const {id}=req.params;const rows=req.body.rows??req.body??[];const cl=await pool.connect();
   try{
     await cl.query("BEGIN");
+    // Opt-in optimistic lock (inside the txn) — see large-losses.
+    await assertParentEntityUnchanged(cl, { parentTable: 'quote', idColumn: 'quote_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await cl.query(`DELETE FROM public.quote_pricing_yearly WHERE quote_id=$1`,[id]);
     const yearlyInsert = buildBatchInsert({
       table: 'public.quote_pricing_yearly',
@@ -1892,8 +1878,9 @@ router.put("/quotes/:id/pricing-yearly", asyncHandler(async (req, res) => {
       leadingId: id,
     });
     if (yearlyInsert) await cl.query(yearlyInsert.sql, yearlyInsert.params);
+    const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
     await cl.query("COMMIT");
-    res.json({ok:true});
+    res.json({ok:true, updated_at: updatedAt});
   } catch(e) {
     await cl.query("ROLLBACK").catch(()=>{});
     throw e;

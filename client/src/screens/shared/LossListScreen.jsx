@@ -3,6 +3,7 @@ import { api } from '../../api';
 import { useContractId } from '../../hooks/useContractId';
 import { useAppState } from '../../context/AppContext';
 import WizardLayout from '../../components/WizardLayout';
+import LoadErrorPanel from '../../components/LoadErrorPanel';
 import { parseFlexibleNumber, dateInputValue } from '../../utils/format';
 import LossAnalysisModal from './LossAnalysisModal';
 
@@ -176,6 +177,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
   const [reportDate, setReportDate] = useState('');
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   const [saveMsg, setSaveMsg] = useState(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
   // Server-side losses (fully populated, with loss_id and reported_date) —
@@ -236,6 +238,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
   const loadData = useCallback(async () => {
     if (!contractId) { setRows(Array.from({ length: MIN_ROWS }, emptyRow)); return; }
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await loadFn(contractId, quoteMode ? { quote: true } : undefined);
       const losses = data?.losses || data?.rows || [];
@@ -275,7 +278,13 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
       }
       setSaveMsg({ type: 'ok', text: `Loaded ${losses.length} records` });
       setTimeout(() => setSaveMsg(null), 2000);
-    } catch (e) { console.warn('Load losses:', e); }
+    } catch (e) {
+      // Surface the failure instead of silently leaving an empty grid the user
+      // could overwrite the server's good data with. Save is disabled while
+      // loadError is set (see below); Retry re-runs loadData.
+      console.warn('Load losses:', e);
+      setLoadError(e);
+    }
     setLoading(false);
   }, [contractId, loadFn, quoteMode]);
 
@@ -284,6 +293,8 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
   // Save
   const save = useCallback(async () => {
     if (!contractId) return true;
+    // Never persist over a failed load — the grid may not reflect server state.
+    if (loadError) { setSaveMsg({ type: 'error', text: 'Cannot save: loss data failed to load. Retry first.' }); return false; }
     const payload = rows.filter(r => !isRowEmpty(r)).map(r => ({
       loss_id: r.lossId || null,
       // Actuarial reporting date drives where the loss is stripped from
@@ -311,7 +322,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
       setTimeout(() => setSaveMsg(null), 3000);
       return false;
     }
-  }, [contractId, rows, saveFn, reportDate, quoteMode, loadData]);
+  }, [contractId, rows, saveFn, reportDate, quoteMode, loadData, loadError]);
 
   // Clear
   const clear = () => {
@@ -433,10 +444,22 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                 📊 Loss Analysis
               </button>
               <button className="ll-btn ll-btn--load" onClick={loadData} title="Reload from server">⟳ Load</button>
-              <button className="ll-btn ll-btn--clear" onClick={clear} title="Clear all rows">✕ Clear</button>
-              <button className={`ll-btn ll-btn--save ${dirty ? 'll-btn--dirty' : ''}`} onClick={save} title="Save to server">💾 Save</button>
+              <button className="ll-btn ll-btn--clear" onClick={clear} title="Clear all rows" disabled={!!loadError}>✕ Clear</button>
+              <button
+                className={`ll-btn ll-btn--save ${dirty ? 'll-btn--dirty' : ''}`}
+                onClick={save}
+                disabled={!!loadError}
+                title={loadError ? 'Loss data failed to load — retry before saving' : 'Save to server'}
+              >💾 Save</button>
             </div>
           </div>
+
+          {loadError && (
+            <LoadErrorPanel
+              message="Couldn’t load saved losses. Saving is disabled to avoid overwriting server data with a blank grid."
+              onRetry={loadData}
+            />
+          )}
 
           {loading ? (
             <div className="ll-loading">Loading...</div>
