@@ -54,6 +54,38 @@ function curveLabel(c) {
   return `${c.taxonomy} · ${c.loss_category} · ${c.imt}${pts}`;
 }
 
+// Candidate curves for a slot: prefer the slot's occupancy class and
+// building/contents loss category; fall back to the whole catalogue if the
+// filter is empty so an unconventional set is still selectable.
+function candidatesForSlot(meta, curveList) {
+  const filtered = curveList.filter((c) => {
+    const occOk = !c.occupancy || c.occupancy === meta.occ;
+    const isContents = c.loss_category === 'contents';
+    const kindOk = meta.kind === 'cont' ? isContents : !isContents;
+    return occOk && kindOk;
+  });
+  return filtered.length ? filtered : curveList;
+}
+
+// Deterministic mid-complexity default for a slot: prefer PGA-based functions,
+// sort the pool by a stable key (taxonomy → IMT → id) and take the median
+// entry. No randomness — same catalogue always yields the same pick.
+function pickDefaultCurve(meta, curveList) {
+  const candidates = candidatesForSlot(meta, curveList);
+  if (!candidates.length) return null;
+  const pga = candidates.filter((c) => c.imt === 'PGA');
+  const pool = pga.length ? pga : candidates;
+  const sorted = [...pool].sort((a, b) => {
+    const ka = `${a.taxonomy || ''}|${a.imt || ''}`;
+    const kb = `${b.taxonomy || ''}|${b.imt || ''}`;
+    if (ka !== kb) return ka < kb ? -1 : 1;
+    return Number(a.id) - Number(b.id);
+  });
+  return sorted[Math.floor((sorted.length - 1) / 2)];
+}
+
+const defaultTag = { marginLeft: 6, fontSize: 9, fontWeight: 700, color: 'var(--accent)', opacity: 0.85 };
+
 /**
  * @param {{
  *   contractId: string,
@@ -72,6 +104,7 @@ export default function EqDamageRatioPanel({ contractId, layers, catLayers, upda
   const [curves, setCurves] = useState([]);
 
   const [assignments, setAssignments] = useState({});   // slot → functionId
+  const [autoSlots, setAutoSlots] = useState(() => new Set()); // slots still on auto-pick
   const [intensities, setIntensities] = useState({});    // IMT → number (string while editing)
   const [persist, setPersist] = useState(false);
 
@@ -97,16 +130,34 @@ export default function EqDamageRatioPanel({ contractId, layers, catLayers, upda
         setCountryName(country);
         setZones(Array.isArray(scn?.zones) ? scn.zones : []);
         const saved = scn?.scenario || null;
-        if (saved?.curve_assignments && typeof saved.curve_assignments === 'object') {
-          setAssignments(saved.curve_assignments);
-        }
         if (saved?.intensities && typeof saved.intensities === 'object') {
           const { byZone: _omit, ...flat } = saved.intensities;
           setIntensities(flat);
         }
         const cv = await api.getGemCurves(country ? { country } : {});
         if (!alive) return;
-        setCurves(Array.isArray(cv?.curves) ? cv.curves : []);
+        const curveList = Array.isArray(cv?.curves) ? cv.curves : [];
+        setCurves(curveList);
+
+        const savedAssignments = saved?.curve_assignments && typeof saved.curve_assignments === 'object'
+          ? saved.curve_assignments : null;
+        if (savedAssignments && Object.keys(savedAssignments).length) {
+          setAssignments(savedAssignments);
+          setAutoSlots(new Set());
+        } else {
+          // No saved scenario — seed each slot with a deterministic
+          // mid-complexity default curve so the UW starts from a sensible
+          // pick rather than blanks. Flagged "(default)" until overridden;
+          // we do NOT auto-calculate (the UW still presses Compute).
+          const auto = {};
+          const autoFlags = new Set();
+          for (const meta of SLOTS) {
+            const pick = pickDefaultCurve(meta, curveList);
+            if (pick) { auto[meta.slot] = String(pick.id); autoFlags.add(meta.slot); }
+          }
+          setAssignments(auto);
+          setAutoSlots(autoFlags);
+        }
       } catch (err) {
         if (alive) setLoadError(err?.message || 'Failed to load GEM exposure data.');
       } finally {
@@ -122,18 +173,7 @@ export default function EqDamageRatioPanel({ contractId, layers, catLayers, upda
     return m;
   }, [curves]);
 
-  // Candidate curves per slot: prefer the slot's occupancy class and
-  // building/contents loss category; fall back to all curves if the filter
-  // is empty so an unconventional catalogue is still selectable.
-  const curvesForSlot = useCallback((meta) => {
-    const filtered = curves.filter((c) => {
-      const occOk = !c.occupancy || c.occupancy === meta.occ;
-      const isContents = c.loss_category === 'contents';
-      const kindOk = meta.kind === 'cont' ? isContents : !isContents;
-      return occOk && kindOk;
-    });
-    return filtered.length ? filtered : curves;
-  }, [curves]);
+  const curvesForSlot = useCallback((meta) => candidatesForSlot(meta, curves), [curves]);
 
   // IMTs needed by the currently assigned curves → one design-intensity input each.
   const neededImts = useMemo(() => {
@@ -223,12 +263,25 @@ export default function EqDamageRatioPanel({ contractId, layers, catLayers, upda
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
                 {SLOTS.map((meta) => (
                   <label key={meta.slot}>
-                    <span style={fieldLabel}>{meta.label}</span>
+                    <span style={fieldLabel}>
+                      {meta.label}
+                      {autoSlots.has(meta.slot) && <span style={defaultTag}>(default)</span>}
+                    </span>
                     <select
                       style={selectStyle}
                       disabled={disabled}
                       value={assignments[meta.slot] ?? ''}
-                      onChange={(e) => setAssignments((a) => ({ ...a, [meta.slot]: e.target.value || undefined }))}
+                      onChange={(e) => {
+                        const v = e.target.value || undefined;
+                        setAssignments((a) => ({ ...a, [meta.slot]: v }));
+                        // Any manual change takes the slot off its auto-pick.
+                        setAutoSlots((s) => {
+                          if (!s.has(meta.slot)) return s;
+                          const next = new Set(s);
+                          next.delete(meta.slot);
+                          return next;
+                        });
+                      }}
                     >
                       <option value="">— none —</option>
                       {curvesForSlot(meta).map((c) => (

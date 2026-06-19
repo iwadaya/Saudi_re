@@ -73,15 +73,30 @@ describe('EqDamageRatioPanel', () => {
     await waitFor(() => expect(screen.getByText(/No CRESTA earthquake exposure/i)).toBeInTheDocument());
   });
 
+  it('auto-picks a deterministic default curve per bucket when no scenario is saved', async () => {
+    renderPanel();
+    await waitFor(() => expect(getGemCurves).toHaveBeenCalledWith({ country: 'Saudi Arabia' }));
+
+    // Every slot is seeded with the (only) catalogue curve and flagged default.
+    const slotSelect = await screen.findByLabelText(/Commercial — building/);
+    expect(slotSelect.value).toBe('7');
+    expect(screen.getAllByText('(default)').length).toBe(5);
+
+    // Overriding a slot clears its "(default)" tag (one fewer tag).
+    fireEvent.change(slotSelect, { target: { value: '' } });
+    await waitFor(() => expect(screen.getAllByText('(default)').length).toBe(4));
+  });
+
   it('computes and applies the effective damage ratio into the cat layer cell', async () => {
     const { updateLayer } = renderPanel();
 
     // Curve catalogue is scoped to the contract's country.
     await waitFor(() => expect(getGemCurves).toHaveBeenCalledWith({ country: 'Saudi Arabia' }));
 
-    // Assign a curve to the commercial-building slot, then set its PGA intensity.
-    const slotSelect = await screen.findByLabelText('Commercial — building');
-    fireEvent.change(slotSelect, { target: { value: '7' } });
+    // The commercial-building slot is pre-seeded with the default curve; set
+    // its PGA design intensity and compute.
+    const slotSelect = await screen.findByLabelText(/Commercial — building/);
+    expect(slotSelect.value).toBe('7');
     const pga = await screen.findByLabelText('PGA');
     fireEvent.change(pga, { target: { value: '0.18' } });
 
@@ -90,11 +105,11 @@ describe('EqDamageRatioPanel', () => {
     // The Apply button (labelled with the effective ratio) appears once the
     // compute resolves and the result renders.
     const applyBtn = await screen.findByRole('button', { name: /Apply 25\.00%/i });
-    expect(computeGemEqLoss).toHaveBeenCalledWith('c-1', {
-      curveAssignments: { commercialBldg: '7' },
+    expect(computeGemEqLoss).toHaveBeenCalledWith('c-1', expect.objectContaining({
+      curveAssignments: expect.objectContaining({ commercialBldg: '7' }),
       intensities: { PGA: 0.18 },
       persist: false,
-    });
+    }));
     expect(screen.getByText('Ground-up EQ loss')).toBeInTheDocument();
 
     // Apply writes effectiveMdr as a ROL% into the selected cat layer cell.
