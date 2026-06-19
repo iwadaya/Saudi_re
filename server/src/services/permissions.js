@@ -89,6 +89,70 @@ export async function assertCanEdit(req, entityType, entityId) {
   return { ...perm, assignedToUserId, assignedToName: own.assigned_to_name || null };
 }
 
+/**
+ * Entity READ authorization — the single policy choke point for who may VIEW a
+ * contract / quote / fac risk (and, by inheritance, its documents). Today reads
+ * are open to every authenticated user (see the module header and the GET routes
+ * in routes/treaties.js + routes/quotes.js), so this asserts only a verified
+ * identity plus that the entity exists. It is centralized HERE on purpose: when
+ * read visibility is later tightened (assignee / team / seniority — the separate
+ * P1 authz item), every read path that routes through this helper, documents
+ * included, tightens at once.
+ *
+ * Throws 401 when anonymous, 404 when the entity does not exist.
+ */
+export async function assertCanReadEntity(req, entityType, entityId) {
+  const { table, idCol } = entityMeta(entityType);
+  if (!req?.user?.userId) {
+    throw Object.assign(new Error('Authentication required.'), { status: 401, code: 'UNAUTHORIZED' });
+  }
+  if (!entityId) throw Object.assign(new Error('Not found'), { status: 404 });
+  const { rows } = await pool.query(`SELECT 1 FROM ${table} WHERE ${idCol} = $1`, [entityId]);
+  if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+  // Read policy: open to all authenticated users (reads are not assignee-gated).
+}
+
+/**
+ * Resolve a document to its owning entity (contract_document is shared: a row is
+ * owned by EITHER a contract OR a quote — migration 072 single-owner check) and
+ * enforce that the requester may perform `action` on it. A document must NEVER be
+ * more accessible than its parent:
+ *   • 'read'   (view / download / text) → inherits the parent READ policy
+ *                                         (assertCanReadEntity).
+ *   • 'delete' (and any future mutation) → takes the assignee edit-lock
+ *                                         (assertCanEdit).
+ * A missing OR orphaned (no parent) document throws 404 — so probing a foreign/
+ * deleted document UUID never serves a file, closing the load-by-id IDOR.
+ *
+ * Returns the resolved owner + the document row so the caller can serve/delete it
+ * without a second lookup. P0-2 reuses this owner-scope resolution.
+ *
+ * @param {object} req         Express request (verified identity in req.user).
+ * @param {string} documentId  contract_document.document_id (UUID).
+ * @param {'read'|'delete'} [action]
+ * @returns {Promise<{ entityType: 'CONTRACT'|'QUOTE', entityId: string, doc: object }>}
+ */
+export async function assertCanAccessDocument(req, documentId, action = 'read') {
+  if (!documentId) throw Object.assign(new Error('Document not found'), { status: 404, code: 'NOT_FOUND' });
+  const { rows } = await pool.query('SELECT * FROM public.contract_document WHERE document_id = $1', [documentId]);
+  const doc = rows[0];
+  if (!doc) throw Object.assign(new Error('Document not found'), { status: 404, code: 'NOT_FOUND' });
+
+  let entityType = null;
+  let entityId = null;
+  if (doc.contract_id) { entityType = 'CONTRACT'; entityId = doc.contract_id; }
+  else if (doc.quote_id) { entityType = 'QUOTE'; entityId = doc.quote_id; }
+  // Orphaned document (no parent contract or quote) → never serve; treat as 404.
+  if (!entityId) throw Object.assign(new Error('Document not found'), { status: 404, code: 'NOT_FOUND' });
+
+  if (action === 'delete') {
+    await assertCanEdit(req, entityType, entityId);
+  } else {
+    await assertCanReadEntity(req, entityType, entityId);
+  }
+  return { entityType, entityId, doc };
+}
+
 // ── Comprehensive mutation guard ────────────────────────────────────────────
 // A single app-level choke point so EVERY mutating route under quotes /
 // treaties / facultative / pricing passes assertCanEdit on its owning entity.
