@@ -126,6 +126,10 @@ export async function getAggCobBreakdown(contractId) {
 export async function getAggDrilldown(contractId) {
   const cols = await getCobCols();
   const label = cobLabel(cols, "'Unclassified'");
+  // The id may be a bound contract or, in the NP/prop quote workbench, a quote.
+  // Try the contract first; fall back to the quote tables so the shared panel
+  // works for both. The country-portfolio comparison below always runs against
+  // the existing bound-contract book, so a quote is measured against the book.
   const contractResult = await pool.query(
     `SELECT c.contract_id, c.country_id, cnt.country_name, cnt.country_code,
             c.signed_line_pct, c.uw_year
@@ -134,8 +138,24 @@ export async function getAggDrilldown(contractId) {
      WHERE c.contract_id=$1`,
     [contractId]
   );
-  if (!contractResult.rows.length) return null;
-  const contract = contractResult.rows[0];
+  let owner = contractResult.rows[0] || null;
+  let crestaTable = 'public.contract_cresta_data';
+  let ownerCol = 'contract_id';
+  if (!owner) {
+    const quoteResult = await pool.query(
+      `SELECT q.quote_id AS contract_id, q.country_id, cnt.country_name, cnt.country_code,
+              q.signed_line_pct, q.uw_year
+       FROM public.quote q
+       LEFT JOIN public.country cnt ON cnt.country_id::text = q.country_id::text
+       WHERE q.quote_id=$1`,
+      [contractId]
+    );
+    if (!quoteResult.rows.length) return null;
+    owner = quoteResult.rows[0];
+    crestaTable = 'public.quote_cresta_data';
+    ownerCol = 'quote_id';
+  }
+  const contract = owner;
   const countryId = contract.country_id;
 
   const zonesRes = await pool.query(
@@ -146,8 +166,8 @@ export async function getAggDrilldown(contractId) {
       COALESCE(others_agg,0) AS others_agg,
       COALESCE(eq_agg,0)+COALESCE(ws_agg,0)+COALESCE(flood_agg,0)+COALESCE(srcc_agg,0)+COALESCE(others_agg,0) AS total_agg,
       COALESCE(NULLIF(cob_name,''),'All Classes') AS cob_name
-     FROM public.contract_cresta_data
-     WHERE contract_id=$1
+     FROM ${crestaTable}
+     WHERE ${ownerCol}=$1
      ORDER BY total_agg DESC`,
     [contractId]
   );
@@ -159,9 +179,9 @@ export async function getAggDrilldown(contractId) {
       SUM(COALESCE(cd.flood_agg,0)) AS flood_agg, SUM(COALESCE(cd.srcc_agg,0)) AS srcc_agg,
       SUM(COALESCE(cd.others_agg,0)) AS others_agg,
       SUM(COALESCE(cd.eq_agg,0)+COALESCE(cd.ws_agg,0)+COALESCE(cd.flood_agg,0)+COALESCE(cd.srcc_agg,0)+COALESCE(cd.others_agg,0)) AS total_agg
-     FROM public.contract_cresta_data cd
+     FROM ${crestaTable} cd
      ${cobJoin(cols)}
-     WHERE cd.contract_id=$1
+     WHERE cd.${ownerCol}=$1
      GROUP BY ${label}
      ORDER BY total_agg DESC`,
     [contractId]
