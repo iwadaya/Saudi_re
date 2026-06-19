@@ -61,7 +61,7 @@ describe('NpInsightModal — GEM insight', () => {
   it('renders the EQ damage-ratio panel under a GEM title', async () => {
     render(<NpInsightModal pricing={makePricing()} open contractId="c-1" isQuote={false} currency="SAR" npDetail={{}} />);
     expect(screen.getByText('GEM EQ Damage Ratios')).toBeInTheDocument();
-    expect(await screen.findByText('EQ Damage Ratio')).toBeInTheDocument();
+    expect(await screen.findByText('EQ Damage Ratios')).toBeInTheDocument();
     await waitFor(() => expect(getGemScenario).toHaveBeenCalledWith('c-1'));
   });
 
@@ -71,7 +71,10 @@ describe('NpInsightModal — GEM insight', () => {
 
     const pga = await screen.findByLabelText('PGA');
     fireEvent.change(pga, { target: { value: '0.18' } });
-    fireEvent.click(screen.getByRole('button', { name: /Compute EQ Loss/i }));
+    // Calculate is disabled until the per-slot curve lists finish loading.
+    const calc = screen.getByRole('button', { name: /Calculate/i });
+    await waitFor(() => expect(calc).toBeEnabled());
+    fireEvent.click(calc);
 
     const applyBtn = await screen.findByRole('button', { name: /Apply to cat burning cost/i });
     fireEvent.click(applyBtn);

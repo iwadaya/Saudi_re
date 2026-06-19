@@ -10,7 +10,7 @@ import ProfileScreen from '../../../shared/ProfileScreen';
 import NpCrestaAggregates from '../../cresta_zones/NpCrestaAggregates';
 import NpMarketAnalysis from '../NpMarketAnalysis';
 import NpChecklistPanel from './NpChecklistPanel.jsx';
-import EqDamageRatioPanel from './EqDamageRatioPanel.jsx';
+import GemDamageRatioPanel from '../../cat_exposure/GemDamageRatioPanel.jsx';
 import CedantSummaryTabs from '../../../../components/cedant/CedantSummaryTabs';
 
 /**
@@ -72,7 +72,7 @@ export default function NpInsightModal({ pricing, open, contractId, isQuote, isT
                       {insightKey === 'CHECKLIST' && <NpChecklistPanel contractId={contractId} isQuote={isQuote} />}
                       {insightKey === 'GEM' && (
                         <div className="bbg-embed-screen">
-                          <EqDamageRatioPanel
+                          <GemDamageRatioPanel
                             contractId={contractId}
                             catLayers={catLayers}
                             currency={currency}
