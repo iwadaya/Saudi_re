@@ -95,10 +95,12 @@ export default function NpTreatyPricingSections({
               {!isQuote && layers.length > 0 && !catDisabled && catLayers.length > 0 && (
                 <EqDamageRatioPanel
                   contractId={contractId}
-                  layers={layers}
                   catLayers={catLayers}
-                  updateLayer={updateLayer}
                   currency={currency}
+                  onApplyToCat={({ value, field, catLayerIndex }) => {
+                    const gi = layers.indexOf(catLayers[catLayerIndex]);
+                    if (gi >= 0) updateLayer(gi, field, value);
+                  }}
                   disabled={isTerminal}
                 />
               )}

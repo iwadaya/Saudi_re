@@ -87,16 +87,19 @@ function pickDefaultCurve(meta, curveList) {
 const defaultTag = { marginLeft: 6, fontSize: 9, fontWeight: 700, color: 'var(--accent)', opacity: 0.85 };
 
 /**
+ * Host-agnostic: the panel computes the ground-up EQ loss and hands the chosen
+ * cat layer + field + value back through `onApplyToCat` — the host owns how the
+ * value is written (treaty `updateLayer` vs quote `updateClientStructureLayer`).
+ *
  * @param {{
  *   contractId: string,
- *   layers: Array<object>,            // full pricing layers[] (for indexOf + apply)
- *   catLayers: Array<object>,         // layers.filter(l => l.cat)
- *   updateLayer: (idx:number, field:string, value:string) => void,
+ *   catLayers: Array<object>,         // cat-covering layers, in host order
+ *   onApplyToCat: (apply: { value: string, field: string, catLayerIndex: number }) => void,
  *   currency: string,
  *   disabled?: boolean,
  * }} props
  */
-export default function EqDamageRatioPanel({ contractId, layers, catLayers, updateLayer, currency, disabled = false }) {
+export default function EqDamageRatioPanel({ contractId, catLayers = [], onApplyToCat, currency, disabled = false }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [countryName, setCountryName] = useState(null);
@@ -215,17 +218,15 @@ export default function EqDamageRatioPanel({ contractId, layers, catLayers, upda
     }
   }, [assignments, intensities, contractId]);
 
-  // Apply the effective mean damage ratio (a unitless rate) into the chosen cat
-  // layer's chosen ROL% cell. The reducer recomputes the blended cat total.
+  // Hand the effective mean damage ratio (a unitless rate) back to the host to
+  // write into the chosen cat layer's chosen ROL% cell. The host's reducer
+  // recomputes the blended cat total.
   const onApply = useCallback(() => {
-    if (!result || disabled) return;
-    const layer = catLayers[targetIdx];
-    if (!layer) return;
-    const gi = layers.indexOf(layer);
-    if (gi < 0) return;
+    if (!result || disabled || typeof onApplyToCat !== 'function') return;
+    if (!catLayers[targetIdx]) return;
     const ratioPct = toN(result.effectiveMdr) * 100;
-    updateLayer(gi, targetField, `${ratioPct.toFixed(2)}%`);
-  }, [result, disabled, catLayers, targetIdx, layers, targetField, updateLayer]);
+    onApplyToCat({ value: `${ratioPct.toFixed(2)}%`, field: targetField, catLayerIndex: targetIdx });
+  }, [result, disabled, onApplyToCat, catLayers, targetIdx, targetField]);
 
   if (!contractId) return null;
 

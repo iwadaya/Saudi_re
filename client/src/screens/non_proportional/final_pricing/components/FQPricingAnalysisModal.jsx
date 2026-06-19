@@ -15,12 +15,14 @@ import FQFinalPriceModal from './FQFinalPriceModal.jsx';
 import SeverityFitPanel from './SeverityFitPanel.jsx';
 import FrequencySimPanel from './FrequencySimPanel.jsx';
 import FQPlaceholderTab from './FQPlaceholderTab.jsx';
+import FQEqDamageRatioTab from './FQEqDamageRatioTab.jsx';
 import AggregateAnalysisPanel from '../../../shared/aggregate_analysis/AggregateAnalysisPanel.jsx';
 
 const TOP_TABS = [
   { k: 'pricing', label: 'Pricing Analysis' },
   { k: 'pareto', label: 'Pareto Simulation' },
   { k: 'loss', label: 'Inflation & Loss' },
+  { k: 'eq', label: 'EQ Damage Ratios' },
   { k: 'agg', label: 'Aggregate Analysis' },
 ];
 
@@ -74,7 +76,7 @@ const G = {
 /**
  * @param {{
  *   pricingAnalysisModal: { open: boolean, structureIndex: number | null },
- *   clientStructures: Array<object>,
+ *   clientStructures: Array<object>, currency: string,
  *   isQuote: boolean,
  *   riskDisabled: boolean,
  *   catDisabled: boolean,
@@ -93,7 +95,7 @@ const G = {
  */
 export default function FQPricingAnalysisModal({
   pricingAnalysisModal,
-  clientStructures,
+  clientStructures, currency,
   isQuote,
   riskDisabled,
   catDisabled,
@@ -774,6 +776,7 @@ export default function FQPricingAnalysisModal({
             </>
           )}
           {tab === 'loss' && <FQPlaceholderTab title="Inflation & Loss Manipulation" line="Apply inflation and adjust large/cat loss inputs to stress pricing — coming soon." />}
+          {tab === 'eq' && <FQEqDamageRatioTab structure={structure} sIdx={sIdx} contractId={contractId} currency={currency} catDisabled={catDisabled} updateClientStructureLayer={updateClientStructureLayer} />}
           {tab === 'agg' && (contractId ? (
             <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
               <AggregateAnalysisPanel contractId={contractId} />

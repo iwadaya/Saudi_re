@@ -33,18 +33,16 @@ vi.mock('recharts', () => {
 const catLayer = { layer: 1, cat: true, limit: '1000000', catExposure: '0.00%' };
 
 function renderPanel(over = {}) {
-  const updateLayer = vi.fn();
-  const layers = [catLayer];
+  const onApplyToCat = vi.fn();
   const props = {
     contractId: 'c-1',
-    layers,
-    catLayers: layers.filter((l) => l.cat),
-    updateLayer,
+    catLayers: [catLayer],
+    onApplyToCat,
     currency: 'SAR',
     disabled: false,
     ...over,
   };
-  return { updateLayer, ...render(<EqDamageRatioPanel {...props} />) };
+  return { onApplyToCat, ...render(<EqDamageRatioPanel {...props} />) };
 }
 
 beforeEach(() => {
@@ -88,7 +86,7 @@ describe('EqDamageRatioPanel', () => {
   });
 
   it('computes and applies the effective damage ratio into the cat layer cell', async () => {
-    const { updateLayer } = renderPanel();
+    const { onApplyToCat } = renderPanel();
 
     // Curve catalogue is scoped to the contract's country.
     await waitFor(() => expect(getGemCurves).toHaveBeenCalledWith({ country: 'Saudi Arabia' }));
@@ -112,8 +110,8 @@ describe('EqDamageRatioPanel', () => {
     }));
     expect(screen.getByText('Ground-up EQ loss')).toBeInTheDocument();
 
-    // Apply writes effectiveMdr as a ROL% into the selected cat layer cell.
+    // Apply hands effectiveMdr as a ROL% back to the host for the selected layer.
     fireEvent.click(applyBtn);
-    expect(updateLayer).toHaveBeenCalledWith(0, 'catExposure', '25.00%');
+    expect(onApplyToCat).toHaveBeenCalledWith({ value: '25.00%', field: 'catExposure', catLayerIndex: 0 });
   });
 });
