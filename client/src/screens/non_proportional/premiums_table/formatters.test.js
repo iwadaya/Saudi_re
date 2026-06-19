@@ -22,6 +22,19 @@ describe('resolveYearsFromServer', () => {
     expect(resolveYearsFromServer({ renewal_date: '2023-06-01' }, np, egnpiRows)).toEqual([2021, 2023, 2024]);
   });
 
+  it('resolves the range from the np payload contract_header when the header is empty', () => {
+    // Mirrors a failed/slow getContract: the separate contract header is gone,
+    // but the non-prop payload still carries its own authoritative header, so
+    // the range must still resolve (no "Waiting for years." dead-end).
+    const np = { detail: {}, contract_header: { uw_year: 2022, renewal_date: '2024-01-01' } };
+    expect(resolveYearsFromServer({}, np, [])).toEqual([2022, 2023, 2024]);
+  });
+
+  it('falls back to the contract_header inception year for a single-year range', () => {
+    const np = { detail: {}, contract_header: { inception_date: '2023-03-01' } };
+    expect(resolveYearsFromServer({}, np, [])).toEqual([2023]);
+  });
+
   it('returns [] when nothing resolves a start year', () => {
     expect(resolveYearsFromServer({}, {}, [])).toEqual([]);
     expect(resolveYearsFromServer(null, null, null)).toEqual([]);

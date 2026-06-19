@@ -1067,7 +1067,9 @@ router.get("/quotes/:id/non-prop", ...npQuoteGuard, asyncHandler(async (req, res
     pool.query(`SELECT * FROM public.quote_np_layers WHERE quote_id=$1 ORDER BY layer_number`,[id]),
     pool.query(`SELECT * FROM public.quote_np_terms WHERE quote_id=$1`,[id]),
     pool.query(`SELECT class_of_business_id, limit_amount FROM public.quote_underwriting_limit WHERE quote_id=$1`,[id]),
-    pool.query(`SELECT status, updated_at FROM public.quote WHERE quote_id=$1`,[id]),
+    pool.query(`SELECT q.status, q.updated_at, q.uw_year, q.inception_date, q.renewal_date, q.country_id, cnt.country_name
+                  FROM public.quote q LEFT JOIN public.country cnt ON cnt.country_id = q.country_id
+                  WHERE q.quote_id=$1`,[id]),
     pool.query(`SELECT status, written_line_pct, next_approver FROM public.quote_offer WHERE quote_id=$1 ORDER BY updated_at DESC LIMIT 1`,[id]).catch(()=>({rows:[]})),
   ]);
   const liveStatus  = qR.rows[0]?.status || null;
@@ -1103,6 +1105,18 @@ router.get("/quotes/:id/non-prop", ...npQuoteGuard, asyncHandler(async (req, res
     offer_status: offerStatus || liveStatus,
     offer_approver: offerR.rows[0]?.next_approver || null,
     updated_at: qR.rows[0]?.updated_at || null,
+    // Authoritative quote header (uw year range + country) so the premiums/
+    // inflation screen can resolve its UW-year range and country directly from
+    // this payload, without depending on a separate getContract call succeeding.
+    contract_header: qR.rows[0]
+      ? {
+          uw_year: qR.rows[0].uw_year,
+          inception_date: qR.rows[0].inception_date,
+          renewal_date: qR.rows[0].renewal_date,
+          country_id: qR.rows[0].country_id,
+          country_name: qR.rows[0].country_name,
+        }
+      : null,
   });
 }));
 router.get("/quotes/:id/np-pricing", ...npQuoteGuard, asyncHandler(async (req, res) => {

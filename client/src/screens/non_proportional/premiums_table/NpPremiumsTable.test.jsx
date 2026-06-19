@@ -232,6 +232,45 @@ describe('NpPremiumsTable — country resolution + average inflation', () => {
     expect(boundaryFallback()).toBeNull();
   });
 
+  it('renders the inflation rows on landing when getContract fails (np contract_header fallback)', async () => {
+    // Repro of the "Inflation Assumptions not rendering on landing" bug: the
+    // contract's guaranteed uw_year/inception live on the contract header, which
+    // a failed/slow getContract drops. Country still shows (from appState), but
+    // the inflation + premium tables were stuck on "Waiting for years." The
+    // non-prop payload now carries its own contract_header so the UW-year range
+    // resolves from it alone — no getContract dependency.
+    installApi({
+      getContract: vi.fn().mockRejectedValue(new Error('boom')),
+      getNonPropTreaty: vi.fn().mockResolvedValue({
+        detail: {},
+        terms: {},
+        contract_header: {
+          uw_year: 2020,
+          inception_date: '2020-01-01',
+          renewal_date: '2022-06-01',
+          country_id: 'country-ae',
+          country_name: 'United Arab Emirates',
+        },
+      }),
+      getRefInflation: vi.fn().mockResolvedValue([
+        { uwYear: 2020, inflationPct: 3 },
+        { uwYear: 2021, inflationPct: 4 },
+        { uwYear: 2022, inflationPct: 5 },
+      ]),
+    });
+    renderScreen({ npTreatyDetail: { contractId: 'contract-prem-001' } });
+
+    // Country resolves from the np payload's own header.
+    expect(await screen.findByText('United Arab Emirates')).toBeInTheDocument();
+    // The UW-year range resolves from the np contract_header, so the inflation
+    // table populates instead of sitting on "Waiting for years."
+    await waitFor(() => {
+      expect(screen.queryByText(/Waiting for years/i)).toBeNull();
+    });
+    expect(screen.getAllByDisplayValue('3%').length).toBeGreaterThan(0);
+    expect(boundaryFallback()).toBeNull();
+  });
+
   it('lets the user pick a country when it cannot be derived', async () => {
     // No country anywhere: empty slice + header without a country.
     installApi({ getContract: vi.fn().mockResolvedValue({ header: {} }) });
