@@ -62,7 +62,7 @@ describe('FQEqDamageRatioTab', () => {
 
     const pga = await screen.findByLabelText('PGA');
     fireEvent.change(pga, { target: { value: '0.18' } });
-    fireEvent.click(screen.getByRole('button', { name: /Compute EQ Loss/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Calculate/i }));
 
     const applyBtn = await screen.findByRole('button', { name: /Apply to cat burning cost/i });
     fireEvent.click(applyBtn);

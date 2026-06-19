@@ -3,7 +3,7 @@
 // that file stays under its 800-line cap, same as FQPlaceholderTab): derives
 // the structure's cat layers, gates on EQ relevance, and wires the panel's
 // onApplyToCat callback to the quote per-layer setter.
-import EqDamageRatioPanel from './EqDamageRatioPanel.jsx';
+import GemDamageRatioPanel from '../../cat_exposure/GemDamageRatioPanel.jsx';
 import FQPlaceholderTab from './FQPlaceholderTab.jsx';
 
 /**
@@ -43,7 +43,7 @@ export default function FQEqDamageRatioTab({
   };
 
   return (
-    <EqDamageRatioPanel
+    <GemDamageRatioPanel
       contractId={contractId}
       catLayers={catLayers}
       currency={currency}

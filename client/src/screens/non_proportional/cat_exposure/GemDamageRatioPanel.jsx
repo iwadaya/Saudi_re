@@ -9,12 +9,17 @@
 // (Σ over zones of eq_agg · Σ bucket_share · MDR(intensity)). The ground-up
 // loss can be pushed into the host's cat burning-cost field via onApplyToCat.
 //
-// Self-contained: it owns its own data fetch/compute and carries no host
-// coupling beyond the three props. Theming mirrors the inline-style +
-// CSS-variable convention used across the FQ pricing workbench (no hard-coded
-// hex outside genuinely dynamic chart/series values).
+// Self-contained: it owns its own data fetch/compute and hands the ground-up
+// EQ loss back to the host via onApplyToCat (the host writes it into the cat
+// burning-cost field with its real layer setter and persists via the screen's
+// normal save). Theming mirrors the inline-style + CSS-variable convention used
+// across the FQ pricing workbench (no hard-coded hex outside genuinely dynamic
+// chart/series values).
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+} from 'recharts';
 import { api } from '../../../api';
 import { formatWithCommas } from '../../../utils/format';
 
@@ -46,6 +51,9 @@ const selectStyle = {
 const numInput = { ...selectStyle, fontVariantNumeric: 'tabular-nums' };
 const thStyle = { ...sectionLabel, textAlign: 'right', padding: '6px 8px', borderBottom: '1px solid rgba(148,163,184,0.18)' };
 const tdStyle = { fontSize: 11, padding: '5px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'rgba(226,232,240,0.86)' };
+const axisTick = { fontSize: 9, fill: 'rgba(148,163,184,0.7)' };
+const gridStroke = 'rgba(255,255,255,0.07)';
+const tooltipStyle = { background: '#0b1526', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8, fontSize: 11 };
 
 /** Coerce to a finite number or 0. */
 const toNum = (v) => {
@@ -86,10 +94,14 @@ const defaultTag = { marginLeft: 6, fontSize: 9, fontWeight: 700, color: 'var(--
  * @param {{
  *   contractId: string,
  *   currency: string,
+ *   catLayers?: Array<object>,   // cat-covering layers; gates the apply button
  *   onApplyToCat?: (groundUpEqLoss: number) => void,
+ *   disabled?: boolean,          // read-only / terminal contract states
  * }} props
  */
-export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat }) {
+export default function GemDamageRatioPanel({
+  contractId, currency, catLayers = [], onApplyToCat, disabled = false,
+}) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [ready, setReady] = useState(false);          // scenario loaded → curve loads may run
@@ -234,6 +246,13 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
 
   const totalEqAgg = useMemo(() => zones.reduce((s, z) => s + toNum(z.eq_agg), 0), [zones]);
 
+  const zoneChartData = useMemo(() => {
+    if (!result?.byZone) return [];
+    return result.byZone
+      .filter((z) => toNum(z.zoneLoss) > 0)
+      .map((z) => ({ name: z.zoneName || z.zoneId || '—', loss: Math.round(toNum(z.zoneLoss)) }));
+  }, [result]);
+
   // True when HAZUS is active and any assigned curve is placeholder data.
   const hazusPlaceholderInUse = useMemo(() => {
     if (source !== 'HAZUS') return false;
@@ -281,10 +300,13 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
   }, [contractId, buildBody]);
 
   const onApply = useCallback(() => {
-    if (!result || typeof onApplyToCat !== 'function') return;
+    // Never push placeholder-derived HAZUS losses (or apply in a read-only /
+    // no-cat-layer state) into cat pricing.
+    if (!result || disabled || catLayers.length === 0
+        || hazusPlaceholderInUse || typeof onApplyToCat !== 'function') return;
     onApplyToCat(toNum(result.groundUpEqLoss));
     setApplied(true);
-  }, [result, onApplyToCat]);
+  }, [result, disabled, catLayers, hazusPlaceholderInUse, onApplyToCat]);
 
   const toggleZone = useCallback((zid) => {
     setExpanded((prev) => {
@@ -333,10 +355,11 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
                       <button
                         key={s}
                         type="button"
+                        disabled={disabled}
                         onClick={() => setSource(s)}
                         style={{
                           padding: '6px 16px', fontSize: 11, fontWeight: 800, letterSpacing: '.04em',
-                          border: 'none', cursor: 'pointer',
+                          border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
                           background: on ? 'rgba(var(--accent-rgb),0.22)' : 'transparent',
                           color: on ? 'var(--accent)' : 'rgba(226,232,240,0.62)',
                         }}
@@ -354,6 +377,7 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
                   type="text"
                   style={numInput}
                   value={countryDraft}
+                  disabled={disabled}
                   placeholder="e.g. GENERIC"
                   onChange={(e) => setCountryDraft(e.target.value)}
                   onBlur={commitCountry}
@@ -405,7 +429,7 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
                       <select
                         style={selectStyle}
                         value={assignments[meta.slot] ?? ''}
-                        disabled={curvesLoading}
+                        disabled={curvesLoading || disabled}
                         onChange={(e) => {
                           const v = e.target.value || undefined;
                           setAssignments((a) => {
@@ -444,6 +468,7 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
                       type="text"
                       inputMode="decimal"
                       style={numInput}
+                      disabled={disabled}
                       placeholder="e.g. 0.18"
                       value={intensities[imt] ?? ''}
                       onChange={(e) => {
@@ -466,7 +491,7 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
                 type="button"
                 className="np-btn np-btn--primary"
                 style={{ minWidth: 140, fontWeight: 700 }}
-                disabled={computing || curvesLoading}
+                disabled={computing || curvesLoading || disabled}
                 onClick={() => onCompute(false)}
               >
                 {computing ? '⟳ Calculating…' : '⚡ Calculate'}
@@ -475,7 +500,7 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
                 type="button"
                 className="np-btn"
                 style={{ fontWeight: 700 }}
-                disabled={computing || curvesLoading}
+                disabled={computing || curvesLoading || disabled}
                 onClick={() => onCompute(true)}
               >
                 Save scenario
@@ -505,8 +530,13 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
                         type="button"
                         className="np-btn np-btn--primary"
                         style={{ fontWeight: 700 }}
+                        disabled={disabled || catLayers.length === 0 || hazusPlaceholderInUse}
                         onClick={onApply}
-                        title="Write the ground-up EQ loss into the cat burning-cost field"
+                        title={hazusPlaceholderInUse
+                          ? 'HAZUS placeholder curves are not valid for pricing — replace them with FEMA Technical Manual values before applying to cat.'
+                          : catLayers.length === 0
+                            ? 'Add a cat-covering layer to apply the ground-up EQ loss.'
+                            : 'Write the ground-up EQ loss into the cat burning-cost field'}
                       >
                         Apply to cat burning cost
                       </button>
@@ -562,6 +592,21 @@ export default function GemDamageRatioPanel({ contractId, currency, onApplyToCat
                         })}
                       </tbody>
                     </table>
+                  </div>
+                )}
+
+                {zoneChartData.length > 0 && (
+                  <div style={{ ...card, padding: '10px 12px' }}>
+                    <div style={{ ...sectionLabel, marginBottom: 6 }}>Ground-up EQ loss by CRESTA zone</div>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={zoneChartData} margin={{ top: 6, right: 12, bottom: 4, left: 4 }}>
+                        <CartesianGrid stroke={gridStroke} />
+                        <XAxis dataKey="name" tick={axisTick} stroke={gridStroke} interval={0} angle={-20} textAnchor="end" height={48} />
+                        <YAxis tick={axisTick} stroke={gridStroke} width={56} tickFormatter={(v) => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(0)}K` : v)} />
+                        <Tooltip contentStyle={tooltipStyle} formatter={(v) => money(Number(v), currency)} />
+                        <Bar dataKey="loss" fill="var(--accent)" fillOpacity={0.65} isAnimationActive={false} />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
                 )}
               </div>
