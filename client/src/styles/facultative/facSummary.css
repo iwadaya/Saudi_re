@@ -1,0 +1,49 @@
+/* FacSummary layout — static styles moved off inline `style={{}}` to keep the
+   screens-layer inline-style budget down (docs/frontend-hardening.md). Dynamic
+   colours (grade band, status) stay inline. */
+.fac-summary{ max-width: 900px; margin: 0 auto; padding: 8px 0 60px; }
+
+.fac-summary .fac-grid-2{ display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+
+.fac-summary .fac-row{
+  display: flex; justify-content: space-between; padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.fac-summary .fac-row-label{ font-size: 12px; color: rgba(148,163,184,.60); }
+.fac-summary .fac-row-value{ font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+
+.fac-summary .fac-sec{ margin-bottom: 22px; }
+.fac-summary .fac-sec-title{
+  font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
+  margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,.06);
+}
+
+.fac-summary .fac-score-panel{
+  display: grid; grid-template-columns: 180px 80px 1fr; gap: 16px; align-items: center;
+  padding: 14px 18px; background: rgba(8,14,30,.40); border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px;
+}
+.fac-summary .fac-kicker{
+  font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+  color: rgba(148,163,184,.45);
+}
+.fac-summary .fac-score-val{ font-size: 32px; font-weight: 900; color: #e2e8f0; font-variant-numeric: tabular-nums; }
+.fac-summary .fac-grade-col{ text-align: center; }
+.fac-summary .fac-grade-val{ font-size: 36px; font-weight: 900; }
+.fac-summary .fac-action-col{ margin-top: 4px; }
+.fac-summary .fac-action-pill{
+  display: inline-block; padding: 4px 12px; border-radius: 20px;
+  font-size: 11px; font-weight: 800; letter-spacing: .08em;
+}
+.fac-summary .fac-scheme-note{ font-size: 11px; color: rgba(148,163,184,.60); margin-top: 8px; }
+
+.fac-summary .fac-edit-row{ margin-top: 12px; display: grid; grid-template-columns: 220px 1fr; gap: 12px; align-items: center; }
+.fac-summary .fac-edit-label{ font-size: 12px; font-weight: 700; }
+.fac-summary .fac-edit-input{ width: 200px; font-size: 12px; }
+.fac-summary .fac-note-input{ width: 100%; resize: vertical; font-size: 12px; }
+
+.fac-summary .fac-action-bar{
+  margin-top: 20px; padding: 14px 16px; background: rgba(8,14,30,.50);
+  border: 1px solid rgba(255,255,255,.08); border-radius: 12px;
+}
+.fac-summary .fac-action-bar-row{ display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }

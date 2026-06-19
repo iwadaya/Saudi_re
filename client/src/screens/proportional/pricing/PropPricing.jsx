@@ -13,6 +13,7 @@ import { useContractId } from '../../../hooks/useContractId';
 import { useEditLock } from '../../../hooks/useEditLock';
 import EditLockBanner, { ReadOnlyWrap } from '../../../components/EditLockBanner.jsx';
 import WizardLayout from '../../../components/WizardLayout';
+import LoadErrorPanel from '../../../components/LoadErrorPanel';
 import PctInput from '../../../components/PctInput';
 import AggDrilldownModal from './components/AggDrilldownModal';
 import InDepthPortfolioModal from './components/InDepthPortfolioModal';
@@ -47,7 +48,7 @@ export default function PropPricing() {
     // identity / context
     td, cid, userRole, userSession, isCU, actorName, showToast, mandateCheck,
     // state
-    loading, dirty, saveMsg, contract, components, leads, shareRows, shareGrid,
+    loading, error, reloadPricing, dirty, saveMsg, contract, components, leads, shareRows, shareGrid,
     yearly, comment, snapshots, snapLabel,
     offerStatus, offerLine, offerComment, offerApprover, eligibleApprovers,
     returnReason, declineReason, approvalTrail, signedLinePct,
@@ -80,6 +81,19 @@ export default function PropPricing() {
   if (loading) return (
     <WizardLayout routeKey={ROUTE_KEY} title="Pricing" headerPill="PROPORTIONAL TREATY: FINAL PRICING">
       {() => <div className="bbg-loading">Loading pricing data...</div>}
+    </WizardLayout>
+  );
+
+  if (error) return (
+    <WizardLayout routeKey={ROUTE_KEY} title="Pricing" headerPill="PROPORTIONAL TREATY: FINAL PRICING">
+      {() => (
+        <LoadErrorPanel
+          variant="block"
+          title="Couldn’t load pricing"
+          message="The treaty or pricing data failed to load. Check your connection and try again."
+          onRetry={reloadPricing}
+        />
+      )}
     </WizardLayout>
   );
 

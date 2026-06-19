@@ -17,7 +17,7 @@
 // (the same dynamic shapes the untyped screen consumed); the STATE model
 // in state/propPricingReducer.ts is the honestly-typed surface.
 
-import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { api } from '../../../../api';
 import { loadProjectedRows } from '../../../../logic/projectWithSavedFactors';
 import { loadLossCategoryByYear, deriveLossComponents } from '../../../../logic/lossCategoryAmounts';
@@ -76,6 +76,9 @@ export interface UsePropPricingStateParams {
 
 export function usePropPricingState({ appState, contractId, readOnly = false, onServerReadOnly }: UsePropPricingStateParams) {
   const [state, dispatch] = useReducer(propPricingReducer, undefined, createInitialPropPricingState);
+  // Bumped by reloadPricing() to re-run the main load effect after a failure.
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const reloadPricing = useCallback(() => setReloadNonce((n) => n + 1), []);
 
   const {
     grid: { components, uwUserEdited, leads, shareRows, shareGrid, yearly, comment, snapshots, snapLabel },
@@ -88,7 +91,7 @@ export function usePropPricingState({ appState, contractId, readOnly = false, on
       showAggBreakdown, showInDepth, showAggDrilldown, showSnapHistory, insightOpen, insightKey,
     },
     saveLifecycle: { dirty, saveMsg, lastUpdatedAt },
-    ui: { loading, showUSD },
+    ui: { loading, showUSD, error },
     refData: {
       contract, reinsurers, fxRates, contractAgg100, otherCountryAgg,
       cobLabel, worstLR, usedPlaceholderLdfs, lossStale,
@@ -175,6 +178,7 @@ export function usePropPricingState({ appState, contractId, readOnly = false, on
   // ── Load data ─────────────────────────────────────────────────────────────
   useEffect(() => {
     const setLoading = (next: any) => dispatch({ type: 'ui/set', key: 'loading', next });
+    const setError = (next: any) => dispatch({ type: 'ui/set', key: 'error', next });
     const setContract = (next: any) => dispatch({ type: 'refData/set', key: 'contract', next });
     const setReinsurers = (next: any) => dispatch({ type: 'refData/set', key: 'reinsurers', next });
     const setLastUpdatedAt = (next: any) => dispatch({ type: 'saveLifecycle/set', key: 'lastUpdatedAt', next });
@@ -194,9 +198,14 @@ export function usePropPricingState({ appState, contractId, readOnly = false, on
     const setShowOffer = (next: any) => dispatch({ type: 'modals/set', key: 'showOffer', next });
 
     if (!cid) { setLoading(false); return; }
+    setError(null);
+    // The two CORE fetches (contract + pricing) are NOT swallowed: a real
+    // failure must surface as a retry panel rather than silently rendering a
+    // blank pricing screen the user could save over real data. The auxiliary
+    // fetches stay best-effort (an empty reinsurer/FX/snapshot list is benign).
     Promise.all([
-      api.getContract(cid).catch(() => ({})),
-      api.getPricing(cid).catch(() => ({})),
+      api.getContract(cid),
+      api.getPricing(cid),
       api.listReinsurers().catch(() => []),
       api.getPricingYearly(cid).catch(() => []),
       api.getExchangeRates().catch(() => []),
@@ -239,8 +248,8 @@ export function usePropPricingState({ appState, contractId, readOnly = false, on
       if (st === 'AWAITING_APPROVAL') setShowOffer(true);
       if (st === 'AWAITING_SIGNED_LINE') setShowOffer(true);
       if (st === 'DISPUTE_PENDING') setShowOffer(true);
-    }).catch(e => { console.error('Pricing load failed:', e); setLoading(false); });
-  }, [cid, td.brokeragePct, td.commissionMode, td.fixedCommissionQSPct, td.fixedCommissionSurplusPct, td.provisionalCommissionPct, td.quotaShareEpi, td.surplusEpi, td.taxesPct]);
+    }).catch(e => { console.error('Pricing load failed:', e); setError(e); setLoading(false); });
+  }, [cid, td.brokeragePct, td.commissionMode, td.fixedCommissionQSPct, td.fixedCommissionSurplusPct, td.provisionalCommissionPct, td.quotaShareEpi, td.surplusEpi, td.taxesPct, reloadNonce]);
 
   useEffect(() => {
     const setApprovalTrail = (next: any) => dispatch({ type: 'workflow/set', key: 'approvalTrail', next });
@@ -679,7 +688,7 @@ export function usePropPricingState({ appState, contractId, readOnly = false, on
     // identity / context
     td, cid, userRole, userSession, isCU, actorName, showToast, mandateCheck,
     // raw state
-    loading, dirty, saveMsg, lastUpdatedAt, contract, components, uwUserEdited,
+    loading, error, reloadPricing, dirty, saveMsg, lastUpdatedAt, contract, components, uwUserEdited,
     leads, shareRows, shareGrid, yearly, comment, snapshots, snapLabel,
     offerStatus, offerLine, offerComment, offerApprover, eligibleApprovers,
     returnReason, declineReason, approvalTrail, signedLinePct,

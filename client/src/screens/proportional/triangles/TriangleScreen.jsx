@@ -3,6 +3,7 @@ import { api } from '../../../api';
 import { useContractId } from '../../../hooks/useContractId';
 import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
+import LoadErrorPanel from '../../../components/LoadErrorPanel';
 
 const TYPE_MAP = {
   PROP_PREMIUM_TRIANGLES: 'PREMIUM',
@@ -63,6 +64,13 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
   // lands (effects run after paint). One of the load effects below always
   // clears it when contractId is truthy.
   const [loading, setLoading] = useState(() => Boolean(contractId));
+  // Real load failure (network / 5xx) vs the normal "no triangle yet" empty
+  // case: the per-fetch `.catch(()=>({cells:[]}))` below used to mask both, so
+  // a failed load silently showed an empty editable grid the user could save
+  // over real server data. loadError surfaces the failure; reloadNonce lets the
+  // Retry button re-run the load effects.
+  const [loadError, setLoadError] = useState(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [dirty, setDirty] = useState({ MODIFIED: false, ACTUAL: false });
   // MODIFIED is the projected triangle the tool prices off — default-active.
   // ACTUAL is the gross reference triangle the underwriter also enters.
@@ -75,6 +83,7 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
   useEffect(() => {
     if (!contractId || isDerived) return;
     setLoading(true);
+    setLoadError(null);
     setDirty({ MODIFIED: false, ACTUAL: false });
     // Index-based origin_year→row / dev_months→col mapping, shared by both
     // variants.
@@ -84,15 +93,18 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
       cells.forEach(c => { const r = years.indexOf(c.origin_year); const d = Math.round(c.dev_months / 12) - 1; if (r >= 0 && d >= 0 && d < devYears.length) newGrid[r][d] = fmtCell(c.cum_value); });
       return newGrid;
     };
+    // No per-fetch swallow: a real failure on either variant must surface as a
+    // load error (the empty "no data yet" case still returns 200 {cells:[]}).
     Promise.all([
-      api.getTriangle(contractId, triType, { ...apiOpts, variant: 'MODIFIED' }).catch(() => ({ cells: [] })),
-      api.getTriangle(contractId, triType, { ...apiOpts, variant: 'ACTUAL' }).catch(() => ({ cells: [] })),
-    ]).then(([m, a]) => ({ MODIFIED: mapCells(m), ACTUAL: mapCells(a) }))
-      .then(setGrids).catch(e => console.warn('Load triangle:', e)).finally(() => setLoading(false));
+      api.getTriangle(contractId, triType, { ...apiOpts, variant: 'MODIFIED' }),
+      api.getTriangle(contractId, triType, { ...apiOpts, variant: 'ACTUAL' }),
+    ]).then(([m, a]) => setGrids({ MODIFIED: mapCells(m), ACTUAL: mapCells(a) }))
+      .catch(e => { console.warn('Load triangle:', e); setLoadError(e); })
+      .finally(() => setLoading(false));
     // Re-run on year-window changes: triangleMeta arrives from PropTreatyDetail
     // asynchronously and sizes the grids; without these deps the index-based
     // mapping drops cells when startYear/numDevYears shift.
-  }, [contractId, triType, startYear, numDevYears, apiOpts, isDerived, years, devYears.length]);
+  }, [contractId, triType, startYear, numDevYears, apiOpts, isDerived, years, devYears.length, reloadNonce]);
 
   // ── Reset derived grids on shape change (INCURRED only) ──
   // The derive effect below recomputes only grids[variant], so on a shape
@@ -119,6 +131,7 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
   useEffect(() => {
     if (!contractId || !isDerived) return;
     setLoading(true);
+    setLoadError(null);
     const buildFromCells = (cells, target) => {
       cells.forEach(c => {
         const r = years.indexOf(c.origin_year);
@@ -130,16 +143,16 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
       });
     };
     Promise.all([
-      api.getTriangle(contractId, 'CLAIMS_PAID', { ...apiOpts, variant }).catch(() => ({ cells: [] })),
-      api.getTriangle(contractId, 'CLAIMS_OS', { ...apiOpts, variant }).catch(() => ({ cells: [] })),
+      api.getTriangle(contractId, 'CLAIMS_PAID', { ...apiOpts, variant }),
+      api.getTriangle(contractId, 'CLAIMS_OS', { ...apiOpts, variant }),
     ]).then(([p, o]) => {
       const sumGrid = years.map(() => new Array(devYears.length).fill(null));
       buildFromCells(p?.cells || (Array.isArray(p) ? p : []), sumGrid);
       buildFromCells(o?.cells || (Array.isArray(o) ? o : []), sumGrid);
       const derived = sumGrid.map(row => row.map(v => v == null ? '' : fmtCell(v)));
       setGrids(prev => ({ ...prev, [variant]: derived }));
-    }).catch(e => console.warn('Load incurred:', e)).finally(() => setLoading(false));
-  }, [contractId, triType, startYear, numDevYears, apiOpts, isDerived, years, devYears.length, variant]);
+    }).catch(e => { console.warn('Load incurred:', e); setLoadError(e); }).finally(() => setLoading(false));
+  }, [contractId, triType, startYear, numDevYears, apiOpts, isDerived, years, devYears.length, variant, reloadNonce]);
 
   // Note: the year window is owned by the load effect above (which re-runs
   // when startYear/numDevYears change). An index-based prev→current copy on
@@ -157,6 +170,8 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
   const save = useCallback(async () => {
     if (isDerived) return true;
     if (!contractId) return false;
+    // Never persist over a failed load — the grid may be empty/partial.
+    if (loadError) return false;
     const pending = ['MODIFIED', 'ACTUAL'].filter(v => dirty[v]);
     if (!pending.length) return true;
     for (const v of pending) {
@@ -173,7 +188,7 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
       setDirty(prev => ({ ...prev, [v]: false }));
     }
     return true;
-  }, [isDerived, contractId, dirty, grids, triType, apiOpts, inTriangle, years]);
+  }, [isDerived, contractId, dirty, grids, triType, apiOpts, inTriangle, years, loadError]);
 
   const handlePaste = useCallback((e, showToast) => {
     const text = e.clipboardData?.getData('text/plain');
@@ -234,7 +249,7 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
   // triangleMeta not yet loaded (e.g. just after a hard reset, before
   // PropTreatyDetail re-fetches the contract). Avoid rendering with a bogus year range.
   // Guard must stay after all hooks — Rules of Hooks.
-  if (!startYear) return <div style={{ padding: 32, color: 'rgba(255,255,255,0.5)' }}>Loading triangle…</div>;
+  if (!startYear) return <div className="tri-loading-msg">Loading triangle…</div>;
 
   // The grid currently shown/edited. For INCURRED this is the derived sum in
   // the MODIFIED slot; otherwise it's whichever variant the tab selects.
@@ -244,27 +259,32 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
     <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill} onBeforeNext={save} onBeforeBack={save}>
       {({ showToast }) => (
         <div className="PROP_TRIANGLES">
-          <div style={{ display: 'flex', gap: 24, padding: '10px 16px', marginBottom: 14, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', fontSize: 13, flexWrap: 'wrap' }}>
-            <div style={{ color: 'var(--text-subtle)' }}>Start Year: <b style={{ color: 'var(--text)' }}>{startYear}</b></div>
-            <div style={{ color: 'var(--text-subtle)' }}>Inception Year: <b style={{ color: 'var(--text)' }}>{inceptionYear}</b></div>
-            <div style={{ color: 'var(--text-subtle)' }}>Development Years: <b style={{ color: 'var(--accent)' }}>{numDevYears}</b></div>
+          <div className="tri-info-bar">
+            <div className="tri-info-item">Start Year: <b>{startYear}</b></div>
+            <div className="tri-info-item">Inception Year: <b>{inceptionYear}</b></div>
+            <div className="tri-info-item tri-info-item--accent">Development Years: <b>{numDevYears}</b></div>
           </div>
-          {loading ? <div className="muted">Loading…</div> : (
+          {loading ? <div className="muted">Loading…</div> : loadError ? (
+            <LoadErrorPanel
+              message="Couldn’t load this triangle. Editing is disabled to avoid saving over server data."
+              onRetry={() => setReloadNonce(n => n + 1)}
+            />
+          ) : (
             <>
               {/* ACTUAL | MODIFIED tab — shown for every triangle type. For the
                   editable types, switching only changes which grid is rendered;
                   unsaved edits in the hidden variant stay in state and the •
                   marks a variant with unsaved edits. For derived INCURRED it
                   re-derives the displayed grid from that variant's paid + OS. */}
-              <div role="tablist" aria-label="Triangle variant" style={{ display: 'inline-flex', marginBottom: 12, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.12)' }}>
+              <div role="tablist" aria-label="Triangle variant" className="tri-variant-tabs">
                 {['MODIFIED', 'ACTUAL'].map(v => { const active = variant === v; return (
                   <button key={v} type="button" role="tab" aria-selected={active} onClick={() => setVariant(v)}
-                    style={{ padding: '6px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', background: active ? 'var(--accent)' : 'transparent', color: active ? 'var(--accent-contrast)' : 'var(--text-subtle)' }}>
+                    className="tri-variant-tab">
                     {v === 'MODIFIED' ? 'Modified' : 'Actual'}{!isDerived && dirty[v] ? ' •' : ''}
                   </button>
                 ); })}
               </div>
-            <div style={{ overflowX: 'auto' }}>
+            <div className="tri-table-scroll">
               <table className="tri-table">
                 <thead><tr><th className="tri-hdr tri-yr-hdr">YEAR</th>{devYears.map(d => <th key={d} className="tri-hdr">{d}</th>)}</tr></thead>
                 <tbody>{years.map((yr, r) => (
@@ -272,26 +292,26 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
                     <td className="tri-yr">{yr}</td>
                     {devYears.map((_, c) => { const maxCol = numDevYears - r - 1; const off = c > maxCol; return (
                       <td key={c} className={off ? 'tri-off' : 'tri-cell'}>{off ? '' : isDerived
-                        ? <div className="tri-inp" style={{ color: 'rgba(226,232,240,0.88)' }}>{activeGrid[r]?.[c] ?? ''}</div>
+                        ? <div className="tri-inp tri-inp--derived">{activeGrid[r]?.[c] ?? ''}</div>
                         : <input className="tri-inp" type="text" value={activeGrid[r]?.[c] ?? ''} data-row={r} data-col={c} onChange={e => updateCell(r, c, e.target.value)} onBlur={() => handleBlur(r, c)} onPaste={(e) => handlePaste(e, showToast)} />}</td>
                     ); })}
                   </tr>
                 ))}</tbody>
               </table>
               {isDerived && (
-                <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8, background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.20)', color: 'rgba(167,243,208,0.85)', fontSize: 12 }}>
+                <div className="tri-derived-note">
                   Read-only derived view — {variant === 'ACTUAL' ? 'Actual' : 'Modified'} incurred = {variant === 'ACTUAL' ? 'Actual' : 'Modified'} paid + outstanding. Edit the Claims Paid and OS Claims triangles (on their own tabs) to change these values.
                 </div>
               )}
               {!isDerived && (dirty.MODIFIED || dirty.ACTUAL) && (
-                <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div className="tri-save-row">
                   <button className="orange-gloss-btn" onClick={async () => {
                     try { await save(); showToast?.('Triangle saved'); }
                     catch (e) { showToast?.(`Save failed: ${e?.message || 'server error'}`); }
                   }}>Save Triangle</button>
                 </div>
               )}
-              {!contractId && <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8, background: 'rgba(251,146,60,0.1)', border: '1px solid rgba(251,146,60,0.3)', color: '#fb923c', fontSize: 12 }}>No contract ID — save treaty detail first.</div>}
+              {!contractId && <div className="tri-warn">No contract ID — save treaty detail first.</div>}
             </div>
             </>
           )}
