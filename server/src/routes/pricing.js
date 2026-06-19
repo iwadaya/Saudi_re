@@ -40,6 +40,11 @@ import {
   listComponentSnapshotsController,
   deleteComponentSnapshotController,
 } from '../modules/pricing/controllers/pricingController.js';
+import {
+  listGemCurvesController,
+  getGemScenarioController,
+  computeGemEqLossController,
+} from '../modules/gemVulnerability/gemVulnerabilityController.js';
 
 import { assertCanEdit } from '../services/permissions.js';
 
@@ -95,5 +100,10 @@ router.get('/pricing/market-average/:countryId', asyncHandler(marketAverageContr
 router.post('/pricing/:id/component-snapshot', asyncHandler(createComponentSnapshotController));
 router.get('/pricing/:id/component-snapshots', asyncHandler(listComponentSnapshotsController));
 router.delete('/pricing/component-snapshot/:snapId', asyncHandler(deleteComponentSnapshotController));
+
+// GEM deterministic EQ exposure rating (Tier-B damage ratios).
+router.get('/pricing/gem/curves', asyncHandler(listGemCurvesController));
+router.get('/pricing/gem/:contractId/scenario', asyncHandler(getGemScenarioController));
+router.post('/pricing/gem/:contractId/compute', asyncHandler(computeGemEqLossController));
 
 export default router;
