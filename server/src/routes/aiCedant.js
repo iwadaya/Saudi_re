@@ -34,6 +34,7 @@ import { checkPortfolioCompliance } from '../lib/portfolioCompliance.js';
 import { logAudit } from '../services/audit.js';
 import { actorFromReq } from '../middleware/requestContext.js';
 import { assertAiEnabled } from '../lib/aiGovernance.js';
+import { resolveReadScope, readScopeCondition } from '../services/readPolicy.js';
 
 const router = Router();
 
@@ -115,8 +116,11 @@ async function resolveCobCols() {
 // Fetch the cedant's full portfolio in the same shape cedant-summary
 // uses. Returns rows with contract_id, entity_type, treaty_type, cob,
 // premium, limit, margin, current_line_pct (fraction 0..1).
-async function fetchPortfolio(cedantId) {
+async function fetchPortfolio(cedantId, req = null) {
   const { idCol, nameCol } = await resolveCobCols();
+  // Read-policy row scoping: the AI portfolio op only sees the cedant's
+  // contracts the requester is permitted to read (assigned/team/office/all).
+  const readScope = await resolveReadScope(req || {});
   const cobSub = (alias) => `(
     SELECT string_agg(cob.${nameCol}, ', ')
     FROM public.contract_class_of_business ccb
@@ -124,6 +128,8 @@ async function fetchPortfolio(cedantId) {
     WHERE ccb.contract_id = ${alias}.contract_id
   )`;
 
+  const propParams = [cedantId];
+  const propReadCond = readScopeCondition(readScope, { ownerCol: 'c.assigned_to_user_id', creatorCol: 'c.created_by_user_id', params: propParams });
   const { rows: propRows } = await pool.query(`
     SELECT
       c.contract_id, c.uw_year, c.status, c.signed_line_pct,
@@ -143,8 +149,11 @@ async function fetchPortfolio(cedantId) {
            ON co.contract_id = c.contract_id
     WHERE c.cedant_id = $1
       AND EXISTS (SELECT 1 FROM public.contract_prop_details pd WHERE pd.contract_id = c.contract_id)
-  `, [cedantId]);
+      ${propReadCond ? `AND ${propReadCond}` : ''}
+  `, propParams);
 
+  const npParams = [cedantId];
+  const npReadCond = readScopeCondition(readScope, { ownerCol: 'c.assigned_to_user_id', creatorCol: 'c.created_by_user_id', params: npParams });
   const { rows: npRows } = await pool.query(`
     SELECT
       c.contract_id, c.uw_year, c.status, c.signed_line_pct,
@@ -174,7 +183,8 @@ async function fetchPortfolio(cedantId) {
            ON co.contract_id = c.contract_id
     WHERE c.cedant_id = $1
       AND EXISTS (SELECT 1 FROM public.contract_np_details nd WHERE nd.contract_id = c.contract_id)
-  `, [cedantId]);
+      ${npReadCond ? `AND ${npReadCond}` : ''}
+  `, npParams);
 
   return [...propRows, ...npRows].map(r => ({
     ...r,
@@ -183,7 +193,10 @@ async function fetchPortfolio(cedantId) {
   }));
 }
 
-async function fetchNpLayers(cedantId) {
+async function fetchNpLayers(cedantId, req = null) {
+  const readScope = await resolveReadScope(req || {});
+  const params = [cedantId];
+  const readCond = readScopeCondition(readScope, { ownerCol: 'c.assigned_to_user_id', creatorCol: 'c.created_by_user_id', params });
   const { rows } = await pool.query(`
     SELECT
       c.contract_id, l.layer_number,
@@ -193,8 +206,9 @@ async function fetchNpLayers(cedantId) {
     FROM public.contract c
     JOIN public.contract_np_layers l ON l.contract_id = c.contract_id
     WHERE c.cedant_id = $1
+      ${readCond ? `AND ${readCond}` : ''}
     ORDER BY c.uw_year DESC, l.layer_number ASC
-  `, [cedantId]);
+  `, params);
   return rows;
 }
 
@@ -332,11 +346,11 @@ router.post(
     const { cedantId } = req.params;
     const body = req.body;
 
-    const portfolio = await fetchPortfolio(cedantId);
+    const portfolio = await fetchPortfolio(cedantId, req);
     if (!portfolio.length) {
       return res.status(404).json({ error: 'Cedant has no portfolio contracts.' });
     }
-    const npLayers = await fetchNpLayers(cedantId);
+    const npLayers = await fetchNpLayers(cedantId, req);
 
     // Call Claude
     const promptCtx = buildPromptContext({ cedantId, body, portfolio, npLayers });
@@ -769,7 +783,7 @@ router.get(
     if (include.has('committed')) statuses.push('COMMITTED');
     if (include.has('discarded')) statuses.push('DISCARDED');
 
-    const portfolio = await fetchPortfolio(cedantId);
+    const portfolio = await fetchPortfolio(cedantId, req);
     const livePctById = new Map(portfolio.map(p => [String(p.contract_id), p.current_line_pct]));
 
     const { rows } = await pool.query(
@@ -811,7 +825,7 @@ router.get(
   '/cedants/:cedantId/staging/portfolio-impact',
   asyncHandler(async (req, res) => {
     const { cedantId } = req.params;
-    const portfolio = await fetchPortfolio(cedantId);
+    const portfolio = await fetchPortfolio(cedantId, req);
 
     const { rows: stagedRows } = await pool.query(
       `SELECT contract_id, proposed_line_pct

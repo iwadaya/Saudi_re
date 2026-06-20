@@ -4,6 +4,7 @@ import { pool } from "../db/pool.js";
 import { asyncHandler } from "../helpers.js";
 import { buildRenewalPackWorkbook } from "../services/renewalPackExport/builder.js";
 import { resolveExportScope } from "../services/renewalPackExport/scope.js";
+import { readableContractIds, intersectContractScopes } from "../services/readPolicy.js";
 import { requireMinLevel, actorFromReq } from "../middleware/requestContext.js";
 import { logAudit } from "../services/audit.js";
 const router = Router();
@@ -22,11 +23,15 @@ router.get("/renewal-pack/export", requirePortfolioExport, asyncHandler(async (r
   // Scope the export to the rows this user's MANDATE permits (treaty-type + COB).
   // A null scope = unrestricted mandate → the full portfolio.
   const scope = await resolveExportScope(pool, req.user?.userId);
-  const contractCount = scope.contractIds
-    ? scope.contractIds.length
+  // Further restrict to the rows the read policy (assigned/team/office/all)
+  // permits, then take the INTERSECTION — the export never widens read access.
+  const readIds = await readableContractIds(req);
+  const effectiveContractIds = intersectContractScopes(scope.contractIds, readIds);
+  const contractCount = effectiveContractIds
+    ? effectiveContractIds.length
     : Number((await pool.query('SELECT count(*)::int AS n FROM public.contract')).rows[0].n);
 
-  const wb = await buildRenewalPackWorkbook(pool, { contractIds: scope.contractIds });
+  const wb = await buildRenewalPackWorkbook(pool, { contractIds: effectiveContractIds });
 
   // Audit the export BEFORE streaming (actor + ts + applied filters + row count).
   // Headers aren't sent yet, so a stream failure can't corrupt the audit.
@@ -35,7 +40,7 @@ router.get("/renewal-pack/export", requirePortfolioExport, asyncHandler(async (r
     actor: actorFromReq(req),
     payload: {
       target: 'renewal-pack',
-      scoped: scope.contractIds !== null,
+      scoped: effectiveContractIds !== null,
       treatyTypeScope: scope.treatyTypeScope,
       restrictedCobIds: scope.restrictedCobIds,
       contractCount,

@@ -18,6 +18,7 @@ import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { storeUploadedFile } from '../lib/uploadStorage.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
 import { assertCanEdit } from '../services/permissions.js';
+import { resolveReadScope, readScopeCondition } from '../services/readPolicy.js';
 import { approveQuote, returnToUnderwriter, recallOffer, markNotTakenUp } from '../services/approvals.js';
 import { declineQuoteAction, submitQuoteForApprovalAction } from '../services/quoteWorkflow.js';
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
@@ -465,6 +466,10 @@ router.get("/quotes", asyncHandler(async (req, res) => {
   if (cedant_id) { conditions.push(`q.cedant_id = $${params.length + 1}`); params.push(cedant_id); }
   const uwYearNum = numOrNull(uw_year);
   if (uwYearNum != null) { conditions.push(`q.uw_year = $${params.length + 1}`); params.push(uwYearNum); }
+  // Read-policy row scoping (assigned/team/office/all) — shared by count + page.
+  const readScope = await resolveReadScope(req);
+  const readCond = readScopeCondition(readScope, { ownerCol: 'q.assigned_to_user_id', creatorCol: 'q.created_by_user_id', params });
+  if (readCond) conditions.push(readCond);
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const limitNum = Math.max(1, Math.min(numOrNull(limit) ?? 100, 500));
   const pageNum = Math.max(1, numOrNull(page) ?? 1);

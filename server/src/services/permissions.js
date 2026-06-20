@@ -8,6 +8,7 @@
 // requester from req, and throws 403 READ_ONLY when editing isn't allowed.
 
 import { pool } from '../db/pool.js';
+import { resolveReadScope, rowInReadScope } from './readPolicy.js';
 
 const ENTITY = {
   CONTRACT: { table: 'public.contract',  idCol: 'contract_id' },
@@ -91,15 +92,15 @@ export async function assertCanEdit(req, entityType, entityId) {
 
 /**
  * Entity READ authorization — the single policy choke point for who may VIEW a
- * contract / quote / fac risk (and, by inheritance, its documents). Today reads
- * are open to every authenticated user (see the module header and the GET routes
- * in routes/treaties.js + routes/quotes.js), so this asserts only a verified
- * identity plus that the entity exists. It is centralized HERE on purpose: when
- * read visibility is later tightened (assignee / team / seniority — the separate
- * P1 authz item), every read path that routes through this helper, documents
- * included, tightens at once.
+ * contract / quote / fac risk (and, by inheritance, its documents). The active
+ * read policy (assigned / team / office / all) is owned by services/readPolicy.js
+ * and selected by the READ_POLICY env var; it defaults to 'all' (open to every
+ * authenticated user). It is centralized HERE on purpose: when read visibility is
+ * tightened, every read path that routes through this helper — documents
+ * included — tightens at once.
  *
- * Throws 401 when anonymous, 404 when the entity does not exist.
+ * Throws 401 when anonymous, 404 when the entity does not exist, 403
+ * READ_FORBIDDEN when the active policy hides this entity from the requester.
  */
 export async function assertCanReadEntity(req, entityType, entityId) {
   const { table, idCol } = entityMeta(entityType);
@@ -107,9 +108,23 @@ export async function assertCanReadEntity(req, entityType, entityId) {
     throw Object.assign(new Error('Authentication required.'), { status: 401, code: 'UNAUTHORIZED' });
   }
   if (!entityId) throw Object.assign(new Error('Not found'), { status: 404 });
-  const { rows } = await pool.query(`SELECT 1 FROM ${table} WHERE ${idCol} = $1`, [entityId]);
+  const { rows } = await pool.query(
+    `SELECT assigned_to_user_id, created_by_user_id FROM ${table} WHERE ${idCol} = $1`,
+    [entityId]
+  );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
-  // Read policy: open to all authenticated users (reads are not assignee-gated).
+
+  // Apply the formal read policy. Under the default 'all' level resolveReadScope
+  // short-circuits and rowInReadScope is always true, so reads stay open.
+  const scope = await resolveReadScope(req);
+  const allowed = rowInReadScope(scope, {
+    ownerId: rows[0].assigned_to_user_id || null,
+    creatorId: rows[0].created_by_user_id || null,
+  });
+  if (!allowed) {
+    // 404, not 403: the read policy hides the row's existence (no IDOR oracle).
+    throw Object.assign(new Error('Not found'), { status: 404, code: 'READ_FORBIDDEN' });
+  }
 }
 
 /**

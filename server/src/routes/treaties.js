@@ -12,6 +12,7 @@ import { treatyPutBodySchema } from "../validation/treaty.js";
 import { logger } from "../lib/logger.js";
 import { buildBatchInsert } from "../db/batchInsert.js";
 import { assertCanEdit, computeEditPermission } from "../services/permissions.js";
+import { resolveReadScope, readScopeCondition } from "../services/readPolicy.js";
 import { getAssignmentHistory } from "../services/assignments.js";
 import { getContractHistory } from "../services/contractHistory.js";
 const router = Router();
@@ -51,6 +52,11 @@ router.get("/treaties", asyncHandler(async (req, res) => {
   if(cedant_id){conds.push(`c.cedant_id=$${i++}`);params.push(cedant_id);}
   if(country_id){conds.push(`c.country_id=$${i++}`);params.push(country_id);}
   if(category){conds.push(`tt.category ILIKE $${i++}`);params.push(`%${category}%`);}
+  // Read-policy row scoping (assigned/team/office/all). Added to BOTH the count
+  // and the page query so pagination stays consistent with what's visible.
+  const readScope = await resolveReadScope(req);
+  const readCond = readScopeCondition(readScope, { ownerCol: 'c.assigned_to_user_id', creatorCol: 'c.created_by_user_id', params });
+  if (readCond) { conds.push(readCond); i = params.length + 1; }
   const where=conds.length?`WHERE ${conds.join(" AND ")}`:"";
   const lim=Math.max(1, Math.min(Number(limit)||200,500));
   const pageNum = Math.max(1, Number(page) || 1);

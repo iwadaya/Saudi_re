@@ -8,6 +8,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { asyncHandler } from "../helpers.js";
+import { resolveReadScope, readScopeCondition } from "../services/readPolicy.js";
 const router = Router();
 
 // ── Shared SQL building blocks ──────────────────────────────────────────────
@@ -215,6 +216,12 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
   if (month)      { conds.push(`EXTRACT(MONTH FROM c.inception_date) = $${i++}`); params.push(Number(month)); }
   if (treatyType) { conds.push(`tt.treaty_type = $${i++}`);    params.push(treatyType); }
   if (region)     { conds.push(`(${regionBucket}) = $${i++}`); params.push(region); }
+  // Read-policy row scoping (assigned/team/office/all): the dashboard aggregates
+  // only over contracts the requester is permitted to see, so totals match the
+  // list views. The shared `params`/`where` flow into every per-tab CTE below.
+  const readScope = await resolveReadScope(req);
+  const readCond = readScopeCondition(readScope, { ownerCol: 'c.assigned_to_user_id', creatorCol: 'c.created_by_user_id', params });
+  if (readCond) { conds.push(readCond); i = params.length + 1; }
   const where = `WHERE ${conds.join(' AND ')}`;
 
   // All tabs aggregate over the shared units / unitsLob CTEs, which source from

@@ -48,6 +48,11 @@ const schema = z.object({
   // for production (a weak/missing secret would let anyone forge tokens).
   AUTH_JWT_SECRET: z.string().optional(),
   SESSION_SECRET: z.string().optional(),
+  // Read-visibility policy (P1-authz). Selects who may VIEW contracts/quotes/
+  // documents/dashboard/exports/AI ops: assigned (own work) ⊆ team (office-mates
+  // at your level or below) ⊆ office (whole office) ⊆ all. Defaults to 'all'
+  // (legacy open reads) so tightening is an explicit, auditable config change.
+  READ_POLICY: z.enum(['assigned', 'team', 'office', 'all']).optional(),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -114,6 +119,10 @@ export const env = Object.freeze({
   axcoBaseUrl: values.AXCO_BASE_URL || '',
   authJwtSecret,
   sessionSecret: values.SESSION_SECRET || '',
+  // Active read-visibility policy. NOTE: services/readPolicy.js reads
+  // process.env.READ_POLICY LIVE (so tests can flip it per-case); this frozen
+  // value is the boot-time snapshot for diagnostics / startup logging.
+  readPolicy: values.READ_POLICY || 'all',
 });
 
 export function validateRuntimeEnv() {

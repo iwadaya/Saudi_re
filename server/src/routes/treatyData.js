@@ -7,7 +7,7 @@ import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from
 import { stripTriangleCells, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from '../lib/triangleStripping.js';
 import { suggestLossQuarters } from '../lib/lossQuarterMapper.js';
 import { logAudit } from '../services/audit.js';
-import { assertCanAccessDocument } from '../services/permissions.js';
+import { assertCanAccessDocument, assertCanReadEntity } from '../services/permissions.js';
 import { actorFromReq } from '../middleware/requestContext.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
@@ -742,6 +742,10 @@ router.get("/treaties/:id/cedant-exposure", asyncHandler(async (req, res) => {
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 router.get("/treaties/:id/documents", asyncHandler(async (req, res) => {
+  // Documents are never more visible than their parent contract — gate the
+  // list through the same read policy (assigned/team/office/all). 404s when the
+  // policy hides the contract, so a foreign contract id can't enumerate its docs.
+  await assertCanReadEntity(req, 'CONTRACT', req.params.id);
   const {rows}=await pool.query(`SELECT document_id,file_name,mime_type,size_bytes,description,doc_type,title,storage_path,uploaded_at FROM public.contract_document WHERE contract_id=$1 ORDER BY uploaded_at DESC`,[req.params.id]);
   res.json(rows);
 }));
