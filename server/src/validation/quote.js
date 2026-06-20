@@ -11,6 +11,14 @@ import {
   optionalUuid, money, pct100, pctOpen, uwYear, isoDate, boolish, contractStatus,
 } from './common.js';
 
+/** A signed number that accepts strings with commas (losses can be negative). */
+const signedNumber = z.preprocess((v) => {
+  if (v === null || v === undefined || v === '') return undefined;
+  if (typeof v === 'number') return v;
+  const n = Number(String(v).replace(/,/g, ''));
+  return Number.isFinite(n) ? n : undefined;
+}, z.number().optional());
+
 /** Header slice — top-level FKs + UW year + status. */
 export const quoteHeaderSchema = z.object({
   cedant_id:        optionalUuid,
@@ -126,3 +134,76 @@ export const quotePutBodySchema = z.object({
     np_structure:       z.unknown().optional(),
   }).default({}),
 });
+
+// ── Subresource save schemas (P1-validation) ────────────────────────────────
+// Lenient + passthrough, matching the partial-save convention above: validate
+// types/shape and coerce known fields, reject obviously-malformed payloads
+// (non-UUID ids, non-array collections) BEFORE they reach the DB layer.
+
+/** PUT /quotes/:id/strip-large-cat — the strip toggle. */
+export const stripLargeCatSchema = z.object({
+  strip_large_cat_losses: boolish,
+  stripLargeCatLosses:    boolish, // camelCase alias the client sometimes sends
+}).passthrough();
+
+/** One large/cat-loss register row. All fields optional; the client may send partial rows. */
+export const lossRowSchema = z.object({
+  loss_id:                 optionalUuid,
+  uw_year:                 uwYear,
+  insured_name:            z.string().nullable().optional(),
+  loss_name:               z.string().nullable().optional(),
+  class_of_business:       z.string().nullable().optional(),
+  date_of_loss:            isoDate,
+  reported_date:           isoDate,
+  actuarial_reported_date: isoDate,
+  policy_inception_date:   isoDate,
+  paid:                    signedNumber,
+  os:                      signedNumber,
+  incurred:                signedNumber,
+  is_selected:             boolish,
+  inflation_factor:        z.preprocess(
+                             v => (v === '' || v == null ? undefined : Number(v)),
+                             z.number().optional()),
+}).passthrough();
+
+/** PUT /quotes/:id/large-losses and /cat-losses — shared register payload. */
+export const lossesSaveSchema = z.object({
+  report_date: isoDate,
+  losses:      z.array(lossRowSchema).max(5000).default([]),
+}).passthrough();
+
+/** PUT /quotes/:id/cobs — class-of-business selection. */
+export const cobsSaveSchema = z.object({
+  class_ids: z.array(z.string().uuid()).optional(),
+  classIds:  z.array(z.string().uuid()).optional(),
+}).passthrough();
+
+/** One exposure/claims band row. */
+const profileBandSchema = z.object({
+  from_amt:          money,
+  to_amt:            money,
+  no_of_risks:       signedNumber,
+  total_sum_insured: money,
+  gross_premium:     money,
+  no_of_claims:      signedNumber,
+  aggregate_incurred: signedNumber,
+}).passthrough();
+
+/** PUT /quotes/:id/risk-profiles/:cobId — exposure curve + bands. */
+export const riskProfileSaveSchema = z.object({
+  c_value:          signedNumber,
+  pml_percentage:   pctOpen,
+  selected_curve:   z.string().nullable().optional(),
+  custom_b:         signedNumber,
+  custom_g:         signedNumber,
+  gross_loss_ratio: pctOpen,
+  bands:            z.array(profileBandSchema).max(1000).default([]),
+}).passthrough();
+
+/** PUT /quotes/:id/claims-profiles/:cobId — claims curve + bands. */
+export const claimsProfileSaveSchema = z.object({
+  selected_curve: z.string().nullable().optional(),
+  custom_b:       signedNumber,
+  custom_g:       signedNumber,
+  bands:          z.array(profileBandSchema).max(1000).default([]),
+}).passthrough();

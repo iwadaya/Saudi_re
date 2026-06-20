@@ -13,7 +13,11 @@ import { assertEntityUnchanged, optimisticLockOverrideRequested } from '../db/op
 import { buildBatchInsert } from '../db/batchInsert.js';
 import { assertParentEntityUnchanged, touchParentEntity } from '../lib/parentEntityPersistence.js';
 import { validateBody } from '../lib/validate.js';
-import { quotePutBodySchema } from '../validation/quote.js';
+import {
+  quotePutBodySchema, stripLargeCatSchema, lossesSaveSchema, cobsSaveSchema,
+  riskProfileSaveSchema, claimsProfileSaveSchema,
+} from '../validation/quote.js';
+import { auditMutation } from '../lib/mutationAudit.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { storeUploadedFile } from '../lib/uploadStorage.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
@@ -787,18 +791,29 @@ router.get("/quotes/:id/triangles/:type/with-exclusions", asyncHandler(async (re
   });
 }));
 // Per-quote choice of whether large + cat losses are stripped from the triangle.
-router.put("/quotes/:id/strip-large-cat", asyncHandler(async (req, res) => {
-  const strip = req.body?.strip_large_cat_losses === true;
-  // Upsert so the toggle persists even if Dev Factors is reached before the
-  // detail screen has created the prop-details row (no silent no-op).
-  await pool.query(
-    `INSERT INTO public.quote_prop_details (quote_id, strip_large_cat_losses)
-       VALUES ($1, $2)
-     ON CONFLICT (quote_id) DO UPDATE
-       SET strip_large_cat_losses=EXCLUDED.strip_large_cat_losses, updated_at=now()`,
-    [req.params.id, strip]
-  );
-  res.json({ ok: true, strip_large_cat_losses: strip });
+router.put("/quotes/:id/strip-large-cat", validateBody(stripLargeCatSchema), asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const strip = (req.body?.strip_large_cat_losses ?? req.body?.stripLargeCatLosses) === true;
+  const cl = await pool.connect();
+  try {
+    await cl.query("BEGIN");
+    await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
+    // Opt-in optimistic lock inside the txn (see large-losses).
+    await assertParentEntityUnchanged(cl, { parentTable: 'quote', idColumn: 'quote_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
+    // Upsert so the toggle persists even if Dev Factors is reached before the
+    // detail screen has created the prop-details row (no silent no-op).
+    await cl.query(
+      `INSERT INTO public.quote_prop_details (quote_id, strip_large_cat_losses)
+         VALUES ($1, $2)
+       ON CONFLICT (quote_id) DO UPDATE
+         SET strip_large_cat_losses=EXCLUDED.strip_large_cat_losses, updated_at=now()`,
+      [id, strip]
+    );
+    const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
+    await auditMutation(cl, req, { entityType: 'QUOTE', entityId: id, eventType: 'STRIP_LARGE_CAT_SAVED', payload: { strip_large_cat_losses: strip } });
+    await cl.query("COMMIT");
+    res.json({ ok: true, strip_large_cat_losses: strip, updated_at: updatedAt });
+  } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }
 }));
 // Loss-selection staleness — quote mirror of the treaty route (see treatyData.js).
 router.get("/quotes/:id/losses/staleness", asyncHandler(async (req, res) => {
@@ -968,7 +983,7 @@ router.get("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
   const {rows:losses}=await pool.query(`SELECT * FROM public.contract_large_losses WHERE report_id=$1 ORDER BY uw_year`,[rr[0].report_id]);
   res.json({report:rr[0],losses});
 }));
-router.put("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
+router.put("/quotes/:id/large-losses", validateBody(lossesSaveSchema), asyncHandler(async (req, res) => {
   const {id}=req.params;const {report_date,losses=[]}=req.body;const cl=await pool.connect();
   try{await cl.query("BEGIN");
   await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
@@ -1008,6 +1023,7 @@ router.put("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
     savedLosses.push(ins[0]?.loss_id);
   }
   const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
+  await auditMutation(cl, req, { entityType: 'QUOTE', entityId: id, eventType: 'LARGE_LOSSES_SAVED', payload: { report_id: rid, loss_count: savedLosses.length } });
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses,updated_at:updatedAt});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
@@ -1666,7 +1682,7 @@ router.get("/quotes/:id/negotiation-history", asyncHandler(async (req, res) => {
 // ── Missing save routes (mirrors treatyData.js PUT routes) ──
 
 // PUT /quotes/:id/cat-losses
-router.put("/quotes/:id/cat-losses", asyncHandler(async (req, res) => {
+router.put("/quotes/:id/cat-losses", validateBody(lossesSaveSchema), asyncHandler(async (req, res) => {
   const {id}=req.params;const {report_date,losses=[]}=req.body;const cl=await pool.connect();
   const reportDateNorm=report_date?new Date(report_date).toISOString().slice(0,10):null;
   try{await cl.query("BEGIN");
@@ -1720,6 +1736,7 @@ router.put("/quotes/:id/cat-losses", asyncHandler(async (req, res) => {
   if (lossesInsert) await cl.query(lossesInsert.sql, lossesInsert.params);
   const savedLosses = lossesWithIds.map((l) => l._loss_id);
   const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
+  await auditMutation(cl, req, { entityType: 'QUOTE', entityId: id, eventType: 'CAT_LOSSES_SAVED', payload: { report_id: rid, loss_count: savedLosses.length } });
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses,updated_at:updatedAt});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
@@ -1760,11 +1777,14 @@ router.post("/quotes/:id/losses/suggest-quarters", asyncHandler(async (req, res)
 }));
 
 // PUT /quotes/:id/cobs
-router.put("/quotes/:id/cobs", asyncHandler(async (req, res) => {
+router.put("/quotes/:id/cobs", validateBody(cobsSaveSchema), asyncHandler(async (req, res) => {
   const {id}=req.params;const {class_ids=[],classIds=[]}=req.body;const ids=classIds.length?classIds:class_ids;
   const cl = await pool.connect();
   try {
     await cl.query("BEGIN");
+    await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
+    // Opt-in optimistic lock inside the txn (see large-losses).
+    await assertParentEntityUnchanged(cl, { parentTable: 'quote', idColumn: 'quote_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await cl.query(`DELETE FROM public.quote_class_of_business WHERE quote_id=$1`,[id]);
     const cobInsert = buildBatchInsert({
       table: 'public.quote_class_of_business',
@@ -1774,8 +1794,10 @@ router.put("/quotes/:id/cobs", asyncHandler(async (req, res) => {
       conflict: 'ON CONFLICT DO NOTHING',
     });
     if (cobInsert) await cl.query(cobInsert.sql, cobInsert.params);
+    const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
+    await auditMutation(cl, req, { entityType: 'QUOTE', entityId: id, eventType: 'COBS_SAVED', payload: { count: ids.filter((c) => c != null).length } });
     await cl.query("COMMIT");
-    res.json({ok:true});
+    res.json({ok:true,updated_at:updatedAt});
   } catch (e) {
     await cl.query("ROLLBACK").catch(() => {});
     throw e;
@@ -1786,11 +1808,14 @@ router.put("/quotes/:id/cobs", asyncHandler(async (req, res) => {
 
 // PUT /quotes/:id/risk-profiles/:cobId
 // Body shape matches treaty PUT: { c_value, pml_percentage, selected_curve, custom_b, custom_g, gross_loss_ratio, bands }
-router.put("/quotes/:id/risk-profiles/:cobId", asyncHandler(async (req, res) => {
+router.put("/quotes/:id/risk-profiles/:cobId", validateBody(riskProfileSaveSchema), asyncHandler(async (req, res) => {
   const {id,cobId}=req.params;
   const {c_value,pml_percentage,selected_curve,custom_b,custom_g,gross_loss_ratio,bands=[]}=req.body;
   const cl=await pool.connect();
   try{await cl.query("BEGIN");
+  await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
+  // Opt-in optimistic lock inside the txn (see large-losses).
+  await assertParentEntityUnchanged(cl, { parentTable: 'quote', idColumn: 'quote_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
   const {rows}=await cl.query(`INSERT INTO public.quote_risk_profile (quote_id,class_of_business_id,c_value,pml_percentage,selected_curve,custom_b,custom_g,gross_loss_ratio) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (quote_id,class_of_business_id) DO UPDATE SET c_value=EXCLUDED.c_value,pml_percentage=EXCLUDED.pml_percentage,selected_curve=EXCLUDED.selected_curve,custom_b=EXCLUDED.custom_b,custom_g=EXCLUDED.custom_g,gross_loss_ratio=EXCLUDED.gross_loss_ratio RETURNING profile_id`,
     [id,cobId,numOrNull(c_value)??0,numOrNull(pml_percentage)??100,selected_curve||null,numOrNull(custom_b),numOrNull(custom_g),numOrNull(gross_loss_ratio)]);
   const pid=rows[0].profile_id;await cl.query(`DELETE FROM public.quote_risk_profile_band WHERE profile_id=$1`,[pid]);
@@ -1801,17 +1826,22 @@ router.put("/quotes/:id/risk-profiles/:cobId", asyncHandler(async (req, res) => 
     leadingId: pid,
   });
   if (riskBandsInsert) await cl.query(riskBandsInsert.sql, riskBandsInsert.params);
-  await cl.query("COMMIT");res.json({ok:true,profile_id:pid});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
+  const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
+  await auditMutation(cl, req, { entityType: 'QUOTE', entityId: id, eventType: 'RISK_PROFILE_SAVED', payload: { class_of_business_id: cobId, profile_id: pid, band_count: bands.length } });
+  await cl.query("COMMIT");res.json({ok:true,profile_id:pid,updated_at:updatedAt});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
 // PUT /quotes/:id/claims-profiles/:cobId
 // Body shape matches treaty PUT: { selected_curve, custom_b, custom_g, bands }
 // Bands include no_of_claims + aggregate_incurred (the actual claims payload).
-router.put("/quotes/:id/claims-profiles/:cobId", asyncHandler(async (req, res) => {
+router.put("/quotes/:id/claims-profiles/:cobId", validateBody(claimsProfileSaveSchema), asyncHandler(async (req, res) => {
   const {id,cobId}=req.params;
   const {selected_curve,custom_b,custom_g,bands=[]}=req.body;
   const cl=await pool.connect();
   try{await cl.query("BEGIN");
+  await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
+  // Opt-in optimistic lock inside the txn (see large-losses).
+  await assertParentEntityUnchanged(cl, { parentTable: 'quote', idColumn: 'quote_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
   const {rows}=await cl.query(`INSERT INTO public.quote_claims_profile (quote_id,class_of_business_id,selected_curve,custom_b,custom_g) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (quote_id,class_of_business_id) DO UPDATE SET selected_curve=EXCLUDED.selected_curve,custom_b=EXCLUDED.custom_b,custom_g=EXCLUDED.custom_g RETURNING profile_id`,
     [id,cobId,selected_curve||null,numOrNull(custom_b),numOrNull(custom_g)]);
   const pid=rows[0].profile_id;await cl.query(`DELETE FROM public.quote_claims_profile_band WHERE profile_id=$1`,[pid]);
@@ -1822,7 +1852,9 @@ router.put("/quotes/:id/claims-profiles/:cobId", asyncHandler(async (req, res) =
     leadingId: pid,
   });
   if (claimsBandsInsert) await cl.query(claimsBandsInsert.sql, claimsBandsInsert.params);
-  await cl.query("COMMIT");res.json({ok:true,profile_id:pid});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
+  const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
+  await auditMutation(cl, req, { entityType: 'QUOTE', entityId: id, eventType: 'CLAIMS_PROFILE_SAVED', payload: { class_of_business_id: cobId, profile_id: pid, band_count: bands.length } });
+  await cl.query("COMMIT");res.json({ok:true,profile_id:pid,updated_at:updatedAt});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
 // PUT /quotes/:id/cresta
