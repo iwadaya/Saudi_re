@@ -1,7 +1,15 @@
 # Observability
 
-Traces + metrics via OpenTelemetry. Off by default; one env var
-(`OTEL_ENABLED=1`) turns the whole stack on without code changes.
+Traces + metrics via OpenTelemetry. **On by default in production** (and
+staging, which runs as `NODE_ENV=production`); off in dev/test. An explicit
+`OTEL_ENABLED` value always wins — `OTEL_ENABLED=1` forces it on anywhere,
+`OTEL_ENABLED=0` is an emergency prod rollback that disables it without a
+redeploy. No code changes either way.
+
+Metrics (the Prometheus scrape backing the dashboards) work with no further
+config. Traces are only exported when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, so
+a default production deploy emits metrics without an OTLP exporter retrying a
+non-existent collector.
 
 ## What you get
 
@@ -26,20 +34,29 @@ What's **not** emitted (deliberately):
 
 ## Enabling it
 
+In **production / staging it is already on** — nothing to do beyond having the
+optionalDependencies installed (a normal `npm ci --omit=dev` keeps them) and,
+for traces, pointing `OTEL_EXPORTER_OTLP_ENDPOINT` at a collector. To turn it
+on locally (dev/test), force it with `OTEL_ENABLED=1`:
+
 ```bash
 # Minimum: install once (OpenTelemetry is an optionalDependencies block;
 # on the demo box npm install picks it up automatically)
 cd server && npm install
 
-# Turn it on (example pointing at a local OTel collector)
+# Force it on in dev (example pointing at a local OTel collector for traces)
 OTEL_ENABLED=1 \
 OTEL_SERVICE_NAME=universe-server \
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
 npm start
+
+# Emergency rollback in production (disable without a redeploy):
+#   OTEL_ENABLED=0
 ```
 
 When the SDK starts you'll see a single `[otel] started — service=…`
-log line. If the OTel deps aren't installed or initialisation fails,
+log line (its `traces→` field reads `disabled` when no endpoint is set —
+metrics still scrape). If the OTel deps aren't installed or initialisation fails,
 you'll see `[otel] initialisation failed, continuing without tracing`
 — the app boots anyway. **Tracing never takes the app down.**
 
