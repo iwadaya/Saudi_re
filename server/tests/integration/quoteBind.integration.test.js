@@ -72,6 +72,16 @@ describe.skipIf(shouldSkipDb)('integration: quote → contract bind lifecycle', 
   });
 
   afterAll(async () => {
+    // Clean up the rows this test's pid created (uw_year is its unique sentinel)
+    // so bound SIGNED contracts don't accumulate in the shared test DB — a
+    // stale leftover in a colliding uw_year breaks the pre-bind
+    // `kpis.contracts === 0` assertion on a later run.
+    try {
+      const { rows: cs } = await pool.query(`SELECT contract_id FROM public.contract WHERE uw_year=$1`, [UW_YEAR]);
+      for (const r of cs) { try { await harness.fetchApp('DELETE', `/api/treaties/${r.contract_id}`); } catch {} }
+      const { rows: qs } = await pool.query(`SELECT quote_id FROM public.quote WHERE uw_year=$1`, [UW_YEAR]);
+      for (const r of qs) { try { await harness.fetchApp('DELETE', `/api/quotes/${r.quote_id}`); } catch {} }
+    } catch {}
     if (harness) await harness.close();
     await closePools();
   });
