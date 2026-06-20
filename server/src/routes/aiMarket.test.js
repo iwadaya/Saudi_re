@@ -281,7 +281,7 @@ vi.mock('../db/pool.js', () => ({
 }));
 
 vi.mock('../config/env.js', () => ({
-  env: { openaiApiKey: 'test-key' },
+  env: { openaiApiKey: 'test-key', aiFeaturesEnabled: true, aiRedactionEnabled: true },
 }));
 
 const logAuditMock = vi.fn(async () => undefined);

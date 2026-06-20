@@ -34,6 +34,12 @@ const schema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
+  // AI/data-governance gate. Fail-closed: when AI_FEATURES_ENABLED is unset no
+  // external LLM call is made. Enabling requires customer/legal approval and a
+  // configured provider. AI_CUSTOMER_OPTOUT blocks all AI for the tenant.
+  AI_FEATURES_ENABLED: z.string().optional(),
+  AI_CUSTOMER_OPTOUT: z.string().optional(),
+  AI_REDACTION_ENABLED: z.string().optional(),
   // Axco Insurance Intelligence — optional. When unset, the market
   // intelligence route falls back to a web-search-only OpenAI call.
   AXCO_API_KEY: z.string().optional(),
@@ -100,6 +106,10 @@ export const env = Object.freeze({
   anthropicApiKey: values.ANTHROPIC_API_KEY || '',
   openaiApiKey: values.OPENAI_API_KEY || '',
   geminiApiKey: values.GEMINI_API_KEY || '',
+  // AI governance — fail-closed by default (AI disabled unless explicitly on).
+  aiFeaturesEnabled: toBool(values.AI_FEATURES_ENABLED, false),
+  aiCustomerOptOut: toBool(values.AI_CUSTOMER_OPTOUT, false),
+  aiRedactionEnabled: toBool(values.AI_REDACTION_ENABLED, true),
   axcoApiKey: values.AXCO_API_KEY || '',
   axcoBaseUrl: values.AXCO_BASE_URL || '',
   authJwtSecret,

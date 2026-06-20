@@ -5,7 +5,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../config/env.js', () => ({
-  env: { geminiApiKey: 'gemini-test-key', openaiApiKey: 'sk-test', uploadDir: '/tmp' },
+  env: {
+    geminiApiKey: 'gemini-test-key', openaiApiKey: 'sk-test', uploadDir: '/tmp',
+    aiFeaturesEnabled: true, aiRedactionEnabled: true,
+  },
 }));
 vi.mock('./logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -88,6 +91,19 @@ describe('callLlmJson', () => {
     expect(sent.generationConfig.maxOutputTokens).toBe(16384);
     expect(sent.generationConfig.response_mime_type).toBe('application/json');
     expect(sent.generationConfig.temperature).toBe(0);
+  });
+
+  it('redacts PII from the user prompt BEFORE it leaves the app', async () => {
+    const fetchFn = vi.fn().mockResolvedValueOnce(geminiOk('{"ok":1}'));
+    const r = await callLlmJson({
+      systemPrompt: 'sys',
+      userPrompt: 'contact jane.doe@example.com or +1 415 555 0100',
+      fetchFn,
+    });
+    const sentBody = fetchFn.mock.calls[0][1].body;
+    expect(sentBody).not.toContain('jane.doe@example.com');
+    expect(sentBody).toContain('[REDACTED_EMAIL]');
+    expect(r.redactionCount).toBeGreaterThanOrEqual(1);
   });
 
   it('honours forceProvider="openai"', async () => {

@@ -33,6 +33,7 @@ import {
 import { checkPortfolioCompliance } from '../lib/portfolioCompliance.js';
 import { logAudit } from '../services/audit.js';
 import { actorFromReq } from '../middleware/requestContext.js';
+import { assertAiEnabled } from '../lib/aiGovernance.js';
 
 const router = Router();
 
@@ -230,6 +231,7 @@ function buildPromptContext({ cedantId, body, portfolio, npLayers }) {
 }
 
 async function callClaude(userJson) {
+  assertAiEnabled(); // fail-closed AI gate before any provider request
   if (!env.anthropicApiKey) {
     const err = new Error('ANTHROPIC_API_KEY not configured on server');
     err.statusCode = 503;

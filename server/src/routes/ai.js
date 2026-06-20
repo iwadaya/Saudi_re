@@ -12,8 +12,15 @@ import { slipIngestSchema, aiCompleteSchema, aiAnalyseJsonSchema, facAnalyseDocu
 import { pool } from '../db/pool.js';
 import { runFacDocumentAnalysis } from '../lib/facDocAi.js';
 import { callLlmJson } from '../lib/llmClient.js';
+import { requireAiEnabled, recordAiCall, redactForLlm } from '../lib/aiGovernance.js';
+import { actorFromReq } from '../middleware/requestContext.js';
 
 const router = Router();
+
+// Fail-closed AI gate, applied PER-ROUTE below (not router.use — this router is
+// mounted at /api alongside others, and router-level middleware would gate every
+// sibling /api route). When AI_FEATURES_ENABLED is unset (or a customer is opted
+// out) these endpoints 403 before any provider call.
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
@@ -99,10 +106,10 @@ const USER_INSTRUCTION = 'Extract the treaty details from this reinsurance slip 
 
 // POST /api/ai/slip-ingest
 // Body: { base64: string, mode: 'NP' | 'PROP' }
-router.post('/ai/slip-ingest', validateBody(slipIngestSchema), asyncHandler(async (req, res) => {
+router.post('/ai/slip-ingest', requireAiEnabled, validateBody(slipIngestSchema), asyncHandler(async (req, res) => {
   const { base64, mode } = req.body;
   try {
-    const { text, provider } = await callLlmJson({
+    const { text, provider, redactionCount } = await callLlmJson({
       systemPrompt: buildSystemPrompt(mode),
       userPrompt: USER_INSTRUCTION,
       attachments: [{ filename: 'slip.pdf', mime: 'application/pdf', base64 }],
@@ -111,6 +118,7 @@ router.post('/ai/slip-ingest', validateBody(slipIngestSchema), asyncHandler(asyn
       maxOutputTokens: 4096,
     });
     logger.info('[ai/slip-ingest] extraction succeeded', { provider });
+    await recordAiCall({ actor: actorFromReq(req), provider, purpose: 'slip-ingest', redactionCount });
     res.json({ text, provider });
   } catch (e) {
     logger.error('[ai/slip-ingest] extraction failed', { error: e?.message });
@@ -122,17 +130,28 @@ router.post('/ai/slip-ingest', validateBody(slipIngestSchema), asyncHandler(asyn
 // General-purpose Claude text completion proxy. This is separate from
 // treaty-detail slip ingest, which uses the shared Gemini-first /
 // OpenAI-fallback llmClient.
-router.post('/ai/complete', validateBody(aiCompleteSchema), asyncHandler(async (req, res) => {
+router.post('/ai/complete', requireAiEnabled, validateBody(aiCompleteSchema), asyncHandler(async (req, res) => {
   const { messages, system, max_tokens = 1000 } = req.body;
 
   if (!env.anthropicApiKey) {
     return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
   }
 
+  // Redact PII/identifiers from user-turn text before it leaves the app.
+  let redactionCount = 0;
+  const safeMessages = (Array.isArray(messages) ? messages : []).map((m) => {
+    if (typeof m?.content === 'string') {
+      const red = redactForLlm(m.content);
+      redactionCount += red.redactionCount;
+      return { ...m, content: red.text };
+    }
+    return m;
+  });
+
   const payload = {
     model: ANTHROPIC_MODEL,
     max_tokens,
-    messages,
+    messages: safeMessages,
     ...(system ? { system } : {}),
   };
 
@@ -154,6 +173,7 @@ router.post('/ai/complete', validateBody(aiCompleteSchema), asyncHandler(async (
   }
 
   const data = await anthropicRes.json();
+  await recordAiCall({ actor: actorFromReq(req), provider: 'anthropic', purpose: 'ai-complete', redactionCount });
   res.json(data);
 }));
 
@@ -161,15 +181,16 @@ router.post('/ai/complete', validateBody(aiCompleteSchema), asyncHandler(async (
 // JSON-mode completion via Gemini → OpenAI fallback (shared LLM client).
 // Used by wording analysis. Replaces /ai/complete for any caller that
 // wants structured JSON output and provider redundancy.
-router.post('/ai/analyse-json', validateBody(aiAnalyseJsonSchema), asyncHandler(async (req, res) => {
+router.post('/ai/analyse-json', requireAiEnabled, validateBody(aiAnalyseJsonSchema), asyncHandler(async (req, res) => {
   const { systemPrompt, userPrompt, maxOutputTokens = 4096, temperature = 0 } = req.body;
   try {
-    const { text, provider } = await callLlmJson({
+    const { text, provider, redactionCount } = await callLlmJson({
       systemPrompt,
       userPrompt,
       maxOutputTokens,
       temperature,
     });
+    await recordAiCall({ actor: actorFromReq(req), provider, purpose: 'analyse-json', redactionCount });
     res.json({ text, provider });
   } catch (e) {
     logger.error('[ai/analyse-json] failed', { error: e?.message });
@@ -184,6 +205,7 @@ router.post('/ai/analyse-json', validateBody(aiAnalyseJsonSchema), asyncHandler(
 // unit-tested without spinning up Express.
 router.post(
   '/ai/fac/analyse-document',
+  requireAiEnabled,
   validateBody(facAnalyseDocumentSchema),
   asyncHandler(async (req, res) => {
     const { fac_risk_id: facRiskId, document_id: documentId, document_kind: documentKind } = req.body;
@@ -206,6 +228,10 @@ router.post(
     try {
       const out = await runFacDocumentAnalysis({
         facRiskId, document: docRows[0], documentKind,
+      });
+      await recordAiCall({
+        actor: actorFromReq(req), entityType: 'FAC_RISK', entityId: facRiskId,
+        provider: out.provider || 'openai', documentId, purpose: 'fac-document-analysis',
       });
       res.json({
         analysis_id:    out.analysisId,
