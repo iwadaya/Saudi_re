@@ -12,6 +12,7 @@ import { logger } from './lib/logger.js';
 import { authenticate, requireAuth, csrfProtection } from './middleware/requestContext.js';
 import { guardApiMutations } from './services/permissions.js';
 import { validateAiProviderConfig } from './lib/aiGovernance.js';
+import { validateIdentityConfig } from './config/identity.js';
 import { attachRequestId } from './middleware/requestId.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { cacheStats } from './middleware/httpCache.js';
@@ -278,6 +279,15 @@ export function createApp() {
   // Validate AI/data-governance posture at boot (fail-closed by default; flags an
   // enabled-but-unconfigured provider). Never throws — must not block non-AI APIs.
   validateAiProviderConfig();
+
+  // Surface identity/SSO misconfiguration at boot (P1-identity Phase 0c). Never
+  // throws: tolerant while SSO is off, and even a misconfigured SSO posture must
+  // not take the API down — it is logged for operators to fix.
+  {
+    const { errors, warnings } = validateIdentityConfig();
+    for (const e of errors) logger.error('[identity] config error', { message: e });
+    for (const w of warnings) logger.warn('[identity] config warning', { message: w });
+  }
 
   // Trust Render's proxy so rate-limiter reads the real client IP
   app.set('trust proxy', 1);

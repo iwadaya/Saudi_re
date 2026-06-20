@@ -98,6 +98,8 @@ vi.mock('../db/pool.js', () => ({
   pool: { query: vi.fn(fakeQuery), connect: vi.fn(() => Promise.resolve(makeClient())) },
 }));
 vi.mock('../services/audit.js', () => ({ logAudit: vi.fn(() => Promise.resolve()) }));
+const alertMock = vi.fn();
+vi.mock('../services/securityAlerts.js', () => ({ emitSecurityAlert: (...a) => alertMock(...a) }));
 
 const { default: authRouter, hashPassword, verifyPassword, validatePasswordStrength } = await import('./auth.js');
 const { logAudit: logAuditMock } = await import('../services/audit.js');
@@ -158,6 +160,11 @@ beforeEach(() => {
   scenario = {};
   currentUser = null;
   logAuditMock.mockClear();
+  alertMock.mockClear();
+  // Identity/SSO config is read from process.env per call — keep the default
+  // posture (SSO off) so unrelated tests behave as before; SSO-gate tests opt in.
+  delete process.env.IDENTITY_SSO_ENABLED;
+  delete process.env.IDENTITY_BREAK_GLASS_USERS;
   process.env.ALLOW_DEMO_AUTH = 'true'; // test default (mirrors vitest env); some tests unset it
   // Open self-registration is FAIL-CLOSED (P1-identity D4): it is OFF unless the
   // flag is explicitly 'true'. The Add-user form tests opt in here; the gate
@@ -417,6 +424,59 @@ describe('POST /auth/login', () => {
     scenario.loginUser = adaRow(hashPassword('realpass1'));
     const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'realpass1' } });
     expect(res.body.session.mustChangePassword).toBe(false);
+  });
+});
+
+describe('POST /auth/login — SSO-posture gate (Phase 0c, tolerant while SSO off)', () => {
+  const row = (hash, username = 'ada.lovelace') => ({
+    user_id: 'u-ada', username, display_name: 'Ada Lovelace', email: `${username}@universe3.app`,
+    office: 'Riyadh', role_id: 'role-uw', role_code: 'UW', role_name: 'Underwriter', hierarchy_level: 4,
+    can_override_below: false, effective_limit_usd: 1, treaty_type_scope: 'BOTH', approvals_required: 1,
+    is_active: true, locked_until: null, password_hash: hash,
+  });
+  const login = (username = 'ada.lovelace') => call(buildApp(), { method: 'POST', path: '/auth/login', body: { username, password: 'realpass1' } });
+  const auditTypes = () => logAuditMock.mock.calls.map((c) => c[1]?.eventType);
+
+  it('SSO OFF (default): local login works unchanged — no gate, no alert', async () => {
+    scenario.loginUser = row(hashPassword('realpass1'));
+    const res = await login();
+    expect(res.status).toBe(200);
+    expect(alertMock).not.toHaveBeenCalled();
+    expect(auditTypes()).not.toContain('LOCAL_LOGIN_BLOCKED');
+  });
+
+  it('SSO ON: a non-break-glass local login is refused 403 SSO_REQUIRED + audited', async () => {
+    process.env.IDENTITY_SSO_ENABLED = 'true';
+    scenario.loginUser = row(hashPassword('realpass1'));
+    const res = await login();
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('SSO_REQUIRED');
+    expect(auditTypes()).toContain('LOCAL_LOGIN_BLOCKED');
+    // No session cookie is issued on a blocked login.
+    expect((res.cookies || []).some((c) => c.name === 'auth_token' && !c.cleared)).toBe(false);
+    expect(alertMock).not.toHaveBeenCalled();
+  });
+
+  it('SSO ON: a configured break-glass user logs in (200), audited BREAK_GLASS_LOGIN + alert raised', async () => {
+    process.env.IDENTITY_SSO_ENABLED = 'true';
+    process.env.IDENTITY_BREAK_GLASS_USERS = 'root.admin, ada.lovelace';
+    scenario.loginUser = row(hashPassword('realpass1'));
+    const res = await login();
+    expect(res.status).toBe(200);
+    expect(auditTypes()).toContain('BREAK_GLASS_LOGIN');
+    expect(alertMock).toHaveBeenCalledTimes(1);
+    expect(alertMock.mock.calls[0][0]).toBe('BREAK_GLASS_LOGIN');
+    // The wrong password still fails BEFORE the posture gate (no alert leak).
+    expect((res.cookies || []).some((c) => c.name === 'auth_token' && !c.cleared)).toBe(true);
+  });
+
+  it('SSO ON: a wrong password is rejected 401 before the gate (no posture disclosure)', async () => {
+    process.env.IDENTITY_SSO_ENABLED = 'true';
+    scenario.loginUser = row(hashPassword('realpass1'));
+    const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'WRONG' } });
+    expect(res.status).toBe(401);
+    expect(auditTypes()).not.toContain('LOCAL_LOGIN_BLOCKED');
+    expect(alertMock).not.toHaveBeenCalled();
   });
 });
 

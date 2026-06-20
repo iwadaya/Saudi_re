@@ -18,6 +18,8 @@ import { setAuthCookies, clearAuthCookies, readCookie, AUTH_COOKIE } from '../li
 import { requireAuth, requireMinLevel, actorFromReq } from '../middleware/requestContext.js';
 import { createSession, revokeSession, revokeAllForUser } from '../services/sessions.js';
 import { auditMutation } from '../lib/mutationAudit.js';
+import { isSsoEnabled, isBreakGlassUser } from '../config/identity.js';
+import { emitSecurityAlert } from '../services/securityAlerts.js';
 
 const router = Router();
 
@@ -263,6 +265,32 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
       [user.user_id]
     ).catch(() => {});
     return res.status(401).json({ error: 'Invalid credentials.' });
+  }
+
+  // SSO-posture gate (P1-identity Phase 0c). TOLERANT while SSO is off (default):
+  // this whole block is skipped and local password login behaves exactly as
+  // before. Once IDENTITY_SSO_ENABLED=true, SSO becomes the login path and a
+  // local password is accepted ONLY for a configured break-glass admin (D4) —
+  // and even then it is a critical, alertable event. Everyone else is told to
+  // use SSO. The gate runs AFTER the password check (so we never reveal the
+  // posture to an unauthenticated guesser) but BEFORE any session is issued.
+  if (isSsoEnabled()) {
+    if (!isBreakGlassUser(user.username)) {
+      await logAudit(pool, {
+        entityType: 'USER', entityId: user.user_id, eventType: 'LOCAL_LOGIN_BLOCKED',
+        actor: { id: user.user_id, name: user.username || user.email },
+        payload: { reason: 'SSO_REQUIRED' },
+      }).catch(() => {});
+      return res.status(403).json({ error: 'Local password sign-in is disabled — please sign in with SSO.', code: 'SSO_REQUIRED' });
+    }
+    // Break-glass login: permitted, but loudly. Audit (best-effort, so it can't
+    // block an emergency login) AND raise an out-of-band security alert.
+    await logAudit(pool, {
+      entityType: 'USER', entityId: user.user_id, eventType: 'BREAK_GLASS_LOGIN',
+      actor: { id: user.user_id, name: user.username || user.email },
+      payload: { username: user.username },
+    }).catch(() => {});
+    emitSecurityAlert('BREAK_GLASS_LOGIN', { userId: user.user_id, username: user.username, ip: clientIp(req) });
   }
 
   // Reset failed attempts on success
