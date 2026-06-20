@@ -1,0 +1,161 @@
+name: scheduled-jobs
+
+# Backups, restore-verification drills, and the two backlog maintenance jobs
+# (import-snapshot cleanup, LDF benchmark refresh) wired as code. Each job alerts
+# on failure via scripts/run-with-alert.sh (ALERT_WEBHOOK_URL secret).
+#
+# Scheduled workflows run on the DEFAULT branch only; until merged, use the
+# "Run workflow" button (workflow_dispatch) to exercise any job. The
+# restore-verification drill is SELF-CONTAINED (its own throwaway Postgres) and
+# also runs on push so script regressions are caught in CI.
+#
+# RPO/RTO targets and the prod schedule are config placeholders — see
+# docs/backup-recovery.md. Confirm them before relying on this in production.
+
+on:
+  schedule:
+    - cron: '0 2 * * *'    # db-backup            — nightly 02:00 UTC  (RPO placeholder: <= 24h)
+    - cron: '30 3 * * 0'   # restore-verification — weekly  Sun 03:30 UTC
+    - cron: '0 4 * * *'    # snapshot-cleanup     — daily   04:00 UTC
+    - cron: '0 5 * * 1'    # ldf-refresh          — weekly  Mon 05:00 UTC (cadence placeholder)
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'Which job to run on demand'
+        type: choice
+        default: restore-verification
+        options: [restore-verification, db-backup, snapshot-cleanup, ldf-refresh]
+  push:
+    paths:
+      - 'scripts/backup-db.sh'
+      - 'scripts/verify-restore.sh'
+      - 'scripts/run-with-alert.sh'
+      - '.github/workflows/scheduled-jobs.yml'
+
+concurrency:
+  group: scheduled-jobs-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ── Restore-verification drill (self-contained: proves the backup+restore
+  #    tooling end-to-end against a throwaway Postgres, no prod access). ──
+  restore-verification:
+    name: restore-verification drill
+    if: >-
+      github.event_name == 'push'
+      || github.event.schedule == '30 3 * * 0'
+      || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'restore-verification')
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reinsurance_tool
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/reinsurance_tool
+      NODE_ENV: test
+      BACKUP_DIR: ${{ github.workspace }}/backup-out
+      ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+      ALERT_SOURCE: github-actions/restore-verification
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Install postgresql-client (pg_dump/pg_restore/psql)
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Install server deps
+        run: npm ci --include=optional --prefix server
+      - name: Migrate the throwaway DB (seeds the schema + reference data)
+        run: npm run migrate --prefix server
+      - name: Backup the throwaway DB
+        run: scripts/run-with-alert.sh db-backup-drill -- scripts/backup-db.sh
+      - name: Verify the backup restores cleanly (drill)
+        run: scripts/run-with-alert.sh restore-verification -- scripts/verify-restore.sh
+
+  # ── Production backup (independent of restore-verify). Skips safely when the
+  #    PROD secret is not configured, so the workflow never fails for that. ──
+  db-backup:
+    name: db-backup (prod)
+    if: >-
+      github.event.schedule == '0 2 * * *'
+      || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'db-backup')
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+      BACKUP_DIR: ${{ github.workspace }}/backup-out
+      BACKUP_RETENTION_DAYS: ${{ vars.BACKUP_RETENTION_DAYS || '30' }}
+      ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+      ALERT_SOURCE: github-actions/db-backup
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip if no prod DB configured
+        id: guard
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "PROD_DATABASE_URL not set — skipping prod backup (configure the secret to enable)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install postgresql-client
+        if: steps.guard.outputs.skip != 'true'
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Backup prod
+        if: steps.guard.outputs.skip != 'true'
+        run: scripts/run-with-alert.sh db-backup -- scripts/backup-db.sh
+      # Durable storage: upload the dump. An artifact is the portable default;
+      # for real RPO/RTO push to object storage (S3/GCS) — see docs/backup-recovery.md.
+      - name: Upload dump artifact
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: ${{ github.workspace }}/backup-out/*.dump
+          retention-days: 7
+
+  snapshot-cleanup:
+    name: import-snapshot cleanup (prod)
+    if: >-
+      github.event.schedule == '0 4 * * *'
+      || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'snapshot-cleanup')
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+      ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+      ALERT_SOURCE: github-actions/snapshot-cleanup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Run snapshot cleanup (skips if no prod DB)
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then echo "PROD_DATABASE_URL not set — skipping."; exit 0; fi
+          npm ci --include=optional --prefix server
+          scripts/run-with-alert.sh snapshot-cleanup -- npm run cleanup:snapshots --prefix server
+
+  ldf-refresh:
+    name: LDF benchmark refresh (prod)
+    if: >-
+      github.event.schedule == '0 5 * * 1'
+      || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'ldf-refresh')
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+      ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+      ALERT_SOURCE: github-actions/ldf-refresh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Run LDF benchmark refresh (skips if no prod DB)
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then echo "PROD_DATABASE_URL not set — skipping."; exit 0; fi
+          npm ci --include=optional --prefix server
+          scripts/run-with-alert.sh ldf-refresh -- npm run refresh:ldf-benchmarks --prefix server

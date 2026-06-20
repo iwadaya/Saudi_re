@@ -50,3 +50,85 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+
+  # ── Scheduled jobs (P0-10) — in-network Render Cron mirror of
+  #    .github/workflows/scheduled-jobs.yml. Each wraps scripts/run-with-alert.sh
+  #    so a failure pages via ALERT_WEBHOOK_URL. RPO/RTO and durable-storage are
+  #    PLACEHOLDERS to confirm — see docs/backup-recovery.md. ──
+
+  # The two backlog maintenance jobs (node only; no pg client needed).
+  - type: cron
+    name: universe-snapshot-cleanup
+    runtime: node
+    region: frankfurt
+    schedule: "0 4 * * *"            # daily 04:00 UTC — import_snapshot 30-day retention
+    buildCommand: npm ci --include=optional --prefix server
+    startCommand: scripts/run-with-alert.sh snapshot-cleanup -- npm run cleanup:snapshots --prefix server
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: ALERT_WEBHOOK_URL
+        sync: false
+
+  - type: cron
+    name: universe-ldf-refresh
+    runtime: node
+    region: frankfurt
+    schedule: "0 5 * * 1"            # weekly Mon 05:00 UTC (cadence placeholder — confirm)
+    buildCommand: npm ci --include=optional --prefix server
+    startCommand: scripts/run-with-alert.sh ldf-refresh -- npm run refresh:ldf-benchmarks --prefix server
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: ALERT_WEBHOOK_URL
+        sync: false
+
+  # Independent backup — needs pg_dump, so it runs the Dockerfile.jobs image.
+  - type: cron
+    name: universe-db-backup
+    runtime: docker
+    dockerfilePath: ./Dockerfile.jobs
+    region: frankfurt
+    schedule: "0 2 * * *"            # nightly 02:00 UTC (RPO placeholder: <= 24h — confirm)
+    startCommand: scripts/run-with-alert.sh db-backup -- scripts/backup-db.sh
+    # A Render disk attaches to ONE service. For cross-job durable retention push
+    # the dump to OBJECT STORAGE (S3/GCS) here and fetch it in restore-verify —
+    # see docs/backup-recovery.md. The disk below is local working space.
+    disk:
+      name: universe-backups
+      mountPath: /var/backups/universe
+      sizeGB: 10
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: BACKUP_DIR
+        value: /var/backups/universe
+      - key: BACKUP_RETENTION_DAYS
+        value: "30"
+      - key: ALERT_WEBHOOK_URL
+        sync: false
+      # RPO/RTO targets — PLACEHOLDERS, confirm. RPO drives backup cadence above;
+      # RTO is the restore-drill SLA. See docs/backup-recovery.md.
+      - key: BACKUP_RPO_TARGET
+        value: "24h"
+      - key: BACKUP_RTO_TARGET
+        value: "4h"
+
+  # Restore-verification — proves a backup restores. NOTE: verify-restore.sh
+  # CREATE/DROPs a scratch DB on the server in DATABASE_URL, so point it at a
+  # DEDICATED verification Postgres, NOT production. Fetch the latest dump from
+  # object storage into BACKUP_DIR before this runs (see docs/backup-recovery.md).
+  - type: cron
+    name: universe-restore-verify
+    runtime: docker
+    dockerfilePath: ./Dockerfile.jobs
+    region: frankfurt
+    schedule: "30 3 * * 0"           # weekly Sun 03:30 UTC
+    startCommand: scripts/run-with-alert.sh restore-verification -- scripts/verify-restore.sh
+    envVars:
+      - key: DATABASE_URL          # DEDICATED verification server — never prod
+        sync: false
+      - key: BACKUP_DIR
+        value: /var/backups/universe
+      - key: ALERT_WEBHOOK_URL
+        sync: false
