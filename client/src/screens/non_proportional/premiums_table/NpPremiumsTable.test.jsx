@@ -216,7 +216,7 @@ describe('NpPremiumsTable — country resolution + average inflation', () => {
     await waitFor(() => expect(avgInput).toHaveValue('4%'));
 
     // Pick a different country WITHOUT leaving average mode.
-    fireEvent.click(screen.getByRole('button', { name: 'COUNTRY' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'COUNTRY' }));
     const select = await screen.findByLabelText(/Select country for inflation/i);
     fireEvent.change(select, { target: { value: 'country-ae' } });
 
@@ -284,7 +284,7 @@ describe('NpPremiumsTable — country resolution + average inflation', () => {
 
     // Country starts unresolved ("—") and the COUNTRY button opens a picker.
     await waitFor(() => expect(apiMock.getContract).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole('button', { name: 'COUNTRY' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'COUNTRY' }));
 
     const select = await screen.findByLabelText(/Select country for inflation/i);
     fireEvent.change(select, { target: { value: 'country-ae' } });
