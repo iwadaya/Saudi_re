@@ -17,6 +17,7 @@ import clientEventsRouter from './clientEvents.js';
 import workbenchRouter from './workbench.js';
 import peerStructuresRouter from './peerStructures.js';
 import reinsurerAnalysisRouter from './reinsurerAnalysis.js';
+import portfolioInsightsRouter from './portfolioInsights.js';
 import renewalPackImportRouter from './renewalPackImport.js';
 import renewalPackRouter from './renewalPack.js';
 import ldfBlendingRouter from './ldfBlending.js';
@@ -41,6 +42,7 @@ const routers = [
   workbenchRouter,
   peerStructuresRouter,
   reinsurerAnalysisRouter,
+  portfolioInsightsRouter,
   renewalPackImportRouter,
   renewalPackRouter,
   ldfBlendingRouter,

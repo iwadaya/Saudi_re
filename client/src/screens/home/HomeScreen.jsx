@@ -14,6 +14,7 @@ import {
 import { exportPortfolioToExcel } from './exportPortfolio';
 import { EveryonePanel } from './HomeOwnership';
 import ReinsurerAnalysisModal from './ReinsurerAnalysisModal';
+import ProfitabilityInsightsModal from '../insights/ProfitabilityInsightsModal';
 import { useViewAllTreaties } from '../../utils/prefs';
 
 /* ── workflow normalisation ── */
@@ -407,6 +408,7 @@ export default function HomeScreen() {
   const [renewError, setRenewError] = useState('');
   const [packBusy, setPackBusy] = useState(false);
   const [showReinsurerAnalysis, setShowReinsurerAnalysis] = useState(false);
+  const [showInsights, setShowInsights] = useState(false);
   // Profile viewer state
   const viewingUser = useViewingUser(); // synced from Topbar dropdown
   const [allocMsg, setAllocMsg]     = useState('');
@@ -582,6 +584,7 @@ export default function HomeScreen() {
       <Topbar title="MODELLING TOOL" subtitle="Reinsurance treaty pricing & modelling workspace" actions={<>
         <button className="topbar-pill" onClick={() => navigate('/dashboard')}>Dashboard</button>
         <button className="topbar-pill" onClick={() => setShowReinsurerAnalysis(true)}>Reinsurer Analysis</button>
+        <button className="topbar-pill" onClick={() => setShowInsights(true)}>Portfolio Intelligence</button>
         <button className="topbar-pill" onClick={downloadRenewalPack} disabled={packBusy}>
           {packBusy ? 'Building…' : 'Renewal Pack'}
         </button>
@@ -664,6 +667,7 @@ export default function HomeScreen() {
       </div></main>
       <RenewalModal open={showRenewal} onClose={() => setShowRenewal(false)} onRenew={handleRenewalDone} />
       <ReinsurerAnalysisModal open={showReinsurerAnalysis} onClose={() => setShowReinsurerAnalysis(false)} />
+      <ProfitabilityInsightsModal open={showInsights} onClose={() => setShowInsights(false)} scope="treaty" />
       <RenewalConfirmModal
         candidate={renewalCandidate}
         busy={renewBusy}
