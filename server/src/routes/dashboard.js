@@ -218,9 +218,10 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
   const where = `WHERE ${conds.join(' AND ')}`;
 
   // All tabs aggregate over the shared units / unitsLob CTEs, which source from
-  // public.contract ONLY — quotes are a standalone artefact and never feed
-  // portfolio exposure (POST /api/quotes/:id/bind is disabled; see
-  // quoteLifecycle.js and docs/architecture.md "Quote binding scope").
+  // public.contract ONLY. Quotes never feed exposure directly; a SIGNED quote
+  // enters the portfolio by BINDING into a contract (POST /api/quotes/:id/bind →
+  // services/quoteBind.js), which creates the contract row this aggregation picks
+  // up. The quote itself stays a frozen as-quoted snapshot.
   //
   // Response coercion: keep a SQL NULL (e.g. a premium-weighted rate with no
   // contributing rows) as null rather than turning it into 0.

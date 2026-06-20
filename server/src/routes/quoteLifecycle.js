@@ -5,6 +5,8 @@ import { pool } from '../db/pool.js';
 import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { resolveAuditActor } from '../services/audit.js';
+import { actorFromReq } from '../middleware/requestContext.js';
+import { bindQuoteToContract } from '../services/quoteBind.js';
 
 const router = Router();
 
@@ -265,20 +267,27 @@ router.post('/quotes/:id/amend', asyncHandler(async (req, res) => {
 }));
 
 // ── POST /api/quotes/:id/bind ─────────────────────────────────────────────
-// Quote → contract binding is intentionally disabled while quotes run as a
-// standalone artefact. The previous implementation (transactional copy of
-// the quote into a new SIGNED contract row, with all sub-tables) is
-// preserved in git history and can be restored when this is re-wired.
-// Consequence: bound quotes do NOT feed portfolio exposure (the dashboard
-// aggregates contracts only). Scope decision recorded in docs/architecture.md
-// ("Quote binding scope"); re-wiring must create a contract row so the
-// existing accumulation picks it up.
-router.post('/quotes/:id/bind', asyncHandler(async (_req, res) => {
-  return res.status(410).json({
-    error: 'Quote-to-contract binding is disabled in this build.',
-    code: 'QUOTE_BIND_DISABLED',
-    detail: 'Quotes run standalone — they do not produce contracts. This endpoint will be re-wired in a later release.',
-  });
+// Atomically bind a SIGNED quote into a new SIGNED contract: the quote stays a
+// frozen as-quoted snapshot, while contract-owned copies of every sub-table feed
+// the dashboard/portfolio going forward. One transaction — any failure rolls
+// back fully (no orphan rows); a double-bind is rejected. See services/quoteBind.js.
+// Authorization is enforced upstream by guardApiMutations (assertCanEdit on the
+// quote) before this handler runs.
+router.post('/quotes/:id/bind', asyncHandler(async (req, res) => {
+  try {
+    const out = await bindQuoteToContract(pool, {
+      quoteId: req.params.id,
+      actor: actorFromReq(req),
+    });
+    logger.info('[quote/bind] bound', { quoteId: req.params.id, contractId: out.contract_id });
+    return res.status(201).json({ ok: true, ...out });
+  } catch (e) {
+    if (e?.status) {
+      return res.status(e.status).json({ error: e.message, code: e.code });
+    }
+    logger.error('[quote/bind] failed', { quoteId: req.params.id, error: e?.message });
+    throw e;
+  }
 }));
 
 export default router;
