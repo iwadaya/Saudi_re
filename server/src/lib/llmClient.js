@@ -22,6 +22,7 @@
 import { env } from '../config/env.js';
 import { logger } from './logger.js';
 import { assertAiEnabled, redactForLlm } from './aiGovernance.js';
+import { recordAiCall } from '../observability/aiMetrics.js';
 
 const GEMINI_MODEL_DEFAULT = 'gemini-2.5-pro';
 const OPENAI_MODEL_DEFAULT = 'gpt-4o';
@@ -80,14 +81,17 @@ export async function callLlmJson(params) {
   }
 
   if (tryGemini) {
+    const startNs = process.hrtime.bigint();
     try {
       const out = await callGemini({
         systemPrompt, userPrompt: safeUserPrompt, attachments,
         maxOutputTokens, temperature, model: geminiModel, fetchFn,
       });
+      recordAiCall({ provider: 'gemini', model: geminiModel, outcome: 'success', durationMs: msSince(startNs), raw: out.raw });
       logger.info('[llm] gemini succeeded', { model: geminiModel });
       return { ...out, redactionCount: redaction.redactionCount };
     } catch (err) {
+      recordAiCall({ provider: 'gemini', model: geminiModel, outcome: 'error', durationMs: msSince(startNs), raw: null });
       const msg = err?.message || String(err);
       logger.warn('[llm] gemini failed, falling back to openai', { error: msg });
       errors.push(`gemini: ${msg}`);
@@ -95,14 +99,17 @@ export async function callLlmJson(params) {
   }
 
   if (tryOpenAi) {
+    const startNs = process.hrtime.bigint();
     try {
       const out = await callOpenAi({
         systemPrompt, userPrompt: safeUserPrompt, attachments,
         maxOutputTokens, temperature, model: openaiModel, fetchFn,
       });
+      recordAiCall({ provider: 'openai', model: openaiModel, outcome: 'success', durationMs: msSince(startNs), raw: out.raw });
       logger.info('[llm] openai succeeded', { model: openaiModel });
       return { ...out, redactionCount: redaction.redactionCount };
     } catch (err) {
+      recordAiCall({ provider: 'openai', model: openaiModel, outcome: 'error', durationMs: msSince(startNs), raw: null });
       const msg = err?.message || String(err);
       logger.error('[llm] openai failed', { error: msg });
       errors.push(`openai: ${msg}`);
@@ -110,6 +117,11 @@ export async function callLlmJson(params) {
   }
 
   throw new Error(`All LLM providers failed: ${errors.join(' | ')}`);
+}
+
+// Elapsed wall-clock ms since a process.hrtime.bigint() mark.
+function msSince(startNs) {
+  return Number(process.hrtime.bigint() - startNs) / 1e6;
 }
 
 // ── Gemini ───────────────────────────────────────────────────────────────────

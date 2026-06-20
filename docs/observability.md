@@ -15,6 +15,7 @@ When enabled, the server emits:
 | Node runtime metrics | Prometheus scrape on `:9464/metrics`             | Process CPU, RSS, event-loop lag, GC pauses                            |
 | **Pool gauges**     | Same Prometheus endpoint                           | `pg_pool_size`, `pg_pool_idle`, `pg_pool_waiting` — the bottleneck signals |
 | **HTTP request metrics** | Same Prometheus endpoint                      | `http_server_request_duration` (histogram, seconds) + `http_server_requests_total` (counter), labelled `http_route`, `http_request_method`, `http_response_status_code`, `status_class` — the API-latency and 5xx dashboards |
+| **AI provider metrics** | Same Prometheus endpoint                       | `ai_provider_requests_total` (by `provider`/`model`/`outcome`), `ai_provider_request_duration` (histogram), `ai_provider_tokens_total` (by `token_type`), `ai_provider_cost_usd_total` (estimated) — the AI failures/cost dashboard |
 
 What's **not** emitted (deliberately):
 
