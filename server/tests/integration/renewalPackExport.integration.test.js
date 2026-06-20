@@ -1,10 +1,8 @@
 // server/tests/integration/renewalPackExport.integration.test.js
 //
-// Access-control + scoping coverage for the portfolio renewal-pack export
-// (audit item P0-2). GET /api/renewal-pack/export was unguarded — any
-// authenticated user could export the entire portfolio workbook. It now:
-//   • requires an authenticated treaty role (hierarchy level ≤ 5, i.e. Treaty
-//     Underwriter and above);
+// Scoping coverage for the portfolio renewal-pack export. The workbook is open
+// to every authenticated user, but GET /api/renewal-pack/export:
+//   • requires an authenticated identity (the blanket requireAuth in app.js);
 //   • scopes rows to the requester's MANDATE (treaty_type_scope + restricted COBs);
 //   • audits each export (actor, applied filters, contract count).
 //
@@ -108,6 +106,12 @@ describe.skipIf(shouldSkipDb)('integration: portfolio export ACL + scoping', () 
     const res = await harness.fetchApp('GET', '/api/renewal-pack/export', { headers: JUNIOR });
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('spreadsheetml');
+  });
+
+  it('an unauthenticated caller is rejected — 401', async () => {
+    // Blank out the harness's default role header → anonymous request.
+    const res = await harness.fetchApp('GET', '/api/renewal-pack/export', { headers: { 'x-user-role': '', 'x-user-id': '' } });
+    expect(res.status).toBe(401);
   });
 
   it('mandate scope limits the rows: PROP_ONLY + restricted COB includes only the permitted contract', async () => {
