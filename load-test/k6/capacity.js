@@ -42,6 +42,7 @@
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
+import { login, authHeaders } from './lib/auth.js';
 
 const BASE_URL = __ENV.BASE_URL || 'http://127.0.0.1:4000';
 const VUS = Number(__ENV.K6_VUS || 10);
@@ -111,14 +112,12 @@ function csv(name) {
     .filter(Boolean);
 }
 
+// Real production auth (cookie + CSRF). Each VU logs in once and reuses the
+// CSRF token; the auth cookie rides k6's per-VU jar. No demo x-user-* headers.
+let vuCsrf = null;
 function headers() {
-  const vuNumber = typeof __VU === 'undefined' ? 0 : __VU;
-  const vu = String(vuNumber).padStart(12, '0');
-  return {
-    'Content-Type': 'application/json',
-    'x-user-role': 'CU',
-    'x-user-id': `00000000-0000-0000-0000-${vu}`,
-  };
+  if (!vuCsrf) vuCsrf = login(BASE_URL);
+  return authHeaders(vuCsrf);
 }
 
 function url(path) {
