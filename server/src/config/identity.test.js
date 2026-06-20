@@ -62,6 +62,22 @@ describe('getIdentityConfig — env parsing + safe defaults', () => {
     expect(isSsoEnabled(cfg({}))).toBe(false);
     expect(isSsoEnabled(cfg({ IDENTITY_SSO_ENABLED: 'yes' }))).toBe(true);
   });
+
+  it('parses OIDC client fields and always includes the openid scope', () => {
+    const c = cfg({
+      IDENTITY_CLIENT_SECRET: 'shh', IDENTITY_REDIRECT_URI: 'https://app/cb',
+      IDENTITY_POST_LOGOUT_REDIRECT_URI: 'https://app/bye', IDENTITY_SCOPES: 'profile, email groups',
+    });
+    expect(c.clientSecret).toBe('shh');
+    expect(c.redirectUri).toBe('https://app/cb');
+    expect(c.postLogoutRedirectUri).toBe('https://app/bye');
+    expect(c.scopes).toEqual(['openid', 'profile', 'email', 'groups']);
+  });
+
+  it('defaults scopes to openid profile email and folds in openid if dropped', () => {
+    expect(cfg({}).scopes).toEqual(['openid', 'profile', 'email']);
+    expect(cfg({ IDENTITY_SCOPES: 'email' }).scopes).toEqual(['openid', 'email']);
+  });
 });
 
 describe('mapClaimsToRole — D3: default low-privilege, never silently elevate', () => {
@@ -146,10 +162,12 @@ describe('validateIdentityConfig — tolerant off, strict on', () => {
     expect(errors.join(' ')).toMatch(/not a valid role code/);
   });
 
-  it('SSO on without issuer/clientId → errors', () => {
+  it('SSO on without issuer/clientId/secret/redirect → errors', () => {
     const { errors } = validateIdentityConfig(cfg({ IDENTITY_SSO_ENABLED: 'true' }));
     expect(errors.join(' ')).toMatch(/IDENTITY_ISSUER/);
     expect(errors.join(' ')).toMatch(/IDENTITY_CLIENT_ID/);
+    expect(errors.join(' ')).toMatch(/IDENTITY_CLIENT_SECRET/);
+    expect(errors.join(' ')).toMatch(/IDENTITY_REDIRECT_URI/);
   });
 
   it('SSO on with no MFA + no break-glass → warnings (D2/D4)', () => {
