@@ -16,7 +16,7 @@ import { validateBody } from '../lib/validate.js';
 import {
   quotePutBodySchema, stripLargeCatSchema, lossesSaveSchema, cobsSaveSchema,
   riskProfileSaveSchema, claimsProfileSaveSchema, pricingOutputsSchema, pricingYearlySchema,
-  quoteCreateSchema, quoteRenewSchema, documentMetaSchema,
+  quoteCreateSchema, quoteRenewSchema, documentMetaSchema, quoteWorkflowActionSchema,
 } from '../validation/quote.js';
 import { auditMutation } from '../lib/mutationAudit.js';
 import { npSaveSchema, egnpiYearPutSchema, quoteNpPricingPutSchema } from '../validation/nonProp.js';
@@ -1583,7 +1583,7 @@ router.put("/quotes/:id/np-pricing", ...npQuoteGuard, validateBody(quoteNpPricin
 }));
 
 // Offer workflow (decline, submit, approve, sign, NTU, return-to-UW)
-router.post("/quotes/:id/decline", asyncHandler(async (req, res) => {
+router.post("/quotes/:id/decline", validateBody(quoteWorkflowActionSchema), asyncHandler(async (req, res) => {
   // Parity with treaty decline: one transaction (status + quote_offer + event +
   // critical audit), legal-transition guard (422 on a terminal pre-state),
   // authority via assertCanEdit. Actor identity is the verified req.user.
@@ -1593,7 +1593,7 @@ router.post("/quotes/:id/decline", asyncHandler(async (req, res) => {
   const result = await declineQuoteAction(id, actor, req.body?.reason);
   res.json({ ok: true, ...result });
 }));
-router.post("/quotes/:id/offer/submit-for-approval", asyncHandler(async (req, res) => {
+router.post("/quotes/:id/offer/submit-for-approval", validateBody(quoteWorkflowActionSchema), asyncHandler(async (req, res) => {
   // Parity with treaty submit: one transaction (quote status + quote_offer +
   // event + critical audit), legal-transition guard (422 unless DRAFT/re-submit).
   const { id } = req.params;
@@ -1603,7 +1603,7 @@ router.post("/quotes/:id/offer/submit-for-approval", asyncHandler(async (req, re
   res.json({ ok: true, ...result });
 }));
 
-router.post("/quotes/:id/offer/mark-approved", asyncHandler(async (req, res) => {
+router.post("/quotes/:id/offer/mark-approved", validateBody(quoteWorkflowActionSchema), asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { comment } = req.body;
   // Route through the approval service: enforces four-eyes + approver authority
@@ -1620,7 +1620,7 @@ router.post("/quotes/:id/offer/mark-approved", asyncHandler(async (req, res) => 
   res.json({ ok: true, ...result });
 }));
 
-router.post("/quotes/:id/offer/return-to-underwriter", asyncHandler(async (req, res) => {
+router.post("/quotes/:id/offer/return-to-underwriter", validateBody(quoteWorkflowActionSchema), asyncHandler(async (req, res) => {
   // Authority (eligible approver / senior) + legal prior state are enforced by
   // the RETURN action inside the approval service; the DRAFT write + event live
   // there. Actor identity is the verified req.user (DB-resolved), never client input.
@@ -1632,7 +1632,7 @@ router.post("/quotes/:id/offer/return-to-underwriter", asyncHandler(async (req, 
 }));
 
 // POST /quotes/:id/offer/recall — underwriter recalls submission before CU decides
-router.post("/quotes/:id/offer/recall", asyncHandler(async (req, res) => {
+router.post("/quotes/:id/offer/recall", validateBody(quoteWorkflowActionSchema), asyncHandler(async (req, res) => {
   // Only the originator may recall, and only while still pending — enforced by
   // the RECALL action inside the approval service, which also logs the event.
   const { id } = req.params;
@@ -1654,7 +1654,7 @@ router.post("/quotes/:id/offer/mark-signed", asyncHandler(async (req, res) => {
   });
 }));
 
-router.post("/quotes/:id/offer/ntu", asyncHandler(async (req, res) => {
+router.post("/quotes/:id/offer/ntu", validateBody(quoteWorkflowActionSchema), asyncHandler(async (req, res) => {
   // NTU funnels through the approval engine: assignee / eligible-senior authority
   // + legal prior state, with the NTU write + immutable event in one place.
   const { id } = req.params;
