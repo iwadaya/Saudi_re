@@ -1,16 +1,18 @@
 // server/src/routes/nonProp.js — Non-proportional treaty endpoints (PARTIAL-SAVE SAFE)
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { asyncHandler, numOrNull } from '../helpers.js';
+import { asyncHandler, numOrNull, assertExists } from '../helpers.js';
 import { entityContext } from '../lib/entityContext.js';
 import { assertParentEntityUnchanged, touchParentEntity } from '../lib/parentEntityPersistence.js';
 import { validateBody } from '../lib/validate.js';
+import { auditMutation } from '../lib/mutationAudit.js';
 import {
   npSaveSchema,
   egnpiYearPutSchema,
   npPricingPutSchema,
   npExpiringPutSchema,
   excessLdfsPutSchema,
+  lossLdfsPutSchema,
   historicalPerfPutSchema,
   stopLossPricingPutSchema,
 } from '../validation/nonProp.js';
@@ -228,6 +230,7 @@ router.post("/treaties/:id/non-prop/save", ...npTreatyGuard, validateBody(npSave
       idColumn: 'contract_id',
       id,
     });
+    await auditMutation(cl, req, { entityType: 'CONTRACT', entityId: id, eventType: 'NP_SAVED', payload: { layer_count: Array.isArray(layers) ? layers.length : 0 } });
     await cl.query("COMMIT");
     res.json({ok: true, updated_at: updatedAt});
   } catch(e) {
@@ -245,7 +248,10 @@ router.get("/treaties/:id/np/egnpi-year", ...npTreatyGuard, asyncHandler(async (
 }));
 router.put("/treaties/:id/np/egnpi-year", ...npTreatyGuard, validateBody(egnpiYearPutSchema), asyncHandler(async (req, res) => {
   const {id}=req.params;const inputRows=req.body.rows??[];const cl=await pool.connect();
-  try{await cl.query("BEGIN");await cl.query(`DELETE FROM public.contract_np_egnpi_year WHERE contract_id=$1`,[id]);
+  try{await cl.query("BEGIN");
+  await assertExists(cl, 'public.contract', 'contract_id', id, 'Contract');
+  await assertParentEntityUnchanged(cl, { parentTable: 'contract', idColumn: 'contract_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
+  await cl.query(`DELETE FROM public.contract_np_egnpi_year WHERE contract_id=$1`,[id]);
   const egnpiInsert = buildBatchInsert({
     table: 'public.contract_np_egnpi_year',
     columns: ['contract_id','uw_year','egnpi','inflation_pct','rate_change_pct'],
@@ -263,7 +269,9 @@ router.put("/treaties/:id/np/egnpi-year", ...npTreatyGuard, validateBody(egnpiYe
       [id, numOrNull(sortedRows[0].egnpi)]
     );
   }
-  await cl.query("COMMIT");res.json({ok:true});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
+  const updatedAt = await touchParentEntity(cl, { parentTable: 'contract', idColumn: 'contract_id', id });
+  await auditMutation(cl, req, { entityType: 'CONTRACT', entityId: id, eventType: 'NP_EGNPI_SAVED', payload: { row_count: Array.isArray(inputRows) ? inputRows.length : 0 } });
+  await cl.query("COMMIT");res.json({ok:true, updated_at: updatedAt});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
 }));
 
 // ── NP Pricing ──
@@ -372,6 +380,7 @@ router.put("/treaties/:id/np-pricing", ...npTreatyGuard, validateBody(npPricingP
       idColumn: 'contract_id',
       id,
     });
+    await auditMutation(cl, req, { entityType: 'CONTRACT', entityId: id, eventType: 'NP_PRICING_SAVED', payload: { output_count: Array.isArray(outputs) ? outputs.length : 0, drift_count: drifts.length } });
     await cl.query("COMMIT");
     res.json({ok:true, updated_at: updatedAt});
   } catch(e) { await cl.query("ROLLBACK").catch(()=>{}); throw e; }
@@ -549,6 +558,7 @@ async function npExpiringPut(req, res) {
       idColumn: ctx.idColumn,
       id,
     });
+    await auditMutation(cl, req, { entityType: ctx.isQuote ? 'QUOTE' : 'CONTRACT', entityId: id, eventType: 'NP_EXPIRING_SAVED', payload: { layer_count: Array.isArray(layers) ? layers.length : 0 } });
     await cl.query('COMMIT');
     res.json({ ok: true, updated_at: updatedAt });
   } catch (e) {
@@ -728,6 +738,8 @@ router.put("/treaties/:id/np/excess-ldfs", ...npTreatyGuard, validateBody(excess
   const cl = await pool.connect();
   try {
     await cl.query('BEGIN');
+    await assertExists(cl, 'public.contract', 'contract_id', id, 'Contract');
+    await assertParentEntityUnchanged(cl, { parentTable: 'contract', idColumn: 'contract_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await cl.query(`DELETE FROM public.contract_np_excess_ldf WHERE contract_id=$1`, [id]);
     for (const f of factors) {
       await cl.query(
@@ -742,8 +754,10 @@ router.put("/treaties/:id/np/excess-ldfs", ...npTreatyGuard, validateBody(excess
          numOrNull(tail_factor) ?? 1.0]
       );
     }
+    const updatedAt = await touchParentEntity(cl, { parentTable: 'contract', idColumn: 'contract_id', id });
+    await auditMutation(cl, req, { entityType: 'CONTRACT', entityId: id, eventType: 'NP_EXCESS_LDFS_SAVED', payload: { factor_count: Array.isArray(factors) ? factors.length : 0 } });
     await cl.query('COMMIT');
-    res.json({ ok: true });
+    res.json({ ok: true, updated_at: updatedAt });
   } catch (e) {
     await cl.query('ROLLBACK').catch(() => {});
     throw e;
@@ -755,6 +769,8 @@ router.put("/quotes/:id/np/excess-ldfs", ...npQuoteGuard, validateBody(excessLdf
   const cl = await pool.connect();
   try {
     await cl.query('BEGIN');
+    await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
+    await assertParentEntityUnchanged(cl, { parentTable: 'quote', idColumn: 'quote_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await cl.query(`DELETE FROM public.quote_np_excess_ldf WHERE quote_id=$1`, [id]);
     for (const f of factors) {
       await cl.query(
@@ -769,8 +785,10 @@ router.put("/quotes/:id/np/excess-ldfs", ...npQuoteGuard, validateBody(excessLdf
          numOrNull(tail_factor) ?? 1.0]
       );
     }
+    const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
+    await auditMutation(cl, req, { entityType: 'QUOTE', entityId: id, eventType: 'NP_EXCESS_LDFS_SAVED', payload: { factor_count: Array.isArray(factors) ? factors.length : 0 } });
     await cl.query('COMMIT');
-    res.json({ ok: true });
+    res.json({ ok: true, updated_at: updatedAt });
   } catch (e) {
     await cl.query('ROLLBACK').catch(() => {});
     throw e;
@@ -806,12 +824,14 @@ function makeLossLdfRoutes(lossType) {
   }));
 
   // PUT LDFs + ultimates
-  router.put(`/treaties/:id/np/${path}-ldfs`, ...npTreatyGuard, asyncHandler(async (req, res) => {
+  router.put(`/treaties/:id/np/${path}-ldfs`, ...npTreatyGuard, validateBody(lossLdfsPutSchema), asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { ldfs = [], ultimates = [], tail_factor = 1.0 } = req.body;
     const cl = await pool.connect();
     try {
       await cl.query('BEGIN');
+      await assertExists(cl, 'public.contract', 'contract_id', id, 'Contract');
+      await assertParentEntityUnchanged(cl, { parentTable: 'contract', idColumn: 'contract_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
       await cl.query(`DELETE FROM public.${contractTbl} WHERE contract_id=$1`, [id]);
       for (const f of ldfs) {
         await cl.query(
@@ -831,20 +851,24 @@ function makeLossLdfRoutes(lossType) {
            numOrNull(u.ibnr) ?? 0, numOrNull(u.ultimate) ?? 0]
         );
       }
+      const updatedAt = await touchParentEntity(cl, { parentTable: 'contract', idColumn: 'contract_id', id });
+      await auditMutation(cl, req, { entityType: 'CONTRACT', entityId: id, eventType: `NP_${lossType.toUpperCase()}_LDFS_SAVED`, payload: { ldf_count: Array.isArray(ldfs) ? ldfs.length : 0 } });
       await cl.query('COMMIT');
-      res.json({ ok: true });
+      res.json({ ok: true, updated_at: updatedAt });
     } catch (e) {
       await cl.query('ROLLBACK').catch(() => {});
       throw e;
     } finally { cl.release(); }
   }));
 
-  router.put(`/quotes/:id/np/${path}-ldfs`, ...npQuoteGuard, asyncHandler(async (req, res) => {
+  router.put(`/quotes/:id/np/${path}-ldfs`, ...npQuoteGuard, validateBody(lossLdfsPutSchema), asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { ldfs = [], ultimates = [], tail_factor = 1.0 } = req.body;
     const cl = await pool.connect();
     try {
       await cl.query('BEGIN');
+      await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
+      await assertParentEntityUnchanged(cl, { parentTable: 'quote', idColumn: 'quote_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
       await cl.query(`DELETE FROM public.${quoteTbl} WHERE quote_id=$1`, [id]);
       for (const f of ldfs) {
         await cl.query(
@@ -864,8 +888,10 @@ function makeLossLdfRoutes(lossType) {
            numOrNull(u.ibnr) ?? 0, numOrNull(u.ultimate) ?? 0]
         );
       }
+      const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
+      await auditMutation(cl, req, { entityType: 'QUOTE', entityId: id, eventType: `NP_${lossType.toUpperCase()}_LDFS_SAVED`, payload: { ldf_count: Array.isArray(ldfs) ? ldfs.length : 0 } });
       await cl.query('COMMIT');
-      res.json({ ok: true });
+      res.json({ ok: true, updated_at: updatedAt });
     } catch (e) {
       await cl.query('ROLLBACK').catch(() => {});
       throw e;
@@ -894,6 +920,7 @@ async function historicalPerformancePut(req, res) {
   const cl = await pool.connect();
   try {
     await cl.query("BEGIN");
+    await assertParentEntityUnchanged(cl, { parentTable: ctx.parentTable, idColumn: ctx.idColumn, id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await cl.query(`DELETE FROM public.${ctx.npTable('historical_performance')} WHERE ${ctx.idColumn} = $1`, [id]);
     for (const r of inputRows) {
       await cl.query(
@@ -911,6 +938,7 @@ async function historicalPerformancePut(req, res) {
       idColumn: ctx.idColumn,
       id,
     });
+    await auditMutation(cl, req, { entityType: ctx.isQuote ? 'QUOTE' : 'CONTRACT', entityId: id, eventType: 'NP_HISTORICAL_PERF_SAVED', payload: { row_count: Array.isArray(inputRows) ? inputRows.length : 0 } });
     await cl.query("COMMIT");
     res.json({ ok: true, updated_at: updatedAt });
   } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; }
@@ -950,6 +978,7 @@ async function stopLossPricingPut(req, res) {
   const cl = await pool.connect();
   try {
     await cl.query("BEGIN");
+    await assertParentEntityUnchanged(cl, { parentTable: ctx.parentTable, idColumn: ctx.idColumn, id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await cl.query(
       `INSERT INTO public.${ctx.npTable('stop_loss_pricing')}
          (${ctx.idColumn}, inputs, outputs)
@@ -965,6 +994,7 @@ async function stopLossPricingPut(req, res) {
       idColumn: ctx.idColumn,
       id,
     });
+    await auditMutation(cl, req, { entityType: ctx.isQuote ? 'QUOTE' : 'CONTRACT', entityId: id, eventType: 'NP_STOP_LOSS_PRICING_SAVED' });
     await cl.query("COMMIT");
     res.json({ ok: true, updated_at: updatedAt });
   } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; }

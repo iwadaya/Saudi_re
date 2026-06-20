@@ -198,6 +198,33 @@ export const excessLdfsPutSchema = z.object({
 }).passthrough();
 
 /**
+ * PUT /api/{treaties|quotes}/:id/np/{large-loss|cat-loss}-ldfs
+ *
+ * Per-loss-type LDF/CDF factors + the developed-ultimate table. Generated for
+ * both loss types by makeLossLdfRoutes(); the handler reads `year|acc_year`,
+ * `count|loss_count` and `cdf|applied_cdf` aliases, so all are accepted.
+ */
+export const lossLdfsPutSchema = z.object({
+  ldfs: z.array(z.object({
+    dev_month:  z.number().int().min(0).max(600),
+    chosen_ldf: numish,
+    chosen_cdf: numish,
+  }).passthrough()).default([]),
+  ultimates: z.array(z.object({
+    year:        uwYear,
+    acc_year:    uwYear,
+    count:       numish,
+    loss_count:  numish,
+    reported:    numish,
+    cdf:         numish,
+    applied_cdf: numish,
+    ibnr:        numish,
+    ultimate:    numish,
+  }).passthrough()).default([]),
+  tail_factor: numish,
+}).passthrough();
+
+/**
  * PUT /api/treaties/:id/np/historical-performance
  *
  * Replaces the historical performance rows for a contract.
