@@ -36,4 +36,17 @@ describe.skipIf(shouldSkipDb)('integration: SSO routes (Phase 1a, inert while of
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('SSO_DISABLED');
   });
+
+  it('GET /api/auth/sso/logout → 404 SSO_DISABLED', async () => {
+    const res = await get('/api/auth/sso/logout');
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('SSO_DISABLED');
+  });
+
+  it('POST /api/auth/sso/backchannel-logout → 404 SSO_DISABLED', async () => {
+    const res = await fetch(`${harness.baseUrl}/api/auth/sso/backchannel-logout`, {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'logout_token=x',
+    });
+    expect(res.status).toBe(404);
+  });
 });

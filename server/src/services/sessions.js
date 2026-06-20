@@ -75,6 +75,36 @@ export async function revokeAllForUser(userId, reason = 'ADMIN', client = pool) 
   return rowCount;
 }
 
+/**
+ * Revoke sessions by IdP session id (OIDC back-channel logout, preferred path —
+ * targets exactly the device whose IdP session ended). Returns count revoked.
+ */
+export async function revokeSessionsByIdpSid(idpSid, reason = 'BACKCHANNEL_LOGOUT', client = pool) {
+  if (!idpSid) return 0;
+  const { rowCount } = await client.query(
+    `UPDATE public.auth_session
+        SET revoked_at = now(), revoked_reason = $2
+      WHERE idp_sid = $1 AND revoked_at IS NULL`,
+    [idpSid, reason],
+  );
+  return rowCount;
+}
+
+/**
+ * Revoke ALL sessions for an IdP subject (back-channel logout fallback when the
+ * logout_token carries only `sub`). Returns count revoked.
+ */
+export async function revokeSessionsByIdpSub(idpSub, reason = 'BACKCHANNEL_LOGOUT', client = pool) {
+  if (!idpSub) return 0;
+  const { rowCount } = await client.query(
+    `UPDATE public.auth_session
+        SET revoked_at = now(), revoked_reason = $2
+      WHERE idp_sub = $1 AND revoked_at IS NULL`,
+    [idpSub, reason],
+  );
+  return rowCount;
+}
+
 /** Active (live, unexpired) sessions for a user — the admin "active sessions" view. */
 export async function listActiveSessions(userId) {
   const { rows } = await pool.query(

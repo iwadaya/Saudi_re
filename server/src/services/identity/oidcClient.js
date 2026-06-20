@@ -89,3 +89,29 @@ export async function completeLogin(currentUrl, { state, nonce, codeVerifier }, 
   if (!claims || !claims.sub) throw new Error('ID token is missing a subject (sub) claim.');
   return claims;
 }
+
+/**
+ * Build the RP-initiated logout (end-session) URL, or null when the IdP exposes
+ * no end_session_endpoint. Per the spec, client_id is sent when no id_token_hint
+ * is available so the IdP can still identify the RP.
+ * @returns {Promise<string|null>}
+ */
+export async function buildLogoutUrl(cfg = getIdentityConfig(), { idTokenHint = null, logoutHint = null } = {}) {
+  const config = await getConfiguration(cfg);
+  const meta = config.serverMetadata();
+  if (!meta.end_session_endpoint) return null;
+  const params = {};
+  if (cfg.postLogoutRedirectUri) params.post_logout_redirect_uri = cfg.postLogoutRedirectUri;
+  if (idTokenHint) params.id_token_hint = idTokenHint;
+  else params.client_id = cfg.clientId;
+  if (logoutHint) params.logout_hint = logoutHint;
+  return oidc.buildEndSessionUrl(config, params).href;
+}
+
+/** Resolve the issuer's JWKS key set (for logout-token verification). */
+export async function getJwksUri(cfg = getIdentityConfig()) {
+  const config = await getConfiguration(cfg);
+  const uri = config.serverMetadata().jwks_uri;
+  if (!uri) throw new Error('issuer metadata has no jwks_uri');
+  return uri;
+}
