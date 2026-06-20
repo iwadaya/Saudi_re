@@ -12,18 +12,22 @@
 // Inert until IDENTITY_SSO_ENABLED=true: both routes 404 while SSO is off so the
 // surface simply doesn't exist in the default posture.
 
-import { Router } from 'express';
+import { Router, urlencoded } from 'express';
 import { asyncHandler } from '../helpers.js';
 import { pool } from '../db/pool.js';
 import { logger } from '../lib/logger.js';
 import { logAudit } from '../services/audit.js';
 import { auditMutation } from '../lib/mutationAudit.js';
-import { signAuthToken } from '../lib/authToken.js';
-import { setAuthCookies, readCookie } from '../lib/authCookies.js';
-import { createSession, revokeAllForUser } from '../services/sessions.js';
+import { signAuthToken, verifyAuthToken } from '../lib/authToken.js';
+import { setAuthCookies, clearAuthCookies, readCookie, AUTH_COOKIE } from '../lib/authCookies.js';
+import {
+  createSession, revokeAllForUser, revokeSession,
+  revokeSessionsByIdpSid, revokeSessionsByIdpSub,
+} from '../services/sessions.js';
 import { getIdentityConfig, isSsoEnabled, acrSatisfied } from '../config/identity.js';
-import { startLogin, completeLogin } from '../services/identity/oidcClient.js';
+import { startLogin, completeLogin, buildLogoutUrl } from '../services/identity/oidcClient.js';
 import { provisionFromClaims } from '../services/identity/provisioning.js';
+import { validateLogoutToken } from '../services/identity/backchannelLogout.js';
 import { emitSecurityAlert } from '../services/securityAlerts.js';
 import {
   SSO_STATE_COOKIE, signSsoState, verifySsoState, ssoStateCookieOptions,
@@ -122,6 +126,65 @@ router.get('/auth/sso/callback', asyncHandler(async (req, res) => {
 
   setAuthCookies(res, signAuthToken({ sub: provisioned.userId, sid: session.sessionId, epoch: session.epoch }));
   return res.redirect(safeReturnTo(tx.returnTo));
+}));
+
+// ── GET /api/auth/sso/logout — RP-initiated logout ──────────────────────────
+// Revoke THIS device's local session, clear cookies, then bounce to the IdP's
+// end-session endpoint (so the IdP session ends too). Falls back to a local
+// redirect when the IdP exposes no end_session_endpoint.
+router.get('/auth/sso/logout', asyncHandler(async (req, res) => {
+  if (!isSsoEnabled()) return res.status(404).json({ error: 'SSO is not enabled.', code: 'SSO_DISABLED' });
+  const cfg = getIdentityConfig();
+
+  const token = readCookie(req, AUTH_COOKIE);
+  const payload = token ? verifyAuthToken(token) : null;
+  if (payload?.sid) {
+    await revokeSession(payload.sid, 'LOGOUT').catch(() => {});
+    await logAudit(pool, {
+      entityType: 'USER', entityId: payload.sub, eventType: 'SESSION_REVOKED',
+      actor: { id: payload.sub, name: null }, payload: { reason: 'SSO_RP_LOGOUT', session_id: payload.sid },
+    }).catch(() => {});
+  }
+  clearAuthCookies(res);
+
+  let url = null;
+  try { url = await buildLogoutUrl(cfg); } catch (e) { logger.warn('sso logout: end-session url failed', { error: e.message }); }
+  return res.redirect(url || safeReturnTo(req.query.returnTo));
+}));
+
+// ── POST /api/auth/sso/backchannel-logout — IdP-initiated logout ────────────
+// Unauthenticated server-to-server POST from the IdP carrying a signed
+// logout_token. We VERIFY it (signature/iss/aud/event/no-nonce) before revoking
+// the matching session(s) — by IdP session id when present, else every session
+// for the IdP subject. CSRF-exempt by construction (no cookie auth). Spec: 200
+// with Cache-Control: no-store.
+router.post('/auth/sso/backchannel-logout', urlencoded({ extended: false }), asyncHandler(async (req, res) => {
+  if (!isSsoEnabled()) return res.status(404).json({ error: 'SSO is not enabled.', code: 'SSO_DISABLED' });
+  const cfg = getIdentityConfig();
+  res.set('Cache-Control', 'no-store');
+
+  const logoutToken = req.body?.logout_token;
+  if (!logoutToken) return res.status(400).json({ error: 'logout_token is required.', code: 'LOGOUT_TOKEN_MISSING' });
+
+  let claims;
+  try {
+    claims = await validateLogoutToken(logoutToken, cfg);
+  } catch (e) {
+    logger.warn('sso backchannel-logout: invalid token', { error: e.message });
+    return res.status(400).json({ error: 'Invalid logout token.', code: 'LOGOUT_TOKEN_INVALID' });
+  }
+
+  const revoked = claims.sid
+    ? await revokeSessionsByIdpSid(claims.sid, 'BACKCHANNEL_LOGOUT')
+    : await revokeSessionsByIdpSub(claims.sub, 'BACKCHANNEL_LOGOUT');
+
+  await logAudit(pool, {
+    entityType: 'USER', entityId: claims.sub, eventType: 'SSO_BACKCHANNEL_LOGOUT',
+    actor: { id: null, name: 'IDP' },
+    payload: { idp_sid: claims.sid, idp_sub: claims.sub, sessions_revoked: revoked },
+  }).catch(() => {});
+
+  return res.status(200).json({ ok: true, sessions_revoked: revoked });
 }));
 
 export default router;

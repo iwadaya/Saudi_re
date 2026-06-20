@@ -9,11 +9,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import express from 'express';
 
 let completeLoginResult = {};
+let logoutUrlResult = 'https://idp.example/endsession?client_id=x';
 vi.mock('../services/identity/oidcClient.js', () => ({
   startLogin: vi.fn(async () => ({
     authorizationUrl: 'https://idp.example/authorize?client_id=x', state: 'st', nonce: 'no', codeVerifier: 'cv',
   })),
   completeLogin: vi.fn(async () => completeLoginResult),
+  buildLogoutUrl: vi.fn(async () => logoutUrlResult),
+}));
+let logoutTokenResult = { sub: 'idp|1', sid: 'idp-sess-1' };
+let logoutTokenThrows = false;
+vi.mock('../services/identity/backchannelLogout.js', () => ({
+  validateLogoutToken: vi.fn(async () => {
+    if (logoutTokenThrows) throw new Error('invalid');
+    return logoutTokenResult;
+  }),
 }));
 vi.mock('../services/audit.js', () => ({ logAudit: vi.fn(() => Promise.resolve()) }));
 const alertMock = vi.fn();
@@ -22,6 +32,10 @@ vi.mock('../services/securityAlerts.js', () => ({ emitSecurityAlert: (...a) => a
 // Fake pg: pool.query (unused on happy path) + pool.connect → tx client.
 function fakeClientQuery(sql, params = []) {
   if (/^\s*(BEGIN|COMMIT|ROLLBACK)/i.test(sql)) return Promise.resolve({ rows: [] });
+  // Session revocations (back-channel + RP logout).
+  if (sql.includes('UPDATE public.auth_session') && sql.includes('idp_sid')) return Promise.resolve({ rowCount: 1, rows: [] });
+  if (sql.includes('UPDATE public.auth_session') && sql.includes('idp_sub')) return Promise.resolve({ rowCount: 2, rows: [] });
+  if (sql.includes('UPDATE public.auth_session') && sql.includes('session_id')) return Promise.resolve({ rowCount: 1, rows: [] });
   if (sql.includes('FROM public.uw_role WHERE role_code')) return Promise.resolve({ rows: [{ role_id: 'role-tuw' }] });
   if (sql.includes('FROM public.uw_user WHERE idp_subject')) return Promise.resolve({ rows: [] });
   if (sql.includes('SELECT 1 FROM public.uw_user WHERE username')) return Promise.resolve({ rows: [] });
@@ -40,6 +54,7 @@ vi.mock('../db/pool.js', () => ({
 
 const { default: ssoRouter } = await import('./sso.js');
 const { signSsoState } = await import('../lib/ssoStateCookie.js');
+const { signAuthToken } = await import('../lib/authToken.js');
 
 function buildApp() {
   const app = express();
@@ -48,9 +63,12 @@ function buildApp() {
   return app;
 }
 
-function call(app, { method = 'GET', path, headers = {} }) {
+function call(app, { method = 'GET', path, headers = {}, body = undefined }) {
   return new Promise((resolve, reject) => {
     const req = Object.assign(Object.create(express.request), { method, url: path, headers: { ...headers } });
+    // Pre-set the parsed body + _body so the in-route urlencoded parser passes
+    // through without reading a (non-existent) request stream.
+    if (body !== undefined) { req.body = body; req._body = true; }
     const chunks = [];
     const res = Object.assign(Object.create(express.response), {
       app, statusCode: 200, cookies: [], locationHeader: null,
@@ -78,7 +96,14 @@ const setEnv = (o) => Object.assign(process.env, o);
 const clearEnv = () => ['IDENTITY_SSO_ENABLED', 'IDENTITY_ISSUER', 'IDENTITY_CLIENT_ID', 'IDENTITY_CLIENT_SECRET', 'IDENTITY_REDIRECT_URI', 'IDENTITY_REQUIRED_ACR', 'IDENTITY_ROLE_MAP']
   .forEach((k) => delete process.env[k]);
 
-beforeEach(() => { clearEnv(); alertMock.mockClear(); completeLoginResult = { sub: 'idp|1', email: 'a@b.com', name: 'A B' }; });
+beforeEach(() => {
+  clearEnv();
+  alertMock.mockClear();
+  completeLoginResult = { sub: 'idp|1', email: 'a@b.com', name: 'A B' };
+  logoutUrlResult = 'https://idp.example/endsession?client_id=x';
+  logoutTokenResult = { sub: 'idp|1', sid: 'idp-sess-1' };
+  logoutTokenThrows = false;
+});
 
 describe('GET /auth/sso/login', () => {
   it('404 when SSO is disabled (default posture)', async () => {
@@ -139,5 +164,67 @@ describe('GET /auth/sso/callback', () => {
     const res = await call(buildApp(), { path: '/auth/sso/callback?code=abc&state=st', headers: withState('https://evil.example') });
     expect(res.status).toBe(302);
     expect(res.location).toBe('/');
+  });
+});
+
+describe('GET /auth/sso/logout (RP-initiated)', () => {
+  it('404 when SSO is disabled', async () => {
+    const res = await call(buildApp(), { path: '/auth/sso/logout' });
+    expect(res.status).toBe(404);
+  });
+
+  it('revokes the session, clears cookies, and redirects to the IdP end-session URL', async () => {
+    setEnv(SSO_ON);
+    const token = signAuthToken({ sub: 'u1', sid: 's1', epoch: 0 });
+    const res = await call(buildApp(), { path: '/auth/sso/logout', headers: { cookie: `auth_token=${token}` } });
+    expect(res.status).toBe(302);
+    expect(res.location).toMatch(/endsession/);
+    expect(res.cookies.some((c) => c.name === 'auth_token' && c.cleared)).toBe(true);
+  });
+
+  it('falls back to a local redirect when the IdP has no end-session endpoint', async () => {
+    setEnv(SSO_ON);
+    logoutUrlResult = null;
+    const res = await call(buildApp(), { path: '/auth/sso/logout?returnTo=/bye' });
+    expect(res.status).toBe(302);
+    expect(res.location).toBe('/bye');
+  });
+});
+
+describe('POST /auth/sso/backchannel-logout', () => {
+  it('404 when SSO is disabled', async () => {
+    const res = await call(buildApp(), { method: 'POST', path: '/auth/sso/backchannel-logout', body: { logout_token: 'x' } });
+    expect(res.status).toBe(404);
+  });
+
+  it('400 when logout_token is missing', async () => {
+    setEnv(SSO_ON);
+    const res = await call(buildApp(), { method: 'POST', path: '/auth/sso/backchannel-logout', body: {} });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('LOGOUT_TOKEN_MISSING');
+  });
+
+  it('400 when the token fails validation', async () => {
+    setEnv(SSO_ON);
+    logoutTokenThrows = true;
+    const res = await call(buildApp(), { method: 'POST', path: '/auth/sso/backchannel-logout', body: { logout_token: 'bad' } });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('LOGOUT_TOKEN_INVALID');
+  });
+
+  it('revokes by IdP session id (sid) and returns 200 no-store', async () => {
+    setEnv(SSO_ON);
+    logoutTokenResult = { sub: 'idp|1', sid: 'idp-sess-1' };
+    const res = await call(buildApp(), { method: 'POST', path: '/auth/sso/backchannel-logout', body: { logout_token: 'good' } });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, sessions_revoked: 1 }); // sid branch → rowCount 1
+  });
+
+  it('falls back to revoking all sessions for the subject when only sub is present', async () => {
+    setEnv(SSO_ON);
+    logoutTokenResult = { sub: 'idp|1', sid: null };
+    const res = await call(buildApp(), { method: 'POST', path: '/auth/sso/backchannel-logout', body: { logout_token: 'good' } });
+    expect(res.status).toBe(200);
+    expect(res.body.sessions_revoked).toBe(2); // sub branch → rowCount 2
   });
 });
