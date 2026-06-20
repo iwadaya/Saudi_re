@@ -307,6 +307,15 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
     setShowGrowthModal(false);
   };
 
+  // Increase every loss's inflation factor by 10%
+  const bumpFactors = () => {
+    setLosses(prev => prev.map(l => ({
+      ...l,
+      inflation_factor: Math.round(cn(l.inflation_factor) * 1.1 * 10000) / 10000,
+    })));
+    setDirty(true);
+  };
+
   // Loadings
   const addLoading = () => { setLoadings(prev => [...prev, { name: '', pct: '' }]); };
   const updateLoading = (i, field, val) => { setLoadings(prev => { const n = [...prev]; n[i] = { ...n[i], [field]: val }; return n; }); setDirty(true); };
@@ -478,6 +487,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
                     <button className="ls-btn" onClick={applyThreshold}>Apply</button>
                   </div>
                   <button className="ls-btn ls-btn--green" onClick={() => { setShowInflModal(true); }}>Inflation{inflData.length > 0 ? ` (${countryName || 'loaded'})` : ''}</button>
+                  <button className="ls-btn" onClick={bumpFactors} title="Increase every loss's inflation factor by 10%">Factor +10%</button>
                   {lossType === 'cat' && <button className="ls-btn ls-btn--blue" onClick={() => { loadPremiumGrowth(); setShowGrowthModal(true); }}>Growth</button>}
                   <button className="ls-btn ls-btn--amber" onClick={openLoadingModal} title="Per-year losses ÷ premium = loading estimate">📈 Loss Loading</button>
                   <button
