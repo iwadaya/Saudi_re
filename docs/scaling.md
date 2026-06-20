@@ -232,6 +232,11 @@ Safe mitigations:
   headroom.
 * In PM2 cluster mode, remember `DB_POOL_MAX` is per worker. Four
   workers with `DB_POOL_MAX=20` can open 80 app connections.
+* In any multi-instance setup (PM2 cluster or multiple hosts) set
+  `REDIS_URL` so the rate limiters share counts — otherwise each worker
+  keeps its own in-memory counts and N workers allow N× the intended
+  ceiling, most dangerously on the login route. See
+  `server/src/lib/rateLimitStore.js`.
 * Prefer reducing query hold time over blindly increasing pool size.
 * Do not add app workers when the database is already the bottleneck.
 
