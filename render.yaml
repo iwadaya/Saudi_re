@@ -15,6 +15,12 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Pricing integrity: reject (422) saves whose total_price drifts from the
+      # canonical shared formula, rather than warn-only. Production also defaults
+      # to strict in code (see lib/pricingVerifier.isStrictMode); this pins it
+      # explicitly. Set to "0" only as a rehearsed emergency rollback.
+      - key: PRICING_STRICT
+        value: "1"
       - key: CORS_ORIGIN
         value: "https://modelling-tool.onrender.com"
       - key: SESSION_TTL_HOURS

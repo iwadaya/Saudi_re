@@ -141,14 +141,23 @@ describe('summariseDrifts', () => {
 
 describe('isStrictMode', () => {
   const original = process.env.PRICING_STRICT;
+  const originalNodeEnv = process.env.NODE_ENV;
   beforeEach(() => { delete process.env.PRICING_STRICT; });
   afterEach(() => {
     if (original === undefined) delete process.env.PRICING_STRICT;
     else process.env.PRICING_STRICT = original;
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalNodeEnv;
   });
 
-  it('defaults to false', () => {
+  it('defaults to false outside production when unset', () => {
+    process.env.NODE_ENV = 'development';
     expect(isStrictMode()).toBe(false);
+  });
+
+  it('defaults to ON in production when unset (drift rejected, not warned)', () => {
+    process.env.NODE_ENV = 'production';
+    expect(isStrictMode()).toBe(true);
   });
 
   it('accepts "1", "true", "yes" as opt-in', () => {
@@ -157,10 +166,15 @@ describe('isStrictMode', () => {
     process.env.PRICING_STRICT = 'yes';  expect(isStrictMode()).toBe(true);
   });
 
-  it('stays off for any other value', () => {
+  it('an explicit opt-out wins even in production (emergency rollback)', () => {
+    process.env.NODE_ENV = 'production';
     process.env.PRICING_STRICT = '0';     expect(isStrictMode()).toBe(false);
     process.env.PRICING_STRICT = 'false'; expect(isStrictMode()).toBe(false);
     process.env.PRICING_STRICT = 'no';    expect(isStrictMode()).toBe(false);
+  });
+
+  it('stays off for non-truthy values outside production', () => {
+    process.env.NODE_ENV = 'development';
     process.env.PRICING_STRICT = '';      expect(isStrictMode()).toBe(false);
   });
 });
@@ -182,8 +196,15 @@ describe('warnIfWarnOnlyInProduction', () => {
     warnSpy.mockRestore();
   });
 
-  it('warns when NODE_ENV=production and PRICING_STRICT is not set', () => {
+  it('stays quiet when NODE_ENV=production and PRICING_STRICT is unset (now strict by default)', () => {
     process.env.NODE_ENV = 'production';
+    warnIfWarnOnlyInProduction();
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('warns when strict is EXPLICITLY disabled in production (emergency rollback)', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.PRICING_STRICT = '0';
     warnIfWarnOnlyInProduction();
     expect(warnSpy).toHaveBeenCalledTimes(1);
     expect(warnSpy.mock.calls[0][0]).toMatch(/warn-only/i);
