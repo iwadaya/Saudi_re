@@ -20,6 +20,7 @@ import { api } from '../../../../api';
 import { toN } from '../formatters.js';
 import { fqBuildPricingCurve } from '../fqHelpers.js';
 import { useNpPricingLoads } from './useNpPricingLoads';
+import { logger } from '../../../../utils/logger';
 import {
   pricingReducer,
   createInitialPricingState,
@@ -409,7 +410,7 @@ export function useNpPricingState({
       expKnown.sort((a, b) => a[0] - b[0]);
       applyColumns(snapCols, expKnown);
     }).catch((e: unknown) => {
-      console.warn('[NpFinalPricing] getNpExpiring failed', e);
+      logger.warn('[NpFinalPricing] getNpExpiring failed', e);
       applyColumns(snapCols, null);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

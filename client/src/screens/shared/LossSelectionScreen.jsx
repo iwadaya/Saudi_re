@@ -7,6 +7,7 @@ import { useAppState } from '../../context/AppContext';
 import { useResource } from '../../hooks/useResource';
 import { api } from '../../api';
 import { fmtOrEm as fmt, toN as cn } from '../../utils/format';
+import { logger } from '../../utils/logger';
 
 function fp(n, d = 1) { return n == null ? '—' : `${Number(n).toFixed(d)}%`; }
 
@@ -359,7 +360,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
         await api.saveLossSelectionSnapshot(contractId, lossType, selSnapshot, appState.quoteMode ? { quote: true } : undefined);
       } catch (e) {
         snapshotOk = false;
-        console.warn('Snapshot save failed:', e);
+        logger.warn('Snapshot save failed:', e);
       }
       setDirty(false);
       setSavedTick(t => t + 1); // re-check staleness against the just-saved selection

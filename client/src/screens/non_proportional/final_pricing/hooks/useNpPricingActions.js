@@ -17,6 +17,7 @@ import { formatPricingDriftMessage } from '../../../../utils/pricingErrors';
 import { useGlobalToast } from '../../../../hooks/useToast';
 import { toN } from '../formatters.js';
 import { expLayerEarnedPremium, normalizeQuoteStructures } from '../fqQuoteMath.js';
+import { logger } from '../../../../utils/logger';
 
 /**
  * @param {{
@@ -115,7 +116,7 @@ export function useNpPricingActions({
       });
       applyQuoteEngineResults(byKey);
     } catch (e) {
-      console.error('[NP Quote Calc Engine]', e);
+      logger.error('[NP Quote Calc Engine]', e);
       engineError('Quote calculation failed: ' + (e.message || 'unknown error'));
     } finally {
       engineFinish(targetAll ? null : structureIndex);
@@ -224,7 +225,7 @@ export function useNpPricingActions({
       const results = await calcLayerPricing(api, contractId, layers, npDetail, mode, quoteMode);
       applyEngineResults(results);
     } catch (e) {
-      console.error('[NP Calc Engine]', e);
+      logger.error('[NP Calc Engine]', e);
       engineError('Calculation failed: ' + (e.message || 'unknown error'));
     } finally {
       engineFinish(null);
@@ -391,7 +392,7 @@ export function useNpPricingActions({
           // Non-fatal: COB junction sync is best-effort here; the
           // canonical store is npTreatyDetail.classIds set on the
           // Treaty Detail step. Log but don't block the save.
-          console.warn('[NP Final Pricing save] cob sync failed', cobErr);
+          logger.warn('[NP Final Pricing save] cob sync failed', cobErr);
         }
       }
 
@@ -430,7 +431,7 @@ export function useNpPricingActions({
       saveSaved(Date.now());
       return true;
     } catch (e) {
-      console.error('[NP Final Pricing save]', e);
+      logger.error('[NP Final Pricing save]', e);
       // Not the assignee: the lock raced this write (or failed open). Flip the
       // editor read-only and surface it once via the save indicator — never
       // retry/overwrite an authz verdict. "Allocate to me" is the path back.

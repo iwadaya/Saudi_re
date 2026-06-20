@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { api } from '../../../../api';
 import { toN as cn } from '../../../../utils/format';
+import { logger } from '../../../../utils/logger';
 
 /* ── Helpers ── */
 function stableStringify(obj){
@@ -155,7 +156,7 @@ export function useLossParetoSave({ contractId, lossType, appState, state, deriv
       actions.saveSucceeded(new Date());
       return true;
     } catch (e) {
-      console.error('Save return period snapshot failed', e);
+      logger.error('Save return period snapshot failed', e);
       actions.saveFailed(e?.message || String(e));
       return false;
     }

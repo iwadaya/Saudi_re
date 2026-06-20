@@ -12,6 +12,7 @@ import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
 import { toN as cn } from '../../../utils/format';
 import '../../../styles/proportional/dev_factors.css';
+import { logger } from '../../../utils/logger';
 
 const fmt4  = n => (n == null || !Number.isFinite(Number(n))) ? '' : Number(n).toFixed(4);
 const fmtN  = n => (n == null || !Number.isFinite(Number(n))) ? '—' : Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -269,7 +270,7 @@ export default function NpLossDevFactors({ routeKey, title, headerPill, lossType
       }
       return true;
     } catch (e) {
-      console.error(`NpLossDevFactors [${lossType}] save:`, e);
+      logger.error(`NpLossDevFactors [${lossType}] save:`, e);
       setSaveMsg({ type: 'err', text: 'Save failed' });
       setTimeout(() => setSaveMsg(null), 3000);
       return false;

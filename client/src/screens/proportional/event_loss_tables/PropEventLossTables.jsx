@@ -4,6 +4,7 @@ import { useContractId } from '../../../hooks/useContractId';
 import { useGlobalToast } from '../../../hooks/useToast';
 import WizardLayout from '../../../components/WizardLayout';
 import { handleStaleWrite } from '../../../utils/handleStaleWrite';
+import { logger } from '../../../utils/logger';
 
 const ROUTE_KEY = 'PROP_EVENT_LOSS_TABLES';
 const COLS = ['eventId','peril','region','returnPeriod','grossLoss','netQs','netXl','ultimateNetLoss','comment'];
@@ -74,7 +75,7 @@ export default function PropEventLossTables() {
         }
         return false;
       }
-      console.error(e); if (!quiet) showToast('Save failed.'); return false;
+      logger.error(e); if (!quiet) showToast('Save failed.'); return false;
     }
   }, [contractId, rows, vendor, modelVersion, perilSet, lastUpdatedAt, showToast]);
 

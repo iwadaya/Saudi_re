@@ -3,6 +3,7 @@ import { api } from '../../../api';
 import { useContractId } from '../../../hooks/useContractId';
 import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
+import { logger } from '../../../utils/logger';
 import {
   buildMatrixFromCells,
   calculateAgeToAgeFactors,
@@ -550,7 +551,7 @@ export default function NpExcessDevFactors() {
       }
       return true;
     } catch (e) {
-      console.error('NpExcessDevFactors save:', e);
+      logger.error('NpExcessDevFactors save:', e);
       setSaveMsg({ type: 'err', text: 'Save failed' });
       setTimeout(() => setSaveMsg(null), 3000);
       return false;

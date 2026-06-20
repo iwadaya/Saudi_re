@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../../../api';
 import { invalidateFacPendingRecsCache } from '../../../../components/FacPendingRecsBanner';
 import useRecommendationUndo from './useRecommendationUndo';
+import { logger } from '../../../../utils/logger';
 
 export default function useAnalysisDrawerState({ analysisId, riskId }) {
   const [data, setData] = useState(null);
@@ -43,7 +44,7 @@ export default function useAnalysisDrawerState({ analysisId, riskId }) {
     setLoading(true);
     api.facGetAnalysis(analysisId)
       .then(setData)
-      .catch((e) => console.error('[AnalysisDrawer] load failed:', e))
+      .catch((e) => logger.error('[AnalysisDrawer] load failed:', e))
       .finally(() => setLoading(false));
     api.facGetFactors().then((r) => {
       const map = {};
@@ -66,7 +67,7 @@ export default function useAnalysisDrawerState({ analysisId, riskId }) {
     if (!analysisId) return;
     return api.facGetAnalysis(analysisId)
       .then(setData)
-      .catch((e) => console.error('[AnalysisDrawer] reload failed:', e));
+      .catch((e) => logger.error('[AnalysisDrawer] reload failed:', e));
   }, [analysisId]);
 
   const markBusy = (id, busy) => {
@@ -126,7 +127,7 @@ export default function useAnalysisDrawerState({ analysisId, riskId }) {
       invalidateFacPendingRecsCache(riskId);
       await reload();
     } catch (e) {
-      console.error('[AnalysisDrawer] accept failed:', e);
+      logger.error('[AnalysisDrawer] accept failed:', e);
     } finally {
       markBusy(rec.recommendation_id, false);
     }
@@ -139,7 +140,7 @@ export default function useAnalysisDrawerState({ analysisId, riskId }) {
       invalidateFacPendingRecsCache(riskId);
       await reload();
     } catch (e) {
-      console.error('[AnalysisDrawer] reject failed:', e);
+      logger.error('[AnalysisDrawer] reject failed:', e);
     } finally {
       markBusy(rec.recommendation_id, false);
     }
@@ -174,7 +175,7 @@ export default function useAnalysisDrawerState({ analysisId, riskId }) {
           flashApplied(rec.recommendation_id);
           lastScreen = rec.target_screen;
         } catch (e) {
-          console.error('[AnalysisDrawer] bulk accept item failed:', e);
+          logger.error('[AnalysisDrawer] bulk accept item failed:', e);
         } finally {
           markBusy(rec.recommendation_id, false);
           done += 1;

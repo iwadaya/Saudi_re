@@ -23,6 +23,7 @@ import { useAppState } from '../../../../context/AppContext';
 import { ACTIVE_QUOTE_ID } from '../../../../constants/storageKeys';
 import { handleStaleWrite } from '../../../../utils/handleStaleWrite';
 import { REINSTATEMENT_OPTIONS } from '../../reinstatementOptions';
+import { logger } from '../../../../utils/logger';
 
 /* handleStaleWrite is a plain-JS util; its inferred options type collapses
    to `{ entityType?: string }`, so give the call site an honest signature. */
@@ -691,7 +692,7 @@ export function useNpStructureState() {
       dirty.current = false;
       return true;
     } catch (e) {
-      console.error('[NpStructure] save failed:', e);
+      logger.error('[NpStructure] save failed:', e);
       if (lockOverride !== '*') {
         const stale = await handleStaleWriteTyped(e, {
           entityType: isQuoteSave ? 'quote structure' : 'structure',

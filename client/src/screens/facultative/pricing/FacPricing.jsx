@@ -12,6 +12,7 @@ import { useResource } from '../../../hooks/useResource';
 import { useGlobalToast } from '../../../hooks/useToast';
 import { isReadOnlyError } from '../../../utils/readOnlyError';
 import { computeScoreAndDecision, computeFacQuote } from '../../../logic/facPropertyPricing';
+import { logger } from '../../../utils/logger';
 
 const ENGINE_VERSION = '1.0.0';
 
@@ -163,7 +164,7 @@ function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange }) {
       setWeights(fw?.schemes || null);
       setScoring(st || null);
       setOccupancies(occ?.occupancies || []);
-    }).catch(console.error);
+    }).catch(logger.error);
   }, [riskId]);
 
   // Hydrate selections separately so reloading the saved blob does not
@@ -545,13 +546,13 @@ export default function FacPricing() {
       setScoringTables(st || null);
       setBiIndemnity(bi?.loadings || {});
       setNatcatRates(nc?.rates || []);
-    }).catch(console.error);
+    }).catch(logger.error);
   }, []);
 
   // Locations — used for pd_si_share / top-location lookups.
   useEffect(() => {
     if (!riskId) return;
-    api.facGetLocations(riskId).then((rows) => setLocations(rows || [])).catch(console.error);
+    api.facGetLocations(riskId).then((rows) => setLocations(rows || [])).catch(logger.error);
   }, [riskId]);
 
   // Load risk + pricing + fac classes — one shot per risk. Hydration runs
@@ -847,7 +848,7 @@ export default function FacPricing() {
       dirty.current = false;
       return uwOk;
     } catch (e) {
-      console.error('[FacPricing] save failed:', e);
+      logger.error('[FacPricing] save failed:', e);
       // Not the assignee: the lock raced this write (or failed open). Flip the
       // editor read-only and surface it once — never retry an authz verdict.
       // "Allocate to me" on the banner is the path back to editing.

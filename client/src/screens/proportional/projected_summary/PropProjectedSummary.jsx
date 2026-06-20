@@ -8,6 +8,7 @@ import { loadLossCategoryByYear, deriveLossComponents } from '../../../logic/los
 import { runFinancialEngine } from '../quick_summary/PropQuickSummary';
 import { buildTreatyTerms } from '../../../logic/propTreatyEngine';
 import { toN as cn } from '../../../utils/format';
+import { logger } from '../../../utils/logger';
 
 const ROUTE_KEY = 'PROP_PROJECTED_SUMMARY';
 
@@ -75,7 +76,7 @@ export default function PropProjectedSummary() {
           setResults([]);
         }
       } catch (e) {
-        console.error('Projected Summary Load Failed', e);
+        logger.error('Projected Summary Load Failed', e);
         setError(e.message || 'Failed to load data');
       }
       setLoading(false);
@@ -145,7 +146,7 @@ export default function PropProjectedSummary() {
       });
       await api.savePricingYearly(contractId, payload);
       return true;
-    } catch (e) { console.error('Save failed:', e); return false; }
+    } catch (e) { logger.error('Save failed:', e); return false; }
   };
 
   const tPrem = rows.reduce((a, r) => a + r.act.premium, 0);

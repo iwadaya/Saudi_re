@@ -5,6 +5,7 @@ import Topbar from '../../components/Topbar';
 import { fmtNum, fmtPct, fmtMoney, fmtBal } from '../../utils/format';
 import { REGION_COLS, LOB_COLS, BY_YEAR_COLS, ROL_BAND_COLS, BALANCE_BAND_COLS, TREATY_TYPE_COLS } from './dashboardColumns';
 import { fitLabelColumn } from './labelWidth';
+import { logger } from '../../utils/logger';
 
 const TABS = [
   { key: 'portfolio-overview', label: 'Portfolio Overview' },
@@ -163,7 +164,7 @@ export default function DashboardScreen() {
     try {
       const { exportDashboardTab } = await import('./dashboardExport');
       await exportDashboardTab({ tabId: tab, tabLabel: TABS.find(t => t.key === tab)?.label || tab, data, currency, filters });
-    } catch (e) { console.warn('Dashboard export failed:', e); }
+    } catch (e) { logger.warn('Dashboard export failed:', e); }
     finally { setExporting(false); }
   }, [data, loading, tab, currency, filters]);
 
@@ -172,7 +173,7 @@ export default function DashboardScreen() {
       const res = await api.dashboardFilters();
       setFilterOpts({ uwYears: res.uwYears || [], months: res.months || [], regions: res.regions || [], treatyTypes: res.treatyTypes || [], currencies: res.currencies || ['ZAR'] });
       if (!filters.uwYear && res.defaultUwYear) setFilters(p => ({ ...p, uwYear: String(res.defaultUwYear) }));
-    } catch (e) { console.warn('Dashboard filters:', e); }
+    } catch (e) { logger.warn('Dashboard filters:', e); }
   }, [filters.uwYear]);
 
   const loadData = useCallback(async () => {
@@ -182,7 +183,7 @@ export default function DashboardScreen() {
       Object.entries(filters).forEach(([k, v]) => { if (v) qs[k] = v; });
       const d = await api.dashboardPage(tab, qs);
       setData(d);
-    } catch (e) { console.warn('Dashboard data:', e); setData(null); }
+    } catch (e) { logger.warn('Dashboard data:', e); setData(null); }
     setLoading(false);
   }, [tab, filters]);
 

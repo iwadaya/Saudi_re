@@ -8,6 +8,7 @@ import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import SlipIngestButton from '../../../components/SlipIngestButton';
 import ImportedFromPackBanner from '../../../components/ImportedFromPackBanner';
+import { logger } from '../../../utils/logger';
 import {
   addMonthsClamped,
   dateInputValue,
@@ -434,7 +435,7 @@ export default function NpTreatyDetail() {
             qm,
           ));
         } catch (e) {
-          console.warn('[NpTreatyDetail] saveContractCobs failed (non-fatal, header already saved):', e?.message);
+          logger.warn('[NpTreatyDetail] saveContractCobs failed (non-fatal, header already saved):', e?.message);
         }
       }
       lastExplicitSaveAtRef.current = Date.now();
@@ -455,7 +456,7 @@ export default function NpTreatyDetail() {
         },
       });
       if (stale.handled) return stale.action === 'overwrite';
-      console.error('Save:', e);
+      logger.error('Save:', e);
       return false;
     }
   }, [contractId, update, contractDescription, quoteMode]);
@@ -480,7 +481,7 @@ export default function NpTreatyDetail() {
       // DB. An existing row (contractId set) can always be re-saved.
       const persistable = cur?.contractId || canPersistTreatyHeader(cur);
       if (persistable && saveRef.current) {
-        saveRef.current().catch(e => console.error('[NpTreatyDetail] unmount save failed:', e));
+        saveRef.current().catch(e => logger.error('[NpTreatyDetail] unmount save failed:', e));
       }
     };
   }, []);

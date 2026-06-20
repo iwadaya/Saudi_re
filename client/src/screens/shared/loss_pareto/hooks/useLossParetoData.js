@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import { api } from '../../../../api';
 import { toN as cn } from '../../../../utils/format';
 import { sumLayerLimits } from '../math/distributions';
+import { logger } from '../../../../utils/logger';
 
 /**
  * @param {{
@@ -117,7 +118,7 @@ export function useLossParetoData({ contractId, lossType, appState, td, actions 
           if (vals.length) actions.xmDefaulted(vals[0]);
           if (cap > 0) actions.setLimit(cap);
         }
-      } catch (e) { console.error('Pareto load', e); }
+      } catch (e) { logger.error('Pareto load', e); }
       actions.loadDone();
     })();
   }, [appState.npStructureLayers, appState.quoteMode, contractId, lossType, td.eventLimit, td.qsLimit, td.totalCapacity, actions]);

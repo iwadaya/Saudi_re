@@ -3,6 +3,7 @@ import { api } from '../../../api';
 import { useContractId } from '../../../hooks/useContractId';
 import WizardLayout from '../../../components/WizardLayout';
 import { useAppState } from '../../../context/AppContext';
+import { logger } from '../../../utils/logger';
 
 const ROUTE_KEY = 'NP_EVENT_LOSS_TABLES';
 const COLS = ['eventId','peril','region','returnPeriod','grossLoss','netQs','netXl','ultimateNetLoss','comment'];
@@ -46,7 +47,7 @@ export default function NpEventLossTables() {
     const valid = rows.filter(r=>COLS.some(c=>String(r[c]||'').trim()));
     try { await api.saveNonPropTreaty(contractId, { terms: { event_loss_tables: { vendor, modelVersion, perilSet, rows: valid, updatedAt: new Date().toISOString() } } }, quoteMode ? { quote: true } : undefined);
       setDirty(false); if (!quiet) { setSaveMsg({ type: 'ok', text: 'Saved' }); setTimeout(() => setSaveMsg(null), 2000); } return true; }
-    catch (e) { console.error(e); setSaveMsg({ type: 'err', text: 'Save failed' }); setTimeout(() => setSaveMsg(null), 3000); return false; }
+    catch (e) { logger.error(e); setSaveMsg({ type: 'err', text: 'Save failed' }); setTimeout(() => setSaveMsg(null), 3000); return false; }
   }, [contractId, vendor, modelVersion, perilSet, rows, quoteMode]);
 
   return (

@@ -27,6 +27,7 @@ import { useContractId } from '../../../../hooks/useContractId';
 import { useScreenSave } from '../../../../hooks/useScreenSave';
 import { priceStopLoss } from '../../../../logic/stopLossPricing';
 import type { StopLossPricingBundle } from '../../../../types/pricing';
+import { logger } from '../../../../utils/logger';
 import {
   SLICE_KEY,
   DEFAULT_INPUTS,
@@ -133,7 +134,7 @@ export function useStopLossPricingState(): UseStopLossPricingStateResult {
         setPremiumData(parseEgnpiRows(rows));
       } catch (err) {
         // Premiums missing is fine — burning cost just won't compute LRs.
-        if (!cancelled) console.warn('[NpStopLossPricing] egnpi-year load failed:', err);
+        if (!cancelled) logger.warn('[NpStopLossPricing] egnpi-year load failed:', err);
       }
     })();
     return () => { cancelled = true; };

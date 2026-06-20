@@ -24,6 +24,7 @@ import { useAppState } from '../../context/AppContext';
 import { formatWithCommas } from '../../utils/format';
 import { useGlobalToast } from '../../hooks/useToast';
 import useContractId from '../../hooks/useContractId';
+import { logger } from '../../utils/logger';
 
 // ── tiny helpers ──────────────────────────────────────────────────────────────
 const fmt  = v => (v != null && v !== '') ? formatWithCommas(Math.round(Number(v))) : '–';
@@ -187,7 +188,7 @@ function parseNpLayers(rows) {
   // marking everything risk+cat was the original bug.
   const perilColIdx = headerRow.findIndex(c => /^(peril|scope|cover|peril.?scope)$/i.test(String(c ?? '').trim()));
   if (perilColIdx < 0) {
-    console.warn('[ExcelImportAgent] NP Treaty Layers sheet has no peril/scope column — defaulting every layer to risk+cat. Verify by hand or add a "Peril Scope" header.');
+    logger.warn('[ExcelImportAgent] NP Treaty Layers sheet has no peril/scope column — defaulting every layer to risk+cat. Verify by hand or add a "Peril Scope" header.');
   }
   const start = hIdx >= 0 ? hIdx + 1 : 1;
   return rows.slice(start).filter(r => r[0] && /^\d/.test(String(r[0]))).map(r => {

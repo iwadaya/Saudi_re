@@ -11,6 +11,7 @@ import { useSearchParams } from 'react-router-dom';
 import api from '../../../../api';
 import { useFacRiskId } from '../../../../hooks/useContractId';
 import { MAX_BYTES, POLL_INTERVAL_MS, POLL_DEADLINE_MS, fmtBytes } from '../documentsShared';
+import { logger } from '../../../../utils/logger';
 
 export default function useFacDocumentsState() {
   const riskId = useFacRiskId();
@@ -58,7 +59,7 @@ export default function useFacDocumentsState() {
       ]);
       setDocs(d || []);
       setAnalyses(a?.analyses || []);
-    } catch (e) { console.error(e); }
+    } catch (e) { logger.error(e); }
     setLoading(false);
   }, [riskId]);
 
@@ -141,7 +142,7 @@ export default function useFacDocumentsState() {
         }
         pollHandleRef.current = setTimeout(tick, POLL_INTERVAL_MS);
       } catch (e) {
-        console.error('[FacDocuments] poll failed:', e);
+        logger.error('[FacDocuments] poll failed:', e);
         pollHandleRef.current = setTimeout(tick, POLL_INTERVAL_MS);
       }
     };
@@ -172,7 +173,7 @@ export default function useFacDocumentsState() {
         setToast({ kind: 'ok', text: `Re-analysis ready (${(r.recommendations || []).length} suggestion(s)).` });
         load();
       }).catch((e) => {
-        console.error('[FacDocuments] re-analyse failed:', e);
+        logger.error('[FacDocuments] re-analyse failed:', e);
       }).finally(() => {
         reAnalyseBusyRef.current = null;
       });
@@ -207,7 +208,7 @@ export default function useFacDocumentsState() {
         load();
       }).catch((e) => {
         // The server already wrote a FAILED row — surfaced via the poll.
-        console.error('[FacDocuments] analyse failed:', e);
+        logger.error('[FacDocuments] analyse failed:', e);
       });
 
       // Optimistically inject a RUNNING analysis row keyed off this
@@ -231,7 +232,7 @@ export default function useFacDocumentsState() {
     try {
       await api.facDeleteDocument(docId);
       load();
-    } catch (e) { console.error(e); }
+    } catch (e) { logger.error(e); }
   }, [load]);
 
   return {
