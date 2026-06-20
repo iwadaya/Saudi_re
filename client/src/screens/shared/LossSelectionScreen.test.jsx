@@ -88,7 +88,7 @@ describe('LossSelectionScreen primary load (useResource + AsyncBoundary)', () =>
     // hydrated row: uw_year parsed from date_of_loss, factor editable,
     // inflated incurred derived (1,000,000 × 1.1 — also in the KPI strip)
     expect(screen.getByText('Acme Factory')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('1.1')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('1.1000')).toBeInTheDocument();
     expect(screen.getAllByText('1,100,000').length).toBeGreaterThan(0);
   });
 
