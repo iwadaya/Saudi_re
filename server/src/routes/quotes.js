@@ -15,7 +15,7 @@ import { assertParentEntityUnchanged, touchParentEntity } from '../lib/parentEnt
 import { validateBody } from '../lib/validate.js';
 import {
   quotePutBodySchema, stripLargeCatSchema, lossesSaveSchema, cobsSaveSchema,
-  riskProfileSaveSchema, claimsProfileSaveSchema,
+  riskProfileSaveSchema, claimsProfileSaveSchema, pricingOutputsSchema, pricingYearlySchema,
 } from '../validation/quote.js';
 import { auditMutation } from '../lib/mutationAudit.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
@@ -860,6 +860,9 @@ router.post("/quotes/:id/triangles/:type", asyncHandler(async (req, res) => {
   const cl = await pool.connect();
   try {
     await cl.query("BEGIN");
+    await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
+    // Opt-in optimistic lock inside the txn (see large-losses).
+    await assertParentEntityUnchanged(cl, { parentTable: 'quote', idColumn: 'quote_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     // Scope the delete to this variant — saving one variant must never wipe
     // the other's cells.
     await cl.query(
@@ -879,15 +882,15 @@ router.post("/quotes/:id/triangles/:type", asyncHandler(async (req, res) => {
         ]
       );
     }
+    const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
     // Quote audit falls through to the generic audit_log table since
     // logAudit only routes CONTRACT entityType to contract_audit_event.
-    await logAudit(cl, {
+    await auditMutation(cl, req, {
       entityType: 'QUOTE', entityId: id, eventType: 'TRIANGLE_SAVED',
-      actor: actorFromReq(req),
       payload: { triangle_type: t, variant, saved: cells.length, dropped: rawCells.length - cells.length },
-    }, { critical: true });
+    });
     await cl.query("COMMIT");
-    res.json({ ok: true, saved: cells.length, dropped: rawCells.length - cells.length });
+    res.json({ ok: true, saved: cells.length, dropped: rawCells.length - cells.length, updated_at: updatedAt });
   } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }
 }));
 
@@ -934,6 +937,9 @@ router.put("/quotes/:id/dev-factors/:type", validateBody(devFactorPutSchema), as
   const cl = await pool.connect();
   try {
     await cl.query("BEGIN");
+    await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
+    // Opt-in optimistic lock inside the txn (see large-losses).
+    await assertParentEntityUnchanged(cl, { parentTable: 'quote', idColumn: 'quote_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await cl.query(
       `DELETE FROM public.quote_dev_factor WHERE quote_id=$1 AND triangle_type=$2::public.triangle_type`,
       [id, t]
@@ -966,13 +972,13 @@ router.put("/quotes/:id/dev-factors/:type", validateBody(devFactorPutSchema), as
         params,
       );
     }
-    await logAudit(cl, {
+    const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
+    await auditMutation(cl, req, {
       entityType: 'QUOTE', entityId: id, eventType: 'DEV_FACTORS_SAVED',
-      actor: actorFromReq(req),
       payload: { triangle_type: t, count: factors.length, method: req.body?.method || null, basis: req.body?.basis || null },
-    }, { critical: true });
+    });
     await cl.query("COMMIT");
-    res.json({ ok: true });
+    res.json({ ok: true, updated_at: updatedAt });
   } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }
 }));
 
@@ -1872,11 +1878,12 @@ router.put("/quotes/:id/cresta", asyncHandler(async (req, res) => {
 }));
 
 // PUT /quotes/:id/pricing-outputs
-router.put("/quotes/:id/pricing-outputs", asyncHandler(async (req, res) => {
+router.put("/quotes/:id/pricing-outputs", validateBody(pricingOutputsSchema), asyncHandler(async (req, res) => {
   const {id}=req.params;const d=req.body||{};
   const cl=await pool.connect();
   try {
     await cl.query("BEGIN");
+    await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
     // Opt-in optimistic lock (inside the txn) — see large-losses.
     await assertParentEntityUnchanged(cl, { parentTable: 'quote', idColumn: 'quote_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await cl.query(
@@ -1895,6 +1902,7 @@ router.put("/quotes/:id/pricing-outputs", asyncHandler(async (req, res) => {
        numOrNull(d.cat_loss_load),numOrNull(d.commission_ratio),numOrNull(d.brokerage_ratio),
        numOrNull(d.tax_ratio),numOrNull(d.technical_result),numOrNull(d.max_commission),numOrNull(d.target_margin)]);
     const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
+    await auditMutation(cl, req, { entityType: 'QUOTE', entityId: id, eventType: 'PRICING_OUTPUTS_SAVED', payload: { epi: numOrNull(d.epi) } });
     await cl.query("COMMIT");
     res.json({ok:true, updated_at: updatedAt});
   } catch(e) {
@@ -1906,10 +1914,11 @@ router.put("/quotes/:id/pricing-outputs", asyncHandler(async (req, res) => {
 }));
 
 // PUT /quotes/:id/pricing-yearly
-router.put("/quotes/:id/pricing-yearly", asyncHandler(async (req, res) => {
+router.put("/quotes/:id/pricing-yearly", validateBody(pricingYearlySchema), asyncHandler(async (req, res) => {
   const {id}=req.params;const rows=req.body.rows??req.body??[];const cl=await pool.connect();
   try{
     await cl.query("BEGIN");
+    await assertExists(cl, 'public.quote', 'quote_id', id, 'Quote');
     // Opt-in optimistic lock (inside the txn) — see large-losses.
     await assertParentEntityUnchanged(cl, { parentTable: 'quote', idColumn: 'quote_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await cl.query(`DELETE FROM public.quote_pricing_yearly WHERE quote_id=$1`,[id]);
@@ -1925,6 +1934,7 @@ router.put("/quotes/:id/pricing-yearly", asyncHandler(async (req, res) => {
     });
     if (yearlyInsert) await cl.query(yearlyInsert.sql, yearlyInsert.params);
     const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
+    await auditMutation(cl, req, { entityType: 'QUOTE', entityId: id, eventType: 'PRICING_YEARLY_SAVED', payload: { row_count: rows.length } });
     await cl.query("COMMIT");
     res.json({ok:true, updated_at: updatedAt});
   } catch(e) {

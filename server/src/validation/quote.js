@@ -207,3 +207,40 @@ export const claimsProfileSaveSchema = z.object({
   custom_g:       signedNumber,
   bands:          z.array(profileBandSchema).max(1000).default([]),
 }).passthrough();
+
+/** PUT /quotes/:id/pricing-outputs — single pricing-summary row. */
+export const pricingOutputsSchema = z.object({
+  epi:              money,
+  attritional_ratio: pctOpen,
+  large_loss_load:  pctOpen,
+  cat_loss_load:    pctOpen,
+  commission_ratio: pctOpen,
+  brokerage_ratio:  pctOpen,
+  tax_ratio:        pctOpen,
+  technical_result: signedNumber,
+  max_commission:   pctOpen,
+  target_margin:    pctOpen,
+}).passthrough();
+
+/** One pricing-yearly experience row. */
+const pricingYearlyRowSchema = z.object({
+  uw_year:         uwYear,
+  premium:         money,
+  paid_claims:     signedNumber,
+  os_claims:       signedNumber,
+  incurred_claims: signedNumber,
+  loss_ratio:      pctOpen,
+  commission:      signedNumber,
+  brokerage:       signedNumber,
+  net_result:      signedNumber,
+}).passthrough();
+
+/**
+ * PUT /quotes/:id/pricing-yearly. The handler accepts EITHER `{ rows: [...] }`
+ * or a bare array, so the schema normalises a bare array into `{ rows }` before
+ * validating (keeping both wire shapes working).
+ */
+export const pricingYearlySchema = z.preprocess(
+  (v) => (Array.isArray(v) ? { rows: v } : v),
+  z.object({ rows: z.array(pricingYearlyRowSchema).max(200).default([]) }).passthrough(),
+);
