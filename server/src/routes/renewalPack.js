@@ -8,10 +8,11 @@ import { requireMinLevel, actorFromReq } from "../middleware/requestContext.js";
 import { logAudit } from "../services/audit.js";
 const router = Router();
 
-// 'portfolio.export' capability — the full-portfolio renewal-pack workbook is a
-// privileged bulk extract, restricted to Chief Underwriter / Chief Executive
-// (hierarchy level ≤ 2) and above via the existing role mechanism.
-const requirePortfolioExport = requireMinLevel(2);
+// 'portfolio.export' capability — the full-portfolio renewal-pack workbook.
+// Open to every treaty role down to Treaty Underwriter (hierarchy level ≤ 5);
+// the per-user MANDATE (treaty-type + COB) still scopes which rows each user
+// receives, so juniors only ever export the contracts they're permitted to see.
+const requirePortfolioExport = requireMinLevel(5);
 
 // audit_log.entity_id is uuid-typed; the portfolio export is not a single
 // entity, so it audits against a fixed sentinel id with the human-readable

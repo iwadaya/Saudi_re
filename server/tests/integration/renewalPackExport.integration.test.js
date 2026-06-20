@@ -3,7 +3,8 @@
 // Access-control + scoping coverage for the portfolio renewal-pack export
 // (audit item P0-2). GET /api/renewal-pack/export was unguarded — any
 // authenticated user could export the entire portfolio workbook. It now:
-//   • requires the 'portfolio.export' capability (CU/CE — hierarchy level ≤ 2);
+//   • requires an authenticated treaty role (hierarchy level ≤ 5, i.e. Treaty
+//     Underwriter and above);
 //   • scopes rows to the requester's MANDATE (treaty_type_scope + restricted COBs);
 //   • audits each export (actor, applied filters, contract count).
 //
@@ -103,10 +104,10 @@ describe.skipIf(shouldSkipDb)('integration: portfolio export ACL + scoping', () 
     expect(res.headers.get('content-type')).toContain('spreadsheetml');
   });
 
-  it('a junior (TUW) is blocked — 403 FORBIDDEN', async () => {
+  it('a treaty underwriter (TUW) may also export — 200 with an xlsx attachment', async () => {
     const res = await harness.fetchApp('GET', '/api/renewal-pack/export', { headers: JUNIOR });
-    expect(res.status).toBe(403);
-    expect((await res.json()).code).toBe('FORBIDDEN');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('spreadsheetml');
   });
 
   it('mandate scope limits the rows: PROP_ONLY + restricted COB includes only the permitted contract', async () => {
