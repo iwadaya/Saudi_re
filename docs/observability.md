@@ -11,6 +11,14 @@ config. Traces are only exported when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, so
 a default production deploy emits metrics without an OTLP exporter retrying a
 non-existent collector.
 
+The metrics endpoint is **private by default**: the Prometheus scrape server
+binds to loopback (`127.0.0.1`), so `/metrics` is reachable only from the same
+host — a sidecar collector or an SSH tunnel — never from the public internet,
+whatever the platform firewall does. To scrape from a Prometheus server
+elsewhere on a trusted private network, set `PROM_EXPORTER_HOST` to the pod's
+private interface IP (or `0.0.0.0` when the platform provides network-level
+isolation).
+
 ## What you get
 
 When enabled, the server emits:

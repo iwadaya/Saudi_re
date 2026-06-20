@@ -48,3 +48,19 @@ export function otlpTraceEndpoint(rawEndpoint) {
   const s = typeof rawEndpoint === 'string' ? rawEndpoint.trim() : '';
   return s || null;
 }
+
+/**
+ * Bind host for the Prometheus metrics server. Defaults to loopback
+ * (127.0.0.1) so the /metrics endpoint is PRIVATE by default — reachable
+ * only from the same host (a sidecar collector or an SSH tunnel), never
+ * from the public internet, regardless of the platform's firewall.
+ *
+ * Operators who scrape from a Prometheus server elsewhere on a trusted
+ * private network set PROM_EXPORTER_HOST explicitly — typically the
+ * pod's private interface IP, or 0.0.0.0 when network-level isolation is
+ * provided by the platform.
+ */
+export function promExporterHost(rawHost) {
+  const s = typeof rawHost === 'string' ? rawHost.trim() : '';
+  return s || '127.0.0.1';
+}
