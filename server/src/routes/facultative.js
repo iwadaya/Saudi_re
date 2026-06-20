@@ -14,6 +14,7 @@ import {
   facPricingSaveSchema,
   facCopeSaveSchema,
   facLossesSaveSchema,
+  facDocumentMetaSchema,
   facSubmitForApprovalSchema,
   facBindSchema,
   facTreatyLinkCreateSchema,
@@ -256,6 +257,8 @@ router.put('/fac/risks/:id/locations', validateBody(facLocationsSaveSchema), asy
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await assertExists(client, 'public.fac_risk', 'fac_risk_id', riskId, 'Risk');
+    await assertParentEntityUnchanged(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await client.query(`DELETE FROM public.fac_location WHERE fac_risk_id = $1`, [riskId]);
     for (let i = 0; i < locations.length; i++) {
       const l = locations[i];
@@ -278,6 +281,8 @@ router.put('/fac/risks/:id/locations', validateBody(facLocationsSaveSchema), asy
         numOrNull(l.carrier_pd_share_pct), numOrNull(l.carrier_bi_share_pct),
       ]);
     }
+    await touchParentEntity(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId });
+    await writeFacAuditEvent({ facRiskId: riskId, eventType: 'FAC_LOCATIONS_SAVED', actor: actorLabel(req), payload: { location_count: locations.length }, client });
     await client.query('COMMIT');
     const { rows } = await client.query(
       `SELECT * FROM public.fac_location WHERE fac_risk_id = $1 ORDER BY sort_order`, [riskId]
@@ -441,7 +446,12 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
   const uiState = (b.ui_state && typeof b.ui_state === 'object') ? b.ui_state : {};
   const extraLoadings = Array.isArray(b.extra_cover_loadings) ? b.extra_cover_loadings : [];
   const engineWarnings = Array.isArray(b.engine_warnings) ? b.engine_warnings : [];
-  const { rows } = await pool.query(`
+  const cl = await pool.connect();
+  try {
+    await cl.query('BEGIN');
+    await assertExists(cl, 'public.fac_risk', 'fac_risk_id', riskId, 'Risk');
+    await assertParentEntityUnchanged(cl, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
+    const { rows } = await cl.query(`
     INSERT INTO public.fac_pricing (fac_risk_id,
       market_rate_per_mille, market_premium, market_source,
       actuarial_method, actuarial_rate_per_mille, actuarial_premium,
@@ -541,7 +551,11 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
     // Summary-screen edits (migration 084)
     numOrNull(b.capacity_proposed_pct), numOrNull(b.accepted_rate_pm), b.uw_note || null,
   ]);
-  res.json(rows[0]);
+    await touchParentEntity(cl, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId });
+    await writeFacAuditEvent({ facRiskId: riskId, eventType: 'FAC_PRICING_SAVED', actor: actorLabel(req), payload: { underwriting_score: numOrNull(b.underwriting_score), capacity_grade: b.capacity_grade || null }, client: cl });
+    await cl.query('COMMIT');
+    res.json(rows[0]);
+  } catch (e) { await cl.query('ROLLBACK').catch(() => {}); throw e; } finally { cl.release(); }
 }));
 
 
@@ -557,15 +571,22 @@ router.get('/fac/risks/:id/documents', asyncHandler(async (req, res) => {
   res.json(rows);
 }));
 
-router.post('/fac/risks/:id/documents', asyncHandler(async (req, res) => {
+router.post('/fac/risks/:id/documents', validateBody(facDocumentMetaSchema), asyncHandler(async (req, res) => {
   const riskId = req.params.id;
   const b = req.body;
-  const { rows } = await pool.query(`
-    INSERT INTO public.fac_document (fac_risk_id, doc_type, file_name, file_path, file_size, mime_type, uploaded_by, notes)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *
-  `, [riskId, b.doc_type || 'OTHER', b.file_name || null, b.file_path || null,
-      numOrNull(b.file_size), b.mime_type || null, b.uploaded_by || null, b.notes || null]);
-  res.status(201).json(rows[0]);
+  const cl = await pool.connect();
+  try {
+    await cl.query('BEGIN');
+    await assertExists(cl, 'public.fac_risk', 'fac_risk_id', riskId, 'Risk');
+    const { rows } = await cl.query(`
+      INSERT INTO public.fac_document (fac_risk_id, doc_type, file_name, file_path, file_size, mime_type, uploaded_by, notes)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *
+    `, [riskId, b.doc_type || 'OTHER', b.file_name || null, b.file_path || null,
+        numOrNull(b.file_size), b.mime_type || null, b.uploaded_by || null, b.notes || null]);
+    await writeFacAuditEvent({ facRiskId: riskId, eventType: 'FAC_DOCUMENT_ADDED', actor: actorLabel(req), payload: { document_id: rows[0].document_id, doc_type: rows[0].doc_type, file_name: rows[0].file_name }, client: cl });
+    await cl.query('COMMIT');
+    res.status(201).json(rows[0]);
+  } catch (e) { await cl.query('ROLLBACK').catch(() => {}); throw e; } finally { cl.release(); }
 }));
 
 router.delete('/fac/documents/:docId', asyncHandler(async (req, res) => {

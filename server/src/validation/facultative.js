@@ -306,6 +306,17 @@ export const facLossesSaveSchema = z.object({
   losses: z.array(facLossRowSchema).max(500).default([]),
 }).passthrough();
 
+/** POST /api/fac/risks/:id/documents — metadata-only JSON insert. */
+export const facDocumentMetaSchema = z.object({
+  doc_type:    optionalText,
+  file_name:   optionalText,
+  file_path:   optionalText,
+  file_size:   optionalInt,
+  mime_type:   optionalText,
+  uploaded_by: optionalText,
+  notes:       optionalText,
+}).passthrough();
+
 /** POST /submit-for-approval — no body required. */
 export const facSubmitForApprovalSchema = z.object({
   comment: optionalText,
