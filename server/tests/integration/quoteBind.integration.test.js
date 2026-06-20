@@ -15,7 +15,10 @@ import { bootApp, seedRefs, shouldSkipDb, closePools } from './helpers.js';
 import { pool } from '../../src/db/pool.js';
 
 // Unique uw_year so the dashboard slice contains ONLY this test's contract.
-const UW_YEAR = 2900 + (process.pid % 95);
+// Kept within the validated range (uwYear caps at 2200 — see validation/common.js;
+// the POST /quotes create body is now schema-validated like the PUT path), while
+// staying clear of the near-present years other suites seed (2024–2087).
+const UW_YEAR = 2100 + (process.pid % 90);
 
 describe.skipIf(shouldSkipDb)('integration: quote → contract bind lifecycle', () => {
   let harness;

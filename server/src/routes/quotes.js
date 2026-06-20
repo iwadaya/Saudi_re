@@ -16,6 +16,7 @@ import { validateBody } from '../lib/validate.js';
 import {
   quotePutBodySchema, stripLargeCatSchema, lossesSaveSchema, cobsSaveSchema,
   riskProfileSaveSchema, claimsProfileSaveSchema, pricingOutputsSchema, pricingYearlySchema,
+  quoteCreateSchema, quoteRenewSchema, documentMetaSchema,
 } from '../validation/quote.js';
 import { auditMutation } from '../lib/mutationAudit.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
@@ -507,7 +508,7 @@ router.get("/quotes", asyncHandler(async (req, res) => {
 }));
 
 // POST /api/quotes
-router.post("/quotes", asyncHandler(async (req, res) => {
+router.post("/quotes", validateBody(quoteCreateSchema), asyncHandler(async (req, res) => {
   const b = req.body || {};
   const uw_year = numOrNull(b.uw_year) || new Date().getFullYear();
   const inception_date = dateOrNull(b.inception_date);
@@ -515,23 +516,29 @@ router.post("/quotes", asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'inception_date is required', code: 'VALIDATION_FAILED' });
   }
   const creatorUserId = req.user?.userId || null;
-  const { rows } = await pool.query(
-    `INSERT INTO public.quote (uw_year,cedant_id,broker_id,currency_id,country_id,treaty_type_id,status,experience_source,renewal_date,inception_date,contract_description,created_by_user_id,assigned_to_user_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12) RETURNING *`,
-    [uw_year, b.cedant_id || null, b.broker_id || null, b.currency_id || null, b.country_id || null, b.treaty_type_id || null, b.status || 'DRAFT', b.experience_source || 'TRIANGLE', dateOrNull(b.renewal_date), inception_date, b.contract_description || null, creatorUserId]
-  );
+  const cl = await pool.connect();
+  try {
+    await cl.query("BEGIN");
+    const { rows } = await cl.query(
+      `INSERT INTO public.quote (uw_year,cedant_id,broker_id,currency_id,country_id,treaty_type_id,status,experience_source,renewal_date,inception_date,contract_description,created_by_user_id,assigned_to_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12) RETURNING *`,
+      [uw_year, b.cedant_id || null, b.broker_id || null, b.currency_id || null, b.country_id || null, b.treaty_type_id || null, b.status || 'DRAFT', b.experience_source || 'TRIANGLE', dateOrNull(b.renewal_date), inception_date, b.contract_description || null, creatorUserId]
+    );
 
-  // Auto-assign human-readable quote reference: QT-YYYY-NNNN.
-  // quote_ref_seq and the quote_ref column both shipped in migration 044;
-  // the previous double-fallback (UUID-suffix ref + skip-the-update) is
-  // dead code and has been removed.
-  const newQuoteId = rows[0].quote_id;
-  const { rows: seqRows } = await pool.query(`SELECT nextval('public.quote_ref_seq') AS n`);
-  const qRef = `QT-${uw_year}-${String(seqRows[0].n).padStart(4, '0')}`;
-  await pool.query(`UPDATE public.quote SET quote_ref=$2 WHERE quote_id=$1`, [newQuoteId, qRef]);
-  rows[0].quote_ref = qRef;
+    // Auto-assign human-readable quote reference: QT-YYYY-NNNN.
+    // quote_ref_seq and the quote_ref column both shipped in migration 044;
+    // the previous double-fallback (UUID-suffix ref + skip-the-update) is
+    // dead code and has been removed.
+    const newQuoteId = rows[0].quote_id;
+    const { rows: seqRows } = await cl.query(`SELECT nextval('public.quote_ref_seq') AS n`);
+    const qRef = `QT-${uw_year}-${String(seqRows[0].n).padStart(4, '0')}`;
+    await cl.query(`UPDATE public.quote SET quote_ref=$2 WHERE quote_id=$1`, [newQuoteId, qRef]);
+    rows[0].quote_ref = qRef;
 
-  res.status(201).json({ id: newQuoteId, quote_id: newQuoteId, quote_ref: qRef, ...rows[0] });
+    await auditMutation(cl, req, { entityType: 'QUOTE', entityId: newQuoteId, eventType: 'CREATED', payload: { uw_year, quote_ref: qRef, assignedTo: creatorUserId } });
+    await cl.query("COMMIT");
+    res.status(201).json({ id: newQuoteId, quote_id: newQuoteId, quote_ref: qRef, ...rows[0] });
+  } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }
 }));
 
 // GET /api/quotes/:id
@@ -717,9 +724,21 @@ router.put("/quotes/:id", validateBody(quotePutBodySchema), asyncHandler(async (
 
 // DELETE /api/quotes/:id
 router.delete("/quotes/:id", asyncHandler(async (req, res) => {
-  const {rowCount}=await pool.query(`DELETE FROM public.quote WHERE quote_id=$1`,[req.params.id]);
-  if(!rowCount) return res.status(404).json({error:"Quote not found"});
-  res.json({ok:true,deleted:req.params.id});
+  const { id } = req.params;
+  const cl = await pool.connect();
+  try {
+    await cl.query("BEGIN");
+    // Opt-in optimistic lock — a stale token (the quote changed since the client
+    // last read it) → 409 STALE_WRITE rather than a surprise delete.
+    await assertEntityUnchanged(cl, { table: 'public.quote', idColumn: 'quote_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
+    const { rowCount } = await cl.query(`DELETE FROM public.quote WHERE quote_id=$1`, [id]);
+    if (!rowCount) { await cl.query("ROLLBACK"); return res.status(404).json({ error: "Quote not found" }); }
+    // Audit BEFORE COMMIT on the same client (audit_log has no FK to quote, so
+    // the row survives the parent's deletion).
+    await auditMutation(cl, req, { entityType: 'QUOTE', entityId: id, eventType: 'DELETED' });
+    await cl.query("COMMIT");
+    res.json({ ok: true, deleted: id });
+  } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }
 }));
 
 // ── Sub-entities (triangles, dev-factors, losses, profiles, cresta, docs, pricing, offer, NP) ──
@@ -1194,19 +1213,29 @@ router.post("/quotes/:id/wording-checklist/ai-check", asyncHandler(async (req, r
 
 // POST /quotes/:id/documents — upload document to quote
 const _multerQ = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
-router.post("/quotes/:id/documents", _multerQ.single('file'), asyncHandler(async (req, res) => {
+router.post("/quotes/:id/documents", _multerQ.single('file'), validateBody(documentMetaSchema), asyncHandler(async (req, res) => {
+  const { id } = req.params;
   const file = req.file; const b = req.body || {};
   if (!file) return res.status(400).json({ error: 'No file provided' });
+  // Check the parent quote exists BEFORE storing bytes — a missing quote must
+  // not leave an orphaned blob in storage.
+  await assertExists(pool, 'public.quote', 'quote_id', id, 'Quote');
   let storagePath;
   try {
-    storagePath = await storeUploadedFile({ folder: `quotes/${req.params.id}`, file });
+    storagePath = await storeUploadedFile({ folder: `quotes/${id}`, file });
   } catch (e) {
     return res.status(502).json({ error: `Upload storage failed: ${e?.message || e}` });
   }
-  const {rows}=await pool.query(
-    `INSERT INTO public.contract_document (quote_id,file_name,mime_type,size_bytes,storage_path,description,doc_type,title) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [req.params.id,file.originalname,file.mimetype,file.size,storagePath,b.description||null,b.doc_type||null,b.title||null]);
-  res.status(201).json(rows[0]);
+  const cl = await pool.connect();
+  try {
+    await cl.query("BEGIN");
+    const { rows } = await cl.query(
+      `INSERT INTO public.contract_document (quote_id,file_name,mime_type,size_bytes,storage_path,description,doc_type,title) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [id, file.originalname, file.mimetype, file.size, storagePath, b.description || null, b.doc_type || null, b.title || null]);
+    await auditMutation(cl, req, { entityType: 'QUOTE', entityId: id, eventType: 'DOCUMENT_UPLOADED', payload: { document_id: rows[0].document_id, file_name: file.originalname, size_bytes: file.size } });
+    await cl.query("COMMIT");
+    res.status(201).json(rows[0]);
+  } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }
 }));
 // export moved to end of file
 
@@ -1249,11 +1278,14 @@ router.get("/quotes/:id/cedant-exposure", asyncHandler(async (req, res) => {
 }));
 
 // Renew
-router.post("/quotes/:id/renew", asyncHandler(async (req, res) => {
+router.post("/quotes/:id/renew", validateBody(quoteRenewSchema), asyncHandler(async (req, res) => {
   const {id}=req.params;const b=req.body||{};
   const creatorUserId = req.user?.userId || null;
-  const {rows:orig}=await pool.query(`SELECT * FROM public.quote WHERE quote_id=$1`,[id]);
-  if(!orig.length) return res.status(404).json({error:"Quote not found"});
+  const cl = await pool.connect();
+  try {
+  await cl.query("BEGIN");
+  const {rows:orig}=await cl.query(`SELECT * FROM public.quote WHERE quote_id=$1`,[id]);
+  if(!orig.length) { await cl.query("ROLLBACK"); return res.status(404).json({error:"Quote not found"}); }
   const o=orig[0];
   // Roll the policy period forward like the contract-renew path: the new
   // inception is last term's renewal date when present, else a caller-
@@ -1265,11 +1297,14 @@ router.post("/quotes/:id/renew", asyncHandler(async (req, res) => {
     ? new Date(new Date(newInception).setFullYear(new Date(newInception).getFullYear() + 1)).toISOString().slice(0, 10)
     : null;
   const newYear = numOrNull(b.uw_year) || (newInception ? new Date(newInception).getFullYear() : o.uw_year + 1);
-  const {rows}=await pool.query(
+  const {rows}=await cl.query(
     `INSERT INTO public.quote (cedant_id,broker_id,country_id,currency_id,treaty_type_id,uw_year,status,experience_source,inception_date,renewal_date,parent_contract_id,created_by_user_id,assigned_to_user_id)
      VALUES ($1,$2,$3,$4,$5,$6,'DRAFT',$7,$8,$9,$10,$11,$11) RETURNING *`,
     [o.cedant_id,o.broker_id,o.country_id,o.currency_id,o.treaty_type_id,newYear,o.experience_source,newInception,newRenewal,id,creatorUserId]);
+  await auditMutation(cl, req, { entityType: 'QUOTE', entityId: rows[0].quote_id, eventType: 'RENEWED', payload: { renewed_from: id, uw_year: newYear } });
+  await cl.query("COMMIT");
   res.status(201).json({id:rows[0].quote_id,quote_id:rows[0].quote_id,is_np:true,...rows[0]});
+  } catch (e) { await cl.query("ROLLBACK").catch(() => {}); throw e; } finally { cl.release(); }
 }));
 
 // NP save — writes all layer columns, COB UW limits, and JSONB terms

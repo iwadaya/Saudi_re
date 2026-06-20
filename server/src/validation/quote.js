@@ -244,3 +244,37 @@ export const pricingYearlySchema = z.preprocess(
   (v) => (Array.isArray(v) ? { rows: v } : v),
   z.object({ rows: z.array(pricingYearlyRowSchema).max(200).default([]) }).passthrough(),
 );
+
+// ── CRUD / lifecycle schemas (P1-validation, quotes slice 3) ────────────────
+
+/**
+ * POST /quotes — create body. Lenient + passthrough: validate FK/year types up
+ * front (so a non-UUID cedant 400s instead of a Postgres FK error). The handler
+ * still enforces inception_date presence with its own VALIDATION_FAILED reply.
+ */
+export const quoteCreateSchema = z.object({
+  cedant_id:        optionalUuid,
+  broker_id:        optionalUuid,
+  currency_id:      optionalUuid,
+  country_id:       optionalUuid,
+  treaty_type_id:   optionalUuid,
+  uw_year:          uwYear,
+  status:           contractStatus.optional(),
+  experience_source: z.enum(['TRIANGLE', 'STRAIGHT']).optional(),
+  renewal_date:     isoDate,
+  inception_date:   isoDate,
+  contract_description: z.string().max(2000).nullable().optional(),
+}).passthrough();
+
+/** POST /quotes/:id/renew — optional roll-forward overrides. */
+export const quoteRenewSchema = z.object({
+  uw_year:        uwYear,
+  inception_date: isoDate,
+}).passthrough();
+
+/** POST /quotes/:id/documents — the multipart text fields (the file is in req.file). */
+export const documentMetaSchema = z.object({
+  description: z.string().max(2000).nullable().optional(),
+  doc_type:    z.string().max(100).nullable().optional(),
+  title:       z.string().max(500).nullable().optional(),
+}).passthrough();
