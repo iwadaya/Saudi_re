@@ -4,6 +4,7 @@ import { useState, useId } from 'react';
 import { ROLE_LABELS, isAtLeast } from '../../utils/auth';
 import { api } from '../../api';
 import { useResource } from '../../hooks/useResource';
+import { Button } from '../../components/ui';
 import Topbar from '../../components/Topbar';
 
 const ROLE_COLORS = {
@@ -42,8 +43,8 @@ function UserRow({ user, onEdit, onMandate }) {
         </span>
       </div>
       <div style={{ display:'flex', gap:6 }}>
-        <button onClick={() => onMandate(user)} style={{ padding:'4px 10px', borderRadius:6, border:'1px solid rgba(255,255,255,.15)', background:'rgba(255,255,255,.05)', color:'rgba(255,255,255,.60)', fontSize:11, cursor:'pointer' }}>Mandate</button>
-        <button onClick={() => onEdit(user)} style={{ padding:'4px 10px', borderRadius:6, border:'1px solid rgba(255,255,255,.15)', background:'rgba(255,255,255,.05)', color:'rgba(255,255,255,.60)', fontSize:11, cursor:'pointer' }}>Edit</button>
+        <Button variant="ghost" size="sm" onClick={() => onMandate(user)}>Mandate</Button>
+        <Button variant="ghost" size="sm" onClick={() => onEdit(user)}>Edit</Button>
       </div>
     </div>
   );
@@ -125,12 +126,10 @@ function MandateModal({ user, onClose, onSave }) {
         {err && <div style={{ color:'#f87171', fontSize:12, marginBottom:12 }}>{err}</div>}
 
         <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:4 }}>
-          <button onClick={onClose} style={{ padding:'8px 16px', borderRadius:8, border:'1px solid rgba(255,255,255,.15)', background:'transparent', color:'rgba(255,255,255,.55)', fontSize:12, cursor:'pointer' }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving}
-            className="action-pill action-pill--primary"
-            style={{ padding:'8px 18px', minHeight:36, fontSize:12, opacity:saving ? .5 : 1 }}>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" loading={saving} onClick={handleSave}>
             {saving ? 'Saving…' : 'Save Mandate'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -187,10 +186,10 @@ function AddUserModal({ roles, onClose, onSave }) {
         <div style={{ fontSize:11, color:'rgba(255,255,255,.30)', marginBottom:14 }}>Default password: <code style={{ color:'rgba(255,255,255,.50)' }}>demo2026</code> — user should change on first login.</div>
         {err && <div style={{ color:'#f87171', fontSize:12, marginBottom:12 }}>{err}</div>}
         <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-          <button onClick={onClose} style={{ padding:'8px 16px', borderRadius:8, border:'1px solid rgba(255,255,255,.15)', background:'transparent', color:'rgba(255,255,255,.55)', fontSize:12, cursor:'pointer' }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="action-pill action-pill--primary" style={{ padding:'8px 18px', minHeight:36, fontSize:12, opacity:saving ? .5 : 1 }}>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" loading={saving} onClick={handleSave}>
             {saving ? 'Creating…' : 'Create User'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -240,7 +239,7 @@ export default function UserManagementScreen() {
           </div>
           <div style={{ display:'flex', gap:8 }}>
             <input className="form-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search users…" style={{ width:200, fontSize:12 }} />
-            <button onClick={() => setShowAdd(true)} className="action-pill action-pill--primary" style={{ padding:'8px 16px', minHeight:36, fontSize:12, fontWeight:700 }}>+ Add User</button>
+            <Button variant="primary" size="sm" onClick={() => setShowAdd(true)}>+ Add User</Button>
           </div>
         </div>
 
