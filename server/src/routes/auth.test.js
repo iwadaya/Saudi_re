@@ -32,7 +32,28 @@ function fakeQuery(sql, params = []) {
       role_id: params[3], office: params[4], password_hash: params[7], created_at: '2026-06-13T00:00:00.000Z',
     }] });
   }
+  // PUT /auth/mandates upsert returns the row (RETURNING *); the default-mandate
+  // insert on user-create has no RETURNING and just resolves empty.
+  if (sql.includes('INSERT INTO public.user_mandate') && sql.includes('RETURNING *')) {
+    return Promise.resolve({ rows: [{
+      user_id: params[0], treaty_limit_usd: params[1], single_risk_limit_usd: params[2],
+      limit_currency: params[3], allowed_cob_ids: params[4], restricted_cob_ids: params[5],
+      allowed_country_ids: params[6], treaty_type_scope: params[7], approvals_required: params[8],
+    }] });
+  }
   if (sql.includes('INSERT INTO public.user_mandate')) return Promise.resolve({ rows: [] });
+  // PATCH /auth/users snapshot (FOR UPDATE) + the user_mandate snapshot.
+  if (sql.includes('SELECT role_id, is_active FROM public.uw_user')) {
+    return Promise.resolve({ rows: scenario.userBefore ? [scenario.userBefore] : [] });
+  }
+  if (sql.includes('FROM public.user_mandate WHERE user_id') && sql.includes('FOR UPDATE')) {
+    return Promise.resolve({ rows: scenario.mandateBefore ? [scenario.mandateBefore] : [] });
+  }
+  if (sql.includes('UPDATE public.uw_user SET') && sql.includes('RETURNING user_id, display_name, email, role_id, office, is_active')) {
+    // PATCH /auth/users update — echo the patched columns back.
+    const out = { user_id: scenario.patchId || 'u-target', display_name: 'X', email: 'x@y.z', role_id: 'role-uw', office: 'Riyadh', is_active: true, ...(scenario.userAfter || {}) };
+    return Promise.resolve({ rows: [out] });
+  }
   if (sql.includes('FROM public.v_user_mandate vm')) {
     return Promise.resolve({ rows: scenario.loginUser ? [scenario.loginUser] : [] });
   }
@@ -61,12 +82,25 @@ function fakeQuery(sql, params = []) {
   return Promise.resolve({ rows: [] });
 }
 
+// Transactional handlers (change-password, PATCH users, PUT mandates) acquire a
+// client via pool.connect(). The fake client delegates to fakeQuery (so the same
+// scenario knobs/queryLog apply) and no-ops BEGIN/COMMIT/ROLLBACK + release.
+function makeClient() {
+  return {
+    query: vi.fn((sql, params) => (/^\s*(BEGIN|COMMIT|ROLLBACK)/i.test(sql)
+      ? Promise.resolve({ rows: [] })
+      : fakeQuery(sql, params))),
+    release: vi.fn(),
+  };
+}
+
 vi.mock('../db/pool.js', () => ({
-  pool: { query: vi.fn(fakeQuery), connect: vi.fn() },
+  pool: { query: vi.fn(fakeQuery), connect: vi.fn(() => Promise.resolve(makeClient())) },
 }));
 vi.mock('../services/audit.js', () => ({ logAudit: vi.fn(() => Promise.resolve()) }));
 
 const { default: authRouter, hashPassword, verifyPassword, validatePasswordStrength } = await import('./auth.js');
+const { logAudit: logAuditMock } = await import('../services/audit.js');
 
 // Stand-in for authenticate(): the verified identity for the request, set
 // per-test. null = anonymous (matches the open-registration / login paths).
@@ -108,12 +142,27 @@ async function call(app, { method = 'GET', path, body, headers = {} }) {
   });
 }
 
+// Phase 0b assertion helpers (revocation + audit on the verified id).
+const revokeAllQuery = (uid) => queryLog.find(
+  (q) => q.sql.includes('UPDATE public.auth_session') && q.sql.includes('revoked_reason') && (q.params || [])[0] === uid,
+);
+const epochBumpQuery = (uid) => queryLog.find(
+  (q) => q.sql.includes('session_epoch = session_epoch + 1') && (q.params || [])[0] === uid,
+);
+const auditEventsFor = (entityId) => logAuditMock.mock.calls
+  .map((c) => c[1])
+  .filter((e) => e && e.entityId === entityId);
+
 beforeEach(() => {
   queryLog.length = 0;
   scenario = {};
   currentUser = null;
+  logAuditMock.mockClear();
   process.env.ALLOW_DEMO_AUTH = 'true'; // test default (mirrors vitest env); some tests unset it
-  delete process.env.ALLOW_OPEN_REGISTRATION; // default-on in test env (NODE_ENV !== 'production')
+  // Open self-registration is FAIL-CLOSED (P1-identity D4): it is OFF unless the
+  // flag is explicitly 'true'. The Add-user form tests opt in here; the gate
+  // tests below override to 'false'/unset to assert the closed door.
+  process.env.ALLOW_OPEN_REGISTRATION = 'true';
 });
 
 describe('privileged auth gates (verified req.user)', () => {
@@ -493,6 +542,114 @@ describe('POST /auth/change-password — self-service, verified identity only', 
     });
     expect(res.status).toBe(401);
     expect(scenario.pwUpdate).toBeUndefined();
+  });
+});
+
+describe('P1-identity Phase 0b — revocation + critical audit on user-admin changes', () => {
+  const me = { userId: 'u-me', roleCode: 'TUW', hierarchyLevel: 5, displayName: 'Me' };
+  const cu = { userId: 'u-cu', roleCode: 'CU', hierarchyLevel: 2, displayName: 'CU' };
+
+  it('change-password revokes ALL sessions, reissues THIS device, and audits PASSWORD_CHANGED', async () => {
+    currentUser = me;
+    scenario.pwHash = hashPassword('oldpass1');
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/change-password',
+      body: { currentPassword: 'oldpass1', newPassword: 'brandnewpass12', confirmPassword: 'brandnewpass12' },
+    });
+    expect(res.status).toBe(200);
+    // Every outstanding session for the caller is revoked + the epoch is bumped…
+    expect(revokeAllQuery('u-me')).toBeTruthy();
+    expect(revokeAllQuery('u-me').params[1]).toBe('PASSWORD_CHANGE');
+    expect(epochBumpQuery('u-me')).toBeTruthy();
+    // …then a fresh session is minted (INSERT auth_session) and a new auth cookie set,
+    // so the device that changed its password stays logged in.
+    expect(queryLog.some((q) => q.sql.includes('INSERT INTO public.auth_session'))).toBe(true);
+    expect((res.cookies || []).some((c) => c.name === 'auth_token' && !c.cleared)).toBe(true);
+    // Critical audit recorded against the verified id.
+    const ev = auditEventsFor('u-me').find((e) => e.eventType === 'PASSWORD_CHANGED');
+    expect(ev).toBeTruthy();
+    expect(ev.payload.sessions_revoked).toBe(true);
+  });
+
+  it('PATCH /auth/users role change → revokes sessions + USER_ROLE_CHANGED audit', async () => {
+    currentUser = cu;
+    scenario.userBefore = { role_id: 'role-old', is_active: true };
+    scenario.userAfter = { role_id: 'role-new', is_active: true };
+    const res = await call(buildApp(), { method: 'PATCH', path: '/auth/users/u-target', body: { role_id: 'role-new' } });
+    expect(res.status).toBe(200);
+    expect(revokeAllQuery('u-target')).toBeTruthy();
+    expect(revokeAllQuery('u-target').params[1]).toBe('ROLE_CHANGE');
+    const ev = auditEventsFor('u-target').find((e) => e.eventType === 'USER_ROLE_CHANGED');
+    expect(ev).toBeTruthy();
+    expect(ev.payload.sessions_revoked).toBe(true);
+  });
+
+  it('PATCH /auth/users deactivation → revokes sessions + USER_DEACTIVATED audit', async () => {
+    currentUser = cu;
+    scenario.userBefore = { role_id: 'role-x', is_active: true };
+    scenario.userAfter = { role_id: 'role-x', is_active: false };
+    const res = await call(buildApp(), { method: 'PATCH', path: '/auth/users/u-target', body: { is_active: false } });
+    expect(res.status).toBe(200);
+    expect(revokeAllQuery('u-target')).toBeTruthy();
+    expect(revokeAllQuery('u-target').params[1]).toBe('DEACTIVATED');
+    expect(auditEventsFor('u-target').some((e) => e.eventType === 'USER_DEACTIVATED')).toBe(true);
+  });
+
+  it('PATCH /auth/users benign field (office) → NO revoke, USER_UPDATED audit', async () => {
+    currentUser = cu;
+    scenario.userBefore = { role_id: 'role-x', is_active: true };
+    scenario.userAfter = { role_id: 'role-x', is_active: true };
+    const res = await call(buildApp(), { method: 'PATCH', path: '/auth/users/u-target', body: { office: 'Dubai' } });
+    expect(res.status).toBe(200);
+    expect(revokeAllQuery('u-target')).toBeFalsy();           // authority unchanged → sessions live
+    expect(auditEventsFor('u-target').some((e) => e.eventType === 'USER_UPDATED')).toBe(true);
+  });
+
+  it('PATCH /auth/users reactivation → USER_REACTIVATED audit (no revoke needed)', async () => {
+    currentUser = cu;
+    scenario.userBefore = { role_id: 'role-x', is_active: false };
+    scenario.userAfter = { role_id: 'role-x', is_active: true };
+    const res = await call(buildApp(), { method: 'PATCH', path: '/auth/users/u-target', body: { is_active: true } });
+    expect(res.status).toBe(200);
+    expect(revokeAllQuery('u-target')).toBeFalsy();
+    expect(auditEventsFor('u-target').some((e) => e.eventType === 'USER_REACTIVATED')).toBe(true);
+  });
+
+  it('PATCH /auth/users on an unknown id → 404, no write/audit', async () => {
+    currentUser = cu;
+    scenario.userBefore = null; // FOR UPDATE finds nothing
+    const res = await call(buildApp(), { method: 'PATCH', path: '/auth/users/u-ghost', body: { office: 'Dubai' } });
+    expect(res.status).toBe(404);
+    expect(auditEventsFor('u-ghost')).toHaveLength(0);
+  });
+
+  it('PUT /auth/mandates authority change → revokes sessions + MANDATE_UPDATED audit', async () => {
+    currentUser = cu;
+    scenario.mandateBefore = {
+      treaty_limit_usd: 1000000, single_risk_limit_usd: null, allowed_cob_ids: [], restricted_cob_ids: [],
+      allowed_country_ids: [], treaty_type_scope: 'BOTH', approvals_required: 1,
+    };
+    const res = await call(buildApp(), { method: 'PUT', path: '/auth/mandates/u-target', body: { treaty_limit_usd: 5000000 } });
+    expect(res.status).toBe(200);
+    expect(revokeAllQuery('u-target')).toBeTruthy();
+    expect(revokeAllQuery('u-target').params[1]).toBe('MANDATE_CHANGE');
+    const ev = auditEventsFor('u-target').find((e) => e.eventType === 'MANDATE_UPDATED');
+    expect(ev).toBeTruthy();
+    expect(ev.payload.changed_authority).toContain('treaty_limit_usd');
+  });
+
+  it('PUT /auth/mandates with no authority change (same values) → NO revoke', async () => {
+    currentUser = cu;
+    scenario.mandateBefore = {
+      treaty_limit_usd: null, single_risk_limit_usd: null, allowed_cob_ids: [], restricted_cob_ids: [],
+      allowed_country_ids: [], treaty_type_scope: 'BOTH', approvals_required: 1,
+    };
+    // Body omits every authority field → upsert writes the same defaults back.
+    const res = await call(buildApp(), { method: 'PUT', path: '/auth/mandates/u-target', body: { notes: 'just a note' } });
+    expect(res.status).toBe(200);
+    expect(revokeAllQuery('u-target')).toBeFalsy();
+    const ev = auditEventsFor('u-target').find((e) => e.eventType === 'MANDATE_UPDATED');
+    expect(ev.payload.changed_authority).toEqual([]);
   });
 });
 

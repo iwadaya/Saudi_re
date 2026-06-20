@@ -16,9 +16,16 @@ import { logAudit } from '../services/audit.js';
 import { signAuthToken, verifyAuthToken } from '../lib/authToken.js';
 import { setAuthCookies, clearAuthCookies, readCookie, AUTH_COOKIE } from '../lib/authCookies.js';
 import { requireAuth, requireMinLevel, actorFromReq } from '../middleware/requestContext.js';
-import { createSession, revokeSession } from '../services/sessions.js';
+import { createSession, revokeSession, revokeAllForUser } from '../services/sessions.js';
+import { auditMutation } from '../lib/mutationAudit.js';
 
 const router = Router();
+
+// req.ip goes through proxy-addr, which throws if there's no socket (e.g. a
+// synthetic test request) — read the client IP defensively (it's advisory).
+function clientIp(req) {
+  try { return req.ip || req.socket?.remoteAddress || null; } catch { return null; }
+}
 
 // Public auth endpoints (no identity needed): login, the login-screen lookups,
 // and user creation (which self-gates open-registration vs authenticated CU/CE).
@@ -117,14 +124,13 @@ function generateTempPassword() {
   return randomBytes(12).toString('base64url');
 }
 
-// Open (login-screen) registration is allowed only when explicitly enabled —
-// default ON in dev/test, OFF in production unless the env says otherwise.
-// render.yaml pins ALLOW_OPEN_REGISTRATION=false for the prod service.
+// Open (login-screen) self-registration is FAIL-CLOSED (P1-identity D4): it is
+// permitted ONLY when an explicit dev flag opts in (ALLOW_OPEN_REGISTRATION=true).
+// Absent or any other value → disabled, in every environment including dev/test,
+// so a forgotten/misset flag can never silently leave the door open. SSO is the
+// default account path; local accounts are minted by an authenticated CU/CE.
 function openRegistrationEnabled() {
-  const flag = process.env.ALLOW_OPEN_REGISTRATION;
-  if (flag === 'true') return true;
-  if (flag === 'false') return false;
-  return process.env.NODE_ENV !== 'production';
+  return process.env.ALLOW_OPEN_REGISTRATION === 'true';
 }
 
 
@@ -279,13 +285,9 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
   // re-read from the DB on every request; the session+epoch make the token
   // REVOCABLE (logout / password / role change / deactivation). httpOnly cookie
   // (+ readable CSRF cookie); never returned in the body.
-  // req.ip goes through proxy-addr, which throws if there's no socket (e.g. a
-  // synthetic test request) — read it defensively; the IP is advisory metadata.
-  let clientIp = null;
-  try { clientIp = req.ip || req.socket?.remoteAddress || null; } catch { clientIp = null; }
   const sess = await createSession({
     userId: user.user_id, authMethod: 'PASSWORD',
-    ip: clientIp, userAgent: req.headers?.['user-agent'] || null,
+    ip: clientIp(req), userAgent: req.headers?.['user-agent'] || null,
   });
   setAuthCookies(res, signAuthToken({ sub: user.user_id, sid: sess.sessionId, epoch: sess.epoch }));
   res.json({ session: buildSession(user) });
@@ -298,7 +300,18 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
 router.post('/auth/logout', asyncHandler(async (req, res) => {
   const token = readCookie(req, AUTH_COOKIE);
   const payload = token ? verifyAuthToken(token) : null;
-  if (payload?.sid) await revokeSession(payload.sid, 'LOGOUT').catch(() => {});
+  if (payload?.sid) {
+    const revoked = await revokeSession(payload.sid, 'LOGOUT').catch(() => false);
+    // Best-effort trail (logout must always succeed in dropping the cookie, so
+    // this is fire-and-forget, not a critical in-transaction write).
+    if (revoked) {
+      await logAudit(pool, {
+        entityType: 'USER', entityId: payload.sub,
+        eventType: 'SESSION_REVOKED', actor: actorFromReq(req),
+        payload: { reason: 'LOGOUT', session_id: payload.sid },
+      }).catch(() => {});
+    }
+  }
   clearAuthCookies(res);
   res.json({ ok: true });
 }));
@@ -357,26 +370,44 @@ router.post('/auth/change-password', requireAuth, asyncHandler(async (req, res) 
     return res.status(401).json({ error: 'Current password is incorrect.' });
   }
 
-  // Persist the new hash and clear the forced-change flag in one write, so the
-  // hard gate (app.js) lifts immediately for this session's next request.
-  await pool.query(
-    `UPDATE public.uw_user
-        SET password_hash = $2, password_changed_at = now(),
-            must_change_password = false, updated_at = now()
-      WHERE user_id = $1`,
-    [userId, hashPassword(newPassword)]
-  );
+  // Persist the new hash, clear the forced-change flag, REVOKE every outstanding
+  // session and re-issue THIS device — all in one transaction so the password and
+  // the revocation can never diverge (P1-identity Phase 0b). revokeAllForUser
+  // bumps the epoch, which invalidates this caller's current token too; we then
+  // mint a fresh session under the new epoch and set new cookies so the device
+  // that just changed its password stays logged in while every OTHER session
+  // (other devices, a thief's stolen token) is killed immediately.
+  const cl = await pool.connect();
+  let freshSession;
+  try {
+    await cl.query('BEGIN');
+    await cl.query(
+      `UPDATE public.uw_user
+          SET password_hash = $2, password_changed_at = now(),
+              must_change_password = false, updated_at = now()
+        WHERE user_id = $1`,
+      [userId, hashPassword(newPassword)]
+    );
+    await revokeAllForUser(userId, 'PASSWORD_CHANGE', cl);
+    freshSession = await createSession(
+      { userId, authMethod: 'PASSWORD', ip: clientIp(req), userAgent: req.headers?.['user-agent'] || null },
+      cl,
+    );
+    // Critical audit on the SAME client — a failed trail rolls the change back.
+    await auditMutation(cl, req, {
+      entityType: 'USER', entityId: userId,
+      eventType: 'PASSWORD_CHANGED', payload: { self_service: true, sessions_revoked: true },
+    });
+    await cl.query('COMMIT');
+  } catch (e) {
+    await cl.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    cl.release();
+  }
 
-  // Audit the change — actor is the verified identity; never the plaintext/hash.
-  await logAudit(pool, {
-    entityType: 'USER', entityId: userId,
-    eventType: 'PASSWORD_CHANGED',
-    actor: actorFromReq(req),
-    payload: { self_service: true },
-  }).catch(() => {});
-
-  // v1: keep the current session valid (no forced re-login). If server-side
-  // token revocation is added later, bump a token version here.
+  // Keep THIS device alive: issue a token bound to the new session + epoch.
+  setAuthCookies(res, signAuthToken({ sub: userId, sid: freshSession.sessionId, epoch: freshSession.epoch }));
   res.json({ ok: true });
 }));
 
@@ -540,6 +571,10 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
 }));
 
 // ── PATCH /api/auth/users/:id — update user ───────────────────────────────
+// User-admin changes are CRITICAL audit events (P1-identity), written inside the
+// update transaction. A role change or a deactivation also REVOKES every session
+// for the target (D5: privilege changes force re-login) so a just-demoted /
+// just-disabled user cannot keep acting on a stale token.
 router.patch('/auth/users/:id', requireMinLevel(2), asyncHandler(async (req, res) => {
   const { id } = req.params;
   const b = req.body || {};
@@ -559,12 +594,64 @@ router.patch('/auth/users/:id', requireMinLevel(2), asyncHandler(async (req, res
   fields.push(`updated_at = now()`);
   params.push(id);
 
-  const { rows } = await pool.query(
-    `UPDATE public.uw_user SET ${fields.join(', ')} WHERE user_id = $${i} RETURNING user_id, display_name, email, role_id, office, is_active`,
-    params
-  );
-  if (!rows.length) return res.status(404).json({ error: 'User not found.' });
-  res.json(rows[0]);
+  const cl = await pool.connect();
+  let out;
+  try {
+    await cl.query('BEGIN');
+
+    // Snapshot the privilege-bearing fields BEFORE the write so we can classify
+    // the change (role/active) and record an honest before→after diff.
+    const { rows: beforeRows } = await cl.query(
+      `SELECT role_id, is_active FROM public.uw_user WHERE user_id = $1 FOR UPDATE`,
+      [id],
+    );
+    if (!beforeRows.length) {
+      await cl.query('ROLLBACK');
+      return res.status(404).json({ error: 'User not found.' });
+    }
+    const before = beforeRows[0];
+
+    const { rows } = await cl.query(
+      `UPDATE public.uw_user SET ${fields.join(', ')} WHERE user_id = $${i} RETURNING user_id, display_name, email, role_id, office, is_active`,
+      params,
+    );
+    out = rows[0];
+
+    // Classify the change → event type + whether sessions must be killed.
+    const roleChanged = b.role_id !== undefined && String(before.role_id) !== String(out.role_id);
+    const deactivated = before.is_active === true && out.is_active === false;
+    const reactivated = before.is_active === false && out.is_active === true;
+    let eventType = 'USER_UPDATED';
+    if (deactivated) eventType = 'USER_DEACTIVATED';
+    else if (reactivated) eventType = 'USER_REACTIVATED';
+    else if (roleChanged) eventType = 'USER_ROLE_CHANGED';
+
+    // D5: a demotion/promotion or a deactivation forces re-login everywhere.
+    let sessionsRevoked = false;
+    if (roleChanged || deactivated) {
+      await revokeAllForUser(id, deactivated ? 'DEACTIVATED' : 'ROLE_CHANGE', cl);
+      sessionsRevoked = true;
+    }
+
+    await auditMutation(cl, req, {
+      entityType: 'USER', entityId: id, eventType,
+      payload: {
+        fields: fields.filter((f) => !f.startsWith('updated_at')).map((f) => f.split(' = ')[0]),
+        role_change: roleChanged ? { from: before.role_id, to: out.role_id } : undefined,
+        is_active: deactivated || reactivated ? out.is_active : undefined,
+        sessions_revoked: sessionsRevoked,
+      },
+    });
+
+    await cl.query('COMMIT');
+  } catch (e) {
+    await cl.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    cl.release();
+  }
+
+  res.json(out);
 }));
 
 // ── GET /api/auth/mandates/:userId — get full mandate for a user ───────────
@@ -585,54 +672,100 @@ router.get('/auth/mandates/:userId', asyncHandler(async (req, res) => {
 }));
 
 // ── PUT /api/auth/mandates/:userId — set/update mandate for a user ─────────
+// A mandate carries the user's authority (UW limit, single-risk limit, COB
+// allow/exclude lists, treaty-type scope, approvals). Changing any of those is a
+// CRITICAL audit event and FORCES re-login (D5: a UW-limit or COB-exclusion
+// change bumps the epoch), so a user can't keep transacting under their old
+// authority on a stale token. The whole thing runs in one transaction.
 router.put('/auth/mandates/:userId', requireMinLevel(2), asyncHandler(async (req, res) => {
   const b = req.body || {};
   const { userId } = req.params;
 
-  const { rows } = await pool.query(
-    `INSERT INTO public.user_mandate
-       (user_id, treaty_limit_usd, single_risk_limit_usd, limit_currency,
-        allowed_cob_ids, restricted_cob_ids, allowed_country_ids,
-        treaty_type_scope, approvals_required, effective_from, effective_to, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-     ON CONFLICT (user_id) DO UPDATE SET
-       treaty_limit_usd      = EXCLUDED.treaty_limit_usd,
-       single_risk_limit_usd = EXCLUDED.single_risk_limit_usd,
-       limit_currency        = EXCLUDED.limit_currency,
-       allowed_cob_ids       = EXCLUDED.allowed_cob_ids,
-       restricted_cob_ids    = EXCLUDED.restricted_cob_ids,
-       allowed_country_ids   = EXCLUDED.allowed_country_ids,
-       treaty_type_scope     = EXCLUDED.treaty_type_scope,
-       approvals_required    = EXCLUDED.approvals_required,
-       effective_from        = EXCLUDED.effective_from,
-       effective_to          = EXCLUDED.effective_to,
-       notes                 = EXCLUDED.notes,
-       updated_at            = now()
-     RETURNING *`,
-    [
-      userId,
-      b.treaty_limit_usd ?? null,
-      b.single_risk_limit_usd ?? null,
-      b.limit_currency || 'USD',
-      b.allowed_cob_ids || [],
-      b.restricted_cob_ids || [],
-      b.allowed_country_ids || [],
-      b.treaty_type_scope || 'BOTH',
-      b.approvals_required ?? 1,
-      b.effective_from || new Date().toISOString().slice(0, 10),
-      b.effective_to || null,
-      b.notes || null,
-      req.user?.userId || null,
-    ]
-  );
+  // Fields whose change alters AUTHORITY (and therefore must force re-login).
+  // limit_currency / effective_* / notes are descriptive and don't, by themselves.
+  const AUTHORITY_FIELDS = [
+    'treaty_limit_usd', 'single_risk_limit_usd', 'allowed_cob_ids',
+    'restricted_cob_ids', 'allowed_country_ids', 'treaty_type_scope', 'approvals_required',
+  ];
+  // Order-insensitive, type-stable comparison so [a,b] vs [b,a] and 1 vs '1' match.
+  const norm = (v) => (Array.isArray(v) ? JSON.stringify([...v].map(String).sort()) : JSON.stringify(v ?? null));
 
-  await logAudit(pool, {
-    entityType: 'USER_MANDATE', entityId: userId,
-    eventType: 'MANDATE_UPDATED', actor: actorFromReq(req),
-    payload: b,
-  }).catch(() => {});
+  const cl = await pool.connect();
+  let out;
+  try {
+    await cl.query('BEGIN');
 
-  res.json(rows[0]);
+    const { rows: beforeRows } = await cl.query(
+      `SELECT treaty_limit_usd, single_risk_limit_usd, allowed_cob_ids, restricted_cob_ids,
+              allowed_country_ids, treaty_type_scope, approvals_required
+         FROM public.user_mandate WHERE user_id = $1 FOR UPDATE`,
+      [userId],
+    );
+    const before = beforeRows[0] || null;
+
+    const { rows } = await cl.query(
+      `INSERT INTO public.user_mandate
+         (user_id, treaty_limit_usd, single_risk_limit_usd, limit_currency,
+          allowed_cob_ids, restricted_cob_ids, allowed_country_ids,
+          treaty_type_scope, approvals_required, effective_from, effective_to, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       ON CONFLICT (user_id) DO UPDATE SET
+         treaty_limit_usd      = EXCLUDED.treaty_limit_usd,
+         single_risk_limit_usd = EXCLUDED.single_risk_limit_usd,
+         limit_currency        = EXCLUDED.limit_currency,
+         allowed_cob_ids       = EXCLUDED.allowed_cob_ids,
+         restricted_cob_ids    = EXCLUDED.restricted_cob_ids,
+         allowed_country_ids   = EXCLUDED.allowed_country_ids,
+         treaty_type_scope     = EXCLUDED.treaty_type_scope,
+         approvals_required    = EXCLUDED.approvals_required,
+         effective_from        = EXCLUDED.effective_from,
+         effective_to          = EXCLUDED.effective_to,
+         notes                 = EXCLUDED.notes,
+         updated_at            = now()
+       RETURNING *`,
+      [
+        userId,
+        b.treaty_limit_usd ?? null,
+        b.single_risk_limit_usd ?? null,
+        b.limit_currency || 'USD',
+        b.allowed_cob_ids || [],
+        b.restricted_cob_ids || [],
+        b.allowed_country_ids || [],
+        b.treaty_type_scope || 'BOTH',
+        b.approvals_required ?? 1,
+        b.effective_from || new Date().toISOString().slice(0, 10),
+        b.effective_to || null,
+        b.notes || null,
+      ],
+    );
+    out = rows[0];
+
+    // A first-ever mandate (before === null) is treated as an authority change;
+    // otherwise compare each authority field before→after.
+    const changedAuthority = AUTHORITY_FIELDS.filter(
+      (f) => !before || norm(before[f]) !== norm(out[f]),
+    );
+    let sessionsRevoked = false;
+    if (changedAuthority.length) {
+      await revokeAllForUser(userId, 'MANDATE_CHANGE', cl);
+      sessionsRevoked = true;
+    }
+
+    await auditMutation(cl, req, {
+      entityType: 'USER_MANDATE', entityId: userId,
+      eventType: 'MANDATE_UPDATED',
+      payload: { changed_authority: changedAuthority, sessions_revoked: sessionsRevoked },
+    });
+
+    await cl.query('COMMIT');
+  } catch (e) {
+    await cl.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    cl.release();
+  }
+
+  res.json(out);
 }));
 
 // ── GET /api/auth/mandate-check — can this user offer a treaty? ─────────────
