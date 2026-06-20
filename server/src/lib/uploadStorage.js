@@ -18,6 +18,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { env } from '../config/env.js';
+import { recordUpload, folderType } from '../observability/businessMetrics.js';
 
 let _cloudinary = null;
 
@@ -61,28 +62,39 @@ export async function storeUploadedFile({ folder, file }) {
   const relPath = `${folder}/${filename}`;
 
   const cld = await getCloudinary();
-  if (cld) {
-    return new Promise((resolve, reject) => cld.uploader.upload_stream(
-      {
-        folder,
-        public_id: filename,
-        resource_type: 'raw',
-        use_filename: false,
-        // Private delivery: 'authenticated' assets are NOT publicly reachable —
-        // each read must be an app-minted, short-lived signed URL (see
-        // getSignedReadUrl). Never 'upload'/access_mode:'public', which would
-        // hand out a permanent world-readable link.
-        type: 'authenticated',
-      },
-      (err, result) => (err ? reject(err) : resolve(result.secure_url)),
-    ).end(file.buffer));
+  const sink = cld ? 'cloudinary' : 'disk';
+  // Record outcome for the upload-failures dashboard. A failure from either
+  // sink propagates to the route (typically surfaced as 502).
+  try {
+    let stored;
+    if (cld) {
+      stored = await new Promise((resolve, reject) => cld.uploader.upload_stream(
+        {
+          folder,
+          public_id: filename,
+          resource_type: 'raw',
+          use_filename: false,
+          // Private delivery: 'authenticated' assets are NOT publicly reachable —
+          // each read must be an app-minted, short-lived signed URL (see
+          // getSignedReadUrl). Never 'upload'/access_mode:'public', which would
+          // hand out a permanent world-readable link.
+          type: 'authenticated',
+        },
+        (err, result) => (err ? reject(err) : resolve(result.secure_url)),
+      ).end(file.buffer));
+    } else {
+      const absDir = path.resolve(env.uploadDir, folder);
+      await fs.mkdir(absDir, { recursive: true });
+      const absPath = path.resolve(env.uploadDir, relPath);
+      await fs.writeFile(absPath, file.buffer);
+      stored = relPath;
+    }
+    recordUpload({ folderType: folderType(folder), sink, outcome: 'success' });
+    return stored;
+  } catch (err) {
+    recordUpload({ folderType: folderType(folder), sink, outcome: 'error' });
+    throw err;
   }
-
-  const absDir = path.resolve(env.uploadDir, folder);
-  await fs.mkdir(absDir, { recursive: true });
-  const absPath = path.resolve(env.uploadDir, relPath);
-  await fs.writeFile(absPath, file.buffer);
-  return relPath;
 }
 
 /**

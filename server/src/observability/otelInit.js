@@ -25,6 +25,7 @@ import {
   ATTR_DEPLOYMENT_ENVIRONMENT_NAME,
 } from '@opentelemetry/semantic-conventions';
 import { TraceIdRatioBasedSampler, ParentBasedSampler } from '@opentelemetry/sdk-trace-base';
+import { otlpTraceEndpoint, promExporterHost } from './otelConfig.js';
 
 /**
  * Build + start the SDK. Idempotent — if somebody imports this twice,
@@ -36,9 +37,17 @@ export async function initOtel() {
   started = true;
 
   const serviceName = process.env.OTEL_SERVICE_NAME || 'universe-server';
-  const endpoint    = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318';
+  // Only export traces when an OTLP endpoint is configured. Otherwise run
+  // metrics-only (Prometheus scrape) so a default production deploy gets
+  // the dashboards without an OTLP exporter retrying a non-existent
+  // collector at localhost.
+  const endpoint    = otlpTraceEndpoint(process.env.OTEL_EXPORTER_OTLP_ENDPOINT);
   const samplerArg  = Number(process.env.OTEL_TRACES_SAMPLER_ARG);
   const promPort    = Number(process.env.PROM_EXPORTER_PORT) || 9464;
+  // Private by default: bind the scrape server to loopback so /metrics is
+  // not reachable off-box. Override with PROM_EXPORTER_HOST for a trusted
+  // private-network scraper.
+  const promHost    = promExporterHost(process.env.PROM_EXPORTER_HOST);
 
   // Sampling — default AlwaysOn, opt-in ratio via env. ParentBased
   // means a parent-sampled trace stays sampled downstream (otherwise
@@ -53,8 +62,8 @@ export async function initOtel() {
       [ATTR_SERVICE_VERSION]:          process.env.npm_package_version || process.env.APP_VERSION || '0.0.0',
       [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: process.env.NODE_ENV || 'development',
     }),
-    traceExporter: new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
-    metricReader: new PrometheusExporter({ port: promPort, endpoint: '/metrics' }),
+    traceExporter: endpoint ? new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }) : undefined,
+    metricReader: new PrometheusExporter({ host: promHost, port: promPort, endpoint: '/metrics' }),
     sampler,
     instrumentations: [
       getNodeAutoInstrumentations({
@@ -78,7 +87,8 @@ export async function initOtel() {
   });
 
   sdk.start();
-  console.log(`[otel] started — service=${serviceName} traces→${endpoint} metrics→:${promPort}/metrics`);
+  const tracesTarget = endpoint ? `${endpoint}/v1/traces` : 'disabled (set OTEL_EXPORTER_OTLP_ENDPOINT)';
+  console.log(`[otel] started — service=${serviceName} traces→${tracesTarget} metrics→${promHost}:${promPort}/metrics`);
 
   // Register custom metrics once the SDK is up. Dynamic-imported here so
   // a missing file doesn't cascade failures in the SDK itself.
@@ -89,6 +99,8 @@ export async function initOtel() {
     await enableHttpMetrics();
     const { enableAiMetrics } = await import('./aiMetrics.js');
     await enableAiMetrics();
+    const { enableBusinessMetrics } = await import('./businessMetrics.js');
+    await enableBusinessMetrics();
   } catch (err) {
     console.warn('[otel] custom metrics registration failed:', err?.message || err);
   }
