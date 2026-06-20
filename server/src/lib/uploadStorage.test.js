@@ -11,11 +11,33 @@ vi.mock('../config/env.js', () => ({
   },
 }));
 
+// Mocked Cloudinary v2 client — lets us assert upload/delivery options and signed
+// URL minting without a real account. Reset per test via _resetCloudinaryForTests.
+const { cldMock } = vi.hoisted(() => ({
+  cldMock: {
+    config: vi.fn(),
+    url: vi.fn((publicId, opts) => `https://signed.example/${publicId}?exp=${opts.expires_at}`),
+    uploader: {
+      upload_stream: vi.fn((opts, cb) => ({
+        end: () => cb(null, {
+          secure_url: `https://res.cloudinary.com/cloud/raw/${opts.type}/v1/${opts.folder}/${opts.public_id}`,
+        }),
+      })),
+      destroy: vi.fn(() => Promise.resolve({ result: 'ok' })),
+    },
+  },
+}));
+vi.mock('cloudinary', () => ({ v2: cldMock }));
+
 const {
   storeUploadedFile,
   deleteUploadedFile,
   isRemoteStoragePath,
   resolveLocalStoragePath,
+  getSignedReadUrl,
+  publicIdFromRemoteUrl,
+  remoteDeliveryType,
+  SIGNED_URL_TTL_SECONDS,
   _resetCloudinaryForTests,
 } = await import('./uploadStorage.js');
 
@@ -98,6 +120,85 @@ describe('deleteUploadedFile (local fallback)', () => {
 
   it('rejects traversal attempts via resolveLocalStoragePath', () => {
     expect(() => resolveLocalStoragePath('../../etc/passwd')).toThrow(/escapes upload directory/);
+  });
+});
+
+describe('Cloudinary delivery (mocked) — private uploads + signed read URLs', () => {
+  beforeEach(() => {
+    process.env.CLOUDINARY_URL = 'cloudinary://key:secret@cloud';
+    _resetCloudinaryForTests();
+    cldMock.url.mockClear();
+    cldMock.uploader.upload_stream.mockClear();
+    cldMock.uploader.destroy.mockClear();
+  });
+  afterEach(() => {
+    delete process.env.CLOUDINARY_URL;
+    _resetCloudinaryForTests();
+  });
+
+  it('uploads as private (type:authenticated) and never public', async () => {
+    const url = await storeUploadedFile({ folder: 'universe3/c1', file: { buffer: Buffer.from('x'), originalname: 'r.pdf' } });
+    const opts = cldMock.uploader.upload_stream.mock.calls[0][0];
+    expect(opts.type).toBe('authenticated');
+    expect(opts.access_mode).toBeUndefined(); // no public delivery
+    expect(url).toContain('/raw/authenticated/'); // stored secure_url is private-delivery
+  });
+
+  it('getSignedReadUrl mints a short-lived, app-signed URL for a remote asset', async () => {
+    const stored = 'https://res.cloudinary.com/cloud/raw/authenticated/v1/universe3/c1/1700000000_r.pdf';
+    const before = Math.floor(Date.now() / 1000);
+    const signed = await getSignedReadUrl(stored);
+    const [publicId, opts] = cldMock.url.mock.calls[0];
+
+    expect(opts.type).toBe('authenticated');
+    expect(opts.sign_url).toBe(true);
+    expect(opts.resource_type).toBe('raw');
+    // Expiry is short and in the near future (now + TTL), never permanent.
+    expect(SIGNED_URL_TTL_SECONDS).toBeLessThanOrEqual(600);
+    expect(opts.expires_at).toBeGreaterThanOrEqual(before + SIGNED_URL_TTL_SECONDS);
+    expect(opts.expires_at).toBeLessThanOrEqual(Math.floor(Date.now() / 1000) + SIGNED_URL_TTL_SECONDS + 2);
+    // public_id is derived without the delivery-type/version/extension segments.
+    expect(publicId).toBe('universe3/c1/1700000000_r.pdf'.replace(/\.[^/.]+$/, ''));
+    expect(signed).toBe(`https://signed.example/${publicId}?exp=${opts.expires_at}`);
+    expect(signed).not.toBe(stored); // never the permanent stored URL
+  });
+
+  it('getSignedReadUrl honours a custom (shorter) TTL', async () => {
+    await getSignedReadUrl('https://res.cloudinary.com/cloud/raw/authenticated/v1/f.pdf', { ttlSeconds: 30 });
+    const now = Math.floor(Date.now() / 1000);
+    expect(cldMock.url.mock.calls[0][1].expires_at).toBeLessThanOrEqual(now + 31);
+  });
+
+  it('getSignedReadUrl returns null for local-disk paths (no remote minting)', async () => {
+    expect(await getSignedReadUrl('quotes/abc/123_file.pdf')).toBeNull();
+    expect(cldMock.url).not.toHaveBeenCalled();
+  });
+
+  it('deleteUploadedFile destroys an authenticated asset with the right delivery type', async () => {
+    await deleteUploadedFile('https://res.cloudinary.com/cloud/raw/authenticated/s--SIG--/v1/universe3/c1/file.pdf');
+    expect(cldMock.uploader.destroy).toHaveBeenCalledWith(
+      'universe3/c1/file', { resource_type: 'raw', type: 'authenticated' },
+    );
+  });
+});
+
+describe('getSignedReadUrl without Cloudinary configured', () => {
+  beforeEach(() => { delete process.env.CLOUDINARY_URL; _resetCloudinaryForTests(); });
+  it('returns null for a remote path when Cloudinary is not configured (never leaks the stored URL)', async () => {
+    expect(await getSignedReadUrl('https://res.cloudinary.com/cloud/raw/authenticated/v1/f.pdf')).toBeNull();
+  });
+});
+
+describe('remote URL parsing helpers', () => {
+  it('publicIdFromRemoteUrl strips delivery type, signature, version and extension', () => {
+    expect(publicIdFromRemoteUrl('https://res.cloudinary.com/c/raw/upload/v123/folder/file.pdf')).toBe('folder/file');
+    expect(publicIdFromRemoteUrl('https://res.cloudinary.com/c/raw/authenticated/s--ABCD--/v9/a/b.csv')).toBe('a/b');
+    expect(publicIdFromRemoteUrl('not-a-url')).toBeNull();
+  });
+  it('remoteDeliveryType detects authenticated/private/upload', () => {
+    expect(remoteDeliveryType('https://x/raw/authenticated/v1/f.pdf')).toBe('authenticated');
+    expect(remoteDeliveryType('https://x/raw/private/v1/f.pdf')).toBe('private');
+    expect(remoteDeliveryType('https://x/raw/upload/v1/f.pdf')).toBe('upload');
   });
 });
 

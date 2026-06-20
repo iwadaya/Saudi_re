@@ -13,6 +13,7 @@
     "cleanup:snapshots": "node scripts/cleanup-snapshots.js",
     "relocate:misfiled-renewal-packs": "node scripts/relocate-misfiled-renewal-packs.js",
     "audit:ownership": "node scripts/audit-contract-quote-ownership.js",
+    "audit:public-docs": "node scripts/audit-public-documents.js",
     "refresh:ldf-benchmarks": "node src/jobs/refreshLdfBenchmarks.js"
   },
   "dependencies": {

@@ -19,6 +19,7 @@ import {
   deleteUploadedFile,
   isRemoteStoragePath,
   resolveLocalStoragePath,
+  getSignedReadUrl,
 } from '../lib/uploadStorage.js';
 import { buildBatchInsert } from '../db/batchInsert.js';
 import { randomUUID } from 'node:crypto';
@@ -833,9 +834,16 @@ async function serveDoc(req, res, { audit = false } = {}) {
       payload: { documentId: req.params.docId, contractId: doc.contract_id || null, quoteId: doc.quote_id || null, action: 'download' },
     });
   }
-  // Cloudinary URL — redirect directly
+  // Remote (Cloudinary) asset — never redirect to the permanent stored URL.
+  // Mint a short-lived, app-signed URL AFTER the ACL check above and redirect to
+  // that; it expires within minutes so a captured link can't be replayed.
   if (isRemoteStoragePath(sp)) {
-    return res.redirect(sp);
+    const signedUrl = await getSignedReadUrl(sp);
+    if (!signedUrl) {
+      return res.status(502).json({ error: 'Document storage temporarily unavailable' });
+    }
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.redirect(signedUrl);
   }
   // Local disk — single async stat both confirms existence and supplies
   // the Content-Length fallback when the DB row predates size_bytes.
@@ -866,7 +874,10 @@ router.get("/documents/:docId/text", asyncHandler(async (req, res) => {
   try {
     if (isRemoteStoragePath(sp)) {
       const { default: nodeFetch } = await import('node-fetch');
-      const r = await nodeFetch(sp);
+      // Fetch via a freshly-minted signed URL rather than the stored one — the
+      // asset is private, so the permanent URL is not directly readable.
+      const fetchUrl = (await getSignedReadUrl(sp)) || sp;
+      const r = await nodeFetch(fetchUrl);
       if (!r.ok) return res.json({ text: '', error: 'Could not fetch from cloud' });
       buffer = Buffer.from(await r.arrayBuffer());
     } else {
