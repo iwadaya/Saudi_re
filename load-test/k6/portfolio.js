@@ -18,14 +18,16 @@
 //   k6 run --summary-export=load-test/out/$(date +%F).json load-test/k6/portfolio.js
 //
 // Notes on auth/rate-limit:
-//   The server rate-limits at 300 req/min per x-user-id. Each VU is
-//   given a unique synthetic user id so a 300-VU run doesn't get 429'd
-//   into oblivion. Real users hit a much lower fan-out.
+//   Auth is the real production flow (cookie + CSRF) — set LOAD_USER/LOAD_PASS.
+//   The server rate-limits per AUTHENTICATED user id, so all VUs sharing one
+//   load account share that limit; bypass the limiter on staging
+//   (LOAD_TEST=true) when measuring raw capacity at high VU counts.
 
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';
 import { Trend, Counter } from 'k6/metrics';
 import { randomIntBetween } from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
+import { login, authHeaders } from './lib/auth.js';
 
 const BASE_URL = __ENV.BASE_URL || 'http://127.0.0.1:3001';
 
@@ -66,15 +68,15 @@ export const options = {
 // A synthetic user id per VU keeps each VU in its own rate-limit
 // bucket. Without this, 300 concurrent VUs would share one bucket and
 // start getting 429s inside 3 seconds.
+// Real production auth (cookie + CSRF). Each VU logs in once; the auth cookie
+// rides k6's per-VU jar; the CSRF token goes in X-CSRF-Token on mutations. The
+// server now rate-limits per authenticated user id (the real account), so a
+// single shared load-test account concentrates the per-user limit — bypass the
+// limiter on staging (LOAD_TEST=true) when measuring raw capacity.
+let vuCsrf = null;
 function userHeaders() {
-  const uid = `ld-vu-${__VU.toString().padStart(8, '0')}`.slice(0, 36);
-  // Pad to UUID-ish shape so any server-side parseUUID won't reject it
-  const uuid = `00000000-0000-0000-0000-${uid.replace(/[^\d]/g, '').padStart(12, '0').slice(-12)}`;
-  return {
-    'Content-Type': 'application/json',
-    'x-user-role': 'CU',
-    'x-user-id':   uuid,
-  };
+  if (!vuCsrf) vuCsrf = login(BASE_URL);
+  return authHeaders(vuCsrf);
 }
 
 function tag429(res) {

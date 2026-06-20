@@ -11,6 +11,7 @@ import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { authenticate, requireAuth, csrfProtection } from './middleware/requestContext.js';
 import { guardApiMutations } from './services/permissions.js';
+import { validateAiProviderConfig } from './lib/aiGovernance.js';
 import { attachRequestId } from './middleware/requestId.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { cacheStats } from './middleware/httpCache.js';
@@ -273,6 +274,10 @@ export function passwordChangeGate(req, res, next) {
 
 export function createApp() {
   const app = express();
+
+  // Validate AI/data-governance posture at boot (fail-closed by default; flags an
+  // enabled-but-unconfigured provider). Never throws — must not block non-AI APIs.
+  validateAiProviderConfig();
 
   // Trust Render's proxy so rate-limiter reads the real client IP
   app.set('trust proxy', 1);

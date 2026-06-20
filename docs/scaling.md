@@ -18,15 +18,20 @@ is completed and the **Measured Results** table is filled from real output.
 The old theoretical PM2 numbers were removed so estimates are never mistaken
 for measurements.
 
-> **Auth caveat — read before running k6.** The load scripts
-> (`load-test/k6/*.js`) currently send identity via `x-user-role` / `x-user-id`
-> **headers**. After the auth hardening those headers are honoured **only** when
-> the target runs with `ALLOW_DEMO_AUTH=true` (a dev/preview service); against a
-> production-config service they are ignored and protected endpoints return 401 —
-> the run would then measure error responses, not real work. So either point k6
-> at a preview service started with `ALLOW_DEMO_AUTH=true`, or first update the
-> scripts to log in via `POST /api/auth/login` and send the returned
-> `Authorization: Bearer` token. Record which mode was used next to the results.
+> **Auth — the load scripts use the REAL production login flow (cookie + CSRF).**
+> The k6 scripts (`load-test/k6/*.js`, via `load-test/k6/lib/auth.js`) log in with
+> `POST /api/auth/login`, then ride the httpOnly `auth_token` cookie (k6's per-VU
+> cookie jar) and send the double-submit `X-CSRF-Token` header on mutations — the
+> same path a browser uses against a production-config service. They do **not**
+> send `x-user-role` / `x-user-id` demo headers (a production target ignores those
+> and would return 401, measuring error responses, not real work).
+>
+> Provide a real account on the target via env: `LOAD_USER` and `LOAD_PASS`. Seed
+> a dedicated load-test user in staging (any role; a read-heavy run needs no
+> elevated rights). Record the auth mode ("prod cookie+CSRF") and the account used
+> next to the results. Note: the API rate-limits per authenticated user id, so a
+> single shared load account concentrates that limit — set `LOAD_TEST=true` on the
+> staging service to bypass the limiter when measuring raw capacity (never in prod).
 
 ## Required Staging Shape
 
@@ -70,6 +75,9 @@ From the repo root:
 ```bash
 export BASE_URL=https://<staging-service>.onrender.com
 export K6_DURATION=5m
+# Real account on the target (seed one in staging). Auth is cookie + CSRF.
+export LOAD_USER='loadtest@example.com'
+export LOAD_PASS='<the-account-password>'
 
 mkdir -p load-test/out
 
@@ -77,6 +85,8 @@ k6 run -e BASE_URL=$BASE_URL \
   --summary-export=load-test/out/staging-smoke-10vu.json \
   load-test/k6/smoke-10vu.js
 
+# Capacity baseline at each VU count. capacity.js logs in (cookie+CSRF),
+# parameterises VUs via K6_VUS, and records pg_pool_waiting from /api/health/deep.
 for vus in 10 20 30 50; do
   K6_VUS=$vus k6 run \
     --summary-export=load-test/out/staging-${vus}vu.json \
@@ -110,15 +120,19 @@ Capture these alongside the k6 summary:
 
 ## Measured Results
 
-Fill this table from `npm run loadtest:summarize` after the staging run.
+Fill this table from `npm run loadtest:summarize` after the staging run. The
+scripts now authenticate via the **real production login (cookie + CSRF)**, so a
+run measures real work, not 401s. Record the auth mode + load account used.
+**Do not quote a supported user count here until these rows are filled from real
+evidence** (left blank deliberately).
 
-| Run | Error rate | `pg_pool_waiting` max | CPU peak | Knee? | Notes |
+| Run | Error rate | `pg_pool_waiting` max | CPU peak | Knee? | Notes (auth: prod cookie+CSRF) |
 | --- | ---: | ---: | ---: | --- | --- |
-| Smoke 10 VUs | Not run | Not run | Not run | Unknown | Blocked: no staging target in this workspace |
-| 10 VUs | Not run | Not run | Not run | Unknown | Blocked: no staging target in this workspace |
-| 20 VUs | Not run | Not run | Not run | Unknown | Blocked: no staging target in this workspace |
-| 30 VUs | Not run | Not run | Not run | Unknown | Blocked: no staging target in this workspace |
-| 50 VUs | Not run | Not run | Not run | Unknown | Blocked: no staging target in this workspace |
+| Smoke 10 VUs | Not run | Not run | Not run | Unknown | Pending staging run |
+| 10 VUs | Not run | Not run | Not run | Unknown | Pending staging run |
+| 20 VUs | Not run | Not run | Not run | Unknown | Pending staging run |
+| 30 VUs | Not run | Not run | Not run | Unknown | Pending staging run |
+| 50 VUs | Not run | Not run | Not run | Unknown | Pending staging run |
 
 Endpoint table template:
 

@@ -1,0 +1,20 @@
+# Dockerfile.jobs — image for the Render Cron backup / restore-verification jobs.
+#
+# These jobs need the Postgres client binaries (pg_dump / pg_restore / psql),
+# which the Render native node runtime does not ship. The node-only cron jobs
+# (snapshot-cleanup, ldf-refresh) use runtime: node and do NOT use this image.
+#
+# Build context is the repo root; only the scripts are needed at runtime — the
+# Render Cron service supplies the command via `startCommand` in render.yaml.
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends postgresql-client ca-certificates curl bash coreutils \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY scripts/ ./scripts/
+RUN chmod +x scripts/*.sh
+
+# Overridden by render.yaml startCommand (run-with-alert.sh -- backup/verify).
+CMD ["bash", "-lc", "echo 'set a startCommand (see render.yaml scheduled jobs)'"]

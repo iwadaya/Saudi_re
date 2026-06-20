@@ -3,6 +3,7 @@ import path from 'path';
 import { createRequire } from 'module';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
+import { assertAiEnabled, redactForLlm } from '../lib/aiGovernance.js';
 
 const requireModule = createRequire(import.meta.url);
 
@@ -235,6 +236,7 @@ function extractJson(text) {
 }
 
 async function callOpenAiChecklist(items, doc, documentText) {
+  assertAiEnabled(); // fail-closed AI gate before any provider request
   if (!env.openaiApiKey) return null;
   const { default: nodeFetch } = await import('node-fetch');
   const checklistJson = JSON.stringify(items.map(item => ({
@@ -250,7 +252,7 @@ async function callOpenAiChecklist(items, doc, documentText) {
     checklistJson,
     '',
     'Treaty slip text:',
-    documentText.slice(0, 18000),
+    redactForLlm(documentText.slice(0, 18000)).text, // strip PII/identifiers before egress
     '',
     'Return valid JSON only in this shape:',
     '{"summary":"short summary","items":[{"item_key":"same key","status":"found|missing|partial|unknown","evidence":"short evidence or reason"}]}',

@@ -68,8 +68,11 @@ export async function storeUploadedFile({ folder, file }) {
         public_id: filename,
         resource_type: 'raw',
         use_filename: false,
-        type: 'upload',
-        access_mode: 'public',
+        // Private delivery: 'authenticated' assets are NOT publicly reachable —
+        // each read must be an app-minted, short-lived signed URL (see
+        // getSignedReadUrl). Never 'upload'/access_mode:'public', which would
+        // hand out a permanent world-readable link.
+        type: 'authenticated',
       },
       (err, result) => (err ? reject(err) : resolve(result.secure_url)),
     ).end(file.buffer));
@@ -88,6 +91,63 @@ export async function storeUploadedFile({ folder, file }) {
  */
 export function isRemoteStoragePath(storagePath) {
   return typeof storagePath === 'string' && /^https?:\/\//i.test(storagePath);
+}
+
+// Short-lived TTL for app-minted signed read URLs. Kept small so a leaked link
+// is useless within minutes; the app re-mints on every authorised read.
+export const SIGNED_URL_TTL_SECONDS = 300; // 5 minutes
+
+/**
+ * Cloudinary delivery type encoded in a stored secure_url. New assets are
+ * 'authenticated' (private); legacy rows may be 'upload' (public) or 'private'.
+ */
+export function remoteDeliveryType(url) {
+  if (typeof url !== 'string') return 'upload';
+  if (url.includes('/authenticated/')) return 'authenticated';
+  if (url.includes('/private/')) return 'private';
+  return 'upload';
+}
+
+/**
+ * Derive the Cloudinary public_id from a stored secure_url, stripping the
+ * delivery-type segment, any signature (s--SIG--), version (v123) and extension.
+ */
+export function publicIdFromRemoteUrl(url) {
+  if (typeof url !== 'string') return null;
+  const m = url.match(/\/(?:authenticated|private|upload)\/(.+)$/);
+  if (!m) return null;
+  return m[1]
+    .replace(/^s--[^/]+--\//, '') // signature segment
+    .replace(/^v\d+\//, '')        // version segment
+    .replace(/\.[^/.]+$/, '');      // file extension
+}
+
+/**
+ * Mint a short-lived, app-signed read URL for a remote (Cloudinary) asset.
+ * Returns null for local-disk paths (streamed directly) or when Cloudinary is
+ * not configured / the public_id can't be derived. The URL is time-limited
+ * (expires_at) so it cannot be replayed beyond the TTL — callers must only mint
+ * AFTER the document ACL check passes, and must never hand out the permanent
+ * stored URL.
+ *
+ * @param {string} storagePath  the stored secure_url.
+ * @param {{ ttlSeconds?: number }} [opts]
+ * @returns {Promise<string|null>}
+ */
+export async function getSignedReadUrl(storagePath, { ttlSeconds = SIGNED_URL_TTL_SECONDS } = {}) {
+  if (!isRemoteStoragePath(storagePath)) return null;
+  const cld = await getCloudinary();
+  if (!cld) return null;
+  const publicId = publicIdFromRemoteUrl(storagePath);
+  if (!publicId) return null;
+  const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
+  return cld.url(publicId, {
+    resource_type: 'raw',
+    type: 'authenticated',
+    sign_url: true,
+    secure: true,
+    expires_at: expiresAt,
+  });
 }
 
 /**
@@ -119,14 +179,11 @@ export async function deleteUploadedFile(storagePath) {
   if (isRemoteStoragePath(storagePath)) {
     const cld = await getCloudinary();
     if (!cld) return false;
-    // URL format: https://res.cloudinary.com/{cloud}/raw/upload/v{ver}/{public_id}.{ext}
-    // or simply:  https://res.cloudinary.com/{cloud}/raw/upload/{public_id}
-    const uploadIdx = storagePath.indexOf('/upload/');
-    if (uploadIdx === -1) return false;
-    let publicId = storagePath.slice(uploadIdx + '/upload/'.length);
-    publicId = publicId.replace(/^v\d+\//, '');   // strip version segment
-    publicId = publicId.replace(/\.[^/.]+$/, ''); // strip file extension
-    await cld.uploader.destroy(publicId, { resource_type: 'raw' });
+    // URL format: https://res.cloudinary.com/{cloud}/raw/{type}/[s--SIG--/]v{ver}/{public_id}.{ext}
+    // where {type} is authenticated (new), upload (legacy public) or private.
+    const publicId = publicIdFromRemoteUrl(storagePath);
+    if (!publicId) return false;
+    await cld.uploader.destroy(publicId, { resource_type: 'raw', type: remoteDeliveryType(storagePath) });
     return true;
   }
   const abs = resolveLocalStoragePath(storagePath);

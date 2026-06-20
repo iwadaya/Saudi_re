@@ -4,13 +4,15 @@
 // pricing session actually touches. This complements portfolio.js,
 // which is a stress/knee-finding profile at much higher VU counts.
 //
+// Auth: real production login (cookie + CSRF) — set LOAD_USER / LOAD_PASS.
 // Run:
-//   k6 run load-test/k6/smoke-10vu.js
-//   k6 run -e BASE_URL=https://staging.example.com load-test/k6/smoke-10vu.js
+//   LOAD_USER=u LOAD_PASS=p k6 run load-test/k6/smoke-10vu.js
+//   LOAD_USER=u LOAD_PASS=p k6 run -e BASE_URL=https://staging.example.com load-test/k6/smoke-10vu.js
 
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
+import { login, authHeaders } from './lib/auth.js';
 
 const BASE_URL = __ENV.BASE_URL || 'http://127.0.0.1:4000';
 
@@ -19,6 +21,7 @@ const quoteListTrend = new Trend('t_quote_list', true);
 const quoteCrudTrend = new Trend('t_quote_crud', true);
 const dashboardTrend = new Trend('t_dashboard', true);
 const healthTrend = new Trend('t_health', true);
+const pgPoolWaiting = new Trend('pg_pool_waiting', false);
 const rateLimited = new Counter('c_rate_limited');
 
 export const options = {
@@ -45,13 +48,12 @@ function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+// Real production auth (cookie + CSRF). Each VU logs in once; the auth cookie
+// rides k6's per-VU jar, the CSRF token goes in X-CSRF-Token on mutations.
+let vuCsrf = null;
 function headers() {
-  const vu = String(__VU).padStart(12, '0');
-  return {
-    'Content-Type': 'application/json',
-    'x-user-role': 'CU',
-    'x-user-id': `00000000-0000-0000-0000-${vu}`,
-  };
+  if (!vuCsrf) vuCsrf = login(BASE_URL);
+  return authHeaders(vuCsrf);
 }
 
 function tagged(res, trend) {
@@ -62,6 +64,16 @@ function tagged(res, trend) {
 
 function url(path) {
   return `${BASE_URL}${path}`;
+}
+
+// Sample pg_pool_waiting from /api/health/deep (X-Pool-Waiting header / pool stats).
+function samplePoolWaiting(h) {
+  const res = http.get(url('/api/health/deep'), { headers: h, tags: { endpoint: 'deep_health' } });
+  const fromHeader = Number(res.headers['X-Pool-Waiting'] || res.headers['x-pool-waiting'] || 0);
+  let fromBody = 0;
+  try { fromBody = Number(res.json('db.pool.waitingCount') || 0); } catch { fromBody = 0; }
+  const waiting = fromHeader > 0 ? fromHeader : fromBody;
+  pgPoolWaiting.add(Number.isFinite(waiting) ? waiting : 0);
 }
 
 export function setup() {
@@ -79,6 +91,9 @@ export default function () {
     const r = tagged(http.get(url('/api/health'), { headers: h, tags: { endpoint: 'health' } }), healthTrend);
     check(r, { 'health 200': (x) => x.status === 200 });
   });
+
+  // Periodically sample DB pool pressure for the results table.
+  if (__ITER % 5 === 0) samplePoolWaiting(h);
 
   group('lookups', () => {
     const endpoints = ['/api/brokers', '/api/reinsurers', '/api/treaty-types', '/api/class-of-business'];

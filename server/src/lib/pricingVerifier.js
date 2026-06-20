@@ -164,18 +164,30 @@ export function pricingDriftStats(drifts) {
   };
 }
 
-/** Env-gated strict mode. When true, drifts become 422s. */
+/**
+ * Strict mode — when true, drifts become 422s. Default-ON in production so
+ * drift is REJECTED, not silently warned: an unset PRICING_STRICT in production
+ * is treated as strict. An explicit value always wins, including an emergency
+ * `PRICING_STRICT=0` (or false/no) rollback that disables strict without a
+ * redeploy. Non-production stays warn-only unless explicitly enabled.
+ *
+ * NOTE: this is the enforcement GATE only — it does not change any pricing
+ * formula. The math lives in shared/pricingMath.js and is unchanged.
+ */
 export function isStrictMode() {
   const v = process.env.PRICING_STRICT;
-  return v === '1' || v === 'true' || v === 'yes';
+  if (v != null && v !== '') {
+    if (v === '0' || v === 'false' || v === 'no') return false; // explicit opt-out
+    return v === '1' || v === 'true' || v === 'yes';
+  }
+  return process.env.NODE_ENV === 'production'; // unset → fail-closed in prod
 }
 
 /**
- * Emit a startup warning when the server is running in production
- * with PRICING_STRICT unset. Warn-only mode is the safe default but
- * silently letting drift slip through in production is precisely the
- * failure mode this verifier exists to prevent — surface it loudly
- * once at boot so it can't be missed.
+ * Production now defaults to STRICT (drift rejected). This warns loudly only
+ * when strict has been EXPLICITLY disabled in production (PRICING_STRICT=0/false/
+ * no) — an emergency rollback that re-opens the very drift hole the verifier
+ * exists to close, so it must never pass unnoticed.
  *
  * Call from bootstrap.js after validateRuntimeEnv().
  */
@@ -183,8 +195,8 @@ export function warnIfWarnOnlyInProduction() {
   if (process.env.NODE_ENV !== 'production') return;
   if (isStrictMode()) return;
   logger.warn(
-    'Pricing verifier running in warn-only mode — set PRICING_STRICT=1 to ' +
-    'reject saves whose total_price disagrees with the canonical formula. ' +
-    'See server/src/lib/pricingVerifier.js for guidance on when to enable.'
+    'Pricing verifier is in WARN-ONLY mode in production because PRICING_STRICT ' +
+    'is explicitly disabled — drifted saves are NOT rejected. Remove the override ' +
+    '(prod defaults to strict) to re-enable rejection. See server/src/lib/pricingVerifier.js.'
   );
 }

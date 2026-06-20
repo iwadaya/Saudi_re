@@ -12,23 +12,27 @@ import express from 'express';
 // env.anthropicApiKey at request time, so keeping it null here means
 // the parallel /ai/complete path returns 503 — fine for these tests
 // which exercise /ai/analyse-json only.
-vi.mock('../config/env.js', () => ({
-  env: {
+const { envMock } = vi.hoisted(() => ({
+  envMock: {
     anthropicApiKey: null,
     geminiApiKey: 'gemini-test-key',
     openaiApiKey: 'sk-test',
     uploadDir: '/tmp',
+    // AI governance — enabled by default for these tests; flipped off to test the gate.
+    aiFeaturesEnabled: true,
+    aiRedactionEnabled: true,
+    aiCustomerOptOut: false,
   },
 }));
+vi.mock('../config/env.js', () => ({ env: envMock }));
 
 const llmJsonMock = vi.fn();
 vi.mock('../lib/llmClient.js', () => ({
   callLlmJson: (...args) => llmJsonMock(...args),
 }));
 
-vi.mock('../db/pool.js', () => ({
-  pool: { query: vi.fn(() => Promise.resolve({ rows: [] })) },
-}));
+const { poolQueryMock } = vi.hoisted(() => ({ poolQueryMock: vi.fn(() => Promise.resolve({ rows: [] })) }));
+vi.mock('../db/pool.js', () => ({ pool: { query: poolQueryMock } }));
 
 vi.mock('../lib/facDocAi.js', () => ({
   runFacDocumentAnalysis: vi.fn(),
@@ -88,6 +92,50 @@ async function call(app, { method, path, body }) {
 
 beforeEach(() => {
   llmJsonMock.mockReset();
+  poolQueryMock.mockClear();
+  envMock.aiFeaturesEnabled = true;
+  envMock.aiCustomerOptOut = false;
+});
+
+describe('AI governance gate', () => {
+  const AI_ENDPOINTS = [
+    ['/api/ai/analyse-json', { systemPrompt: 'sys', userPrompt: 'user' }],
+    ['/api/ai/slip-ingest', { base64: 'ZmFrZQ==', mode: 'PROP' }],
+    ['/api/ai/complete', { messages: [{ role: 'user', content: 'hi' }] }],
+    ['/api/ai/fac/analyse-document', { fac_risk_id: 'r1', document_id: 'd1' }],
+  ];
+
+  it('when AI_FEATURES_ENABLED is off, every AI endpoint 403s and makes NO provider call', async () => {
+    envMock.aiFeaturesEnabled = false;
+    llmJsonMock.mockResolvedValue({ text: '{}', provider: 'gemini' });
+    const app = buildApp();
+    for (const [path, body] of AI_ENDPOINTS) {
+      const res = await call(app, { method: 'POST', path, body });
+      expect(res.status, `${path} should 403`).toBe(403);
+      expect(res.body.code).toBe('AI_DISABLED');
+    }
+    expect(llmJsonMock).not.toHaveBeenCalled(); // gate blocks before any provider call
+  });
+
+  it('a tenant/customer opt-out also 403s the gate', async () => {
+    envMock.aiCustomerOptOut = true;
+    const app = buildApp();
+    const res = await call(app, { method: 'POST', path: '/api/ai/analyse-json', body: { systemPrompt: 's', userPrompt: 'u' } });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('AI_OPTED_OUT');
+    expect(llmJsonMock).not.toHaveBeenCalled();
+  });
+
+  it('with the gate open, a successful call writes an AI_CALL audit row', async () => {
+    llmJsonMock.mockResolvedValueOnce({ text: '{"ok":1}', provider: 'gemini', redactionCount: 0 });
+    const app = buildApp();
+    const res = await call(app, { method: 'POST', path: '/api/ai/analyse-json', body: { systemPrompt: 's', userPrompt: 'u' } });
+    expect(res.status).toBe(200);
+    const auditCall = poolQueryMock.mock.calls.find(
+      ([sql, params]) => /audit_log/.test(sql) && Array.isArray(params) && params.includes('AI_CALL'),
+    );
+    expect(auditCall, 'an AI_CALL audit row should be written').toBeTruthy();
+  });
 });
 
 describe('POST /api/ai/analyse-json', () => {

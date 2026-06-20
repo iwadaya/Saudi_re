@@ -28,6 +28,7 @@ import { logger } from '../lib/logger.js';
 import { validateBody } from '../lib/validate.js';
 import { logAudit } from '../services/audit.js';
 import { actorFromReq } from '../middleware/requestContext.js';
+import { assertAiEnabled } from '../lib/aiGovernance.js';
 import { checkPortfolioCompliance } from '../lib/portfolioCompliance.js';
 import { fetchMarketSnapshot as fetchAxcoSnapshot } from '../lib/axcoClient.js';
 import { fetchWorldBankSnapshot } from '../lib/worldBankClient.js';
@@ -215,6 +216,7 @@ async function findFreshReport({ countryId, cobId, targetYear, ttlDays }) {
 // ingest call in routes/ai.js (Bearer auth, /v1/responses, `input`
 // array of role+content messages).
 async function callOpenAI({ system, userPrompt, withWebSearch = true, maxTokens = OPENAI_MAX_TOKENS }) {
+  assertAiEnabled(); // fail-closed AI gate before any provider request
   if (!env.openaiApiKey) {
     const err = new Error('OPENAI_API_KEY not configured on server');
     err.statusCode = 503;

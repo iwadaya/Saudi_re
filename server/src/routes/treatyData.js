@@ -7,6 +7,7 @@ import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from
 import { stripTriangleCells, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from '../lib/triangleStripping.js';
 import { suggestLossQuarters } from '../lib/lossQuarterMapper.js';
 import { logAudit } from '../services/audit.js';
+import { assertCanAccessDocument } from '../services/permissions.js';
 import { actorFromReq } from '../middleware/requestContext.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
@@ -18,6 +19,7 @@ import {
   deleteUploadedFile,
   isRemoteStoragePath,
   resolveLocalStoragePath,
+  getSignedReadUrl,
 } from '../lib/uploadStorage.js';
 import { buildBatchInsert } from '../db/batchInsert.js';
 import { randomUUID } from 'node:crypto';
@@ -786,26 +788,62 @@ router.post("/treaties/:id/wording-checklist/ai-check", asyncHandler(async (req,
 }));
 
 router.delete("/documents/:docId", asyncHandler(async (req, res) => {
-  const {rows}=await pool.query(`SELECT storage_path FROM public.contract_document WHERE document_id=$1`,[req.params.docId]);
-  const {rowCount}=await pool.query(`DELETE FROM public.contract_document WHERE document_id=$1`,[req.params.docId]);
-  if(!rowCount) return res.status(404).json({error:"Document not found"});
-  const sp = rows[0]?.storage_path || '';
-  // Best-effort cleanup — the DB row is already gone, so any failure
+  const { docId } = req.params;
+  // ACL: a document is never more accessible than its parent (contract or quote)
+  // — deleting takes the assignee edit-lock. Resolves doc→owner (404 on
+  // missing/orphan).
+  const { entityType, entityId, doc } = await assertCanAccessDocument(req, docId, 'delete');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rowCount } = await client.query(`DELETE FROM public.contract_document WHERE document_id=$1`, [docId]);
+    if (!rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: "Document not found" }); }
+    // Audit the delete in the SAME transaction (critical: a delete with no audit
+    // record must roll back rather than commit silently).
+    await logAudit(client, {
+      entityType, entityId, eventType: 'DOCUMENT_DELETED',
+      actor: actorFromReq(req),
+      payload: { documentId: docId, contractId: doc.contract_id || null, quoteId: doc.quote_id || null, action: 'delete' },
+    }, { critical: true });
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+  const sp = doc?.storage_path || '';
+  // Best-effort cleanup AFTER commit — the DB row is already gone, so any failure
   // here is a logged disk-space leak, not a request failure.
   deleteUploadedFile(sp).catch((err) => {
     logger.warn('[doc/delete] storage cleanup failed', { storagePath: sp, error: err?.message });
   });
-  res.json({ok:true});
+  res.json({ ok: true });
 }));
 
-async function serveDoc(req, res) {
-  const {rows}=await pool.query(`SELECT * FROM public.contract_document WHERE document_id=$1`,[req.params.docId]);
-  if(!rows.length) return res.status(404).json({error:"Document not found"});
-  const doc = rows[0];
+async function serveDoc(req, res, { audit = false } = {}) {
+  // ACL: reads inherit the parent (contract/quote) READ policy (404 on missing/orphan).
+  const { entityType, entityId, doc } = await assertCanAccessDocument(req, req.params.docId, 'read');
   const sp = doc.storage_path || '';
-  // Cloudinary URL — redirect directly
+  if (audit) {
+    // Record the download. There is no surrounding mutation, so this single-
+    // statement audit write goes on the pool (see services/audit.js txn note).
+    await logAudit(pool, {
+      entityType, entityId, eventType: 'DOCUMENT_DOWNLOADED',
+      actor: actorFromReq(req),
+      payload: { documentId: req.params.docId, contractId: doc.contract_id || null, quoteId: doc.quote_id || null, action: 'download' },
+    });
+  }
+  // Remote (Cloudinary) asset — never redirect to the permanent stored URL.
+  // Mint a short-lived, app-signed URL AFTER the ACL check above and redirect to
+  // that; it expires within minutes so a captured link can't be replayed.
   if (isRemoteStoragePath(sp)) {
-    return res.redirect(sp);
+    const signedUrl = await getSignedReadUrl(sp);
+    if (!signedUrl) {
+      return res.status(502).json({ error: 'Document storage temporarily unavailable' });
+    }
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.redirect(signedUrl);
   }
   // Local disk — single async stat both confirms existence and supplies
   // the Content-Length fallback when the DB row predates size_bytes.
@@ -823,23 +861,23 @@ async function serveDoc(req, res) {
   fs.createReadStream(fp).pipe(res);
 }
 
-router.get("/documents/:docId/download", asyncHandler(serveDoc));
-router.get("/documents/:docId/view",     asyncHandler(serveDoc));
+router.get("/documents/:docId/download", asyncHandler((req, res) => serveDoc(req, res, { audit: true })));
+router.get("/documents/:docId/view",     asyncHandler((req, res) => serveDoc(req, res)));
 
 // ── Document text extraction endpoint ──
 router.get("/documents/:docId/text", asyncHandler(async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT * FROM public.contract_document WHERE document_id=$1`, [req.params.docId]
-  );
-  if (!rows.length) return res.status(404).json({ error: "Document not found" });
-  const doc = rows[0];
+  // ACL: reads inherit the parent contract's READ policy (404 on missing/orphan).
+  const { doc } = await assertCanAccessDocument(req, req.params.docId, 'read');
   const sp = doc.storage_path || '';
   let buffer = null;
 
   try {
     if (isRemoteStoragePath(sp)) {
       const { default: nodeFetch } = await import('node-fetch');
-      const r = await nodeFetch(sp);
+      // Fetch via a freshly-minted signed URL rather than the stored one — the
+      // asset is private, so the permanent URL is not directly readable.
+      const fetchUrl = (await getSignedReadUrl(sp)) || sp;
+      const r = await nodeFetch(fetchUrl);
       if (!r.ok) return res.json({ text: '', error: 'Could not fetch from cloud' });
       buffer = Buffer.from(await r.arrayBuffer());
     } else {

@@ -91,15 +91,28 @@ jobs:
             echo "rolldown linux binding already present — no-op"
           fi
 
+      # ── Enterprise gate (mirrors `npm run verify`, package.json) ──
+      # Every step below is a hard gate: a non-zero exit fails the job, and the
+      # `integration` job needs this one, so nothing merges on a red gate.
       - name: Lint
         run: npm run lint
+
+      # Frontend typecheck (client tsc --noEmit) — part of `verify`, was missing in CI.
+      - name: Frontend typecheck
+        run: npm run typecheck
+
+      # Frontend ratchet budget (inline styles / LOC / a11y / console) — scans
+      # client/src/screens source, no build needed.
+      - name: Frontend budget
+        run: npm run budget:frontend
 
       - name: Unit tests (server)
         run: npm run test:server
 
       # Build the client BEFORE the client tests so bundleBudget.test.js runs
       # against a real dist/ (it FAILS rather than skips when dist is absent).
-      - name: Build client (for the bundle-size budget)
+      # This is also the production build gate from `verify`.
+      - name: Build client (production build + bundle-size budget)
         run: npm run build --prefix client
 
       - name: Unit tests + coverage (client)
@@ -160,5 +173,10 @@ jobs:
       - name: Run DB migrations
         run: npm run migrate --prefix server
 
-      - name: Integration tests
+      # Postgres-backed integration suite. Includes the PRODUCTION-AUTH path
+      # (tests/integration/productionAuth.integration.test.js): it unsets
+      # ALLOW_DEMO_AUTH, logs in for a real httpOnly auth cookie + CSRF token,
+      # and proves a cookie-authenticated mutation needs the X-CSRF-Token header
+      # (403 CSRF_FAILED without it). A non-zero exit fails the job.
+      - name: Integration tests (postgres + production-auth path)
         run: npm run test:server

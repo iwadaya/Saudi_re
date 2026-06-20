@@ -21,6 +21,9 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
 vi.hoisted(() => {
   process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'test-gemini-key';
   process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || 'sk-test';
+  // This spec drives the real extractor → callLlmJson; enable the AI gate
+  // (fail-closed by default) before env.js loads and freezes the flag.
+  process.env.AI_FEATURES_ENABLED = 'true';
 });
 import path from 'path';
 import fs from 'fs';

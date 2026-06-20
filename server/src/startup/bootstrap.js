@@ -71,11 +71,11 @@ export async function bootstrap() {
     startPoolWatchdog();
   }
 
-  // TODO(scheduling): import_snapshots have a 30-day retention. There
-  // is no scheduler in this codebase yet, so cleanup is manual via
-  // `npm run cleanup:snapshots` (see server/scripts/cleanup-snapshots.js).
-  // When a scheduling pattern lands (Render Cron, pg_cron, or a
-  // setInterval-on-boot), wire that script up here.
+  // Scheduling lives OUT of the request-serving process (so a busy/crashed web
+  // dyno never skips a job): import_snapshot cleanup and LDF benchmark refresh
+  // run as scheduled jobs — .github/workflows/scheduled-jobs.yml (GitHub Actions)
+  // and the Render Cron services in render.yaml — alongside the backup +
+  // restore-verification drills. See docs/backup-recovery.md.
 
   return server;
 }

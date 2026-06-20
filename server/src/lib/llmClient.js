@@ -21,6 +21,7 @@
 
 import { env } from '../config/env.js';
 import { logger } from './logger.js';
+import { assertAiEnabled, redactForLlm } from './aiGovernance.js';
 
 const GEMINI_MODEL_DEFAULT = 'gemini-2.5-pro';
 const OPENAI_MODEL_DEFAULT = 'gpt-4o';
@@ -56,7 +57,19 @@ export async function callLlmJson(params) {
     openaiModel = OPENAI_MODEL_DEFAULT,
     forceProvider = null,
     fetchFn = fetch,
+    governance = {},
   } = params;
+
+  // Fail-closed AI gate — enforced here so EVERY caller of the shared client is
+  // covered even if a route forgets the middleware. Throws 403 when AI is
+  // disabled / unconfigured / opted-out, before any provider request.
+  assertAiEnabled(governance);
+
+  // Redact PII/identifiers from the user-turn text BEFORE it leaves the app.
+  // (System prompt is app-authored; binary attachments bypass text redaction —
+  // see aiGovernance.js.) redactionCount is surfaced so callers can audit it.
+  const redaction = redactForLlm(userPrompt);
+  const safeUserPrompt = redaction.text;
 
   const errors = [];
   const tryGemini = forceProvider !== 'openai' && !!env.geminiApiKey;
@@ -69,11 +82,11 @@ export async function callLlmJson(params) {
   if (tryGemini) {
     try {
       const out = await callGemini({
-        systemPrompt, userPrompt, attachments,
+        systemPrompt, userPrompt: safeUserPrompt, attachments,
         maxOutputTokens, temperature, model: geminiModel, fetchFn,
       });
       logger.info('[llm] gemini succeeded', { model: geminiModel });
-      return out;
+      return { ...out, redactionCount: redaction.redactionCount };
     } catch (err) {
       const msg = err?.message || String(err);
       logger.warn('[llm] gemini failed, falling back to openai', { error: msg });
@@ -84,11 +97,11 @@ export async function callLlmJson(params) {
   if (tryOpenAi) {
     try {
       const out = await callOpenAi({
-        systemPrompt, userPrompt, attachments,
+        systemPrompt, userPrompt: safeUserPrompt, attachments,
         maxOutputTokens, temperature, model: openaiModel, fetchFn,
       });
       logger.info('[llm] openai succeeded', { model: openaiModel });
-      return out;
+      return { ...out, redactionCount: redaction.redactionCount };
     } catch (err) {
       const msg = err?.message || String(err);
       logger.error('[llm] openai failed', { error: msg });

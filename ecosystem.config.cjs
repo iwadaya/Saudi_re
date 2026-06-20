@@ -90,6 +90,9 @@ module.exports = {
       // ── Runtime env ───────────────────────────────────────────
       env: {
         NODE_ENV: 'production',
+        // Reject pricing drift (422) instead of warn-only. Prod also defaults to
+        // strict in code; this pins it. Set "0" only for a rehearsed rollback.
+        PRICING_STRICT: '1',
         DB_POOL_MAX: String(dbPoolMax),
         // Only worker 0 starts the pool watchdog — it would log N
         // duplicate warnings otherwise. All workers still observe
