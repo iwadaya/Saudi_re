@@ -14,6 +14,7 @@ When enabled, the server emits:
 | Postgres query spans | Same                                              | Auto-instrumented; SQL text included, parameter values redacted        |
 | Node runtime metrics | Prometheus scrape on `:9464/metrics`             | Process CPU, RSS, event-loop lag, GC pauses                            |
 | **Pool gauges**     | Same Prometheus endpoint                           | `pg_pool_size`, `pg_pool_idle`, `pg_pool_waiting` — the bottleneck signals |
+| **HTTP request metrics** | Same Prometheus endpoint                      | `http_server_request_duration` (histogram, seconds) + `http_server_requests_total` (counter), labelled `http_route`, `http_request_method`, `http_response_status_code`, `status_class` — the API-latency and 5xx dashboards |
 
 What's **not** emitted (deliberately):
 

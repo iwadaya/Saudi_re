@@ -14,6 +14,7 @@ import { guardApiMutations } from './services/permissions.js';
 import { validateAiProviderConfig } from './lib/aiGovernance.js';
 import { validateIdentityConfig } from './config/identity.js';
 import { attachRequestId } from './middleware/requestId.js';
+import { httpMetricsMiddleware } from './observability/httpMetrics.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { cacheStats } from './middleware/httpCache.js';
 import { requestTimeout } from './middleware/requestTimeout.js';
@@ -310,6 +311,12 @@ export function createApp() {
   // Cache-Control. Load-balancer polling should never queue behind
   // real user traffic waiting on helmet/compression/CORS.
   registerHealthRoutes(app);
+
+  // Inbound HTTP metrics (latency histogram + request/5xx counter). Mounted
+  // after the health fast-path so load-balancer probes don't dominate the
+  // series, and before the rest of the chain so it times the full request.
+  // A pure pass-through unless OTel is enabled (see observability/httpMetrics.js).
+  app.use(httpMetricsMiddleware);
 
   // Per-request CSP nonce. Lets script-src stay nonce-based (no 'unsafe-inline'
   // for scripts) while still allowing the single inline bootstrap script in

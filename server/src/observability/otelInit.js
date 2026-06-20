@@ -80,13 +80,15 @@ export async function initOtel() {
   sdk.start();
   console.log(`[otel] started — service=${serviceName} traces→${endpoint} metrics→:${promPort}/metrics`);
 
-  // Register custom pool metrics once the SDK is up. Dynamic-imported
-  // here so a missing file doesn't cascade failures in the SDK itself.
+  // Register custom metrics once the SDK is up. Dynamic-imported here so
+  // a missing file doesn't cascade failures in the SDK itself.
   try {
     const { registerPoolMetrics } = await import('./poolMetrics.js');
     registerPoolMetrics();
+    const { enableHttpMetrics } = await import('./httpMetrics.js');
+    await enableHttpMetrics();
   } catch (err) {
-    console.warn('[otel] pool metrics registration failed:', err?.message || err);
+    console.warn('[otel] custom metrics registration failed:', err?.message || err);
   }
 
   // Drain spans/metrics cleanly on shutdown. We install ours here
