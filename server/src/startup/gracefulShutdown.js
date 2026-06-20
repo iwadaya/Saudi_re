@@ -16,6 +16,7 @@
 
 import { logger } from '../lib/logger.js';
 import { closePools } from '../db/pool.js';
+import { closeRateLimitStore } from '../lib/rateLimitStore.js';
 
 const GRACE_MS = Number(process.env.SHUTDOWN_GRACE_MS) || 10_000;
 const HARD_DEADLINE_MS = Number(process.env.SHUTDOWN_DEADLINE_MS) || 25_000;
@@ -53,6 +54,7 @@ export function installGracefulShutdown(server) {
     // Stage 1: stop accepting new connections.
     server.close(async () => {
       try {
+        await closeRateLimitStore();
         await closePools();
         logger.info('database pools closed — clean shutdown');
       } catch (err) {

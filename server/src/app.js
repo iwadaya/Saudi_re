@@ -6,6 +6,7 @@ import fs from 'fs';
 import helmet from 'helmet';
 import path from 'path';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { makeLimiterStore, rateLimitStoreEnabled } from './lib/rateLimitStore.js';
 import { pool, getPoolStats } from './db/pool.js';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
@@ -198,7 +199,7 @@ function skipRateLimit(req) {
 // whole team. It is keyed on IP ONLY — never x-user-id — so rotating that
 // header can't manufacture fresh buckets to bypass the limit (incl. login
 // brute force, which hits this before authenticate runs).
-export function createApiLimiter({ max = 300, windowMs = 60 * 1000 } = {}) {
+export function createApiLimiter({ max = 300, windowMs = 60 * 1000, store = makeLimiterStore('api') } = {}) {
   return rateLimit({
     windowMs,
     max,
@@ -207,6 +208,7 @@ export function createApiLimiter({ max = 300, windowMs = 60 * 1000 } = {}) {
     message: { error: 'Too many requests, please slow down.' },
     keyGenerator: (req) => `ip:${ipKeyGenerator(req.ip)}`,
     skip: skipRateLimit,
+    ...(store ? { store } : {}),
   });
 }
 
@@ -214,7 +216,7 @@ export function createApiLimiter({ max = 300, windowMs = 60 * 1000 } = {}) {
 // Complements the DB failed_attempts lockout (5 fails → 15-min account lock):
 // this throttles brute force at the edge per IP+identity before the handler/DB
 // is touched. Low ceiling, 15-min window.
-export function createLoginLimiter({ max = 5, windowMs = 15 * 60 * 1000 } = {}) {
+export function createLoginLimiter({ max = 5, windowMs = 15 * 60 * 1000, store = makeLimiterStore('login') } = {}) {
   return rateLimit({
     windowMs,
     max,
@@ -225,6 +227,7 @@ export function createLoginLimiter({ max = 5, windowMs = 15 * 60 * 1000 } = {}) 
       const id = String(req.body?.username || req.body?.email || '').trim().toLowerCase();
       return `login:${ipKeyGenerator(req.ip)}:${id}`;
     },
+    ...(store ? { store } : {}),
   });
 }
 
@@ -234,7 +237,7 @@ export function createLoginLimiter({ max = 5, windowMs = 15 * 60 * 1000 } = {}) 
 // req.user.userId so it's per-account (runs AFTER authenticate); falls back to
 // IP for the anonymous case the route itself rejects with 401. Low ceiling,
 // 15-min window — mirrors the login limiter.
-export function createChangePasswordLimiter({ max = 5, windowMs = 15 * 60 * 1000 } = {}) {
+export function createChangePasswordLimiter({ max = 5, windowMs = 15 * 60 * 1000, store = makeLimiterStore('pw') } = {}) {
   return rateLimit({
     windowMs,
     max,
@@ -242,13 +245,14 @@ export function createChangePasswordLimiter({ max = 5, windowMs = 15 * 60 * 1000
     legacyHeaders: false,
     message: { error: 'Too many password-change attempts. Please wait a few minutes and try again.', code: 'TOO_MANY_REQUESTS' },
     keyGenerator: (req) => (req.user?.userId ? `pw:${req.user.userId}` : `pw-ip:${ipKeyGenerator(req.ip)}`),
+    ...(store ? { store } : {}),
   });
 }
 
 // ── Optional per-user limiter (additive, runs AFTER authenticate) ──
 // Per-user quota keyed on the VERIFIED req.user.userId — never replaces the IP
 // limiter. Anonymous requests are skipped here (already IP-limited above).
-export function createUserApiLimiter({ max = 600, windowMs = 60 * 1000 } = {}) {
+export function createUserApiLimiter({ max = 600, windowMs = 60 * 1000, store = makeLimiterStore('user') } = {}) {
   return rateLimit({
     windowMs,
     max,
@@ -257,6 +261,7 @@ export function createUserApiLimiter({ max = 600, windowMs = 60 * 1000 } = {}) {
     message: { error: 'Too many requests, please slow down.' },
     keyGenerator: (req) => `u:${req.user?.userId}`,
     skip: (req) => !req.user || skipRateLimit(req),
+    ...(store ? { store } : {}),
   });
 }
 
@@ -411,8 +416,12 @@ export function createApp() {
 
   // Rate limiting on all /api — intentionally before JSON parsing so
   // throttled clients do not make the process spend CPU/memory parsing
-  // a body that will be rejected anyway. In-memory store is fine for a
-  // single Node process; swap to Redis when scaling horizontally.
+  // a body that will be rejected anyway. The limiters use a shared Redis
+  // store when REDIS_URL is set (counts shared across instances), else a
+  // per-instance in-memory store — see lib/rateLimitStore.js.
+  if (rateLimitStoreEnabled()) {
+    logger.info('API rate limiters using shared Redis store (distributed across instances)');
+  }
   if (rateLimitBypassed()) {
     logger.warn('API rate limiters BYPASSED (LOAD_TEST or ALLOW_DEMO_AUTH set) — measuring uncapped capacity; never enable in production');
   }
