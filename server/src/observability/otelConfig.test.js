@@ -1,6 +1,6 @@
 // Unit tests for the OTel enablement policy. Pure helpers, no SDK.
 import { describe, expect, it } from 'vitest';
-import { shouldEnableOtel, otlpTraceEndpoint, truthyFlag, falsyFlag } from './otelConfig.js';
+import { shouldEnableOtel, otlpTraceEndpoint, promExporterHost, truthyFlag, falsyFlag } from './otelConfig.js';
 
 describe('shouldEnableOtel', () => {
   it('is ON by default in production (staging/prod run as production)', () => {
@@ -42,6 +42,20 @@ describe('otlpTraceEndpoint', () => {
     expect(otlpTraceEndpoint(undefined)).toBeNull();
     expect(otlpTraceEndpoint('')).toBeNull();
     expect(otlpTraceEndpoint('   ')).toBeNull();
+  });
+});
+
+describe('promExporterHost', () => {
+  it('defaults to loopback so /metrics is private off-box', () => {
+    expect(promExporterHost(undefined)).toBe('127.0.0.1');
+    expect(promExporterHost('')).toBe('127.0.0.1');
+    expect(promExporterHost('   ')).toBe('127.0.0.1');
+  });
+
+  it('honours an explicit bind host for a private-network scraper', () => {
+    expect(promExporterHost('0.0.0.0')).toBe('0.0.0.0');
+    expect(promExporterHost('10.1.2.3')).toBe('10.1.2.3');
+    expect(promExporterHost('  10.0.0.5  ')).toBe('10.0.0.5');
   });
 });
 

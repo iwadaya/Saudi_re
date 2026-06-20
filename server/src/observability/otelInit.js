@@ -25,7 +25,7 @@ import {
   ATTR_DEPLOYMENT_ENVIRONMENT_NAME,
 } from '@opentelemetry/semantic-conventions';
 import { TraceIdRatioBasedSampler, ParentBasedSampler } from '@opentelemetry/sdk-trace-base';
-import { otlpTraceEndpoint } from './otelConfig.js';
+import { otlpTraceEndpoint, promExporterHost } from './otelConfig.js';
 
 /**
  * Build + start the SDK. Idempotent — if somebody imports this twice,
@@ -44,6 +44,10 @@ export async function initOtel() {
   const endpoint    = otlpTraceEndpoint(process.env.OTEL_EXPORTER_OTLP_ENDPOINT);
   const samplerArg  = Number(process.env.OTEL_TRACES_SAMPLER_ARG);
   const promPort    = Number(process.env.PROM_EXPORTER_PORT) || 9464;
+  // Private by default: bind the scrape server to loopback so /metrics is
+  // not reachable off-box. Override with PROM_EXPORTER_HOST for a trusted
+  // private-network scraper.
+  const promHost    = promExporterHost(process.env.PROM_EXPORTER_HOST);
 
   // Sampling — default AlwaysOn, opt-in ratio via env. ParentBased
   // means a parent-sampled trace stays sampled downstream (otherwise
@@ -59,7 +63,7 @@ export async function initOtel() {
       [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: process.env.NODE_ENV || 'development',
     }),
     traceExporter: endpoint ? new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }) : undefined,
-    metricReader: new PrometheusExporter({ port: promPort, endpoint: '/metrics' }),
+    metricReader: new PrometheusExporter({ host: promHost, port: promPort, endpoint: '/metrics' }),
     sampler,
     instrumentations: [
       getNodeAutoInstrumentations({
@@ -84,7 +88,7 @@ export async function initOtel() {
 
   sdk.start();
   const tracesTarget = endpoint ? `${endpoint}/v1/traces` : 'disabled (set OTEL_EXPORTER_OTLP_ENDPOINT)';
-  console.log(`[otel] started — service=${serviceName} traces→${tracesTarget} metrics→:${promPort}/metrics`);
+  console.log(`[otel] started — service=${serviceName} traces→${tracesTarget} metrics→${promHost}:${promPort}/metrics`);
 
   // Register custom metrics once the SDK is up. Dynamic-imported here so
   // a missing file doesn't cascade failures in the SDK itself.
