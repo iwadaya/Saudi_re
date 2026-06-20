@@ -311,7 +311,14 @@ export default function ProfitabilityInsightsModal({ open, onClose, scope = 'tre
 
   return (
     <Modal open={open} onClose={onClose} title="Portfolio Intelligence — Profitability Drivers" className="pi-modal">
-      <style>{`.ui-modal.pi-modal{width:min(1080px,96vw);}`}</style>
+      <style>{`
+        .ui-modal-backdrop:has(.pi-modal){padding:0;}
+        .ui-modal.pi-modal{
+          width:100vw;max-width:100vw;
+          height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;
+          border-radius:0;border-left:none;border-right:none;
+        }
+      `}</style>
 
       {loading && <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-subtle)' }}>Analysing the book…</div>}
       {error && <div style={{ ...card, color: '#fb7185' }}>{error}</div>}
