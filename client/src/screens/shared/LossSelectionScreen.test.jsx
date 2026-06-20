@@ -107,8 +107,10 @@ describe('LossSelectionScreen primary load (useResource + AsyncBoundary)', () =>
 
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
     expect(apiMock.getLargeLosses).toHaveBeenCalledTimes(2);
-    // recovered: hydrated content (KPI strip + empty-table row) is back
-    expect(screen.getByText('Selected')).toBeInTheDocument();
+    // recovered: hydrated content (KPI strip + empty-table row) is back.
+    // findBy* (awaited) — the recovery re-render lands async, so a sync getBy*
+    // here raced the hydration under CI load (intermittent failures).
+    expect(await screen.findByText('Selected')).toBeInTheDocument();
     expect(screen.getByText(/No losses found/i)).toBeInTheDocument();
   });
 });
