@@ -1,8 +1,9 @@
 // src/screens/admin/UserManagementScreen.jsx
 // User & mandate management — accessible to CE and CU only
-import { useState, useEffect, useCallback, useId } from 'react';
+import { useState, useId } from 'react';
 import { ROLE_LABELS, isAtLeast } from '../../utils/auth';
 import { api } from '../../api';
+import { useResource } from '../../hooks/useResource';
 import Topbar from '../../components/Topbar';
 
 const ROLE_COLORS = {
@@ -197,25 +198,25 @@ function AddUserModal({ roles, onClose, onSave }) {
 }
 
 export default function UserManagementScreen() {
-  const [users, setUsers]     = useState([]);
-  const [roles, setRoles]     = useState([]);
-  const [loading, setLoading] = useState(true);
   const [mandateUser, setMandateUser] = useState(null);
   const [, setEditUser]               = useState(null);
   const [showAdd, setShowAdd]         = useState(false);
   const [search, setSearch]           = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  // Users + roles load through the shared useResource hook (uniform loading/
+  // error/abort handling); reload() re-fetches after a create/mandate edit.
+  const resource = useResource(
+    async () => {
       const [u, r] = await Promise.all([api.getUsers(), api.getRoles()]);
-      setUsers(Array.isArray(u) ? u : []);
-      setRoles(Array.isArray(r) ? r : []);
-    } catch { }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
+      return { users: Array.isArray(u) ? u : [], roles: Array.isArray(r) ? r : [] };
+    },
+    [],
+    { reportLabel: 'user management' },
+  );
+  const users = resource.data?.users || [];
+  const roles = resource.data?.roles || [];
+  const loading = resource.loading;
+  const reload = resource.refetch;
 
   // Guard: only CE/CU
   if (!isAtLeast(2)) {
@@ -273,8 +274,8 @@ export default function UserManagementScreen() {
         )}
       </div>
 
-      {mandateUser && <MandateModal user={mandateUser} onClose={() => setMandateUser(null)} onSave={load} />}
-      {showAdd     && <AddUserModal roles={roles} onClose={() => setShowAdd(false)} onSave={load} />}
+      {mandateUser && <MandateModal user={mandateUser} onClose={() => setMandateUser(null)} onSave={reload} />}
+      {showAdd     && <AddUserModal roles={roles} onClose={() => setShowAdd(false)} onSave={reload} />}
     </div>
   );
 }
