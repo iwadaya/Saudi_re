@@ -20,7 +20,7 @@ const TRIANGLE_TYPES = [
 ];
 const TRIANGLE_SUBTITLE = 'All amounts USD · UW year × development period';
 
-export async function buildRenewalPackWorkbook(pool) {
+export async function buildRenewalPackWorkbook(pool, { contractIds = null } = {}) {
   const workbook = new ExcelJS.Workbook();
   coverSheet(workbook, [
     { name: 'Contract Register', desc: 'All treaties with structure detail — one row per NP layer' },
@@ -34,17 +34,27 @@ export async function buildRenewalPackWorkbook(pool) {
     { name: 'Claims Profile', desc: 'Banded claims experience, signed contracts' },
     { name: 'Aggregates by Country', desc: 'Peril aggregates (EQ/WS/Flood/SRCC/Others)' },
   ], { date: new Date().toISOString().slice(0, 10) });
-  await addContractRegisterSheet(workbook, pool);
-  await addTriangleSheets(workbook, pool);
-  await addLossSheet(workbook, pool, 'Large Losses', 'contract_large_losses', 'contract_large_loss_report');
-  await addLossSheet(workbook, pool, 'Cat Losses', 'contract_cat_losses', 'contract_cat_loss_report');
-  await addRiskProfileSheet(workbook, pool);
-  await addClaimsProfileSheet(workbook, pool);
-  await addCountryAggregatesSheet(workbook, pool);
+  await addContractRegisterSheet(workbook, pool, contractIds);
+  await addTriangleSheets(workbook, pool, contractIds);
+  await addLossSheet(workbook, pool, 'Large Losses', 'contract_large_losses', 'contract_large_loss_report', contractIds);
+  await addLossSheet(workbook, pool, 'Cat Losses', 'contract_cat_losses', 'contract_cat_loss_report', contractIds);
+  await addRiskProfileSheet(workbook, pool, contractIds);
+  await addClaimsProfileSheet(workbook, pool, contractIds);
+  await addCountryAggregatesSheet(workbook, pool, contractIds);
   return workbook;
 }
 
 // ---------- helpers ----------
+
+// Per-user export scoping. When `contractIds` is null the export is unrestricted
+// and the SQL is unchanged; otherwise every contract-touching query ANDs
+// `c.contract_id = ANY(...)`. `nextParam` is the next positional parameter index
+// for that query (so the filter param appends after any existing ones).
+function scopeFilter(contractIds, nextParam) {
+  if (!contractIds) return { sql: '', params: [] };
+  return { sql: ` AND c.contract_id = ANY($${nextParam}::uuid[])`, params: [contractIds] };
+}
+
 
 const num = (v) => (v == null ? 0 : Number(v));
 const numOrNull = (v) => (v == null ? null : Number(v));
@@ -87,9 +97,10 @@ function makeBands(initAccumulators) {
 
 // ---------- contract register ----------
 
-async function addContractRegisterSheet(workbook, pool) {
+async function addContractRegisterSheet(workbook, pool, contractIds = null) {
   const ws = workbook.addWorksheet('Contract Register');
   const subtitle = 'All contracts · USD · 100% treaty terms · one row per NP layer';
+  const scope = scopeFilter(contractIds, 1);
   let rows;
   try {
     ({ rows } = await pool.query(
@@ -111,7 +122,9 @@ async function addContractRegisterSheet(workbook, pool) {
          AND (COALESCE(tt.category,'') ILIKE '%NP%' OR COALESCE(tt.category,'') ILIKE '%NON%')
        LEFT JOIN public.currency cur ON cur.currency_id = c.currency_id
        LEFT JOIN ${FX} ON fx.currency_code = cur.currency_code
-       ORDER BY c.uw_year DESC, ced.company_name NULLS LAST, tt.treaty_type, nl.layer_number`
+       WHERE TRUE${scope.sql}
+       ORDER BY c.uw_year DESC, ced.company_name NULLS LAST, tt.treaty_type, nl.layer_number`,
+      scope.params
     ));
   } catch {
     writeNoData(ws, 'Contract Register', subtitle);
@@ -201,7 +214,7 @@ export function triangleDevColumns(minY, maxY, devSet) {
   return [...new Set([...dense, ...present])].sort((a, b) => a - b);
 }
 
-async function addTriangleSheets(workbook, pool) {
+async function addTriangleSheets(workbook, pool, contractIds = null) {
   const typeSheets = TRIANGLE_TYPES.map(({ type, sheet }) => ({ type, ws: workbook.addWorksheet(sheet) }));
   const incurredWs = workbook.addWorksheet('Incurred Triangle');
 
@@ -209,8 +222,13 @@ async function addTriangleSheets(workbook, pool) {
   let minY = null;
   let maxY = null;
   try {
+    const boundScope = scopeFilter(contractIds, 1);
     const { rows } = await pool.query(
-      'SELECT MIN(origin_year) AS min_y, MAX(origin_year) AS max_y FROM public.contract_triangle_cells'
+      `SELECT MIN(t.origin_year) AS min_y, MAX(t.origin_year) AS max_y
+         FROM public.contract_triangle_cells t
+         JOIN public.contract c ON c.contract_id = t.contract_id
+        WHERE TRUE${boundScope.sql}`,
+      boundScope.params
     );
     if (rows.length && rows[0].min_y != null && rows[0].max_y != null) {
       minY = Number(rows[0].min_y);
@@ -226,6 +244,7 @@ async function addTriangleSheets(workbook, pool) {
     grids[type] = null;
     if (minY == null) continue;
     try {
+      const gridScope = scopeFilter(contractIds, 2);
       const { rows } = await pool.query(
         `SELECT t2.origin_year, t2.dev_months,
                 SUM(t2.cum_value * COALESCE(fx.rate_to_usd,1.0)) AS val
@@ -233,9 +252,9 @@ async function addTriangleSheets(workbook, pool) {
          JOIN public.contract c ON c.contract_id = t2.contract_id
          LEFT JOIN public.currency cur ON cur.currency_id = c.currency_id
          LEFT JOIN ${FX} ON fx.currency_code = cur.currency_code
-         WHERE t2.type = $1
+         WHERE t2.type = $1${gridScope.sql}
          GROUP BY t2.origin_year, t2.dev_months`,
-        [type]
+        [type, ...gridScope.params]
       );
       const grid = new Map();
       for (const r of rows) {
@@ -300,9 +319,10 @@ function writeTriangle(ws, grid, minY, maxY, devCols) {
 
 // ---------- large / cat losses ----------
 
-async function addLossSheet(workbook, pool, sheetName, lossTable, reportTable) {
+async function addLossSheet(workbook, pool, sheetName, lossTable, reportTable, contractIds = null) {
   const ws = workbook.addWorksheet(sheetName);
   const subtitle = 'All amounts USD';
+  const scope = scopeFilter(contractIds, 1);
   let rows;
   try {
     ({ rows } = await pool.query(
@@ -317,7 +337,9 @@ async function addLossSheet(workbook, pool, sheetName, lossTable, reportTable) {
        LEFT JOIN public.currency cur ON cur.currency_id = c.currency_id
        LEFT JOIN ${FX} ON fx.currency_code = cur.currency_code
        LEFT JOIN public.country co ON co.country_id = c.country_id
-       ORDER BY ll.date_of_loss NULLS LAST`
+       WHERE TRUE${scope.sql}
+       ORDER BY ll.date_of_loss NULLS LAST`,
+      scope.params
     ));
   } catch {
     writeNoData(ws, sheetName, subtitle);
@@ -364,9 +386,10 @@ async function addLossSheet(workbook, pool, sheetName, lossTable, reportTable) {
 
 // ---------- risk profile ----------
 
-async function addRiskProfileSheet(workbook, pool) {
+async function addRiskProfileSheet(workbook, pool, contractIds = null) {
   const ws = workbook.addWorksheet('Risk Profile');
   const subtitle = 'Signed contracts · USD · share-adjusted exposure & premium';
+  const scope = scopeFilter(contractIds, 1);
   let rows;
   try {
     ({ rows } = await pool.query(
@@ -378,7 +401,8 @@ async function addRiskProfileSheet(workbook, pool) {
        JOIN public.contract_risk_profile_band b ON b.profile_id = p.profile_id
        LEFT JOIN public.currency cur ON cur.currency_id = c.currency_id
        LEFT JOIN ${FX} ON fx.currency_code = cur.currency_code
-       WHERE c.uw_status = 'SIGNED'`
+       WHERE c.uw_status = 'SIGNED'${scope.sql}`,
+      scope.params
     ));
   } catch {
     writeNoData(ws, 'Risk Profile', subtitle);
@@ -447,9 +471,10 @@ async function addRiskProfileSheet(workbook, pool) {
 
 // ---------- claims profile ----------
 
-async function addClaimsProfileSheet(workbook, pool) {
+async function addClaimsProfileSheet(workbook, pool, contractIds = null) {
   const ws = workbook.addWorksheet('Claims Profile');
   const subtitle = 'Signed contracts · USD · share-adjusted';
+  const scope = scopeFilter(contractIds, 1);
   let rows;
   try {
     ({ rows } = await pool.query(
@@ -461,7 +486,8 @@ async function addClaimsProfileSheet(workbook, pool) {
        JOIN public.contract_claims_profile_band b ON b.profile_id = p.profile_id
        LEFT JOIN public.currency cur ON cur.currency_id = c.currency_id
        LEFT JOIN ${FX} ON fx.currency_code = cur.currency_code
-       WHERE c.uw_status = 'SIGNED'`
+       WHERE c.uw_status = 'SIGNED'${scope.sql}`,
+      scope.params
     ));
   } catch {
     writeNoData(ws, 'Claims Profile', subtitle);
@@ -530,9 +556,10 @@ async function addClaimsProfileSheet(workbook, pool) {
 
 // ---------- cresta aggregates ----------
 
-async function addCountryAggregatesSheet(workbook, pool) {
+async function addCountryAggregatesSheet(workbook, pool, contractIds = null) {
   const ws = workbook.addWorksheet('Aggregates by Country');
   const subtitle = 'Signed contracts · USD · share-adjusted aggregate exposure';
+  const scope = scopeFilter(contractIds, 2);
   let rows;
   try {
     ({ rows } = await pool.query(
@@ -547,10 +574,10 @@ async function addCountryAggregatesSheet(workbook, pool) {
        LEFT JOIN public.currency cur ON cur.currency_id = c.currency_id
        LEFT JOIN ${FX} ON fx.currency_code = cur.currency_code
        LEFT JOIN public.country co ON co.country_id = cd.country_id
-       WHERE c.uw_status = 'SIGNED'
+       WHERE c.uw_status = 'SIGNED'${scope.sql}
        GROUP BY co.country_name
        ORDER BY co.country_name`,
-      [APPLY_SIGNED_SHARE]
+      [APPLY_SIGNED_SHARE, ...scope.params]
     ));
   } catch {
     writeNoData(ws, 'Aggregates by Country', subtitle);
