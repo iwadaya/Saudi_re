@@ -40,6 +40,21 @@ class BrokenStore {
   async resetAll() { throw new Error('ECONNREFUSED'); }
 }
 
+// A store that works for N increments, then starts failing (mid-window outage).
+class FailsAfterNStore extends FakeSharedStore {
+  constructor(failAfter) {
+    super();
+    this.failAfter = failAfter;
+    this.calls = 0;
+  }
+
+  async increment(key) {
+    this.calls += 1;
+    if (this.calls > this.failAfter) throw new Error('ECONNRESET');
+    return super.increment(key);
+  }
+}
+
 describe('FallbackStore — shared counts across instances', () => {
   it('two stores over one shared backend see each other\'s counts', async () => {
     const shared = new FakeSharedStore();
@@ -70,6 +85,22 @@ describe('FallbackStore — degrade to in-memory on Redis error', () => {
     const b = (await store.increment('login:ip:x')).totalHits;
     const c = (await store.increment('login:ip:x')).totalHits;
     expect([a, b, c]).toEqual([1, 2, 3]);
+    expect(store.degraded).toBe(true);
+  });
+
+  it('does not reset counters when Redis fails after earlier successes', async () => {
+    const store = new FallbackStore(new FailsAfterNStore(3), { label: 'login' });
+    store.init({ windowMs: 60_000 });
+
+    // First three increments come from the primary store.
+    expect((await store.increment('login:ip:y')).totalHits).toBe(1);
+    expect((await store.increment('login:ip:y')).totalHits).toBe(2);
+    expect((await store.increment('login:ip:y')).totalHits).toBe(3);
+
+    // After the primary fails, fallback must continue from the existing count
+    // (not restart at 1, which would grant a fresh brute-force burst).
+    expect((await store.increment('login:ip:y')).totalHits).toBe(4);
+    expect((await store.increment('login:ip:y')).totalHits).toBe(5);
     expect(store.degraded).toBe(true);
   });
 
