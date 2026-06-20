@@ -18,6 +18,7 @@
     "budget:frontend": "node scripts/frontend-budget.mjs",
     "test": "npm run test:server && npm run test:client",
     "test:server": "vitest run --config server/vitest.config.js",
+    "test:server:coverage": "vitest run --config server/vitest.config.js --coverage",
     "test:client": "vitest run --config client/vitest.config.js",
     "test:client:coverage": "vitest run --config client/vitest.config.js --coverage",
     "test:watch": "vitest --config server/vitest.config.js",

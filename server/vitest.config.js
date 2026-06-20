@@ -40,6 +40,40 @@ export default defineConfig({
         'src/types/**',            // JSDoc only, no runtime
       ],
       reporter: ['text', 'html'],
+      // Coverage ratchets (P1-validation). Enforced by `npm run test:server:coverage`
+      // — which MUST run with TEST_WITH_DB=1 so the integration suite executes and
+      // these DB-backed paths are actually exercised (the CI `integration` job does
+      // this). A bare `npm run test:server` does not compute coverage, so unit-only
+      // runs are unaffected.
+      //
+      // Floors sit a few points BELOW current coverage so they catch regressions
+      // without being brittle. The four named areas (auth / workflow / pricing /
+      // documents) get dedicated globs on top of the global floor; raise these
+      // numbers as coverage improves — never lower them to make a red gate pass.
+      thresholds: {
+        // Whole-server floor (current ≈ 65/55/62/67).
+        statements: 62,
+        branches: 52,
+        functions: 58,
+        lines: 64,
+
+        // auth — token/cookie/CSRF verification + the request-context identity load.
+        '**/{requestContext,authToken,authCookies,csrf}.js': {
+          statements: 78, branches: 74, functions: 95, lines: 90,
+        },
+        // workflow — the approval engine + quote workflow/bind lifecycle.
+        '**/{workflow,approvals,quoteWorkflow,quoteBind}.js': {
+          statements: 64, branches: 52, functions: 67, lines: 67,
+        },
+        // pricing — the server-side NP pricing authority (drift verifier).
+        '**/pricingVerifier.js': {
+          statements: 90, branches: 82, functions: 95, lines: 95,
+        },
+        // documents — upload storage + the document/entity read-access guard.
+        '**/{uploadStorage,permissions}.js': {
+          statements: 85, branches: 77, functions: 95, lines: 92,
+        },
+      },
     },
   },
 });

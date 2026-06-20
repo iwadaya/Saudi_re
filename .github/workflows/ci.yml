@@ -178,5 +178,9 @@ jobs:
       # ALLOW_DEMO_AUTH, logs in for a real httpOnly auth cookie + CSRF token,
       # and proves a cookie-authenticated mutation needs the X-CSRF-Token header
       # (403 CSRF_FAILED without it). A non-zero exit fails the job.
-      - name: Integration tests (postgres + production-auth path)
-        run: npm run test:server
+      #
+      # Runs WITH coverage so the server thresholds (server/vitest.config.js —
+      # global + auth/workflow/pricing/documents) are enforced here, where the DB
+      # is available and the integration suite actually exercises those paths.
+      - name: Integration tests + coverage thresholds (postgres + production-auth path)
+        run: npm run test:server:coverage
