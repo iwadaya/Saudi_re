@@ -1,6 +1,7 @@
 import { lazy } from 'react';
 
 const LoginScreen = lazy(() => import('../screens/login/LoginScreen'));
+const SsoCallback = lazy(() => import('../screens/login/SsoCallback'));
 const SelectScreen = lazy(() => import('../screens/select/SelectScreen'));
 const HomeScreen = lazy(() => import('../screens/home/HomeScreen'));
 const FacHomeScreen = lazy(() => import('../screens/facultative/home/FacHomeScreen'));
@@ -74,6 +75,7 @@ const FacSummary = lazy(() => import('../screens/facultative/summary/FacSummary'
 
 export const appRoutes = [
   { path: '/login', component: LoginScreen, public: true },
+  { path: '/auth/callback', component: SsoCallback, public: true },
   { path: '/select', component: SelectScreen },
   { path: '/', component: HomeScreen },
   { path: '/fac', component: FacHomeScreen },

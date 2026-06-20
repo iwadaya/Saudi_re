@@ -47,6 +47,18 @@ function safeReturnTo(raw) {
   return s;
 }
 
+// Front-channel failures bounce back to the SPA login with a code (the browser
+// is here via a top-level redirect from the IdP — show UI, not raw JSON).
+const loginError = (res, code) => res.redirect(`/login?sso_error=${encodeURIComponent(code)}`);
+
+// ── GET /api/auth/sso/status — public posture probe (always answers) ────────
+// Lets the SPA decide whether to show the "Sign in with SSO" button without
+// leaking anything sensitive. NOT behind the SSO-off 404 guard.
+router.get('/auth/sso/status', (req, res) => {
+  const cfg = getIdentityConfig();
+  res.json({ enabled: isSsoEnabled(cfg), provider: cfg.provider });
+});
+
 // ── GET /api/auth/sso/login ─────────────────────────────────────────────────
 router.get('/auth/sso/login', asyncHandler(async (req, res) => {
   if (!isSsoEnabled()) return res.status(404).json({ error: 'SSO is not enabled.', code: 'SSO_DISABLED' });
@@ -66,7 +78,7 @@ router.get('/auth/sso/callback', asyncHandler(async (req, res) => {
   const txToken = readCookie(req, SSO_STATE_COOKIE);
   const tx = txToken ? verifySsoState(txToken) : null;
   res.clearCookie(SSO_STATE_COOKIE, ssoStateCookieOptions());
-  if (!tx) return res.status(400).json({ error: 'Login session expired or invalid — please try again.', code: 'SSO_STATE_INVALID' });
+  if (!tx) return loginError(res, 'expired');
 
   // Reconstruct the absolute callback URL from the configured redirect URI +
   // the incoming query (stable regardless of proxy host headers).
@@ -78,7 +90,7 @@ router.get('/auth/sso/callback', asyncHandler(async (req, res) => {
     claims = await completeLogin(currentUrl, { state: tx.state, nonce: tx.nonce, codeVerifier: tx.codeVerifier }, cfg);
   } catch (e) {
     logger.warn('sso callback: code exchange failed', { error: e.message });
-    return res.status(401).json({ error: 'SSO sign-in failed.', code: 'SSO_EXCHANGE_FAILED' });
+    return loginError(res, 'failed');
   }
 
   // D2 — enforce the required assurance IN-APP, never trusting the IdP alone.
@@ -90,7 +102,7 @@ router.get('/auth/sso/callback', asyncHandler(async (req, res) => {
       payload: { reasons: assurance.reasons },
     }).catch(() => {});
     emitSecurityAlert('SSO_ACR_DENIED', { sub: claims.sub, reasons: assurance.reasons });
-    return res.status(403).json({ error: 'Multi-factor authentication is required to sign in.', code: 'SSO_MFA_REQUIRED' });
+    return loginError(res, 'mfa_required');
   }
 
   // Provision + issue a session in ONE transaction. A role change bumps the
@@ -119,7 +131,7 @@ router.get('/auth/sso/callback', asyncHandler(async (req, res) => {
   } catch (e) {
     await cl.query('ROLLBACK').catch(() => {});
     logger.error('sso callback: provisioning/session failed', { error: e.message });
-    return res.status(500).json({ error: 'SSO sign-in could not be completed.', code: 'SSO_PROVISION_FAILED' });
+    return loginError(res, 'failed');
   } finally {
     cl.release();
   }
