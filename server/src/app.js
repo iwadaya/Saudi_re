@@ -19,6 +19,7 @@ import { cacheStats } from './middleware/httpCache.js';
 import { requestTimeout } from './middleware/requestTimeout.js';
 
 import authRouter from './routes/auth.js';
+import ssoRouter from './routes/sso.js';
 import { registerApiRoutes } from './routes/registerApiRoutes.js';
 
 // Pagination metadata + error codes exposed so browsers can read them.
@@ -441,6 +442,11 @@ export function createApp() {
   // see the app) but cannot WRITE anything until they reset — every mutating
   // request gets 423 except the change-password route itself (and login).
   app.use('/api', passwordChangeGate);
+
+  // SSO (OIDC) login + callback — public GET endpoints (they ARE the
+  // authentication), registered before the blanket requireAuth. Inert (404)
+  // until IDENTITY_SSO_ENABLED=true. (P1-identity Phase 1a.)
+  app.use('/api', ssoRouter);
 
   // Auth routes self-gate (login / open-registration / login-screen lookups are
   // public; /auth/me and the rest require a real identity) — register before the

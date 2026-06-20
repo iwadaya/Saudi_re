@@ -32,6 +32,14 @@ const TRUTHY = new Set(['1', 'true', 'yes', 'on']);
 const toBool = (v) => TRUTHY.has(String(v ?? '').trim().toLowerCase());
 const parseList = (v) => String(v ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 
+// OIDC scopes are space- or comma-separated; `openid` is always required and is
+// folded in (deduped) so a misconfigured list can't drop it.
+function parseScopes(v) {
+  const raw = String(v ?? '').split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+  const set = new Set(['openid', ...raw]);
+  return [...set];
+}
+
 /** Parse IDENTITY_ROLE_MAP (a JSON object of claimValue→roleCode); bad JSON → {}. */
 function parseRoleMap(v) {
   if (!v) return {};
@@ -61,6 +69,11 @@ export function getIdentityConfig(envObj = process.env) {
     provider: String(envObj.IDENTITY_PROVIDER ?? '').trim() || null,
     issuer: String(envObj.IDENTITY_ISSUER ?? '').trim() || null,
     clientId: String(envObj.IDENTITY_CLIENT_ID ?? '').trim() || null,
+    clientSecret: String(envObj.IDENTITY_CLIENT_SECRET ?? '').trim() || null,
+    redirectUri: String(envObj.IDENTITY_REDIRECT_URI ?? '').trim() || null,
+    postLogoutRedirectUri: String(envObj.IDENTITY_POST_LOGOUT_REDIRECT_URI ?? '').trim() || null,
+    // OIDC scopes requested at authorization; openid is always implied.
+    scopes: parseScopes(envObj.IDENTITY_SCOPES || 'openid profile email'),
     roleClaim: String(envObj.IDENTITY_ROLE_CLAIM ?? '').trim() || 'groups',
     roleMap: parseRoleMap(envObj.IDENTITY_ROLE_MAP),
     defaultRole: VALID_ROLE_CODES.has(defaultRoleRaw) ? defaultRoleRaw : DEFAULT_LOW_PRIV_ROLE,
@@ -150,6 +163,8 @@ export function validateIdentityConfig(config = getIdentityConfig()) {
 
   if (!config.issuer) errors.push('IDENTITY_ISSUER is required when SSO is enabled.');
   if (!config.clientId) errors.push('IDENTITY_CLIENT_ID is required when SSO is enabled.');
+  if (!config.clientSecret) errors.push('IDENTITY_CLIENT_SECRET is required when SSO is enabled (confidential client).');
+  if (!config.redirectUri) errors.push('IDENTITY_REDIRECT_URI is required when SSO is enabled.');
   if (!config.requiredAcr.length && !config.requiredAmr.length) {
     warnings.push('SSO enabled but no IDENTITY_REQUIRED_ACR/AMR set — MFA would not be enforced in-app (D2).');
   }
