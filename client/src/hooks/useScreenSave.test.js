@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
+
+// Capture the toast emitted on save failure (was a window.alert).
+const { toastSpy } = vi.hoisted(() => ({ toastSpy: vi.fn() }));
+vi.mock('./useToast.js', () => ({ useGlobalToast: () => toastSpy }));
+
 import { useScreenSave } from './useScreenSave.js';
 
 // We control the loader/save promises so we can assert ordering and
@@ -76,8 +81,8 @@ describe('useScreenSave', () => {
     expect(persisted).toHaveBeenCalledTimes(1);
   });
 
-  it('save() returns false and alerts when the API throws', async () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+  it('save() returns false and toasts when the API throws', async () => {
+    toastSpy.mockClear();
     const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const { result } = renderHook(() =>
@@ -95,11 +100,10 @@ describe('useScreenSave', () => {
       let ok;
       await act(async () => { ok = await result.current.save(); });
       expect(ok).toBe(false);
-      expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Cope save failed'));
+      expect(toastSpy).toHaveBeenCalledWith(expect.stringContaining('Cope save failed'));
       // dirty stays true so the user can retry
       expect(result.current.dirtyRef.current).toBe(true);
     } finally {
-      alertSpy.mockRestore();
       consoleErr.mockRestore();
     }
   });
