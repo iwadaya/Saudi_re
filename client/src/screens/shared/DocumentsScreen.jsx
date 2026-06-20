@@ -8,6 +8,7 @@ import WizardLayout from '../../components/WizardLayout';
 import ImportProgressModal from '../../components/ImportProgressModal';
 import WarningsDrawer from '../../components/WarningsDrawer';
 import RestoreImportConfirm from '../../components/RestoreImportConfirm';
+import { logger } from '../../utils/logger';
 
 const DOC_TYPES = [
   'Final Slip','Draft Slip','Expiring Slip','Renewal Pack',
@@ -90,9 +91,9 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
         try {
           const c = await api.getContract(contractId);
           setParentId(c?.header?.parent_contract_id || null);
-        } catch (e) { console.warn('[DocumentsScreen] getContract failed:', e?.message); }
+        } catch (e) { logger.warn('[DocumentsScreen] getContract failed:', e?.message); }
       }
-    } catch (e) { console.error('[DocumentsScreen] getDocuments failed:', e); }
+    } catch (e) { logger.error('[DocumentsScreen] getDocuments failed:', e); }
   }, [apiOpts, contractId, quoteMode]);
 
   useEffect(() => { load(); }, [load]);
@@ -119,7 +120,7 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
       }
       setSnapshotsByDocId(byDoc);
     } catch (e) {
-      console.warn('[DocumentsScreen] loadImportState failed:', e?.message);
+      logger.warn('[DocumentsScreen] loadImportState failed:', e?.message);
     }
   }, [apiOpts, contractId]);
 

@@ -12,6 +12,7 @@ import WizardLayout from '../../../components/WizardLayout';
 import LoadErrorPanel from '../../../components/LoadErrorPanel';
 import { useFacRiskId } from '../../../hooks/useContractId';
 import { useScreenSave } from '../../../hooks/useScreenSave';
+import { logger } from '../../../utils/logger';
 
 const ROUTE_KEY = 'FAC_SUMMARY';
 
@@ -90,7 +91,7 @@ export default function FacSummary() {
 
   // Reference data loaders: scoring tables for the territorial cap lookup.
   useEffect(() => {
-    api.facGetScoringTables().then(setScoringTables).catch(console.error);
+    api.facGetScoringTables().then(setScoringTables).catch(logger.error);
   }, []);
 
   const load = useCallback(async () => {
@@ -117,7 +118,7 @@ export default function FacSummary() {
     } catch (e) {
       // Without this the screen used to sit on the "Loading…" spinner forever
       // (loading flips false but risk stays null). Surface it with a retry.
-      console.error('[FacSummary] load failed:', e);
+      logger.error('[FacSummary] load failed:', e);
       setLoadError(e);
     }
     setLoading(false);
@@ -268,7 +269,7 @@ export default function FacSummary() {
       await load();          // pull fresh risk + audit events
       return result;
     } catch (err) {
-      console.error(`[FacSummary:${name}]`, err);
+      logger.error(`[FacSummary:${name}]`, err);
       setActionMessage({ kind: 'error', text: err?.message || `${name} failed` });
       return null;
     } finally {

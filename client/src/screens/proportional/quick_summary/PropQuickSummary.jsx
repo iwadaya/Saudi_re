@@ -6,6 +6,7 @@ import WizardLayout from '../../../components/WizardLayout';
 import { loadProjectedRows } from '../../../logic/projectWithSavedFactors';
 import { loadLossCategoryByYear, deriveLossComponents } from '../../../logic/lossCategoryAmounts';
 import { fmtOrEm as fmt } from '../../../utils/format';
+import { logger } from '../../../utils/logger';
 import {
   cn,
   applyLossCap,
@@ -118,7 +119,7 @@ export function QuickSummaryEmbed({ contractId: propContractId }) {
         const { rows, totals: tot } = runFinancialEngine(standardRows, t);
         setCalcRows(rows); setTotals(tot);
         setLossCat(await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() })));
-      } catch (e) { console.error('Quick Summary Embed Load Failed', e); setError(e.message); }
+      } catch (e) { logger.error('Quick Summary Embed Load Failed', e); setError(e.message); }
       setLoading(false);
     })();
   }, [appState.propTreatyDetail, appState.quoteMode, contractId]);
@@ -213,7 +214,7 @@ export default function PropQuickSummary() {
         const { rows, totals: tot } = runFinancialEngine(standardRows, t);
         setCalcRows(rows); setTotals(tot);
         setLossCat(await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() })));
-      } catch (e) { console.error('Quick Summary Load Failed', e); setError(e.message); }
+      } catch (e) { logger.error('Quick Summary Load Failed', e); setError(e.message); }
       setLoading(false);
     })();
   }, [appState.propTreatyDetail, appState.quoteMode, contractId]);

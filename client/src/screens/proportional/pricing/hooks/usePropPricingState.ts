@@ -26,6 +26,7 @@ import { useGlobalToast } from '../../../../hooks/useToast';
 import { handleStaleWrite as handleStaleWriteRaw } from '../../../../utils/handleStaleWrite';
 import { isReadOnlyError } from '../../../../utils/readOnlyError';
 import { formatPricingDriftMessage } from '../../../../utils/pricingErrors';
+import { logger } from '../../../../utils/logger';
 import {
   COMPONENT_ROWS, DEFAULT_SHARE_ROWS,
   cn, mbbefdG, SWISS_RE_C as SWISS_RE_C_RAW, fitPareto,
@@ -248,7 +249,7 @@ export function usePropPricingState({ appState, contractId, readOnly = false, on
       if (st === 'AWAITING_APPROVAL') setShowOffer(true);
       if (st === 'AWAITING_SIGNED_LINE') setShowOffer(true);
       if (st === 'DISPUTE_PENDING') setShowOffer(true);
-    }).catch(e => { console.error('Pricing load failed:', e); setError(e); setLoading(false); });
+    }).catch(e => { logger.error('Pricing load failed:', e); setError(e); setLoading(false); });
   }, [cid, td.brokeragePct, td.commissionMode, td.fixedCommissionQSPct, td.fixedCommissionSurplusPct, td.provisionalCommissionPct, td.quotaShareEpi, td.surplusEpi, td.taxesPct, reloadNonce]);
 
   useEffect(() => {
@@ -385,7 +386,7 @@ export function usePropPricingState({ appState, contractId, readOnly = false, on
               }
             }
           }
-        } catch (e) { console.error('Large loss load calc failed:', e); }
+        } catch (e) { logger.error('Large loss load calc failed:', e); }
 
         let catLoad = 0;
         try {
@@ -423,7 +424,7 @@ export function usePropPricingState({ appState, contractId, readOnly = false, on
               }
             }
           }
-        } catch (e) { console.error('Cat load calc failed:', e); }
+        } catch (e) { logger.error('Cat load calc failed:', e); }
 
         let exposureLR = 0;
         let cobIds: any[] = [];
@@ -500,7 +501,7 @@ export function usePropPricingState({ appState, contractId, readOnly = false, on
           }
           return nc;
         });
-      } catch (e) { console.error('Auto-calc pricing failed:', e); }
+      } catch (e) { logger.error('Auto-calc pricing failed:', e); }
     })();
   }, [appState.quoteMode, cid, loading, yearly.length, td.treatyTypeId, td.quotaShareEpi, td.surplusEpi, td.fixedCommissionQSPct, td.fixedCommissionSurplusPct, td.brokeragePct, td.taxesPct, td.provisionalCommissionPct, td.commissionMode, td.stripLargeCat, td.totalCapacity, td.qsLimit, td.eventLimit, contract.detail?.total_capacity, contract.detail?.qs_limit, contract.detail?.event_limit, contract.detail?.brokerage_pct, contract.detail?.taxes_pct, contract.commissions?.fixed_commission_qs_pct, contract.commissions?.fixed_commission_surplus_pct, worstLR.lr, contract.header?.country_id, td.countryId, contract, td.country_id, yearly, uwUserEdited]);
 
@@ -642,7 +643,7 @@ export function usePropPricingState({ appState, contractId, readOnly = false, on
       setDirty(false); setSaveMsg({ type: 'ok', text: 'Saved' }); setTimeout(() => setSaveMsg(null), 2000);
       return true;
     } catch (e) {
-      console.error(e);
+      logger.error(e);
       // Not the assignee: the lock raced this write (or failed open). Flip the
       // editor read-only, surface it once, and STOP — never retry/overwrite an
       // authz verdict. The banner's "Allocate to me" is the path back to edit.

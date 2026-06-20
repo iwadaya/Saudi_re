@@ -9,6 +9,7 @@ import AsyncBoundary from '../../../components/AsyncBoundary';
 import PctInput from '../../../components/PctInput';
 import SlipIngestButton from '../../../components/SlipIngestButton';
 import ImportedFromPackBanner from '../../../components/ImportedFromPackBanner';
+import { logger } from '../../../utils/logger';
 import {
   addMonthsClamped,
   dateInputValue,
@@ -750,7 +751,7 @@ export default function PropTreatyDetail() {
         },
       });
       if (stale.handled) return stale.action === 'overwrite';
-      console.error('Save failed:', e); return false;
+      logger.error('Save failed:', e); return false;
     }
     finally { setSaving(false); }
   }, [contractId, update, contractDescription, treatyTypes]);
@@ -781,7 +782,7 @@ export default function PropTreatyDetail() {
       // DB. An existing row (contractId set) can always be re-saved.
       const persistable = cur?.contractId || canPersistTreatyHeader(cur);
       if (persistable && saveRef.current) {
-        saveRef.current().catch(e => console.error('[PropTreatyDetail] unmount save failed:', e));
+        saveRef.current().catch(e => logger.error('[PropTreatyDetail] unmount save failed:', e));
       }
     };
   }, []);

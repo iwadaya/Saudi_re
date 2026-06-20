@@ -9,6 +9,7 @@ import { formatWithCommas, sanitizeNumber, toN, toNullableN } from '../../../uti
 import { getNpTreatyTypeMode, isNpStopLossTreaty } from '../../../utils/npTreatyType';
 import { handleStaleWrite } from '../../../utils/handleStaleWrite';
 import NpStopLossExpiring from './NpStopLossExpiring';
+import { logger } from '../../../utils/logger';
 
 const ROUTE_KEY = 'NP_EXPIRING_STRUCTURE';
 
@@ -479,7 +480,7 @@ export default function NpExpiringStructure() {
         // them as empty 200s). Refuse to overwrite local state with empties —
         // a subsequent save would then DELETE the user's saved row. Surface
         // the failure and let the user retry instead.
-        console.warn('NP Expiring Structure load failed:', e);
+        logger.warn('NP Expiring Structure load failed:', e);
         setSaveMsg(dirty.current
           ? 'Load failed — your unsaved edits are preserved. Refresh to retry.'
           : 'Load failed — refresh to retry.');
@@ -570,7 +571,7 @@ export default function NpExpiringStructure() {
       setTimeout(() => setSaveMsg(''), 2000);
       return true;
     } catch (e) {
-      console.warn('NP Expiring Structure save failed:', e);
+      logger.warn('NP Expiring Structure save failed:', e);
       if (lockOverride !== '*') {
         const stale = await handleStaleWrite(e, {
           entityType: isQuoteSave ? 'quote expiring structure' : 'expiring structure',

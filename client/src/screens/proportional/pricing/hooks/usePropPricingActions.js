@@ -13,6 +13,7 @@
 import { useEffect } from 'react';
 import { api } from '../../../../api';
 import { COMPONENT_ROWS, fmtPct } from '../components/propPricingConstants.js';
+import { logger } from '../../../../utils/logger';
 
 /**
  * @param {{
@@ -73,11 +74,11 @@ export function usePropPricingActions({
       const saved = await api.saveComponentSnapshot(cid, { label: label || `Snapshot ${new Date().toLocaleDateString()}`, components: snapData });
       setSnapshots(prev => [saved, ...prev]);
       setSnapLabel('');
-    } catch (e) { console.error('Snapshot save failed:', e); }
+    } catch (e) { logger.error('Snapshot save failed:', e); }
   };
 
   const handleDeleteSnapshot = async (snapId) => {
-    try { await api.deleteComponentSnapshot(snapId); setSnapshots(prev => prev.filter(s => s.id !== snapId)); } catch (e) { console.error('deleteComponentSnapshot failed:', e); showToast('Failed to delete snapshot: ' + (e?.message || 'Server error')); }
+    try { await api.deleteComponentSnapshot(snapId); setSnapshots(prev => prev.filter(s => s.id !== snapId)); } catch (e) { logger.error('deleteComponentSnapshot failed:', e); showToast('Failed to delete snapshot: ' + (e?.message || 'Server error')); }
   };
 
   // ── Workflow actions ──────────────────────────────────────────────────────
@@ -113,7 +114,7 @@ export function usePropPricingActions({
     try {
       await api.markOfferApproved(cid, { _actor: actorName, comment: returnReason || offerComment, line_pct: offerLine });
     } catch (e) {
-      console.error('mark-approved error:', e.message);
+      logger.error('mark-approved error:', e.message);
       showToast('Approval failed: ' + (e?.message || 'Server error') + '. UI state unchanged — please retry.');
       return;
     }

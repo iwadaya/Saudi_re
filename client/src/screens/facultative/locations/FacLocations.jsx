@@ -11,6 +11,7 @@ import api from '../../../api';
 import WizardLayout from '../../../components/WizardLayout';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import { useFacRiskId } from '../../../hooks/useContractId';
+import { logger } from '../../../utils/logger';
 
 const ROUTE_KEY = 'FAC_LOCATIONS';
 
@@ -241,7 +242,7 @@ export default function FacLocations() {
     ]).then(([occ, cu]) => {
       setOccupancies(occ?.occupancies || []);
       setCurrencies(Array.isArray(cu) ? cu : cu?.items || []);
-    }).catch(console.error);
+    }).catch(logger.error);
   }, []);
 
   const hydrate = useCallback((data) => {

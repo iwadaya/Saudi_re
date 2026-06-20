@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { getUserDisplayName } from '../../../utils/auth';
 import api from '../../../api';
 import { setActiveFacRiskId } from '../../../hooks/useContractId';
+import { logger } from '../../../utils/logger';
 
 const STATUS_COLORS = {
   DRAFT:    { bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.25)', color: 'rgba(148,163,184,0.80)' },
@@ -48,7 +49,7 @@ export default function FacHomeScreen() {
       setRisks(risksData);
       setKpis(kpisData);
     } catch (e) {
-      console.error('Fac home load error:', e);
+      logger.error('Fac home load error:', e);
     } finally {
       setLoading(false);
     }
@@ -73,7 +74,7 @@ export default function FacHomeScreen() {
       setActiveFacRiskId(risk.fac_risk_id, { quote: isQuote });
       navigate('/fac/risk/detail', { state: { facRiskId: risk.fac_risk_id } });
     } catch (e) {
-      console.error('Create fac risk error:', e);
+      logger.error('Create fac risk error:', e);
     }
   };
 
@@ -231,7 +232,7 @@ export default function FacHomeScreen() {
                   const deleteDraft = async (e) => {
                     e.stopPropagation();
                     if (!confirm(`Delete ${r.fac_ref || 'this draft'}?`)) return;
-                    try { await api.facDeleteRisk(r.fac_risk_id); load(); } catch (err) { console.error(err); }
+                    try { await api.facDeleteRisk(r.fac_risk_id); load(); } catch (err) { logger.error(err); }
                   };
                   const sc = STATUS_COLORS[r.status] || STATUS_COLORS.DRAFT;
                   const typePill = r.placement_type === 'NON_PROPORTIONAL'

@@ -6,6 +6,7 @@ import WizardLayout from '../../../components/WizardLayout';
 import { formatWithCommas, sanitizeNumber, parseFlexibleNumber } from '../../../utils/format';
 import LdfAnalysisModal from '../../shared/LdfAnalysisModal';
 import LdfCurveTable from '../../shared/LdfCurveTable';
+import { logger } from '../../../utils/logger';
 
 const ROUTE_KEY = 'PROP_NO_TRIANGULATION';
 
@@ -117,7 +118,7 @@ export default function PropNoTriangulation() {
         }
         setRows(newRows);
       } catch (e) {
-        console.error('No-triangulation load failed:', e);
+        logger.error('No-triangulation load failed:', e);
       }
       setLoading(false);
     })();
@@ -194,7 +195,7 @@ export default function PropNoTriangulation() {
       dirty.current = false;
       return true;
     } catch (e) {
-      console.error('Save failed:', e);
+      logger.error('Save failed:', e);
       return false;
     }
   }, [contractId, years, rows]);

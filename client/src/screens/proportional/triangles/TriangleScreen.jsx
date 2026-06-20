@@ -4,6 +4,7 @@ import { useContractId } from '../../../hooks/useContractId';
 import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
 import LoadErrorPanel from '../../../components/LoadErrorPanel';
+import { logger } from '../../../utils/logger';
 
 const TYPE_MAP = {
   PROP_PREMIUM_TRIANGLES: 'PREMIUM',
@@ -99,7 +100,7 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
       api.getTriangle(contractId, triType, { ...apiOpts, variant: 'MODIFIED' }),
       api.getTriangle(contractId, triType, { ...apiOpts, variant: 'ACTUAL' }),
     ]).then(([m, a]) => setGrids({ MODIFIED: mapCells(m), ACTUAL: mapCells(a) }))
-      .catch(e => { console.warn('Load triangle:', e); setLoadError(e); })
+      .catch(e => { logger.warn('Load triangle:', e); setLoadError(e); })
       .finally(() => setLoading(false));
     // Re-run on year-window changes: triangleMeta arrives from PropTreatyDetail
     // asynchronously and sizes the grids; without these deps the index-based
@@ -151,7 +152,7 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
       buildFromCells(o?.cells || (Array.isArray(o) ? o : []), sumGrid);
       const derived = sumGrid.map(row => row.map(v => v == null ? '' : fmtCell(v)));
       setGrids(prev => ({ ...prev, [variant]: derived }));
-    }).catch(e => { console.warn('Load incurred:', e); setLoadError(e); }).finally(() => setLoading(false));
+    }).catch(e => { logger.warn('Load incurred:', e); setLoadError(e); }).finally(() => setLoading(false));
   }, [contractId, triType, startYear, numDevYears, apiOpts, isDerived, years, devYears.length, variant, reloadNonce]);
 
   // Note: the year window is owned by the load effect above (which re-runs

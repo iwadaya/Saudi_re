@@ -6,6 +6,7 @@ import WizardLayout from '../../components/WizardLayout';
 import LoadErrorPanel from '../../components/LoadErrorPanel';
 import { parseFlexibleNumber, dateInputValue } from '../../utils/format';
 import LossAnalysisModal from './LossAnalysisModal';
+import { logger } from '../../utils/logger';
 
 const COLS = [
   // UW Year leads — it's the origin-year key stripping joins the triangle on.
@@ -282,7 +283,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
       // Surface the failure instead of silently leaving an empty grid the user
       // could overwrite the server's good data with. Save is disabled while
       // loadError is set (see below); Retry re-runs loadData.
-      console.warn('Load losses:', e);
+      logger.warn('Load losses:', e);
       setLoadError(e);
     }
     setLoading(false);
@@ -317,7 +318,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
       loadData();
       return true;
     } catch (e) {
-      console.error('Save losses:', e);
+      logger.error('Save losses:', e);
       setSaveMsg({ type: 'err', text: 'Save failed' });
       setTimeout(() => setSaveMsg(null), 3000);
       return false;

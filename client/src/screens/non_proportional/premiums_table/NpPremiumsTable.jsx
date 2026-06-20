@@ -6,7 +6,7 @@ import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import { useGlobalToast } from '../../../hooks/useToast';
 import { toInt, yearFromDate, parseFlexNum, numOrZero, fmtMoney, fmtPct, computeCumulative, resolveYearsFromServer, sameYears } from './formatters';
-
+import { logger } from '../../../utils/logger';
 const ROUTE_KEY = 'NP_PREMIUMS_TABLE';
 
 /* ═══════════════════════════════════════════════
@@ -487,7 +487,7 @@ export default function NpPremiumsTable() {
       await api.saveNonPropTreaty(contractId, payload, quoteMode ? { quote: true } : undefined);
       return true;
     } catch (e) {
-      console.error('[NpPremiumsTable] save failed:', e);
+      logger.error('[NpPremiumsTable] save failed:', e);
       showToast('Premiums save failed: ' + (e?.message || 'Server error'));
       return false;
     }

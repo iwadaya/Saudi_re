@@ -5,6 +5,7 @@ import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import { sanitizeNumber, toN as cn } from '../../../utils/format';
+import { logger } from '../../../utils/logger';
 
 const ROUTE_KEY = 'PROP_CRESTA_AGGREGATES';
 const PERILS = [
@@ -300,7 +301,7 @@ export default function PropCrestaAggregates({ embedded = false, routeKeyOverrid
         setActiveCountry(initCountry);
         setActiveCobId(initCob);
         setAggTreatyType(initType);
-      } catch (e) { if (!cancelled) console.error('CRESTA load failed', e); }
+      } catch (e) { if (!cancelled) logger.error('CRESTA load failed', e); }
     })();
     return () => { cancelled = true; };
   }, [appState.quoteMode, appState.wizardMode, bumpCache, contractId, npTd.countryId, npTd.treatyTypeName, td.countryId, td.treatyTypeName]);
@@ -373,7 +374,7 @@ export default function PropCrestaAggregates({ embedded = false, routeKeyOverrid
     });
     const failures = results.filter(r => !r.ok);
     if (failures.length) {
-      failures.forEach(f => console.error('[PropCrestaAggregates] batch save failed for', f.key, f.error));
+      failures.forEach(f => logger.error('[PropCrestaAggregates] batch save failed for', f.key, f.error));
       const msg = failures[0].error?.message || 'Server error';
       setSaveMsg({ type: 'err', text: `CRESTA save failed for ${failures.length} of ${results.length} contexts: ${msg}` });
       setTimeout(() => setSaveMsg(null), 4000);
@@ -428,7 +429,7 @@ export default function PropCrestaAggregates({ embedded = false, routeKeyOverrid
       if (!quiet) { setSaveMsg({ type: 'ok', text: 'Saved' }); setTimeout(() => setSaveMsg(null), 2000); }
       return true;
     } catch (e) {
-      console.error('CRESTA save error', e);
+      logger.error('CRESTA save error', e);
       if (!quiet) {
         setSaveMsg({ type: 'err', text: `Save failed: ${e?.message || 'server error'}` });
         setTimeout(() => setSaveMsg(null), 4000);

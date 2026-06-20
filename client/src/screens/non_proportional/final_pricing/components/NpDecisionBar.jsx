@@ -6,6 +6,7 @@
 
 import { exportNpPricingToExcel } from '../exportPricingToExcel.js';
 import { toN } from '../formatters.js';
+import { logger } from '../../../../utils/logger';
 
 /**
  * @param {{
@@ -81,7 +82,7 @@ export default function NpDecisionBar({
                         egnpi: npDetail?.estGnpi || npDetail?.est_gnpi || 0,
                         totalLimit: layers.reduce((s, l) => s + (toN(l.limit) || 0), 0),
                         programmeRows: progRows,
-                      }).catch(e => console.error('Export failed:', e));
+                      }).catch(e => logger.error('Export failed:', e));
                     }}
                   >
                     ↓ Export Excel

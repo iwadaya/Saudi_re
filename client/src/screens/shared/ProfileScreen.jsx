@@ -5,6 +5,7 @@ import { useResource } from '../../hooks/useResource';
 import WizardLayout from '../../components/WizardLayout';
 import AsyncBoundary from '../../components/AsyncBoundary';
 import { sanitizeNumber, fmtOrEm as fmt, toN as cn } from '../../utils/format';
+import { logger } from '../../utils/logger';
 
 function emptyBand() { return { min: '', max: '', policies: '', sumInsured: '', premiums: '', claimsPaid: '' }; }
 function bandHasData(b) {
@@ -282,7 +283,7 @@ export default function ProfileScreen({ routeKey, title, headerPill, profileType
       await saveFn(contractId, cobId, profilePayload, quoteMode ? { quote: true } : undefined);
       setDirty(false); setSaveMsg({ type: 'ok', text: 'Saved' }); setTimeout(() => setSaveMsg(null), 2000);
       return true;
-    } catch (e) { console.error('Save profile:', e); setSaveMsg({ type: 'err', text: 'Save failed' }); setTimeout(() => setSaveMsg(null), 3000); return false; }
+    } catch (e) { logger.error('Save profile:', e); setSaveMsg({ type: 'err', text: 'Save failed' }); setTimeout(() => setSaveMsg(null), 3000); return false; }
   }, [contractId, customB, customG, grossLossRatio, isClaims, quoteMode, saveFn]);
 
   /* ═══════════════════════════════════════════════════════════════

@@ -5,6 +5,7 @@ import { getUserDisplayName, getSession, canAccessApprovals } from '../../utils/
 import { formatDate } from '../../utils/format';
 import { useAppState } from '../../context/AppContext';
 import Topbar, { useViewingUser, setViewingUser } from '../../components/Topbar';
+import { logger } from '../../utils/logger';
 import {
   setActiveContractId,
   setActiveQuoteId,
@@ -450,7 +451,7 @@ export default function HomeScreen() {
       dataRef.current = next;
       React.startTransition(() => setData(next));
     } catch (e) {
-      if (myToken === loadToken.current) console.warn('Home load:', e);
+      if (myToken === loadToken.current) logger.warn('Home load:', e);
     } finally {
       if (myToken === loadToken.current) {
         setLoading(false);
@@ -587,7 +588,7 @@ export default function HomeScreen() {
         <button className="topbar-pill" onClick={() => navigate('/benchmark')}>⚡ Quick Benchmark</button>
         <button className="topbar-pill" onClick={() => navigate('/workbench')}>Workbench</button>
         <button className="topbar-pill" onClick={() => {
-          exportPortfolioToExcel().catch(e => console.error('Portfolio export failed:', e));
+          exportPortfolioToExcel().catch(e => logger.error('Portfolio export failed:', e));
         }}>↓ Export Portfolio</button>
         {canAccessApprovals() && pendingCount > 0 && <button className="topbar-pill" onClick={() => navigate('/approvals')}>Approvals ({pendingCount})</button>}
       </>} />

@@ -1,6 +1,7 @@
 // WordingChecker.jsx — AI wording analysis: coverage, exclusions, grey areas, treaty check
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { api } from '../../api';
+import { logger } from '../../utils/logger';
 
 const WORDING_CHECKLIST = [
   { key: 'claimClause',           label: 'Claim Clause',                    required: true },
@@ -175,7 +176,7 @@ export default function WordingChecker({ contractId, parentContractId, docs: pro
           const docId = wordingDoc.document_id || wordingDoc.id;
           const r = await api.getDocumentText(docId);
           wordingText = r.text || '';
-        } catch(e) { console.warn('text extract:', e.message); }
+        } catch(e) { logger.warn('text extract:', e.message); }
       }
       if (priorWordingDoc) {
         try {
