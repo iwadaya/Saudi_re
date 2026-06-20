@@ -261,8 +261,9 @@ describe('NpStopLossPricing — render + interaction', () => {
     });
     expect(screen.getByText('15%')).toBeInTheDocument();
     expect(screen.getByText('12,000,000')).toBeInTheDocument();
-    // …and the engine-only fields the Structure page doesn't own get
-    // hydrated from the server snapshot.
-    expect(screen.getByPlaceholderText('e.g. 20').value).toBe('12');     // freqLambda
+    // …and the engine-only fields the Structure page doesn't own get hydrated
+    // from the server snapshot. That hydration lands independently of the
+    // read-only display above, so await it (a sync read raced under CI load).
+    await waitFor(() => expect(screen.getByPlaceholderText('e.g. 20').value).toBe('12')); // freqLambda
   });
 });
