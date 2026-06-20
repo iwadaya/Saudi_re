@@ -518,7 +518,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
                     <th className="ls-th ls-th--r">Paid</th>
                     <th className="ls-th ls-th--r">OS</th>
                     <th className="ls-th ls-th--r">Incurred</th>
-                    <th className="ls-th ls-th--c" style={{ width: 70 }}>Factor</th>
+                    <th className="ls-th ls-th--c" style={{ width: 92 }}>Factor</th>
                     <th className="ls-th ls-th--r">Inflated</th>
                   </tr></thead>
                   <tbody>

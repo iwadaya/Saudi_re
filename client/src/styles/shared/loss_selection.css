@@ -47,7 +47,7 @@
   font-size: 12px; box-shadow: none !important; appearance: none; -webkit-appearance: none;
 }
 .LOSS_SELECTION_PAGE .ls-finput:focus{ border-color: rgba(var(--accent-rgb),.50) !important; outline: none; }
-.LOSS_SELECTION_PAGE .ls-finput--sm{ width: 64px; text-align: center; padding: 0 4px; }
+.LOSS_SELECTION_PAGE .ls-finput--sm{ width: 80px; text-align: center; padding: 0 4px; }
 
 /* Buttons */
 .LOSS_SELECTION_PAGE .ls-btn{
