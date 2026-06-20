@@ -89,6 +89,8 @@ export async function initOtel() {
     await enableHttpMetrics();
     const { enableAiMetrics } = await import('./aiMetrics.js');
     await enableAiMetrics();
+    const { enableBusinessMetrics } = await import('./businessMetrics.js');
+    await enableBusinessMetrics();
   } catch (err) {
     console.warn('[otel] custom metrics registration failed:', err?.message || err);
   }

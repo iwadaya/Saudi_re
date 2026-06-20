@@ -35,6 +35,7 @@ import {
 import { resolveActor } from '../services/pricingHelpers.js';
 import { logger } from '../../../lib/logger.js';
 import { verifyNpPricingOutputs, summariseDrifts, isStrictMode, pricingDriftStats } from '../../../lib/pricingVerifier.js';
+import { recordPricingDrift } from '../../../observability/businessMetrics.js';
 
 export async function getTreatyPricingController(req, res) {
   res.json(await getTreatyPricing(req.params.id));
@@ -69,6 +70,7 @@ export async function saveCompositePricingController(req, res) {
   const drifts = verifyNpPricingOutputs(outputs);
   res.setHeader('X-Pricing-Drift-Count', String(drifts.length));
   const driftStats = pricingDriftStats(drifts);
+  recordPricingDrift({ endpoint: 'treaty_pricing', stats: driftStats, strict: isStrictMode() });
   const driftLog = {
     requestId: res.locals.requestId || req.id || null,
     endpoint: 'treaty_pricing',
