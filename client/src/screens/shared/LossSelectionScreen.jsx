@@ -18,6 +18,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
   const [losses, setLosses] = useState([]);
   const [threshold, setThreshold] = useState('');
   const [thresholdFocused, setThresholdFocused] = useState(false);
+  const [factorFocus, setFactorFocus] = useState(null);
   const [dirty, setDirty] = useState(false);
   const [saveMsg, setSaveMsg] = useState(null);
   // Loss-selection staleness: true when large/cat losses were edited after the
@@ -456,7 +457,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
                 <div className="ls-kpi ls-kpi--green"><div className="ls-kpi-label">Selected</div><div className="ls-kpi-value">{selected.length}</div></div>
                 <div className="ls-kpi"><div className="ls-kpi-label">Incurred</div><div className="ls-kpi-value">{fmt(totalIncurred)}</div></div>
                 <div className="ls-kpi ls-kpi--blue"><div className="ls-kpi-label">Inflation-Adj</div><div className="ls-kpi-value">{fmt(totalInflated)}</div></div>
-                <div className="ls-kpi"><div className="ls-kpi-label">Avg Factor</div><div className="ls-kpi-value">{avgFactor.toFixed(3)}</div></div>
+                <div className="ls-kpi"><div className="ls-kpi-label">Avg Factor</div><div className="ls-kpi-value">{avgFactor.toFixed(4)}</div></div>
                 <div className="ls-kpi"><div className="ls-kpi-label">Inception Yr</div><div className="ls-kpi-value">{inceptionYear || contractUwYear || '—'}</div></div>
                 {totalLoadingPct > 0 && <div className="ls-kpi ls-kpi--amber"><div className="ls-kpi-label">Loaded Total</div><div className="ls-kpi-value">{fmt(totalLoaded)}</div></div>}
                 {lossLoading.overallInflatedPct != null && (
@@ -539,8 +540,14 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
                           <td className="ls-td ls-td--r">{fmt(cn(l.os))}</td>
                           <td className="ls-td ls-td--r ls-td--bold">{fmt(inc)}</td>
                           <td className="ls-td ls-td--c">
-                            <input className="ls-finput ls-finput--sm" type="number" step="0.001"
-                              value={l.inflation_factor} onChange={e => {
+                            <input className="ls-finput ls-finput--sm" type="text" inputMode="decimal"
+                              value={factorFocus === i ? l.inflation_factor : (String(l.inflation_factor).trim() === '' ? '' : cn(l.inflation_factor).toFixed(4))}
+                              onFocus={() => setFactorFocus(i)}
+                              onBlur={() => {
+                                setFactorFocus(null);
+                                setLosses(prev => { const n = [...prev]; const v = String(n[i].inflation_factor).trim(); n[i] = { ...n[i], inflation_factor: v === '' ? '' : cn(v).toFixed(4) }; return n; });
+                              }}
+                              onChange={e => {
                                 setLosses(prev => { const n = [...prev]; n[i] = { ...n[i], inflation_factor: e.target.value }; return n; });
                                 setDirty(true);
                               }} />
