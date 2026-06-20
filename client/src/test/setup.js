@@ -8,15 +8,20 @@ import { vi } from 'vitest';
 vi.mock('react-router-dom', async () => {
   const React = await import('react');
   const RouterContext = React.createContext({
-    location: { pathname: '/', state: null },
+    location: { pathname: '/', search: '', state: null },
     navigate: vi.fn(),
   });
+  // Split a "/path?a=b" entry into { pathname, search } so useSearchParams works.
+  const splitEntry = (s) => {
+    const i = s.indexOf('?');
+    return i === -1 ? { pathname: s, search: '' } : { pathname: s.slice(0, i), search: s.slice(i) };
+  };
   return {
     MemoryRouter({ initialEntries, children }) {
     const first = Array.isArray(initialEntries) && initialEntries.length ? initialEntries[0] : '/';
     const location = typeof first === 'string'
-      ? { pathname: first, state: null }
-      : { pathname: first?.pathname || '/', state: first?.state || null };
+      ? { ...splitEntry(first), state: null }
+      : { pathname: first?.pathname || '/', search: first?.search || '', state: first?.state || null };
     const navigate = vi.fn();
     return React.createElement(RouterContext.Provider, { value: { location, navigate } }, children);
     },
@@ -25,6 +30,10 @@ vi.mock('react-router-dom', async () => {
     },
     useNavigate() {
       return React.useContext(RouterContext).navigate;
+    },
+    useSearchParams() {
+      const loc = React.useContext(RouterContext).location;
+      return [new URLSearchParams(loc?.search || ''), vi.fn()];
     },
     Link({ to, children, ...props }) {
       return React.createElement('a', { href: typeof to === 'string' ? to : '#', ...props }, children);

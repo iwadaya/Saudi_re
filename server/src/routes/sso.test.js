@@ -105,6 +105,21 @@ beforeEach(() => {
   logoutTokenThrows = false;
 });
 
+describe('GET /auth/sso/status', () => {
+  it('reports disabled in the default posture (always answers, no 404)', async () => {
+    const res = await call(buildApp(), { path: '/auth/sso/status' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ enabled: false });
+  });
+
+  it('reports enabled + provider label when SSO is on', async () => {
+    setEnv({ ...SSO_ON, IDENTITY_PROVIDER: 'keycloak' });
+    const res = await call(buildApp(), { path: '/auth/sso/status' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ enabled: true, provider: 'keycloak' });
+  });
+});
+
 describe('GET /auth/sso/login', () => {
   it('404 when SSO is disabled (default posture)', async () => {
     const res = await call(buildApp(), { path: '/auth/sso/login' });
@@ -132,11 +147,11 @@ describe('GET /auth/sso/callback', () => {
     expect(res.status).toBe(404);
   });
 
-  it('400 when the state cookie is missing/invalid', async () => {
+  it('redirects to /login?sso_error=expired when the state cookie is missing/invalid', async () => {
     setEnv(SSO_ON);
     const res = await call(buildApp(), { path: '/auth/sso/callback?code=abc&state=st' });
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe('SSO_STATE_INVALID');
+    expect(res.status).toBe(302);
+    expect(res.location).toBe('/login?sso_error=expired');
   });
 
   it('happy path: provisions, issues a session cookie, redirects to returnTo', async () => {
@@ -149,12 +164,12 @@ describe('GET /auth/sso/callback', () => {
     expect(res.cookies.some((c) => c.name === 'sso_tx' && c.cleared)).toBe(true);
   });
 
-  it('D2: denies 403 when required ACR is not satisfied + raises an alert', async () => {
+  it('D2: redirects to /login?sso_error=mfa_required when ACR is not satisfied + raises an alert', async () => {
     setEnv({ ...SSO_ON, IDENTITY_REQUIRED_ACR: 'mfa-strong' });
     completeLoginResult = { sub: 'idp|1', email: 'a@b.com', acr: 'pwd-only' };
     const res = await call(buildApp(), { path: '/auth/sso/callback?code=abc&state=st', headers: withState() });
-    expect(res.status).toBe(403);
-    expect(res.body.code).toBe('SSO_MFA_REQUIRED');
+    expect(res.status).toBe(302);
+    expect(res.location).toBe('/login?sso_error=mfa_required');
     expect(alertMock).toHaveBeenCalledWith('SSO_ACR_DENIED', expect.objectContaining({ sub: 'idp|1' }));
     expect(res.cookies.some((c) => c.name === 'auth_token' && !c.cleared)).toBe(false);
   });

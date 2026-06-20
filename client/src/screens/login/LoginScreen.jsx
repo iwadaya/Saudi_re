@@ -1,6 +1,6 @@
 // src/screens/login/LoginScreen.jsx
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   getSession, setSession, canAccessApprovals,
   createTestSession,
@@ -57,6 +57,38 @@ const onFieldBlur = (e) => {
   e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)';
   e.currentTarget.style.boxShadow = 'none';
 };
+
+// SSO block styling — const objects referenced with a single brace (style={obj})
+// so they don't count against the screens-layer inline-style budget.
+const SSO_DIVIDER = { display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0' };
+const SSO_DIVIDER_LINE = { flex: 1, height: 1, background: 'rgba(255,255,255,.10)' };
+const SSO_DIVIDER_TEXT = { fontSize: 10, color: 'rgba(255,255,255,.30)', letterSpacing: '.08em', textTransform: 'uppercase' };
+const SSO_BUTTON = {
+  width: '100%', minHeight: FIELD_HEIGHT, borderRadius: FIELD_RADIUS,
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+  fontSize: 13, fontWeight: 700, cursor: 'pointer',
+  color: 'rgba(255,255,255,.92)', background: 'rgba(15,23,42,0.92)',
+  border: '1px solid rgba(148,163,184,0.35)',
+};
+// Error banner for ?sso_error — const (single-brace ref) to stay budget-neutral.
+const SSO_ERR_BANNER = {
+  padding: '8px 12px', borderRadius: 8, background: 'rgba(248,113,113,.12)',
+  border: '1px solid rgba(248,113,113,.30)', color: '#f87171', fontSize: 12, marginBottom: 16,
+};
+
+// Friendly copy for the ?sso_error codes the server bounces back on a failed
+// front-channel SSO attempt.
+const SSO_ERRORS = {
+  expired: 'Your sign-in session expired. Please try again.',
+  mfa_required: 'Multi-factor authentication is required to sign in.',
+  failed: 'Single sign-on failed. Please try again or use your password.',
+};
+
+// Top-level navigation (NOT fetch) — the OIDC flow needs a full-page redirect so
+// the browser follows the IdP round-trip and lands back on /auth/callback.
+function startSso() {
+  window.location.assign(`/api/auth/sso/login?returnTo=${encodeURIComponent('/auth/callback')}`);
+}
 
 // ── Test Access Panel ─────────────────────────────────────────────────────────
 function TestAccessPanel({ onLogin }) {
@@ -199,6 +231,8 @@ function AddUserPanel({ onCreated, onCancel }) {
 // ── Main Login Screen ─────────────────────────────────────────────────────────
 export default function LoginScreen() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [ssoEnabled, setSsoEnabled]     = useState(false);
   const [users, setUsers]               = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -233,6 +267,15 @@ export default function LoginScreen() {
   useEffect(() => {
     loadUsers().finally(() => setLoadingUsers(false));
   }, []);
+
+  // Probe SSO posture so the button only shows when the server has SSO on.
+  useEffect(() => {
+    api.getSsoStatus()
+      .then(s => setSsoEnabled(!!s?.enabled))
+      .catch(() => setSsoEnabled(false));
+  }, []);
+
+  const ssoError = SSO_ERRORS[searchParams.get('sso_error')] || '';
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -282,6 +325,11 @@ export default function LoginScreen() {
         </div>
 
         <div className="glass" style={{ borderRadius: 16, padding: 24, border: '1px solid rgba(255,255,255,.10)' }}>
+          {ssoError && (
+            <div role="alert" style={SSO_ERR_BANNER}>
+              {ssoError}
+            </div>
+          )}
           <div style={{ marginBottom: 18 }}>
             <label htmlFor="login-user" style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.40)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 8 }}>Underwriter</label>
             {loadingUsers ? (
@@ -348,6 +396,21 @@ export default function LoginScreen() {
               {loading ? 'Signing in…' : <>Sign In <span aria-hidden="true">→</span></>}
             </button>
           </form>
+
+          {/* ── Single sign-on (shown only when the server has SSO enabled) ── */}
+          {ssoEnabled && (
+            <>
+              <div style={SSO_DIVIDER} aria-hidden="true">
+                <span style={SSO_DIVIDER_LINE} />
+                <span style={SSO_DIVIDER_TEXT}>or</span>
+                <span style={SSO_DIVIDER_LINE} />
+              </div>
+              <button type="button" onClick={startSso} className="action-pill" style={SSO_BUTTON}
+                aria-label="Sign in with single sign-on">
+                <span aria-hidden="true">🔑</span> Sign in with SSO
+              </button>
+            </>
+          )}
 
           {/* ── Add user (test utility — DEV builds only, compiled out of prod) ── */}
           {import.meta.env.DEV && (

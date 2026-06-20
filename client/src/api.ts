@@ -226,6 +226,7 @@ const PATHS = {
   authLogout: '/api/auth/logout',
   authChangePassword: '/api/auth/change-password',
   authMe: '/api/auth/me',
+  authSsoStatus: '/api/auth/sso/status',
   authUsers: '/api/auth/users',
   authRoles: '/api/auth/roles',
   dashboardFilters: '/api/dashboard/filters',
@@ -774,6 +775,9 @@ export const api = {
   // Verify the session via the httpOnly auth cookie and refresh from server truth.
   // Used by the boot-time AuthBootstrap check; 401 ⇒ invalid/expired token.
   getMe(opts?: RequestOpts): Promise<{ session?: Record<string, unknown> }> { return request(PATHS.authMe, opts); },
+  // Public SSO posture probe — drives whether the login screen shows the SSO
+  // button. Always answers ({ enabled:false } when SSO is off), never 404s.
+  getSsoStatus(opts?: RequestOpts): Promise<{ enabled: boolean; provider: string | null }> { return request(PATHS.authSsoStatus, opts); },
   // Self-service password change for the logged-in user. The httpOnly auth cookie
   // is the identity; the server ignores any body user id.
   changePassword(payload: { currentPassword: string; newPassword: string; confirmPassword: string }, opts?: RequestOpts): Promise<unknown> { return request(PATHS.authChangePassword, { method: 'POST', body: payload, ...opts }); },

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import LoginScreen from './LoginScreen.jsx';
 import { getSession } from '../../utils/auth';
 
@@ -9,6 +10,7 @@ const { apiMock } = vi.hoisted(() => ({
     getRoles: vi.fn(),
     createUser: vi.fn(),
     loginUser: vi.fn(),
+    getSsoStatus: vi.fn(),
   },
 }));
 
@@ -34,6 +36,40 @@ beforeEach(() => {
   apiMock.getRoles.mockResolvedValue([{ role_id: 'r-uw', role_name: 'Underwriter' }, { role_id: 'r-cu', role_name: 'Chief Underwriter' }]);
   apiMock.createUser.mockResolvedValue(TURING);
   apiMock.loginUser.mockResolvedValue({ session: { userId: ADA.user_id, roleCode: 'UW', displayName: 'role-title-not-name' } });
+  apiMock.getSsoStatus.mockResolvedValue({ enabled: false, provider: null });
+});
+
+describe('LoginScreen — SSO (Phase 1c)', () => {
+  it('does NOT show the SSO button when the server reports SSO disabled', async () => {
+    apiMock.getSsoStatus.mockResolvedValue({ enabled: false, provider: null });
+    render(<LoginScreen />);
+    await screen.findByLabelText('Underwriter');
+    expect(screen.queryByRole('button', { name: /sign in with single sign-on/i })).toBeNull();
+  });
+
+  it('shows the SSO button when enabled and redirects to the SSO login endpoint', async () => {
+    apiMock.getSsoStatus.mockResolvedValue({ enabled: true, provider: 'keycloak' });
+    const assign = vi.fn();
+    const orig = window.location;
+    // jsdom location.assign is not implemented; stub it.
+    Object.defineProperty(window, 'location', { value: { ...orig, assign }, writable: true });
+
+    render(<LoginScreen />);
+    const btn = await screen.findByRole('button', { name: /sign in with single sign-on/i });
+    fireEvent.click(btn);
+    expect(assign).toHaveBeenCalledWith('/api/auth/sso/login?returnTo=%2Fauth%2Fcallback');
+
+    Object.defineProperty(window, 'location', { value: orig, writable: true });
+  });
+
+  it('surfaces a friendly message for ?sso_error=mfa_required', async () => {
+    render(
+      <MemoryRouter initialEntries={['/login?sso_error=mfa_required']}>
+        <LoginScreen />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText(/multi-factor authentication is required/i)).toBeInTheDocument();
+  });
 });
 
 describe('LoginScreen people dropdown', () => {
