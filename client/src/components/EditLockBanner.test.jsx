@@ -44,12 +44,13 @@ describe('editor read-only lock', () => {
     expect(screen.getByLabelText('field')).toBeInTheDocument();
   });
 
-  it('fails open (editable) when the permission lookup errors', async () => {
+  it('fails closed (locks the editor) when the permission lookup errors', async () => {
     apiMock.getEditPermission.mockRejectedValue(new Error('network'));
     const { container } = render(<Harness />);
     await waitFor(() => expect(apiMock.getEditPermission).toHaveBeenCalled());
-    expect(screen.queryByText(/Read-only/)).toBeNull();
-    expect(container.querySelector('[inert]')).toBeNull();
+    // A failed lookup must NOT hand out edit access — the editor locks.
+    expect(await screen.findByText(/Read-only/)).toBeInTheDocument();
+    expect(container.querySelector('[inert] input[aria-label="field"]')).toBeTruthy();
   });
 
   it('markReadOnly flips an editable lock closed on demand (server 403 path)', async () => {

@@ -1,7 +1,10 @@
 // useEditLock — reports whether the current user may edit a treaty/quote, so
 // the pricing editors can lock their UI. Reads are open; the server still
-// enforces on write, so this fails OPEN (canEdit:true) on error and only locks
-// when the server explicitly says canEdit:false.
+// enforces on write. This fails CLOSED (canEdit:false) on a permission-lookup
+// ERROR: a failed/unauthorized check locks the editor rather than silently
+// leaving it open, so a flaky or rejected lookup can't hand out edit access the
+// server would refuse anyway. It unlocks only when the lookup succeeds and the
+// server explicitly says canEdit is not false.
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 
@@ -23,7 +26,7 @@ export function useEditLock({ contractId, quoteId, facRiskId, isQuote = false } 
         loading: false,
         loaded: true,
       }))
-      .catch(() => setState({ canEdit: true, isOwner: false, assignedToName: null, loading: false, loaded: true }));
+      .catch(() => setState({ canEdit: false, isOwner: false, assignedToName: null, loading: false, loaded: true }));
   }, [id, fetchFn]);
 
   // Force the lock closed immediately. The editor calls this when a save comes

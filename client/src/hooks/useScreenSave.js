@@ -24,6 +24,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { useResource } from './useResource';
+import { useGlobalToast } from './useToast.js';
 
 /**
  * @template T
@@ -61,6 +62,8 @@ export function useScreenSave(opts) {
 
   const loaded = useRef(false);
   const dirty  = useRef(false);
+  // App-wide toast bus (stable no-op outside a ToastProvider, e.g. unit tests).
+  const toast = useGlobalToast();
 
   // ── Load on mount / when entityId (or a reloadDep) changes ───────
   // Hydration happens inside the fetcher so the ordering matches the
@@ -104,12 +107,12 @@ export function useScreenSave(opts) {
       return true;
     } catch (err) {
       console.error(`[${errorLabel}] save failed:`, err);
-      if (typeof window !== 'undefined') {
-        window.alert(`${errorLabel} save failed: ${err?.message || 'Server error'}`);
-      }
+      // Surface failure through the app toast bus (was a blocking window.alert).
+      // save() still returns false so wizard navigation blocks on the failure.
+      toast(`${errorLabel} save failed: ${err?.message || 'Server error'}`);
       return false;
     }
-  }, [entityId, saveImpl, currentState, errorLabel]);
+  }, [entityId, saveImpl, currentState, errorLabel, toast]);
 
   return {
     save,
