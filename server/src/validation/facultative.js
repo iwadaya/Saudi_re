@@ -251,6 +251,61 @@ export const facPricingSaveSchema = z.object({
 }).passthrough();
 
 
+/**
+ * PUT /api/fac/risks/:id/cope — COPE survey data. Lenient + passthrough:
+ * coerce the typed numeric/boolean/date fields, keep everything else.
+ */
+export const facCopeSaveSchema = z.object({
+  construction_type:        optionalText,
+  construction_year:        optionalInt,
+  fire_walls:               boolish,
+  fire_doors:               boolish,
+  spatial_separation_m:     optionalNumber,
+  roof_material:            optionalText,
+  wall_material:            optionalText,
+  floors:                   optionalInt,
+  total_area_sqm:           optionalNumber,
+  occupation_description:   optionalText,
+  process_description:      optionalText,
+  hazard_grade:             optionalText,
+  operating_hours:          optionalText,
+  sprinkler_system:         boolish,
+  sprinkler_type:           optionalText,
+  fire_alarm:               boolish,
+  fire_brigade_distance_km: optionalNumber,
+  extinguishers:            boolish,
+  hydrants:                 boolish,
+  cctv:                     boolish,
+  security_guards:          boolish,
+  natcat_earthquake:        boolish,
+  natcat_flood:             boolish,
+  natcat_windstorm:         boolish,
+  natcat_other:             optionalText,
+  exposure_notes:           optionalText,
+  survey_date:              isoDate,
+  survey_provider:          optionalText,
+  survey_rating:            optionalText,
+}).passthrough();
+
+/** One fac loss-history row. */
+const facLossRowSchema = z.object({
+  loss_year:           optionalInt,
+  loss_date:           isoDate,
+  loss_description:    optionalText,
+  cause_of_loss:       optionalText,
+  fgu_paid:            money,
+  fgu_outstanding:     money,
+  ri_paid:             money,
+  ri_outstanding:      money,
+  mitigation_measures: optionalText,
+  is_open:             boolish,
+}).passthrough();
+
+/** PUT /api/fac/risks/:id/losses — full loss-history replacement. */
+export const facLossesSaveSchema = z.object({
+  losses: z.array(facLossRowSchema).max(500).default([]),
+}).passthrough();
+
 /** POST /submit-for-approval — no body required. */
 export const facSubmitForApprovalSchema = z.object({
   comment: optionalText,
