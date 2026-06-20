@@ -120,6 +120,22 @@ export const npPricingPutSchema = z.object({
 }).passthrough();
 
 /**
+ * PUT /api/quotes/:id/np-pricing
+ *
+ * Mirrors npPricingPutSchema, but `quote_np_pricing_outputs` has NO section
+ * CHECK constraint (contract_np_pricing_outputs restricts it to RISK/CAT — see
+ * migration 000). Quote pricing legitimately carries other section labels (e.g.
+ * 'AS_IF'), so the quote variant validates `section` as a lenient short string
+ * rather than the treaty enum.
+ */
+export const quoteNpPricingPutSchema = npPricingPutSchema.extend({
+  outputs: z.array(z.object({
+    layer_number: z.number().int().min(1).max(50),
+    section:      z.string().min(1).max(40),
+  }).passthrough()).optional(),
+});
+
+/**
  * PUT /api/{treaties|quotes}/:id/np/expiring
  *
  * Shared handler; layers + terms are the same shape as the NP save
