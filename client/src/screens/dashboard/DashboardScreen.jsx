@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 import Topbar from '../../components/Topbar';
+import AsyncBoundary from '../../components/AsyncBoundary';
+import { useResource } from '../../hooks/useResource';
 import { fmtNum, fmtPct, fmtMoney, fmtBal } from '../../utils/format';
 import { REGION_COLS, LOB_COLS, BY_YEAR_COLS, ROL_BAND_COLS, BALANCE_BAND_COLS, TREATY_TYPE_COLS } from './dashboardColumns';
 import { fitLabelColumn } from './labelWidth';
@@ -138,16 +140,29 @@ function SummaryTable({ title, rows, columns, sort, sortKey, onSort, currency })
 export default function DashboardScreen() {
   const navigate = useNavigate();
   const [tab, setTab] = useState('portfolio-overview');
-  const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ uwYear: '', month: '', region: '', treatyType: '', yearsBack: '3', currency: 'USD' });
   const [filterOpts, setFilterOpts] = useState({ uwYears: [], months: [], regions: [], treatyTypes: [], currencies: ['USD','SAR','GBP'] });
-  const [data, setData] = useState(null);
   const [sort, setSort] = useState({ byRegion: { key: 'premium', dir: 'desc' }, byLob: { key: 'premium', dir: 'desc' }, byYear: { key: 'uwYear', dir: 'asc' }, byBand: { key: 'premium', dir: 'desc' }, byBalanceBand: { key: 'premium', dir: 'desc' }, byTreaty: { key: 'premium', dir: 'desc' } });
   const [exporting, setExporting] = useState(false);
 
   const currency = filters.currency || 'USD';
   const fm = useCallback((v) => fmtMoney(v), []);
   const fp = useCallback((v) => fmtPct(v), []);
+
+  // The page payload for the active tab + filters. useResource gives uniform
+  // loading/error state, aborts superseded requests when tab/filters change,
+  // and reports failures through the shared errorReporter path.
+  const page = useResource(
+    () => {
+      const qs = {};
+      Object.entries(filters).forEach(([k, v]) => { if (v) qs[k] = v; });
+      return api.dashboardPage(tab, qs);
+    },
+    [tab, filters],
+    { reportLabel: 'dashboard' },
+  );
+  const data = page.data;
+  const loading = page.loading;
 
   const handleSort = useCallback((tableKey, colKey) => {
     setSort(prev => {
@@ -176,19 +191,7 @@ export default function DashboardScreen() {
     } catch (e) { logger.warn('Dashboard filters:', e); }
   }, [filters.uwYear]);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const qs = {};
-      Object.entries(filters).forEach(([k, v]) => { if (v) qs[k] = v; });
-      const d = await api.dashboardPage(tab, qs);
-      setData(d);
-    } catch (e) { logger.warn('Dashboard data:', e); setData(null); }
-    setLoading(false);
-  }, [tab, filters]);
-
   useEffect(() => { loadFilters(); }, [loadFilters]);
-  useEffect(() => { loadData(); }, [loadData]);
 
   // Size the row-label (first) column to the longest label once the tab's tables
   // have rendered. The font is read from a real first-column cell so it matches;
@@ -254,12 +257,12 @@ export default function DashboardScreen() {
                   ))}
                 </div>
                 <button className="chip-btn" onClick={() => setFilters(p => ({ ...p, region: '', treatyType: '' }))}>Reset</button>
-                <button className="primary-pill" onClick={loadData}>Apply</button>
+                <button className="primary-pill" onClick={page.refetch}>Apply</button>
               </div>
             </div>
           </section>
 
-          {loading ? <div className="glass dash-block" style={{ marginTop: 12 }}><div className="muted">Loading…</div></div> : (
+          <AsyncBoundary loading={loading} error={page.error} onRetry={page.refetch} label="dashboard">
             <section style={{ marginTop: 12 }}>
               {/* KPI tiles */}
               <div className="dash-kpis">
@@ -349,7 +352,7 @@ export default function DashboardScreen() {
                 </div>
               )}
             </section>
-          )}
+          </AsyncBoundary>
         </div>
       </main>
     </div>
