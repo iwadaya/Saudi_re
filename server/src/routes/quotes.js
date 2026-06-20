@@ -28,6 +28,7 @@ import { approveQuote, returnToUnderwriter, recallOffer, markNotTakenUp } from '
 import { declineQuoteAction, submitQuoteForApprovalAction } from '../services/quoteWorkflow.js';
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
 import { verifyNpPricingOutputs, summariseDrifts, isStrictMode, pricingDriftStats } from '../lib/pricingVerifier.js';
+import { recordPricingDrift } from '../observability/businessMetrics.js';
 import { getWordingChecklist, runWordingChecklistAi, saveWordingChecklist } from '../services/wordingChecklist.js';
 import { loadQuoteCategory, requireQuoteCategory } from '../lib/treatyCategoryGuard.js';
 import multer from 'multer';
@@ -1487,6 +1488,7 @@ router.put("/quotes/:id/np-pricing", ...npQuoteGuard, validateBody(quoteNpPricin
   const drifts = verifyNpPricingOutputs(outputs);
   res.setHeader('X-Pricing-Drift-Count', String(drifts.length));
   const driftStats = pricingDriftStats(drifts);
+  recordPricingDrift({ endpoint: 'quote_pricing', stats: driftStats, strict: isStrictMode() });
   const driftLog = {
     requestId: res.locals.requestId || req.id || null,
     endpoint: 'quote_pricing',

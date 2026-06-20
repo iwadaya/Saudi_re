@@ -17,6 +17,7 @@ import {
   stopLossPricingPutSchema,
 } from '../validation/nonProp.js';
 import { verifyNpPricingOutputs, summariseDrifts, isStrictMode, pricingDriftStats } from '../lib/pricingVerifier.js';
+import { recordPricingDrift } from '../observability/businessMetrics.js';
 import { logger } from '../lib/logger.js';
 import { buildBatchInsert } from '../db/batchInsert.js';
 import {
@@ -294,6 +295,7 @@ router.put("/treaties/:id/np-pricing", ...npTreatyGuard, validateBody(npPricingP
   const drifts = verifyNpPricingOutputs(outputs);
   res.setHeader('X-Pricing-Drift-Count', String(drifts.length));
   const driftStats = pricingDriftStats(drifts);
+  recordPricingDrift({ endpoint: 'np_layer_pricing', stats: driftStats, strict: isStrictMode() });
   const driftLog = {
     requestId: res.locals.requestId || req.id || null,
     endpoint: 'np_layer_pricing',

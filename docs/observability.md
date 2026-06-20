@@ -158,6 +158,13 @@ pricing formula. Every checked save now emits:
 - Log fields: `endpoint`, `pricingDriftCount`, `maxAbsDiff`,
   `driftMagnitudeBucket`, `requestId`, `contractId` or `quoteId`,
   `parentType`, `route`, and `summary`
+- OTel metrics (when enabled): `pricing_drift_checks_total`
+  (labelled `endpoint`, `has_drift`, `magnitude_bucket`, `strict`) and
+  `pricing_drift_rows_total` (labelled `endpoint`)
+
+Document uploads emit `upload_requests_total` (labelled `folder_type`,
+`sink` = `cloudinary`/`disk`, `outcome` = `success`/`error`) — the
+upload-failures dashboard.
 
 Endpoint labels:
 
