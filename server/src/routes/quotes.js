@@ -1,8 +1,9 @@
 // server/src/routes/quotes.js — Quote CRUD + sub-entities, using quote_* tables
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { asyncHandler, numOrNull, dateOrNull, boolOrDefault, safeUwYear, preserveBool, preserveNum, assertExists, isStaleSince } from '../helpers.js';
+import { asyncHandler, numOrNull, dateOrNull, boolOrDefault, safeUwYear, preserveBool, preserveNum, assertExists, isStaleSince, reinstatInt } from '../helpers.js';
 import { logger } from '../lib/logger.js';
+import { resolveVariant } from '../lib/triangleVariant.js';
 import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from '../lib/triangleBounds.js';
 import { stripTriangleCells, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from '../lib/triangleStripping.js';
 import { suggestLossQuarters } from '../lib/lossQuarterMapper.js';
@@ -38,16 +39,6 @@ const router = Router();
 // Category fence for the NP-only quote routes: a proportional quote has no
 // quote_np_* rows, so reject (409) rather than silently returning empties.
 const npQuoteGuard = [loadQuoteCategory, requireQuoteCategory('NON_PROPORTIONAL')];
-
-// Triangle variant (migration 116). Reads/writes default to MODIFIED so all
-// pre-variant behaviour is unchanged unless ACTUAL is explicitly requested.
-// Returns null for an explicitly-invalid value so the caller can 400.
-const TRIANGLE_VARIANTS = new Set(['ACTUAL', 'MODIFIED']);
-function resolveVariant(raw) {
-  if (raw == null || raw === '') return 'MODIFIED';
-  const v = String(raw).toUpperCase();
-  return TRIANGLE_VARIANTS.has(v) ? v : null;
-}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -1314,8 +1305,6 @@ router.post("/quotes/:id/non-prop/save", ...npQuoteGuard, validateBody(npSaveSch
   const {id}=req.params;
   const {detail={}, layers=[], terms={}, cob_underwriting_limits=[]} = req.body;
   const cl=await pool.connect();
-  // Helper: "UNLIMITED" stays null in numeric columns; store it in JSONB terms instead
-  const reinstatInt = v => { if(String(v||'').trim().toUpperCase()==='UNLIMITED') return null; return numOrNull(v); };
   try{
     await cl.query("BEGIN");
     await assertParentEntityUnchanged(cl, {

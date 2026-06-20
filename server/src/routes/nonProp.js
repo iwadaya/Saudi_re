@@ -1,7 +1,7 @@
 // server/src/routes/nonProp.js — Non-proportional treaty endpoints (PARTIAL-SAVE SAFE)
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { asyncHandler, numOrNull, assertExists } from '../helpers.js';
+import { asyncHandler, numOrNull, assertExists, reinstatInt } from '../helpers.js';
 import { entityContext } from '../lib/entityContext.js';
 import { assertParentEntityUnchanged, touchParentEntity } from '../lib/parentEntityPersistence.js';
 import { validateBody } from '../lib/validate.js';
@@ -31,8 +31,6 @@ const router = Router();
 // targets a proportional treaty/quote before the handler reads empty NP tables.
 const npTreatyGuard = [loadTreatyCategory, requireTreatyCategory('NON_PROPORTIONAL')];
 const npQuoteGuard = [loadQuoteCategory, requireQuoteCategory('NON_PROPORTIONAL')];
-// "UNLIMITED" reinstatements stays null in numeric column; preserved in JSONB
-function reinstatInt(v){if(String(v||'').trim().toUpperCase()==='UNLIMITED')return null;return numOrNull(v);}
 
 // ── GET /api/treaties/:id/non-prop ──
 // Returns: detail row, layers (each with their COB ids), cob UW limits, JSONB terms,

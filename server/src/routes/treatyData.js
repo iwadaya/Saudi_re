@@ -3,6 +3,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { asyncHandler, numOrNull, dateOrNull, safeUwYear, preserveBool, preserveNum, assertExists, isStaleSince } from '../helpers.js';
 import { logger } from '../lib/logger.js';
+import { resolveVariant } from '../lib/triangleVariant.js';
 import { getTriangleBounds, filterTriangleCells, normalizeTriangleRequest } from '../lib/triangleBounds.js';
 import { stripTriangleCells, stripFieldForType, summarizeLossPlacement, combineIncurredCells } from '../lib/triangleStripping.js';
 import { suggestLossQuarters } from '../lib/lossQuarterMapper.js';
@@ -29,17 +30,6 @@ import fsp from "fs/promises";
 import { createRequire } from "module";
 const _require = createRequire(import.meta.url);
 const router = Router();
-function parseDateFlex(v){return dateOrNull(v);}
-
-// Triangle variant (migration 116). Reads/writes default to MODIFIED so all
-// pre-variant behaviour is unchanged unless ACTUAL is explicitly requested.
-// Returns null for an explicitly-invalid value so the caller can 400.
-const TRIANGLE_VARIANTS = new Set(['ACTUAL', 'MODIFIED']);
-function resolveVariant(raw) {
-  if (raw == null || raw === '') return 'MODIFIED';
-  const v = String(raw).toUpperCase();
-  return TRIANGLE_VARIANTS.has(v) ? v : null;
-}
 
 // ── TRIANGLES ──
 router.get("/treaties/:id/triangles/:type", asyncHandler(async (req, res) => {
@@ -282,9 +272,9 @@ router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
       _reported: existedReported || reportSaved,
       // Actuarial reporting date (when the loss was booked into the triangle)
       // — user-entered, nullable, drives stripping.
-      _actuarial: parseDateFlex(l.actuarial_reported_date),
-      _dol: parseDateFlex(l.date_of_loss),
-      _pinc: parseDateFlex(l.policy_inception_date),
+      _actuarial: dateOrNull(l.actuarial_reported_date),
+      _dol: dateOrNull(l.date_of_loss),
+      _pinc: dateOrNull(l.policy_inception_date),
       // Underwriting year — NaN-guarded so an invalid inception/loss date
       // can't push NaN into the integer column and abort the save.
       _uwy: safeUwYear(l),
@@ -339,9 +329,9 @@ router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
       // the current report date.
       _reported: existedReported || reportSaved,
       // Actuarial reporting date — user-entered, nullable, drives stripping.
-      _actuarial: parseDateFlex(l.actuarial_reported_date),
-      _dol: parseDateFlex(l.date_of_loss),
-      _pinc: parseDateFlex(l.policy_inception_date),
+      _actuarial: dateOrNull(l.actuarial_reported_date),
+      _dol: dateOrNull(l.date_of_loss),
+      _pinc: dateOrNull(l.policy_inception_date),
       // NaN-guarded underwriting year (see large-loss handler).
       _uwy: safeUwYear(l),
       // Preserve selection + inflation when the save omits them.
@@ -564,7 +554,7 @@ router.put("/treaties/:id/loss-selection/:lossType/snapshot", asyncHandler(async
             l.uw_year||null,
             l.insured_name||null,
             l.loss_name||null,
-            parseDateFlex(l.date_of_loss)||null,
+            dateOrNull(l.date_of_loss)||null,
             l.class_of_business||null,
             numOrNull(l.paid)||0,
             numOrNull(l.os)||0,

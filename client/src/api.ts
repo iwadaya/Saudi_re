@@ -508,7 +508,6 @@ export const api = {
   listTreatyTypes(opts?: RequestOpts): Promise<unknown> { return request(PATHS.treatyTypes, opts); },
   listClassOfBusiness(opts?: RequestOpts): Promise<unknown> { return request(PATHS.classOfBusiness, opts); },
   getRefListItems(key: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.refListItems(key), opts); },
-  listRefItems(key: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.refListItems(key), opts); },
   getRefCrestaZones(countryId: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.refCrestaZones(countryId), opts); },
   getRefInflation(countryId: string, startYear?: string | number, endYear?: string | number, opts?: RequestOpts): Promise<unknown> { return request(PATHS.refInflation(countryId, startYear, endYear), opts); },
   getRefBenchmarkLdf(countryId: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.refBenchmarkLdf(countryId), opts); },
@@ -642,7 +641,6 @@ export const api = {
 
   // Straight stats
   saveStraightStats(contractId: string, tailType: string, stats: Array<{ year?: number; underwriting_year?: number; premium?: unknown; paid?: unknown; os?: unknown }>, opts?: RequestOpts): Promise<unknown> { return request(PATHS.straightStatsSave, { method: 'POST', body: { contractId, tailType, stats: stats.map(s => ({ underwriting_year: s.year ?? s.underwriting_year, premium: s.premium, paid_claims: s.paid, os_claims: s.os })) }, ...opts }); },
-  loadStraightStats(id: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.straightStatsLoad(id), opts); },
   getStraightStats(id: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.straightStatsLoad(id), opts); },
 
   // Country aggregates
