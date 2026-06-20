@@ -5,7 +5,7 @@
 // tab 4 "CAT Modelling" rates GEM/HAZUS EQ damage ratios; tab 5 "Aggregate Analysis" embeds the shared CRESTA-zone exposure panel.
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { formatWithCommas } from '../../../../utils/format';
-import { toN, capPct2 } from '../formatters.js';
+import { toN } from '../formatters.js';
 import { QUOTE_COMPONENT_SCOPES, quoteComponentDerived, layerCombinedPricing, quoteWeightIssues } from '../fqQuoteMath.js';
 import { fqPriceLayerOnCurve, fqFitPowerLaw, fqPeerToXY, fqGeomean } from '../fqHelpers.js';
 import { REINSTATEMENT_OPTIONS } from '../../reinstatementOptions';
@@ -17,61 +17,7 @@ import FrequencySimPanel from './FrequencySimPanel.jsx';
 import FQPlaceholderTab from './FQPlaceholderTab.jsx';
 import FQEqDamageRatioTab from './FQEqDamageRatioTab.jsx';
 import AggregateAnalysisPanel from '../../../shared/aggregate_analysis/AggregateAnalysisPanel.jsx';
-
-const TOP_TABS = [
-  { k: 'pricing', label: 'Pricing Analysis' },
-  { k: 'pareto', label: 'Pareto Simulation' },
-  { k: 'loss', label: 'Inflation & Loss' },
-  { k: 'eq', label: 'CAT Modelling' },
-  { k: 'agg', label: 'Aggregate Analysis' },
-];
-
-// Editable weight cell: shows the value with a "%" suffix while idle (capped at
-// 2 dp), bare full-precision digits while editing. Entry keeps full precision
-// and strips any "%" (onChange passes the raw number); only the idle display is
-// capped and suffixed — the stored weight stays a bare number, so the Σ=100
-// blend math reads it unchanged.
-function WtInput({ value, disabled, ariaLabel, onChange }) {
-  const [editing, setEditing] = useState(false);
-  const [raw, setRaw] = useState('');
-  const idle = capPct2(value);
-  return (
-    <input
-      type="text"
-      inputMode="decimal"
-      className="bm-cell bm-cell--sm"
-      aria-label={ariaLabel}
-      value={editing ? raw : (idle === '' ? '' : `${idle}%`)}
-      disabled={disabled}
-      onFocus={() => { setEditing(true); setRaw(String(value ?? '').replace(/%/g, '')); }}
-      onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ''); setRaw(v); onChange(v); }}
-      onBlur={() => setEditing(false)}
-      style={{ width: '100%', boxSizing: 'border-box', opacity: disabled ? 0.5 : 1 }}
-    />
-  );
-}
-
-// Per-component colours for the modelled block. Each component (Pure Burn /
-// Pareto / Exposure) gets a distinct line + faint tint, and its matching weight
-// column (Wt Burn / Wt Pareto / Wt Exp) reuses the SAME colour so the blend
-// weights read visually paired with the component they weight.
-const COMP = {
-  pureBurn: { line: 'var(--accent)',       tint: 'rgba(var(--accent-rgb),0.10)' },        // green
-  pareto:   { line: 'var(--accent-amber)', tint: 'rgba(var(--accent-amber-rgb),0.10)' },  // amber
-  exposure: { line: 'var(--accent-rose)',  tint: 'rgba(var(--accent-rose-rgb),0.10)' },   // violet → rose (no violet token)
-};
-
-// Subtle background tints that band the table into Modelled / Implied-Expiring /
-// Implied-Market / UW groups.
-const G = {
-  modelled: 'rgba(var(--accent-rgb),0.06)',
-  exp: 'rgba(var(--accent-amber-rgb),0.08)',
-  country: 'rgba(var(--accent-blue-rgb),0.08)',
-  region: 'rgba(var(--accent-rose-rgb),0.08)',   // violet → rose (no violet token)
-  global: 'rgba(var(--accent-rgb),0.08)',
-  uw: 'rgba(var(--accent-blue-rgb),0.08)',
-  note: 'var(--surface-hover)',
-};
+import { TOP_TABS, WtInput, COMP, G } from './FQPricingAnalysisModal.parts.jsx';
 
 /**
  * @param {{
