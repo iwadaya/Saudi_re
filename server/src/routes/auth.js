@@ -13,9 +13,10 @@ import { pool } from '../db/pool.js';
 import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { logAudit } from '../services/audit.js';
-import { signAuthToken } from '../lib/authToken.js';
-import { setAuthCookies, clearAuthCookies } from '../lib/authCookies.js';
+import { signAuthToken, verifyAuthToken } from '../lib/authToken.js';
+import { setAuthCookies, clearAuthCookies, readCookie, AUTH_COOKIE } from '../lib/authCookies.js';
 import { requireAuth, requireMinLevel, actorFromReq } from '../middleware/requestContext.js';
+import { createSession, revokeSession } from '../services/sessions.js';
 
 const router = Router();
 
@@ -273,21 +274,34 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
     payload: { office: user.office },
   }).catch(() => {});
 
-  // Issue a signed token carrying only the user id; role/level are re-read from
-  // the DB on every request, so the token can't preserve elevated rights. The
-  // token is set as an httpOnly cookie (+ a readable CSRF cookie) and is NEVER
-  // returned in the body — the client gets session metadata only.
-  setAuthCookies(res, signAuthToken({ sub: user.user_id }));
+  // Create a server-side session, then issue a signed token carrying the user id,
+  // the session id (`sid`) and the user's revocation epoch. Role/level are still
+  // re-read from the DB on every request; the session+epoch make the token
+  // REVOCABLE (logout / password / role change / deactivation). httpOnly cookie
+  // (+ readable CSRF cookie); never returned in the body.
+  // req.ip goes through proxy-addr, which throws if there's no socket (e.g. a
+  // synthetic test request) — read it defensively; the IP is advisory metadata.
+  let clientIp = null;
+  try { clientIp = req.ip || req.socket?.remoteAddress || null; } catch { clientIp = null; }
+  const sess = await createSession({
+    userId: user.user_id, authMethod: 'PASSWORD',
+    ip: clientIp, userAgent: req.headers?.['user-agent'] || null,
+  });
+  setAuthCookies(res, signAuthToken({ sub: user.user_id, sid: sess.sessionId, epoch: sess.epoch }));
   res.json({ session: buildSession(user) });
 }));
 
-// ── POST /api/auth/logout — clear the auth + CSRF cookies ───────────────────
-// Public + CSRF-exempt so it always succeeds in dropping the session. Re-reading
-// identity is unnecessary: its sole effect is to clear this browser's cookies.
-router.post('/auth/logout', (_req, res) => {
+// ── POST /api/auth/logout — revoke this session + clear the cookies ─────────
+// Public + CSRF-exempt so it always succeeds in dropping the session. It now also
+// REVOKES the server-side session row (per-device logout) so the token cannot be
+// replayed after logout — read the session id from the (verified) cookie token.
+router.post('/auth/logout', asyncHandler(async (req, res) => {
+  const token = readCookie(req, AUTH_COOKIE);
+  const payload = token ? verifyAuthToken(token) : null;
+  if (payload?.sid) await revokeSession(payload.sid, 'LOGOUT').catch(() => {});
   clearAuthCookies(res);
   res.json({ ok: true });
-});
+}));
 
 // ── GET /api/auth/me — refresh session from the verified token ─────────────
 router.get('/auth/me', asyncHandler(async (req, res) => {

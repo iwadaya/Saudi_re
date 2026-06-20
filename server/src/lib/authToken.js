@@ -26,10 +26,21 @@ function sign(data) {
   return createHmac('sha256', secret()).update(data).digest('base64url');
 }
 
-export function signAuthToken({ sub }, ttlSeconds = DEFAULT_TTL_S) {
+/**
+ * Sign an auth token. `sub` is the user id; `sid` is the server-side session id
+ * (P1-identity Phase 0a) and `epoch` is the user's revocation epoch at mint time
+ * — both echoed back by verifyAuthToken and checked by the authenticate
+ * middleware against the live auth_session row + uw_user.session_epoch. `sid`/
+ * `epoch` are optional so legacy callers (and unit tests) still produce a valid
+ * token; a token without a `sid` simply has no live session and is rejected at
+ * authentication.
+ */
+export function signAuthToken({ sub, sid = null, epoch = 0 }, ttlSeconds = DEFAULT_TTL_S) {
   if (!sub) throw new Error('signAuthToken: sub required');
   const now = Math.floor(Date.now() / 1000);
-  const body = Buffer.from(JSON.stringify({ sub, iat: now, exp: now + ttlSeconds })).toString('base64url');
+  const claims = { sub, iat: now, exp: now + ttlSeconds, epoch: Number(epoch) || 0 };
+  if (sid) claims.sid = sid;
+  const body = Buffer.from(JSON.stringify(claims)).toString('base64url');
   return `${body}.${sign(body)}`;
 }
 
