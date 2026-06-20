@@ -208,6 +208,19 @@ export const claimsProfileSaveSchema = z.object({
   bands:          z.array(profileBandSchema).max(1000).default([]),
 }).passthrough();
 
+/**
+ * Quote approval-workflow actions — decline / submit-for-approval / mark-approved
+ * / return-to-underwriter / recall / ntu. These carry only a free-text note
+ * (`comment` or `reason`); authority + legal-state + critical audit are owned by
+ * the approval engine (services/approvals.js, services/quoteWorkflow.js). The
+ * schema just rejects a malformed note (e.g. an object/array) and is passthrough
+ * so the submit action's extra routing fields still reach the service.
+ */
+export const quoteWorkflowActionSchema = z.object({
+  comment: z.string().max(2000).nullish(),
+  reason:  z.string().max(2000).nullish(),
+}).passthrough();
+
 /** PUT /quotes/:id/pricing-outputs — single pricing-summary row. */
 export const pricingOutputsSchema = z.object({
   epi:              money,
