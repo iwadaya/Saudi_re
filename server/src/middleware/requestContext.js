@@ -45,34 +45,57 @@ function extractToken(req) {
   return { token: null, via: null };
 }
 
-/** Load the user FRESH from the DB — the source of truth for role/level. */
-async function loadUserFromDb(sub) {
+/** Shape a v_user_mandate row into the req.user object (role/level are live). */
+function mapUserRow(u, sessionId) {
+  const hierarchyLevel = u.hierarchy_level ?? 5;
+  return {
+    userId: u.user_id,
+    role: u.role_code,
+    roleCode: u.role_code,
+    displayName: u.display_name,
+    hierarchyLevel,
+    canApprove: hierarchyLevel <= 4,
+    isSupervisor: hierarchyLevel <= 2,
+    effectiveLimit: u.effective_limit_usd ?? null,
+    excludedCobIds: Array.isArray(u.restricted_cob_ids) ? u.restricted_cob_ids : [],
+    treatyTypeScope: u.treaty_type_scope || 'BOTH',
+    mustChangePassword: u.must_change_password === true,
+    sessionId: sessionId || null,
+    source: 'token',
+  };
+}
+
+/**
+ * Load the user FRESH (role/level live) AND validate the token's server-side
+ * session + revocation epoch in ONE query (P1-identity Phase 0a). The request
+ * authenticates only when:
+ *   • the user exists and is active (v_user_mandate filters is_active),
+ *   • the auth_session row for `sid` exists, is unrevoked and unexpired, and
+ *   • the token's `epoch` still equals uw_user.session_epoch (mass-revoke lever).
+ * Any miss → null (treated as anonymous → 401 on guarded routes), so logout,
+ * password change, role change and deactivation all take effect immediately once
+ * they revoke the session / bump the epoch.
+ */
+async function loadUserAndSession(sub, sid, epoch) {
   try {
     const { rows } = await pool.query(
-      `SELECT user_id, display_name, role_code, hierarchy_level, can_override_below,
-              effective_limit_usd, restricted_cob_ids, treaty_type_scope, must_change_password
-       FROM public.v_user_mandate WHERE user_id = $1 AND is_active = true LIMIT 1`,
-      [sub],
+      `SELECT v.user_id, v.display_name, v.role_code, v.hierarchy_level, v.can_override_below,
+              v.effective_limit_usd, v.restricted_cob_ids, v.treaty_type_scope, v.must_change_password,
+              v.session_epoch,
+              s.session_id AS sess_id, s.revoked_at, (s.expires_at <= now()) AS expired
+         FROM public.v_user_mandate v
+         LEFT JOIN public.auth_session s ON s.session_id = $2 AND s.user_id = v.user_id
+        WHERE v.user_id = $1 AND v.is_active = true
+        LIMIT 1`,
+      [sub, sid || null],
     );
     const u = rows[0];
-    if (!u) return null;
-    const hierarchyLevel = u.hierarchy_level ?? 5;
-    return {
-      userId: u.user_id,
-      role: u.role_code,
-      roleCode: u.role_code,
-      displayName: u.display_name,
-      hierarchyLevel,
-      canApprove: hierarchyLevel <= 4,
-      isSupervisor: hierarchyLevel <= 2,
-      effectiveLimit: u.effective_limit_usd ?? null,
-      excludedCobIds: Array.isArray(u.restricted_cob_ids) ? u.restricted_cob_ids : [],
-      treatyTypeScope: u.treaty_type_scope || 'BOTH',
-      mustChangePassword: u.must_change_password === true,
-      source: 'token',
-    };
+    if (!u) return null;                                  // unknown / deactivated user
+    if (!u.sess_id || u.revoked_at || u.expired) return null; // no live session for this sid
+    if (Number(epoch) !== Number(u.session_epoch)) return null; // mass-revoked (epoch bumped)
+    return mapUserRow(u, u.sess_id);
   } catch (e) {
-    logger.warn('loadUserFromDb failed', { error: e.message });
+    logger.warn('loadUserAndSession failed', { error: e.message });
     return null;
   }
 }
@@ -110,10 +133,11 @@ export async function authenticate(req, _res, next) {
     if (token) {
       const payload = verifyAuthToken(token);
       if (payload && payload.sub) {
-        const user = await loadUserFromDb(payload.sub);
+        // Verified token → require a live server-side session + matching epoch.
+        const user = await loadUserAndSession(payload.sub, payload.sid, payload.epoch);
         if (user) { req.user = user; req.authVia = via; return next(); }
       }
-      // invalid/expired token or unknown user → fall through to demo/anon
+      // invalid/expired/revoked token or unknown user → fall through to demo/anon
     }
     const demo = process.env.ALLOW_DEMO_AUTH === 'true' ? demoUserFromHeaders(req) : null;
     req.user = demo;

@@ -43,6 +43,13 @@ function fakeQuery(sql, params = []) {
     return Promise.resolve({ rows: scenario.usersList || [] });
   }
   if (sql.includes('UPDATE public.uw_user SET failed_attempts')) return Promise.resolve({ rows: [] });
+  // Phase 0a: login creates a server-side session (INSERT) + reads the epoch.
+  if (sql.includes('INSERT INTO public.auth_session')) {
+    return Promise.resolve({ rows: [{ session_id: 'sess-test-1', expires_at: '2026-06-20T08:00:00.000Z' }] });
+  }
+  if (sql.includes('SELECT session_epoch FROM public.uw_user')) {
+    return Promise.resolve({ rows: [{ session_epoch: 0 }] });
+  }
   // change-password: load the caller's stored hash, then persist the new one.
   if (sql.includes('password_hash FROM public.uw_user WHERE user_id')) {
     return Promise.resolve({ rows: scenario.pwHash !== undefined ? [{ password_hash: scenario.pwHash }] : [] });

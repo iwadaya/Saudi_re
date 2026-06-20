@@ -10,10 +10,13 @@ const { authenticate, requireAuth, requireRole, requireMinLevel, csrfProtection 
 const { signAuthToken, verifyAuthToken } = await import('../lib/authToken.js');
 const { issueCsrfToken } = await import('../lib/csrf.js');
 
-// CU row returned by loadUserFromDb's query — reused across token-path tests.
+// CU row returned by loadUserAndSession's join — reused across token-path tests.
+// Includes the live-session columns (sess_id present, not revoked, not expired)
+// and the matching session_epoch so the Phase-0a session check passes.
 const CU_ROW = {
   user_id: 'u-cu', display_name: 'Chief', role_code: 'CU', hierarchy_level: 2,
   effective_limit_usd: null, restricted_cob_ids: [], treaty_type_scope: 'BOTH',
+  sess_id: 'sess-cu', revoked_at: null, expired: false, session_epoch: 0,
 };
 
 // Minimal Express-like req with header() lookup (case-insensitive).
@@ -54,8 +57,9 @@ describe('authenticate — token path (DB is source of truth)', () => {
     poolMock.query.mockResolvedValue({ rows: [{
       user_id: 'u-cu', display_name: 'Chief', role_code: 'CU', hierarchy_level: 2,
       effective_limit_usd: null, restricted_cob_ids: [], treaty_type_scope: 'BOTH',
+      sess_id: 'sess-cu', revoked_at: null, expired: false, session_epoch: 0,
     }] });
-    const token = signAuthToken({ sub: 'u-cu' });
+    const token = signAuthToken({ sub: 'u-cu', sid: 'sess-cu', epoch: 0 });
     const req = makeReq({ authorization: `Bearer ${token}`, 'x-user-role': 'CE', 'x-user-level': '1' }); // spoof CE
     const next = vi.fn();
     await authenticate(req, makeRes(), next);
@@ -73,7 +77,7 @@ describe('authenticate — token path (DB is source of truth)', () => {
 
   it('authenticates from the httpOnly auth_token cookie (authVia=cookie)', async () => {
     poolMock.query.mockResolvedValue({ rows: [CU_ROW] });
-    const req = makeReq({ cookie: `auth_token=${signAuthToken({ sub: 'u-cu' })}` });
+    const req = makeReq({ cookie: `auth_token=${signAuthToken({ sub: 'u-cu', sid: 'sess-cu', epoch: 0 })}` });
     const next = vi.fn();
     await authenticate(req, makeRes(), next);
     expect(next).toHaveBeenCalled();
@@ -84,7 +88,7 @@ describe('authenticate — token path (DB is source of truth)', () => {
   it('in production (ALLOW_DEMO_AUTH off) a Bearer header is IGNORED — only the cookie authenticates', async () => {
     delete process.env.ALLOW_DEMO_AUTH;
     poolMock.query.mockResolvedValue({ rows: [CU_ROW] });
-    const token = signAuthToken({ sub: 'u-cu' });
+    const token = signAuthToken({ sub: 'u-cu', sid: 'sess-cu', epoch: 0 });
     // A valid Bearer header alone is no longer an auth path in prod.
     const bearerReq = makeReq({ authorization: `Bearer ${token}` });
     await authenticate(bearerReq, makeRes(), vi.fn());
@@ -100,7 +104,7 @@ describe('authenticate — token path (DB is source of truth)', () => {
   it('the cookie wins over a Bearer header when both are present', async () => {
     poolMock.query.mockResolvedValue({ rows: [CU_ROW] });
     const req = makeReq({
-      cookie: `auth_token=${signAuthToken({ sub: 'u-cu' })}`,
+      cookie: `auth_token=${signAuthToken({ sub: 'u-cu', sid: 'sess-cu', epoch: 0 })}`,
       authorization: `Bearer ${signAuthToken({ sub: 'someone-else' })}`,
     });
     await authenticate(req, makeRes(), vi.fn());
