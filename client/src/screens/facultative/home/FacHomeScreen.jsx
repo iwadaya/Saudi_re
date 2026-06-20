@@ -5,6 +5,7 @@ import { getUserDisplayName } from '../../../utils/auth';
 import api from '../../../api';
 import { setActiveFacRiskId } from '../../../hooks/useContractId';
 import { logger } from '../../../utils/logger';
+import ProfitabilityInsightsModal from '../../insights/ProfitabilityInsightsModal';
 
 const STATUS_COLORS = {
   DRAFT:    { bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.25)', color: 'rgba(148,163,184,0.80)' },
@@ -79,6 +80,7 @@ export default function FacHomeScreen() {
   };
 
   const [showRenewModal, setShowRenewModal] = useState(false);
+  const [showInsights, setShowInsights] = useState(false);
 
   const handleRenew = (riskId) => {
     setActiveFacRiskId(riskId, { quote: true });
@@ -128,6 +130,12 @@ export default function FacHomeScreen() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => setShowInsights(true)} style={{
+            appearance: 'none', border: '1px solid rgba(148,163,184,0.18)',
+            background: 'rgba(8,16,40,0.45)', color: 'rgba(226,232,240,0.90)',
+            borderRadius: 999, padding: '7px 14px', fontSize: 11, fontWeight: 650,
+            cursor: 'pointer',
+          }}>Portfolio Intelligence</button>
           <button onClick={() => navigate('/select')} style={{
             appearance: 'none', border: '1px solid rgba(148,163,184,0.18)',
             background: 'rgba(8,16,40,0.45)', color: 'rgba(226,232,240,0.90)',
@@ -337,6 +345,7 @@ export default function FacHomeScreen() {
           </div>
         </div>
       )}
+      <ProfitabilityInsightsModal open={showInsights} onClose={() => setShowInsights(false)} scope="fac" />
     </div>
   );
 }

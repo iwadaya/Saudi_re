@@ -492,6 +492,11 @@ export const api = {
   getReinsurerAnalysis(opts?: RequestOpts): Promise<unknown> {
     return request('/api/reinsurer-analysis', opts);
   },
+  // Decisioned-book feature feed for the Portfolio Intelligence module
+  // (driver ranking + unsupervised segmentation, computed client-side).
+  getPortfolioInsights(opts?: RequestOpts): Promise<unknown> {
+    return request('/api/portfolio-insights', opts);
+  },
   // Optional AI commentary on a single structure's positioning vs the
   // peer pool. The peer fetch above must succeed first; this endpoint
   // is fire-on-demand so we don't burn OpenAI tokens on every modal open.
