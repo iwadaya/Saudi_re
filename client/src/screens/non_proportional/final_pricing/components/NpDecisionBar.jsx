@@ -4,7 +4,7 @@
 // and the Offer / Decline buttons. JSX moved verbatim from
 // NpFinalPricing — props in, callbacks out, no logic changes.
 
-import { exportNpPricingToExcel } from '../exportPricingToExcel.js';
+import { exportNpContractWorkbook } from '../npWorkbookExporters.js';
 import { toN } from '../formatters.js';
 import { logger } from '../../../../utils/logger';
 
@@ -29,6 +29,9 @@ export default function NpDecisionBar({
   currency,
   save,
   showToast,
+  contractId,
+  catDisabled = false,
+  riskDisabled = false,
 }) {
   const {
     layers, quoteStructures, saveState, offerStatus,
@@ -51,7 +54,7 @@ export default function NpDecisionBar({
                   <button
                     className="bbg-btn"
                     style={{ borderColor: 'rgba(34,197,94,0.5)', color: '#4ade80', display: 'flex', alignItems: 'center', gap: 6 }}
-                    title="Export all pricing data to Excel"
+                    title="Export the whole contract to Excel — one sheet per screen, in wizard order (Treaty Detail → Final Pricing)"
                     onClick={() => {
                       const progRows = layers.map((l) => {
                         const r = (() => {
@@ -64,7 +67,7 @@ export default function NpDecisionBar({
                         })();
                         return r;
                       });
-                      exportNpPricingToExcel({
+                      const finalData = {
                         layers,
                         quoteStructures,
                         mode,
@@ -82,7 +85,16 @@ export default function NpDecisionBar({
                         egnpi: npDetail?.estGnpi || npDetail?.est_gnpi || 0,
                         totalLimit: layers.reduce((s, l) => s + (toN(l.limit) || 0), 0),
                         programmeRows: progRows,
-                      }).catch(e => logger.error('Export failed:', e));
+                      };
+                      exportNpContractWorkbook({
+                        contractId,
+                        isQuote,
+                        finalData,
+                        npDetail,
+                        flags: { catDisabled, riskDisabled, npStopLoss: false },
+                      })
+                        .then(() => showToast?.('Workbook exported'))
+                        .catch(e => { logger.error('Export failed:', e); showToast?.('Export failed'); });
                     }}
                   >
                     ↓ Export Excel

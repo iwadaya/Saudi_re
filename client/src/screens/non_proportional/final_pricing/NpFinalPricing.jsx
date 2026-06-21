@@ -239,6 +239,9 @@ export default function NpFinalPricing() {
                 currency={currency}
                 save={save}
                 showToast={showToast}
+                contractId={contractId}
+                catDisabled={catDisabled}
+                riskDisabled={riskDisabled}
               />
 
               <NpTechAnalysisModal

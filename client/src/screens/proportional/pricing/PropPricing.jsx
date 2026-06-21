@@ -227,6 +227,7 @@ export default function PropPricing() {
             setShowOffer={setShowOffer} setShowDecline={setShowDecline}
             td={td} appState={appState} components={components} yearly={yearly}
             contract={contract} shareRows={shareRows} shareGrid={shareGrid} leads={leads}
+            contractId={cid}
           />
 
           {/* ═══ DECLINE MODAL ═══ */}
