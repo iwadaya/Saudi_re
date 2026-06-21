@@ -162,39 +162,48 @@ router.post("/treaties/:id/non-prop/save", ...npTreatyGuard, validateBody(npSave
       }
       await cl.query(`DELETE FROM public.contract_np_layers WHERE contract_id=$1`, [id]);
 
-      for (const l of layers) {
-        // Insert layer, get back its layer_id
-        const ins = await cl.query(
-          `INSERT INTO public.contract_np_layers
-             (contract_id,layer_number,attachment,layer_limit,aggregate_limit,egnpi,earned_premium,
-              rate,rol,num_reinstatements,reinstatement_pct,annual_agg_deductible,peril_scope,mdp,mdp_pct,
-              hist_margin,modelled_margin,tech_ratio,uw_price,expiring_price,lead_price)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
-           RETURNING layer_id`,
-          [id, l.layer_number,
-           numOrNull(l.attachment), numOrNull(l.layer_limit), numOrNull(l.aggregate_limit),
-           numOrNull(l.egnpi), numOrNull(l.earned_premium),
-           numOrNull(l.rate), numOrNull(l.rol),
-           reinstatInt(l.num_reinstatements), numOrNull(l.reinstatement_pct),
-           numOrNull(l.annual_agg_deductible),
-           l.peril_scope || 'BOTH',
-           numOrNull(l.mdp), numOrNull(l.mdp_pct),
-           numOrNull(l.hist_margin), numOrNull(l.modelled_margin), numOrNull(l.tech_ratio),
-           numOrNull(l.uw_price), numOrNull(l.expiring_price), numOrNull(l.lead_price)]
-        );
-        const layerId = ins.rows[0].layer_id;
+      // Re-insert every layer in one statement instead of one round-trip per
+      // layer. RETURNING rows come back in VALUES order, so they line up with
+      // `layers` index-for-index.
+      const layersInsert = buildBatchInsert({
+        table: 'public.contract_np_layers',
+        columns: [
+          'contract_id','layer_number','attachment','layer_limit','aggregate_limit','egnpi','earned_premium',
+          'rate','rol','num_reinstatements','reinstatement_pct','annual_agg_deductible','peril_scope','mdp','mdp_pct',
+          'hist_margin','modelled_margin','tech_ratio','uw_price','expiring_price','lead_price',
+        ],
+        rows: layers.map((l) => [
+          l.layer_number,
+          numOrNull(l.attachment), numOrNull(l.layer_limit), numOrNull(l.aggregate_limit),
+          numOrNull(l.egnpi), numOrNull(l.earned_premium),
+          numOrNull(l.rate), numOrNull(l.rol),
+          reinstatInt(l.num_reinstatements), numOrNull(l.reinstatement_pct),
+          numOrNull(l.annual_agg_deductible),
+          l.peril_scope || 'BOTH',
+          numOrNull(l.mdp), numOrNull(l.mdp_pct),
+          numOrNull(l.hist_margin), numOrNull(l.modelled_margin), numOrNull(l.tech_ratio),
+          numOrNull(l.uw_price), numOrNull(l.expiring_price), numOrNull(l.lead_price),
+        ]),
+        leadingId: id,
+      });
+      const insertedLayers = await cl.query(`${layersInsert.sql} RETURNING layer_id`, layersInsert.params);
 
-        // Insert COB participation for this layer
-        const cobIds = Array.isArray(l.class_of_business_ids) ? l.class_of_business_ids : [];
+      // Flatten every (layer, COB) pair and insert them all in one statement
+      // instead of one round-trip per COB.
+      const cobPairs = [];
+      insertedLayers.rows.forEach((row, idx) => {
+        const cobIds = Array.isArray(layers[idx]?.class_of_business_ids) ? layers[idx].class_of_business_ids : [];
         for (const cobId of cobIds) {
-          if (cobId) {
-            await cl.query(
-              `INSERT INTO public.contract_np_layer_class_of_business (layer_id, class_of_business_id)
-               VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-              [layerId, cobId]
-            );
-          }
+          if (cobId) cobPairs.push([row.layer_id, cobId]);
         }
+      });
+      if (cobPairs.length > 0) {
+        const values = cobPairs.map((_, i) => `($${i * 2 + 1},$${i * 2 + 2})`).join(',');
+        await cl.query(
+          `INSERT INTO public.contract_np_layer_class_of_business (layer_id, class_of_business_id)
+           VALUES ${values} ON CONFLICT DO NOTHING`,
+          cobPairs.flat()
+        );
       }
     }
 
@@ -202,16 +211,16 @@ router.post("/treaties/:id/non-prop/save", ...npTreatyGuard, validateBody(npSave
     // These go into contract_underwriting_limit (shared with Prop but keyed to contract_id + cob)
     if (Array.isArray(cob_underwriting_limits) && cob_underwriting_limits.length > 0) {
       await cl.query(`DELETE FROM public.contract_underwriting_limit WHERE contract_id=$1`, [id]);
-      for (const r of cob_underwriting_limits) {
-        if (!r.cob_id) continue;
-        await cl.query(
-          `INSERT INTO public.contract_underwriting_limit (contract_id, class_of_business_id, limit_amount, basis)
-           VALUES ($1, $2, $3, $4)
-           ON CONFLICT (contract_id, class_of_business_id) DO UPDATE
-             SET limit_amount=EXCLUDED.limit_amount, updated_at=now()`,
-          [id, r.cob_id, numOrNull(r.limit_amount) ?? 0, 'COMBINED']
-        );
-      }
+      const uwLimitInsert = buildBatchInsert({
+        table: 'public.contract_underwriting_limit',
+        columns: ['contract_id','class_of_business_id','limit_amount','basis'],
+        rows: cob_underwriting_limits
+          .filter((r) => r.cob_id)
+          .map((r) => [r.cob_id, numOrNull(r.limit_amount) ?? 0, 'COMBINED']),
+        leadingId: id,
+        conflict: 'ON CONFLICT (contract_id,class_of_business_id) DO UPDATE SET limit_amount=EXCLUDED.limit_amount, updated_at=now()',
+      });
+      if (uwLimitInsert) await cl.query(uwLimitInsert.sql, uwLimitInsert.params);
     }
 
     // ── MERGE terms JSONB ──

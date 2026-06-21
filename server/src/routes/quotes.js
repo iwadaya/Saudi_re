@@ -1020,26 +1020,42 @@ router.put("/quotes/:id/large-losses", validateBody(lossesSaveSchema), asyncHand
   await cl.query(`DELETE FROM public.contract_large_losses WHERE report_id=$1`,[rid]);
   const today=new Date().toISOString().slice(0,10);
   const reportSaved=dateOrNull(report_date)||today;
-  const savedLosses = [];
-  for(const l of losses) {
-    const key=l.loss_id?String(l.loss_id):null;
-    const existedReported=key?prevReported.get(key):null;
-    // "Saved in Universe": report date of the cycle the loss first entered,
-    // preserved across saves for year-over-year comparison (new rows take the
-    // current report date). Actuarial date is the user-entered booking date
-    // that drives stripping (nullable).
-    const reported=existedReported||reportSaved;
-    const actuarial=dateOrNull(l.actuarial_reported_date);
-    const pinc=dateOrNull(l.policy_inception_date);
-    // NaN-guarded underwriting year (see treaty handler).
-    const uwy=safeUwYear(l);
-    // Preserve selection + inflation when the save omits them.
-    const selected=preserveBool(l.is_selected, key?prevSelected.get(key):undefined);
-    const infl=preserveNum(l.inflation_factor, key?prevInfl.get(key):undefined, 1);
-    const {rows:ins}=await cl.query(`INSERT INTO public.contract_large_losses (report_id,loss_id,uw_year,insured_name,loss_name,date_of_loss,class_of_business,paid,os,incurred,is_selected,inflation_factor,reported_date,actuarial_reported_date,policy_inception_date) VALUES ($1,COALESCE($2,gen_random_uuid()),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING loss_id`,
-    [rid,l.loss_id||null,uwy,l.insured_name,l.loss_name,dateOrNull(l.date_of_loss),l.class_of_business,numOrNull(l.paid),numOrNull(l.os),numOrNull(l.incurred),selected,infl,reported,actuarial,pinc]);
-    savedLosses.push(ins[0]?.loss_id);
-  }
+  // Assign loss IDs up-front so we can batch the INSERT and still return the
+  // same loss_ids array the one-row-at-a-time loop used to surface (mirrors the
+  // cat-losses handler below and the contract-side large-losses save).
+  const lossesWithIds = losses.map((l) => {
+    const key = l.loss_id ? String(l.loss_id) : null;
+    const existedReported = key ? prevReported.get(key) : null;
+    return {
+      ...l,
+      _loss_id: l.loss_id || randomUUID(),
+      // "Saved in Universe": report date of the cycle the loss first entered,
+      // preserved across saves for year-over-year comparison (new rows take the
+      // current report date). Actuarial date is the user-entered booking date
+      // that drives stripping (nullable).
+      _reported: existedReported || reportSaved,
+      _actuarial: dateOrNull(l.actuarial_reported_date),
+      _dol: dateOrNull(l.date_of_loss),
+      _pinc: dateOrNull(l.policy_inception_date),
+      // NaN-guarded underwriting year (see treaty handler).
+      _uwy: safeUwYear(l),
+      // Preserve selection + inflation when the save omits them.
+      _selected: preserveBool(l.is_selected, key ? prevSelected.get(key) : undefined),
+      _infl: preserveNum(l.inflation_factor, key ? prevInfl.get(key) : undefined, 1),
+    };
+  });
+  const lossesInsert = buildBatchInsert({
+    table: 'public.contract_large_losses',
+    columns: ['report_id','loss_id','uw_year','insured_name','loss_name','date_of_loss','class_of_business','paid','os','incurred','is_selected','inflation_factor','reported_date','actuarial_reported_date','policy_inception_date'],
+    rows: lossesWithIds.map((l) => [
+      l._loss_id, l._uwy, l.insured_name, l.loss_name, l._dol,
+      l.class_of_business, numOrNull(l.paid), numOrNull(l.os), numOrNull(l.incurred),
+      l._selected, l._infl, l._reported, l._actuarial, l._pinc,
+    ]),
+    leadingId: rid,
+  });
+  if (lossesInsert) await cl.query(lossesInsert.sql, lossesInsert.params);
+  const savedLosses = lossesWithIds.map((l) => l._loss_id);
   const updatedAt = await touchParentEntity(cl, { parentTable: 'quote', idColumn: 'quote_id', id });
   await auditMutation(cl, req, { entityType: 'QUOTE', entityId: id, eventType: 'LARGE_LOSSES_SAVED', payload: { report_id: rid, loss_count: savedLosses.length } });
   await cl.query("COMMIT");res.json({ok:true,report_id:rid,loss_ids:savedLosses,updated_at:updatedAt});}catch(e){await cl.query("ROLLBACK").catch(()=>{});throw e;}finally{cl.release();}
