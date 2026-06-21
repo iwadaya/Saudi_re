@@ -153,3 +153,10 @@ export async function assertExists(client, table, idColumn, id, label = 'Resourc
 export function isStaleSince(sourceUpdatedAt, savedAt) {
   return !!(savedAt && sourceUpdatedAt && new Date(sourceUpdatedAt) > new Date(savedAt));
 }
+
+// "UNLIMITED" reinstatements stay null in the numeric column; the literal is
+// preserved separately in the JSONB terms. Any other value parses as a number.
+export function reinstatInt(v) {
+  if (String(v || '').trim().toUpperCase() === 'UNLIMITED') return null;
+  return numOrNull(v);
+}

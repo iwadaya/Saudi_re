@@ -243,7 +243,7 @@ export default function PropCrestaAggregates({ embedded = false, routeKeyOverrid
       try {
         const [c, cList, saved, cobs] = await Promise.all([
           api.getContract(contractId, appState.quoteMode ? { quote: true } : undefined).catch(() => ({})),
-          api.listRefItems('country').catch(() => []),
+          api.getRefListItems('country').catch(() => []),
           api.getCrestaData(contractId, appState.quoteMode ? { quote: true } : undefined).catch(() => []),
           api.getContractCobs(contractId, appState.quoteMode ? { quote: true } : undefined).catch(() => []),
         ]);
