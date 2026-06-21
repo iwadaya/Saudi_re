@@ -6,12 +6,13 @@
 // || [])` fallback) verbatim. Props in, callbacks out.
 
 import { cn } from './propPricingConstants';
-import { exportPropPricingToExcel } from '../exportPropPricingToExcel.js';
+import { exportPropContractWorkbook } from '../propWorkbookExporters.js';
 
 export default function PropPricingDecisionBar({
   comment, setComment, setDirty, isReadOnly, offerStatus,
   setShowOffer, setShowDecline,
   td, appState, components, yearly, contract, shareRows, shareGrid, leads,
+  contractId,
 }) {
   return (
     <div className="bbg-block bbg-block--decision">
@@ -27,8 +28,9 @@ export default function PropPricingDecisionBar({
           <button
             className="bbg-btn"
             style={{ borderColor:'rgba(34,197,94,0.5)', color:'#4ade80', display:'flex', alignItems:'center', gap:6 }}
+            title="Export the whole contract to Excel — one sheet per screen, in wizard order (Treaty Detail → Pricing)"
             onClick={() => {
-              exportPropPricingToExcel({
+              const finalData = {
                 cedantName: td?.cedantName || '',
                 countryName: td?.countryName || '',
                 uwYear: td?.startYear || td?.uwYear || '',
@@ -49,7 +51,13 @@ export default function PropPricingDecisionBar({
                 totalEpi: cn(td?.quotaShareEpi || 0) + cn(td?.surplusEpi || 0),
                 qsEpi: cn(td?.quotaShareEpi || 0),
                 surplusEpi: cn(td?.surplusEpi || 0),
-              });
+              };
+              exportPropContractWorkbook({
+                contractId,
+                finalData,
+                propDetail: td,
+                triangulationsEnabled: appState.propTreatyDetail?.triangulationsAvailable !== false,
+              }).catch((e) => { try { console.error('Export failed:', e); } catch { /* noop */ } });
             }}
           >↓ Export Excel</button>
           <button className="bbg-btn bbg-btn--offer" onClick={() => setShowOffer(true)}>

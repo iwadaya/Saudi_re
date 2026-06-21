@@ -1,6 +1,13 @@
 /**
  * exportPricingToExcel.js
- * Exports NP Final Pricing screen data to a multi-sheet Excel workbook.
+ * Builds the NP Final Pricing sheets.
+ *
+ * Split into a pure sheet-builder (`buildNpPricingSheets`) and a thin
+ * download wrapper (`exportNpPricingToExcel`). The builder is reused by the
+ * whole-contract workbook exporter (npWorkbookExporters.js) so the final
+ * pricing sheets are byte-for-byte identical whether you export just this
+ * screen or the full Treaty-Detail -> Final-Pricing sequence.
+ *
  * exceljs is lazy-loaded via the excel util so it stays out of the main
  * vendor bundle.
  */
@@ -11,41 +18,39 @@ function toNum(v) {
 function pct(v) { const n = toNum(v); return n != null ? `${n.toFixed(2)}%` : '–'; }
 function fmtNum(v) { const n = toNum(v); return n != null ? Math.round(n) : null; }
 
-function appendStyledSheet(wb, name, headers, rows) {
-  const ws = wb.appendSheet(name, [headers, ...rows]);
-  ws.columns = headers.map((h, i) => ({
-    width: Math.max(14, String(h).length + 2, ...rows.map(r => String(r[i] ?? '').length)),
-  }));
-  return ws;
-}
-
-export async function exportNpPricingToExcel(data) {
-  const { createWorkbook } = await import('../../../utils/excel');
+/**
+ * Pure builder: returns an ordered list of { name, aoa } sheets.
+ * No I/O, no workbook - callers decide what to do with them.
+ * @returns {Array<{name:string, aoa:Array<Array<any>>}>}
+ */
+export function buildNpPricingSheets(data) {
   const {
     layers = [], quoteStructures = [], mode,
     treatyTypeStr, cedantName, countryName, uwYear,
     currency, isQuote, totalROL, egnpi, totalLimit,
     programmeRows = [],
-  } = data;
+  } = data || {};
 
-  const wb = await createWorkbook();
+  const sheets = [];
 
-  // ── Sheet 1: Summary ─────────────────────────────────────────────────
-  const summaryRows = [
-    ['Cedant',               cedantName   || '–'],
-    ['Country',              countryName  || '–'],
-    ['UW Year',              uwYear       || '–'],
-    ['Treaty Type',          treatyTypeStr|| '–'],
-    ['XL Mode',              mode         || '–'],
-    ['Currency',             currency     || '–'],
-    ['EST. GNPI (100%)',     fmtNum(egnpi)],
-    ['Total Programme Limit',fmtNum(totalLimit)],
-    ['Total ROL',            pct(totalROL)],
-  ];
-  const wsSummary = wb.appendSheet('Summary', [['Field', 'Value'], ...summaryRows]);
-  wsSummary.columns = [{ width: 28 }, { width: 22 }];
+  // -- Summary --
+  sheets.push({
+    name: 'Summary',
+    aoa: [
+      ['Field', 'Value'],
+      ['Cedant',               cedantName   || '–'],
+      ['Country',              countryName  || '–'],
+      ['UW Year',              uwYear       || '–'],
+      ['Treaty Type',          treatyTypeStr|| '–'],
+      ['XL Mode',              mode         || '–'],
+      ['Currency',             currency     || '–'],
+      ['EST. GNPI (100%)',     fmtNum(egnpi)],
+      ['Total Programme Limit',fmtNum(totalLimit)],
+      ['Total ROL',            pct(totalROL)],
+    ],
+  });
 
-  // ── Sheet 2: Risk XL Layers ──────────────────────────────────────────
+  // -- Risk XL Layers --
   const riskLayers = layers.filter(l => l.risk || (!l.cat));
   if (riskLayers.length) {
     const headers = ['Layer','Limit','Deductible','Pure Burn %','Pareto %',
@@ -57,10 +62,10 @@ export async function exportNpPricingToExcel(data) {
       toNum(l.riskLoading), pct(l.riskTotalPrice), pct(l.riskUwPrice || l.riskTotalPrice),
     ]);
     rows.push(['TOTAL', riskLayers.reduce((s,l) => s+(toNum(l.limit)||0), 0), ...Array(10).fill('')]);
-    appendStyledSheet(wb, 'Risk XL Layers', headers, rows);
+    sheets.push({ name: 'Risk XL Layers', aoa: [headers, ...rows] });
   }
 
-  // ── Sheet 3: Cat XL Layers ───────────────────────────────────────────
+  // -- Cat XL Layers --
   const catLayers = layers.filter(l => l.cat);
   if (catLayers.length) {
     const headers = ['Layer','Limit','Deductible','Pure Burn %','Pareto %',
@@ -72,10 +77,10 @@ export async function exportNpPricingToExcel(data) {
       toNum(l.catLoading), pct(l.catTotalPrice), pct(l.catUwPrice || l.catTotalPrice),
     ]);
     rows.push(['TOTAL', catLayers.reduce((s,l) => s+(toNum(l.limit)||0), 0), ...Array(10).fill('')]);
-    appendStyledSheet(wb, 'Cat XL Layers', headers, rows);
+    sheets.push({ name: 'Cat XL Layers', aoa: [headers, ...rows] });
   }
 
-  // ── Sheet 4: Pricing Summary ─────────────────────────────────────────
+  // -- Pricing Summary --
   if (layers.length) {
     const headers = ['Layer','Limit','Deductible','Reinstatements',
       'Reinsurer %','Lead %','Expiring %','Hist. Margin %','Margin %','Tech Ratio %','% Diff'];
@@ -92,7 +97,6 @@ export async function exportNpPricingToExcel(data) {
         diff != null ? `${diff >= 0 ? '+' : ''}${diff.toFixed(2)}%` : '–',
       ];
     });
-    // Weighted totals row
     const totLim = layers.reduce((s,l) => s+(toNum(l.limit)||0), 0);
     if (totLim > 0) {
       const sp = f => layers.reduce((s,l) => s+(toNum(l.limit)||0)*(toNum(l[f])||0), 0) / totLim;
@@ -104,10 +108,10 @@ export async function exportNpPricingToExcel(data) {
       rows.push(['TOTAL', totLim, '', '', pct(wR), pct(wL), pct(wE), pct(wH), '–', pct(wT),
         d != null ? `${d >= 0 ? '+' : ''}${d.toFixed(2)}%` : '–']);
     }
-    appendStyledSheet(wb, 'Pricing Summary', headers, rows);
+    sheets.push({ name: 'Pricing Summary', aoa: [headers, ...rows] });
   }
 
-  // ── Sheet 5: Programme Limits ────────────────────────────────────────
+  // -- Programme Limits --
   if (!isQuote && programmeRows.length) {
     const headers = ['Layer','Share %','Premium','Per Risk Limit','Cat Limit',
       'Cedant Total Limit','Agg Contribution','Total Country Agg','Annual Agg Limit','Expected Shortfall'];
@@ -117,10 +121,10 @@ export async function exportNpPricingToExcel(data) {
       fmtNum(r.cedantTot), fmtNum(r.aggContrib), fmtNum(r.totalCountryAgg),
       fmtNum(r.aal), fmtNum(r.es),
     ]);
-    appendStyledSheet(wb, 'Programme Limits', headers, rows);
+    sheets.push({ name: 'Programme Limits', aoa: [headers, ...rows] });
   }
 
-  // ── Sheet 6+: Quote Structures ───────────────────────────────────────
+  // -- Quote Structures --
   if (isQuote && quoteStructures.length) {
     quoteStructures.forEach((st, sIdx) => {
       const stLayers = Array.isArray(st.layers) ? st.layers : [];
@@ -134,11 +138,32 @@ export async function exportNpPricingToExcel(data) {
         fmtNum(l.egnpi), pct(l.rate || l.rol),
         pct(l.reinsurerPricing), pct(l.leadPricing), pct(l.expiringPricing),
       ]);
-      appendStyledSheet(wb, `Structure ${sIdx+1}`, headers, rows);
+      sheets.push({ name: `Structure ${sIdx+1}`, aoa: [headers, ...rows] });
     });
   }
 
-  // ── Download ─────────────────────────────────────────────────────────
+  return sheets;
+}
+
+function applyAutoWidth(ws, aoa) {
+  const ncols = aoa.reduce((m, r) => Math.max(m, r.length), 0);
+  ws.columns = Array.from({ length: ncols }, (_, i) => ({
+    width: Math.min(60, Math.max(12, ...aoa.map((r) => String(r[i] ?? '').length + 2))),
+  }));
+}
+
+/**
+ * Standalone "Export this screen" download - unchanged output, now built on
+ * the shared builder above.
+ */
+export async function exportNpPricingToExcel(data) {
+  const { createWorkbook } = await import('../../../utils/excel');
+  const wb = await createWorkbook();
+  for (const s of buildNpPricingSheets(data)) {
+    const ws = wb.appendSheet(s.name, s.aoa);
+    applyAutoWidth(ws, s.aoa);
+  }
+  const { cedantName, uwYear } = data || {};
   const filename = `NP_Pricing_${(cedantName||'Export').replace(/\s+/g,'_')}_${uwYear||new Date().getFullYear()}.xlsx`;
   await wb.writeFile(filename);
 }
