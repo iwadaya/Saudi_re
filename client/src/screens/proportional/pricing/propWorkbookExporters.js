@@ -13,11 +13,11 @@ import {
 import { buildPropPricingSheets } from './exportPropPricingToExcel.js';
 import { getWizardNav, STEP_LABELS } from '../../../config/wizard';
 
-const tBase = ({ contractId }) => `/api/treaties/${contractId}`;
+const entityBase = ({ contractId, isQuote }) => (isQuote ? `/api/quotes/${contractId}` : `/api/treaties/${contractId}`);
 
 const triangleStep = (type, label) => ({
   sheetName: label,
-  fetch: (ctx) => fetchJson(`${tBase(ctx)}/triangles/${type}`, ctx.signal),
+  fetch: (ctx) => fetchJson(`${entityBase(ctx)}/triangles/${type}`, ctx.signal),
   build: (data) => {
     const rows = Array.isArray(data) ? data : (data?.rows || data?.cells || []);
     return rows.length ? tableSheet(rows) : noteSheet('No triangle saved for this basis.');
@@ -26,7 +26,7 @@ const triangleStep = (type, label) => ({
 
 const devFactorStep = (type, label) => ({
   sheetName: label,
-  fetch: (ctx) => fetchJson(`${tBase(ctx)}/dev-factors/${type}`, ctx.signal),
+  fetch: (ctx) => fetchJson(`${entityBase(ctx)}/dev-factors/${type}`, ctx.signal),
   build: (data) => {
     const rows = Array.isArray(data) ? data : (data?.rows || []);
     return rows.length
@@ -42,7 +42,7 @@ const devFactorStep = (type, label) => ({
 export const PROP_SCREEN_EXPORTERS = {
   PROP_TREATY_DETAIL: {
     sheetName: 'Treaty Detail',
-    fetch: (ctx) => fetchJson(`${tBase(ctx)}`, ctx.signal),
+    fetch: (ctx) => fetchJson(`${entityBase(ctx)}`, ctx.signal),
     build: (fetched, ctx) => {
       const merged = { ...(fetched || {}), ...(ctx.propDetail || {}), ...(ctx.header || {}) };
       return kvSheet(merged, {
@@ -53,7 +53,7 @@ export const PROP_SCREEN_EXPORTERS = {
 
   PROP_TREATY_DOCUMENTS: {
     sheetName: 'Documents',
-    fetch: (ctx) => fetchJson(`${tBase(ctx)}/documents`, ctx.signal),
+    fetch: (ctx) => fetchJson(`${entityBase(ctx)}/documents`, ctx.signal),
     build: (data) => {
       const rows = Array.isArray(data) ? data : (data?.documents || data?.files || []);
       return rows.length
@@ -75,7 +75,7 @@ export const PROP_SCREEN_EXPORTERS = {
 
   PROP_LARGE_LOSS_LIST: {
     sheetName: 'Large Loss List',
-    fetch: (ctx) => fetchJson(`${tBase(ctx)}/large-losses`, ctx.signal),
+    fetch: (ctx) => fetchJson(`${entityBase(ctx)}/large-losses`, ctx.signal),
     build: (data) => {
       const losses = data?.losses || [];
       return losses.length
@@ -88,7 +88,7 @@ export const PROP_SCREEN_EXPORTERS = {
   },
   PROP_LARGE_LOSS_SELECTION: {
     sheetName: 'Large Loss Selection',
-    fetch: (ctx) => fetchJson(`${tBase(ctx)}/loss-selection/LARGE/latest`, ctx.signal),
+    fetch: (ctx) => fetchJson(`${entityBase(ctx)}/loss-selection/LARGE/latest`, ctx.signal),
     build: (data) => autoSheet(data),
   },
   PROP_LARGE_LOSS_PARETO: {
@@ -98,7 +98,7 @@ export const PROP_SCREEN_EXPORTERS = {
 
   PROP_CAT_LOSS_LIST: {
     sheetName: 'Cat Loss List',
-    fetch: (ctx) => fetchJson(`${tBase(ctx)}/cat-losses`, ctx.signal),
+    fetch: (ctx) => fetchJson(`${entityBase(ctx)}/cat-losses`, ctx.signal),
     build: (data) => {
       const losses = data?.losses || [];
       return losses.length ? tableSheet(losses) : noteSheet('No cat losses recorded.');
@@ -106,7 +106,7 @@ export const PROP_SCREEN_EXPORTERS = {
   },
   PROP_CAT_LOSS_SELECTION: {
     sheetName: 'Cat Loss Selection',
-    fetch: (ctx) => fetchJson(`${tBase(ctx)}/loss-selection/CAT/latest`, ctx.signal),
+    fetch: (ctx) => fetchJson(`${entityBase(ctx)}/loss-selection/CAT/latest`, ctx.signal),
     build: (data) => autoSheet(data),
   },
   PROP_CAT_LOSS_PARETO: {
@@ -121,12 +121,12 @@ export const PROP_SCREEN_EXPORTERS = {
 
   PROP_PROJECTED_SUMMARY: {
     sheetName: 'Projected Summary',
-    fetch: (ctx) => fetchJson(`${tBase(ctx)}/pricing-yearly`, ctx.signal),
+    fetch: (ctx) => fetchJson(`${entityBase(ctx)}/pricing-yearly`, ctx.signal),
     build: (data) => autoSheet(data),
   },
   PROP_QUICK_SUMMARY: {
     sheetName: 'Quick Summary',
-    fetch: (ctx) => fetchJson(`${tBase(ctx)}/pricing-outputs`, ctx.signal),
+    fetch: (ctx) => fetchJson(`${entityBase(ctx)}/pricing-outputs`, ctx.signal),
     build: (data) => autoSheet(data),
   },
 
@@ -141,7 +141,7 @@ export const PROP_SCREEN_EXPORTERS = {
 
   PROP_CRESTA_AGGREGATES: {
     sheetName: 'CRESTA Aggregates',
-    fetch: (ctx) => fetchJson(`${tBase(ctx)}/cresta`, ctx.signal),
+    fetch: (ctx) => fetchJson(`${entityBase(ctx)}/cresta`, ctx.signal),
     build: (data) => {
       const rows = Array.isArray(data) ? data : (data?.rows || []);
       return rows.length ? tableSheet(rows) : noteSheet('No CRESTA aggregates saved.');
@@ -167,10 +167,18 @@ export const PROP_SCREEN_EXPORTERS = {
  *                                    prop export (components, yearly, epiSplit,
  *                                    shareRows, shareGrid, leads, …)
  * @param {object}  args.propDetail   in-memory treaty-detail slice
+ * @param {boolean} [args.isQuote]    use quote endpoints instead of treaty endpoints
  * @param {boolean} [args.triangulationsEnabled=true]
  * @param {AbortSignal} [args.signal]
  */
-export async function exportPropContractWorkbook({ contractId, finalData = {}, propDetail = {}, triangulationsEnabled = true, signal }) {
+export async function exportPropContractWorkbook({
+  contractId,
+  finalData = {},
+  propDetail = {},
+  isQuote = !!finalData.isQuote,
+  triangulationsEnabled = true,
+  signal,
+}) {
   const { order } = getWizardNav('PROP_PRICING', { wizardMode: 'PROP', triangulationsEnabled });
   const fullOrder = order.includes('PROP_PRICING') ? order : [...order, 'PROP_PRICING'];
 
@@ -191,7 +199,7 @@ export async function exportPropContractWorkbook({ contractId, finalData = {}, p
     order: fullOrder,
     labels: STEP_LABELS,
     registry: PROP_SCREEN_EXPORTERS,
-    ctx: { finalData, propDetail, header },
+    ctx: { isQuote, finalData, propDetail, header },
     header,
     filename,
     signal,
