@@ -125,11 +125,56 @@ export function noteSheet(text) {
 
 // ── Workbook builder ─────────────────────────────────────────────────────
 
-function autoWidth(ws, aoa) {
-  const ncols = aoa.reduce((m, r) => Math.max(m, r.length), 0);
-  ws.columns = Array.from({ length: ncols }, (_, i) => ({
-    width: Math.min(60, Math.max(10, ...aoa.map((r) => String(r[i] ?? '').length + 2))),
-  }));
+// Render one AoA onto a themed worksheet, matching the treaty/portfolio
+// export look (UNIVERSE gradient title bar → styled header row → zebra body,
+// frozen panes, hidden gridlines, print-to-fit). Single-cell payloads (note
+// sheets) drop the header/zebra and just show the note under the title bar.
+function writeThemedSheet(theme, workbook, name, title, aoa) {
+  const { UT, titleBar, headerRow, zebra, totalRow, finishSheet } = theme;
+  const ws = workbook.addWorksheet(name);
+  const rows = Array.isArray(aoa) && aoa.length ? aoa : [['(no saved data for this screen)']];
+  const ncols = Math.max(1, rows.reduce((m, r) => Math.max(m, r.length), 0));
+  const hdr = titleBar(ws, ncols, title); // → 4
+
+  const isNote = rows.length === 1 && rows[0].length <= 1;
+  if (isNote) {
+    const cell = ws.getCell(hdr, 1);
+    cell.value = rows[0][0] ?? '';
+    cell.font = { name: UT.font, italic: true, color: { argb: UT.inkSoft } };
+    cell.alignment = { vertical: 'middle', wrapText: true };
+    ws.getColumn(1).width = 90;
+    finishSheet(ws, 3, 0); // freeze the title block only
+    return ws;
+  }
+
+  ws.getRow(hdr).values = rows[0];
+  headerRow(ws, hdr, ncols);
+
+  const firstData = hdr + 1;
+  let totalRowIdx = -1;
+  for (let i = 1; i < rows.length; i++) {
+    const rowIdx = firstData + i - 1;
+    ws.getRow(rowIdx).values = rows[i];
+    if (String(rows[i][0] ?? '').toUpperCase() === 'TOTAL') totalRowIdx = rowIdx;
+  }
+  const lastData = firstData + (rows.length - 2);
+  if (lastData >= firstData) zebra(ws, firstData, lastData, ncols);
+  if (totalRowIdx > 0) totalRow(ws, totalRowIdx, ncols);
+
+  // Auto-width + light number formatting for genuine numeric cells (percentage
+  // / formatted cells are already strings, so they pass through untouched).
+  for (let c = 1; c <= ncols; c++) {
+    let w = 10;
+    for (let rr = hdr; rr <= lastData; rr++) {
+      const v = ws.getCell(rr, c).value;
+      w = Math.max(w, String(v ?? '').length + 2);
+      if (rr >= firstData && typeof v === 'number') ws.getCell(rr, c).numFmt = UT.fmtInt;
+    }
+    ws.getColumn(c).width = Math.min(60, w);
+  }
+
+  finishSheet(ws, hdr, 1);
+  return ws;
 }
 
 // Mirror the excel util's sheet-name rules + add cross-sheet uniqueness.
@@ -179,27 +224,17 @@ export async function buildContractWorkbook({
   contractId, order = [], labels = {}, registry = {}, ctx = {}, header = {}, filename, signal,
 }) {
   const { createWorkbook } = await import('./excel');
+  // Same Universe palette + ExcelJS helpers the treaty / portfolio exports use,
+  // so the whole-contract workbook is visually identical to those.
+  const theme = await import('../../../shared/universeXlsxTheme.js');
   const wb = await createWorkbook();
+  const workbook = wb.workbook;
   const nameOf = makeNamer();
 
   const generatedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  const coverRows = [
-    ['UNIVERSE — CONTRACT EXPORT'],
-    [],
-    ['Cedant', header.cedantName || '–'],
-    ['Country', header.countryName || '–'],
-    ['UW Year', header.uwYear || '–'],
-    ['Treaty Type', header.treatyTypeStr || '–'],
-    ['Mode', header.modeLabel || '–'],
-    ['Currency', header.currency || '–'],
-    ['Contract / Quote ID', String(contractId || '–')],
-    ['Generated (UTC)', generatedAt],
-    [],
-    ['#', 'Screen', 'Sheet(s)'],
-  ];
 
-  // Build all data sheets first so the Contents page can index them.
-  const plan = []; // { displayName, aoa }
+  // Build all data sheets first so the cover page can index them.
+  const plan = []; // { displayName, title, screen, aoa }
   let seq = 0;
   for (const key of order) {
     seq += 1;
@@ -215,24 +250,34 @@ export async function buildContractWorkbook({
     }
     const subs = normaliseBuildResult(result);
     const prefix = String(seq).padStart(2, '0');
-    const sheetLabels = [];
+    const screen = entry.sheetName || label;
     for (const sub of subs) {
-      const base = sub.subName
-        ? `${prefix} ${entry.sheetName || label} – ${sub.subName}`
-        : `${prefix} ${entry.sheetName || label}`;
+      const base = sub.subName ? `${prefix} ${screen} – ${sub.subName}` : `${prefix} ${screen}`;
       const displayName = nameOf(base);
-      plan.push({ displayName, aoa: sub.aoa });
-      sheetLabels.push(displayName);
+      const title = sub.subName ? `${screen} — ${sub.subName}` : screen;
+      plan.push({ displayName, title, screen: label, aoa: sub.aoa });
     }
-    coverRows.push([seq, label, sheetLabels.join('  |  ')]);
   }
 
-  const wsCover = wb.appendSheet('Contents', coverRows);
-  wsCover.columns = [{ width: 6 }, { width: 34 }, { width: 46 }];
+  // Themed cover sheet (brand block + table of contents) — added first so it
+  // leads the workbook, exactly like the treaty / portfolio exports.
+  theme.coverSheet(workbook, plan.map((s) => ({ name: s.displayName, desc: s.screen })), {
+    title: 'Contract Export',
+    date: generatedAt,
+    lines: [
+      ['Cedant', header.cedantName || '–'],
+      ['Country', header.countryName || '–'],
+      ['UW Year', String(header.uwYear || '–')],
+      ['Treaty Type', header.treatyTypeStr || '–'],
+      ['Mode', header.modeLabel || '–'],
+      ['Currency', header.currency || '–'],
+      ['Contract / Quote ID', String(contractId || '–')],
+      ['Generated (UTC)', generatedAt],
+    ],
+  });
 
   for (const s of plan) {
-    const ws = wb.appendSheet(s.displayName, s.aoa);
-    autoWidth(ws, s.aoa);
+    writeThemedSheet(theme, workbook, s.displayName, s.title, s.aoa);
   }
 
   const fname = filename || `Universe_Contract_${contractId || 'export'}.xlsx`;
