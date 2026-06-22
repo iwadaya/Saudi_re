@@ -35,6 +35,7 @@ export const BY_YEAR_COLS = [
 
 export const ROL_BAND_COLS = [
   { key: 'band', label: 'ROL Band', kind: 'text' },
+  { key: 'contracts', label: 'Policies', kind: 'int' },
   { key: 'premium', label: 'Premium', kind: 'money' },
   { key: 'exposure', label: 'Exposure', kind: 'money' },
   { key: 'rol', label: 'Avg ROL', kind: 'pct' },
@@ -43,6 +44,7 @@ export const ROL_BAND_COLS = [
 
 export const BALANCE_BAND_COLS = [
   { key: 'band', label: 'Balance Band', kind: 'text' },
+  { key: 'contracts', label: 'Policies', kind: 'int' },
   { key: 'premium', label: 'Premium', kind: 'money' },
   { key: 'exposure', label: 'Exposure', kind: 'money' },
   { key: 'balance', label: 'Avg Balance', kind: 'mult' },

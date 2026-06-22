@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildPivot,
   buildWeightedPivot,
+  buildTreatyKindMap,
   normalizePivot,
   unitsCte,
   unitsLobCte,
@@ -67,6 +68,22 @@ describe('buildWeightedPivot', () => {
     expect(p.totals.values.QS).toBeCloseTo(15 / 100, 10); // (10+5)/(100+0)
     expect(p.totals.values.XL).toBeCloseTo(90 / 300, 10);
     expect(p.totals.total).toBeCloseTo(105 / 400, 10);    // (10+90+5)/(100+300+0)
+  });
+});
+
+describe('buildTreatyKindMap', () => {
+  it('maps each treaty type to its dominant class, defaulting non-NP to PROP', () => {
+    const map = buildTreatyKindMap([
+      { treatyType: 'Cat XL', kind: 'NP' },
+      { treatyType: 'Quota Share', kind: 'PROP' },
+      { treatyType: 'Surplus', kind: undefined },   // missing → PROP
+    ]);
+    expect(map).toEqual({ 'Cat XL': 'NP', 'Quota Share': 'PROP', Surplus: 'PROP' });
+  });
+
+  it('tolerates empty / nullish input', () => {
+    expect(buildTreatyKindMap(undefined)).toEqual({});
+    expect(buildTreatyKindMap([null, { treatyType: null, kind: 'NP' }])).toEqual({});
   });
 });
 

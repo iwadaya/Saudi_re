@@ -5,9 +5,10 @@ import Topbar from '../../components/Topbar';
 import AsyncBoundary from '../../components/AsyncBoundary';
 import { useResource } from '../../hooks/useResource';
 import { fmtNum, fmtPct, fmtMoney, fmtBal } from '../../utils/format';
-import { REGION_COLS, LOB_COLS, BY_YEAR_COLS, ROL_BAND_COLS, BALANCE_BAND_COLS, TREATY_TYPE_COLS } from './dashboardColumns';
+import { REGION_COLS, LOB_COLS, BY_YEAR_COLS, TREATY_TYPE_COLS } from './dashboardColumns';
 import { fitLabelColumn } from './labelWidth';
 import { logger } from '../../utils/logger';
+import ComboChart from './comboChart';
 
 const TABS = [
   { key: 'portfolio-overview', label: 'Portfolio Overview' },
@@ -34,8 +35,6 @@ const withFmt = (cols) => cols.map((c) => ({ ...c, fmt: KIND_FMT[c.kind] }));
 const regionCols = withFmt(REGION_COLS);
 const lobCols = withFmt(LOB_COLS);
 const byYearCols = withFmt(BY_YEAR_COLS);
-const rolBandCols = withFmt(ROL_BAND_COLS);
-const balanceBandCols = withFmt(BALANCE_BAND_COLS);
 const treatyTypeCols = withFmt(TREATY_TYPE_COLS);
 
 // Every value that can land in a table's first (row-label) column — across the
@@ -137,6 +136,178 @@ function SummaryTable({ title, rows, columns, sort, sortKey, onSort, currency })
   );
 }
 
+/* ── Technical-analysis: Strata-style diagonal-split matrix ────────────────
+   Rows = treaty type, Columns = UW year. Each cell is split on the diagonal:
+   top-left = the headline rate (Balance ×, for proportional; ROL %, for
+   non-proportional), bottom-right = UW Margin (green ≥ 0, red < 0). A coloured
+   left stripe marks the row's class. Reads the treaty×year pivots the Universe
+   query already returns — no new data shape. */
+
+// Pivot → { rowKey: { values:{col:v}, total } } for O(1) cell lookup.
+function indexPivot(pivot) {
+  const out = { rows: {}, totals: pivot?.totals || { values: {}, total: null } };
+  for (const r of pivot?.rows || []) out.rows[r.key ?? r.region ?? r.lob] = r;
+  return out;
+}
+
+function TechCell({ kind, top, topUnit, margin }) {
+  const topTxt = top == null ? '—' : (topUnit === 'BAL' ? fmtBal(top) : fmtPct(top));
+  const mTxt = margin == null ? '—' : fmtPct(margin);
+  const mClass = margin == null ? 'muted' : margin >= 0 ? 'dash-pos' : 'dash-neg';
+  const cls = ['dash-tcell', kind === 'NP' ? 'dash-tcell--np' : kind === 'PROP' ? 'dash-tcell--prop' : 'dash-tcell--neutral']
+    .concat(top == null && margin == null ? 'dash-tcell--empty' : []).join(' ');
+  return (
+    <td className={cls}>
+      <span className="dash-tcell-tl">{topTxt}{top != null && topUnit && <span className="dash-tcell-kx"> {topUnit}</span>}</span>
+      <span className={`dash-tcell-br ${mClass}`}>{mTxt}</span>
+    </td>
+  );
+}
+
+function TechMatrix({ data }) {
+  const balByT = indexPivot(data?.treatyBalanceByYear);
+  const rolByT = indexPivot(data?.treatyRolByYear);
+  const marginByT = indexPivot(data?.treatyUwMarginByYear);
+  const kindMap = data?.treatyKindByType || {};
+  const byTreaty = data?.byTreatyType || [];
+
+  // Union of years across the rate pivots, numerically sorted.
+  const cols = [...new Set([
+    ...(data?.treatyBalanceByYear?.columns || []),
+    ...(data?.treatyRolByYear?.columns || []),
+    ...(data?.treatyUwMarginByYear?.columns || []),
+  ])].sort((a, b) => Number(a) - Number(b));
+
+  // Treaty types in the breakdown's premium order (falls back to pivot rows).
+  const treaties = byTreaty.length
+    ? byTreaty.map(t => t.treatyType)
+    : Object.keys({ ...balByT.rows, ...rolByT.rows });
+  if (!cols.length || !treaties.length) {
+    return <div className="glass dash-block"><div className="dash-block-title">Technical Matrix</div><div className="muted">No data.</div></div>;
+  }
+
+  const rate = (t, c) => {
+    const np = kindMap[t] === 'NP';
+    const src = np ? rolByT : balByT;
+    return { val: src.rows[t]?.values?.[c] ?? null, unit: np ? 'ROL' : 'BAL' };
+  };
+  const breakdown = Object.fromEntries(byTreaty.map(t => [t.treatyType, t]));
+
+  return (
+    <div className="glass dash-block">
+      <div className="dash-block-title">Technical Matrix — Treaty Type × UW Year <span className="dash-tag">BALANCE · ROL · UW MARGIN</span></div>
+      <div className="dash-table-wrap">
+        <table className="table dash-table dash-tech">
+          <thead><tr><th className="dash-th">Treaty Type</th>{cols.map(c => <th key={c} className="dash-th">{c}</th>)}<th className="dash-th">Total</th></tr></thead>
+          <tbody>
+            {treaties.map(t => {
+              const np = kindMap[t] === 'NP';
+              const bd = breakdown[t];
+              return (
+                <tr key={t}>
+                  <td className="dash-td" style={{ textAlign: 'left' }}>{t}</td>
+                  {cols.map(c => { const r = rate(t, c); return <TechCell key={c} kind={kindMap[t]} top={r.val} topUnit={r.unit} margin={marginByT.rows[t]?.values?.[c] ?? null} />; })}
+                  <TechCell kind={kindMap[t]} top={np ? bd?.rol ?? null : bd?.balance ?? null} topUnit={np ? 'ROL' : 'BAL'} margin={bd?.uwMargin ?? marginByT.rows[t]?.total ?? null} />
+                </tr>
+              );
+            })}
+            <tr className="dash-tr-total">
+              <td className="dash-td" style={{ textAlign: 'left' }}><b>Total</b></td>
+              {cols.map(c => <TechCell key={c} kind="neutral" top={null} margin={marginByT.totals.values?.[c] ?? null} />)}
+              <TechCell kind="neutral" top={null} margin={marginByT.totals.total ?? null} />
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <TechLegend />
+    </div>
+  );
+}
+
+function TechLegend() {
+  return (
+    <div className="dash-tech-legend">
+      <div className="dash-lz"><span className="dash-sq"><i className="a">3.2×</i><i className="b">12%</i></span><span>Each cell split on the diagonal</span></div>
+      <div className="dash-lz"><span className="dash-pill dash-pill--prop" /><b>Proportional</b> — top-left = Balance (Limit ÷ Premium, ×)</div>
+      <div className="dash-lz"><span className="dash-pill dash-pill--np" /><b>Non-proportional</b> — top-left = ROL (Premium ÷ Limit, %)</div>
+      <div className="dash-lz">Bottom-right (both) = <b>UW Margin</b> (green ≥ 0, red &lt; 0)</div>
+    </div>
+  );
+}
+
+/* Strata-style band section: a table (Band | Policies | Premium-with-inline-bar
+   | % Prem | UW Margin) with a Table/Chart toggle. Reads rolBands / balanceBands
+   verbatim. `rateKey`/`rateUnit` show the band's avg rate alongside. */
+function BandSection({ title, rows, rateKey, rateUnit, view, onView, currency }) {
+  const data = rows || [];
+  const totalPrem = data.reduce((s, r) => s + (Number(r.premium) || 0), 0);
+  const maxPrem = Math.max(0, ...data.map(r => Number(r.premium) || 0));
+  const totMargin = (() => {
+    let num = 0, den = 0;
+    for (const r of data) { if (r.uwMargin != null) { num += r.uwMargin * (Number(r.premium) || 0); den += Number(r.premium) || 0; } }
+    return den ? num / den : null;
+  })();
+  const totContracts = data.reduce((s, r) => s + (Number(r.contracts) || 0), 0);
+  const rateFmt = rateUnit === 'BAL' ? fmtBal : fmtPct;
+  const chartData = data.map(r => ({ label: r.band, premium: Number(r.premium) || 0, margin: r.uwMargin ?? null }));
+
+  return (
+    <div className="glass dash-block">
+      <div className="dash-block-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>{title}</span>
+        <span className="dash-seg">
+          {['table', 'chart'].map(v => (
+            <button key={v} className={`dash-seg-btn ${view === v ? 'dash-seg-btn--on' : ''}`} onClick={() => onView(v)}>{v === 'table' ? 'Table' : 'Chart'}</button>
+          ))}
+        </span>
+      </div>
+      {view === 'chart' ? (
+        <>
+          <ComboChart data={chartData} premiumFmt={(v) => fmtMoney(v)} />
+          <div className="dash-chart-legend">
+            <span className="dash-li"><span className="dash-sw" style={{ background: '#39b7ff' }} />Premium (left axis, bars)</span>
+            <span className="dash-li"><span className="dash-sw" style={{ background: '#ffb020' }} />UW Margin (right axis %, dots green/red by sign)</span>
+          </div>
+        </>
+      ) : (
+        <div className="dash-table-wrap">
+          <table className="table dash-table">
+            <thead><tr>
+              <th className="dash-th">Band</th><th className="dash-th">Policies</th>
+              <th className="dash-th">Avg {rateUnit === 'BAL' ? 'Balance' : 'ROL'}</th>
+              <th className="dash-th">Premium</th><th className="dash-th">% Prem</th><th className="dash-th">UW Margin</th>
+            </tr></thead>
+            <tbody>
+              {data.map((r, i) => {
+                const w = maxPrem > 0 ? Math.min(100, ((Number(r.premium) || 0) / maxPrem) * 100) : 0;
+                const mClass = r.uwMargin == null ? 'muted' : r.uwMargin >= 0 ? 'dash-pos' : 'dash-neg';
+                return (
+                  <tr key={i}>
+                    <td className="dash-td" style={{ textAlign: 'left' }}>{r.band}</td>
+                    <td className="dash-td">{fmtNum(r.contracts)}</td>
+                    <td className="dash-td">{rateFmt(r[rateKey])}</td>
+                    <td className="dash-td"><span className="dash-barcell"><span className="dash-bar" style={{ width: `${w}%` }} /><span className="dash-bar-v">{fmtMoney(r.premium, currency)}</span></span></td>
+                    <td className="dash-td">{totalPrem > 0 ? fmtPct((Number(r.premium) || 0) / totalPrem) : '—'}</td>
+                    <td className={`dash-td ${mClass}`}>{r.uwMargin == null ? '—' : fmtPct(r.uwMargin)}</td>
+                  </tr>
+                );
+              })}
+              <tr className="dash-tr-total">
+                <td className="dash-td" style={{ textAlign: 'left' }}><b>Total</b></td>
+                <td className="dash-td"><b>{fmtNum(totContracts)}</b></td>
+                <td className="dash-td">—</td>
+                <td className="dash-td"><b>{fmtMoney(totalPrem, currency)}</b></td>
+                <td className="dash-td"><b>100%</b></td>
+                <td className={`dash-td ${totMargin == null ? 'muted' : totMargin >= 0 ? 'dash-pos' : 'dash-neg'}`}><b>{totMargin == null ? '—' : fmtPct(totMargin)}</b></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardScreen() {
   const navigate = useNavigate();
   const [tab, setTab] = useState('portfolio-overview');
@@ -144,6 +315,7 @@ export default function DashboardScreen() {
   const [filterOpts, setFilterOpts] = useState({ uwYears: [], months: [], regions: [], treatyTypes: [], currencies: ['USD','SAR','GBP'] });
   const [sort, setSort] = useState({ byRegion: { key: 'premium', dir: 'desc' }, byLob: { key: 'premium', dir: 'desc' }, byYear: { key: 'uwYear', dir: 'asc' }, byBand: { key: 'premium', dir: 'desc' }, byBalanceBand: { key: 'premium', dir: 'desc' }, byTreaty: { key: 'premium', dir: 'desc' } });
   const [exporting, setExporting] = useState(false);
+  const [bandView, setBandView] = useState({ rol: 'table', balance: 'table' });
 
   const currency = filters.currency || 'USD';
   const fm = useCallback((v) => fmtMoney(v), []);
@@ -320,13 +492,11 @@ export default function DashboardScreen() {
                 tab === 'regional-technical-analysis' && !filters.region
                   ? <div className="glass dash-block"><div className="dash-block-title">Regional Technical Analysis</div><div className="muted">Select a region to view this page.</div></div>
                   : <div className="dash-stack">
-                      <SummaryTable title="NP Premiums by ROL Band" rows={data?.rolBands || []} columns={rolBandCols} sort={sort.byBand} sortKey="byBand" onSort={handleSort} currency={currency} />
-                      <SummaryTable title="Proportional Premiums by Balance Band" rows={data?.balanceBands || []} columns={balanceBandCols} sort={sort.byBalanceBand} sortKey="byBalanceBand" onSort={handleSort} currency={currency} />
+                      <TechMatrix data={data} />
                       <SummaryTable title="Treaty Type Breakdown" rows={data?.byTreatyType || []} columns={treatyTypeCols} sort={sort.byTreaty} sortKey="byTreaty" onSort={handleSort} currency={currency} />
+                      <BandSection title="Non-Proportional — ROL Bands" rows={data?.rolBands || []} rateKey="rol" rateUnit="ROL" view={bandView.rol} onView={(v) => setBandView(p => ({ ...p, rol: v }))} currency={currency} />
+                      <BandSection title="Proportional — Balance Bands" rows={data?.balanceBands || []} rateKey="balance" rateUnit="BAL" view={bandView.balance} onView={(v) => setBandView(p => ({ ...p, balance: v }))} currency={currency} />
                       <PivotTable title="Treaty Premium (by UW Year)" data={data?.treatyPremiumByYear} cellFmt={fm} rowLabel="Treaty Type" />
-                      <PivotTable title="Treaty Balance (by UW Year)" data={data?.treatyBalanceByYear} cellFmt={fmtBal} rowLabel="Treaty Type" />
-                      <PivotTable title="Treaty ROL (by UW Year)" data={data?.treatyRolByYear} cellFmt={fp} rowLabel="Treaty Type" />
-                      <PivotTable title="Treaty UW Margin (by UW Year)" data={data?.treatyUwMarginByYear} cellFmt={fp} rowLabel="Treaty Type" />
                     </div>)}
 
               {tab === 'return-analysis-proportional' && <div className="dash-stack">

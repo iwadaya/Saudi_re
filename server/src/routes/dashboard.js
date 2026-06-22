@@ -448,6 +448,7 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
       // ROL bands over NP units only.
       pool.query(`WITH ${unitsW}
         SELECT ${bandCaseSql('rol', ROL_BANDS)} AS band,
+          COUNT(DISTINCT contract_id)::int AS contracts,
           COALESCE(SUM(premium),0)  AS premium,
           COALESCE(SUM(exposure),0) AS exposure,
           ${UNIT_AGGREGATES.avgRol}   AS rol,
@@ -456,21 +457,26 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
       // Balance bands over PROP units only.
       pool.query(`WITH ${unitsW}
         SELECT ${bandCaseSql('balance', BALANCE_BANDS)} AS band,
+          COUNT(DISTINCT contract_id)::int AS contracts,
           COALESCE(SUM(premium),0)  AS premium,
           COALESCE(SUM(exposure),0) AS exposure,
           ${UNIT_AGGREGATES.balance}  AS balance,
           ${UNIT_AGGREGATES.uwMargin} AS "uwMargin"
         FROM units WHERE kind = 'PROP' GROUP BY 1`, params),
       // Treaty-type breakdown over all units (rol resolves for NP, balance for
-      // PROP — the FILTER expressions drop the NULLs).
+      // PROP — the FILTER expressions drop the NULLs). `kind` is the dominant
+      // class by premium, so the client can colour each treaty type as prop/NP.
       pool.query(`WITH ${unitsW}
         SELECT treaty_type AS "treatyType",
+          CASE WHEN COALESCE(SUM(premium) FILTER (WHERE kind = 'NP'),0)
+                  >  COALESCE(SUM(premium) FILTER (WHERE kind = 'PROP'),0)
+               THEN 'NP' ELSE 'PROP' END AS kind,
           COALESCE(SUM(premium),0)  AS premium,
           COALESCE(SUM(exposure),0) AS exposure,
           ${UNIT_AGGREGATES.avgRol}   AS rol,
           ${UNIT_AGGREGATES.balance}  AS balance,
           ${UNIT_AGGREGATES.uwMargin} AS "uwMargin"
-        FROM units GROUP BY treaty_type ORDER BY 2 DESC`, params),
+        FROM units GROUP BY treaty_type ORDER BY 3 DESC`, params),
       // Treaty-type × UW year — premium plus weighted-pivot num/den pairs.
       pool.query(`WITH ${unitsW}
         SELECT treaty_type, uw_year::text AS uw_year,
@@ -491,6 +497,7 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
       const r = rolByBand.get(b.label);
       return {
         band: b.label,
+        contracts: r ? Number(r.contracts) : 0,
         premium:  r ? Number(r.premium) : 0,
         exposure: r ? Number(r.exposure) : 0,
         rol:      r ? num(r.rol) : null,
@@ -503,6 +510,7 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
       const r = balByBand.get(b.label);
       return {
         band: b.label,
+        contracts: r ? Number(r.contracts) : 0,
         premium:  r ? Number(r.premium) : 0,
         exposure: r ? Number(r.exposure) : 0,
         balance:  r ? num(r.balance) : null,
@@ -512,6 +520,7 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
 
     const byTreatyType = treatyR.rows.map(r => ({
       treatyType: r.treatyType,
+      kind:     r.kind === 'NP' ? 'NP' : 'PROP',
       premium:  Number(r.premium),
       exposure: Number(r.exposure),
       rol:      num(r.rol),
@@ -524,6 +533,9 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
       rolBands,
       balanceBands,
       byTreatyType,
+      // treatyType → 'NP'|'PROP' so the client diagonal matrix can pick Balance
+      // (prop) vs ROL (NP) for each cell and colour the row stripe.
+      treatyKindByType: buildTreatyKindMap(byTreatyType),
       // xolBandLayerPremium is intentionally omitted (pending the premium-band
       // definition); the client no-ops on an undefined pivot.
       treatyPremiumByYear:  buildPivot(treatyYearR.rows, 'treaty_type', 'uw_year', 'premium'),
@@ -535,6 +547,18 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
 
   res.json({ kpis: {}, rows: [] });
 }));
+
+// ── Treaty-class map ────────────────────────────────────────────────────────
+// Collapse the byTreatyType rows to a { treatyType: 'NP'|'PROP' } lookup. The
+// technical-analysis matrix reads this to choose Balance (prop) vs ROL (NP) per
+// cell and to colour each row's class stripe. Anything not flagged NP is PROP.
+export function buildTreatyKindMap(byTreatyType) {
+  const map = {};
+  for (const r of byTreatyType || []) {
+    if (r && r.treatyType != null) map[r.treatyType] = r.kind === 'NP' ? 'NP' : 'PROP';
+  }
+  return map;
+}
 
 // ── Pivot builder ─────────────────────────────────────────────────────────
 export function buildPivot(rows, rowKey, colKey, valKey) {
