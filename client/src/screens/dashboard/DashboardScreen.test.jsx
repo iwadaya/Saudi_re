@@ -56,4 +56,32 @@ describe('DashboardScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Regional Analysis' }));
     await waitFor(() => expect(apiMock.dashboardPage).toHaveBeenCalledWith('regional-analysis', expect.anything()));
   });
+
+  it('renders the Strata-style technical matrix + band sections with a chart toggle', async () => {
+    apiMock.dashboardPage.mockResolvedValue({
+      kpis: {},
+      treatyKindByType: { 'Quota Share': 'PROP', 'Cat XL': 'NP' },
+      byTreatyType: [
+        { treatyType: 'Quota Share', kind: 'PROP', premium: 100, exposure: 300, rol: null, balance: 3, uwMargin: 0.12 },
+        { treatyType: 'Cat XL', kind: 'NP', premium: 40, exposure: 800, rol: 0.05, balance: null, uwMargin: -0.04 },
+      ],
+      treatyBalanceByYear: { columns: ['2024'], rows: [{ key: 'Quota Share', region: 'Quota Share', values: { 2024: 3 }, total: 3 }], totals: { values: { 2024: 3 }, total: 3 } },
+      treatyRolByYear: { columns: ['2024'], rows: [{ key: 'Cat XL', region: 'Cat XL', values: { 2024: 0.05 }, total: 0.05 }], totals: { values: { 2024: 0.05 }, total: 0.05 } },
+      treatyUwMarginByYear: { columns: ['2024'], rows: [{ key: 'Quota Share', region: 'Quota Share', values: { 2024: 0.12 }, total: 0.12 }], totals: { values: { 2024: 0.05 }, total: 0.05 } },
+      treatyPremiumByYear: { columns: ['2024'], rows: [], totals: { values: {}, total: 0 } },
+      rolBands: [{ band: '0–5%', contracts: 2, premium: 40, exposure: 800, rol: 0.04, uwMargin: -0.04 }],
+      balanceBands: [{ band: '1–3×', contracts: 3, premium: 100, exposure: 300, balance: 3, uwMargin: 0.12 }],
+    });
+    render(<DashboardScreen />);
+    await screen.findByText('Contracts');
+    fireEvent.click(screen.getByRole('button', { name: 'Portfolio Technical Analysis' }));
+    await screen.findByText(/Technical Matrix/i);
+    // diagonal-split cells render
+    expect(document.querySelectorAll('.dash-tech .dash-tcell').length).toBeGreaterThan(0);
+    // band section renders, and toggling to Chart swaps the table for the SVG
+    expect(screen.getByText('Non-Proportional — ROL Bands')).toBeInTheDocument();
+    const chartBtns = screen.getAllByRole('button', { name: 'Chart' });
+    fireEvent.click(chartBtns[0]);
+    await waitFor(() => expect(document.querySelector('.dash-combo-svg')).toBeInTheDocument());
+  });
 });
