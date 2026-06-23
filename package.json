@@ -36,6 +36,12 @@
   "engines": {
     "node": ">=20.18.0"
   },
+  "overrides": {
+    "pm2": {
+      "ws": "^8.21.0",
+      "js-yaml": "^4.2.0"
+    }
+  },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "@testing-library/jest-dom": "^6.6.3",
