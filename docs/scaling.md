@@ -169,6 +169,31 @@ Optimization order:
    aggregate drilldowns with a clear invalidation rule.
 5. Re-run the same VU level and record before/after p95.
 
+### Code-level optimization backlog (static analysis, pre-staging)
+
+These came from a read-through of the hot paths, not a staging run, so they
+are split into "applied" (safe, behaviour-preserving, covered by existing
+tests) and "candidates" (need the measurement gate above before landing).
+Capacity numbers are still **unmeasured** — nothing here quotes a user count.
+
+**Applied**
+
+| Area | Change | Why it helps | Verification |
+| --- | --- | --- | --- |
+| Pricing save (`pricingOutputsRepository.js`) | Replaced the per-row `await INSERT` loops for `contract_pricing_yearly`, `pricing_components`, and `pricing_share_scenarios` with one `buildBatchInsert` multi-row INSERT each | Cuts DB round-trips on the save transaction from O(rows) to O(1) per child table, shortening connection-hold time — the pool is the documented first ceiling | `npm run test:server` (1202 tests) green incl. `contractPersistence.integration` round-trip; before/after p95 still TODO at staging |
+| Pricing save (`repositoryUtils.js`) | Memoized `getPricingSchemaFlags` (was two `information_schema` queries on every save) | Removes two catalog queries from each save's critical path; schema is fixed after startup migrations. Mirrors the existing `getCobCols` cache | Same suite; memo dedupes the in-flight promise and clears on error |
+
+**Candidates — verify with the gate above before landing**
+
+| Rank | Area | Candidate | Guardrail |
+| --- | --- | --- | --- |
+| 1 | Dashboard portfolio-overview (`routes/dashboard.js`) | The 7 parallel aggregates each re-declare the same `units` CTE; materialize it once (temp table / single CTE) and run the cheap SELECTs from it. Also single-pass the 3× `buildPivot` scans over the same row set | Measure p95 at 30 VUs first; behaviour-preserving refactor, needs an EXPLAIN/ANALYZE before/after |
+| 2 | Portfolio reads (`portfolioInsights.js`, `reinsurerAnalysis.js`, `lookups.js` cedant-summary) | Add `jsonCache()`/ETag — large stable reads recomputed every request | Cache only with a clear invalidation rule (bust on quote bind / decision); these are decisioned-book reads, so stale data is a correctness risk — design invalidation first |
+| 3 | Index candidates | `contract (country_id, uw_status)`, `contract_pricing_outputs (contract_id, updated_at DESC)` for the DISTINCT-ON latest-per-contract reads | **Only add when `EXPLAIN (ANALYZE, BUFFERS)` on staging data proves the seq scan** (team rule) |
+| 4 | Renewal-pack Excel export (`routes/renewalPack.js`) | Large workbook built inline on the request thread with unbounded row queries; stream rows in batches or offload to a job | Memory/event-loop risk under concurrency; needs a job-queue decision before building |
+| 5 | Market-average tiers (`pricingAggregateRepository.js`) | 5-tier fallback runs sequentially per pricing workflow; cache deterministic result keyed on `(countryId, treatyTypeId, cobIds)` | Redis cache + bust on pricing save; verify tier-fallback semantics unchanged |
+| 6 | Client (`LossListScreen.jsx`, `useLossParetoDerived.js`, `AppContext.jsx`) | Virtualize large loss tables; debounce Pareto fitting off keystroke; split AppContext to cut wide re-renders | Front-end perf, separate workstream; measure with the frontend budget + React profiler |
+
 ## Supported User Count
 
 Do not fill this in until the 10/20/30/50 VU sequence has measured

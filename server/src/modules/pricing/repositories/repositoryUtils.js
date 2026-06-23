@@ -18,7 +18,7 @@ export async function withTransaction(work) {
   }
 }
 
-export async function getPricingSchemaFlags() {
+async function loadPricingSchemaFlags() {
   const { rows: outputColumns } = await pool.query(
     `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='contract_pricing_outputs'`
   );
@@ -35,6 +35,22 @@ export async function getPricingSchemaFlags() {
     hasExposure: componentSet.has('exposure_value'),
     componentColumns: componentSet,
   };
+}
+
+// The DB schema is fixed once migrations have run at startup, so the optional-
+// column probes never change within a process. Memoize the lookup (the in-flight
+// promise, to dedupe concurrent first-callers) so it isn't two information_schema
+// queries on every pricing save's critical path. Mirrors getCobCols caching.
+let _pricingSchemaFlagsPromise = null;
+
+export function getPricingSchemaFlags() {
+  if (!_pricingSchemaFlagsPromise) {
+    _pricingSchemaFlagsPromise = loadPricingSchemaFlags().catch((error) => {
+      _pricingSchemaFlagsPromise = null; // don't cache a failure — let the next save retry
+      throw error;
+    });
+  }
+  return _pricingSchemaFlagsPromise;
 }
 
 export async function upsertPricingOutputsWithClient(client, contractId, output) {
