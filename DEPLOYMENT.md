@@ -364,10 +364,22 @@ Key variables (full list in `.env.example`):
 | `ALLOW_DEMO_AUTH` | No | **Dev/test only.** When `true`, enables the `demo2026` shortcut and `x-user-*` header identity. NEVER set in production — leave unset so only verified bearer tokens authenticate. |
 | `OPENAI_API_KEY` | No | Required only for AI slip ingestion |
 | `UPLOAD_DIR` | No | Defaults to `./uploads` relative to project root |
+| `CLOUDINARY_URL` (or `CLOUDINARY_CLOUD_NAME`/`API_KEY`/`API_SECRET`) | **Yes (production)** | Durable **private** object storage for uploads. Without it, production uploads fail `503 STORAGE_NOT_DURABLE` (a web dyno's disk is ephemeral). Override with `ALLOW_LOCAL_UPLOADS=true` only for a single box with a persistent mounted volume. |
+| `CLAMAV_ENABLED` | Recommended (prod) | `true` streams every upload to clamd (`CLAMAV_HOST`/`PORT`/`TIMEOUT_MS`) before storage, fail-closed (infected → 422, scan unavailable → 503). |
+| `REDIS_URL` | **Yes (multi-instance)** | Shared store for distributed rate limits. Per-process in-memory when unset; **required** for PM2 cluster mode or multiple replicas (see §10.2). |
+| `PASSWORD_SCRYPT_COST` | No | log2 of scrypt's N work factor; default 15. Hashing is async (off the event loop). |
+| `IDENTITY_SSO_ENABLED` + `IDENTITY_*` | Recommended (prod) | Enterprise SSO/MFA login posture and break-glass controls. See `docs/runbooks/sso-mfa-break-glass.md`. |
 | `DB_POOL_MAX` | No | Defaults to 50 |
 | `DB_POOL_MIN` | No | Defaults to 4 |
 
 > **Boot-time secret gate.** With `NODE_ENV=production` the server validates secrets before serving and exits with a clear error if `AUTH_JWT_SECRET` is missing, the insecure dev placeholder, or shorter than 32 chars. A production container/host that doesn't supply it will not start (this is intentional — a missing secret would let anyone forge tokens).
+
+> **Boot-time posture warnings.** Beyond the fatal secret gate, the server logs
+> `[posture] …` warnings/errors at startup for valid-but-risky production
+> settings: no durable upload storage (P1 #2), no `REDIS_URL` while running
+> multi-instance (P1 #3), and SSO/MFA/break-glass gaps (P1 #6). These do **not**
+> stop boot — review the startup log and clear them before go-live
+> (`server/src/startup/productionPosture.js`).
 
 ## 8. First-run checklist
 
@@ -453,6 +465,12 @@ The auth-hardening work has landed; the items below are how the app behaves **to
 
 4. **Content-Security-Policy is enforcing.** Helmet ships an enforcing nonce-based CSP (`script-src` is `'self'` + per-request nonce; no `unsafe-inline` for scripts — the only `unsafe-inline` is a documented styles-only exception for React inline style attributes). `img-src`/`frame-src` also allow `https://res.cloudinary.com` for document previews when remote storage is configured. Violations are still collected at `/csp-report` for monitoring (see `SECURITY.md` → "Content-Security-Policy"). `server/src/app.js`.
 
+5. **Password hashing is async + cost-calibrated.** scrypt runs off the event loop (no login-path blocking) at a tunable work factor (`PASSWORD_SCRYPT_COST`, default 2^15); legacy hashes verify unchanged and upgrade opportunistically on next login (`server/src/lib/passwordHash.js`).
+
+6. **Upload hardening.** Every document upload is checked against a MIME/extension allowlist with magic-byte content sniffing (the stored `mime_type` is content-derived, not the client header), and optionally malware-scanned (ClamAV, fail-closed). Production refuses ephemeral local-disk storage by default (`server/src/lib/uploadValidation.js`, `uploadStorage.js`).
+
+7. **Hardened container image.** Non-root runtime, `tini` PID 1, healthcheck, pinned minimal base; CI builds an SBOM (Syft) and scans the image (Trivy). See `SECURITY.md` → "Container image".
+
 5. **Password policy.** A single enforced policy (`validatePasswordStrength`, used by both change-password and every user-creation path) requires a **minimum of 12 characters**, rejects the seeded temp `Universe#1234`, and rejects obviously weak/common values.
 
 6. **Boot-time secret gate.** Production refuses to start without a strong `AUTH_JWT_SECRET` (see §7).
@@ -460,8 +478,10 @@ The auth-hardening work has landed; the items below are how the app behaves **to
 ### Still your responsibility before / at go-live
 
 1. **Set `CORS_ORIGIN` to the public URL** — never `*` in production. `.env.example` ships a development default.
-2. **Rate limiting is in-memory.** Adequate for one Node process. If you run PM2 cluster mode or multiple replicas, move to a shared store (e.g. Redis-backed rate limiting) so limits are enforced across processes.
-3. **Provide and protect `AUTH_JWT_SECRET`** as a real secret (secrets manager / env injection), and rotate the seeded users' temporary passwords on first login (§8).
+2. **Rate limiting: set `REDIS_URL` for any multi-instance deploy.** Limits use a shared Redis/Valkey store when `REDIS_URL` is set (counts shared across instances; degrades to per-instance with a loud `[ratelimit] degraded` log if Redis drops). With it unset, limits are **per-process** — fine for a single Node process, but PM2 cluster mode or multiple replicas would let N processes allow N× the ceiling. The boot posture check flags this in production (`lib/rateLimitStore.js`, §7).
+3. **Configure durable private upload storage and enable malware scanning.** Set `CLOUDINARY_URL` (uploads fail `503 STORAGE_NOT_DURABLE` in production otherwise) and `CLAMAV_ENABLED=true` with a reachable clamd. See §7 and `SECURITY.md`.
+4. **Enable SSO + MFA and define break-glass accounts** for the enterprise login posture — `docs/runbooks/sso-mfa-break-glass.md`.
+5. **Provide and protect `AUTH_JWT_SECRET`** as a real secret (secrets manager / env injection), and rotate the seeded users' temporary passwords on first login (§8).
 
 ## 11. Backup and recovery
 
