@@ -23,6 +23,9 @@ export default function useFacDocumentsState() {
   // Upload zone state.
   const [pendingFile, setPendingFile] = useState(null);
   const [pendingKind, setPendingKind] = useState('PLACEMENT_SLIP');
+  // Treaty-style metadata captured on the upload form.
+  const [pendingTitle, setPendingTitle] = useState('');
+  const [pendingDescription, setPendingDescription] = useState('');
   const [uploading, setUploading] = useState(false);
   const [stalePollHint, setStalePollHint] = useState(false);
   const [draggingOver, setDraggingOver] = useState(false);
@@ -105,6 +108,9 @@ export default function useFacDocumentsState() {
       return;
     }
     setPendingFile(f);
+    // Default the title to the filename (sans extension) when blank — mirrors
+    // the treaty DocumentsScreen behaviour.
+    setPendingTitle((prev) => prev || (f.name ? f.name.replace(/\.[^.]+$/, '') : ''));
     setToast(null);
   }, [validateFile]);
 
@@ -184,6 +190,42 @@ export default function useFacDocumentsState() {
     }
   }, [riskId, load, pollAnalysis]);
 
+  // Reset the upload form after a successful store.
+  const resetUploadForm = useCallback(() => {
+    setPendingFile(null);
+    setPendingTitle('');
+    setPendingDescription('');
+  }, []);
+
+  // Shared upload step: stores the bytes + treaty-style metadata and
+  // prepends the returned row. Returns the created document (or null on
+  // failure — the caller has already surfaced the toast).
+  const uploadOnly = useCallback(async () => {
+    const doc = await api.facUploadDocumentMultipart(riskId, pendingFile, {
+      documentKind: pendingKind,
+      title: pendingTitle,
+      description: pendingDescription,
+    });
+    setDocs((prev) => [doc, ...prev]);
+    return doc;
+  }, [riskId, pendingFile, pendingKind, pendingTitle, pendingDescription]);
+
+  // ── Upload only (treaty-style — no AI run) ──
+  const onUpload = useCallback(async () => {
+    if (!pendingFile || !riskId) return;
+    setUploading(true);
+    setToast(null);
+    setStalePollHint(false);
+    try {
+      await uploadOnly();
+      resetUploadForm();
+      setToast({ kind: 'ok', text: 'Document uploaded.' });
+    } catch (e) {
+      setToast({ kind: 'error', text: `Upload failed: ${e?.message || e}` });
+    }
+    setUploading(false);
+  }, [pendingFile, riskId, uploadOnly, resetUploadForm]);
+
   // ── Upload + analyse ──
   const onUploadAndAnalyse = useCallback(async () => {
     if (!pendingFile || !riskId) return;
@@ -191,9 +233,8 @@ export default function useFacDocumentsState() {
     setToast(null);
     setStalePollHint(false);
     try {
-      const doc = await api.facUploadDocumentMultipart(riskId, pendingFile, pendingKind);
-      setDocs((prev) => [doc, ...prev]);
-      setPendingFile(null);
+      const doc = await uploadOnly();
+      resetUploadForm();
 
       // Kick off analysis. The endpoint runs synchronously so the
       // response IS the analysis row — but we poll the list endpoint
@@ -226,7 +267,7 @@ export default function useFacDocumentsState() {
       setToast({ kind: 'error', text: `Upload failed: ${e?.message || e}` });
     }
     setUploading(false);
-  }, [pendingFile, pendingKind, riskId, load, pollAnalysis]);
+  }, [pendingFile, pendingKind, riskId, uploadOnly, resetUploadForm, load, pollAnalysis]);
 
   const handleDelete = useCallback(async (docId) => {
     try {
@@ -244,11 +285,14 @@ export default function useFacDocumentsState() {
     // upload zone
     pendingFile, setPendingFile,
     pendingKind, setPendingKind,
+    pendingTitle, setPendingTitle,
+    pendingDescription, setPendingDescription,
     uploading,
     draggingOver, setDraggingOver,
     fileInputRef,
     onPickFile,
     onDrop,
+    onUpload,
     onUploadAndAnalyse,
     // table
     sortedDocs,

@@ -3,11 +3,19 @@
 // loss history, dual pricing, documents, market rates, and home listing.
 import { Router } from 'express';
 import multer from 'multer';
+import fs, { promises as fsp } from 'fs';
 import { pool } from '../db/pool.js';
 import { asyncHandler, numOrNull, dateOrNull, assertExists } from '../helpers.js';
 import { validateBody } from '../lib/validate.js';
 import { assertParentEntityUnchanged, touchParentEntity } from '../lib/parentEntityPersistence.js';
-import { storeUploadedFile } from '../lib/uploadStorage.js';
+import {
+  storeUploadedFile,
+  deleteUploadedFile,
+  isRemoteStoragePath,
+  getSignedReadUrl,
+  resolveLocalStoragePath,
+} from '../lib/uploadStorage.js';
+import { logger } from '../lib/logger.js';
 import {
   facRiskSaveSchema,
   facLocationsSaveSchema,
@@ -590,7 +598,19 @@ router.post('/fac/risks/:id/documents', validateBody(facDocumentMetaSchema), asy
 }));
 
 router.delete('/fac/documents/:docId', asyncHandler(async (req, res) => {
-  await pool.query(`DELETE FROM public.fac_document WHERE document_id = $1`, [req.params.docId]);
+  // Capture the storage location before the row goes, so we can clean up the
+  // file afterwards (best-effort — the DB row is the source of truth).
+  const { rows } = await pool.query(
+    `DELETE FROM public.fac_document WHERE document_id = $1
+       RETURNING storage_key, file_path`,
+    [req.params.docId],
+  );
+  const sp = rows[0]?.storage_key || rows[0]?.file_path || '';
+  if (sp) {
+    deleteUploadedFile(sp).catch((err) => {
+      logger.warn('[fac/doc/delete] storage cleanup failed', { storagePath: sp, error: err?.message });
+    });
+  }
   res.json({ deleted: true });
 }));
 
@@ -613,6 +633,11 @@ router.post(
     if (!file) return res.status(400).json({ error: 'No file provided' });
     const riskId = req.params.id;
     const kind = req.body?.document_kind || 'OTHER';
+    // Treaty-style metadata captured on the upload form. doc_type tracks the
+    // AI document_kind unless the form sends an explicit override.
+    const docType = req.body?.doc_type || kind;
+    const title = req.body?.title || null;
+    const description = req.body?.description || null;
 
     let storageKey;
     try {
@@ -624,18 +649,59 @@ router.post(
     const { rows } = await pool.query(`
       INSERT INTO public.fac_document
         (fac_risk_id, doc_type, document_kind, file_name, file_path,
-         storage_key, file_size, byte_size, mime_type, uploaded_at, uploaded_by_user_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), $10)
+         storage_key, file_size, byte_size, mime_type, title, description,
+         uploaded_at, uploaded_by_user_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), $12)
       RETURNING *
     `, [
-      riskId, kind, kind,
+      riskId, docType, kind,
       file.originalname, storageKey, storageKey,
       file.size, file.size, file.mimetype || null,
+      title, description,
       actorUserUuid(req),
     ]);
     res.status(201).json(rows[0]);
   }),
 );
+
+// ── File view / download ──
+// Mirrors the treaty document serve path (treatyData.js serveDoc): mints a
+// short-lived signed URL for remote (Cloudinary) assets, streams local-disk
+// files directly. `view` serves inline; `download` keeps the same inline
+// disposition so the browser can preview PDFs/images in a new tab.
+async function serveFacDoc(req, res) {
+  const { rows } = await pool.query(
+    `SELECT file_name, mime_type, byte_size, file_size, storage_key, file_path
+       FROM public.fac_document WHERE document_id = $1`,
+    [req.params.docId],
+  );
+  const doc = rows[0];
+  if (!doc) return res.status(404).json({ error: 'Document not found' });
+  const sp = doc.storage_key || doc.file_path || '';
+  if (!sp) return res.status(404).json({ error: 'Document has no stored file' });
+
+  if (isRemoteStoragePath(sp)) {
+    const signedUrl = await getSignedReadUrl(sp);
+    if (!signedUrl) return res.status(502).json({ error: 'Document storage temporarily unavailable' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.redirect(signedUrl);
+  }
+  const fp = resolveLocalStoragePath(sp);
+  let stat;
+  try {
+    stat = await fsp.stat(fp);
+  } catch (err) {
+    if (err.code === 'ENOENT') return res.status(404).json({ error: 'File not found on disk' });
+    throw err;
+  }
+  res.setHeader('Content-Type', doc.mime_type || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(doc.file_name || 'document')}"`);
+  res.setHeader('Content-Length', doc.byte_size || doc.file_size || stat.size);
+  fs.createReadStream(fp).pipe(res);
+}
+
+router.get('/fac/documents/:docId/view',     asyncHandler((req, res) => serveFacDoc(req, res)));
+router.get('/fac/documents/:docId/download',  asyncHandler((req, res) => serveFacDoc(req, res)));
 
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -1,8 +1,18 @@
-// DocumentsTable.jsx — the legacy metadata list + per-row analysis
-// status / actions (View / Re-analyse / Delete).
+// DocumentsTable.jsx — the document metadata list + per-row file actions
+// (Preview / Download) and AI analysis status / actions (View / Re-analyse
+// / Delete).
+import api from '../../../../api';
 import { Badge, Button, Table } from '../../../../components/ui';
 import { AI_KIND_LABELS, fmtBytes } from '../documentsShared';
 import StatusChip from './StatusChip';
+
+// Mime types we can render inline in a browser tab (mirrors the treaty
+// DocumentsScreen VIEWABLE set). Anything else is download-only.
+const VIEWABLE = new Set([
+  'application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+  'text/plain', 'text/csv',
+]);
+const isViewable = (m) => VIEWABLE.has(m) || (m || '').startsWith('image/');
 
 // One-liner used in each document row's Status column. The cell is
 // clickable when SUCCEEDED (opens the drawer). FAILED rows expose a
@@ -61,7 +71,7 @@ export default function DocumentsTable({
     <Table>
       <thead>
         <tr>
-          {['Filename', 'Kind', 'Size', 'Uploaded by', 'Status', 'Actions'].map((h) => (
+          {['Filename', 'Kind', 'Title', 'Size', 'Uploaded by', 'Status', 'Actions'].map((h) => (
             <th key={h}>{h}</th>
           ))}
         </tr>
@@ -71,10 +81,14 @@ export default function DocumentsTable({
           const kind = d.document_kind || d.doc_type || 'OTHER';
           const analysis = latestAnalysisByDoc.get(d.document_id);
           const reanalysing = reAnalyseBusyRef.current === d.document_id;
+          // A row backed by stored bytes can be previewed / downloaded;
+          // legacy metadata-only rows (no storage) cannot.
+          const hasFile = !!(d.storage_key || d.file_path);
           return (
             <tr key={d.document_id}>
               <td>
                 <div className="facdoc-doc-name">{d.file_name || '—'}</div>
+                {d.description && <div className="facdoc-doc-desc">{d.description}</div>}
                 <div className="facdoc-doc-date">
                   {d.uploaded_at || d.created_at
                     ? new Date(d.uploaded_at || d.created_at).toLocaleString()
@@ -86,6 +100,7 @@ export default function DocumentsTable({
                   {AI_KIND_LABELS[kind] || kind}
                 </Badge>
               </td>
+              <td className="facdoc-td-dim">{d.title || '—'}</td>
               <td className="facdoc-td-dim">
                 {fmtBytes(d.byte_size || d.file_size)}
               </td>
@@ -97,6 +112,19 @@ export default function DocumentsTable({
                                onRetry={() => onReAnalyse(d.document_id, kind)} reanalysing={reanalysing} />
               </td>
               <td className="facdoc-td-actions">
+                {hasFile && isViewable(d.mime_type) && (
+                  <button type="button" className="facdoc-linkbtn facdoc-link-preview"
+                          onClick={() => window.open(api.facGetDocumentViewUrl(d.document_id), '_blank', 'noopener,noreferrer')}>
+                    Preview
+                  </button>
+                )}
+                {hasFile && (
+                  <a className="facdoc-linkbtn facdoc-link-download"
+                     href={api.facGetDocumentDownloadUrl(d.document_id)}
+                     target="_blank" rel="noopener noreferrer">
+                    Download
+                  </a>
+                )}
                 <button type="button" className="facdoc-linkbtn facdoc-link-view"
                         disabled={analysis?.status !== 'SUCCEEDED'}
                         onClick={() => analysis?.status === 'SUCCEEDED' && onOpenAnalysis(analysis.analysis_id)}>
@@ -105,7 +133,7 @@ export default function DocumentsTable({
                 <button type="button" className="facdoc-linkbtn facdoc-link-reanalyse"
                         disabled={reanalysing}
                         onClick={() => !reanalysing && onReAnalyse(d.document_id, kind)}>
-                  {reanalysing ? 'Re-analysing…' : 'Re-analyse'}
+                  {reanalysing ? 'Re-analysing…' : (analysis ? 'Re-analyse' : 'Analyse')}
                 </button>
                 <button type="button" className="facdoc-linkbtn facdoc-link-delete"
                         onClick={() => onDelete(d.document_id)}>Delete</button>

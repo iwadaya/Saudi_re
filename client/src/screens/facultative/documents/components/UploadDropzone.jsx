@@ -7,10 +7,12 @@ import { AI_KINDS, fmtBytes } from '../documentsShared';
 export default function UploadDropzone({
   pendingFile, setPendingFile,
   pendingKind, setPendingKind,
+  pendingTitle, setPendingTitle,
+  pendingDescription, setPendingDescription,
   uploading,
   draggingOver, setDraggingOver,
   fileInputRef,
-  onPickFile, onDrop, onUploadAndAnalyse,
+  onPickFile, onDrop, onUpload, onUploadAndAnalyse,
 }) {
   return (
     <div
@@ -34,8 +36,8 @@ export default function UploadDropzone({
                   onClick={() => fileInputRef.current?.click()}>Choose file</Button>
         </div>
       ) : (
-        <div className="facdoc-upload-row">
-          <div>
+        <div className="facdoc-upload-form">
+          <div className="facdoc-upload-fileinfo">
             <div className="facdoc-upload-name">{pendingFile.name}</div>
             <div className="facdoc-upload-meta">
               {fmtBytes(pendingFile.size)} · {pendingFile.type || 'application/octet-stream'}
@@ -45,16 +47,34 @@ export default function UploadDropzone({
               remove
             </button>
           </div>
-          <div>
-            <div className="facdoc-kind-label">Document kind</div>
-            <select className="fi" value={pendingKind} onChange={(e) => setPendingKind(e.target.value)}>
-              {AI_KINDS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
-            </select>
+          <div className="facdoc-upload-fields">
+            <div>
+              <div className="facdoc-field-label">Document kind</div>
+              <select className="fi" value={pendingKind} onChange={(e) => setPendingKind(e.target.value)}>
+                {AI_KINDS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+              </select>
+            </div>
+            <div>
+              <div className="facdoc-field-label">Title</div>
+              <input className="fi" type="text" placeholder="e.g. Final signed slip"
+                     value={pendingTitle} onChange={(e) => setPendingTitle(e.target.value)} />
+            </div>
+            <div>
+              <div className="facdoc-field-label">Description (optional)</div>
+              <input className="fi" type="text" placeholder="Notes…"
+                     value={pendingDescription} onChange={(e) => setPendingDescription(e.target.value)} />
+            </div>
           </div>
-          <Button variant="primary" className="facdoc-btn--upload" disabled={uploading}
-                  onClick={onUploadAndAnalyse}>
-            {uploading ? 'Uploading…' : 'Upload & analyse'}
-          </Button>
+          <div className="facdoc-upload-actions">
+            <Button className="facdoc-btn--choose" disabled={uploading}
+                    onClick={onUpload}>
+              {uploading ? 'Uploading…' : 'Upload'}
+            </Button>
+            <Button variant="primary" className="facdoc-btn--upload" disabled={uploading}
+                    onClick={onUploadAndAnalyse}>
+              {uploading ? 'Uploading…' : 'Upload & analyse'}
+            </Button>
+          </div>
         </div>
       )}
     </div>
