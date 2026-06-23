@@ -28,7 +28,7 @@ import {
   facTreatyLinkCreateSchema,
 } from '../validation/facultative.js';
 import { applyRecommendation } from '../lib/facRecommendationApply.js';
-import { assertCanEdit, getEditPermission } from '../services/permissions.js';
+import { assertCanEdit, assertCanReadEntity, getEditPermission } from '../services/permissions.js';
 
 const router = Router();
 
@@ -671,12 +671,20 @@ router.post(
 // disposition so the browser can preview PDFs/images in a new tab.
 async function serveFacDoc(req, res) {
   const { rows } = await pool.query(
-    `SELECT file_name, mime_type, byte_size, file_size, storage_key, file_path
+    `SELECT fac_risk_id, file_name, mime_type, byte_size, file_size, storage_key, file_path
        FROM public.fac_document WHERE document_id = $1`,
     [req.params.docId],
   );
   const doc = rows[0];
-  if (!doc) return res.status(404).json({ error: 'Document not found' });
+  // 404 (not 403) on a missing/orphaned document so probing a foreign UUID
+  // never even reveals existence — mirrors assertCanAccessDocument on the
+  // treaty side.
+  if (!doc || !doc.fac_risk_id) return res.status(404).json({ error: 'Document not found' });
+  // Route reads through the central policy choke point: today it only checks a
+  // verified identity + that the risk exists, but when read visibility is
+  // tightened (assignee / team / seniority) these endpoints tighten with it
+  // instead of silently staying open.
+  await assertCanReadEntity(req, 'FAC_RISK', doc.fac_risk_id);
   const sp = doc.storage_key || doc.file_path || '';
   if (!sp) return res.status(404).json({ error: 'Document has no stored file' });
 
