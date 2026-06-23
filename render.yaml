@@ -53,8 +53,10 @@ services:
 
   # ── Scheduled jobs (P0-10) — in-network Render Cron mirror of
   #    .github/workflows/scheduled-jobs.yml. Each wraps scripts/run-with-alert.sh
-  #    so a failure pages via ALERT_WEBHOOK_URL. RPO/RTO and durable-storage are
-  #    PLACEHOLDERS to confirm — see docs/backup-recovery.md. ──
+  #    so a failure pages via ALERT_WEBHOOK_URL. Committed targets: RPO <= 24h
+  #    (nightly dump; pair with the provider's PITR for tighter RPO) and
+  #    RTO <= 4h. Durable backups push to object storage — see
+  #    docs/backup-recovery.md. ──
 
   # The two backlog maintenance jobs (node only; no pg client needed).
   - type: cron
@@ -89,11 +91,12 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile.jobs
     region: frankfurt
-    schedule: "0 2 * * *"            # nightly 02:00 UTC (RPO placeholder: <= 24h — confirm)
+    schedule: "0 2 * * *"            # nightly 02:00 UTC — meets the committed RPO <= 24h
     startCommand: scripts/run-with-alert.sh db-backup -- scripts/backup-db.sh
-    # A Render disk attaches to ONE service. For cross-job durable retention push
-    # the dump to OBJECT STORAGE (S3/GCS) here and fetch it in restore-verify —
-    # see docs/backup-recovery.md. The disk below is local working space.
+    # A Render disk attaches to ONE service, so the backup and restore-verify
+    # crons CANNOT share one. The dump is pushed to OBJECT STORAGE (set
+    # BACKUP_S3_* below) and restore-verify fetches the newest from there. The
+    # disk below is just local working space. See docs/backup-recovery.md.
     disk:
       name: universe-backups
       mountPath: /var/backups/universe
@@ -103,12 +106,26 @@ services:
         sync: false
       - key: BACKUP_DIR
         value: /var/backups/universe
-      - key: BACKUP_RETENTION_DAYS
+      - key: BACKUP_RETENTION_DAYS    # LOCAL disk prune; object retention = bucket lifecycle
         value: "30"
       - key: ALERT_WEBHOOK_URL
         sync: false
-      # RPO/RTO targets — PLACEHOLDERS, confirm. RPO drives backup cadence above;
-      # RTO is the restore-drill SLA. See docs/backup-recovery.md.
+      # Durable object storage (S3-compatible). Object-storage RETENTION is a
+      # bucket LIFECYCLE rule, not BACKUP_RETENTION_DAYS — see docs/backup-recovery.md.
+      - key: BACKUP_S3_BUCKET
+        sync: false
+      - key: BACKUP_S3_PREFIX
+        value: backups
+      - key: BACKUP_S3_ENDPOINT       # only for non-AWS S3-compatible stores; omit for AWS
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_DEFAULT_REGION
+        sync: false
+      # Committed targets (documented in docs/backup-recovery.md). RPO drives the
+      # nightly cadence above; RTO is the restore-drill SLA.
       - key: BACKUP_RPO_TARGET
         value: "24h"
       - key: BACKUP_RTO_TARGET
@@ -116,8 +133,8 @@ services:
 
   # Restore-verification — proves a backup restores. NOTE: verify-restore.sh
   # CREATE/DROPs a scratch DB on the server in DATABASE_URL, so point it at a
-  # DEDICATED verification Postgres, NOT production. Fetch the latest dump from
-  # object storage into BACKUP_DIR before this runs (see docs/backup-recovery.md).
+  # DEDICATED verification Postgres, NEVER production. It fetches the latest dump
+  # from object storage into BACKUP_DIR automatically (see docs/backup-recovery.md).
   - type: cron
     name: universe-restore-verify
     runtime: docker
@@ -131,4 +148,17 @@ services:
       - key: BACKUP_DIR
         value: /var/backups/universe
       - key: ALERT_WEBHOOK_URL
+        sync: false
+      # Same object-storage config as the backup job — fetches the newest dump.
+      - key: BACKUP_S3_BUCKET
+        sync: false
+      - key: BACKUP_S3_PREFIX
+        value: backups
+      - key: BACKUP_S3_ENDPOINT
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_DEFAULT_REGION
         sync: false

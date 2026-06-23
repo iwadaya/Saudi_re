@@ -1,0 +1,92 @@
+name: image-security
+
+# Builds the production container image, generates a Software Bill of Materials
+# (SBOM), and scans the image for known vulnerabilities. Complements the
+# source-level `npm audit` gate in ci.yml by covering the OS/base-image layers.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'package*.json'
+      - 'server/**'
+      - 'client/**'
+      - 'shared/**'
+      - '.github/workflows/image-security.yml'
+
+concurrency:
+  group: image-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-scan-sbom:
+    name: build + SBOM (Syft) + scan (Trivy)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to GitHub code scanning
+    env:
+      IMAGE: universe3:ci-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (load into local docker)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: ${{ env.IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── SBOM (always produced, even if the scan later fails the job) ──
+      - name: Generate SBOM (Syft, SPDX-JSON)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ github.sha }}
+          path: sbom.spdx.json
+          retention-days: 90
+
+      # ── Vulnerability scan ──
+      # Report HIGH+CRITICAL to code scanning (non-blocking visibility) …
+      - name: Trivy scan → SARIF (report)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF to code scanning
+        if: always()
+        continue-on-error: true # don't fail the job if code scanning is off
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+      # … and HARD-FAIL only on a fixable CRITICAL, so the gate is meaningful
+      # without being noisy on day one. Tighten to HIGH,CRITICAL once the base
+      # image is on a regular bump cadence.
+      - name: Trivy scan → gate (fail on fixable CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: table
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'

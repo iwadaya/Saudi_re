@@ -9,12 +9,13 @@ name: scheduled-jobs
 # restore-verification drill is SELF-CONTAINED (its own throwaway Postgres) and
 # also runs on push so script regressions are caught in CI.
 #
-# RPO/RTO targets and the prod schedule are config placeholders — see
-# docs/backup-recovery.md. Confirm them before relying on this in production.
+# Committed targets: RPO <= 24h (nightly dump), RTO <= 4h — see
+# docs/backup-recovery.md. Durable backups push to object storage when the
+# BACKUP_S3_* / AWS_* secrets are configured.
 
 on:
   schedule:
-    - cron: '0 2 * * *'    # db-backup            — nightly 02:00 UTC  (RPO placeholder: <= 24h)
+    - cron: '0 2 * * *'    # db-backup            — nightly 02:00 UTC  (meets RPO <= 24h)
     - cron: '30 3 * * 0'   # restore-verification — weekly  Sun 03:30 UTC
     - cron: '0 4 * * *'    # snapshot-cleanup     — daily   04:00 UTC
     - cron: '0 5 * * 1'    # ldf-refresh          — weekly  Mon 05:00 UTC (cadence placeholder)
@@ -91,6 +92,14 @@ jobs:
       DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
       BACKUP_DIR: ${{ github.workspace }}/backup-out
       BACKUP_RETENTION_DAYS: ${{ vars.BACKUP_RETENTION_DAYS || '30' }}
+      # Durable object storage (push the dump off the runner). When BACKUP_S3_BUCKET
+      # is unset, backup-db.sh skips the upload and only the run artifact below is kept.
+      BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+      BACKUP_S3_PREFIX: ${{ vars.BACKUP_S3_PREFIX || 'backups' }}
+      BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
       ALERT_SOURCE: github-actions/db-backup
     steps:
@@ -105,11 +114,11 @@ jobs:
       - name: Install postgresql-client
         if: steps.guard.outputs.skip != 'true'
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
-      - name: Backup prod
+      - name: Backup prod (uploads to object storage when BACKUP_S3_BUCKET is set)
         if: steps.guard.outputs.skip != 'true'
         run: scripts/run-with-alert.sh db-backup -- scripts/backup-db.sh
-      # Durable storage: upload the dump. An artifact is the portable default;
-      # for real RPO/RTO push to object storage (S3/GCS) — see docs/backup-recovery.md.
+      # Portable fallback copy. Durable retention is the object-storage bucket
+      # lifecycle (see docs/backup-recovery.md); this 7-day artifact is a safety net.
       - name: Upload dump artifact
         if: steps.guard.outputs.skip != 'true'
         uses: actions/upload-artifact@v4

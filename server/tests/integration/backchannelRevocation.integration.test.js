@@ -28,7 +28,7 @@ describe.skipIf(shouldSkipDb)('integration: back-channel session revocation (Pha
     const ins = await pool.query(
       `INSERT INTO public.uw_user (email, username, display_name, role_id, is_active, password_hash, auth_provider, idp_subject)
        VALUES ($1,$2,'P1b User',$3,true,$4,'SSO',$5) RETURNING user_id`,
-      [`${username}@example.test`, username, role.rows[0].role_id, hashPassword('x-not-used'), `idp|${username}`],
+      [`${username}@example.test`, username, role.rows[0].role_id, await hashPassword('x-not-used'), `idp|${username}`],
     );
     const id = ins.rows[0].user_id;
     createdUserIds.push(id);

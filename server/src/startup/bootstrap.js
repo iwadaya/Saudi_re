@@ -7,6 +7,7 @@ import { ensureReferenceData } from './ensureReferenceData.js';
 import { runMigrations } from './runMigrations.js';
 import { installGracefulShutdown } from './gracefulShutdown.js';
 import { warnIfWarnOnlyInProduction } from '../lib/pricingVerifier.js';
+import { checkProductionPosture } from './productionPosture.js';
 
 function logStartupBanner() {
   logger.info('startup configuration loaded', {
@@ -26,6 +27,14 @@ export async function bootstrap() {
   validateRuntimeEnv();
   logStartupBanner();
   warnIfWarnOnlyInProduction();
+  // Surface (don't fail on) valid-but-risky production posture: durable upload
+  // storage (P1 #2), distributed rate limiting (P1 #3), SSO/MFA/break-glass
+  // (P1 #6). Best-effort — a check bug must never block boot.
+  try {
+    checkProductionPosture();
+  } catch (err) {
+    logger.warn('[posture] posture check failed to run', { message: err?.message || String(err) });
+  }
 
   await verifyDatabaseConnection();
   logger.info('database connection verified');

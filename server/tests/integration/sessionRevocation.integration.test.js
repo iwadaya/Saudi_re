@@ -58,7 +58,7 @@ describe.skipIf(shouldSkipDb)('integration: session revocation (Phase 0a)', () =
     const ins = await pool.query(
       `INSERT INTO public.uw_user (email, username, display_name, role_id, is_active, password_hash)
        VALUES ($1,$2,'Session Revocation User',$3,true,$4) RETURNING user_id`,
-      [`${username}@example.test`, username, role.rows[0].role_id, hashPassword(PASSWORD)],
+      [`${username}@example.test`, username, role.rows[0].role_id, await hashPassword(PASSWORD)],
     );
     userId = ins.rows[0].user_id;
   });

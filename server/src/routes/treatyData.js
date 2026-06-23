@@ -22,6 +22,7 @@ import {
   resolveLocalStoragePath,
   getSignedReadUrl,
 } from '../lib/uploadStorage.js';
+import { assertUploadSafe } from '../lib/uploadValidation.js';
 import { buildBatchInsert } from '../db/batchInsert.js';
 import { randomUUID } from 'node:crypto';
 import multer from "multer";
@@ -741,15 +742,18 @@ router.post("/treaties/:id/documents", upload.single("file"), asyncHandler(async
   const file = req.file;
   const b = req.body;
   if (!file) return res.status(400).json({ error: "No file uploaded" });
+  // Allowlist + content sniff + (optional) malware scan before any persistence.
+  const safe = await assertUploadSafe(file);
   let storagePath;
   try {
     storagePath = await storeUploadedFile({ folder: `universe3/${id}`, file });
   } catch (e) {
+    if (e?.code === 'STORAGE_NOT_DURABLE') throw e; // surface as 503 via errorHandler
     return res.status(502).json({ error: `Upload storage failed: ${e?.message || e}` });
   }
   const {rows}=await pool.query(
     `INSERT INTO public.contract_document (contract_id,file_name,mime_type,size_bytes,storage_path,description,doc_type,title) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [id, file.originalname, file.mimetype, file.size, storagePath, b.description||null, b.doc_type||null, b.title||null]);
+    [id, file.originalname, safe.mime, file.size, storagePath, b.description||null, b.doc_type||null, b.title||null]);
   res.status(201).json(rows[0]);
 }));
 

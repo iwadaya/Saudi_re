@@ -50,7 +50,7 @@ describe.skipIf(shouldSkipDb)('integration: production auth (cookie + CSRF)', ()
     await pool.query(
       `INSERT INTO public.uw_user (email, username, display_name, role_id, is_active, password_hash)
        VALUES ($1,$2,'Prod Auth User',$3,true,$4)`,
-      [`${username}@example.test`, username, role.rows[0].role_id, hashPassword(PASSWORD)],
+      [`${username}@example.test`, username, role.rows[0].role_id, await hashPassword(PASSWORD)],
     );
   });
 
