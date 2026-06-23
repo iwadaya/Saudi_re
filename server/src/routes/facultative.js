@@ -15,6 +15,7 @@ import {
   getSignedReadUrl,
   resolveLocalStoragePath,
 } from '../lib/uploadStorage.js';
+import { assertUploadSafe } from '../lib/uploadValidation.js';
 import { logger } from '../lib/logger.js';
 import {
   facRiskSaveSchema,
@@ -631,6 +632,10 @@ router.post(
   asyncHandler(async (req, res) => {
     const file = req.file;
     if (!file) return res.status(400).json({ error: 'No file provided' });
+    // Allowlist + content sniff + (optional) malware scan BEFORE storing. Throws
+    // UploadValidationError (415/422/503) → central errorHandler. `safe.mime` is
+    // the trusted, content-derived type we persist (never the client's header).
+    const safe = await assertUploadSafe(file);
     const riskId = req.params.id;
     const kind = req.body?.document_kind || 'OTHER';
     // Treaty-style metadata captured on the upload form. doc_type tracks the
@@ -643,6 +648,7 @@ router.post(
     try {
       storageKey = await storeUploadedFile({ folder: `fac/${riskId}`, file });
     } catch (e) {
+      if (e?.code === 'STORAGE_NOT_DURABLE') throw e; // surface as 503 via errorHandler
       return res.status(502).json({ error: `Upload storage failed: ${e?.message || e}` });
     }
 
@@ -656,7 +662,7 @@ router.post(
     `, [
       riskId, docType, kind,
       file.originalname, storageKey, storageKey,
-      file.size, file.size, file.mimetype || null,
+      file.size, file.size, safe.mime,
       title, description,
       actorUserUuid(req),
     ]);

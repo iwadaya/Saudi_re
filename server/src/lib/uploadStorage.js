@@ -7,10 +7,16 @@
 // path that no file was ever written to. This module collapses them
 // onto one path:
 //
-//   • Cloudinary if CLOUDINARY_URL is set — returns the secure URL.
+//   • Cloudinary if configured (CLOUDINARY_URL or the three CLOUDINARY_*
+//     vars) — private 'authenticated' delivery; returns the secure URL.
 //   • Local disk under env.uploadDir otherwise — returns a path
 //     relative to env.uploadDir so the read side can `path.join`
 //     and serve it without needing to know which sink was used.
+//
+// Durable-storage policy (P1 #2): in production the local-disk sink is
+// refused (503 STORAGE_NOT_DURABLE) unless ALLOW_LOCAL_UPLOADS=true, because
+// a web dyno's disk is ephemeral and per-instance. Configure object storage
+// for any real deployment.
 //
 // Errors from either sink propagate; the route decides how to surface
 // them (a 502 is the obvious default).
@@ -22,11 +28,35 @@ import { recordUpload, folderType } from '../observability/businessMetrics.js';
 
 let _cloudinary = null;
 
+/**
+ * True when a durable remote store (Cloudinary) is configured — either via the
+ * single CLOUDINARY_URL the SDK reads, or the three discrete CLOUDINARY_*
+ * variables documented in .env.example. (Previously only CLOUDINARY_URL was
+ * honoured, so the documented three-var form silently fell back to local disk.)
+ */
+export function remoteStorageConfigured() {
+  if (process.env.CLOUDINARY_URL) return true;
+  return Boolean(
+    process.env.CLOUDINARY_CLOUD_NAME
+    && process.env.CLOUDINARY_API_KEY
+    && process.env.CLOUDINARY_API_SECRET,
+  );
+}
+
 async function getCloudinary() {
-  if (!_cloudinary && process.env.CLOUDINARY_URL) {
-    const mod = await import('cloudinary');
-    _cloudinary = mod.v2;
-    _cloudinary.config({ secure: true });
+  if (_cloudinary) return _cloudinary;
+  if (!remoteStorageConfigured()) return null;
+  const mod = await import('cloudinary');
+  _cloudinary = mod.v2;
+  if (process.env.CLOUDINARY_URL) {
+    _cloudinary.config({ secure: true }); // SDK reads CLOUDINARY_URL from env
+  } else {
+    _cloudinary.config({
+      secure: true,
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+    });
   }
   return _cloudinary;
 }
@@ -34,6 +64,29 @@ async function getCloudinary() {
 // Test seam: lets the unit tests reset the cached client between cases.
 export function _resetCloudinaryForTests() {
   _cloudinary = null;
+}
+
+/** Explicit opt-in to ephemeral local-disk uploads in production. */
+export function localUploadsAllowed() {
+  return ['1', 'true', 'yes', 'on'].includes(String(process.env.ALLOW_LOCAL_UPLOADS || '').toLowerCase());
+}
+
+// Durable-storage policy (P1): production must use durable, private object
+// storage for uploads — local disk on a web dyno is ephemeral (lost on every
+// deploy/restart) and not shared across instances. We fail closed: if no remote
+// store is configured in production, refuse to write to local disk unless the
+// operator has explicitly accepted the trade-off with ALLOW_LOCAL_UPLOADS=true.
+function assertLocalStorageAllowed() {
+  if (env.isProduction && !localUploadsAllowed()) {
+    const err = new Error(
+      'Durable object storage is required in production. Configure Cloudinary '
+      + '(CLOUDINARY_URL or CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET), or set '
+      + 'ALLOW_LOCAL_UPLOADS=true to explicitly accept ephemeral local-disk storage.',
+    );
+    err.status = 503;
+    err.code = 'STORAGE_NOT_DURABLE';
+    throw err;
+  }
 }
 
 function safeFilename(originalname) {
@@ -83,6 +136,8 @@ export async function storeUploadedFile({ folder, file }) {
         (err, result) => (err ? reject(err) : resolve(result.secure_url)),
       ).end(file.buffer));
     } else {
+      // Refuse ephemeral local disk as the production default (P1 #2).
+      assertLocalStorageAllowed();
       const absDir = path.resolve(env.uploadDir, folder);
       await fs.mkdir(absDir, { recursive: true });
       const absPath = path.resolve(env.uploadDir, relPath);

@@ -4,10 +4,11 @@ import path from 'node:path';
 import os from 'node:os';
 
 let tmpUploadDir;
+let isProductionEnv = false; // toggled by the durable-storage guard tests
 
 vi.mock('../config/env.js', () => ({
   get env() {
-    return { uploadDir: tmpUploadDir };
+    return { uploadDir: tmpUploadDir, isProduction: isProductionEnv };
   },
 }));
 
@@ -37,13 +38,20 @@ const {
   getSignedReadUrl,
   publicIdFromRemoteUrl,
   remoteDeliveryType,
+  remoteStorageConfigured,
+  localUploadsAllowed,
   SIGNED_URL_TTL_SECONDS,
   _resetCloudinaryForTests,
 } = await import('./uploadStorage.js');
 
 beforeEach(async () => {
   tmpUploadDir = await fs.mkdtemp(path.join(os.tmpdir(), 'upload-storage-test-'));
+  isProductionEnv = false;
   delete process.env.CLOUDINARY_URL;
+  delete process.env.CLOUDINARY_CLOUD_NAME;
+  delete process.env.CLOUDINARY_API_KEY;
+  delete process.env.CLOUDINARY_API_SECRET;
+  delete process.env.ALLOW_LOCAL_UPLOADS;
   _resetCloudinaryForTests();
 });
 
@@ -95,6 +103,45 @@ describe('storeUploadedFile (local disk fallback)', () => {
     await expect(
       storeUploadedFile({ folder: 'f', file: { originalname: 'a' } }),
     ).rejects.toThrow(/file\.buffer is required/);
+  });
+});
+
+describe('durable-storage guard (P1 #2 — no local disk as the prod default)', () => {
+  it('refuses local-disk writes in production without an opt-in (503 STORAGE_NOT_DURABLE)', async () => {
+    isProductionEnv = true;
+    const file = { buffer: Buffer.from('x'), originalname: 'a.pdf' };
+    await expect(storeUploadedFile({ folder: 'fac/1', file }))
+      .rejects.toMatchObject({ code: 'STORAGE_NOT_DURABLE', status: 503 });
+    // Nothing was written.
+    await expect(fs.readdir(path.resolve(tmpUploadDir, 'fac/1'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('allows local-disk writes in production when ALLOW_LOCAL_UPLOADS=true', async () => {
+    isProductionEnv = true;
+    process.env.ALLOW_LOCAL_UPLOADS = 'true';
+    const rel = await storeUploadedFile({ folder: 'fac/1', file: { buffer: Buffer.from('ok'), originalname: 'a.pdf' } });
+    expect(rel.startsWith('fac/1/')).toBe(true);
+    expect(localUploadsAllowed()).toBe(true);
+  });
+
+  it('allows local-disk writes outside production (dev/test default)', async () => {
+    isProductionEnv = false;
+    const rel = await storeUploadedFile({ folder: 'fac/1', file: { buffer: Buffer.from('ok'), originalname: 'a.pdf' } });
+    expect(rel.startsWith('fac/1/')).toBe(true);
+  });
+});
+
+describe('remoteStorageConfigured', () => {
+  it('is true for CLOUDINARY_URL or the three discrete vars, false otherwise', () => {
+    expect(remoteStorageConfigured()).toBe(false);
+    process.env.CLOUDINARY_URL = 'cloudinary://k:s@cloud';
+    expect(remoteStorageConfigured()).toBe(true);
+    delete process.env.CLOUDINARY_URL;
+    process.env.CLOUDINARY_CLOUD_NAME = 'c';
+    process.env.CLOUDINARY_API_KEY = 'k';
+    expect(remoteStorageConfigured()).toBe(false); // secret still missing
+    process.env.CLOUDINARY_API_SECRET = 's';
+    expect(remoteStorageConfigured()).toBe(true);
   });
 });
 

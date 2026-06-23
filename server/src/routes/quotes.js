@@ -23,6 +23,7 @@ import { auditMutation } from '../lib/mutationAudit.js';
 import { npSaveSchema, egnpiYearPutSchema, quoteNpPricingPutSchema } from '../validation/nonProp.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { storeUploadedFile } from '../lib/uploadStorage.js';
+import { assertUploadSafe } from '../lib/uploadValidation.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
 import { assertCanEdit } from '../services/permissions.js';
 import { approveQuote, returnToUnderwriter, recallOffer, markNotTakenUp } from '../services/approvals.js';
@@ -1210,6 +1211,8 @@ router.post("/quotes/:id/documents", _multerQ.single('file'), validateBody(docum
   const { id } = req.params;
   const file = req.file; const b = req.body || {};
   if (!file) return res.status(400).json({ error: 'No file provided' });
+  // Allowlist + content sniff + (optional) malware scan before any persistence.
+  const safe = await assertUploadSafe(file);
   // Check the parent quote exists BEFORE storing bytes — a missing quote must
   // not leave an orphaned blob in storage.
   await assertExists(pool, 'public.quote', 'quote_id', id, 'Quote');
@@ -1217,6 +1220,7 @@ router.post("/quotes/:id/documents", _multerQ.single('file'), validateBody(docum
   try {
     storagePath = await storeUploadedFile({ folder: `quotes/${id}`, file });
   } catch (e) {
+    if (e?.code === 'STORAGE_NOT_DURABLE') throw e; // surface as 503 via errorHandler
     return res.status(502).json({ error: `Upload storage failed: ${e?.message || e}` });
   }
   const cl = await pool.connect();
@@ -1224,7 +1228,7 @@ router.post("/quotes/:id/documents", _multerQ.single('file'), validateBody(docum
     await cl.query("BEGIN");
     const { rows } = await cl.query(
       `INSERT INTO public.contract_document (quote_id,file_name,mime_type,size_bytes,storage_path,description,doc_type,title) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [id, file.originalname, file.mimetype, file.size, storagePath, b.description || null, b.doc_type || null, b.title || null]);
+      [id, file.originalname, safe.mime, file.size, storagePath, b.description || null, b.doc_type || null, b.title || null]);
     await auditMutation(cl, req, { entityType: 'QUOTE', entityId: id, eventType: 'DOCUMENT_UPLOADED', payload: { document_id: rows[0].document_id, file_name: file.originalname, size_bytes: file.size } });
     await cl.query("COMMIT");
     res.status(201).json(rows[0]);

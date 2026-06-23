@@ -50,7 +50,7 @@ describe.skipIf(shouldSkipDb)('integration: user-admin revocation + audit (Phase
     const ins = await pool.query(
       `INSERT INTO public.uw_user (email, username, display_name, role_id, is_active, password_hash)
        VALUES ($1,$2,'Phase0b User',$3,true,$4) RETURNING user_id`,
-      [`${username}@example.test`, username, roleId, hashPassword(STRONG_PW)],
+      [`${username}@example.test`, username, roleId, await hashPassword(STRONG_PW)],
     );
     const id = ins.rows[0].user_id;
     createdUserIds.push(id);
