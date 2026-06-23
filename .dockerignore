@@ -1,0 +1,35 @@
+# Keep the Docker build context (and the resulting image) small and free of
+# host artifacts, tests and secrets. Each build stage installs its own deps.
+
+# Host dependency trees — every stage runs its own `npm ci`.
+node_modules
+**/node_modules
+
+# VCS / CI metadata
+.git
+.gitignore
+.github
+
+# Tests, fixtures and coverage — not needed to build or run.
+**/*.test.js
+**/tests/
+**/__tests__/
+**/coverage/
+load-test/
+
+# Local env / secrets — NEVER bake these into an image. .env.example is
+# re-included because the Dockerfile copies it as a template.
+.env
+.env.*
+!.env.example
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.log
+.DS_Store
+
+# Docs and scratch (README kept for image provenance/source browsing).
+docs/
+*.md
+!README.md

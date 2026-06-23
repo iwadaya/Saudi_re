@@ -102,6 +102,33 @@ Deliberately **dev-only**, excluded from the runtime gate (documented, not silen
 We pin patched transitives via `overrides` rather than `npm audit fix --force`,
 which would otherwise downgrade `exceljs` to 3.x and bump Vite to 8.
 
+## Container image
+
+The production image (`Dockerfile`) is built for a minimal, least-privilege
+runtime:
+
+- **Non-root.** The runtime stage runs as the built-in unprivileged `node`
+  user (uid 1000); all copied artifacts are `--chown=node:node`. Nothing in the
+  container runs as root.
+- **Minimal surface.** Multi-stage build copies only the production server
+  (`npm ci --omit=dev`), the pre-built `client/dist`, and `shared/` into a clean
+  Alpine base. No build toolchain, tests, docs or `.env` reach the image
+  (`.dockerignore`). The only added OS package is `tini`.
+- **Correct PID 1.** `tini` is the entrypoint so `SIGTERM` reaches Node's
+  graceful-shutdown handler and in-flight requests drain on deploy.
+- **Healthcheck.** A `HEALTHCHECK` probes the DB-free `/api/health` endpoint
+  using Node's built-in `fetch` (no `curl`/`wget` in the image).
+- **Pinned base.** The base image is pinned to an exact patch
+  (`node:20.18.0-alpine`) for reproducible builds; bump it deliberately when the
+  scanner reports a fixed base CVE.
+
+**SBOM + image scanning** run in CI (`.github/workflows/image-security.yml`):
+Syft produces an SPDX SBOM (uploaded as a 90-day artifact) and Trivy scans the
+built image. HIGH+CRITICAL findings (fixable) are reported to GitHub code
+scanning (SARIF); a fixable **CRITICAL** hard-fails the build. This complements
+the source-level `npm audit` gate by covering the OS/base-image layers. Tighten
+the hard gate to HIGH+CRITICAL once the base image is on a regular bump cadence.
+
 ## Content-Security-Policy
 
 CSP is **enforcing** (server/src/app.js): the server sends

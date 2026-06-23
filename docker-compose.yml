@@ -25,6 +25,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # Mirrors the image HEALTHCHECK (Dockerfile) — Compose marks the app healthy
+    # once /api/health responds, so `docker compose ps` and dependents see it.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||4000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
   db:
     image: postgres:16-alpine
     environment:
