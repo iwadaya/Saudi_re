@@ -32,10 +32,12 @@ export default function FacDocuments() {
     docs, loading, toast, stalePollHint,
     pendingFile, setPendingFile,
     pendingKind, setPendingKind,
+    pendingTitle, setPendingTitle,
+    pendingDescription, setPendingDescription,
     uploading,
     draggingOver, setDraggingOver,
     fileInputRef,
-    onPickFile, onDrop, onUploadAndAnalyse,
+    onPickFile, onDrop, onUpload, onUploadAndAnalyse,
     sortedDocs, latestAnalysisByDoc, reAnalyseBusyRef,
     onReAnalyse, handleDelete,
     openAnalysisId, setOpenAnalysisId,
@@ -53,11 +55,13 @@ export default function FacDocuments() {
         <UploadDropzone
           pendingFile={pendingFile} setPendingFile={setPendingFile}
           pendingKind={pendingKind} setPendingKind={setPendingKind}
+          pendingTitle={pendingTitle} setPendingTitle={setPendingTitle}
+          pendingDescription={pendingDescription} setPendingDescription={setPendingDescription}
           uploading={uploading}
           draggingOver={draggingOver} setDraggingOver={setDraggingOver}
           fileInputRef={fileInputRef}
           onPickFile={onPickFile} onDrop={onDrop}
-          onUploadAndAnalyse={onUploadAndAnalyse}
+          onUpload={onUpload} onUploadAndAnalyse={onUploadAndAnalyse}
         />
 
         {/* Toast */}

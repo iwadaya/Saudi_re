@@ -185,10 +185,11 @@ describe('documents list', () => {
     expect(within(rows[1]).getByText('survey.pdf')).toBeInTheDocument();
 
     // doc-1 has a SUCCEEDED analysis → clickable status; doc-2 has none
+    // (scope to the status cell — empty Title/Size cells also render '—').
     expect(
       within(rows[0]).getByRole('button', { name: /Succeeded — 2 recommendations/ }),
     ).toBeInTheDocument();
-    expect(within(rows[1]).getByText('—')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('—', { selector: '.facdoc-status-none' })).toBeInTheDocument();
 
     // per-row actions: View disabled without a SUCCEEDED analysis
     expect(within(rows[0]).getByRole('button', { name: 'View' })).toBeEnabled();

@@ -901,16 +901,28 @@ export const api = {
    * @param file         DOM File object
    * @param documentKind PLACEMENT_SLIP / SURVEY_REPORT / …
    */
-  facUploadDocumentMultipart(id: string, file: File, documentKind?: string, opts?: RequestOpts): Promise<unknown> {
+  facUploadDocumentMultipart(
+    id: string,
+    file: File,
+    meta?: { documentKind?: string; title?: string; description?: string },
+    opts?: RequestOpts,
+  ): Promise<unknown> {
     const form = new FormData();
     form.append('file', file);
-    form.append('document_kind', documentKind || 'OTHER');
+    form.append('document_kind', meta?.documentKind || 'OTHER');
+    if (meta?.title) form.append('title', meta.title);
+    if (meta?.description) form.append('description', meta.description);
     // request() sends FormData as-is (no JSON body) when method=POST
     // and body is a FormData instance.
     return request(`/api/fac/risks/${enc(id)}/documents/upload`, {
       method: 'POST', body: form, ...opts,
     });
   },
+  // Stored-file view / download URLs (mirror the treaty getDocument*Url
+  // helpers). Auth rides the httpOnly cookie, so these resolve as plain
+  // <a href> / new-tab links.
+  facGetDocumentViewUrl(docId: string): string { return `${API_BASE}/api/fac/documents/${enc(docId)}/view`; },
+  facGetDocumentDownloadUrl(docId: string): string { return `${API_BASE}/api/fac/documents/${enc(docId)}/download`; },
 
   /**
    * Renewal-pack import endpoints — entity-polymorphic via opts.quote.
