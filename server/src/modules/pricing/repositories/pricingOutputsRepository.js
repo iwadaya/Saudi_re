@@ -1,4 +1,5 @@
 import { pool } from '../../../db/pool.js';
+import { buildBatchInsert } from '../../../db/batchInsert.js';
 import { logger } from '../../../lib/logger.js';
 import { assertParentEntityUnchanged, touchParentEntity } from '../../../lib/parentEntityPersistence.js';
 import { logAudit, SYSTEM_ACTOR } from '../../../services/audit.js';
@@ -176,56 +177,54 @@ export async function saveCompositePricing(payload) {
 
     if (Array.isArray(yearly)) {
       await client.query('DELETE FROM public.contract_pricing_yearly WHERE contract_id=$1', [contractId]);
-      for (const row of yearly) {
-        await client.query(
-          `INSERT INTO public.contract_pricing_yearly
-            (contract_id,uw_year,ultimate_premium,ultimate_loss,loss_ratio,commission_amt,brokerage_amt,technical_result,record_type)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          [
-            contractId,
-            row.uw_year,
-            numOrNull(row.ultimate_premium),
-            numOrNull(row.ultimate_loss),
-            numOrNull(row.loss_ratio),
-            numOrNull(row.commission_amt),
-            numOrNull(row.brokerage_amt),
-            numOrNull(row.technical_result),
-            row.record_type || 'PROJECTED',
-          ]
-        );
-      }
+      // One multi-row INSERT instead of a round-trip per year — see db/batchInsert.js.
+      const yearlyInsert = buildBatchInsert({
+        table: 'public.contract_pricing_yearly',
+        columns: ['contract_id', 'uw_year', 'ultimate_premium', 'ultimate_loss', 'loss_ratio', 'commission_amt', 'brokerage_amt', 'technical_result', 'record_type'],
+        rows: yearly.map((row) => [
+          row.uw_year,
+          numOrNull(row.ultimate_premium),
+          numOrNull(row.ultimate_loss),
+          numOrNull(row.loss_ratio),
+          numOrNull(row.commission_amt),
+          numOrNull(row.brokerage_amt),
+          numOrNull(row.technical_result),
+          row.record_type || 'PROJECTED',
+        ]),
+        leadingId: contractId,
+      });
+      if (yearlyInsert) await client.query(yearlyInsert.sql, yearlyInsert.params);
     }
 
     if (Array.isArray(components)) {
       await client.query('SAVEPOINT sp_components');
       try {
         await client.query('DELETE FROM public.pricing_components WHERE contract_id=$1', [contractId]);
-        for (const component of components) {
-          const componentColumns = schemaFlags.componentColumns || new Set();
-          const columns = ['contract_id', 'component_name'];
-          const values = [contractId, component.component_name];
-          const addColumn = (column, value) => {
-            if (!componentColumns.has(column)) return;
-            columns.push(column);
-            values.push(value);
-          };
-          const uwValue = component.uw_value ?? component.underwriter_value ?? null;
-          const underwriterValue = component.underwriter_value ?? component.uw_value ?? null;
-          addColumn('selected', component.selected == null ? true : component.selected);
-          addColumn('actuarial_value', component.actuarial_value ?? null);
-          addColumn('uw_value', uwValue);
-          addColumn('underwriter_value', underwriterValue);
-          addColumn('market_value', component.market_value ?? null);
-          addColumn('actual_stats_value', component.actual_stats_value ?? null);
-          addColumn('comment', component.comment ?? null);
-          addColumn('display_order', component.display_order ?? null);
-          addColumn('exposure_value', component.exposure_value ?? null);
-          const placeholders = values.map((_, i) => `$${i + 1}`).join(',');
-          await client.query(
-            `INSERT INTO public.pricing_components (${columns.join(',')}) VALUES (${placeholders})`,
-            values,
-          );
-        }
+        const componentColumns = schemaFlags.componentColumns || new Set();
+        // Optional columns are gated on the live schema, but the gate is identical
+        // for every component — so resolve the present set once and batch every row
+        // into a single INSERT instead of one round-trip per component.
+        const optionalColumns = [
+          ['selected', (c) => (c.selected == null ? true : c.selected)],
+          ['actuarial_value', (c) => c.actuarial_value ?? null],
+          ['uw_value', (c) => c.uw_value ?? c.underwriter_value ?? null],
+          ['underwriter_value', (c) => c.underwriter_value ?? c.uw_value ?? null],
+          ['market_value', (c) => c.market_value ?? null],
+          ['actual_stats_value', (c) => c.actual_stats_value ?? null],
+          ['comment', (c) => c.comment ?? null],
+          ['display_order', (c) => c.display_order ?? null],
+          ['exposure_value', (c) => c.exposure_value ?? null],
+        ].filter(([column]) => componentColumns.has(column));
+        const componentsInsert = buildBatchInsert({
+          table: 'public.pricing_components',
+          columns: ['contract_id', 'component_name', ...optionalColumns.map(([column]) => column)],
+          rows: components.map((component) => [
+            component.component_name,
+            ...optionalColumns.map(([, valueOf]) => valueOf(component)),
+          ]),
+          leadingId: contractId,
+        });
+        if (componentsInsert) await client.query(componentsInsert.sql, componentsInsert.params);
       } catch (error) {
         logger.error('[pricing/save] components save failed, continuing without components', { error: error.message });
         await client.query('ROLLBACK TO SAVEPOINT sp_components').catch(() => {});
@@ -247,25 +246,24 @@ export async function saveCompositePricing(payload) {
 
     if (Array.isArray(share_scenarios)) {
       await client.query('DELETE FROM public.pricing_share_scenarios WHERE contract_id=$1', [contractId]);
-      for (const scenario of share_scenarios) {
-        await client.query(
-          `INSERT INTO public.pricing_share_scenarios
-            (contract_id,share_label,limit_amt,premium_amt,cedant_limit,agg_contrib,country_agg,event_limit,downside_amt,shortfall_amt)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-          [
-            contractId,
-            scenario.share_label,
-            numOrNull(scenario.limit_amt),
-            numOrNull(scenario.premium_amt),
-            numOrNull(scenario.cedant_limit),
-            numOrNull(scenario.agg_contrib),
-            numOrNull(scenario.country_agg),
-            numOrNull(scenario.event_limit),
-            numOrNull(scenario.downside_amt),
-            numOrNull(scenario.shortfall_amt),
-          ]
-        );
-      }
+      // One multi-row INSERT instead of a round-trip per scenario — see db/batchInsert.js.
+      const scenariosInsert = buildBatchInsert({
+        table: 'public.pricing_share_scenarios',
+        columns: ['contract_id', 'share_label', 'limit_amt', 'premium_amt', 'cedant_limit', 'agg_contrib', 'country_agg', 'event_limit', 'downside_amt', 'shortfall_amt'],
+        rows: share_scenarios.map((scenario) => [
+          scenario.share_label,
+          numOrNull(scenario.limit_amt),
+          numOrNull(scenario.premium_amt),
+          numOrNull(scenario.cedant_limit),
+          numOrNull(scenario.agg_contrib),
+          numOrNull(scenario.country_agg),
+          numOrNull(scenario.event_limit),
+          numOrNull(scenario.downside_amt),
+          numOrNull(scenario.shortfall_amt),
+        ]),
+        leadingId: contractId,
+      });
+      if (scenariosInsert) await client.query(scenariosInsert.sql, scenariosInsert.params);
     }
 
     // "Who modelled" — record the modeller + a summary/diff of what they saved.
