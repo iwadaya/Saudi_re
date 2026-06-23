@@ -1,6 +1,7 @@
 // server/src/routes/auth.js
 // Authentication, user management, and mandate resolution.
-// Passwords are scrypt-hashed (hashPassword/verifyPassword). A single shared
+// Passwords are scrypt-hashed via lib/passwordHash.js — ASYNC (off the event
+// loop) and at a calibrated, tunable cost (PASSWORD_SCRYPT_COST). A single shared
 // policy (validatePasswordStrength) gates every place a password is set —
 // change-password and ALL user-creation paths. No path stores a static/demo
 // hash; an admin create with no password gets a generated, scrypt-hashed temp
@@ -8,10 +9,11 @@
 // backdoor gated behind ALLOW_DEMO_AUTH and is never honoured in production.
 
 import { Router } from 'express';
-import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { pool } from '../db/pool.js';
 import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
+import { hashPassword, verifyPassword, needsRehash } from '../lib/passwordHash.js';
 import { logAudit } from '../services/audit.js';
 import { signAuthToken, verifyAuthToken } from '../lib/authToken.js';
 import { setAuthCookies, clearAuthCookies, readCookie, AUTH_COOKIE } from '../lib/authCookies.js';
@@ -100,24 +102,11 @@ export function validatePasswordStrength(pw) {
   return null;
 }
 
-// Password hashing with the Node stdlib (no new dependency). Format:
-//   scrypt$<saltHex>$<hashHex>
-// Every create/update path stores one of these — there is no static/demo hash.
-export function hashPassword(plain) {
-  const salt = randomBytes(16).toString('hex');
-  const hash = scryptSync(String(plain), salt, 64).toString('hex');
-  return `scrypt$${salt}$${hash}`;
-}
-
-export function verifyPassword(plain, stored) {
-  if (typeof stored !== 'string' || !stored.startsWith('scrypt$')) return false;
-  const [, saltHex, hashHex] = stored.split('$');
-  if (!saltHex || !hashHex) return false;
-  const expected = Buffer.from(hashHex, 'hex');
-  let actual;
-  try { actual = scryptSync(String(plain), saltHex, 64); } catch { return false; }
-  return expected.length === actual.length && timingSafeEqual(expected, actual);
-}
+// Password hashing lives in lib/passwordHash.js (async scrypt, calibrated +
+// tunable cost, backward-compatible with legacy `scrypt$salt$hash` rows). It is
+// async so the derivation never blocks the event loop on the login hot path.
+// Re-exported here so existing importers (and tests) keep their import surface.
+export { hashPassword, verifyPassword };
 
 /** Generate a strong, unique one-time temp password (never a shared literal).
  *  Returned to the admin who created the account; the user must change it on
@@ -252,8 +241,11 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
   //     honoured ONLY when ALLOW_DEMO_AUTH=true (never in production).
   const storedHash = user.password_hash;
   const demoAuthAllowed = process.env.ALLOW_DEMO_AUTH === 'true';
-  const passwordOk = (demoAuthAllowed && password === DEMO_PASSWORD)
-    || (typeof storedHash === 'string' && storedHash.startsWith('scrypt$') && verifyPassword(password, storedHash));
+  // verifyPassword is async (off-loop scrypt). Only evaluated for a real
+  // scrypt hash; the demo shortcut short-circuits first so the await is skipped.
+  const hashMatches = typeof storedHash === 'string' && storedHash.startsWith('scrypt$')
+    && await verifyPassword(password, storedHash);
+  const passwordOk = (demoAuthAllowed && password === DEMO_PASSWORD) || hashMatches;
 
   if (!passwordOk) {
     // Increment failed attempts (fire-and-forget)
@@ -299,6 +291,18 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
      WHERE user_id = $1`,
     [user.user_id]
   ).catch(() => {});
+
+  // Opportunistic cost upgrade: when a real-password login verified against a
+  // legacy/under-cost hash, re-hash at the current policy and persist. Best-
+  // effort and fire-and-forget — it must never block or fail a valid login.
+  if (hashMatches && needsRehash(storedHash)) {
+    hashPassword(password)
+      .then((fresh) => pool.query(
+        `UPDATE public.uw_user SET password_hash = $2, updated_at = now() WHERE user_id = $1`,
+        [user.user_id, fresh],
+      ))
+      .catch(() => {});
+  }
 
   // At login req.user isn't set yet (this IS the authentication), so the actor
   // is the user being authenticated, built from the verified DB row.
@@ -394,7 +398,7 @@ router.post('/auth/change-password', requireAuth, asyncHandler(async (req, res) 
   // Current-password check. verifyPassword returns false for any non-'scrypt$'
   // value, so a legacy/demo hash (e.g. 'DEMO_HASH_2026') can never pass and
   // demo2026 is NOT accepted here — such users must be reset by an admin first.
-  if (!verifyPassword(currentPassword, rows[0].password_hash)) {
+  if (!(await verifyPassword(currentPassword, rows[0].password_hash))) {
     return res.status(401).json({ error: 'Current password is incorrect.' });
   }
 
@@ -405,6 +409,7 @@ router.post('/auth/change-password', requireAuth, asyncHandler(async (req, res) 
   // mint a fresh session under the new epoch and set new cookies so the device
   // that just changed its password stays logged in while every OTHER session
   // (other devices, a thief's stolen token) is killed immediately.
+  const newHash = await hashPassword(newPassword);
   const cl = await pool.connect();
   let freshSession;
   try {
@@ -414,7 +419,7 @@ router.post('/auth/change-password', requireAuth, asyncHandler(async (req, res) 
           SET password_hash = $2, password_changed_at = now(),
               must_change_password = false, updated_at = now()
         WHERE user_id = $1`,
-      [userId, hashPassword(newPassword)]
+      [userId, newHash]
     );
     await revokeAllForUser(userId, 'PASSWORD_CHANGE', cl);
     freshSession = await createSession(
@@ -554,7 +559,7 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
       }
     }
     finalEmail = b.email ? String(b.email).trim().toLowerCase() : `${finalUsername}@universe3.app`;
-    passwordHash = hashPassword(password);
+    passwordHash = await hashPassword(password);
   } else {
     // Admin payload (no password field). Mint a strong one-time temp, hash it,
     // and force a first-login change — NEVER a static/demo hash.
@@ -567,7 +572,7 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
     finalEmail = email.trim().toLowerCase();
     roleId = role_id;
     tempPassword = generateTempPassword();
-    passwordHash = hashPassword(tempPassword);
+    passwordHash = await hashPassword(tempPassword);
     mustChangePassword = true;
   }
 

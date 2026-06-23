@@ -199,16 +199,24 @@ describe('privileged auth gates (verified req.user)', () => {
 });
 
 describe('password hashing helpers', () => {
-  it('hashPassword produces a scrypt$ string that verifyPassword accepts', () => {
-    const stored = hashPassword('secret1');
+  it('hashPassword produces a scrypt$ string that verifyPassword accepts', async () => {
+    const stored = await hashPassword('secret1');
     expect(stored.startsWith('scrypt$')).toBe(true);
-    expect(verifyPassword('secret1', stored)).toBe(true);
-    expect(verifyPassword('wrong', stored)).toBe(false);
+    expect(await verifyPassword('secret1', stored)).toBe(true);
+    expect(await verifyPassword('wrong', stored)).toBe(false);
   });
-  it('verifyPassword rejects non-scrypt / malformed stored values', () => {
-    expect(verifyPassword('x', 'DEMO_HASH_2026')).toBe(false);
-    expect(verifyPassword('x', 'scrypt$only')).toBe(false);
-    expect(verifyPassword('x', null)).toBe(false);
+  it('verifyPassword rejects non-scrypt / malformed stored values', async () => {
+    expect(await verifyPassword('x', 'DEMO_HASH_2026')).toBe(false);
+    expect(await verifyPassword('x', 'scrypt$only')).toBe(false);
+    expect(await verifyPassword('x', null)).toBe(false);
+  });
+  it('verifyPassword still accepts a legacy scrypt$salt$hash row (backward compatible)', async () => {
+    // A legacy hash produced by the old scryptSync(plain, saltHex, 64) at N=2^14.
+    const { scryptSync } = await import('node:crypto');
+    const salt = 'a'.repeat(32);
+    const legacy = `scrypt$${salt}$${scryptSync('legacypass1', salt, 64).toString('hex')}`;
+    expect(await verifyPassword('legacypass1', legacy)).toBe(true);
+    expect(await verifyPassword('nope', legacy)).toBe(false);
   });
 });
 
@@ -318,7 +326,7 @@ describe('POST /auth/users (Add-user form)', () => {
     expect(typeof res.body.temp_password).toBe('string');
     expect(res.body.temp_password.length).toBeGreaterThanOrEqual(12);
     expect(res.body.temp_password).not.toBe('Universe#1234');
-    expect(verifyPassword(res.body.temp_password, insert.params[7])).toBe(true);
+    expect(await verifyPassword(res.body.temp_password, insert.params[7])).toBe(true);
   });
 
   it('blocks open registration when disabled and there is no caller', async () => {
@@ -345,7 +353,7 @@ describe('POST /auth/login', () => {
   const csrfCookieOf = (res) => (res.cookies || []).find((c) => c.name === 'csrf_token');
 
   it('logs in a real account with the correct password (200 session)', async () => {
-    scenario.loginUser = adaRow(hashPassword('secret1'));
+    scenario.loginUser = adaRow(await hashPassword('secret1'));
     const app = buildApp();
     const res = await call(app, { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'secret1' } });
     expect(res.status).toBe(200);
@@ -354,7 +362,7 @@ describe('POST /auth/login', () => {
   });
 
   it('rejects a wrong password with 401', async () => {
-    scenario.loginUser = adaRow(hashPassword('secret1'));
+    scenario.loginUser = adaRow(await hashPassword('secret1'));
     const app = buildApp();
     const res = await call(app, { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'nope' } });
     expect(res.status).toBe(401);
@@ -370,7 +378,7 @@ describe('POST /auth/login', () => {
 
   it('REJECTS demo2026 in production mode (ALLOW_DEMO_AUTH unset) — only the real scrypt password works', async () => {
     delete process.env.ALLOW_DEMO_AUTH;
-    scenario.loginUser = adaRow(hashPassword('realpass1')); // real password, not demo2026
+    scenario.loginUser = adaRow(await hashPassword('realpass1')); // real password, not demo2026
     // demo backdoor refused
     const bad = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'demo2026' } });
     expect(bad.status).toBe(401);
@@ -382,7 +390,7 @@ describe('POST /auth/login', () => {
   });
 
   it('sets an httpOnly Secure-capable SameSite auth cookie + a readable CSRF cookie, and never returns the token in the body', async () => {
-    scenario.loginUser = adaRow(hashPassword('realpass1'));
+    scenario.loginUser = adaRow(await hashPassword('realpass1'));
     const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'realpass1' } });
     expect(res.status).toBe(200);
 
@@ -403,7 +411,7 @@ describe('POST /auth/login', () => {
   });
 
   it('still authenticates (via cookie) AND flags mustChangePassword for a forced-change user', async () => {
-    scenario.loginUser = { ...adaRow(hashPassword('Universe#1234')), must_change_password: true };
+    scenario.loginUser = { ...adaRow(await hashPassword('Universe#1234')), must_change_password: true };
     const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'Universe#1234' } });
     expect(res.status).toBe(200);
     expect(res.body.session.token).toBeUndefined();
@@ -421,7 +429,7 @@ describe('POST /auth/login', () => {
   });
 
   it('does not flag mustChangePassword for a normal user', async () => {
-    scenario.loginUser = adaRow(hashPassword('realpass1'));
+    scenario.loginUser = adaRow(await hashPassword('realpass1'));
     const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'realpass1' } });
     expect(res.body.session.mustChangePassword).toBe(false);
   });
@@ -438,7 +446,7 @@ describe('POST /auth/login — SSO-posture gate (Phase 0c, tolerant while SSO of
   const auditTypes = () => logAuditMock.mock.calls.map((c) => c[1]?.eventType);
 
   it('SSO OFF (default): local login works unchanged — no gate, no alert', async () => {
-    scenario.loginUser = row(hashPassword('realpass1'));
+    scenario.loginUser = row(await hashPassword('realpass1'));
     const res = await login();
     expect(res.status).toBe(200);
     expect(alertMock).not.toHaveBeenCalled();
@@ -447,7 +455,7 @@ describe('POST /auth/login — SSO-posture gate (Phase 0c, tolerant while SSO of
 
   it('SSO ON: a non-break-glass local login is refused 403 SSO_REQUIRED + audited', async () => {
     process.env.IDENTITY_SSO_ENABLED = 'true';
-    scenario.loginUser = row(hashPassword('realpass1'));
+    scenario.loginUser = row(await hashPassword('realpass1'));
     const res = await login();
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('SSO_REQUIRED');
@@ -460,7 +468,7 @@ describe('POST /auth/login — SSO-posture gate (Phase 0c, tolerant while SSO of
   it('SSO ON: a configured break-glass user logs in (200), audited BREAK_GLASS_LOGIN + alert raised', async () => {
     process.env.IDENTITY_SSO_ENABLED = 'true';
     process.env.IDENTITY_BREAK_GLASS_USERS = 'root.admin, ada.lovelace';
-    scenario.loginUser = row(hashPassword('realpass1'));
+    scenario.loginUser = row(await hashPassword('realpass1'));
     const res = await login();
     expect(res.status).toBe(200);
     expect(auditTypes()).toContain('BREAK_GLASS_LOGIN');
@@ -472,7 +480,7 @@ describe('POST /auth/login — SSO-posture gate (Phase 0c, tolerant while SSO of
 
   it('SSO ON: a wrong password is rejected 401 before the gate (no posture disclosure)', async () => {
     process.env.IDENTITY_SSO_ENABLED = 'true';
-    scenario.loginUser = row(hashPassword('realpass1'));
+    scenario.loginUser = row(await hashPassword('realpass1'));
     const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'WRONG' } });
     expect(res.status).toBe(401);
     expect(auditTypes()).not.toContain('LOCAL_LOGIN_BLOCKED');
@@ -485,7 +493,7 @@ describe('POST /auth/change-password — self-service, verified identity only', 
 
   it('changes the password with the correct current password (200 ok); new hash verifies, old does not, force-flag cleared', async () => {
     currentUser = me;
-    scenario.pwHash = hashPassword('oldpass1');
+    scenario.pwHash = await hashPassword('oldpass1');
     const res = await call(buildApp(), {
       method: 'POST', path: '/auth/change-password',
       body: { currentPassword: 'oldpass1', newPassword: 'brandnewpass12', confirmPassword: 'brandnewpass12' },
@@ -494,15 +502,15 @@ describe('POST /auth/change-password — self-service, verified identity only', 
     expect(res.body).toEqual({ ok: true });
     // Persisted a fresh scrypt of the NEW password against the verified id…
     expect(scenario.pwUpdate.userId).toBe('u-me');
-    expect(verifyPassword('brandnewpass12', scenario.pwUpdate.newHash)).toBe(true);
-    expect(verifyPassword('oldpass1', scenario.pwUpdate.newHash)).toBe(false);
+    expect(await verifyPassword('brandnewpass12', scenario.pwUpdate.newHash)).toBe(true);
+    expect(await verifyPassword('oldpass1', scenario.pwUpdate.newHash)).toBe(false);
     // …and cleared must_change_password in the same write.
     expect(scenario.pwUpdate.clearsForceFlag).toBe(true);
   });
 
   it('rejects the forced-change temp password (Universe#1234) as the new password → 400', async () => {
     currentUser = me;
-    scenario.pwHash = hashPassword('oldpass1');
+    scenario.pwHash = await hashPassword('oldpass1');
     const res = await call(buildApp(), {
       method: 'POST', path: '/auth/change-password',
       body: { currentPassword: 'oldpass1', newPassword: 'Universe#1234', confirmPassword: 'Universe#1234' },
@@ -513,7 +521,7 @@ describe('POST /auth/change-password — self-service, verified identity only', 
 
   it('rejects a wrong current password with 401 and writes nothing', async () => {
     currentUser = me;
-    scenario.pwHash = hashPassword('oldpass1');
+    scenario.pwHash = await hashPassword('oldpass1');
     const res = await call(buildApp(), {
       method: 'POST', path: '/auth/change-password',
       body: { currentPassword: 'WRONG', newPassword: 'brandnewpass12', confirmPassword: 'brandnewpass12' },
@@ -525,7 +533,7 @@ describe('POST /auth/change-password — self-service, verified identity only', 
 
   it('rejects a mismatched confirm with 400 "Passwords do not match"', async () => {
     currentUser = me;
-    scenario.pwHash = hashPassword('oldpass1');
+    scenario.pwHash = await hashPassword('oldpass1');
     const res = await call(buildApp(), {
       method: 'POST', path: '/auth/change-password',
       body: { currentPassword: 'oldpass1', newPassword: 'brandnewpass12', confirmPassword: 'different2' },
@@ -537,7 +545,7 @@ describe('POST /auth/change-password — self-service, verified identity only', 
 
   it('rejects new === current with 400 "New password must differ"', async () => {
     currentUser = me;
-    scenario.pwHash = hashPassword('samepasslong12');
+    scenario.pwHash = await hashPassword('samepasslong12');
     const res = await call(buildApp(), {
       method: 'POST', path: '/auth/change-password',
       body: { currentPassword: 'samepasslong12', newPassword: 'samepasslong12', confirmPassword: 'samepasslong12' },
@@ -548,7 +556,7 @@ describe('POST /auth/change-password — self-service, verified identity only', 
 
   it('rejects a new password shorter than 8 chars with 400', async () => {
     currentUser = me;
-    scenario.pwHash = hashPassword('oldpass1');
+    scenario.pwHash = await hashPassword('oldpass1');
     const res = await call(buildApp(), {
       method: 'POST', path: '/auth/change-password',
       body: { currentPassword: 'oldpass1', newPassword: 'short7!', confirmPassword: 'short7!' },
@@ -559,7 +567,7 @@ describe('POST /auth/change-password — self-service, verified identity only', 
 
   it('rejects a missing field with 400', async () => {
     currentUser = me;
-    scenario.pwHash = hashPassword('oldpass1');
+    scenario.pwHash = await hashPassword('oldpass1');
     const res = await call(buildApp(), {
       method: 'POST', path: '/auth/change-password',
       body: { currentPassword: 'oldpass1', newPassword: 'brandnewpass12' }, // no confirmPassword
@@ -580,7 +588,7 @@ describe('POST /auth/change-password — self-service, verified identity only', 
 
   it('ignores any body/param user id — only ever mutates req.user own hash', async () => {
     currentUser = me;
-    scenario.pwHash = hashPassword('oldpass1');
+    scenario.pwHash = await hashPassword('oldpass1');
     const res = await call(buildApp(), {
       method: 'POST', path: '/auth/change-password',
       body: {
@@ -611,7 +619,7 @@ describe('P1-identity Phase 0b — revocation + critical audit on user-admin cha
 
   it('change-password revokes ALL sessions, reissues THIS device, and audits PASSWORD_CHANGED', async () => {
     currentUser = me;
-    scenario.pwHash = hashPassword('oldpass1');
+    scenario.pwHash = await hashPassword('oldpass1');
     const res = await call(buildApp(), {
       method: 'POST', path: '/auth/change-password',
       body: { currentPassword: 'oldpass1', newPassword: 'brandnewpass12', confirmPassword: 'brandnewpass12' },
