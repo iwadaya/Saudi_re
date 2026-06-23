@@ -10,7 +10,11 @@
 #   scripts/verify-restore.sh [path/to/dump]     # default: newest in BACKUP_DIR
 # Config (environment):
 #   DATABASE_URL   Postgres connection string (its server hosts the scratch DB)  (required)
+#                  ALWAYS a DEDICATED verification server — this CREATE/DROPs DBs.
 #   BACKUP_DIR     Where to look for the newest dump   (default: /var/backups/universe)
+#   BACKUP_S3_BUCKET / BACKUP_S3_PREFIX / BACKUP_S3_ENDPOINT
+#                  When no LOCAL dump is found, fetch the newest from object
+#                  storage (backup and verify jobs run on separate disks/hosts).
 set -euo pipefail
 
 : "${DATABASE_URL:?DATABASE_URL is required (postgres connection string)}"
@@ -20,7 +24,22 @@ dump="${1:-}"
 if [ -z "$dump" ]; then
   dump="$(ls -1t "$BACKUP_DIR"/universe-*.dump 2>/dev/null | head -1 || true)"
 fi
-[ -n "$dump" ] && [ -f "$dump" ] || { echo "[verify-restore] no dump found (looked in ${1:-$BACKUP_DIR})" >&2; exit 1; }
+# No local dump → pull the newest from object storage when configured. Dump names
+# are UTC-timestamped (universe-YYYYMMDDTHHMMSSZ.dump) so lexical sort == newest.
+if [ -z "$dump" ] && [ -n "${BACKUP_S3_BUCKET:-}" ]; then
+  prefix="${BACKUP_S3_PREFIX:-backups}"
+  s3base="s3://${BACKUP_S3_BUCKET}/${prefix%/}"
+  endpoint_args=()
+  [ -n "${BACKUP_S3_ENDPOINT:-}" ] && endpoint_args=(--endpoint-url "$BACKUP_S3_ENDPOINT")
+  mkdir -p "$BACKUP_DIR"
+  latest="$(aws s3 ls "${endpoint_args[@]}" "$s3base/" | awk '/universe-.*\.dump$/ {print $4}' | sort | tail -1)"
+  if [ -n "$latest" ]; then
+    echo "[verify-restore] fetching $s3base/$latest" >&2
+    aws s3 cp "${endpoint_args[@]}" "$s3base/$latest" "$BACKUP_DIR/$latest" >&2
+    dump="$BACKUP_DIR/$latest"
+  fi
+fi
+[ -n "$dump" ] && [ -f "$dump" ] || { echo "[verify-restore] no dump found (looked in ${1:-$BACKUP_DIR}${BACKUP_S3_BUCKET:+ and s3://$BACKUP_S3_BUCKET})" >&2; exit 1; }
 echo "[verify-restore] verifying $dump" >&2
 
 # A unique scratch DB on the same server, and a connection URL pointing at it

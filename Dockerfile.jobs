@@ -1,15 +1,19 @@
 # Dockerfile.jobs — image for the Render Cron backup / restore-verification jobs.
 #
 # These jobs need the Postgres client binaries (pg_dump / pg_restore / psql),
-# which the Render native node runtime does not ship. The node-only cron jobs
-# (snapshot-cleanup, ldf-refresh) use runtime: node and do NOT use this image.
+# which the Render native node runtime does not ship, plus the AWS CLI for the
+# durable object-storage upload/fetch. The node-only cron jobs (snapshot-cleanup,
+# ldf-refresh) use runtime: node and do NOT use this image.
 #
 # Build context is the repo root; only the scripts are needed at runtime — the
 # Render Cron service supplies the command via `startCommand` in render.yaml.
 FROM debian:bookworm-slim
 
+# postgresql-client → pg_dump/pg_restore/psql; awscli → durable object-storage
+# upload/fetch (S3-compatible: AWS, MinIO, R2, Spaces, GCS via XML/HMAC) used by
+# backup-db.sh / verify-restore.sh when BACKUP_S3_BUCKET is set.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends postgresql-client ca-certificates curl bash coreutils \
+  && apt-get install -y --no-install-recommends postgresql-client awscli ca-certificates curl bash coreutils \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
