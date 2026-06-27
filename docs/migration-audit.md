@@ -12,11 +12,24 @@ The migration chain is file-based and applied through
 * uses a Postgres advisory lock to serialize app workers;
 * records only the filename, not a checksum.
 
+The runner is invoked by the standalone `npm run migrate:up`
+(`server/src/db/migrate.js`) from CI / predeploy hooks. It runs on app boot only
+when `RUN_MIGRATIONS_ON_BOOT=true`, which defaults to **false** — local dev and
+docker-compose opt in for convenience, while production applies migrations as a
+separate predeploy step so a bad migration fails the deploy instead of taking
+the API down on boot.
+
 Current SQL files run from `000_core_schema.sql` through
-`073_pricing_component_persistence_alignment.sql`. Number gaps exist at
-`041`, `058`, `060`, and `070`; that is operationally safe because ordering is by
-filename, but future migrations should not reuse those numbers unless
-they are known never to have shipped.
+`128_fac_document_meta.sql`. Number gaps exist at `041`, `058`, `060`, `070`,
+and `085`–`089`; that is operationally safe because ordering is by filename, but
+future migrations should not reuse those numbers unless they are known never to
+have shipped.
+
+> Note: the per-migration findings below were written at the 2026-05-01 audit,
+> which covered the chain through `073`. Migrations `074`–`128` have since been
+> added (facultative schema, AI / market-intelligence, import jobs, LDF
+> benchmarks, auth sessions, etc.); they follow the same additive, idempotent
+> conventions but are not individually catalogued here yet.
 
 ## Audit Findings
 

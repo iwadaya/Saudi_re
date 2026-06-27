@@ -81,7 +81,7 @@ server/
 - Patch updates with `buildPartialUpdate()` from `server/src/db/partialUpdate.js` — it enforces the column allow-list and translates absent vs explicit-null correctly.
 
 ### Database
-- Schema changes go in `server/src/db/migrations/NNN_description.sql`. They run automatically on boot (`RUN_MIGRATIONS_ON_BOOT=true`, on by default).
+- Schema changes go in `server/src/db/migrations/NNN_description.sql`. They run on boot only when `RUN_MIGRATIONS_ON_BOOT=true`, which defaults to **false**: production and CI apply migrations as a predeploy step (`npm run migrate:up`), while local dev and docker-compose opt into boot-time migrations for convenience.
 - Use `IF NOT EXISTS` and idempotent statements where possible — migrations re-run is safe.
 - Reference data seeds live in `server/src/startup/ensureReferenceData.js`.
 
