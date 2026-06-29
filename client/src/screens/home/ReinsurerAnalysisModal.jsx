@@ -12,9 +12,10 @@ import '../benchmark/benchmark.css';
    fit a single power-law curve y = a·x^b over its NP layers (one point per layer,
    x = √((L+A)·A) / EGNPI, y = ROL fraction) and compare each against a Global
    curve fitted over the entire filtered pool across all reinsurers. The pool can
-   be sliced by class of business and NP treaty type via three dropdown selectors.
-   Data comes from /api/reinsurer-analysis; the curve maths reuse fqHelpers and the
-   visual language mirrors FQScopeCurvePanel / FQBenchmarkModal. */
+   be sliced by class of business, NP treaty type, country, and region via the
+   dropdown selectors. Data comes from /api/reinsurer-analysis; the curve maths
+   reuse fqHelpers and the visual language mirrors FQScopeCurvePanel /
+   FQBenchmarkModal. */
 
 // Up to six reinsurers can be drawn at once; one palette colour each.
 const PALETTE = ['#00d4ff', '#a78bfa', '#4ade80', '#f59e0b', '#f472b6', '#facc15'];
@@ -123,7 +124,9 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
   const [selected, setSelected] = useState(() => new Set()); // reinsurer names
   const [cobFilter, setCobFilter] = useState('all');
   const [ttFilter, setTtFilter] = useState('all');
-  const [openKey, setOpenKey] = useState(null);   // 'reinsurer' | 'cob' | 'type' | null
+  const [countryFilter, setCountryFilter] = useState('all');
+  const [regionFilter, setRegionFilter] = useState('all');
+  const [openKey, setOpenKey] = useState(null);   // 'reinsurer' | 'cob' | 'type' | 'country' | 'region' | null
   const [reinsurerSearch, setReinsurerSearch] = useState('');
   const [sortKey, setSortKey] = useState('limit');
   const [sortDir, setSortDir] = useState('desc');
@@ -143,6 +146,8 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
     setData(null);
     setCobFilter('all');
     setTtFilter('all');
+    setCountryFilter('all');
+    setRegionFilter('all');
     setOpenKey(null);
     setReinsurerSearch('');
     api.getReinsurerAnalysis()
@@ -180,6 +185,8 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
   const reinsurers = useMemo(() => (Array.isArray(data?.reinsurers) ? data.reinsurers : []), [data]);
   const cobs = useMemo(() => (Array.isArray(data?.cobs) ? data.cobs : []), [data]);
   const treatyTypes = useMemo(() => (Array.isArray(data?.treatyTypes) ? data.treatyTypes : []), [data]);
+  const countries = useMemo(() => (Array.isArray(data?.countries) ? data.countries : []), [data]);
+  const regions = useMemo(() => (Array.isArray(data?.regions) ? data.regions : []), [data]);
 
   // Layer → (x, y) for the power-law fit, keeping the row fields for scatter +
   // the underlying-treaty roll-up. Drop anything that can't sit on a log curve.
@@ -196,8 +203,10 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
   const filtered = useMemo(() => mapped.filter((p) => {
     if (cobFilter !== 'all' && !(Array.isArray(p.cobs) ? p.cobs : []).includes(cobFilter)) return false;
     if (ttFilter !== 'all' && p.treatyType !== ttFilter) return false;
+    if (countryFilter !== 'all' && p.country !== countryFilter) return false;
+    if (regionFilter !== 'all' && p.region !== regionFilter) return false;
     return true;
-  }), [mapped, cobFilter, ttFilter]);
+  }), [mapped, cobFilter, ttFilter, countryFilter, regionFilter]);
 
   // Stable, ranked order for the selected reinsurers so colours don't reshuffle
   // as the user ticks rows on and off.
@@ -426,6 +435,8 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
 
   const cobOptions = [{ value: 'all', label: 'All COBs' }, ...cobs.map((c) => ({ value: c, label: c }))];
   const ttOptions = [{ value: 'all', label: 'All Types' }, ...treatyTypes.map((t) => ({ value: t, label: t }))];
+  const countryOptions = [{ value: 'all', label: 'All Countries' }, ...countries.map((c) => ({ value: c, label: c }))];
+  const regionOptions = [{ value: 'all', label: 'All Regions' }, ...regions.map((r) => ({ value: r, label: r }))];
 
   return (
     <div className="bm-modal-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -518,6 +529,30 @@ export default function ReinsurerAnalysisModal({ open, onClose }) {
                     onClose={() => setOpenKey((k) => (k === 'type' ? null : k))}
                   >
                     <OptionList options={ttOptions} value={ttFilter} onPick={(v) => { setTtFilter(v); setOpenKey(null); }} />
+                  </Dropdown>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 850, letterSpacing: '.12em', color: 'rgba(148,163,184,0.6)', textTransform: 'uppercase', marginBottom: 5 }}>Country</div>
+                  <Dropdown
+                    label={countryFilter === 'all' ? 'All Countries' : countryFilter} popoverWidth={220}
+                    open={openKey === 'country'}
+                    onToggle={() => setOpenKey((k) => (k === 'country' ? null : 'country'))}
+                    onClose={() => setOpenKey((k) => (k === 'country' ? null : k))}
+                  >
+                    <OptionList options={countryOptions} value={countryFilter} onPick={(v) => { setCountryFilter(v); setOpenKey(null); }} />
+                  </Dropdown>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 850, letterSpacing: '.12em', color: 'rgba(148,163,184,0.6)', textTransform: 'uppercase', marginBottom: 5 }}>Region</div>
+                  <Dropdown
+                    label={regionFilter === 'all' ? 'All Regions' : regionFilter} popoverWidth={220}
+                    open={openKey === 'region'}
+                    onToggle={() => setOpenKey((k) => (k === 'region' ? null : 'region'))}
+                    onClose={() => setOpenKey((k) => (k === 'region' ? null : k))}
+                  >
+                    <OptionList options={regionOptions} value={regionFilter} onPick={(v) => { setRegionFilter(v); setOpenKey(null); }} />
                   </Dropdown>
                 </div>
 

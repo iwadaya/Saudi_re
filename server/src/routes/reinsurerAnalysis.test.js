@@ -137,6 +137,15 @@ describe('GET /api/reinsurer-analysis', () => {
     expect(r.body.treatyTypes).toEqual(['Cat XL', 'Per Risk XL']);
   });
 
+  it('returns distinct, sorted countries and regions', async () => {
+    pushHandler((sql) => (sql.includes('pricing_leads') ? { rows: POOL_ROWS } : undefined));
+    const app = buildApp();
+    const r = await call(app, '/api/reinsurer-analysis');
+    expect(r.status).toBe(200);
+    expect(r.body.countries).toEqual(['Qatar', 'Saudi Arabia', 'UAE']);
+    expect(r.body.regions).toEqual(['Middle East']);
+  });
+
   it('returns empty facets and zero counts for an empty pool', async () => {
     pushHandler((sql) => (sql.includes('pricing_leads') ? { rows: [] } : undefined));
     const app = buildApp();
@@ -146,6 +155,8 @@ describe('GET /api/reinsurer-analysis', () => {
     expect(r.body.reinsurers).toEqual([]);
     expect(r.body.cobs).toEqual([]);
     expect(r.body.treatyTypes).toEqual([]);
+    expect(r.body.countries).toEqual([]);
+    expect(r.body.regions).toEqual([]);
     expect(r.body.pointCount).toBe(0);
     expect(r.body.treatyCount).toBe(0);
     expect(r.body.truncated).toBe(false);
