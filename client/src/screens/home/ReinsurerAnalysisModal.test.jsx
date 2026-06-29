@@ -27,13 +27,15 @@ const DATA = {
   ],
   cobs: ['Aviation', 'Energy', 'Marine', 'Property'],
   treatyTypes: ['Cat XL', 'Per Risk XL'],
+  countries: ['Qatar', 'Saudi Arabia', 'UAE'],
+  regions: ['Middle East'],
   pointCount: 5,
   treatyCount: 3,
   truncated: false,
   generatedAt: '2026-06-18T00:00:00.000Z',
 };
 
-const EMPTY = { points: [], reinsurers: [], cobs: [], treatyTypes: [], pointCount: 0, treatyCount: 0, truncated: false, generatedAt: '2026-06-18T00:00:00.000Z' };
+const EMPTY = { points: [], reinsurers: [], cobs: [], treatyTypes: [], countries: [], regions: [], pointCount: 0, treatyCount: 0, truncated: false, generatedAt: '2026-06-18T00:00:00.000Z' };
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 beforeEach(() => { apiMock.getReinsurerAnalysis.mockResolvedValue(DATA); });
@@ -55,6 +57,8 @@ describe('ReinsurerAnalysisModal', () => {
     expect(await screen.findByRole('button', { name: /\d+ selected/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /All COBs/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /All Types/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /All Countries/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /All Regions/ })).toBeInTheDocument();
 
     // Opening the reinsurer dropdown reveals the multi-select list controls.
     fireEvent.click(screen.getByRole('button', { name: /\d+ selected/ }));
@@ -65,6 +69,19 @@ describe('ReinsurerAnalysisModal', () => {
     // At least one fitted power-law equation (y = a · x^b) is shown.
     const eqs = await screen.findAllByText((t) => t.startsWith('y =') && t.includes('x^'));
     expect(eqs.length).toBeGreaterThan(0);
+  });
+
+  it('narrows the pool when a country filter is picked', async () => {
+    render(<ReinsurerAnalysisModal open onClose={vi.fn()} />);
+    await screen.findByRole('button', { name: /\d+ selected/ });
+
+    // Whole pool of 5 layers is in scope before filtering.
+    expect(screen.getByText(/5 of 5 layers in scope/)).toBeInTheDocument();
+
+    // Pick Qatar — only Munich Re's two layers remain.
+    fireEvent.click(screen.getByRole('button', { name: /All Countries/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Qatar' }));
+    expect(await screen.findByText(/2 of 5 layers in scope/)).toBeInTheDocument();
   });
 
   it('shows the empty state when no treaty carries a lead reinsurer', async () => {

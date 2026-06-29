@@ -26,8 +26,9 @@ const POINT_LIMIT = 8000;
 
 // GET /api/reinsurer-analysis
 //
-// Returns { points, reinsurers, cobs, treatyTypes, pointCount, treatyCount,
-//           truncated, generatedAt }. One point per NP layer.
+// Returns { points, reinsurers, cobs, treatyTypes, countries, regions,
+//           pointCount, treatyCount, truncated, generatedAt }. One point per
+//           NP layer.
 router.get(
   '/reinsurer-analysis',
   asyncHandler(async (_req, res) => {
@@ -113,6 +114,8 @@ router.get(
     const reinsurerMap = new Map();
     const cobSet = new Set();
     const treatyTypeSet = new Set();
+    const countrySet = new Set();
+    const regionSet = new Set();
 
     for (const p of points) {
       let agg = reinsurerMap.get(p.reinsurer);
@@ -125,6 +128,10 @@ router.get(
 
       for (const cob of p.cobs) cobSet.add(cob);
       if (p.treatyType) treatyTypeSet.add(p.treatyType);
+      // The country point field carries a '—' placeholder for unknowns; only
+      // real names become selectable facets.
+      if (p.country && p.country !== '—') countrySet.add(p.country);
+      if (p.region) regionSet.add(p.region);
     }
 
     const reinsurers = Array.from(reinsurerMap.values())
@@ -133,6 +140,8 @@ router.get(
 
     const cobs = Array.from(cobSet).sort((a, b) => a.localeCompare(b));
     const treatyTypes = Array.from(treatyTypeSet).sort((a, b) => a.localeCompare(b));
+    const countries = Array.from(countrySet).sort((a, b) => a.localeCompare(b));
+    const regions = Array.from(regionSet).sort((a, b) => a.localeCompare(b));
 
     const treatyCount = reinsurers.reduce((sum, r) => sum + r.treatyCount, 0);
 
@@ -141,6 +150,8 @@ router.get(
       reinsurers,
       cobs,
       treatyTypes,
+      countries,
+      regions,
       pointCount: points.length,
       treatyCount,
       truncated: points.length >= POINT_LIMIT,
