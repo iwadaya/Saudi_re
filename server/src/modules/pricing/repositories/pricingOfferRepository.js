@@ -11,6 +11,13 @@ function scheduleBenchmarkRefresh() {
   refreshBenchmarks(pool).catch(() => {});
 }
 
+// A checked-out transaction client has a .query and a .release; the Pool has
+// .query but no .release. Used to refuse the pool for multi-statement writes
+// that must be atomic (see replaceOffer / markDeclined).
+function isTxClient(db) {
+  return Boolean(db) && typeof db.query === 'function' && typeof db.release === 'function';
+}
+
 /**
  * Load the current uw_status for a contract. Throws a 404-style
  * Error when the contract doesn't exist; the error handler turns
@@ -37,7 +44,13 @@ export async function getOffer(contractId) {
 }
 
 export async function replaceOffer(contractId, offer, client) {
-  const db = client || pool;
+  // Multi-statement write (DELETE + INSERT + UPDATE contract). It MUST run on a
+  // caller-supplied transaction client so the three statements commit together;
+  // on the pool each would autocommit independently and a mid-sequence failure
+  // would leave a half-applied offer. Require the client rather than silently
+  // falling back to the pool.
+  if (!isTxClient(client)) throw new Error('replaceOffer requires a transaction client');
+  const db = client;
   await db.query('DELETE FROM public.contract_offer WHERE contract_id=$1', [contractId]);
   const { rows } = await db.query(
     `INSERT INTO public.contract_offer
@@ -58,7 +71,10 @@ export async function replaceOffer(contractId, offer, client) {
 }
 
 export async function markDeclined(contractId, reason, client, actor) {
-  const db = client || pool;
+  // Multi-statement write (status change + decline_reason + offer mirror). Must
+  // be atomic, so require the caller's transaction client (see replaceOffer).
+  if (!isTxClient(client)) throw new Error('markDeclined requires a transaction client');
+  const db = client;
   // Decline is legal from any non-terminal state; the machine blocks
   // only SIGNED → DECLINED and NTU → DECLINED (can't un-sign a treaty).
   const current = await loadCurrentStatus(contractId, client);
