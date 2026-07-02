@@ -29,8 +29,17 @@ const SKIPPABLE_PG_CODES = new Set([
   '42P01', // undefined_table (legacy DROP TABLE without IF EXISTS)
 ]);
 
-function isSkippableMigrationError(err) {
-  return SKIPPABLE_PG_CODES.has(err?.code);
+export function isSkippableMigrationError(err, stmt = '') {
+  const code = err?.code;
+  if (!SKIPPABLE_PG_CODES.has(code)) return false;
+  // 23505 (unique_violation) is only legitimately idempotent for seed INSERTs
+  // re-running against already-seeded data. On any OTHER statement a unique
+  // violation is an unexpected data-integrity failure that must surface (and
+  // roll the migration back), not be silently recorded as applied.
+  if (code === '23505') {
+    return /^\s*(?:WITH\b[\s\S]*?\b)?INSERT\b/i.test(stripComments(stmt));
+  }
+  return true;
 }
 
 function splitStatements(sql) {
@@ -292,7 +301,7 @@ async function runOneMigration(file, stmts) {
         await client.query('RELEASE SAVEPOINT migration_stmt');
         appliedCount++;
       } catch (err) {
-        if (isSkippableMigrationError(err)) {
+        if (isSkippableMigrationError(err, stmt)) {
           await client.query('ROLLBACK TO SAVEPOINT migration_stmt');
           await client.query('RELEASE SAVEPOINT migration_stmt');
           skippedCount++;

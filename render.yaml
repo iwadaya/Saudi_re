@@ -4,7 +4,10 @@ services:
     runtime: node
     region: frankfurt
     plan: starter
-    buildCommand: npm install && npm install --prefix client && npm install --prefix server && npm run build --prefix client
+    # npm ci (not npm install) so the deployed artifact matches the audited
+    # lockfiles exactly — install can silently resolve newer transitive
+    # versions and mutate package-lock.json, deploying something CI never saw.
+    buildCommand: npm ci && npm ci --prefix client && npm ci --prefix server && npm run build --prefix client
     # Migrations run as an explicit pre-deploy step. A failing migration
     # fails the deploy cleanly instead of taking the previous version
     # down on boot. RUN_MIGRATIONS_ON_BOOT stays at its default (false)
