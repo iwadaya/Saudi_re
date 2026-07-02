@@ -262,3 +262,52 @@ export async function deleteUploadedFile(storagePath) {
     throw err;
   }
 }
+
+// The only remote host we ever fetch stored assets from. Cloudinary secure_urls
+// are always https://res.cloudinary.com/... (see publicIdFromRemoteUrl). Keeping
+// the fetch pinned to this host is what makes stored-URL reads SSRF-safe: an
+// attacker who plants an arbitrary URL (e.g. http://169.254.169.254/...) in a
+// document row can never cause an outbound request off this allowlist.
+const REMOTE_ASSET_HOST = 'res.cloudinary.com';
+
+/**
+ * True only for URLs we are willing to fetch server-side: https to the
+ * Cloudinary asset host. Everything else (other hosts, http, private IPs,
+ * anything user-controlled) is rejected — the caller must fall back to a
+ * disk read or refuse.
+ */
+export function isFetchableRemoteAssetUrl(url) {
+  let u;
+  try { u = new URL(String(url)); } catch { return false; }
+  return u.protocol === 'https:' && u.hostname.toLowerCase() === REMOTE_ASSET_HOST;
+}
+
+/**
+ * SSRF-safe fetch of a stored remote asset. Refuses any URL that isn't https to
+ * the Cloudinary asset host, disables redirects (so an allowlisted URL can't
+ * bounce to an internal address), applies a timeout, and caps the response size.
+ *
+ * @param {string} url            the stored secure_url to fetch.
+ * @param {{ timeoutMs?: number, maxBytes?: number }} [opts]
+ * @returns {Promise<Buffer>}
+ */
+export async function fetchRemoteAsset(url, { timeoutMs = 15_000, maxBytes = 50 * 1024 * 1024 } = {}) {
+  if (!isFetchableRemoteAssetUrl(url)) {
+    throw new Error('refusing to fetch non-allowlisted remote asset URL');
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { redirect: 'error', signal: controller.signal });
+    if (!r.ok) throw new Error(`failed to fetch remote asset: ${r.status}`);
+    const declared = Number(r.headers?.get?.('content-length'));
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      throw new Error('remote asset exceeds size limit');
+    }
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length > maxBytes) throw new Error('remote asset exceeds size limit');
+    return buf;
+  } finally {
+    clearTimeout(timer);
+  }
+}

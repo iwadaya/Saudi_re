@@ -132,6 +132,16 @@ export function validateRuntimeEnv() {
 
 const MIN_SECRET_LEN = 32;
 
+// A secret is a "placeholder" if it's the old hard-coded literal OR matches the
+// CHANGE_ME* templates shipped in .env.example. The .env.example value
+// (CHANGE_ME_RUN_NODE_RANDOMBYTES_48_BASE64URL) is 43 chars and is NOT the
+// legacy literal, so without this it would sail past the length + equality
+// checks — meaning `cp .env.example .env` could boot production with a signing
+// key that is public in the repo (forgeable auth tokens → full auth bypass).
+function isPlaceholderSecret(value) {
+  return value === INSECURE_SECRET_PLACEHOLDER || /^CHANGE_ME/i.test(value);
+}
+
 /**
  * Pure secret-strength checker (testable). Returns an array of error strings;
  * empty means OK. Secrets are only enforced in production. SESSION_SECRET is
@@ -143,15 +153,15 @@ export function checkSecretsConfig({ nodeEnv: ne, authJwtSecret: auth, sessionSe
 
   if (!auth) {
     errors.push('AUTH_JWT_SECRET is required in production (set it as a secret env var).');
-  } else if (auth === INSECURE_SECRET_PLACEHOLDER) {
-    errors.push('AUTH_JWT_SECRET must not be the insecure development placeholder.');
+  } else if (isPlaceholderSecret(auth)) {
+    errors.push('AUTH_JWT_SECRET must not be a placeholder — generate a real secret (e.g. `node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'base64url\'))"`).');
   } else if (auth.length < MIN_SECRET_LEN) {
     errors.push(`AUTH_JWT_SECRET must be at least ${MIN_SECRET_LEN} characters.`);
   }
 
   if (sess) { // only enforce strength when a session secret is configured
-    if (sess === INSECURE_SECRET_PLACEHOLDER) {
-      errors.push('SESSION_SECRET must not be the insecure development placeholder.');
+    if (isPlaceholderSecret(sess)) {
+      errors.push('SESSION_SECRET must not be a placeholder — generate a real secret.');
     } else if (sess.length < MIN_SECRET_LEN) {
       errors.push(`SESSION_SECRET must be at least ${MIN_SECRET_LEN} characters.`);
     }

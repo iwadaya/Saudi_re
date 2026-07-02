@@ -75,11 +75,20 @@ export async function provisionFromClaims(client, claims, cfg) {
 
   if (existing.length) {
     const u = existing[0];
+    // A locally deactivated account must stay deactivated: an admin disabling a
+    // departed/suspended user is the authoritative signal. Re-activating on the
+    // next IdP login (offboarding lag, or a local-only disable) would silently
+    // undo deprovisioning, so we refuse to mint a session for an inactive user.
+    if (u.is_active === false) {
+      throw Object.assign(new Error('account is deactivated'), { code: 'ACCOUNT_DEACTIVATED' });
+    }
     const roleChanged = String(u.role_id) !== String(roleId);
+    // NOTE: is_active is deliberately NOT written here — provisioning never
+    // (re)activates an account; activation is an explicit admin action.
     await client.query(
       `UPDATE public.uw_user
           SET role_id = $2, display_name = $3, email = $4,
-              auth_provider = 'SSO', is_active = true, updated_at = now()
+              auth_provider = 'SSO', updated_at = now()
         WHERE user_id = $1`,
       [u.user_id, roleId, displayName, email],
     );

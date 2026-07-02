@@ -130,6 +130,10 @@ router.get('/auth/sso/callback', asyncHandler(async (req, res) => {
     await cl.query('COMMIT');
   } catch (e) {
     await cl.query('ROLLBACK').catch(() => {});
+    if (e?.code === 'ACCOUNT_DEACTIVATED') {
+      logger.warn('sso callback: login refused for deactivated account', { sub: claims.sub });
+      return loginError(res, 'account_disabled');
+    }
     logger.error('sso callback: provisioning/session failed', { error: e.message });
     return loginError(res, 'failed');
   } finally {

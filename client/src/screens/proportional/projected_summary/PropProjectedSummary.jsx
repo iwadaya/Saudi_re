@@ -41,6 +41,10 @@ export default function PropProjectedSummary() {
 
   useEffect(() => {
     if (!contractId) return;
+    // Guard against a stale response overwriting a newer one: switching contract
+    // or toggling quote mode re-fires this effect, and an older in-flight load
+    // must not clobber the current selection's projected figures.
+    let cancelled = false;
     setLoading(true); setError(null);
     (async () => {
       try {
@@ -56,11 +60,14 @@ export default function PropProjectedSummary() {
         const qm = appState.quoteMode ? { quote: true } : undefined;
         const contract = await api.getContract(contractId, qm).catch(() => ({}));
         const t = buildTreatyTerms(contract, appState.propTreatyDetail || {});
+        if (cancelled) return;
         setTerms(t);
         const { rows: standardRows, source: src, usedPlaceholderLdfs: placeholder } = await loadProjectedRows(contractId, qm);
+        const lc = await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() }));
+        if (cancelled) return;
         setSource(src || '');
         setUsedPlaceholderLdfs(!!placeholder);
-        setLossCat(await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() })));
+        setLossCat(lc);
 
         if (standardRows && standardRows.length > 0) {
           // Raw projection outputs only. Loss components and the derived
@@ -76,11 +83,14 @@ export default function PropProjectedSummary() {
           setResults([]);
         }
       } catch (e) {
-        logger.error('Projected Summary Load Failed', e);
-        setError(e.message || 'Failed to load data');
+        if (!cancelled) {
+          logger.error('Projected Summary Load Failed', e);
+          setError(e.message || 'Failed to load data');
+        }
       }
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     })();
+    return () => { cancelled = true; };
   }, [appState.propTreatyDetail, appState.quoteMode, contractId]);
 
   /* Staleness: were the incurred (paid/OS) or premium triangles saved after

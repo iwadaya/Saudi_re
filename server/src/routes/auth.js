@@ -445,24 +445,41 @@ router.post('/auth/change-password', requireAuth, asyncHandler(async (req, res) 
 }));
 
 // ── GET /api/auth/users — list all users
-// Safe fields only; login screen uses this to populate the user selector
+// This endpoint is PUBLIC (the login screen populates its user selector from it
+// before anyone is authenticated). Unauthenticated callers therefore get a
+// MINIMAL projection — display name + role label only — never emails, offices,
+// hierarchy levels or mandate/authority limits. Exposing those pre-auth is a
+// PII leak and hands an attacker the material for targeted password spraying.
+// Authenticated callers (e.g. the admin User Management screen) get the full
+// record they need to render the admin table.
 router.get('/auth/users', asyncHandler(async (req, res) => {
+  const authed = Boolean(req.user);
   try {
     const { rows } = await pool.query(
-      `SELECT
-         u.user_id, u.username,
-         REPLACE(u.display_name, 'Treaty Underwriter', 'Underwriter') AS display_name,
-         u.email, u.office,
-         u.is_active,
-         REPLACE(r.role_name, 'Treaty Underwriter', 'Underwriter') AS role_name,
-         r.role_code, r.hierarchy_level, r.authority_limit_usd,
-         m.treaty_limit_usd, m.single_risk_limit_usd, m.treaty_type_scope,
-         m.approvals_required
-       FROM public.uw_user u
-       JOIN public.uw_role r ON r.role_id = u.role_id
-       LEFT JOIN public.user_mandate m ON m.user_id = u.user_id
-       WHERE u.is_active = true
-       ORDER BY u.display_name`
+      authed
+        ? `SELECT
+             u.user_id, u.username,
+             REPLACE(u.display_name, 'Treaty Underwriter', 'Underwriter') AS display_name,
+             u.email, u.office,
+             u.is_active,
+             REPLACE(r.role_name, 'Treaty Underwriter', 'Underwriter') AS role_name,
+             r.role_code, r.hierarchy_level, r.authority_limit_usd,
+             m.treaty_limit_usd, m.single_risk_limit_usd, m.treaty_type_scope,
+             m.approvals_required
+           FROM public.uw_user u
+           JOIN public.uw_role r ON r.role_id = u.role_id
+           LEFT JOIN public.user_mandate m ON m.user_id = u.user_id
+           WHERE u.is_active = true
+           ORDER BY u.display_name`
+        : `SELECT
+             u.user_id, u.username,
+             REPLACE(u.display_name, 'Treaty Underwriter', 'Underwriter') AS display_name,
+             REPLACE(r.role_name, 'Treaty Underwriter', 'Underwriter') AS role_name,
+             r.role_code
+           FROM public.uw_user u
+           JOIN public.uw_role r ON r.role_id = u.role_id
+           WHERE u.is_active = true
+           ORDER BY u.display_name`
     );
     if (rows.length) return res.json(rows);
     // No users yet — return static demo fallback
