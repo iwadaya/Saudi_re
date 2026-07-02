@@ -16,7 +16,7 @@
 //     include user context explicitly we log it; we never grab session
 //     data implicitly.
 
-import { getAuthHeaders } from './auth';
+import { getAuthHeaders, getCsrfToken } from './auth';
 import { getLastRequestId } from './httpClient.js';
 
 const ENDPOINT = '/api/client-events';
@@ -109,10 +109,19 @@ export async function reportError(type, error, extra = {}) {
       return '';
     })();
 
+    // Echo the readable CSRF cookie so this state-changing POST passes the
+    // server's double-submit check, mirroring the api.ts request path. Absent
+    // when logged out — the header is simply omitted then.
+    const csrf = getCsrfToken();
     await fetch(`${base}${ENDPOINT}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+      },
       body: JSON.stringify(payload),
+      credentials: 'include',  // send the httpOnly auth + csrf cookies
       keepalive: true,  // allow the request to outlive the page on unload
     });
     return true;

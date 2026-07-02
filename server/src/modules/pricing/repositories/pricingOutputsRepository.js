@@ -109,7 +109,12 @@ export async function saveCompositePricing(payload) {
 
   const schemaFlags = await getPricingSchemaFlags();
   // Snapshot the prior outputs BEFORE the write so the PRICED audit can diff them.
-  const priorOutputs = await getPricingOutputs(contractId).catch(() => null);
+  const priorOutputs = await getPricingOutputs(contractId).catch((error) => {
+    // Non-fatal: the diff in the PRICED audit is best-effort. Still surface the
+    // failure so a real DB problem isn't invisible.
+    logger.warn('[pricing/save] failed to load prior outputs for audit diff', { contractId, error: error.message });
+    return null;
+  });
 
   const updatedAt = await withTransaction(async (client) => {
     await assertParentEntityUnchanged(client, {
@@ -128,25 +133,30 @@ export async function saveCompositePricing(payload) {
            actuarial_margin, actual_margin, uw_margin)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
          ON CONFLICT (contract_id) DO UPDATE SET
-          epi=COALESCE(EXCLUDED.epi, contract_pricing_outputs.epi),
-          attritional_ratio=COALESCE(EXCLUDED.attritional_ratio, contract_pricing_outputs.attritional_ratio),
-          large_loss_load=COALESCE(EXCLUDED.large_loss_load, contract_pricing_outputs.large_loss_load),
-          cat_loss_load=COALESCE(EXCLUDED.cat_loss_load, contract_pricing_outputs.cat_loss_load),
-          commission_ratio=COALESCE(EXCLUDED.commission_ratio, contract_pricing_outputs.commission_ratio),
-          brokerage_ratio=COALESCE(EXCLUDED.brokerage_ratio, contract_pricing_outputs.brokerage_ratio),
-          tax_ratio=COALESCE(EXCLUDED.tax_ratio, contract_pricing_outputs.tax_ratio),
-          technical_result=COALESCE(EXCLUDED.technical_result, contract_pricing_outputs.technical_result),
-          max_commission=COALESCE(EXCLUDED.max_commission, contract_pricing_outputs.max_commission),
-          target_margin=COALESCE(EXCLUDED.target_margin, contract_pricing_outputs.target_margin),
+          -- The composite payload is a FULL snapshot of the pricing screen, so
+          -- overwrite every field with EXCLUDED (never COALESCE): an explicitly
+          -- blanked money field must persist as NULL, not silently retain the
+          -- prior value. This keeps all three writers (here,
+          -- upsertPricingOutputs, upsertPricingOutputsWithClient) consistent.
+          epi=EXCLUDED.epi,
+          attritional_ratio=EXCLUDED.attritional_ratio,
+          large_loss_load=EXCLUDED.large_loss_load,
+          cat_loss_load=EXCLUDED.cat_loss_load,
+          commission_ratio=EXCLUDED.commission_ratio,
+          brokerage_ratio=EXCLUDED.brokerage_ratio,
+          tax_ratio=EXCLUDED.tax_ratio,
+          technical_result=EXCLUDED.technical_result,
+          max_commission=EXCLUDED.max_commission,
+          target_margin=EXCLUDED.target_margin,
           uw_comment=EXCLUDED.uw_comment,
           offer_status=EXCLUDED.offer_status,
           offer_line=EXCLUDED.offer_line,
           offer_comment=EXCLUDED.offer_comment,
           offer_approver=EXCLUDED.offer_approver,
-          signed_line_pct=COALESCE(EXCLUDED.signed_line_pct, contract_pricing_outputs.signed_line_pct),
-          actuarial_margin=COALESCE(EXCLUDED.actuarial_margin, contract_pricing_outputs.actuarial_margin),
-          actual_margin=COALESCE(EXCLUDED.actual_margin, contract_pricing_outputs.actual_margin),
-          uw_margin=COALESCE(EXCLUDED.uw_margin, contract_pricing_outputs.uw_margin),
+          signed_line_pct=EXCLUDED.signed_line_pct,
+          actuarial_margin=EXCLUDED.actuarial_margin,
+          actual_margin=EXCLUDED.actual_margin,
+          uw_margin=EXCLUDED.uw_margin,
           updated_at=now()`,
         [
           contractId,
@@ -197,38 +207,39 @@ export async function saveCompositePricing(payload) {
     }
 
     if (Array.isArray(components)) {
-      await client.query('SAVEPOINT sp_components');
-      try {
-        await client.query('DELETE FROM public.pricing_components WHERE contract_id=$1', [contractId]);
-        const componentColumns = schemaFlags.componentColumns || new Set();
-        // Optional columns are gated on the live schema, but the gate is identical
-        // for every component — so resolve the present set once and batch every row
-        // into a single INSERT instead of one round-trip per component.
-        const optionalColumns = [
-          ['selected', (c) => (c.selected == null ? true : c.selected)],
-          ['actuarial_value', (c) => c.actuarial_value ?? null],
-          ['uw_value', (c) => c.uw_value ?? c.underwriter_value ?? null],
-          ['underwriter_value', (c) => c.underwriter_value ?? c.uw_value ?? null],
-          ['market_value', (c) => c.market_value ?? null],
-          ['actual_stats_value', (c) => c.actual_stats_value ?? null],
-          ['comment', (c) => c.comment ?? null],
-          ['display_order', (c) => c.display_order ?? null],
-          ['exposure_value', (c) => c.exposure_value ?? null],
-        ].filter(([column]) => componentColumns.has(column));
-        const componentsInsert = buildBatchInsert({
-          table: 'public.pricing_components',
-          columns: ['contract_id', 'component_name', ...optionalColumns.map(([column]) => column)],
-          rows: components.map((component) => [
-            component.component_name,
-            ...optionalColumns.map(([, valueOf]) => valueOf(component)),
-          ]),
-          leadingId: contractId,
-        });
-        if (componentsInsert) await client.query(componentsInsert.sql, componentsInsert.params);
-      } catch (error) {
-        logger.error('[pricing/save] components save failed, continuing without components', { error: error.message });
-        await client.query('ROLLBACK TO SAVEPOINT sp_components').catch(() => {});
-      }
+      // Previously wrapped in SAVEPOINT sp_components with a swallow-and-continue
+      // catch: on ANY failure the components were rolled back but the outer txn
+      // still committed and the caller was told the save succeeded — leaving
+      // stale components behind while reporting success. That silent data loss is
+      // unacceptable on a financial path, so a component failure now propagates
+      // and rolls back the WHOLE save (withTransaction ROLLBACKs + rethrows), and
+      // the controller returns an error instead of a false { ok: true }.
+      await client.query('DELETE FROM public.pricing_components WHERE contract_id=$1', [contractId]);
+      const componentColumns = schemaFlags.componentColumns || new Set();
+      // Optional columns are gated on the live schema, but the gate is identical
+      // for every component — so resolve the present set once and batch every row
+      // into a single INSERT instead of one round-trip per component.
+      const optionalColumns = [
+        ['selected', (c) => (c.selected == null ? true : c.selected)],
+        ['actuarial_value', (c) => c.actuarial_value ?? null],
+        ['uw_value', (c) => c.uw_value ?? c.underwriter_value ?? null],
+        ['underwriter_value', (c) => c.underwriter_value ?? c.uw_value ?? null],
+        ['market_value', (c) => c.market_value ?? null],
+        ['actual_stats_value', (c) => c.actual_stats_value ?? null],
+        ['comment', (c) => c.comment ?? null],
+        ['display_order', (c) => c.display_order ?? null],
+        ['exposure_value', (c) => c.exposure_value ?? null],
+      ].filter(([column]) => componentColumns.has(column));
+      const componentsInsert = buildBatchInsert({
+        table: 'public.pricing_components',
+        columns: ['contract_id', 'component_name', ...optionalColumns.map(([column]) => column)],
+        rows: components.map((component) => [
+          component.component_name,
+          ...optionalColumns.map(([, valueOf]) => valueOf(component)),
+        ]),
+        leadingId: contractId,
+      });
+      if (componentsInsert) await client.query(componentsInsert.sql, componentsInsert.params);
     }
 
     if (leads) {

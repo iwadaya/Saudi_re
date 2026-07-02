@@ -170,16 +170,37 @@ export function checkSecretsConfig({ nodeEnv: ne, authJwtSecret: auth, sessionSe
 }
 
 /**
+ * Pure demo-auth fence (testable). ALLOW_DEMO_AUTH turns on the universal
+ * demo-password backdoor AND the x-user-* header auth bypass (see
+ * middleware/requestContext.js, routes/auth.js) — dev/test conveniences that
+ * would be a full auth bypass in production. Returns an array of error strings;
+ * empty means OK. Only enforced in production.
+ */
+export function checkDemoAuthConfig({ nodeEnv: ne, allowDemoAuth } = {}) {
+  const errors = [];
+  if (ne !== 'production') return errors;
+  if (toBool(allowDemoAuth, false)) {
+    errors.push('ALLOW_DEMO_AUTH must not be enabled in production — it activates the demo-password backdoor and header-based auth bypass. Unset it (or set it to false) before deploying.');
+  }
+  return errors;
+}
+
+/**
  * Fail-fast secret validation, called at the very top of bootstrap. In
- * production an invalid/missing secret is fatal — we console.error and exit(1)
- * rather than boot with forgeable tokens.
+ * production an invalid/missing secret — or an enabled demo-auth backdoor — is
+ * fatal: we console.error and exit(1) rather than boot with forgeable tokens or
+ * an open auth bypass.
  */
 export function validateEnv() {
-  const errors = checkSecretsConfig({
-    nodeEnv: process.env.NODE_ENV || 'development',
-    authJwtSecret: process.env.AUTH_JWT_SECRET || '',
-    sessionSecret: process.env.SESSION_SECRET || '',
-  });
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  const errors = [
+    ...checkSecretsConfig({
+      nodeEnv,
+      authJwtSecret: process.env.AUTH_JWT_SECRET || '',
+      sessionSecret: process.env.SESSION_SECRET || '',
+    }),
+    ...checkDemoAuthConfig({ nodeEnv, allowDemoAuth: process.env.ALLOW_DEMO_AUTH }),
+  ];
   if (errors.length) {
     console.error('[env] Refusing to start with an insecure configuration:\n  - ' + errors.join('\n  - '));
     process.exit(1);

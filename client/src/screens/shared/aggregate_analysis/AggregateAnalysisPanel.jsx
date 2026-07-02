@@ -74,14 +74,20 @@ export default function AggregateAnalysisPanel({ contractId, onMeta }) {
   onMetaRef.current = onMeta;
 
   useEffect(() => {
+    // Guard against a stale response for a previous contractId overwriting the
+    // current one's data.
+    let cancelled = false;
     api.getAggDrilldown(contractId).then(d => {
+      if (cancelled) return;
       setData(d);
       onMetaRef.current?.(d?.contract || null);
       setLoading(false);
     }).catch(e => {
+      if (cancelled) return;
       setError(e.message);
       setLoading(false);
     });
+    return () => { cancelled = true; };
   }, [contractId]);
 
   // Totals

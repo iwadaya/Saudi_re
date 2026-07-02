@@ -22,9 +22,13 @@ function fakeQuery(sql, params = []) {
     const taken = scenario.takenUsernames || [];
     return Promise.resolve({ rows: taken.includes(params[0]) ? [{ exists: 1 }] : [] });
   }
-  // Caller authority gate.
+  // A5 target-seniority lookup (getUserHierarchyLevel): the target user's level.
   if (sql.includes('SELECT r.hierarchy_level FROM public.uw_user u JOIN public.uw_role r')) {
-    return Promise.resolve({ rows: scenario.callerLevel != null ? [{ hierarchy_level: scenario.callerLevel }] : [] });
+    return Promise.resolve({ rows: scenario.targetLevel != null ? [{ hierarchy_level: scenario.targetLevel }] : [] });
+  }
+  // A5 role-seniority lookup (getRoleHierarchyLevel): the assigned role's level.
+  if (sql.includes('SELECT hierarchy_level FROM public.uw_role WHERE role_id')) {
+    return Promise.resolve({ rows: scenario.newRoleLevel != null ? [{ hierarchy_level: scenario.newRoleLevel }] : [] });
   }
   if (sql.includes('INSERT INTO public.uw_user')) {
     return Promise.resolve({ rows: [{
@@ -200,6 +204,58 @@ describe('privileged auth gates (verified req.user)', () => {
   });
 });
 
+describe('A5 — privilege-escalation guards on user/mandate admin', () => {
+  const cu = { userId: 'u-cu', roleCode: 'CU', hierarchyLevel: 2, displayName: 'CU' };
+
+  it('PATCH /auth/users cannot assign a role senior to the actor (403)', async () => {
+    currentUser = cu;
+    scenario.newRoleLevel = 1; // CE — senior to the CU actor (level 2)
+    const res = await call(buildApp(), { method: 'PATCH', path: '/auth/users/u-target', body: { role_id: 'role-ce' } });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/senior/i);
+  });
+
+  it('PATCH /auth/users cannot modify a target user senior to the actor (403)', async () => {
+    currentUser = cu;
+    scenario.targetLevel = 1; // the target is a CE
+    const res = await call(buildApp(), { method: 'PATCH', path: '/auth/users/u-boss', body: { office: 'Dubai' } });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/senior/i);
+  });
+
+  it('PATCH /auth/users cannot modify the actor OWN account — no self-promotion (403)', async () => {
+    currentUser = cu;
+    const res = await call(buildApp(), { method: 'PATCH', path: '/auth/users/u-cu', body: { role_id: 'role-ce' } });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/your own account/i);
+  });
+
+  it('PATCH /auth/users allows a peer/junior role change on a junior target (200)', async () => {
+    currentUser = cu;
+    scenario.newRoleLevel = 5; // assigning an Underwriter role
+    scenario.targetLevel = 5;  // target is a junior Underwriter
+    scenario.userBefore = { role_id: 'role-old', is_active: true };
+    scenario.userAfter = { role_id: 'role-uw', is_active: true };
+    const res = await call(buildApp(), { method: 'PATCH', path: '/auth/users/u-target', body: { role_id: 'role-uw' } });
+    expect(res.status).toBe(200);
+  });
+
+  it('PUT /auth/mandates cannot raise the actor OWN mandate (403)', async () => {
+    currentUser = cu;
+    const res = await call(buildApp(), { method: 'PUT', path: '/auth/mandates/u-cu', body: { treaty_limit_usd: 999999999 } });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/your own mandate/i);
+  });
+
+  it('PUT /auth/mandates cannot modify the mandate of a senior user (403)', async () => {
+    currentUser = cu;
+    scenario.targetLevel = 1; // senior target
+    const res = await call(buildApp(), { method: 'PUT', path: '/auth/mandates/u-boss', body: { treaty_limit_usd: 1 } });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/senior/i);
+  });
+});
+
 describe('password hashing helpers', () => {
   it('hashPassword produces a scrypt$ string that verifyPassword accepts', async () => {
     const stored = await hashPassword('secret1');
@@ -368,6 +424,24 @@ describe('POST /auth/login', () => {
     const app = buildApp();
     const res = await call(app, { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'nope' } });
     expect(res.status).toBe(401);
+  });
+
+  // A4 — no user-enumeration oracle.
+  it('an unknown username returns the SAME generic 401 as a bad password (no enumeration)', async () => {
+    scenario.loginUser = null; // v_user_mandate finds nothing
+    const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ghost', password: 'whatever12345' } });
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: 'Invalid credentials.' });
+  });
+
+  it('a locked account returns a uniform generic 401 (lock state not disclosed) and issues no session', async () => {
+    scenario.loginUser = { ...adaRow(await hashPassword('realpass1')), locked_until: new Date(Date.now() + 3600e3).toISOString() };
+    const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'realpass1' } });
+    // Same status + body as a bad password — no "Account locked" message, no 403.
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: 'Invalid credentials.' });
+    // The lock is enforced: even the correct password grants no auth cookie.
+    expect((res.cookies || []).some((c) => c.name === 'auth_token' && !c.cleared)).toBe(false);
   });
 
   it('still accepts demo accounts with demo2026 when ALLOW_DEMO_AUTH=true', async () => {

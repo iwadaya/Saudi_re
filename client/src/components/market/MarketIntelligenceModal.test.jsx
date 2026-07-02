@@ -160,6 +160,30 @@ describe('MarketIntelligenceModal', () => {
     expect(screen.getByText(/Hardening market/i)).toBeInTheDocument();
   });
 
+  it('renders an http(s) source URL as a clickable link', async () => {
+    renderModal();
+    await waitFor(() => expect(screen.getByText(/^Sources$/i)).toBeInTheDocument());
+    const link = screen.getByRole('link', { name: 'https://example.com/source' });
+    expect(link).toHaveAttribute('href', 'https://example.com/source');
+  });
+
+  it('does not render a javascript: source URL as a link (shown as text)', async () => {
+    const maliciousReport = {
+      ...REPORT_FIXTURE,
+      sources: [{ idx: 1, url: 'javascript:alert(1)', title: 'Bad source', snippet: 's' }],
+    };
+    apiMock.getLatestMarketReport.mockResolvedValue(maliciousReport);
+    apiMock.getTreatyBenchmarks.mockResolvedValue(BENCHMARKS_FIXTURE);
+    apiMock.getTreatyRecommendations.mockResolvedValue({ recommendations: [] });
+    render(
+      <MemoryRouter><MarketIntelligenceModal {...baseProps} /></MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText(/^Sources$/i)).toBeInTheDocument());
+    // The URL text is still shown for transparency, but never as an anchor.
+    expect(screen.getByText('javascript:alert(1)')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'javascript:alert(1)' })).toBeNull();
+  });
+
   it('falls back to generate when latest returns 404', async () => {
     apiMock.getLatestMarketReport.mockRejectedValueOnce(new FakeHttpError(404, '{"error":"none"}'));
     apiMock.generateMarketReport.mockResolvedValue(REPORT_FIXTURE);

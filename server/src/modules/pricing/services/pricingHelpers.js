@@ -16,9 +16,14 @@ export function parseOfferLinePct({ line_pct, written_line_pct }) {
   try {
     const parsed = JSON.parse(line_pct);
     if (typeof parsed === 'object' && parsed && !Array.isArray(parsed)) {
+      // Average every present per-layer line, INCLUDING legitimate 0% layers.
+      // Only null/undefined/NaN and negative entries are dropped; excluding
+      // 0% layers (the old `n > 0`) biased the mean upward and silently
+      // discarded layers the cedant genuinely wrote at 0%. No per-layer
+      // weight is available in this map, so this is an unweighted mean.
       const vals = Object.values(parsed)
         .map((v) => parseFloat(String(v).replace(/%/g, '')))
-        .filter((n) => Number.isFinite(n) && n > 0);
+        .filter((n) => Number.isFinite(n) && n >= 0);
       return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
     }
   } catch {}
@@ -32,9 +37,11 @@ export function parseSignedLinePct(signed_line_pct) {
   try {
     const parsed = JSON.parse(signed_line_pct);
     if (typeof parsed === 'object' && parsed && !Array.isArray(parsed)) {
+      // Include 0% layers in the mean (see parseOfferLinePct) — drop only
+      // null/undefined/NaN and negatives. Unweighted: no per-layer weight here.
       const vals = Object.values(parsed)
         .map((v) => parseFloat(String(v).replace(/%/g, '')))
-        .filter((n) => Number.isFinite(n) && n > 0);
+        .filter((n) => Number.isFinite(n) && n >= 0);
       return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
     }
     return numOrNull(parsed);

@@ -81,11 +81,20 @@ jobs:
         run: |
           set -euo pipefail
           PKG_DIR=node_modules/@rolldown/binding-linux-x64-gnu
+          # Pinned to 1.0.1 to match package-lock.json; the tarball is verified
+          # against the lockfile's recorded sha512 integrity BEFORE extraction so
+          # a tampered/MITM'd tarball can never execute as a native .node binding.
+          EXPECTED="sha512-XABVmGp9Tg0WspTVvwduTc4fpqy6JnAUrSQe6OuyqD/03nI7r0O9OWUkMIwFrjKAIqolvqoA4ZrJppgwE0Gxmw=="
           if [ ! -f "$PKG_DIR/rolldown-binding.linux-x64-gnu.node" ]; then
             mkdir -p "$PKG_DIR"
-            curl -sSL https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.0.1.tgz \
-              | tar -xz --strip-components=1 -C "$PKG_DIR"
-            echo "rolldown linux binding planted:"
+            curl -sSL https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.0.1.tgz -o /tmp/rolldown.tgz
+            ACTUAL="sha512-$(openssl dgst -sha512 -binary /tmp/rolldown.tgz | openssl base64 -A)"
+            if [ "$ACTUAL" != "$EXPECTED" ]; then
+              echo "rolldown tarball integrity mismatch! expected=$EXPECTED actual=$ACTUAL" >&2
+              exit 1
+            fi
+            tar -xz --strip-components=1 -C "$PKG_DIR" -f /tmp/rolldown.tgz
+            echo "rolldown linux binding planted (integrity verified):"
             ls -la "$PKG_DIR"
           else
             echo "rolldown linux binding already present — no-op"
@@ -164,10 +173,17 @@ jobs:
         run: |
           set -euo pipefail
           PKG_DIR=node_modules/@rolldown/binding-linux-x64-gnu
+          # Verify the tarball against the lockfile's sha512 before extracting.
+          EXPECTED="sha512-XABVmGp9Tg0WspTVvwduTc4fpqy6JnAUrSQe6OuyqD/03nI7r0O9OWUkMIwFrjKAIqolvqoA4ZrJppgwE0Gxmw=="
           if [ ! -f "$PKG_DIR/rolldown-binding.linux-x64-gnu.node" ]; then
             mkdir -p "$PKG_DIR"
-            curl -sSL https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.0.1.tgz \
-              | tar -xz --strip-components=1 -C "$PKG_DIR"
+            curl -sSL https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.0.1.tgz -o /tmp/rolldown.tgz
+            ACTUAL="sha512-$(openssl dgst -sha512 -binary /tmp/rolldown.tgz | openssl base64 -A)"
+            if [ "$ACTUAL" != "$EXPECTED" ]; then
+              echo "rolldown tarball integrity mismatch! expected=$EXPECTED actual=$ACTUAL" >&2
+              exit 1
+            fi
+            tar -xz --strip-components=1 -C "$PKG_DIR" -f /tmp/rolldown.tgz
           fi
 
       - name: Run DB migrations

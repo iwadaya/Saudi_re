@@ -7,7 +7,7 @@
 // strips those statements; this test pins the regex down.
 
 import { describe, it, expect } from 'vitest';
-import { isTxControl, stripComments } from './runMigrations.js';
+import { isTxControl, stripComments, isSkippableMigrationError } from './runMigrations.js';
 
 describe('isTxControl', () => {
   it.each([
@@ -64,5 +64,31 @@ COMMIT;`;
     expect(stripComments('-- leading\nBEGIN;')).toBe('BEGIN;');
     expect(stripComments('/* block */ BEGIN;')).toBe('BEGIN;');
     expect(stripComments('CREATE TABLE foo (id int); -- trailing')).toBe('CREATE TABLE foo (id int);');
+  });
+});
+
+describe('isSkippableMigrationError — 23505 scoped to seed INSERTs', () => {
+  const dup = { code: '23505' };
+
+  it('skips a unique_violation on a seed INSERT (idempotent re-run)', () => {
+    expect(isSkippableMigrationError(dup, "INSERT INTO public.country (code) VALUES ('US')")).toBe(true);
+    expect(isSkippableMigrationError(dup, '  insert into foo values (1)')).toBe(true);
+    expect(isSkippableMigrationError(dup, '-- seed\nINSERT INTO foo VALUES (1)')).toBe(true);
+    expect(isSkippableMigrationError(dup, 'WITH x AS (SELECT 1) INSERT INTO foo SELECT * FROM x')).toBe(true);
+  });
+
+  it('does NOT skip a unique_violation on a non-INSERT statement (must surface)', () => {
+    expect(isSkippableMigrationError(dup, 'ALTER TABLE foo ADD CONSTRAINT u UNIQUE (id)')).toBe(false);
+    expect(isSkippableMigrationError(dup, 'CREATE UNIQUE INDEX ix ON foo (id)')).toBe(false);
+    expect(isSkippableMigrationError(dup, 'UPDATE foo SET id = 1')).toBe(false);
+  });
+
+  it('still skips the pure idempotency codes regardless of statement', () => {
+    expect(isSkippableMigrationError({ code: '42P07' }, 'CREATE TABLE foo (id int)')).toBe(true); // duplicate_table
+    expect(isSkippableMigrationError({ code: '42701' }, 'ALTER TABLE foo ADD COLUMN id int')).toBe(true); // duplicate_column
+  });
+
+  it('never skips a genuine programming error (e.g. undefined_column)', () => {
+    expect(isSkippableMigrationError({ code: '42703' }, 'SELECT bogus FROM foo')).toBe(false);
   });
 });

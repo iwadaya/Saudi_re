@@ -11,6 +11,23 @@
 // (...),(...),(...) statement that shares a leading `$1` parameter
 // (the parent entity id). Returns null when there are no rows so the
 // caller can skip the query entirely.
+//
+// Table/column names are interpolated (values are always parameterised),
+// so — like partialUpdate.js — they are validated against an identifier
+// allow-list and the helper throws on anything that isn't a plain
+// identifier. All call sites use hard-coded names, so this only ever
+// fires on a programming error, never on user input.
+
+const IDENT = /^[a-z_][a-z0-9_]*$/i;
+
+// A table may be schema-qualified (`public.foo`); every dot-separated
+// segment must be a plain identifier.
+function assertIdentifier(name, kind) {
+  const segments = String(name).split('.');
+  if (!segments.length || !segments.every((s) => IDENT.test(s))) {
+    throw new Error(`Invalid ${kind} identifier: ${name}`);
+  }
+}
 
 /**
  * @param {object} args
@@ -26,6 +43,8 @@
  */
 export function buildBatchInsert({ table, columns, rows, leadingId, conflict = '' }) {
   if (!rows.length) return null;
+  assertIdentifier(table, 'table');
+  for (const column of columns) assertIdentifier(column, 'column');
   const colsAfterId = columns.length - 1;
   const placeholders = [];
   const params = [leadingId];

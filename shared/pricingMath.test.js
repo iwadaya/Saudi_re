@@ -184,6 +184,29 @@ describe('deriveComponentTotal (3-way blend)', () => {
     expect(deriveComponentTotal(NaN, 'foo', undefined, null, '', 'bar', 'x')).toBe(0);
   });
 
+  it('agrees with applyLoading across the valid 0..99 loading range', () => {
+    // In the valid range the two functions must produce identical loaded rates
+    // (verifier re-derives with deriveComponentTotal; the server persistence
+    // path uses applyLoading — they may not disagree where the input is legal).
+    for (const loading of [0, 20, 50, 99]) {
+      const blended = 0.03; // wB=100 → blended == pureBurn
+      expect(deriveComponentTotal(0.03, 0.01, 0.05, 100, 0, 0, loading))
+        .toBeCloseTo(applyLoading(blended, loading), 12);
+    }
+  });
+
+  it('clamps loading >= 100 to 99 (finite, never throws — live-UI path)', () => {
+    // Unlike applyLoading (server persistence path, which throws to surface bad
+    // input), deriveComponentTotal degrades gracefully so a stray keystroke can't
+    // crash the pricing reducer. 100/150 both clamp to 99 → the same huge finite.
+    const at99 = deriveComponentTotal(0.03, 0.01, 0.05, 100, 0, 0, 99);
+    expect(deriveComponentTotal(0.03, 0.01, 0.05, 100, 0, 0, 100)).toBe(at99);
+    expect(deriveComponentTotal(0.03, 0.01, 0.05, 100, 0, 0, 150)).toBe(at99);
+    expect(Number.isFinite(at99)).toBe(true);
+    // applyLoading, by contrast, still rejects the same input.
+    expect(() => applyLoading(0.03, 100)).toThrow(RangeError);
+  });
+
   it('parses %-formatted string inputs as the real client passes them', () => {
     // The client stores rates as "%"-formatted strings; without stripping
     // the % the function used to return 0 (Number("10%") === NaN).

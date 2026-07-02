@@ -6,6 +6,7 @@
 
 import { pool } from '../db/pool.js';
 import { numOrNull } from '../helpers.js';
+import { buildBatchInsert } from '../db/batchInsert.js';
 
 const TABLES = {
   contract: { table: 'public.contract_cresta_data', parent: 'contract_id' },
@@ -56,19 +57,19 @@ export async function saveCrestaSlice({ kind, id, rows, treatyType, cobId, cobNa
     else           { where += ` AND country_id IS NULL`; }
     await cl.query(`DELETE FROM ${table} WHERE ${where}`, params);
 
-    const insertSql = `
-      INSERT INTO ${table} (
-        ${parent}, country_id, zone_id, zone_name,
-        eq_agg, ws_agg, flood_agg, srcc_agg, others_agg,
-        treaty_type, cob_id, cob_name,
-        residential_bldg_pct, commercial_bldg_pct, commercial_cont_pct,
-        industrial_bldg_pct, industrial_cont_pct
-      ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17
-      )`;
-    for (const r of rows) {
-      await cl.query(insertSql, [
-        id,
+    // One multi-row INSERT instead of a round-trip per zone (see db/batchInsert.js).
+    // The parent FK column name is dynamic (contract_id | quote_id) but is a
+    // fixed identifier from TABLES, and leadingId supplies its value per row.
+    const insert = buildBatchInsert({
+      table,
+      columns: [
+        parent, 'country_id', 'zone_id', 'zone_name',
+        'eq_agg', 'ws_agg', 'flood_agg', 'srcc_agg', 'others_agg',
+        'treaty_type', 'cob_id', 'cob_name',
+        'residential_bldg_pct', 'commercial_bldg_pct', 'commercial_cont_pct',
+        'industrial_bldg_pct', 'industrial_cont_pct',
+      ],
+      rows: rows.map((r) => [
         r.country_id ?? countryId ?? null,
         r.zone_id ?? null,
         r.zone_name ?? null,
@@ -85,8 +86,10 @@ export async function saveCrestaSlice({ kind, id, rows, treatyType, cobId, cobNa
         numOrNull(r.commercial_cont_pct)  ?? 15,
         numOrNull(r.industrial_bldg_pct)  ?? 20,
         numOrNull(r.industrial_cont_pct)  ?? 10,
-      ]);
-    }
+      ]),
+      leadingId: id,
+    });
+    if (insert) await cl.query(insert.sql, insert.params);
     await cl.query('COMMIT');
   } catch (e) {
     await cl.query('ROLLBACK').catch(() => {});

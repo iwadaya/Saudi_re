@@ -91,8 +91,20 @@ export function installGracefulShutdown(server) {
     logger.error('uncaughtException', { error: err.message, stack: err.stack });
     void shutdown('uncaughtException');
   });
+  // Deliberate policy: an unhandledRejection is LOGGED but does NOT trigger a
+  // shutdown (unlike uncaughtException above). Rationale: in an Express app the
+  // overwhelming majority of unhandled rejections are localized to a single
+  // request (a missed `await`/`.catch`) and do not corrupt global process
+  // state, so tearing the whole instance down would convert a one-request bug
+  // into a fleet-wide availability hit. The error is logged at error level so
+  // it still surfaces loudly for triage. Set CRASH_ON_UNHANDLED_REJECTION=true
+  // to opt into fail-fast shutdown (e.g. while hunting a state-corruption bug).
   process.on('unhandledRejection', (reason) => {
     const msg = reason instanceof Error ? reason.message : String(reason);
-    logger.error('unhandledRejection', { reason: msg });
+    const stack = reason instanceof Error ? reason.stack : undefined;
+    logger.error('unhandledRejection', { reason: msg, stack });
+    if (process.env.CRASH_ON_UNHANDLED_REJECTION === 'true') {
+      void shutdown('unhandledRejection');
+    }
   });
 }

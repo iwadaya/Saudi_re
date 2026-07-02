@@ -46,6 +46,8 @@ export function CompareTermsPanel({ contractId, contract, td }) {
     if (!contractId) { setPrevLoading(false); return; }
     const parentId = hdr.parent_contract_id;
     const cedantId = hdr.cedant_id || td.cedantId;
+    // Guard against a stale response for a prior contractId overwriting state.
+    let cancelled = false;
     const fetchPrev = async () => {
       try {
         let prev = null;
@@ -66,16 +68,18 @@ export function CompareTermsPanel({ contractId, contract, td }) {
             if (prevId) prev = await api.getContract(prevId).catch(() => null);
           }
         }
-        if (prev) setPrevContract(prev);
+        if (prev && !cancelled) setPrevContract(prev);
       } catch {}
-      setPrevLoading(false);
+      if (!cancelled) setPrevLoading(false);
     };
     fetchPrev();
+    return () => { cancelled = true; };
   }, [contractId, hdr.cedant_id, hdr.parent_contract_id, prevYear, td.cedantId]);
 
   // Fetch aggregate data for current
   useEffect(() => {
     if (!contractId) return;
+    let cancelled = false;
     (async () => {
       try {
         const [cresta, large, cat] = await Promise.all([
@@ -83,15 +87,17 @@ export function CompareTermsPanel({ contractId, contract, td }) {
           api.getLargeLosses(contractId).catch(() => null),
           api.getCatLosses(contractId).catch(() => null),
         ]);
-        setCurAgg({ cresta, large, cat });
+        if (!cancelled) setCurAgg({ cresta, large, cat });
       } catch {}
     })();
+    return () => { cancelled = true; };
   }, [contractId]);
 
   // Fetch aggregate data for previous (only if found from DB)
   useEffect(() => {
     const prevId = prevContract?.contract_id;
     if (!prevId) return;
+    let cancelled = false;
     (async () => {
       try {
         const [cresta, large, cat] = await Promise.all([
@@ -99,9 +105,10 @@ export function CompareTermsPanel({ contractId, contract, td }) {
           api.getLargeLosses(prevId).catch(() => null),
           api.getCatLosses(prevId).catch(() => null),
         ]);
-        setPrevAgg({ cresta, large, cat });
+        if (!cancelled) setPrevAgg({ cresta, large, cat });
       } catch {}
     })();
+    return () => { cancelled = true; };
   }, [prevContract]);
 
   const pDet = useMemo(() => prevContract?.detail || {}, [prevContract]);

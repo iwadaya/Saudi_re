@@ -23,6 +23,13 @@ import { useGlobalToast } from '../../hooks/useToast.js';
 // page reload, which is the desired session granularity.
 const _viewLogged = new Set();
 
+// Source URLs come from the AI/model-generated report, so they are untrusted.
+// React does not block javascript:/data: URLs bound to href, so only surface a
+// clickable anchor for plain http(s) links; anything else renders as text.
+function safeHref(url) {
+  return typeof url === 'string' && /^https?:\/\//i.test(url) ? url : null;
+}
+
 const STATES = {
   LOADING_REPORT:     'LOADING_REPORT',
   GENERATING_REPORT:  'GENERATING_REPORT',
@@ -1130,14 +1137,17 @@ function SectionSources({ report, rowRefs, highlightedIdx }) {
                     }}
                   >
                     <div style={{ color: '#fff', fontWeight: 600 }}>{s.title}</div>
-                    <a
-                      href={s.url} target="_blank" rel="noreferrer noopener"
-                      style={{
+                    {(() => {
+                      const linkStyle = {
                         color: '#67e8f9', fontSize: 11, textDecoration: 'none',
                         wordBreak: 'break-all', display: 'inline-block', maxWidth: '100%',
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}
-                    >{s.url}</a>
+                      };
+                      const href = safeHref(s.url);
+                      return href
+                        ? <a href={href} target="_blank" rel="noreferrer noopener" style={linkStyle}>{s.url}</a>
+                        : <span style={{ ...linkStyle, color: 'rgba(255,255,255,0.55)' }}>{s.url}</span>;
+                    })()}
                     {s.snippet && <div style={{ fontStyle: 'italic', color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>“{s.snippet}”</div>}
                   </li>
                 );

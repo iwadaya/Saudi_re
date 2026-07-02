@@ -35,6 +35,17 @@
 
 import ExcelJS from 'exceljs';
 
+// ── resource caps ───────────────────────────────────────────────────────────
+// A crafted .xlsx can declare an enormous used range or a huge number of
+// sheets and blow up memory when we materialize every cell in sheetToRaw().
+// These caps are set safely above any real renewal pack (which are a handful
+// of sheets with thousands of rows at most) and abort with a clear error when
+// exceeded, before any per-cell work happens.
+const MAX_SHEETS = 50;
+const MAX_ROWS_PER_SHEET = 100_000;
+const MAX_COLS_PER_SHEET = 1000;
+const MAX_TOTAL_CELLS = 5_000_000;
+
 // ── public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -45,6 +56,7 @@ import ExcelJS from 'exceljs';
  */
 export async function parseRenewalPack(input) {
   const workbook = await loadWorkbook(input);
+  assertWorkbookWithinCaps(workbook);
   const rawSheets = workbook.worksheets.map(sheetToRaw);
   const sheets = rawSheets.map((s) => ({ name: s.name, rows: trimEmptyEdges(s.rows) }));
 
@@ -95,6 +107,39 @@ export async function parseRenewalPack(input) {
 }
 
 // ── workbook loading ──────────────────────────────────────────────────────────
+
+// Reject workbooks that exceed the resource caps before we materialize any
+// cells. Checked against ExcelJS's declared dimensions (rowCount/columnCount),
+// so a hostile "used range" is caught without allocating for it.
+function assertWorkbookWithinCaps(workbook) {
+  const sheets = workbook.worksheets || [];
+  if (sheets.length > MAX_SHEETS) {
+    throw new Error(
+      `Renewal pack has too many worksheets (${sheets.length} > ${MAX_SHEETS}).`,
+    );
+  }
+  let totalCells = 0;
+  for (const ws of sheets) {
+    const rowCount = ws.rowCount || 0;
+    const colCount = ws.columnCount || 0;
+    if (rowCount > MAX_ROWS_PER_SHEET) {
+      throw new Error(
+        `Worksheet "${ws.name}" has too many rows (${rowCount} > ${MAX_ROWS_PER_SHEET}).`,
+      );
+    }
+    if (colCount > MAX_COLS_PER_SHEET) {
+      throw new Error(
+        `Worksheet "${ws.name}" has too many columns (${colCount} > ${MAX_COLS_PER_SHEET}).`,
+      );
+    }
+    totalCells += rowCount * colCount;
+    if (totalCells > MAX_TOTAL_CELLS) {
+      throw new Error(
+        `Renewal pack exceeds the maximum cell budget (> ${MAX_TOTAL_CELLS} cells).`,
+      );
+    }
+  }
+}
 
 async function loadWorkbook(input) {
   const wb = new ExcelJS.Workbook();

@@ -1,4 +1,5 @@
 import { getBenchmarkLdfForClass } from './benchmark.js';
+import { logger } from '../../lib/logger.js';
 
 /**
  * Compute the weighted LDF curve for a contract × triangle_type.
@@ -16,14 +17,19 @@ import { getBenchmarkLdfForClass } from './benchmark.js';
  *   {
  *     classes: [{ classOfBusinessId, weight, scope, nContracts, curve: [{devMonth, ldf}] }],
  *     blended: [{ devMonth, ldf, cdf }],
- *     allDevMonths: number[]
+ *     allDevMonths: number[],
+ *     degenerate: boolean   // true when there was no class weight/premium to
+ *                           //   blend, so the curve collapsed to CDF 1.0 (a
+ *                           //   "no development" answer that isn't a real one).
+ *                           //   Callers should surface this rather than treat
+ *                           //   the CDF-1.0 curve as a genuine result.
  *   }
  */
 export async function computeBlendedLdfCurve(client, {
   epiSplit, countryId, region, triangleType, treatyCategory, overrideWeights = null,
 }) {
   if (!Array.isArray(epiSplit) || epiSplit.length === 0) {
-    return { classes: [], blended: [], allDevMonths: [] };
+    return { classes: [], blended: [], allDevMonths: [], degenerate: false };
   }
 
   // Default weights = EPI share. Override if provided.
@@ -89,7 +95,19 @@ export async function computeBlendedLdfCurve(client, {
     blended[i].cdf = Math.round(cdf * 1000000) / 1000000;
   }
 
-  return { classes: perClass, blended, allDevMonths };
+  // If no class carried any weight/premium, every dev_month fell through to
+  // the ldf = 1.0 fallback and the CDF collapsed to a flat 1.0 — indistinguishable
+  // from a genuine "no development" curve. Flag it (and warn) so the caller can
+  // tell the difference instead of pricing off a silent no-op curve.
+  const hadWeight = perClass.some((cls) => cls.weight > 0);
+  const degenerate = blended.length > 0 && !hadWeight;
+  if (degenerate) {
+    logger.warn('[ldf-blend] no class weight/premium to blend; curve collapsed to CDF 1.0', {
+      triangleType, treatyCategory, countryId, region, classCount: perClass.length,
+    });
+  }
+
+  return { classes: perClass, blended, allDevMonths, degenerate };
 }
 
 /**

@@ -8,9 +8,11 @@ git checkout main
 git pull origin main
 
 echo "Installing dependencies..."
-npm install
-npm install --prefix client
-npm install --prefix server
+# npm ci (not npm install): reproducible install straight from the lockfiles,
+# so a deploy never resolves newer transitive versions than CI audited.
+npm ci
+npm ci --prefix client
+npm ci --prefix server
 
 echo "Building frontend..."
 npm run build --prefix client

@@ -64,4 +64,44 @@ describe('buildBatchInsert', () => {
     });
     expect(result.params).toEqual(['p-1', null, 1]);
   });
+
+  it('accepts a schema-qualified table and plain columns', () => {
+    expect(() =>
+      buildBatchInsert({
+        table: 'public.pricing_components',
+        columns: ['contract_id', 'component_name'],
+        rows: [['x']],
+        leadingId: 'p-1',
+      }),
+    ).not.toThrow();
+  });
+
+  it('throws on an invalid table identifier', () => {
+    expect(() =>
+      buildBatchInsert({
+        table: 'public.foo; DROP TABLE bar',
+        columns: ['parent_id', 'a'],
+        rows: [['v']],
+        leadingId: 'p-1',
+      }),
+    ).toThrow(/Invalid table identifier/);
+  });
+
+  it('throws on an invalid column identifier', () => {
+    expect(() =>
+      buildBatchInsert({
+        table: 'public.foo',
+        columns: ['parent_id', 'a); DROP TABLE bar; --'],
+        rows: [['v']],
+        leadingId: 'p-1',
+      }),
+    ).toThrow(/Invalid column identifier/);
+  });
+
+  it('validates before short-circuiting is bypassed — empty rows still returns null', () => {
+    // No rows means no query is built at all, so validation is moot.
+    expect(
+      buildBatchInsert({ table: 'bad name', columns: ['x'], rows: [], leadingId: 'p-1' }),
+    ).toBeNull();
+  });
 });

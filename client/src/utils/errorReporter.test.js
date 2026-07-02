@@ -73,4 +73,22 @@ describe('reportError', () => {
     expect(body.path).toBeDefined();
     expect(body.userAgent).toBeDefined();
   });
+
+  it('attaches the X-CSRF-Token header from the csrf cookie and includes credentials', async () => {
+    document.cookie = 'csrf_token=tok-123';
+    try {
+      await reportError('other', new Error('csrf'));
+      const init = global.fetch.mock.calls[0][1];
+      expect(init.headers['X-CSRF-Token']).toBe('tok-123');
+      expect(init.credentials).toBe('include');
+    } finally {
+      document.cookie = 'csrf_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    }
+  });
+
+  it('omits the X-CSRF-Token header when no csrf cookie is present', async () => {
+    await reportError('other', new Error('no-csrf'));
+    const init = global.fetch.mock.calls[0][1];
+    expect('X-CSRF-Token' in init.headers).toBe(false);
+  });
 });

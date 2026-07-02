@@ -117,8 +117,15 @@ function trianglesToCells(tri, pathPrefix, setLeaf) {
     if (!Number.isFinite(oy)) continue;
     const row = Array.isArray(values[i]) ? values[i] : [];
     for (let j = 0; j < devPeriods.length; j++) {
-      const dm = Number(devPeriods[j]);
-      if (!Number.isFinite(dm)) continue;
+      const rawDev = Number(devPeriods[j]);
+      if (!Number.isFinite(rawDev)) continue;
+      // Normalise dev periods to months, mirroring triangleBounds.js's
+      // normalizeTriangleRequest: a pack may carry dev columns as plain
+      // integer indices (1, 2, 3, …) rather than months (12, 24, 36).
+      // Downstream 12/24/36-keyed LDF logic can't match bare indices, so
+      // anything < 12 is treated as a year index and scaled to months;
+      // values already in months (>= 12) pass through unchanged.
+      const dm = rawDev < 12 ? rawDev * 12 : rawDev;
       const cv = row[j];
       if (cv == null) continue;
       const n = Number(cv);

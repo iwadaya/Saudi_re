@@ -306,11 +306,14 @@ export const facLossesSaveSchema = z.object({
   losses: z.array(facLossRowSchema).max(500).default([]),
 }).passthrough();
 
-/** POST /api/fac/risks/:id/documents — metadata-only JSON insert. */
+/** POST /api/fac/risks/:id/documents — metadata-only JSON insert.
+ *  `file_path` is intentionally NOT accepted here: a client must never be able
+ *  to set an arbitrary document storage path via metadata (defense-in-depth on
+ *  top of the readDocumentBytes SSRF hardening). Real bytes + their storage
+ *  path come only from the multipart /documents/upload route. */
 export const facDocumentMetaSchema = z.object({
   doc_type:    optionalText,
   file_name:   optionalText,
-  file_path:   optionalText,
   file_size:   optionalInt,
   mime_type:   optionalText,
   uploaded_by: optionalText,

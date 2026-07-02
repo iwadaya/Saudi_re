@@ -179,7 +179,11 @@ export default function GemDamageRatioPanel({
   }, [contractId]);
 
   // ── Load all five curve lists; re-runs whenever source OR country changes. ──
+  // Monotonic token so a slow response for a prior source/country can't
+  // overwrite the curves loaded for the current selection.
+  const curvesLoadToken = useRef(0);
   const loadCurves = useCallback(async (src, ctry) => {
+    const token = ++curvesLoadToken.current;
     setCurvesLoading(true);
     setCurvesError(null);
     try {
@@ -195,6 +199,7 @@ export default function GemDamageRatioPanel({
         }
         return [meta.slot, list];
       }));
+      if (token !== curvesLoadToken.current) return;
       const next = Object.fromEntries(results);
       setCurvesBySlot(next);
       // Reconcile assignments against the freshly loaded lists: keep any that
@@ -218,10 +223,11 @@ export default function GemDamageRatioPanel({
       setAssignments(out);
       setAutoSlots(nextAuto);
     } catch (err) {
+      if (token !== curvesLoadToken.current) return;
       setCurvesError(err?.message || 'Failed to load vulnerability curves.');
       setCurvesBySlot({});
     } finally {
-      setCurvesLoading(false);
+      if (token === curvesLoadToken.current) setCurvesLoading(false);
     }
   }, []);
 

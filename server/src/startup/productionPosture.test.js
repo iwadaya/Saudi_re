@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 let isProd = true;
+let corsOrigin = 'https://app.example';
 vi.mock('../config/env.js', () => ({
-  get env() { return { isProduction: isProd }; },
+  get env() { return { isProduction: isProd, corsOrigin }; },
 }));
 
 const { checkProductionPosture, inClusterMode } = await import('./productionPosture.js');
@@ -29,6 +30,7 @@ const CLUSTER_KEYS = ['POOL_WATCHDOG_CLUSTER', 'NODE_APP_INSTANCE', 'WEB_CONCURR
 
 beforeEach(() => {
   isProd = true;
+  corsOrigin = 'https://app.example'; // non-wildcard by default; the G5 test opts in to '*'
   for (const k of [...IDENTITY_KEYS, ...STORAGE_KEYS, ...CLUSTER_KEYS, 'REDIS_URL']) delete process.env[k];
 });
 afterEach(() => {
@@ -63,6 +65,29 @@ describe('checkProductionPosture', () => {
     const { log } = fakeLog();
     const { errors } = checkProductionPosture({ log });
     expect(errors.join('\n')).toMatch(/multi-instance\/cluster WITHOUT REDIS_URL/);
+  });
+
+  it('warns when CORS_ORIGIN is "*" in production (G5)', () => {
+    corsOrigin = '*';
+    const { log, calls } = fakeLog();
+    const { warnings } = checkProductionPosture({ log });
+    expect(warnings.join('\n')).toMatch(/CORS_ORIGIN is "\*" in production/);
+    expect(calls.warn.join('\n')).toMatch(/CORS_ORIGIN is "\*" in production/);
+  });
+
+  it('does not warn about CORS when an explicit origin allow-list is set', () => {
+    corsOrigin = 'https://app.example,https://admin.example';
+    const { log } = fakeLog();
+    const { warnings } = checkProductionPosture({ log });
+    expect(warnings.join('\n')).not.toMatch(/CORS_ORIGIN/);
+  });
+
+  it('does not warn about CORS "*" outside production', () => {
+    isProd = false;
+    corsOrigin = '*';
+    const { log } = fakeLog();
+    const { warnings } = checkProductionPosture({ log });
+    expect(warnings.join('\n')).not.toMatch(/CORS_ORIGIN/);
   });
 
   it('treats ALLOW_LOCAL_UPLOADS as a warning, not an error', () => {

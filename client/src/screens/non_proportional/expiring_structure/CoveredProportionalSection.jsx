@@ -41,19 +41,23 @@ export default function CoveredProportionalSection({ coveredProps, setCoveredPro
   // Load PROP contracts from DB whenever db mode is active and filters change
   React.useEffect(() => {
     if (mode !== 'db') return;
+    // Guard against a stale response for prior filters overwriting newer results.
+    let cancelled = false;
     setDbLoading(true);
     const params = { category: 'PROPORTIONAL' };
     if (filterCedant)  params.cedant_id  = filterCedant;
     if (filterCountry) params.country_id = filterCountry;
     api.listContracts(params)
       .then(rows => {
+        if (cancelled) return;
         const arr = Array.isArray(rows) ? rows : (rows?.rows || []);
         const prop = arr.filter(r => !r.has_np_details &&
           String(r.treaty_category || r.category || '').toUpperCase().includes('PROP'));
         setDbProgrammes(prop);
       })
-      .catch(() => setDbProgrammes([]))
-      .finally(() => setDbLoading(false));
+      .catch(() => { if (!cancelled) setDbProgrammes([]); })
+      .finally(() => { if (!cancelled) setDbLoading(false); });
+    return () => { cancelled = true; };
   }, [mode, filterCedant, filterCountry]);
 
   const fmtC = v => formatWithCommas(v);

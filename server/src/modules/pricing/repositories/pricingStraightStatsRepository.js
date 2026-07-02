@@ -1,5 +1,6 @@
 import { pool } from '../../../db/pool.js';
 import { numOrNull, withTransaction } from './repositoryUtils.js';
+import { buildBatchInsert } from '../../../db/batchInsert.js';
 
 export async function saveStraightStats(payload) {
   const { contractId, tailType, stats = [] } = payload;
@@ -11,19 +12,19 @@ export async function saveStraightStats(payload) {
       [contractId, tailType]
     );
     await client.query('DELETE FROM public.contract_straight_uw_stats WHERE contract_id=$1', [contractId]);
-    for (const stat of stats) {
-      await client.query(
-        `INSERT INTO public.contract_straight_uw_stats (contract_id,underwriting_year,premium,paid_claims,os_claims)
-         VALUES ($1,$2,$3,$4,$5)`,
-        [
-          contractId,
-          stat.underwriting_year ?? stat.uw_year,
-          numOrNull(stat.premium),
-          numOrNull(stat.paid_claims),
-          numOrNull(stat.os_claims),
-        ]
-      );
-    }
+    // One multi-row INSERT instead of a round-trip per stat row (see db/batchInsert.js).
+    const insert = buildBatchInsert({
+      table: 'public.contract_straight_uw_stats',
+      columns: ['contract_id', 'underwriting_year', 'premium', 'paid_claims', 'os_claims'],
+      rows: stats.map((stat) => [
+        stat.underwriting_year ?? stat.uw_year,
+        numOrNull(stat.premium),
+        numOrNull(stat.paid_claims),
+        numOrNull(stat.os_claims),
+      ]),
+      leadingId: contractId,
+    });
+    if (insert) await client.query(insert.sql, insert.params);
   });
 }
 

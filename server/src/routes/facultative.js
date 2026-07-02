@@ -15,7 +15,7 @@ import {
   getSignedReadUrl,
   resolveLocalStoragePath,
 } from '../lib/uploadStorage.js';
-import { assertUploadSafe } from '../lib/uploadValidation.js';
+import { assertUploadSafe, ALLOWED_TYPES, UploadValidationError } from '../lib/uploadValidation.js';
 import { logger } from '../lib/logger.js';
 import {
   facRiskSaveSchema,
@@ -587,10 +587,13 @@ router.post('/fac/risks/:id/documents', validateBody(facDocumentMetaSchema), asy
   try {
     await cl.query('BEGIN');
     await assertExists(cl, 'public.fac_risk', 'fac_risk_id', riskId, 'Risk');
+    // file_path is deliberately inserted as NULL here — clients cannot set an
+    // arbitrary storage path via metadata. Bytes + path come only from the
+    // multipart /documents/upload route below.
     const { rows } = await cl.query(`
       INSERT INTO public.fac_document (fac_risk_id, doc_type, file_name, file_path, file_size, mime_type, uploaded_by, notes)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *
-    `, [riskId, b.doc_type || 'OTHER', b.file_name || null, b.file_path || null,
+      VALUES ($1,$2,$3,NULL,$4,$5,$6,$7) RETURNING *
+    `, [riskId, b.doc_type || 'OTHER', b.file_name || null,
         numOrNull(b.file_size), b.mime_type || null, b.uploaded_by || null, b.notes || null]);
     await writeFacAuditEvent({ facRiskId: riskId, eventType: 'FAC_DOCUMENT_ADDED', actor: actorLabel(req), payload: { document_id: rows[0].document_id, doc_type: rows[0].doc_type, file_name: rows[0].file_name }, client: cl });
     await cl.query('COMMIT');
@@ -621,9 +624,25 @@ router.delete('/fac/documents/:docId', asyncHandler(async (req, res) => {
 // needs real bytes, so we add a separate route that accepts a
 // multipart 'file' field + document_kind. 20MB cap matches the
 // client-side guard; storage strategy lives in lib/uploadStorage.js.
+// Cheap early reject on an obviously-wrong extension BEFORE the full buffer is
+// read into memory. The authoritative content-sniff + malware scan still runs
+// in assertUploadSafe() after multer; this just avoids buffering junk.
+function uploadFileFilter(_req, file, cb) {
+  const ext = String(file?.originalname || '').toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] || '';
+  if (!ALLOWED_TYPES[ext]) {
+    cb(new UploadValidationError(
+      415, 'UNSUPPORTED_FILE_TYPE',
+      `File type ".${ext}" is not allowed. Accepted: ${Object.keys(ALLOWED_TYPES).join(', ')}.`,
+    ));
+    return;
+  }
+  cb(null, true);
+}
+
 const _facDocUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { files: 1, fileSize: 20 * 1024 * 1024 },
+  fileFilter: uploadFileFilter,
 });
 
 router.post(

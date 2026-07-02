@@ -1,7 +1,7 @@
 // Secret-config validation: production refuses to boot without a strong
 // AUTH_JWT_SECRET; dev/test mints an ephemeral one.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { checkSecretsConfig, validateEnv, INSECURE_SECRET_PLACEHOLDER } from './env.js';
+import { checkSecretsConfig, checkDemoAuthConfig, validateEnv, INSECURE_SECRET_PLACEHOLDER } from './env.js';
 
 const STRONG = 'x'.repeat(40);
 
@@ -40,12 +40,32 @@ describe('checkSecretsConfig', () => {
   });
 });
 
+describe('checkDemoAuthConfig (A6 — demo-auth fenced from production)', () => {
+  it('production + ALLOW_DEMO_AUTH=true is an error', () => {
+    expect(checkDemoAuthConfig({ nodeEnv: 'production', allowDemoAuth: 'true' }))
+      .toEqual([expect.stringMatching(/ALLOW_DEMO_AUTH must not be enabled in production/)]);
+  });
+  it('production accepts other truthy forms (1/yes/on) as enabled', () => {
+    for (const v of ['1', 'yes', 'on']) {
+      expect(checkDemoAuthConfig({ nodeEnv: 'production', allowDemoAuth: v })).toHaveLength(1);
+    }
+  });
+  it('production without ALLOW_DEMO_AUTH (unset / false) is OK', () => {
+    expect(checkDemoAuthConfig({ nodeEnv: 'production', allowDemoAuth: undefined })).toEqual([]);
+    expect(checkDemoAuthConfig({ nodeEnv: 'production', allowDemoAuth: 'false' })).toEqual([]);
+  });
+  it('development with ALLOW_DEMO_AUTH=true is fine (dev/test convenience)', () => {
+    expect(checkDemoAuthConfig({ nodeEnv: 'development', allowDemoAuth: 'true' })).toEqual([]);
+  });
+});
+
 describe('validateEnv (fail-fast)', () => {
-  const orig = { NODE_ENV: process.env.NODE_ENV, AUTH_JWT_SECRET: process.env.AUTH_JWT_SECRET, SESSION_SECRET: process.env.SESSION_SECRET };
+  const orig = { NODE_ENV: process.env.NODE_ENV, AUTH_JWT_SECRET: process.env.AUTH_JWT_SECRET, SESSION_SECRET: process.env.SESSION_SECRET, ALLOW_DEMO_AUTH: process.env.ALLOW_DEMO_AUTH };
   afterEach(() => {
     process.env.NODE_ENV = orig.NODE_ENV;
     if (orig.AUTH_JWT_SECRET === undefined) delete process.env.AUTH_JWT_SECRET; else process.env.AUTH_JWT_SECRET = orig.AUTH_JWT_SECRET;
     if (orig.SESSION_SECRET === undefined) delete process.env.SESSION_SECRET; else process.env.SESSION_SECRET = orig.SESSION_SECRET;
+    if (orig.ALLOW_DEMO_AUTH === undefined) delete process.env.ALLOW_DEMO_AUTH; else process.env.ALLOW_DEMO_AUTH = orig.ALLOW_DEMO_AUTH;
     vi.restoreAllMocks();
   });
 
@@ -71,6 +91,26 @@ describe('validateEnv (fail-fast)', () => {
   it('does not exit with a strong secret', () => {
     process.env.NODE_ENV = 'production';
     process.env.AUTH_JWT_SECRET = STRONG;
+    delete process.env.ALLOW_DEMO_AUTH; // isolate the secret check (test env defaults it on)
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('__exit__'); });
+    expect(() => validateEnv()).not.toThrow();
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('exits(1) in production when ALLOW_DEMO_AUTH is enabled, even with a strong secret (A6)', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.AUTH_JWT_SECRET = STRONG; // secrets are fine…
+    process.env.ALLOW_DEMO_AUTH = 'true'; // …but the demo backdoor is fatal in prod
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('__exit__'); });
+    expect(() => validateEnv()).toThrow('__exit__');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errSpy.mock.calls.join('\n')).toMatch(/ALLOW_DEMO_AUTH must not be enabled in production/);
+  });
+
+  it('does NOT exit in development with ALLOW_DEMO_AUTH=true (dev/test convenience)', () => {
+    process.env.NODE_ENV = 'development';
+    process.env.ALLOW_DEMO_AUTH = 'true';
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('__exit__'); });
     expect(() => validateEnv()).not.toThrow();
     expect(exitSpy).not.toHaveBeenCalled();
