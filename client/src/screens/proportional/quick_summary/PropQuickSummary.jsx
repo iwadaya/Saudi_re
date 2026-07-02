@@ -107,21 +107,31 @@ export function QuickSummaryEmbed({ contractId: propContractId }) {
 
   useEffect(() => {
     if (!contractId) return;
+    // Guard against a stale response overwriting a newer one: switching contract
+    // or toggling quote mode re-fires this effect, and an older in-flight load
+    // must not clobber the current selection's figures (would show the wrong
+    // contract's/mode's pricing).
+    let cancelled = false;
     setLoading(true); setError(null);
     const qm = appState.quoteMode ? { quote: true } : undefined;
     (async () => {
       try {
         const contract = await api.getContract(contractId, qm).catch(() => ({}));
         const t = buildTreatyTerms(contract, appState.propTreatyDetail || {});
+        if (cancelled) return;
         setStripLC(t.strip_large_cat === true);
         const { rows: standardRows } = await loadProjectedRows(contractId, qm);
+        if (cancelled) return;
         if (!standardRows || standardRows.length === 0) { setCalcRows([]); setLoading(false); return; }
         const { rows, totals: tot } = runFinancialEngine(standardRows, t);
+        const lc = await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() }));
+        if (cancelled) return;
         setCalcRows(rows); setTotals(tot);
-        setLossCat(await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() })));
-      } catch (e) { logger.error('Quick Summary Embed Load Failed', e); setError(e.message); }
-      setLoading(false);
+        setLossCat(lc);
+      } catch (e) { if (!cancelled) { logger.error('Quick Summary Embed Load Failed', e); setError(e.message); } }
+      if (!cancelled) setLoading(false);
     })();
+    return () => { cancelled = true; };
   }, [appState.propTreatyDetail, appState.quoteMode, contractId]);
 
   if (loading) return <div style={{padding:40,textAlign:'center',color:'rgba(255,255,255,0.5)'}}>Loading Quick Summary...</div>;
@@ -198,25 +208,33 @@ export default function PropQuickSummary() {
 
   useEffect(() => {
     if (!contractId) return;
+    // See QuickSummaryEmbed above: guard against a stale load overwriting the
+    // current contract's/mode's figures when the deps change mid-flight.
+    let cancelled = false;
     setLoading(true); setError(null);
     const qm = appState.quoteMode ? { quote: true } : undefined;
     (async () => {
       try {
         const contract = await api.getContract(contractId, qm).catch(() => ({}));
         const t = buildTreatyTerms(contract, appState.propTreatyDetail || {});
+        if (cancelled) return;
         setTerms(t);
 
         /* ── Use saved dev factors via shared utility ── */
         const { rows: standardRows, source } = await loadProjectedRows(contractId, qm);
+        if (cancelled) return;
         setProjSource(source || '');
 
         if (!standardRows || standardRows.length === 0) { setCalcRows([]); setLoading(false); return; }
         const { rows, totals: tot } = runFinancialEngine(standardRows, t);
+        const lc = await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() }));
+        if (cancelled) return;
         setCalcRows(rows); setTotals(tot);
-        setLossCat(await loadLossCategoryByYear(contractId, qm).catch(() => ({ large: new Map(), cat: new Map() })));
-      } catch (e) { logger.error('Quick Summary Load Failed', e); setError(e.message); }
-      setLoading(false);
+        setLossCat(lc);
+      } catch (e) { if (!cancelled) { logger.error('Quick Summary Load Failed', e); setError(e.message); } }
+      if (!cancelled) setLoading(false);
     })();
+    return () => { cancelled = true; };
   }, [appState.propTreatyDetail, appState.quoteMode, contractId]);
 
   const stats = calcStats(calcRows);

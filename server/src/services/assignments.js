@@ -92,10 +92,22 @@ export async function reassign({ entityType, entityId, reassignedBy, newOwnerId,
 
 export async function selfAssign({ entityType, entityId, userId }) {
   const table=entityTable(entityType); const idCol=entityIdCol(entityType);
-  const { rows } = await pool.query(`SELECT assigned_to_user_id FROM ${table} WHERE ${idCol}=$1`,[entityId]);
+  const { rows } = await pool.query(`SELECT assigned_to_user_id, uw_status FROM ${table} WHERE ${idCol}=$1`,[entityId]);
   if (!rows.length) throw Object.assign(new Error('Not found'),{status:404});
   const currentOwner=rows[0].assigned_to_user_id;
   if (currentOwner===userId) return { assignedTo:userId, changed:false };
+  // Self-assign only claims genuinely UNASSIGNED work. Taking over work already
+  // owned by someone else is a reallocation — that must go through
+  // allocate()/reassign(), which enforce DRAFT status AND the hierarchy check.
+  // Without this guard any user could seize (and, via the assignee edit-lock,
+  // edit pricing/terms/losses of) any treaty or quote in the system.
+  if (currentOwner) {
+    throw Object.assign(new Error('This item is already assigned. Use reassign to take it over.'),{status:403});
+  }
+  const status=(rows[0].uw_status||'DRAFT').toUpperCase();
+  if (status !== 'DRAFT') {
+    throw Object.assign(new Error(`Cannot claim: item is ${status}. Only DRAFT items can be self-assigned.`),{status:403});
+  }
   await pool.query(`UPDATE ${table} SET assigned_to_user_id=$2, updated_at=now() WHERE ${idCol}=$1`,[entityId,userId]);
   await logHistory({entityType,entityId,fromUserId:currentOwner,toUserId:userId,assignedBy:userId,action:'SELF_ASSIGNED'});
   return { assignedTo:userId, changed:true };

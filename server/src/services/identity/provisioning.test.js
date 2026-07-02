@@ -94,6 +94,22 @@ describe('provisionFromClaims', () => {
     expect(out.username).toBe('new.user2');
   });
 
+  it('returning subject that is locally deactivated → refuses (no silent reactivation)', async () => {
+    const cl = fakeClient({ existing: { user_id: 'u1', username: 'c.user', role_id: 'role-cu', is_active: false } });
+    await expect(provisionFromClaims(cl, { sub: 's1', email: 'c@x.com', groups: ['chiefs'] }, cfg))
+      .rejects.toMatchObject({ code: 'ACCOUNT_DEACTIVATED' });
+    // Must NOT have written an UPDATE (which previously flipped is_active back to true).
+    expect(cl.calls.updateUser).toBeNull();
+  });
+
+  it('active returning subject → the UPDATE no longer forces is_active=true', async () => {
+    const cl = fakeClient({ existing: { user_id: 'u1', username: 'c.user', role_id: 'role-cu', is_active: true } });
+    await provisionFromClaims(cl, { sub: 's1', email: 'c@x.com', groups: ['chiefs'] }, cfg);
+    const updateSql = cl.query.mock.calls.map((c) => c[0]).find((s) => s.includes('UPDATE public.uw_user'));
+    expect(updateSql).toBeTruthy();
+    expect(updateSql).not.toMatch(/is_active\s*=\s*true/);
+  });
+
   it('throws when claims lack a subject', async () => {
     await expect(provisionFromClaims(fakeClient(), {}, cfg)).rejects.toThrow(/sub is required/);
   });

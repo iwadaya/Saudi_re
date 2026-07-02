@@ -9,6 +9,7 @@ import path from 'node:path';
 import { env } from '../config/env.js';
 import { pool } from '../db/pool.js';
 import { logger } from './logger.js';
+import { isRemoteStoragePath, fetchRemoteAsset } from './uploadStorage.js';
 import { buildFacSystemPrompt, facAiResponseSchema } from './facDocAiPrompts.js';
 
 const OPENAI_API   = 'https://api.openai.com/v1/responses';
@@ -18,23 +19,39 @@ const PROVIDER     = 'openai';
 /**
  * Read the document bytes off whatever storage the upload route used.
  *
- * For Cloudinary URLs (http/https) we fetch over the wire; for local
- * paths under env.uploadDir we read off disk. Anything else throws.
+ * Bytes come from the SERVER-GENERATED storage_key only. Remote (Cloudinary)
+ * keys are fetched through fetchRemoteAsset, which pins the request to the
+ * Cloudinary host, blocks redirects, and caps size/time — so a poisoned or
+ * user-supplied URL cannot turn this into an SSRF. A local key is read off disk
+ * inside env.uploadDir. file_path is untrusted display metadata (the legacy
+ * metadata route lets the client set it) and is NEVER used as a fetch target:
+ * we only accept it as a local relative path, never as a URL.
  */
 export async function readDocumentBytes(doc) {
-  const key = doc?.storage_key || doc?.file_path;
-  if (!key) throw new Error('document has no storage_key');
-  if (/^https?:\/\//i.test(key)) {
-    const r = await fetch(key);
-    if (!r.ok) throw new Error(`failed to fetch document from ${key}: ${r.status}`);
-    const buf = Buffer.from(await r.arrayBuffer());
-    return buf;
+  const storageKey = doc?.storage_key;
+  if (storageKey) {
+    if (isRemoteStoragePath(storageKey)) {
+      return fetchRemoteAsset(storageKey);
+    }
+    return readLocalUploadBytes(storageKey);
   }
-  // Treat as a path relative to env.uploadDir; resolve to an absolute
-  // path inside the upload dir and refuse anything that escapes it
-  // (defence against a poisoned storage_key from a stale row).
+  // Fall back to file_path only for local-disk deployments that predate
+  // storage_key. Refuse any URL here — an attacker-controlled file_path URL is
+  // exactly the SSRF vector we are closing.
+  const legacy = doc?.file_path;
+  if (!legacy) throw new Error('document has no storage_key');
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(legacy)) {
+    throw new Error('refusing to fetch document from a file_path URL');
+  }
+  return readLocalUploadBytes(legacy);
+}
+
+// Resolve a relative key to an absolute path inside env.uploadDir and refuse
+// anything that escapes it (defence against a poisoned key from a stale row).
+function readLocalUploadBytes(key) {
   const abs = path.resolve(env.uploadDir, key);
-  if (!abs.startsWith(path.resolve(env.uploadDir) + path.sep) && abs !== path.resolve(env.uploadDir)) {
+  const root = path.resolve(env.uploadDir);
+  if (abs !== root && !abs.startsWith(root + path.sep)) {
     throw new Error('document path escapes upload directory');
   }
   return fs.readFile(abs);

@@ -60,7 +60,9 @@ function fakeQuery(sql, params = []) {
   if (sql.includes('FROM public.v_user_mandate WHERE user_id')) {
     return Promise.resolve({ rows: scenario.mandateRow ? [{ user_id: params[0], ...scenario.mandateRow }] : [] });
   }
-  if (sql.includes('FROM public.uw_user u') && sql.includes('LEFT JOIN public.user_mandate')) {
+  // GET /auth/users — matches both the authenticated (full, mandate-join) and
+  // unauthenticated (minimal) projections.
+  if (sql.includes('FROM public.uw_user u') && sql.includes('ORDER BY u.display_name')) {
     return Promise.resolve({ rows: scenario.usersList || [] });
   }
   if (sql.includes('UPDATE public.uw_user SET failed_attempts')) return Promise.resolve({ rows: [] });
@@ -773,5 +775,26 @@ describe('GET /auth/users', () => {
     expect(res.body.some((u) => u.display_name === 'Ada Lovelace')).toBe(true);
     // ordered by display_name (no CU/TUW filter applied here)
     expect(queryLog.some((q) => q.sql.includes('ORDER BY u.display_name'))).toBe(true);
+  });
+
+  it('unauthenticated callers get a MINIMAL projection — no email/office/limits/hierarchy leaked pre-auth', async () => {
+    scenario.usersList = [{ user_id: 'u-ada', username: 'ada.lovelace', display_name: 'Ada Lovelace', role_code: 'UW', role_name: 'Underwriter' }];
+    // No x-user-* headers → req.user is null → the public login-screen path.
+    const res = await call(buildApp(), { method: 'GET', path: '/auth/users' });
+    expect(res.status).toBe(200);
+    const usersQuery = queryLog.find((q) => q.sql.includes('FROM public.uw_user u') && q.sql.includes('ORDER BY u.display_name'));
+    expect(usersQuery).toBeTruthy();
+    // The pre-auth query must not select PII / authority columns.
+    expect(usersQuery.sql).not.toMatch(/user_mandate|treaty_limit_usd|single_risk_limit_usd|u\.email|u\.office|hierarchy_level/);
+  });
+
+  it('authenticated callers get the full record (mandate join) for the admin screen', async () => {
+    currentUser = { userId: 'u-cu', roleCode: 'CU', hierarchyLevel: 2, displayName: 'CU' };
+    scenario.usersList = [{ user_id: 'u-ada', username: 'ada.lovelace', display_name: 'Ada Lovelace', email: 'a@b.c', role_code: 'UW' }];
+    const res = await call(buildApp(), { method: 'GET', path: '/auth/users' });
+    expect(res.status).toBe(200);
+    const usersQuery = queryLog.find((q) => q.sql.includes('FROM public.uw_user u') && q.sql.includes('LEFT JOIN public.user_mandate'));
+    expect(usersQuery).toBeTruthy();
+    expect(usersQuery.sql).toMatch(/treaty_limit_usd/);
   });
 });

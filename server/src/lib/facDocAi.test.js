@@ -30,7 +30,7 @@ vi.mock('./logger.js', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: v
 
 // Now import the module under test (top-level imports above are
 // already resolved through the mocks).
-const { runFacDocumentAnalysis, parseFacAiResponse, sanitizeRecommendations } = await import('./facDocAi.js');
+const { runFacDocumentAnalysis, parseFacAiResponse, sanitizeRecommendations, readDocumentBytes } = await import('./facDocAi.js');
 
 beforeEach(() => {
   poolMock.query.mockReset();
@@ -126,7 +126,7 @@ describe('runFacDocumentAnalysis — happy path', () => {
 
       const result = await runFacDocumentAnalysis({
         facRiskId: '11111111-1111-1111-1111-111111111111',
-        document: { document_id: '22222222-2222-2222-2222-222222222222', storage_key: 'https://cdn.example/foo.pdf' },
+        document: { document_id: '22222222-2222-2222-2222-222222222222', storage_key: 'https://res.cloudinary.com/demo/raw/authenticated/v1/foo.pdf' },
         documentKind: 'SURVEY_REPORT',
         openAiCaller,
       });
@@ -162,7 +162,7 @@ describe('runFacDocumentAnalysis — OpenAI error', () => {
       });
       await expect(runFacDocumentAnalysis({
         facRiskId: '11111111-1111-1111-1111-111111111111',
-        document: { document_id: '22222222-2222-2222-2222-222222222222', storage_key: 'https://cdn.example/foo.pdf' },
+        document: { document_id: '22222222-2222-2222-2222-222222222222', storage_key: 'https://res.cloudinary.com/demo/raw/authenticated/v1/foo.pdf' },
         documentKind: 'SURVEY_REPORT',
         openAiCaller,
       })).rejects.toThrow(/OpenAI 500/);
@@ -188,5 +188,22 @@ describe('sanitizeRecommendations — drops invalid FACTOR_OPTION', () => {
       },
     ]);
     expect(recs).toHaveLength(0);
+  });
+});
+
+describe('readDocumentBytes — SSRF hardening', () => {
+  it('refuses to fetch a file_path URL (the SSRF vector)', async () => {
+    await expect(readDocumentBytes({ file_path: 'http://169.254.169.254/latest/meta-data/' }))
+      .rejects.toThrow(/refusing to fetch document from a file_path URL/);
+  });
+
+  it('refuses to fetch a non-Cloudinary storage_key URL', async () => {
+    await expect(readDocumentBytes({ storage_key: 'http://localhost:6379/' }))
+      .rejects.toThrow(/non-allowlisted remote asset URL/);
+  });
+
+  it('refuses an internal https host masquerading as a storage_key', async () => {
+    await expect(readDocumentBytes({ storage_key: 'https://internal.metadata.example/secret' }))
+      .rejects.toThrow(/non-allowlisted remote asset URL/);
   });
 });

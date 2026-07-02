@@ -12,7 +12,17 @@ describe('checkSecretsConfig', () => {
   });
   it('production: the insecure dev literal is rejected', () => {
     expect(checkSecretsConfig({ nodeEnv: 'production', authJwtSecret: INSECURE_SECRET_PLACEHOLDER, sessionSecret: '' }))
-      .toEqual([expect.stringMatching(/must not be the insecure/)]);
+      .toEqual([expect.stringMatching(/must not be a placeholder/)]);
+  });
+  it('production: the CHANGE_ME .env.example placeholder is rejected (even though it is >32 chars)', () => {
+    const placeholder = 'CHANGE_ME_RUN_NODE_RANDOMBYTES_48_BASE64URL';
+    expect(placeholder.length).toBeGreaterThan(32); // would pass the length check
+    expect(checkSecretsConfig({ nodeEnv: 'production', authJwtSecret: placeholder, sessionSecret: '' }))
+      .toEqual([expect.stringMatching(/must not be a placeholder/)]);
+  });
+  it('production: a CHANGE_ME SESSION_SECRET is rejected', () => {
+    expect(checkSecretsConfig({ nodeEnv: 'production', authJwtSecret: STRONG, sessionSecret: 'CHANGE_ME_RUN_NODE_RANDOMBYTES_48_BASE64URL' }))
+      .toEqual([expect.stringMatching(/SESSION_SECRET must not be a placeholder/)]);
   });
   it('production: a short secret (<32) is rejected', () => {
     expect(checkSecretsConfig({ nodeEnv: 'production', authJwtSecret: 'short', sessionSecret: '' }))
