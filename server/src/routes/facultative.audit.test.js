@@ -496,7 +496,10 @@ describe.skipIf(shouldSkipDb)('Phase 6: fac persistence round-trip audit', () =>
   // ── 8. fac_document (metadata only) ─────────────────────────────
   it('8. fac_document: round-trip metadata via the JSON POST', async () => {
     const riskId = await createRisk();
-    const KEYS = ['doc_type', 'file_name', 'file_path', 'file_size', 'mime_type', 'notes'];
+    // file_path is NOT round-tripped: the metadata route must never let a
+    // client set an arbitrary storage path (I7 defense-in-depth). A client-
+    // supplied file_path is dropped and stored as NULL.
+    const KEYS = ['doc_type', 'file_name', 'file_size', 'mime_type', 'notes'];
     const payloadIn = {
       doc_type: 'SURVEY_REPORT', file_name: 'survey-aug-12 — تقرير.pdf',
       file_path: 'fac/audit/survey.pdf', file_size: 192345,
@@ -506,10 +509,13 @@ describe.skipIf(shouldSkipDb)('Phase 6: fac persistence round-trip audit', () =>
     const back1 = normalise(pick(created, KEYS));
     const in1   = normalise(pick(payloadIn, KEYS));
     expect(back1).toEqual(in1);
+    // The attacker-controlled file_path was dropped, not persisted.
+    expect(created.file_path).toBeNull();
 
     const list = await jsonNoBody(harness, 'GET', `/api/fac/risks/${riskId}/documents`);
     expect(list).toHaveLength(1);
     expect(normalise(pick(list[0], KEYS))).toEqual(in1);
+    expect(list[0].file_path).toBeNull();
 
     await harness.fetchApp('DELETE', `/api/fac/risks/${riskId}`);
   });

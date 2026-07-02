@@ -1,4 +1,5 @@
 import { pool } from '../../../db/pool.js';
+import { logger } from '../../../lib/logger.js';
 
 let _cobCols = null;
 
@@ -410,8 +411,14 @@ export async function getMarketAverage(countryId, exclude, {
     let rows;
     try {
       ({ rows } = await pool.query(buildAvgQuery(t.join, t.where), t.params));
-    } catch {
-      continue; // a tier whose optional inputs don't fit the schema is skipped
+    } catch (error) {
+      // A tier whose optional inputs don't fit the schema is skipped — but log
+      // it so a real DB error (not just a schema-shape mismatch) is visible
+      // rather than silently degrading the market average.
+      logger.warn('[pricing/market-average] tier query failed, skipping tier', {
+        tier: t.tier, countryId, error: error.message,
+      });
+      continue;
     }
     const count = maxContractCount(rows);
     // Broadest tier doubles as the fallback when nothing meets the threshold.

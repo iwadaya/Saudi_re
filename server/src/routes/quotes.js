@@ -23,7 +23,7 @@ import { auditMutation } from '../lib/mutationAudit.js';
 import { npSaveSchema, egnpiYearPutSchema, quoteNpPricingPutSchema } from '../validation/nonProp.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { storeUploadedFile } from '../lib/uploadStorage.js';
-import { assertUploadSafe } from '../lib/uploadValidation.js';
+import { assertUploadSafe, ALLOWED_TYPES, UploadValidationError } from '../lib/uploadValidation.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
 import { assertCanEdit } from '../services/permissions.js';
 import { approveQuote, returnToUnderwriter, recallOffer, markNotTakenUp } from '../services/approvals.js';
@@ -1206,7 +1206,22 @@ router.post("/quotes/:id/wording-checklist/ai-check", asyncHandler(async (req, r
 }));
 
 // POST /quotes/:id/documents — upload document to quote
-const _multerQ = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+// Cheap early reject on an obviously-wrong extension BEFORE the full buffer is
+// read into memory. The authoritative content-sniff + malware scan still runs
+// in assertUploadSafe() after multer; this just avoids buffering junk.
+function uploadFileFilter(_req, file, cb) {
+  const ext = String(file?.originalname || '').toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] || '';
+  if (!ALLOWED_TYPES[ext]) {
+    cb(new UploadValidationError(
+      415, 'UNSUPPORTED_FILE_TYPE',
+      `File type ".${ext}" is not allowed. Accepted: ${Object.keys(ALLOWED_TYPES).join(', ')}.`,
+    ));
+    return;
+  }
+  cb(null, true);
+}
+
+const _multerQ = multer({ storage: multer.memoryStorage(), limits: { files: 1, fileSize: 50 * 1024 * 1024 }, fileFilter: uploadFileFilter });
 router.post("/quotes/:id/documents", _multerQ.single('file'), validateBody(documentMetaSchema), asyncHandler(async (req, res) => {
   const { id } = req.params;
   const file = req.file; const b = req.body || {};

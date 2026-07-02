@@ -251,7 +251,9 @@ export default function LoginScreen() {
 
   // Load ALL active users for the people dropdown. Demo fallback covers the
   // network-failure / empty case only — no role filtering or dedupe.
-  const loadUsers = (selectUserId) => api.getUsers({ headers: { 'x-user-role': 'CU', 'x-user-id': 'system', 'x-user-name': 'System' } })
+  // No spoofed x-user-* headers: the server returns a minimal projection to
+  // unauthenticated callers, so an elevated role header would be misleading.
+  const loadUsers = (selectUserId) => api.getUsers()
     .then(data => {
       const list = Array.isArray(data) && data.length ? data : DEMO_FALLBACK;
       setUsers(list);

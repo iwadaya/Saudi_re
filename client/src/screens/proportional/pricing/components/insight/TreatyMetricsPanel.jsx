@@ -22,6 +22,8 @@ export function TreatyMetricsPanel({ shareGrid, contract, td, epi, limit, yearly
     if (!contractId) { setPrevLoading(false); return; }
     const parentId = hdr.parent_contract_id;
     const cedantId = hdr.cedant_id || td.cedantId;
+    // Guard against a stale response for a prior contractId overwriting state.
+    let cancelled = false;
     (async () => {
       try {
         let prev = null;
@@ -31,10 +33,11 @@ export function TreatyMetricsPanel({ shareGrid, contract, td, epi, limit, yearly
           const r = Array.isArray(rows) ? rows.find(r => { const yr = r.inception_date ? new Date(r.inception_date).getFullYear() : Number(r.uw_year); return yr === prevYear; }) : null;
           if (r) { const pid = r.contract_id || r.id; if (pid) prev = await api.getContract(pid).catch(() => null); }
         }
-        if (prev) setPrevContract(prev);
+        if (prev && !cancelled) setPrevContract(prev);
       } catch {}
-      setPrevLoading(false);
+      if (!cancelled) setPrevLoading(false);
     })();
+    return () => { cancelled = true; };
   }, [contractId, hdr.cedant_id, hdr.parent_contract_id, prevYear, td.cedantId]);
 
   // Load the previous contract's pricing-yearly rows so the 5/10-year
@@ -43,12 +46,14 @@ export function TreatyMetricsPanel({ shareGrid, contract, td, epi, limit, yearly
   useEffect(() => {
     const prevId = prevContract?.contract_id;
     if (!prevId) { setPrevYearly([]); return; }
+    let cancelled = false;
     (async () => {
       try {
         const rows = await api.getPricingYearly(prevId).catch(() => []);
-        setPrevYearly(Array.isArray(rows) ? rows : []);
-      } catch { setPrevYearly([]); }
+        if (!cancelled) setPrevYearly(Array.isArray(rows) ? rows : []);
+      } catch { if (!cancelled) setPrevYearly([]); }
     })();
+    return () => { cancelled = true; };
   }, [prevContract]);
 
   const n = v => { const x = Number(String(v ?? '').replace(/,/g, '').trim()); return Number.isFinite(x) ? x : 0; };

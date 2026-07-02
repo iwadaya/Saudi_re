@@ -41,12 +41,16 @@ export default function useAnalysisDrawerState({ analysisId, riskId }) {
 
   useEffect(() => {
     if (!analysisId) return;
+    // Guard against a stale response (a previous analysisId still in flight)
+    // overwriting the current drawer's data.
+    let cancelled = false;
     setLoading(true);
     api.facGetAnalysis(analysisId)
-      .then(setData)
-      .catch((e) => logger.error('[AnalysisDrawer] load failed:', e))
-      .finally(() => setLoading(false));
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch((e) => { if (!cancelled) logger.error('[AnalysisDrawer] load failed:', e); })
+      .finally(() => { if (!cancelled) setLoading(false); });
     api.facGetFactors().then((r) => {
+      if (cancelled) return;
       const map = {};
       for (const f of r?.factors || []) {
         if (Array.isArray(f.options) && f.options.length > 0) {
@@ -55,6 +59,7 @@ export default function useAnalysisDrawerState({ analysisId, riskId }) {
       }
       setFactorOptions(map);
     }).catch(() => {});
+    return () => { cancelled = true; };
   }, [analysisId]);
 
   // Clear any pending "just applied" timers on unmount.

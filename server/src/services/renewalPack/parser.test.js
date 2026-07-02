@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import ExcelJS from 'exceljs';
 import { parseRenewalPack } from './parser.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -115,5 +116,23 @@ describe('parseRenewalPack', () => {
     expect(lo).toBeLessThanOrEqual(hi);
     expect(lo).toBeGreaterThanOrEqual(1900);
     expect(hi).toBeLessThanOrEqual(2200);
+  });
+
+  // ── resource caps (I4) ──────────────────────────────────────────
+  it('rejects a workbook that declares more worksheets than the cap', async () => {
+    const wb = new ExcelJS.Workbook();
+    // 51 sheets > MAX_SHEETS (50). Cheap to build, hits the cap before any
+    // per-cell materialization happens.
+    for (let i = 0; i < 51; i++) wb.addWorksheet(`Sheet ${i + 1}`);
+    const buf = await wb.xlsx.writeBuffer();
+    await expect(parseRenewalPack(Buffer.from(buf))).rejects.toThrow(/too many worksheets/i);
+  });
+
+  it('accepts a small workbook that stays within the caps', async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Cover');
+    ws.addRow(['Cedant', 'Test Re']);
+    const buf = await wb.xlsx.writeBuffer();
+    await expect(parseRenewalPack(Buffer.from(buf))).resolves.toBeDefined();
   });
 });

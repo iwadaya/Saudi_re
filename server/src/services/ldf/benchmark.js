@@ -5,6 +5,16 @@ import { logger } from '../../lib/logger.js';
 
 const MIN_CONTRACTS_FOR_SCOPE = 5;
 
+// A scope (country / region) is only good enough to carry the whole curve if
+// EVERY dev-month row meets the contract-count threshold — not just the first
+// (most-mature) row. Early dev months almost always have more contributing
+// contracts than the sparse tail, so keying acceptance off rows[0] let a well-
+// populated 12-month row validate a 120-month row backed by a single contract.
+function scopeHasEnoughContracts(rows) {
+  return rows.length > 0
+    && rows.every((r) => Number(r.n_contracts) >= MIN_CONTRACTS_FOR_SCOPE);
+}
+
 export async function getBenchmarkLdfForClass(client, {
   classOfBusinessId, countryId, region, triangleType, treatyCategory,
 }) {
@@ -27,8 +37,7 @@ export async function getBenchmarkLdfForClass(client, {
         ORDER BY dev_month`,
       [classOfBusinessId, countryId, triangleType, treatyCategory],
     );
-    if (country.rows.length > 0 &&
-        country.rows[0].n_contracts >= MIN_CONTRACTS_FOR_SCOPE) {
+    if (scopeHasEnoughContracts(country.rows)) {
       return { scope: 'COUNTRY', countryId, region: null, rows: country.rows };
     }
   }
@@ -43,8 +52,7 @@ export async function getBenchmarkLdfForClass(client, {
         ORDER BY dev_month`,
       [classOfBusinessId, region, triangleType, treatyCategory],
     );
-    if (reg.rows.length > 0 &&
-        reg.rows[0].n_contracts >= MIN_CONTRACTS_FOR_SCOPE) {
+    if (scopeHasEnoughContracts(reg.rows)) {
       return { scope: 'REGION', countryId: null, region, rows: reg.rows };
     }
   }

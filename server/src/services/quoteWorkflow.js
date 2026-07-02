@@ -34,8 +34,9 @@ const numOrNull = (v) => {
 /**
  * Parse the written line a submit carries. The client sends either
  * `written_line_pct` (a number), `line_pct` (a plain number for PROP), or
- * `line_pct` as a JSON per-layer map for NP — in which case we average the
- * positive entries. Returns null when nothing usable is present.
+ * `line_pct` as a JSON per-layer map for NP — in which case we average every
+ * present per-layer entry, INCLUDING legitimate 0% layers (only null/NaN and
+ * negatives are dropped). Returns null when nothing usable is present.
  */
 export function parseQuoteLinePct({ written_line_pct, line_pct }) {
   if (written_line_pct != null) return numOrNull(written_line_pct);
@@ -45,9 +46,12 @@ export function parseQuoteLinePct({ written_line_pct, line_pct }) {
   try {
     const parsed = JSON.parse(line_pct);
     if (parsed && typeof parsed === 'object') {
+      // Include 0% layers in the mean — drop only null/undefined/NaN and
+      // negatives. Excluding zeros biased the written line upward. Unweighted:
+      // no per-layer weight is present in this map.
       const vals = Object.values(parsed)
         .map((v) => parseFloat(String(v).replace(/%/g, '')))
-        .filter((n) => Number.isFinite(n) && n > 0);
+        .filter((n) => Number.isFinite(n) && n >= 0);
       return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
     }
   } catch { /* not JSON — fall through */ }

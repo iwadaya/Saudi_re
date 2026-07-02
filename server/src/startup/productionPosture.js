@@ -63,6 +63,17 @@ export function checkProductionPosture({ log = logger } = {}) {
     }
   }
 
+  // ── CORS origin allow-list (G5) ──
+  // A wildcard CORS_ORIGIN in production makes the API reflect ANY request origin
+  // (app.js createCorsOptions drops credentials there, but still answers every
+  // cross-origin caller). Surface it so operators pin an explicit allow-list.
+  if (env.isProduction && env.corsOrigin === '*') {
+    warn('[posture] CORS_ORIGIN is "*" in production — the API reflects any request origin. '
+      + 'Set CORS_ORIGIN to an explicit comma-separated allow-list of your web origins so a '
+      + 'malicious site cannot make cross-origin API calls on a victim\'s behalf. '
+      + 'See app.js createCorsOptions / SECURITY.md.');
+  }
+
   // ── Distributed rate limiting (P1 #3) ──
   if (env.isProduction && !rateLimitStoreEnabled()) {
     if (inClusterMode()) {

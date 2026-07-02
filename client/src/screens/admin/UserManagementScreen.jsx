@@ -183,7 +183,7 @@ function AddUserModal({ roles, onClose, onSave }) {
         )})}
         {fi('Office', 'office', { placeholder:'Riyadh, Dubai, London…' })}
         {fi('Phone', 'phone', { placeholder:'+966 5X XXX XXXX (optional)' })}
-        <div style={{ fontSize:11, color:'rgba(255,255,255,.30)', marginBottom:14 }}>Default password: <code style={{ color:'rgba(255,255,255,.50)' }}>demo2026</code> — user should change on first login.</div>
+        <div style={{ fontSize:11, color:'rgba(255,255,255,.30)', marginBottom:14 }}>The server sets a temporary password for the new user, who must reset it on first login.</div>
         {err && <div style={{ color:'#f87171', fontSize:12, marginBottom:12 }}>{err}</div>}
         <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>

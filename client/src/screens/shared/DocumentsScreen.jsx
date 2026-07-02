@@ -531,11 +531,18 @@ export default function DocumentsScreen({ routeKey, headerPill, quoteMode = fals
               </div>
               <div style={{ flex:1, overflow:'auto', display:'flex', justifyContent:'center', alignItems:'flex-start', padding:20 }}>
                 {preview.mime==='application/pdf' ? (
-                  <iframe src={preview.url} style={{ width:'100%', height:'100%', border:'none', borderRadius:8, background:'#fff', minHeight:'80vh' }} title="PDF Preview"/>
+                  // sandbox="allow-same-origin" is the least-permissive value that
+                  // still lets the browser's built-in PDF viewer render the
+                  // same-origin document. allow-scripts is intentionally omitted so
+                  // no script inside the previewed file can execute.
+                  <iframe src={preview.url} sandbox="allow-same-origin" style={{ width:'100%', height:'100%', border:'none', borderRadius:8, background:'#fff', minHeight:'80vh' }} title="PDF Preview"/>
                 ) : preview.mime?.startsWith('image/') ? (
                   <img src={preview.url} alt={preview.name} style={{ maxWidth:'100%', maxHeight:'85vh', borderRadius:8, objectFit:'contain' }}/>
                 ) : (
-                  <iframe src={preview.url} style={{ width:'100%', height:'100%', border:'none', borderRadius:8, background:'#fff', minHeight:'80vh' }} title="File Preview"/>
+                  // Same rationale as the PDF branch: allow-same-origin lets the
+                  // preview render but allow-scripts is withheld so embedded
+                  // scripts in an untrusted file cannot run.
+                  <iframe src={preview.url} sandbox="allow-same-origin" style={{ width:'100%', height:'100%', border:'none', borderRadius:8, background:'#fff', minHeight:'80vh' }} title="File Preview"/>
                 )}
               </div>
             </div>

@@ -204,6 +204,46 @@ describe('mapExtractionToPages — proportional', () => {
     expect(fieldConfidence['largeLosses[0].insuredName']).toBe(1);
   });
 
+  it('normalises bare dev-period indices (1,2,3) to months (12,24,36)', async () => {
+    // A pack whose triangle columns are plain indices rather than months —
+    // matches triangleBounds.js normalizeTriangleRequest so downstream
+    // 12/24/36-keyed LDF logic can match the cells.
+    const extraction = buildPropExtraction({
+      premium: {
+        triangle: {
+          uwYears: [2024],
+          devPeriods: [1, 2, 3],
+          values: [[100, 200, 300]],
+          source: 'Premium Triangle:A1:D2',
+          confidence: 1,
+        },
+        latestEarned: lf(1_000_000),
+        growthAssumption: lf(3),
+      },
+    });
+    const { pages } = await mapExtractionToPages(extraction, { treatyCategory: 'PROPORTIONAL' });
+    expect(pages.premium_history.cells.map((c) => c.dev_months)).toEqual([12, 24, 36]);
+    expect(pages.premium_history.cells.map((c) => c.cum_value)).toEqual([100, 200, 300]);
+  });
+
+  it('leaves dev periods already in months (12,24,36) unchanged', async () => {
+    const extraction = buildPropExtraction({
+      premium: {
+        triangle: {
+          uwYears: [2024],
+          devPeriods: [12, 24, 36],
+          values: [[100, 200, 300]],
+          source: 'Premium Triangle:A1:D2',
+          confidence: 1,
+        },
+        latestEarned: lf(1_000_000),
+        growthAssumption: lf(3),
+      },
+    });
+    const { pages } = await mapExtractionToPages(extraction, { treatyCategory: 'PROPORTIONAL' });
+    expect(pages.premium_history.cells.map((c) => c.dev_months)).toEqual([12, 24, 36]);
+  });
+
   it('omits triangle pages when triangles are null', async () => {
     const extraction = buildPropExtraction({
       premium: { triangle: null, latestEarned: lf(1_000_000), growthAssumption: lf(3) },

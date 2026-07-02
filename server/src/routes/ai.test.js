@@ -5,7 +5,7 @@
 // we exercise validation + response shaping without touching real
 // providers.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 
 // Stub env BEFORE importing the route. The /ai/complete route inspects
@@ -135,6 +135,71 @@ describe('AI governance gate', () => {
       ([sql, params]) => /audit_log/.test(sql) && Array.isArray(params) && params.includes('AI_CALL'),
     );
     expect(auditCall, 'an AI_CALL audit row should be written').toBeTruthy();
+  });
+});
+
+describe('POST /api/ai/complete PII redaction', () => {
+  let fetchSpy;
+  beforeEach(() => {
+    // /ai/complete talks to Anthropic directly via global fetch — stub both.
+    envMock.anthropicApiKey = 'sk-ant-test';
+    fetchSpy = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: 'msg_1', content: [{ type: 'text', text: 'ok' }] }),
+    }));
+    vi.stubGlobal('fetch', fetchSpy);
+  });
+  afterEach(() => {
+    envMock.anthropicApiKey = null;
+    vi.unstubAllGlobals();
+  });
+
+  it('redacts PII inside array-form content blocks AND the system field before the provider call', async () => {
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST',
+      path: '/api/ai/complete',
+      body: {
+        system: 'Contact underwriter at boss@example.com',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Insured email is john@example.com' },
+              { type: 'text', text: 'no pii here' },
+              { type: 'image', source: { data: 'AAAA' } },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+
+    // Array text blocks are redacted; non-text blocks pass through untouched.
+    expect(sentBody.messages[0].content[0].text).toBe('Insured email is [REDACTED_EMAIL]');
+    expect(sentBody.messages[0].content[1].text).toBe('no pii here');
+    expect(sentBody.messages[0].content[2]).toEqual({ type: 'image', source: { data: 'AAAA' } });
+    // The system field is redacted too.
+    expect(sentBody.system).toBe('Contact underwriter at [REDACTED_EMAIL]');
+    // Belt-and-braces: no raw PII anywhere in the outbound payload.
+    const wire = JSON.stringify(sentBody);
+    expect(wire).not.toContain('john@example.com');
+    expect(wire).not.toContain('boss@example.com');
+  });
+
+  it('still redacts string-form content (regression on the original path)', async () => {
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST',
+      path: '/api/ai/complete',
+      body: { messages: [{ role: 'user', content: 'reach me at a@b.com' }] },
+    });
+    expect(res.status).toBe(200);
+    const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    expect(sentBody.messages[0].content).toBe('reach me at [REDACTED_EMAIL]');
   });
 });
 

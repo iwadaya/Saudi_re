@@ -196,8 +196,19 @@ export function parseLooseNumber(v) {
  * @param {number} weightBurn     % weight on pure burn (0..100).
  * @param {number} weightPareto   % weight on Pareto (0..100).
  * @param {number} weightExposure % weight on exposure (0..100).
- * @param {number} loading        % internal loading (0..99).
- * @returns {number} Blended, loaded rate. 0 when Σ weights ≤ 0 (loading is clamped to ≤ 99%).
+ * @param {number} loading        % internal loading (0..99; values >= 100 are
+ *   clamped to 99, not thrown — see the note below).
+ * @returns {number} Blended, loaded rate. 0 when Σ weights ≤ 0.
+ *
+ * Loading is CLAMPED to [0,99] here (a >= 100 loading becomes 99 → a huge but
+ * finite number), deliberately NOT thrown: this is the canonical formula the
+ * LIVE client pricing reducers run on every keystroke of user-entered fields
+ * (see final_pricing/state/pricingReducer.ts), so it must degrade gracefully
+ * rather than throw and crash the screen. The server-side `applyLoading`
+ * (persistence path) throws on the same >= 100 input to surface it before a bad
+ * rate is stored. Across the valid 0..99 range the two are identical, and the
+ * pricing verifier re-derives with THIS function, so verifier and client always
+ * agree. See docs/actuarial-audit.md.
  */
 export function deriveComponentTotal(pureBurn, pareto, exposure, weightBurn, weightPareto, weightExposure, loading) {
   // Parse loose/formatted strings consistently with the server verifier — see
@@ -210,8 +221,8 @@ export function deriveComponentTotal(pureBurn, pareto, exposure, weightBurn, wei
   const wTot = wB + wP + wE;
   if (wTot <= 0) return 0;
   const blended = (wB * toN(pureBurn) + wP * toN(pareto) + wE * toN(exposure)) / wTot;
-  const loadingN = clamp(toN(loading), 0, 99);
-  return blended / (1 - loadingN / 100);
+  const L = clamp(toN(loading), 0, 99);
+  return blended / (1 - L / 100);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -2,14 +2,11 @@
 // and the mandatory first-login modal (ForcePasswordChange). Renders the three
 // fields + show/hide + validation + submit; the CONTAINER and the success action
 // are the caller's. Client validation mirrors the server (>=8, confirm match,
-// differs from current, not the seeded temp); the server stays authoritative.
+// differs from current); the server stays authoritative — it also rejects reuse
+// of the seeded temporary password, so no such literal is baked into the client.
 import { useState } from 'react';
 import { api } from '../api';
 import { parseErrorBody } from '../utils/errorBody';
-
-// The seeded forced-change temp password — forbidden as a NEW password (the
-// server rejects it too). Not a secret: it's a throwaway that must be replaced.
-export const TEMP_SEED_PASSWORD = 'Universe#1234';
 
 export default function ChangePasswordForm({ onSuccess, onCancel, submitLabel = 'Update password' }) {
   const [cur, setCur] = useState('');
@@ -19,12 +16,11 @@ export default function ChangePasswordForm({ onSuccess, onCancel, submitLabel = 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const valid = cur.length > 0 && next.length >= 8 && next === conf && next !== cur && next !== TEMP_SEED_PASSWORD;
+  const valid = cur.length > 0 && next.length >= 8 && next === conf && next !== cur;
   const hint = (() => {
     if (next.length > 0 && next.length < 8) return 'New password must be at least 8 characters.';
     if (conf.length > 0 && next !== conf) return 'Passwords do not match';
     if (next.length >= 8 && next === cur) return 'New password must differ';
-    if (next.length >= 8 && next === TEMP_SEED_PASSWORD) return 'Choose a different password — not the temporary one.';
     return '';
   })();
 

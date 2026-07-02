@@ -7,6 +7,7 @@
 
 import { cn } from './propPricingConstants';
 import { exportPropContractWorkbook } from '../propWorkbookExporters.js';
+import { logger } from '../../../../utils/logger';
 
 export default function PropPricingDecisionBar({
   comment, setComment, setDirty, isReadOnly, offerStatus,
@@ -57,7 +58,7 @@ export default function PropPricingDecisionBar({
                 finalData,
                 propDetail: td,
                 triangulationsEnabled: appState.propTreatyDetail?.triangulationsAvailable !== false,
-              }).catch((e) => { try { console.error('Export failed:', e); } catch { /* noop */ } });
+              }).catch((e) => { logger.error('Export failed', e); });
             }}
           >↓ Export Excel</button>
           <button className="bbg-btn bbg-btn--offer" onClick={() => setShowOffer(true)}>

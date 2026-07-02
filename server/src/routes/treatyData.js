@@ -22,7 +22,7 @@ import {
   resolveLocalStoragePath,
   getSignedReadUrl,
 } from '../lib/uploadStorage.js';
-import { assertUploadSafe } from '../lib/uploadValidation.js';
+import { assertUploadSafe, ALLOWED_TYPES, UploadValidationError } from '../lib/uploadValidation.js';
 import { buildBatchInsert } from '../db/batchInsert.js';
 import { randomUUID } from 'node:crypto';
 import multer from "multer";
@@ -729,8 +729,23 @@ router.get("/treaties/:id/cedant-exposure", asyncHandler(async (req, res) => {
 // and facultative.js. Reads still happen here because they're
 // document-table-specific.
 
+// Cheap early reject on an obviously-wrong extension BEFORE the full buffer is
+// read into memory. The authoritative content-sniff + malware scan still runs
+// in assertUploadSafe() after multer; this just avoids buffering junk.
+function uploadFileFilter(_req, file, cb) {
+  const ext = String(file?.originalname || '').toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] || '';
+  if (!ALLOWED_TYPES[ext]) {
+    cb(new UploadValidationError(
+      415, 'UNSUPPORTED_FILE_TYPE',
+      `File type ".${ext}" is not allowed. Accepted: ${Object.keys(ALLOWED_TYPES).join(', ')}.`,
+    ));
+    return;
+  }
+  cb(null, true);
+}
+
 // Always use memory storage — the helper decides where the bytes land.
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { files: 1, fileSize: 50 * 1024 * 1024 }, fileFilter: uploadFileFilter });
 
 router.get("/treaties/:id/documents", asyncHandler(async (req, res) => {
   const {rows}=await pool.query(`SELECT document_id,file_name,mime_type,size_bytes,description,doc_type,title,storage_path,uploaded_at FROM public.contract_document WHERE contract_id=$1 ORDER BY uploaded_at DESC`,[req.params.id]);

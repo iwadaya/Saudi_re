@@ -83,6 +83,14 @@ describe('LoginScreen people dropdown', () => {
     expect(screen.queryByText('Chief Underwriter')).toBeNull();
   });
 
+  it('loads users without sending spoofed x-user-* headers', async () => {
+    render(<LoginScreen />);
+    await screen.findByLabelText('Underwriter');
+    // The server returns a minimal projection to unauthenticated callers, so no
+    // elevated role/identity headers are sent.
+    expect(apiMock.getUsers).toHaveBeenCalledWith();
+  });
+
   it('renders the underwriter select and password input with an identical box model', async () => {
     render(<LoginScreen />);
     const select = await screen.findByLabelText('Underwriter');

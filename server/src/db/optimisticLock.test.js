@@ -40,6 +40,28 @@ describe('assertEntityUnchanged', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('takes a FOR UPDATE row lock so a concurrent stale write blocks', async () => {
+    // The lock is what closes the TOCTOU window: the read must be
+    // SELECT ... FOR UPDATE so a second transaction with the same baseline
+    // blocks on the first, then re-reads the fresh timestamp.
+    const ts = '2026-01-01T00:00:00Z';
+    const db = mkDb(ts);
+    await assertEntityUnchanged(db, { ...base, ifUnmodifiedSince: ts });
+    expect(db.query).toHaveBeenCalledTimes(1);
+    const [sql] = db.query.mock.calls[0];
+    expect(sql).toMatch(/FOR UPDATE\s*$/);
+  });
+
+  it('rejects when handed the pool instead of a transaction client', async () => {
+    // A Pool exposes .connect(); FOR UPDATE would not hold across the caller's
+    // transaction, so the helper must refuse it.
+    const fakePool = { query: vi.fn(), connect: vi.fn() };
+    await expect(
+      assertEntityUnchanged(fakePool, { ...base, ifUnmodifiedSince: '2026-01-01T00:00:00Z' }),
+    ).rejects.toThrow(/transaction client/);
+    expect(fakePool.query).not.toHaveBeenCalled();
+  });
+
   it('throws ConflictError on any forward delta — even 1ms', async () => {
     // Earlier versions had a 500ms grace window. That masked the realistic
     // case the integration suite exercises: GET → PUT (no header) → stale PUT,

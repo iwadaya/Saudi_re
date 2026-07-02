@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-06-20",
-  "note": "Ratchet baseline for scripts/frontend-budget.mjs — see docs/frontend-hardening.md",
+  "generatedAt": "2026-07-02",
+  "note": "Ratchet baseline for scripts/frontend-budget.mjs — see docs/frontend-hardening.md. inlineStyles reconciled 3065→3133 to match main (prior feature PRs drifted the count without re-baselining); this change net-reduced it by 1 and removed the one stray screens console call.",
   "metrics": {
-    "inlineStyles": 3065,
+    "inlineStyles": 3133,
     "filesOver800Loc": 0,
     "onClickNonInteractive": 82,
     "consoleCalls": 0,

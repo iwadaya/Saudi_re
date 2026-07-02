@@ -137,22 +137,41 @@ router.post('/ai/complete', requireAiEnabled, validateBody(aiCompleteSchema), as
     return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
   }
 
-  // Redact PII/identifiers from user-turn text before it leaves the app.
+  // Redact PII/identifiers from every text part before it leaves the app.
+  // `content` may be a plain string OR an array of content blocks (Anthropic
+  // Messages shape); the `system` field carries free text too. All three must
+  // be redacted, otherwise array-form content / system text reaches the
+  // provider unredacted.
   let redactionCount = 0;
+  const redactText = (t) => {
+    const red = redactForLlm(t);
+    redactionCount += red.redactionCount;
+    return red.text;
+  };
   const safeMessages = (Array.isArray(messages) ? messages : []).map((m) => {
     if (typeof m?.content === 'string') {
-      const red = redactForLlm(m.content);
-      redactionCount += red.redactionCount;
-      return { ...m, content: red.text };
+      return { ...m, content: redactText(m.content) };
+    }
+    if (Array.isArray(m?.content)) {
+      const content = m.content.map((block) => {
+        // Only text blocks have redactable free text (e.g. { type:'text', text }).
+        if (block && typeof block === 'object' && typeof block.text === 'string') {
+          return { ...block, text: redactText(block.text) };
+        }
+        return block;
+      });
+      return { ...m, content };
     }
     return m;
   });
+
+  const safeSystem = typeof system === 'string' ? redactText(system) : system;
 
   const payload = {
     model: ANTHROPIC_MODEL,
     max_tokens,
     messages: safeMessages,
-    ...(system ? { system } : {}),
+    ...(safeSystem ? { system: safeSystem } : {}),
   };
 
   const anthropicRes = await fetch(ANTHROPIC_API, {

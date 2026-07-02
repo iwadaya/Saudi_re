@@ -1,5 +1,5 @@
 // src/screens/facultative/home/FacHomeScreen.jsx
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getUserDisplayName } from '../../../utils/auth';
 import api from '../../../api';
@@ -37,7 +37,11 @@ export default function FacHomeScreen() {
 
   const statuses = ['ALL', 'DRAFT', 'QUOTED', 'BOUND', 'REFERRED', 'DECLINED', 'NTU'];
 
+  // Monotonic token: only the most recent load may apply its results, so a
+  // slow response for a stale status-filter/search can't overwrite newer state.
+  const loadToken = useRef(0);
   const load = useCallback(async () => {
+    const token = ++loadToken.current;
     try {
       setLoading(true);
       const params = {};
@@ -47,12 +51,14 @@ export default function FacHomeScreen() {
         api.facListRisks(params),
         api.facGetKpis(),
       ]);
+      if (token !== loadToken.current) return;
       setRisks(risksData);
       setKpis(kpisData);
     } catch (e) {
+      if (token !== loadToken.current) return;
       logger.error('Fac home load error:', e);
     } finally {
-      setLoading(false);
+      if (token === loadToken.current) setLoading(false);
     }
   }, [statusFilter, search]);
 

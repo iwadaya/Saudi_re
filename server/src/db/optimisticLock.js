@@ -42,7 +42,15 @@ export function optimisticLockOverrideRequested(ifUnmodifiedSince) {
  * If `ifUnmodifiedSince` is not supplied or not parseable, this is a
  * no-op (backwards-compatible with clients that don't send the header).
  *
- * @param {import('pg').PoolClient|import('pg').Pool} db
+ * MUST be called with the transaction client (the one from withTransaction),
+ * not the pool: the read takes a `FOR UPDATE` row lock so a second concurrent
+ * save with the same baseline timestamp blocks until the first commits, then
+ * re-reads the fresh timestamp and raises the 409 — closing the read/check/
+ * write race that a bare SELECT leaves open. On the pool each query runs in its
+ * own implicit transaction, so the lock would release immediately and reopen
+ * the window; we guard against that below.
+ *
+ * @param {import('pg').PoolClient} db  transaction client (NOT the pool)
  * @param {{table:string, idColumn:string, id:string|number, ifUnmodifiedSince?:string|string[]}} opts
  */
 export async function assertEntityUnchanged(db, { table, idColumn, id, ifUnmodifiedSince }) {
@@ -52,8 +60,20 @@ export async function assertEntityUnchanged(db, { table, idColumn, id, ifUnmodif
   const expected = new Date(header);
   if (Number.isNaN(expected.getTime())) return; // unparseable — skip
 
+  // Refuse the Pool: FOR UPDATE only holds a row lock inside an open
+  // transaction, and each pool.query() runs in its own implicit one.
+  // NOTE: a pg PoolClient inherits .connect() from Client, so .connect alone
+  // does NOT distinguish pool from client. The reliable discriminator is
+  // .release(): only a checked-out PoolClient has it; the Pool does not.
+  const isPool = typeof db?.connect === 'function' && typeof db?.release !== 'function';
+  if (isPool) {
+    throw new Error(
+      'assertEntityUnchanged requires a transaction client (the withTransaction client), not the pool — FOR UPDATE only holds inside a transaction',
+    );
+  }
+
   const { rows } = await db.query(
-    `SELECT updated_at FROM ${table} WHERE ${idColumn} = $1`,
+    `SELECT updated_at FROM ${table} WHERE ${idColumn} = $1 FOR UPDATE`,
     [id],
   );
   if (!rows.length) return; // let the caller's own existence check handle 404

@@ -115,6 +115,36 @@ function generateTempPassword() {
   return randomBytes(12).toString('base64url');
 }
 
+// A4 (user-enumeration): a fixed dummy scrypt hash, minted ONCE at module load
+// at the current cost. The login handler verifies the submitted password against
+// this whenever the username is unknown, so the "no such user" path spends the
+// same scrypt time as a real check and there is no timing oracle to enumerate
+// accounts. It never matches anything real (the plaintext is random + discarded).
+const DUMMY_PASSWORD_HASH = await hashPassword(randomBytes(32).toString('hex'));
+
+// A5 (privilege escalation): role/level lookups for the admin guards. Mirrors
+// services/assignments.getHierarchyLevel, kept local to this router. Defensive —
+// a missing row / DB hiccup returns null (guard "can't confirm seniority" and
+// falls through) rather than throwing on the admin path.
+async function getUserHierarchyLevel(userId) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT r.hierarchy_level FROM public.uw_user u JOIN public.uw_role r ON r.role_id = u.role_id WHERE u.user_id = $1 LIMIT 1`,
+      [userId],
+    );
+    return rows.length ? Number(rows[0].hierarchy_level) : null;
+  } catch { return null; }
+}
+async function getRoleHierarchyLevel(roleId) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT hierarchy_level FROM public.uw_role WHERE role_id = $1 LIMIT 1`,
+      [roleId],
+    );
+    return rows.length ? Number(rows[0].hierarchy_level) : null;
+  } catch { return null; }
+}
+
 // Open (login-screen) self-registration is FAIL-CLOSED (P1-identity D4): it is
 // permitted ONLY when an explicit dev flag opts in (ALLOW_OPEN_REGISTRATION=true).
 // Absent or any other value → disabled, in every environment including dev/test,
@@ -221,16 +251,22 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
   }
 
   if (!rows.length) {
+    // Unknown username. Still run a scrypt verification against a fixed dummy
+    // hash so this path costs ~the same as a real-user check (no timing oracle),
+    // then return the SAME generic 401 as a bad password.
+    await verifyPassword(password, DUMMY_PASSWORD_HASH);
     return res.status(401).json({ error: 'Invalid credentials.' });
   }
 
   const user = rows[0];
 
-  // Account lock check
+  // Account lock check. Return the SAME generic 401 as bad credentials so the
+  // lock state (and thus the account's existence) is never disclosed to the
+  // caller; the lock is still enforced server-side (no session is issued). Run
+  // the verification anyway to keep the response timing uniform.
   if (user.locked_until && new Date(user.locked_until) > new Date()) {
-    return res.status(403).json({
-      error: `Account locked until ${new Date(user.locked_until).toISOString()}. Contact your administrator.`,
-    });
+    await verifyPassword(password, user.password_hash || DUMMY_PASSWORD_HASH);
+    return res.status(401).json({ error: 'Invalid credentials.' });
   }
 
   // Password check.
@@ -628,6 +664,27 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
 router.patch('/auth/users/:id', requireMinLevel(2), asyncHandler(async (req, res) => {
   const { id } = req.params;
   const b = req.body || {};
+  const actorLevel = Number(req.user?.hierarchyLevel);
+
+  // ── A5 privilege-escalation guards (defence in depth on top of requireMinLevel) ──
+  // (b) An actor may never modify their OWN account here — no self-promotion or
+  //     self-(de)activation.
+  if (String(id) === String(req.user?.userId)) {
+    return res.status(403).json({ error: 'You cannot modify your own account.', code: 'FORBIDDEN' });
+  }
+  // (c) Never modify a user who is senior to (numerically below) the actor.
+  const targetLevel = await getUserHierarchyLevel(id);
+  if (targetLevel != null && targetLevel < actorLevel) {
+    return res.status(403).json({ error: 'You cannot modify a user more senior than yourself.', code: 'FORBIDDEN' });
+  }
+  // (a) Never assign a role that is senior to the actor's own level.
+  if (b.role_id !== undefined) {
+    const newRoleLevel = await getRoleHierarchyLevel(b.role_id);
+    if (newRoleLevel != null && newRoleLevel < actorLevel) {
+      return res.status(403).json({ error: 'You cannot assign a role more senior than your own.', code: 'FORBIDDEN' });
+    }
+  }
+
   const fields = [];
   const params = [];
   let i = 1;
@@ -730,6 +787,18 @@ router.get('/auth/mandates/:userId', asyncHandler(async (req, res) => {
 router.put('/auth/mandates/:userId', requireMinLevel(2), asyncHandler(async (req, res) => {
   const b = req.body || {};
   const { userId } = req.params;
+  const actorLevel = Number(req.user?.hierarchyLevel);
+
+  // ── A5 privilege-escalation guards ──
+  // (b) An actor may never raise/alter their OWN mandate (self-target guard).
+  if (String(userId) === String(req.user?.userId)) {
+    return res.status(403).json({ error: 'You cannot modify your own mandate.', code: 'FORBIDDEN' });
+  }
+  // (c) Never modify the mandate of a user senior to (numerically below) the actor.
+  const targetLevel = await getUserHierarchyLevel(userId);
+  if (targetLevel != null && targetLevel < actorLevel) {
+    return res.status(403).json({ error: 'You cannot modify the mandate of a user more senior than yourself.', code: 'FORBIDDEN' });
+  }
 
   // Fields whose change alters AUTHORITY (and therefore must force re-login).
   // limit_currency / effective_* / notes are descriptive and don't, by themselves.
