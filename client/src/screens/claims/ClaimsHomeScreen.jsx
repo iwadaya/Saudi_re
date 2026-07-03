@@ -72,6 +72,15 @@ const EMPTY_FORM = {
   cedant_claim_ref: '', cause_of_loss: '', description: '',
   loss_type: 'ATTRITIONAL', cat_event_ref: '', gross_paid_100: '0', gross_os_100: '0',
 };
+const EMPTY_PICKER = { country_id: '', cedant_id: '', uw_year: '', search: '' };
+
+/** Short human label for a treaty in the picker. */
+const treatyLabel = (c) => {
+  const bits = [c.cedant_name || 'Unnamed', c.treaty_type || 'Treaty', `UW ${c.uw_year}`];
+  if (c.alt_contract_id) bits.push(c.alt_contract_id);
+  if (c.signed_line_pct != null) bits.push(`line ${Number(c.signed_line_pct)}%`);
+  return bits.join(' · ');
+};
 
 export default function ClaimsHomeScreen() {
   const navigate = useNavigate();
@@ -88,6 +97,8 @@ export default function ClaimsHomeScreen() {
   const [createOpen, setCreateOpen] = useState(false);
   const [contracts, setContracts] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [picker, setPicker] = useState(EMPTY_PICKER);
+  const [files, setFiles] = useState([]);
   const [saving, setSaving] = useState(false);
   const [createError, setCreateError] = useState('');
 
@@ -114,7 +125,7 @@ export default function ClaimsHomeScreen() {
   useEffect(() => { load(); }, [load]);
 
   const openCreate = useCallback(async () => {
-    setCreateOpen(true); setCreateError(''); setForm(EMPTY_FORM);
+    setCreateOpen(true); setCreateError(''); setForm(EMPTY_FORM); setPicker(EMPTY_PICKER); setFiles([]);
     try {
       const rows = await api.getClaimsEligibleContracts();
       setContracts(Array.isArray(rows) ? rows : []);
@@ -123,6 +134,66 @@ export default function ClaimsHomeScreen() {
       setCreateError('Could not load signed treaties.');
     }
   }, []);
+
+  // Cascading treaty picker: country → cedants in that country → that cedant's
+  // treaties, further narrowed by UW year and free-text search (contract id /
+  // alt id / description / cedant).
+  const countries = useMemo(() => {
+    const seen = new Map();
+    for (const c of contracts) if (c.country_id && !seen.has(c.country_id)) seen.set(c.country_id, c.country_name || 'Unknown');
+    return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [contracts]);
+
+  const cedants = useMemo(() => {
+    const seen = new Map();
+    for (const c of contracts) {
+      if (picker.country_id && c.country_id !== picker.country_id) continue;
+      if (c.cedant_id && !seen.has(c.cedant_id)) seen.set(c.cedant_id, c.cedant_name || 'Unnamed');
+    }
+    return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [contracts, picker.country_id]);
+
+  const uwYears = useMemo(() => {
+    const years = new Set();
+    for (const c of contracts) {
+      if (picker.country_id && c.country_id !== picker.country_id) continue;
+      if (picker.cedant_id && c.cedant_id !== picker.cedant_id) continue;
+      if (c.uw_year != null) years.add(c.uw_year);
+    }
+    return [...years].sort((a, b) => b - a);
+  }, [contracts, picker.country_id, picker.cedant_id]);
+
+  const eligibleTreaties = useMemo(() => {
+    const needle = picker.search.trim().toLowerCase();
+    return contracts.filter((c) => {
+      if (picker.country_id && c.country_id !== picker.country_id) return false;
+      if (picker.cedant_id && c.cedant_id !== picker.cedant_id) return false;
+      if (picker.uw_year && String(c.uw_year) !== String(picker.uw_year)) return false;
+      if (needle) {
+        const hay = [c.contract_id, c.alt_contract_id, c.contract_description, c.cedant_name, c.treaty_type]
+          .filter(Boolean).join(' ').toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      return true;
+    });
+  }, [contracts, picker]);
+
+  const setPickerField = (k) => (e) => {
+    const value = e?.target ? e.target.value : e;
+    setPicker((p) => {
+      const next = { ...p, [k]: value };
+      if (k === 'country_id') { next.cedant_id = ''; next.uw_year = ''; }
+      if (k === 'cedant_id') next.uw_year = '';
+      return next;
+    });
+  };
+
+  // Drop the treaty selection if it no longer survives the picker filters.
+  useEffect(() => {
+    if (form.contract_id && !eligibleTreaties.some((c) => c.contract_id === form.contract_id)) {
+      setForm((f) => ({ ...f, contract_id: '' }));
+    }
+  }, [eligibleTreaties, form.contract_id]);
 
   const submitCreate = useCallback(async () => {
     setCreateError('');
@@ -144,13 +215,29 @@ export default function ClaimsHomeScreen() {
         gross_os_100: Number(String(form.gross_os_100).replace(/,/g, '')) || 0,
       };
       const out = await api.createClaim(body);
+      // Attachments ride along after the claim exists; a failed upload is
+      // reported but never blocks the created claim.
+      const failed = [];
+      for (const file of files) {
+        try {
+          const fd = new FormData();
+          fd.append('file', file);
+          await api.uploadClaimDocument(out.claim_id, fd);
+        } catch (e) {
+          logger.error('claim attachment upload failed', e);
+          failed.push(file.name);
+        }
+      }
+      if (failed.length) {
+        window.alert(`Claim ${out.claim_ref || ''} was created, but these attachments failed to upload: ${failed.join(', ')}. You can re-attach them on the claim screen.`);
+      }
       setCreateOpen(false);
       navigate(`/claims/${out.claim_id}`);
     } catch (e) {
       logger.error('claim create failed', e);
       setCreateError(errMsg(e, 'Claim creation failed.'));
     } finally { setSaving(false); }
-  }, [form, navigate]);
+  }, [form, files, navigate]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e?.target ? e.target.value : e }));
 
@@ -271,18 +358,43 @@ export default function ClaimsHomeScreen() {
         )}
       >
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {/* Treaty picker: country → cedant → treaty, with UW year + search */}
+          <Field label="Country">
+            <select value={picker.country_id} onChange={setPickerField('country_id')} style={{ ...selStyle, width: '100%' }}>
+              <option value="">All countries</option>
+              {countries.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Cedant">
+            <select value={picker.cedant_id} onChange={setPickerField('cedant_id')} style={{ ...selStyle, width: '100%' }}>
+              <option value="">All cedants{picker.country_id ? ' in country' : ''}</option>
+              {cedants.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </Field>
+          <Field label="UW year">
+            <select value={picker.uw_year} onChange={setPickerField('uw_year')} style={{ ...selStyle, width: '100%' }}>
+              <option value="">All years</option>
+              {uwYears.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </Field>
+          <Field label="Search treaties">
+            <Input value={picker.search} onChange={setPickerField('search')} placeholder="Contract ID / description…" />
+          </Field>
           <div style={{ gridColumn: '1 / -1' }}>
-            <Field label="Treaty (SIGNED / BOUND only)" required>
+            <Field label={`Treaty (SIGNED / BOUND only — ${eligibleTreaties.length} match${eligibleTreaties.length === 1 ? '' : 'es'})`} required>
               <select value={form.contract_id} onChange={set('contract_id')} style={{ ...selStyle, width: '100%' }}>
                 <option value="">Select treaty…</option>
-                {contracts.map((c) => (
-                  <option key={c.contract_id} value={c.contract_id}>
-                    {(c.cedant_name || 'Unnamed')} · {c.treaty_type || 'Treaty'} · UW {c.uw_year}
-                    {c.signed_line_pct != null ? ` · line ${Number(c.signed_line_pct)}%` : ''}
-                  </option>
+                {eligibleTreaties.map((c) => (
+                  <option key={c.contract_id} value={c.contract_id}>{treatyLabel(c)}</option>
                 ))}
               </select>
             </Field>
+            {form.contract_id && (() => {
+              const sel = contracts.find((c) => c.contract_id === form.contract_id);
+              return sel?.contract_description
+                ? <div style={{ fontSize: 11.5, color: 'var(--text-subtle)', marginTop: 4 }}>{sel.contract_description}</div>
+                : null;
+            })()}
           </div>
           <Field label="Loss date" required><Input type="date" value={form.loss_date} onChange={set('loss_date')} /></Field>
           <Field label="Reported date"><Input type="date" value={form.reported_date} onChange={set('reported_date')} /></Field>
@@ -302,6 +414,21 @@ export default function ClaimsHomeScreen() {
           </div>
           <Field label="Opening paid @100%"><Input inputMode="numeric" value={form.gross_paid_100} onChange={set('gross_paid_100')} /></Field>
           <Field label="Opening OS reserve @100%"><Input inputMode="numeric" value={form.gross_os_100} onChange={set('gross_os_100')} /></Field>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <Field label="Attachments">
+              <input
+                type="file" multiple
+                onChange={(e) => setFiles(Array.from(e.target.files || []))}
+                style={{ ...selStyle, width: '100%', padding: '7px 10px' }}
+                aria-label="Claim attachments"
+              />
+            </Field>
+            {files.length > 0 && (
+              <div style={{ fontSize: 11.5, color: 'var(--text-subtle)', marginTop: 4 }}>
+                {files.length} file{files.length === 1 ? '' : 's'} will be attached: {files.map((f) => f.name).join(', ')}
+              </div>
+            )}
+          </div>
         </div>
         {createError && <div style={{ color: '#f87171', fontSize: 12.5, marginTop: 12 }}>{createError}</div>}
       </Modal>

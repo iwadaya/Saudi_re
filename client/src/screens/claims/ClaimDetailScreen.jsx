@@ -54,6 +54,9 @@ export default function ClaimDetailScreen() {
   const [actionOpen, setActionOpen] = useState(null); // 'close' | 'decline' | 'reopen' | 'submit' | 'approve' | 'reject'
   const [reason, setReason] = useState('');
   const [note, setNote] = useState('');
+  const [docFiles, setDocFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [docError, setDocError] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -116,6 +119,29 @@ export default function ClaimDetailScreen() {
     try { await api.addClaimNote(id, note.trim()); setNote(''); await load(); }
     catch (e) { logger.error('note failed', e); }
   }, [id, note, load]);
+
+  const uploadDocs = useCallback(async () => {
+    if (!docFiles.length) return;
+    setUploading(true); setDocError('');
+    try {
+      for (const file of docFiles) {
+        const fd = new FormData();
+        fd.append('file', file);
+        await api.uploadClaimDocument(id, fd);
+      }
+      setDocFiles([]);
+      await load();
+    } catch (e) {
+      logger.error('claim doc upload failed', e);
+      setDocError(errMsg(e, 'Attachment upload failed.'));
+    } finally { setUploading(false); }
+  }, [id, docFiles, load]);
+
+  const deleteDoc = useCallback(async (docId, fileName) => {
+    if (!window.confirm(`Delete attachment “${fileName}”?`)) return;
+    try { await api.deleteClaimDocument(docId); await load(); }
+    catch (e) { logger.error('claim doc delete failed', e); setDocError(errMsg(e, 'Delete failed.')); }
+  }, [load]);
 
   const underReview = claim && claim.approval_status === 'WAITING_APPROVAL';
   const isOpen = claim && ['OPEN', 'REOPENED'].includes(claim.status) && !underReview;
@@ -229,6 +255,67 @@ export default function ClaimDetailScreen() {
                 </tbody>
               </table>
             </div>
+
+            {/* Attachments */}
+            <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 8 }}>Attachments</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="file" multiple
+                onChange={(e) => setDocFiles(Array.from(e.target.files || []))}
+                style={{
+                  flex: 1, minWidth: 240, background: 'var(--surface-2)', color: 'var(--text)',
+                  border: '1px solid rgba(var(--accent-rgb),0.25)', borderRadius: 8,
+                  padding: '7px 10px', fontSize: 12.5, fontFamily: 'var(--font-sans)',
+                }}
+                aria-label="Attach files to this claim"
+              />
+              <Button loading={uploading} onClick={uploadDocs} disabled={!docFiles.length}>
+                Upload{docFiles.length ? ` (${docFiles.length})` : ''}
+              </Button>
+            </div>
+            {docError && <div style={{ color: '#f87171', fontSize: 12.5, marginBottom: 10 }}>{docError}</div>}
+            {(claim.documents || []).length > 0 && (
+              <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid rgba(var(--accent-rgb),0.14)', marginBottom: 26 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--surface-2)', textAlign: 'left' }}>
+                      {['File', 'Size', 'Uploaded', 'By', ''].map((h) => (
+                        <th key={h || 'actions'} style={{ padding: '9px 12px', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-subtle)' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {claim.documents.map((d) => (
+                      <tr key={d.document_id} style={{ borderTop: '1px solid rgba(var(--accent-rgb),0.08)' }}>
+                        <td style={{ padding: '9px 12px' }}>
+                          <a href={api.getClaimDocumentViewUrl(d.document_id)} target="_blank" rel="noreferrer"
+                            style={{ color: 'var(--accent)', fontWeight: 700, textDecoration: 'none' }}>
+                            {d.file_name}
+                          </a>
+                          {d.title ? <div style={{ fontSize: 11, color: 'var(--text-subtle)' }}>{d.title}</div> : null}
+                        </td>
+                        <td style={{ padding: '9px 12px', color: 'var(--text-subtle)' }}>
+                          {d.size_bytes != null ? `${(Number(d.size_bytes) / 1024).toLocaleString(undefined, { maximumFractionDigits: 0 })} KB` : '–'}
+                        </td>
+                        <td style={{ padding: '9px 12px', color: 'var(--text)' }}>{fmtDate(d.uploaded_at)}</td>
+                        <td style={{ padding: '9px 12px', color: 'var(--text-subtle)' }}>{d.uploaded_by_name || '–'}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <a href={api.getClaimDocumentDownloadUrl(d.document_id)}
+                            style={{ color: 'var(--accent)', fontSize: 12, marginRight: 12, textDecoration: 'none' }}>Download</a>
+                          <button
+                            onClick={() => deleteDoc(d.document_id, d.file_name)}
+                            style={{ background: 'none', border: 'none', color: '#f87171', fontSize: 12, cursor: 'pointer', padding: 0, fontFamily: 'var(--font-sans)' }}
+                          >Delete</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {!(claim.documents || []).length && (
+              <div style={{ fontSize: 12.5, color: 'var(--text-subtle)', marginBottom: 26 }}>No attachments yet — cedant advices, adjuster reports and settlement proofs live here.</div>
+            )}
 
             {/* Notes */}
             <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 8 }}>Notes</div>
