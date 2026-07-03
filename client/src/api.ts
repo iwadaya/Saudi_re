@@ -230,6 +230,9 @@ const PATHS = {
   claimClose: (id: string) => `/api/claims/${enc(id)}/close`,
   claimDecline: (id: string) => `/api/claims/${enc(id)}/decline`,
   claimReopen: (id: string) => `/api/claims/${enc(id)}/reopen`,
+  claimSubmit: (id: string) => `/api/claims/${enc(id)}/submit`,
+  claimApprove: (id: string) => `/api/claims/${enc(id)}/approve`,
+  claimReject: (id: string) => `/api/claims/${enc(id)}/reject`,
   claimNotes: (id: string) => `/api/claims/${enc(id)}/notes`,
   // Finance module
   financeTreaties: '/api/finance/treaties',
@@ -427,9 +430,10 @@ export interface ImportSnapshot {
 // Public API object
 export const api = {
   // ── Claims module ──────────────────────────────────────────────────────────
-  listClaims(filters: { status?: string; contractId?: string; lossType?: string; q?: string } = {}, opts?: RequestOpts): Promise<unknown> {
+  listClaims(filters: { status?: string; approvalStatus?: string; contractId?: string; lossType?: string; q?: string } = {}, opts?: RequestOpts): Promise<unknown> {
     const params = new URLSearchParams();
     if (filters.status) params.set('status', filters.status);
+    if (filters.approvalStatus) params.set('approval_status', filters.approvalStatus);
     if (filters.contractId) params.set('contract_id', filters.contractId);
     if (filters.lossType) params.set('loss_type', filters.lossType);
     if (filters.q) params.set('q', filters.q);
@@ -445,6 +449,9 @@ export const api = {
   closeClaim(id: string, reason?: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimClose(id), { ...opts, method: 'POST', body: { reason } }); },
   declineClaim(id: string, reason?: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimDecline(id), { ...opts, method: 'POST', body: { reason } }); },
   reopenClaim(id: string, reason?: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimReopen(id), { ...opts, method: 'POST', body: { reason } }); },
+  submitClaim(id: string, reason?: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimSubmit(id), { ...opts, method: 'POST', body: { reason } }); },
+  approveClaim(id: string, reason?: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimApprove(id), { ...opts, method: 'POST', body: { reason } }); },
+  rejectClaim(id: string, reason?: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimReject(id), { ...opts, method: 'POST', body: { reason } }); },
   addClaimNote(id: string, note: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimNotes(id), { ...opts, method: 'POST', body: { note } }); },
 
   // ── Finance module ─────────────────────────────────────────────────────────

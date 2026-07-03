@@ -20,7 +20,7 @@ import { withTransaction } from '../db/withTransaction.js';
 import { logAudit, resolveAuditActor } from '../services/audit.js';
 import {
   claimCreateSchema, claimUpdateSchema, movementCreateSchema,
-  claimCloseSchema, claimNoteSchema,
+  claimCloseSchema, claimReviewSchema, claimNoteSchema, APPROVAL_STATUSES,
 } from '../validation/claims.js';
 
 const router = Router();
@@ -33,7 +33,10 @@ const CLAIM_SELECT = `
     cl.claim_id, cl.claim_ref, cl.contract_id, cl.cedant_claim_ref, cl.insured_name,
     cl.loss_date, cl.reported_date, cl.cause_of_loss, cl.description,
     cl.loss_type, cl.cat_event_ref, cl.status, cl.closed_at, cl.closed_reason,
+    cl.approval_status, cl.submitted_at, cl.reviewed_at, cl.review_comment,
     cl.class_of_business_id, cl.currency_id, cl.created_at, cl.updated_at,
+    sub.display_name                    AS submitted_by_name,
+    rev.display_name                    AS reviewed_by_name,
     ced.company_name                    AS cedant_name,
     co.country_name                     AS country_name,
     tt.treaty_type                      AS treaty_type,
@@ -58,6 +61,8 @@ const CLAIM_SELECT = `
   LEFT JOIN public.class_of_business cob ON cob.class_of_business_id = cl.class_of_business_id
   LEFT JOIN public.currency cur     ON cur.currency_id = cl.currency_id
   LEFT JOIN public.currency ccur    ON ccur.currency_id = c.currency_id
+  LEFT JOIN public.uw_user sub      ON sub.user_id = cl.submitted_by_user_id
+  LEFT JOIN public.uw_user rev      ON rev.user_id = cl.reviewed_by_user_id
   LEFT JOIN LATERAL (
     SELECT m.movement_no, m.movement_date, m.gross_paid_100, m.gross_os_100, m.share_pct
       FROM public.claim_movement m
@@ -67,14 +72,19 @@ const CLAIM_SELECT = `
   ) mv ON true`;
 
 // ── GET /api/claims ──────────────────────────────────────────────────────────
-// List with optional filters: ?status=OPEN&contract_id=…&loss_type=…&q=text
+// List with optional filters:
+//   ?status=OPEN&approval_status=WAITING_APPROVAL&contract_id=…&loss_type=…&q=text
 router.get('/claims', asyncHandler(async (req, res) => {
-  const { status, contract_id: contractId, loss_type: lossType, q } = req.query;
+  const { status, approval_status: approvalStatus, contract_id: contractId, loss_type: lossType, q } = req.query;
   const where = [];
   const params = [];
   if (status && ['OPEN', 'REOPENED', 'CLOSED', 'DECLINED'].includes(String(status).toUpperCase())) {
     params.push(String(status).toUpperCase());
     where.push(`cl.status = $${params.length}`);
+  }
+  if (approvalStatus && APPROVAL_STATUSES.includes(String(approvalStatus).toUpperCase())) {
+    params.push(String(approvalStatus).toUpperCase());
+    where.push(`cl.approval_status = $${params.length}`);
   }
   if (contractId && UUID_RE.test(String(contractId))) {
     params.push(contractId);
@@ -102,7 +112,7 @@ router.get('/claims', asyncHandler(async (req, res) => {
 router.get('/claims/summary', asyncHandler(async (_req, res) => {
   const { rows } = await pool.query(`
     WITH latest AS (
-      SELECT cl.claim_id, cl.status, cl.loss_type,
+      SELECT cl.claim_id, cl.status, cl.approval_status, cl.loss_type,
              COALESCE(mv.gross_paid_100, 0) AS paid_100,
              COALESCE(mv.gross_os_100, 0)   AS os_100,
              COALESCE(mv.share_pct, 0)      AS share_pct
@@ -119,11 +129,17 @@ router.get('/claims/summary', asyncHandler(async (_req, res) => {
       COUNT(*) FILTER (WHERE status IN ('OPEN','REOPENED'))::int           AS open_claims,
       COUNT(*) FILTER (WHERE status = 'CLOSED')::int                       AS closed_claims,
       COUNT(*) FILTER (WHERE loss_type = 'CAT')::int                       AS cat_claims,
+      COUNT(*) FILTER (WHERE approval_status = 'DRAFT')::int               AS draft_claims,
+      COUNT(*) FILTER (WHERE approval_status = 'WAITING_APPROVAL')::int    AS waiting_approval_claims,
+      COUNT(*) FILTER (WHERE approval_status = 'REJECTED')::int            AS rejected_claims,
+      COUNT(*) FILTER (WHERE approval_status = 'FINALISED')::int           AS finalised_claims,
       COALESCE(SUM((paid_100 + os_100) * share_pct / 100.0)
                FILTER (WHERE status IN ('OPEN','REOPENED')), 0)::numeric(20,2) AS open_incurred_our_share,
       COALESCE(SUM(os_100 * share_pct / 100.0)
                FILTER (WHERE status IN ('OPEN','REOPENED')), 0)::numeric(20,2) AS open_os_our_share,
-      COALESCE(SUM(paid_100 * share_pct / 100.0), 0)::numeric(20,2)        AS total_paid_our_share
+      -- Paid to date excludes claims the reviewer rejected.
+      COALESCE(SUM(paid_100 * share_pct / 100.0)
+               FILTER (WHERE approval_status <> 'REJECTED'), 0)::numeric(20,2) AS total_paid_our_share
     FROM latest`);
   res.json(rows[0]);
 }));
@@ -255,12 +271,16 @@ router.put('/claims/:id', validateBody(claimUpdateSchema), asyncHandler(async (r
   const { rows } = await pool.query(
     `UPDATE public.claim SET ${sets.join(', ')}, updated_at = now()
       WHERE claim_id = $1 AND status IN ('OPEN','REOPENED')
+        AND approval_status <> 'WAITING_APPROVAL'
       RETURNING claim_id, claim_ref`,
     params,
   );
   if (!rows.length) {
-    const { rows: exists } = await pool.query('SELECT status FROM public.claim WHERE claim_id=$1', [id]);
+    const { rows: exists } = await pool.query('SELECT status, approval_status FROM public.claim WHERE claim_id=$1', [id]);
     if (!exists.length) return res.status(404).json({ error: 'Claim not found' });
+    if (exists[0].approval_status === 'WAITING_APPROVAL') {
+      return res.status(422).json({ error: 'Claim is awaiting approval — it is frozen until reviewed.' });
+    }
     return res.status(422).json({ error: `Cannot edit a ${exists[0].status} claim — reopen it first.` });
   }
   await logAudit(null, {
@@ -280,7 +300,7 @@ router.post('/claims/:id/movements', validateBody(movementCreateSchema), asyncHa
 
   const out = await withTransaction(async (client) => {
     const { rows: clRows } = await client.query(
-      `SELECT cl.claim_id, cl.status, c.signed_line_pct
+      `SELECT cl.claim_id, cl.status, cl.approval_status, c.signed_line_pct
          FROM public.claim cl JOIN public.contract c ON c.contract_id = cl.contract_id
         WHERE cl.claim_id = $1 FOR UPDATE OF cl`,
       [id],
@@ -290,6 +310,10 @@ router.post('/claims/:id/movements', validateBody(movementCreateSchema), asyncHa
     if (!['OPEN', 'REOPENED'].includes(claim.status)) {
       const e = new Error(`Cannot book a movement on a ${claim.status} claim — reopen it first.`);
       e.status = 422; e.code = 'CLAIM_NOT_OPEN'; throw e;
+    }
+    if (claim.approval_status === 'WAITING_APPROVAL') {
+      const e = new Error('Claim is awaiting approval — the ledger is frozen until reviewed.');
+      e.status = 422; e.code = 'CLAIM_UNDER_REVIEW'; throw e;
     }
 
     const { rows: nextRows } = await client.query(
@@ -329,7 +353,7 @@ async function transitionClaim(req, res, { toStatus, movementType, eventType }) 
 
   const out = await withTransaction(async (client) => {
     const { rows: clRows } = await client.query(
-      `SELECT cl.claim_id, cl.status, c.signed_line_pct
+      `SELECT cl.claim_id, cl.status, cl.approval_status, c.signed_line_pct
          FROM public.claim cl JOIN public.contract c ON c.contract_id = cl.contract_id
         WHERE cl.claim_id = $1 FOR UPDATE OF cl`, [id]);
     if (!clRows.length) { const e = new Error('Claim not found'); e.status = 404; throw e; }
@@ -341,6 +365,10 @@ async function transitionClaim(req, res, { toStatus, movementType, eventType }) 
     if (!legal) {
       const e = new Error(`Cannot move a ${claim.status} claim to ${toStatus}.`);
       e.status = 422; e.code = 'ILLEGAL_CLAIM_TRANSITION'; throw e;
+    }
+    if (claim.approval_status === 'WAITING_APPROVAL') {
+      const e = new Error('Claim is awaiting approval — it is frozen until reviewed.');
+      e.status = 422; e.code = 'CLAIM_UNDER_REVIEW'; throw e;
     }
 
     const { rows: lastRows } = await client.query(
@@ -389,6 +417,71 @@ router.post('/claims/:id/decline', validateBody(claimCloseSchema), asyncHandler(
 
 router.post('/claims/:id/reopen', validateBody(claimCloseSchema), asyncHandler(
   (req, res) => transitionClaim(req, res, { toStatus: 'REOPENED', movementType: 'REOPEN', eventType: 'CLAIM_REOPENED' })));
+
+/**
+ * Shared approval-workflow transition (submit / approve / reject).
+ * DRAFT|REJECTED → WAITING_APPROVAL → FINALISED | REJECTED. While a claim is
+ * WAITING_APPROVAL every other mutation (edits, movements, close/reopen) is
+ * frozen, so the reviewer decides on exactly what was submitted.
+ */
+async function transitionApproval(req, res, { toStatus, from, eventType }) {
+  const { id } = req.params;
+  const reason = req.body?.reason ?? null;
+  const actor = await resolveAuditActor(req);
+
+  const out = await withTransaction(async (client) => {
+    const { rows: clRows } = await client.query(
+      `SELECT claim_id, claim_ref, approval_status FROM public.claim
+        WHERE claim_id = $1 FOR UPDATE`, [id]);
+    if (!clRows.length) { const e = new Error('Claim not found'); e.status = 404; throw e; }
+    const claim = clRows[0];
+    if (!from.includes(claim.approval_status)) {
+      const e = new Error(`Cannot move a ${claim.approval_status} claim to ${toStatus}.`);
+      e.status = 422; e.code = 'ILLEGAL_APPROVAL_TRANSITION'; throw e;
+    }
+
+    if (toStatus === 'WAITING_APPROVAL') {
+      await client.query(
+        `UPDATE public.claim
+            SET approval_status = 'WAITING_APPROVAL',
+                submitted_at = now(), submitted_by_user_id = $2,
+                reviewed_at = NULL, reviewed_by_user_id = NULL, review_comment = NULL,
+                updated_at = now()
+          WHERE claim_id = $1`,
+        [id, actor.actorUserId ?? null],
+      );
+    } else {
+      await client.query(
+        `UPDATE public.claim
+            SET approval_status = $2,
+                reviewed_at = now(), reviewed_by_user_id = $3, review_comment = $4,
+                updated_at = now()
+          WHERE claim_id = $1`,
+        [id, toStatus, actor.actorUserId ?? null, reason],
+      );
+    }
+
+    await logAudit(client, {
+      entityType: 'CLAIM', entityId: id, eventType,
+      actor: { id: actor.actorUserId, name: actor.actorName, role: actor.actorRole },
+      payload: { claim_ref: claim.claim_ref, from: claim.approval_status, to: toStatus, reason },
+    }, { critical: true });
+
+    return { claim_id: id, approval_status: toStatus };
+  });
+
+  res.json({ ok: true, ...out });
+}
+
+// ── POST /api/claims/:id/submit · /approve · /reject ────────────────────────
+router.post('/claims/:id/submit', validateBody(claimReviewSchema), asyncHandler(
+  (req, res) => transitionApproval(req, res, { toStatus: 'WAITING_APPROVAL', from: ['DRAFT', 'REJECTED'], eventType: 'CLAIM_SUBMITTED' })));
+
+router.post('/claims/:id/approve', validateBody(claimReviewSchema), asyncHandler(
+  (req, res) => transitionApproval(req, res, { toStatus: 'FINALISED', from: ['WAITING_APPROVAL'], eventType: 'CLAIM_APPROVED' })));
+
+router.post('/claims/:id/reject', validateBody(claimReviewSchema), asyncHandler(
+  (req, res) => transitionApproval(req, res, { toStatus: 'REJECTED', from: ['WAITING_APPROVAL'], eventType: 'CLAIM_REJECTED' })));
 
 // ── POST /api/claims/:id/notes ───────────────────────────────────────────────
 router.post('/claims/:id/notes', validateBody(claimNoteSchema), asyncHandler(async (req, res) => {
