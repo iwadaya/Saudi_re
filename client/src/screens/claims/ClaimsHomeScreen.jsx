@@ -54,18 +54,25 @@ export function ApprovalPill({ status }) {
   );
 }
 
-function KpiCard({ label, value, sub }) {
+function KpiCard({ label, value, sub, accent }) {
   return (
     <div style={{
-      flex: '1 1 180px', minWidth: 180, padding: '18px 20px', borderRadius: 14,
+      padding: '16px 18px', borderRadius: 14, minWidth: 0,
       background: 'var(--surface-2)', border: '1px solid rgba(var(--accent-rgb),0.18)',
     }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 8 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)' }}>{value}</div>
-      {sub ? <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>{sub}</div> : null}
+      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 800, color: accent || 'var(--text)', lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 6, minHeight: 13 }}>{sub || ''}</div>
     </div>
   );
 }
+
+const kpiRowStyle = (min) => ({
+  display: 'grid',
+  gridTemplateColumns: `repeat(auto-fit, minmax(${min}px, 1fr))`,
+  gap: 14,
+  marginBottom: 14,
+});
 
 const EMPTY_FORM = {
   contract_id: '', loss_date: '', reported_date: '', insured_name: '',
@@ -260,21 +267,20 @@ export default function ClaimsHomeScreen() {
 
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 20px' }}>
 
-        {/* Dashboard KPIs */}
-        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 22 }}>
-          <KpiCard label="Total Claims Paid to Date" value={summary ? fmtMoney(summary.total_paid_our_share) : '–'} sub="our share, excl. rejected" />
-          <KpiCard label="Draft Claims" value={summary ? summary.draft_claims : '–'} />
-          <KpiCard label="Waiting for Approval" value={summary ? summary.waiting_approval_claims : '–'} />
-          <KpiCard label="Rejected" value={summary ? summary.rejected_claims : '–'} />
-          <KpiCard label="Finalised" value={summary ? summary.finalised_claims : '–'} sub={`${summary ? summary.total_claims : '–'} claims total`} />
+        {/* Claim counts */}
+        <div style={kpiRowStyle(150)}>
+          <KpiCard label="Total Claims" value={summary ? summary.total_claims : '–'} sub={summary ? `${summary.open_claims} open · ${summary.cat_claims} CAT` : ''} />
+          <KpiCard label="Draft" value={summary ? summary.draft_claims : '–'} accent="#94a3b8" />
+          <KpiCard label="Waiting for Approval" value={summary ? summary.waiting_approval_claims : '–'} accent="#fbbf24" />
+          <KpiCard label="Rejected" value={summary ? summary.rejected_claims : '–'} accent="#f87171" />
+          <KpiCard label="Finalised" value={summary ? summary.finalised_claims : '–'} accent="#23d18b" />
         </div>
 
-        {/* Position KPIs */}
-        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 22 }}>
-          <KpiCard label="Open Claims" value={summary ? summary.open_claims : '–'} />
-          <KpiCard label="Open Incurred (our share)" value={summary ? fmtMoney(summary.open_incurred_our_share) : '–'} />
-          <KpiCard label="Outstanding (our share)" value={summary ? fmtMoney(summary.open_os_our_share) : '–'} />
-          <KpiCard label="CAT Claims" value={summary ? summary.cat_claims : '–'} />
+        {/* Position (our share) */}
+        <div style={{ ...kpiRowStyle(200), marginBottom: 22 }}>
+          <KpiCard label="Total Claims Paid to Date" value={summary ? fmtMoney(summary.total_paid_our_share) : '–'} sub="our share, excl. rejected" />
+          <KpiCard label="Open Incurred" value={summary ? fmtMoney(summary.open_incurred_our_share) : '–'} sub="our share, open claims" />
+          <KpiCard label="Outstanding" value={summary ? fmtMoney(summary.open_os_our_share) : '–'} sub="our share, open claims" />
         </div>
 
         {/* Filters */}
