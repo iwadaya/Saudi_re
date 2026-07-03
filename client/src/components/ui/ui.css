@@ -170,6 +170,23 @@
   padding: 14px 20px;
   border-top: 1px solid var(--hairline);
 }
+/* Full-screen variant — fills the viewport (minus the backdrop padding);
+   the body flexes so tab content scrolls inside the fixed chrome. The
+   backdrop lifts above the Topbar (zIndex 10001) so the dialog owns the
+   whole screen. */
+.ui-modal-backdrop:has(.ui-modal--full) {
+  z-index: 10002;
+}
+.ui-modal--full {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+.ui-modal--full .ui-modal__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
 
 /* ── Table ──────────────────────────────────────────────────────────── */
 .ui-table-wrap {
