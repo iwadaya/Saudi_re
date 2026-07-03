@@ -123,6 +123,15 @@ function mockDb(cfg = {}) {
     if (isSelect && s.includes('contract_offer')) return { rows: cfg.offer ? [cfg.offer] : [] };
     if (s.includes('SET peer1_user_id=$2')) return { rows: won(cfg.peer1Claim) ? [{ offer_id: cfg.offer?.offer_id }] : [] };
     if (s.includes('SET peer2_user_id=$2')) return { rows: won(cfg.peer2Claim) ? [{ offer_id: cfg.offer?.offer_id }] : [] };
+    // Finance push (services/financePush.js) — runs inside the SIGN txn. Serve
+    // its contract snapshot SELECT and the ledger UPSERT so markContractSigned
+    // completes; entityType FINANCE_ENTRY audit falls through to rows:[].
+    if (isSelect && s.includes('contract_pricing_outputs po')) {
+      return { rows: [{ contract_id: 'c1', signed_line_pct: 12, epi: null, currency_code: 'USD' }] };
+    }
+    if (s.includes('INSERT INTO public.finance_treaty_entry')) {
+      return { rows: [{ entry_id: 'fe1', contract_id: 'c1', status: 'PENDING_SETUP' }] };
+    }
     return { rows: [] };
   });
 }

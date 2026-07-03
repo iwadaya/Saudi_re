@@ -28,6 +28,7 @@
 // with surrogate-id remapping.
 
 import { logAudit } from './audit.js';
+import { pushContractToFinance } from './financePush.js';
 
 /** Flat symmetric sub-tables: quote_X (by quote_id) → contract_X (by contract_id). */
 const FLAT_SYMMETRIC = [
@@ -244,6 +245,10 @@ export async function bindQuoteToContract(pool, { quoteId, actor }) {
       entityType: 'QUOTE', entityId: quoteId, eventType: 'QUOTE_BOUND',
       actor, payload: { contractId },
     }, { critical: true });
+
+    // Finance handover — the bound contract is born SIGNED, so it enters the
+    // finance ledger in the same transaction (see services/financePush.js).
+    await pushContractToFinance(client, { contractId, source: 'BIND', actor });
 
     await client.query('COMMIT');
     return { contract_id: contractId, source_quote_id: quoteId };

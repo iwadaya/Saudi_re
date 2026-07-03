@@ -1,6 +1,76 @@
 // src/screens/select/SelectScreen.jsx
+// Module selection after login: Underwriting (Treaty), Facultative, Claims,
+// and Finance. Each card is a themed accent — treaty/fac keep their existing
+// accent variables; claims (amber) and finance (emerald) use fixed rgba
+// accents, the same pattern Topbar uses for role colors.
 import { useNavigate } from 'react-router-dom';
 import { getUserDisplayName } from '../../utils/auth';
+
+const MODULES = [
+  {
+    key: 'treaty', to: '/', icon: '📋', title: 'Treaty Underwriting',
+    blurb: 'Proportional & non-proportional treaty pricing, portfolio management, and approval workflows.',
+    tags: ['Proportional', 'Non-Proportional', 'XL / QS', 'Portfolio'],
+    cta: 'Open Treaty', rgb: 'var(--accent-rgb)', color: 'var(--accent)',
+  },
+  {
+    key: 'fac', to: '/fac', icon: '🔎', title: 'Facultative Underwriting',
+    blurb: 'Individual risk underwriting — per-risk submission, PML/EML pricing, certificate issuance.',
+    tags: ['Per Risk', 'Pro-Rata', 'XS of Retention', 'Fac Cert'],
+    cta: 'Open Facultative', rgb: 'var(--accent-blue-rgb)', color: 'var(--accent-blue)',
+  },
+  {
+    key: 'claims', to: '/claims', icon: '🧾', title: 'Claims',
+    blurb: 'Treaty claims register — cedant advices, movement ledger, reserves and payments at our share.',
+    tags: ['Advices', 'Movements', 'Reserves', 'CAT Events'],
+    cta: 'Open Claims', rgb: '251,191,36', color: 'rgb(251,191,36)',
+  },
+  {
+    key: 'finance', to: '/finance', icon: '🏦', title: 'Finance',
+    blurb: 'Signed-treaty ledger — every signed or bound treaty lands here automatically for booking and setup.',
+    tags: ['Signed Treaties', 'EPI', 'Setup', 'Cashflow'],
+    cta: 'Open Finance', rgb: '35,209,139', color: 'rgb(35,209,139)',
+  },
+];
+
+function ModuleCard({ m, onOpen }) {
+  return (
+    <button onClick={onOpen} style={{
+      width: 300, padding: '32px 28px', textAlign: 'left',
+      background: 'var(--surface-2)', border: `1px solid rgba(${m.rgb},0.22)`,
+      borderRadius: 18, cursor: 'pointer', transition: 'all .18s',
+    }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = `rgba(${m.rgb},0.50)`; e.currentTarget.style.boxShadow = `0 0 28px rgba(${m.rgb},0.10)`; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = `rgba(${m.rgb},0.22)`; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
+    >
+      <div style={{
+        width: 40, height: 40, borderRadius: 10,
+        background: `rgba(${m.rgb},0.10)`, border: `1px solid rgba(${m.rgb},0.28)`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 18, marginBottom: 18,
+      }}>{m.icon}</div>
+      <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', marginBottom: 6, letterSpacing: '.01em' }}>
+        {m.title}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text-subtle)', lineHeight: 1.6, marginBottom: 20 }}>
+        {m.blurb}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {m.tags.map(tag => (
+          <span key={tag} style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: '.08em',
+            padding: '3px 8px', borderRadius: 20,
+            background: `rgba(${m.rgb},0.07)`, border: `1px solid rgba(${m.rgb},0.18)`,
+            color: m.color,
+          }}>{tag}</span>
+        ))}
+      </div>
+      <div style={{ marginTop: 22, display: 'flex', alignItems: 'center', gap: 6, color: m.color, fontSize: 12, fontWeight: 700 }}>
+        {m.cta} <span style={{ fontSize: 16 }}>→</span>
+      </div>
+    </button>
+  );
+}
 
 export default function SelectScreen() {
   const navigate = useNavigate();
@@ -33,86 +103,13 @@ export default function SelectScreen() {
           Welcome back, {name.split(' ')[0]}
         </div>
         <div style={{ fontSize: 13, color: 'var(--text-subtle)' }}>
-          Select a product to continue
+          Select a module to continue
         </div>
       </div>
 
-      {/* Product cards */}
-      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', justifyContent: 'center', maxWidth: 720 }}>
-
-        {/* Treaty */}
-        <button onClick={() => navigate('/')} style={{
-          width: 300, padding: '32px 28px', textAlign: 'left',
-          background: 'var(--surface-2)', border: '1px solid rgba(var(--accent-rgb),0.25)',
-          borderRadius: 18, cursor: 'pointer', transition: 'all .18s',
-          boxShadow: '0 0 0 0 rgba(var(--accent-rgb),0)',
-        }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(var(--accent-rgb),0.55)'; e.currentTarget.style.boxShadow = '0 0 28px rgba(var(--accent-rgb),0.12)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(var(--accent-rgb),0.25)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
-        >
-          <div style={{
-            width: 40, height: 40, borderRadius: 10,
-            background: 'rgba(var(--accent-rgb),0.12)', border: '1px solid rgba(var(--accent-rgb),0.30)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 18, marginBottom: 18,
-          }}>📋</div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', marginBottom: 6, letterSpacing: '.01em' }}>
-            Treaty Reinsurance
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-subtle)', lineHeight: 1.6, marginBottom: 20 }}>
-            Proportional &amp; non-proportional treaty pricing, portfolio management, and approval workflows.
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {['Proportional', 'Non-Proportional', 'XL / QS', 'Portfolio'].map(tag => (
-              <span key={tag} style={{
-                fontSize: 10, fontWeight: 700, letterSpacing: '.08em',
-                padding: '3px 8px', borderRadius: 20,
-                background: 'rgba(var(--accent-rgb),0.08)', border: '1px solid rgba(var(--accent-rgb),0.20)',
-                color: 'var(--accent)',
-              }}>{tag}</span>
-            ))}
-          </div>
-          <div style={{ marginTop: 22, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--accent)', fontSize: 12, fontWeight: 700 }}>
-            Open Treaty <span style={{ fontSize: 16 }}>→</span>
-          </div>
-        </button>
-
-        {/* Facultative */}
-        <button onClick={() => navigate('/fac')} style={{
-          width: 300, padding: '32px 28px', textAlign: 'left',
-          background: 'var(--surface-2)', border: '1px solid rgba(var(--accent-blue-rgb),0.20)',
-          borderRadius: 18, cursor: 'pointer', transition: 'all .18s',
-        }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(var(--accent-blue-rgb),0.45)'; e.currentTarget.style.boxShadow = '0 0 28px rgba(var(--accent-blue-rgb),0.10)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(var(--accent-blue-rgb),0.20)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
-        >
-          <div style={{
-            width: 40, height: 40, borderRadius: 10,
-            background: 'rgba(var(--accent-blue-rgb),0.08)', border: '1px solid rgba(var(--accent-blue-rgb),0.25)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 18, marginBottom: 18,
-          }}>🔎</div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', marginBottom: 6, letterSpacing: '.01em' }}>
-            Facultative Reinsurance
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-subtle)', lineHeight: 1.6, marginBottom: 20 }}>
-            Individual risk underwriting — per-risk submission, PML/EML pricing, certificate issuance.
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {['Per Risk', 'Pro-Rata', 'XS of Retention', 'Fac Cert'].map(tag => (
-              <span key={tag} style={{
-                fontSize: 10, fontWeight: 700, letterSpacing: '.08em',
-                padding: '3px 8px', borderRadius: 20,
-                background: 'rgba(var(--accent-blue-rgb),0.06)', border: '1px solid rgba(var(--accent-blue-rgb),0.18)',
-                color: 'var(--accent-blue)',
-              }}>{tag}</span>
-            ))}
-          </div>
-          <div style={{ marginTop: 22, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--accent-blue)', fontSize: 12, fontWeight: 700 }}>
-            Open Facultative <span style={{ fontSize: 16 }}>→</span>
-          </div>
-        </button>
-
+      {/* Module cards */}
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', justifyContent: 'center', maxWidth: 680 }}>
+        {MODULES.map((m) => <ModuleCard key={m.key} m={m} onOpen={() => navigate(m.to)} />)}
       </div>
 
       {/* Footer */}

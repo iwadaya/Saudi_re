@@ -58,6 +58,9 @@ const PropHistory       = lazy(() => import('../screens/proportional/history/Pro
 const NpHistory         = lazy(() => import('../screens/non_proportional/history/NpHistory'));
 const ExcelImportAgent  = lazy(() => import('../screens/shared/ExcelImportAgent'));
 const QuickBenchmark    = lazy(() => import('../screens/benchmark/QuickBenchmark'));
+const ClaimsHomeScreen  = lazy(() => import('../screens/claims/ClaimsHomeScreen'));
+const ClaimDetailScreen = lazy(() => import('../screens/claims/ClaimDetailScreen'));
+const FinanceHomeScreen = lazy(() => import('../screens/finance/FinanceHomeScreen'));
 const UserManagementScreen = lazy(() => import('../screens/admin/UserManagementScreen'));
 const FormulaWorkbench     = lazy(() => import('../screens/workbench/FormulaWorkbench'));
 const FormulaDetail        = lazy(() => import('../screens/workbench/FormulaDetail'));
@@ -77,6 +80,9 @@ export const appRoutes = [
   { path: '/login', component: LoginScreen, public: true },
   { path: '/auth/callback', component: SsoCallback, public: true },
   { path: '/select', component: SelectScreen },
+  { path: '/claims', component: ClaimsHomeScreen },
+  { path: '/claims/:id', component: ClaimDetailScreen },
+  { path: '/finance', component: FinanceHomeScreen },
   { path: '/', component: HomeScreen },
   { path: '/fac', component: FacHomeScreen },
   { path: '/dashboard', component: DashboardScreen },
