@@ -264,6 +264,69 @@ describe.skipIf(shouldSkipDb)('integration: claims + finance modules', () => {
     expect(mv.status).toBe(201);
   });
 
+  it('eligible-contracts supports the country → cedant cascade, UW-year filter, and search', async () => {
+    await pool.query(
+      `UPDATE public.contract SET contract_description='IT Motor XL Programme', alt_contract_id='ALT-IT-42' WHERE contract_id=$1`,
+      [contractId]);
+
+    const hit = (rows) => rows.some((c) => c.contract_id === contractId);
+    const get = (qs) => harness.fetchApp('GET', `/api/claims/eligible-contracts${qs}`).then((r) => r.json());
+
+    // Rows carry the cascade + search fields.
+    const all = await get('');
+    const mine = all.find((c) => c.contract_id === contractId);
+    expect(mine.country_id).toBe(refs.country_id);
+    expect(mine.cedant_id).toBe(refs.cedant_id);
+    expect(mine.contract_description).toBe('IT Motor XL Programme');
+    expect(mine.alt_contract_id).toBe('ALT-IT-42');
+
+    expect(hit(await get(`?country_id=${refs.country_id}`))).toBe(true);
+    expect(hit(await get('?country_id=00000000-0000-0000-0000-00000000dead'))).toBe(false);
+    expect(hit(await get(`?cedant_id=${refs.cedant_id}`))).toBe(true);
+    expect(hit(await get(`?uw_year=${UW_YEAR}`))).toBe(true);
+    expect(hit(await get(`?uw_year=${UW_YEAR + 1}`))).toBe(false);
+    // Search by contract id, alt id, and description.
+    expect(hit(await get(`?q=${contractId}`))).toBe(true);
+    expect(hit(await get('?q=ALT-IT-42'))).toBe(true);
+    expect(hit(await get('?q=Motor%20XL'))).toBe(true);
+    expect(hit(await get('?q=zzz-no-such-treaty'))).toBe(false);
+    // Filters combine.
+    expect(hit(await get(`?country_id=${refs.country_id}&cedant_id=${refs.cedant_id}&uw_year=${UW_YEAR}&q=Motor`))).toBe(true);
+  });
+
+  it('takes, serves, and deletes attachments (audited)', async () => {
+    const form = new FormData();
+    form.append('file', new Blob(['cedant advice body'], { type: 'text/plain' }), 'advice.txt');
+    const up = await harness.fetchApp('POST', `/api/claims/${claimId}/documents`, { body: form });
+    expect(up.status).toBe(201);
+    const doc = await up.json();
+    expect(doc.file_name).toBe('advice.txt');
+    expect(await auditCount('CLAIM', claimId, 'CLAIM_DOCUMENT_UPLOADED')).toBe(1);
+
+    // Listed on the claim detail.
+    const detail = await harness.fetchApp('GET', `/api/claims/${claimId}`).then((r) => r.json());
+    expect(detail.documents.length).toBe(1);
+    expect(detail.documents[0].document_id).toBe(doc.document_id);
+
+    // Served back with the original bytes.
+    const dl = await harness.fetchApp('GET', `/api/claims/documents/${doc.document_id}/download`);
+    expect(dl.status).toBe(200);
+    expect(await dl.text()).toBe('cedant advice body');
+    expect(await auditCount('CLAIM', claimId, 'CLAIM_DOCUMENT_DOWNLOADED')).toBe(1);
+
+    // Junk extensions are rejected before any persistence.
+    const bad = new FormData();
+    bad.append('file', new Blob(['#!/bin/sh'], { type: 'application/x-sh' }), 'evil.sh');
+    const badRes = await harness.fetchApp('POST', `/api/claims/${claimId}/documents`, { body: bad });
+    expect(badRes.status).toBe(415);
+
+    // Delete removes the row and audits critically.
+    const del = await harness.fetchApp('DELETE', `/api/claims/documents/${doc.document_id}`);
+    expect(del.status).toBe(200);
+    expect((await harness.fetchApp('GET', `/api/claims/documents/${doc.document_id}/download`)).status).toBe(404);
+    expect(await auditCount('CLAIM', claimId, 'CLAIM_DOCUMENT_DELETED')).toBe(1);
+  });
+
   it('dashboard summary carries the approval KPIs', async () => {
     const cs = await harness.fetchApp('GET', '/api/claims/summary').then((r) => r.json());
     for (const k of ['draft_claims', 'waiting_approval_claims', 'rejected_claims', 'finalised_claims', 'total_paid_our_share']) {

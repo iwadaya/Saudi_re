@@ -13,11 +13,20 @@
 // (entity_type CLAIM) with the DB-resolved actor.
 
 import { Router } from 'express';
+import multer from 'multer';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import { pool } from '../db/pool.js';
 import { asyncHandler } from '../helpers.js';
 import { validateBody } from '../lib/validate.js';
 import { withTransaction } from '../db/withTransaction.js';
 import { logAudit, resolveAuditActor } from '../services/audit.js';
+import { logger } from '../lib/logger.js';
+import { assertUploadSafe, ALLOWED_TYPES, UploadValidationError } from '../lib/uploadValidation.js';
+import {
+  storeUploadedFile, deleteUploadedFile, isRemoteStoragePath,
+  getSignedReadUrl, resolveLocalStoragePath,
+} from '../lib/uploadStorage.js';
 import {
   claimCreateSchema, claimUpdateSchema, movementCreateSchema,
   claimCloseSchema, claimReviewSchema, claimNoteSchema, APPROVAL_STATUSES,
@@ -145,20 +154,45 @@ router.get('/claims/summary', asyncHandler(async (_req, res) => {
 }));
 
 // ── GET /api/claims/eligible-contracts ───────────────────────────────────────
-// SIGNED/BOUND contracts a claim can be booked against (create-claim dropdown).
-router.get('/claims/eligible-contracts', asyncHandler(async (_req, res) => {
+// SIGNED/BOUND contracts a claim can be booked against (create-claim picker).
+// Optional filters: ?country_id=…&cedant_id=…&uw_year=…&q=… — q searches the
+// contract id / alt contract id / contract description / cedant name.
+router.get('/claims/eligible-contracts', asyncHandler(async (req, res) => {
+  const { country_id: countryId, cedant_id: cedantId, uw_year: uwYear, q } = req.query;
+  const where = [`c.status IN ('SIGNED','BOUND')`];
+  const params = [];
+  if (countryId && UUID_RE.test(String(countryId))) {
+    params.push(countryId);
+    where.push(`c.country_id = $${params.length}`);
+  }
+  if (cedantId && UUID_RE.test(String(cedantId))) {
+    params.push(cedantId);
+    where.push(`c.cedant_id = $${params.length}`);
+  }
+  const year = Number.parseInt(String(uwYear ?? ''), 10);
+  if (Number.isInteger(year) && year > 1900 && year < 2300) {
+    params.push(year);
+    where.push(`c.uw_year = $${params.length}`);
+  }
+  if (q && String(q).trim()) {
+    params.push(`%${String(q).trim()}%`);
+    where.push(`(c.contract_id::text ILIKE $${params.length} OR c.alt_contract_id ILIKE $${params.length}
+                 OR c.contract_description ILIKE $${params.length} OR ced.company_name ILIKE $${params.length})`);
+  }
   const { rows } = await pool.query(`
-    SELECT c.contract_id, c.uw_year, c.status, c.signed_line_pct, c.inception_date,
-           ced.company_name AS cedant_name, co.country_name,
+    SELECT c.contract_id, c.alt_contract_id, c.contract_description,
+           c.uw_year, c.status, c.signed_line_pct, c.inception_date,
+           c.cedant_id, ced.company_name AS cedant_name,
+           c.country_id, co.country_name,
            tt.treaty_type, cur.currency_code
       FROM public.contract c
       LEFT JOIN public.companies ced  ON ced.company_id = c.cedant_id
       LEFT JOIN public.country co     ON co.country_id = c.country_id
       LEFT JOIN public.treaty_type tt ON tt.treaty_type_id = c.treaty_type_id
       LEFT JOIN public.currency cur   ON cur.currency_id = c.currency_id
-     WHERE c.status IN ('SIGNED','BOUND')
+     WHERE ${where.join(' AND ')}
      ORDER BY ced.company_name NULLS LAST, c.uw_year DESC
-     LIMIT 1000`);
+     LIMIT 1000`, params);
   res.json(rows);
 }));
 
@@ -230,7 +264,7 @@ router.post('/claims', validateBody(claimCreateSchema), asyncHandler(async (req,
 router.get('/claims/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!UUID_RE.test(id)) return res.status(400).json({ error: 'Invalid claim id' });
-  const [{ rows: header }, { rows: movements }, { rows: notes }] = await Promise.all([
+  const [{ rows: header }, { rows: movements }, { rows: notes }, { rows: documents }] = await Promise.all([
     pool.query(`${CLAIM_SELECT} WHERE cl.claim_id = $1`, [id]),
     pool.query(
       `SELECT m.movement_id, m.movement_no, m.movement_date, m.movement_type,
@@ -247,9 +281,16 @@ router.get('/claims/:id', asyncHandler(async (req, res) => {
          LEFT JOIN public.uw_user u ON u.user_id = n.created_by_user_id
         WHERE n.claim_id = $1
         ORDER BY n.created_at DESC`, [id]),
+    pool.query(
+      `SELECT d.document_id, d.file_name, d.mime_type, d.size_bytes, d.title,
+              d.description, d.uploaded_at, u.display_name AS uploaded_by_name
+         FROM public.claim_document d
+         LEFT JOIN public.uw_user u ON u.user_id = d.uploaded_by_user_id
+        WHERE d.claim_id = $1
+        ORDER BY d.uploaded_at DESC`, [id]),
   ]);
   if (!header.length) return res.status(404).json({ error: 'Claim not found' });
-  res.json({ ...header[0], movements, notes });
+  res.json({ ...header[0], movements, notes, documents });
 }));
 
 // ── PUT /api/claims/:id ──────────────────────────────────────────────────────
@@ -495,6 +536,130 @@ router.post('/claims/:id/notes', validateBody(claimNoteSchema), asyncHandler(asy
     [id, req.body.note, actor.actorUserId ?? null],
   );
   res.status(201).json({ ok: true, ...rows[0] });
+}));
+
+// ── Claim attachments ────────────────────────────────────────────────────────
+// Same upload pipeline as treaty/quote documents: extension pre-filter →
+// multer memory buffer → assertUploadSafe (content sniff + malware scan) →
+// shared storage sink (lib/uploadStorage.js). Claims are not assignee
+// edit-locked, so access follows the module's any-authenticated-user policy;
+// every upload/download/delete is audited.
+
+function uploadFileFilter(_req, file, cb) {
+  const ext = String(file?.originalname || '').toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] || '';
+  if (!ALLOWED_TYPES[ext]) {
+    cb(new UploadValidationError(
+      415, 'UNSUPPORTED_FILE_TYPE',
+      `File type ".${ext}" is not allowed. Accepted: ${Object.keys(ALLOWED_TYPES).join(', ')}.`,
+    ));
+    return;
+  }
+  cb(null, true);
+}
+const upload = multer({ storage: multer.memoryStorage(), limits: { files: 1, fileSize: 50 * 1024 * 1024 }, fileFilter: uploadFileFilter });
+
+// POST /api/claims/:id/documents — attach a file to a claim.
+router.post('/claims/:id/documents', upload.single('file'), asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) return res.status(400).json({ error: 'Invalid claim id' });
+  const file = req.file;
+  if (!file) return res.status(400).json({ error: 'No file uploaded' });
+
+  const { rows: exists } = await pool.query('SELECT claim_ref FROM public.claim WHERE claim_id=$1', [id]);
+  if (!exists.length) return res.status(404).json({ error: 'Claim not found' });
+
+  const actor = await resolveAuditActor(req);
+  const safe = await assertUploadSafe(file);
+  let storagePath;
+  try {
+    storagePath = await storeUploadedFile({ folder: `universe3/claims/${id}`, file });
+  } catch (e) {
+    if (e?.code === 'STORAGE_NOT_DURABLE') throw e; // 503 via errorHandler
+    return res.status(502).json({ error: `Upload storage failed: ${e?.message || e}` });
+  }
+
+  const title = String(req.body?.title ?? '').trim().slice(0, 300) || null;
+  const description = String(req.body?.description ?? '').trim().slice(0, 2000) || null;
+  const { rows } = await pool.query(
+    `INSERT INTO public.claim_document
+       (claim_id, file_name, mime_type, size_bytes, storage_path, title, description, uploaded_by_user_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     RETURNING document_id, file_name, mime_type, size_bytes, title, description, uploaded_at`,
+    [id, file.originalname, safe.mime, file.size, storagePath, title, description, actor.actorUserId ?? null],
+  );
+  await logAudit(null, {
+    entityType: 'CLAIM', entityId: id, eventType: 'CLAIM_DOCUMENT_UPLOADED',
+    actor: { id: actor.actorUserId, name: actor.actorName, role: actor.actorRole },
+    payload: { documentId: rows[0].document_id, fileName: file.originalname, sizeBytes: file.size },
+  });
+  res.status(201).json({ ok: true, ...rows[0] });
+}));
+
+/** Load a claim document row or 404. */
+async function loadClaimDoc(docId) {
+  if (!UUID_RE.test(docId)) return null;
+  const { rows } = await pool.query(
+    `SELECT document_id, claim_id, file_name, mime_type, size_bytes, storage_path
+       FROM public.claim_document WHERE document_id=$1`, [docId]);
+  return rows[0] || null;
+}
+
+async function serveClaimDoc(req, res, { audit = false } = {}) {
+  const doc = await loadClaimDoc(req.params.docId);
+  if (!doc) return res.status(404).json({ error: 'Document not found' });
+  const sp = doc.storage_path || '';
+  if (audit) {
+    const actor = await resolveAuditActor(req);
+    await logAudit(pool, {
+      entityType: 'CLAIM', entityId: doc.claim_id, eventType: 'CLAIM_DOCUMENT_DOWNLOADED',
+      actor: { id: actor.actorUserId, name: actor.actorName, role: actor.actorRole },
+      payload: { documentId: doc.document_id, fileName: doc.file_name },
+    });
+  }
+  // Remote (Cloudinary) asset — mint a short-lived signed URL, never the stored one.
+  if (isRemoteStoragePath(sp)) {
+    const signedUrl = await getSignedReadUrl(sp);
+    if (!signedUrl) return res.status(502).json({ error: 'Document storage temporarily unavailable' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.redirect(signedUrl);
+  }
+  const fp = resolveLocalStoragePath(sp);
+  let stat;
+  try {
+    stat = await fsp.stat(fp);
+  } catch (err) {
+    if (err.code === 'ENOENT') return res.status(404).json({ error: 'File not found on disk' });
+    throw err;
+  }
+  res.setHeader('Content-Type', doc.mime_type || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(doc.file_name)}"`);
+  res.setHeader('Content-Length', doc.size_bytes || stat.size);
+  fs.createReadStream(fp).pipe(res);
+}
+
+router.get('/claims/documents/:docId/download', asyncHandler((req, res) => serveClaimDoc(req, res, { audit: true })));
+router.get('/claims/documents/:docId/view', asyncHandler((req, res) => serveClaimDoc(req, res)));
+
+// DELETE /api/claims/documents/:docId
+router.delete('/claims/documents/:docId', asyncHandler(async (req, res) => {
+  const doc = await loadClaimDoc(req.params.docId);
+  if (!doc) return res.status(404).json({ error: 'Document not found' });
+  const actor = await resolveAuditActor(req);
+  await withTransaction(async (client) => {
+    const { rowCount } = await client.query(
+      'DELETE FROM public.claim_document WHERE document_id=$1', [doc.document_id]);
+    if (!rowCount) { const e = new Error('Document not found'); e.status = 404; throw e; }
+    await logAudit(client, {
+      entityType: 'CLAIM', entityId: doc.claim_id, eventType: 'CLAIM_DOCUMENT_DELETED',
+      actor: { id: actor.actorUserId, name: actor.actorName, role: actor.actorRole },
+      payload: { documentId: doc.document_id, fileName: doc.file_name },
+    }, { critical: true });
+  });
+  // Best-effort cleanup AFTER commit — a failure is a logged leak, not a 500.
+  deleteUploadedFile(doc.storage_path || '').catch((err) => {
+    logger.warn('[claim-doc/delete] storage cleanup failed', { storagePath: doc.storage_path, error: err?.message });
+  });
+  res.json({ ok: true });
 }));
 
 export default router;

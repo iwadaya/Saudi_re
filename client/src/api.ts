@@ -234,6 +234,10 @@ const PATHS = {
   claimApprove: (id: string) => `/api/claims/${enc(id)}/approve`,
   claimReject: (id: string) => `/api/claims/${enc(id)}/reject`,
   claimNotes: (id: string) => `/api/claims/${enc(id)}/notes`,
+  claimDocuments: (id: string) => `/api/claims/${enc(id)}/documents`,
+  claimDocumentDownload: (docId: string) => `/api/claims/documents/${enc(docId)}/download`,
+  claimDocumentView: (docId: string) => `/api/claims/documents/${enc(docId)}/view`,
+  claimDocumentDelete: (docId: string) => `/api/claims/documents/${enc(docId)}`,
   // Finance module
   financeTreaties: '/api/finance/treaties',
   financeSummary: '/api/finance/summary',
@@ -441,7 +445,15 @@ export const api = {
     return request(`${PATHS.claims}${qs ? '?' + qs : ''}`, opts);
   },
   getClaimsSummary(opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimsSummary, opts); },
-  getClaimsEligibleContracts(opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimsEligibleContracts, opts); },
+  getClaimsEligibleContracts(filters: { countryId?: string; cedantId?: string; uwYear?: string | number; q?: string } = {}, opts?: RequestOpts): Promise<unknown> {
+    const params = new URLSearchParams();
+    if (filters.countryId) params.set('country_id', filters.countryId);
+    if (filters.cedantId) params.set('cedant_id', filters.cedantId);
+    if (filters.uwYear != null && filters.uwYear !== '') params.set('uw_year', String(filters.uwYear));
+    if (filters.q) params.set('q', filters.q);
+    const qs = params.toString();
+    return request(`${PATHS.claimsEligibleContracts}${qs ? '?' + qs : ''}`, opts);
+  },
   getClaim(id: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claim(id), opts); },
   createClaim(body: unknown, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claims, { ...opts, method: 'POST', body }); },
   updateClaim(id: string, body: unknown, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claim(id), { ...opts, method: 'PUT', body }); },
@@ -453,6 +465,10 @@ export const api = {
   approveClaim(id: string, reason?: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimApprove(id), { ...opts, method: 'POST', body: { reason } }); },
   rejectClaim(id: string, reason?: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimReject(id), { ...opts, method: 'POST', body: { reason } }); },
   addClaimNote(id: string, note: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimNotes(id), { ...opts, method: 'POST', body: { note } }); },
+  uploadClaimDocument(id: string, formData: FormData, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimDocuments(id), { ...opts, method: 'POST', body: formData }); },
+  deleteClaimDocument(docId: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimDocumentDelete(docId), { ...opts, method: 'DELETE' }); },
+  getClaimDocumentDownloadUrl(docId: string): string { return `${API_BASE}${PATHS.claimDocumentDownload(docId)}`; },
+  getClaimDocumentViewUrl(docId: string): string { return `${API_BASE}${PATHS.claimDocumentView(docId)}`; },
 
   // ── Finance module ─────────────────────────────────────────────────────────
   listFinanceTreaties(status?: string, opts?: RequestOpts): Promise<unknown> {
