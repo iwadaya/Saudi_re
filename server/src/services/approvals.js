@@ -16,6 +16,7 @@ import { withTransaction as withTxn } from '../db/withTransaction.js';
 import { changeUwStatus } from './workflow.js';
 import { assertLegalTransition, InvalidTransitionError } from '../lib/statusMachine.js';
 import { refreshBenchmarks } from './ldf/benchmark.js';
+import { pushContractToFinance } from './financePush.js';
 
 const LEVEL = { CE:1, CU:2, CA:2, TD:3, UM:3, TM:4, TUW:5, UW:5, AN:6 };
 const ROLE_NAME = { CE:'Chief Executive', CU:'Chief Underwriter', CA:'Chief Actuary', TD:'Treaty Director', UM:'Underwriting Manager', TM:'Treaty Manager', TUW:'Treaty Underwriter', UW:'Underwriter', AN:'Analyst' };
@@ -1018,6 +1019,12 @@ export async function markContractSigned({ contractId, actorUserId, actorName, a
       [contractId, signedLinePct ?? null]
     );
     await logOfferEvent({ contractId, eventType: 'SIGNED', actorUserId, actorName, actorRole, payload: { signedLinePct: signedLinePct ?? null }, client });
+    // Finance handover — same transaction as the SIGN, so a signed treaty can
+    // never exist without its finance ledger entry (see services/financePush.js).
+    await pushContractToFinance(client, {
+      contractId, source: 'SIGN',
+      actor: { id: actorUserId, name: actorName, role: actorRole },
+    });
   });
   refreshBenchmarks(pool).catch(() => {});
   return { nextStatus: 'SIGNED' };

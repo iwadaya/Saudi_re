@@ -221,6 +221,22 @@ const PATHS = {
   offerNtu: (id: string) => `/api/treaties/${enc(id)}/offer/ntu`,
   npPricing: (id: string) => `/api/treaties/${enc(id)}/np-pricing`,
   npExpiring: (id: string) => `/api/treaties/${enc(id)}/np/expiring`,
+  // Claims module
+  claims: '/api/claims',
+  claimsSummary: '/api/claims/summary',
+  claimsEligibleContracts: '/api/claims/eligible-contracts',
+  claim: (id: string) => `/api/claims/${enc(id)}`,
+  claimMovements: (id: string) => `/api/claims/${enc(id)}/movements`,
+  claimClose: (id: string) => `/api/claims/${enc(id)}/close`,
+  claimDecline: (id: string) => `/api/claims/${enc(id)}/decline`,
+  claimReopen: (id: string) => `/api/claims/${enc(id)}/reopen`,
+  claimNotes: (id: string) => `/api/claims/${enc(id)}/notes`,
+  // Finance module
+  financeTreaties: '/api/finance/treaties',
+  financeSummary: '/api/finance/summary',
+  financeEntry: (id: string) => `/api/finance/entries/${enc(id)}`,
+  financeAcknowledge: (id: string) => `/api/finance/entries/${enc(id)}/acknowledge`,
+  financeStatus: (id: string) => `/api/finance/entries/${enc(id)}/status`,
   mandateCheck: '/api/auth/mandate-check',
   authLogin: '/api/auth/login',
   authLogout: '/api/auth/logout',
@@ -410,6 +426,36 @@ export interface ImportSnapshot {
 
 // Public API object
 export const api = {
+  // ── Claims module ──────────────────────────────────────────────────────────
+  listClaims(filters: { status?: string; contractId?: string; lossType?: string; q?: string } = {}, opts?: RequestOpts): Promise<unknown> {
+    const params = new URLSearchParams();
+    if (filters.status) params.set('status', filters.status);
+    if (filters.contractId) params.set('contract_id', filters.contractId);
+    if (filters.lossType) params.set('loss_type', filters.lossType);
+    if (filters.q) params.set('q', filters.q);
+    const qs = params.toString();
+    return request(`${PATHS.claims}${qs ? '?' + qs : ''}`, opts);
+  },
+  getClaimsSummary(opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimsSummary, opts); },
+  getClaimsEligibleContracts(opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimsEligibleContracts, opts); },
+  getClaim(id: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claim(id), opts); },
+  createClaim(body: unknown, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claims, { ...opts, method: 'POST', body }); },
+  updateClaim(id: string, body: unknown, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claim(id), { ...opts, method: 'PUT', body }); },
+  bookClaimMovement(id: string, body: unknown, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimMovements(id), { ...opts, method: 'POST', body }); },
+  closeClaim(id: string, reason?: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimClose(id), { ...opts, method: 'POST', body: { reason } }); },
+  declineClaim(id: string, reason?: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimDecline(id), { ...opts, method: 'POST', body: { reason } }); },
+  reopenClaim(id: string, reason?: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimReopen(id), { ...opts, method: 'POST', body: { reason } }); },
+  addClaimNote(id: string, note: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimNotes(id), { ...opts, method: 'POST', body: { note } }); },
+
+  // ── Finance module ─────────────────────────────────────────────────────────
+  listFinanceTreaties(status?: string, opts?: RequestOpts): Promise<unknown> {
+    return request(status ? `${PATHS.financeTreaties}?status=${enc(status)}` : PATHS.financeTreaties, opts);
+  },
+  getFinanceSummary(opts?: RequestOpts): Promise<unknown> { return request(PATHS.financeSummary, opts); },
+  getFinanceEntry(id: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.financeEntry(id), opts); },
+  acknowledgeFinanceEntry(id: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.financeAcknowledge(id), { ...opts, method: 'POST', body: {} }); },
+  setFinanceEntryStatus(id: string, status: string, notes?: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.financeStatus(id), { ...opts, method: 'POST', body: { status, notes } }); },
+
   // Home
   getHomeSummary(opts?: RequestOpts & { scope?: 'mine' | 'all' }): Promise<unknown> {
     const { scope, ...rest } = opts || {};
