@@ -206,4 +206,74 @@ describe.skipIf(shouldSkipDb)('integration: claims + finance modules', () => {
     expect(fs.total_entries).toBeGreaterThanOrEqual(1);
     expect(fs.active).toBeGreaterThanOrEqual(1);
   });
+
+  it('approval workflow: claims start DRAFT and submit freezes the claim', async () => {
+    let detail = await harness.fetchApp('GET', `/api/claims/${claimId}`).then((r) => r.json());
+    expect(detail.approval_status).toBe('DRAFT');
+
+    const submit = await harness.fetchApp('POST', `/api/claims/${claimId}/submit`, { body: {} });
+    expect(submit.status).toBe(200);
+    expect(await auditCount('CLAIM', claimId, 'CLAIM_SUBMITTED')).toBe(1);
+    detail = await harness.fetchApp('GET', `/api/claims/${claimId}`).then((r) => r.json());
+    expect(detail.approval_status).toBe('WAITING_APPROVAL');
+    expect(detail.submitted_at).toBeTruthy();
+
+    // Frozen under review: no movements, edits, or lifecycle changes.
+    const mv = await harness.fetchApp('POST', `/api/claims/${claimId}/movements`, {
+      body: { movement_type: 'RESERVE_CHANGE', gross_paid_100: 250_000, gross_os_100: 100_000 },
+    });
+    expect(mv.status).toBe(422);
+    const edit = await harness.fetchApp('PUT', `/api/claims/${claimId}`, { body: { insured_name: 'Changed' } });
+    expect(edit.status).toBe(422);
+    const close = await harness.fetchApp('POST', `/api/claims/${claimId}/close`, { body: {} });
+    expect(close.status).toBe(422);
+    // And a double-submit is an illegal transition.
+    const again = await harness.fetchApp('POST', `/api/claims/${claimId}/submit`, { body: {} });
+    expect(again.status).toBe(422);
+  });
+
+  it('approval workflow: reject returns it to the handler, resubmit + approve finalises', async () => {
+    const reject = await harness.fetchApp('POST', `/api/claims/${claimId}/reject`, { body: { reason: 'Reserve unsupported' } });
+    expect(reject.status).toBe(200);
+    expect(await auditCount('CLAIM', claimId, 'CLAIM_REJECTED')).toBe(1);
+    let detail = await harness.fetchApp('GET', `/api/claims/${claimId}`).then((r) => r.json());
+    expect(detail.approval_status).toBe('REJECTED');
+    expect(detail.review_comment).toBe('Reserve unsupported');
+
+    // Approve is only legal from WAITING_APPROVAL.
+    const badApprove = await harness.fetchApp('POST', `/api/claims/${claimId}/approve`, { body: {} });
+    expect(badApprove.status).toBe(422);
+
+    // Rejected claims are editable again, then resubmit → approve.
+    const edit = await harness.fetchApp('PUT', `/api/claims/${claimId}`, { body: { insured_name: 'IT Insured (revised)' } });
+    expect(edit.status).toBe(200);
+    expect((await harness.fetchApp('POST', `/api/claims/${claimId}/submit`, { body: {} })).status).toBe(200);
+    const approve = await harness.fetchApp('POST', `/api/claims/${claimId}/approve`, { body: { reason: 'Looks right' } });
+    expect(approve.status).toBe(200);
+    expect(await auditCount('CLAIM', claimId, 'CLAIM_SUBMITTED')).toBe(2);
+    expect(await auditCount('CLAIM', claimId, 'CLAIM_APPROVED')).toBe(1);
+
+    detail = await harness.fetchApp('GET', `/api/claims/${claimId}`).then((r) => r.json());
+    expect(detail.approval_status).toBe('FINALISED');
+    expect(detail.reviewed_at).toBeTruthy();
+
+    // Finalised claims keep developing — the ledger accepts movements again.
+    const mv = await harness.fetchApp('POST', `/api/claims/${claimId}/movements`, {
+      body: { movement_type: 'RESERVE_CHANGE', gross_paid_100: 250_000, gross_os_100: 100_000, comment: 'Reserve re-established' },
+    });
+    expect(mv.status).toBe(201);
+  });
+
+  it('dashboard summary carries the approval KPIs', async () => {
+    const cs = await harness.fetchApp('GET', '/api/claims/summary').then((r) => r.json());
+    for (const k of ['draft_claims', 'waiting_approval_claims', 'rejected_claims', 'finalised_claims', 'total_paid_our_share']) {
+      expect(cs[k]).toBeDefined();
+    }
+    expect(cs.finalised_claims).toBeGreaterThanOrEqual(1);
+    // The register filters by approval state.
+    const finalised = await harness.fetchApp('GET', '/api/claims?approval_status=FINALISED').then((r) => r.json());
+    expect(finalised.some((c) => c.claim_id === claimId)).toBe(true);
+    const waiting = await harness.fetchApp('GET', '/api/claims?approval_status=WAITING_APPROVAL').then((r) => r.json());
+    expect(waiting.some((c) => c.claim_id === claimId)).toBe(false);
+  });
 });

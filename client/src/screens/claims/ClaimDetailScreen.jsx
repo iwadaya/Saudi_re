@@ -8,6 +8,7 @@ import { api } from '../../api';
 import Topbar from '../../components/Topbar';
 import { Button, Field, Input, Modal } from '../../components/ui';
 import { logger } from '../../utils/logger';
+import { ApprovalPill } from './ClaimsHomeScreen';
 
 const errMsg = (e, fallback) => {
   const b = e?.body;
@@ -50,7 +51,7 @@ export default function ClaimDetailScreen() {
   const [mvError, setMvError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const [actionOpen, setActionOpen] = useState(null); // 'close' | 'decline' | 'reopen'
+  const [actionOpen, setActionOpen] = useState(null); // 'close' | 'decline' | 'reopen' | 'submit' | 'approve' | 'reject'
   const [reason, setReason] = useState('');
   const [note, setNote] = useState('');
 
@@ -99,6 +100,9 @@ export default function ClaimDetailScreen() {
       if (actionOpen === 'close') await api.closeClaim(id, reason || undefined);
       if (actionOpen === 'decline') await api.declineClaim(id, reason || undefined);
       if (actionOpen === 'reopen') await api.reopenClaim(id, reason || undefined);
+      if (actionOpen === 'submit') await api.submitClaim(id, reason || undefined);
+      if (actionOpen === 'approve') await api.approveClaim(id, reason || undefined);
+      if (actionOpen === 'reject') await api.rejectClaim(id, reason || undefined);
       setActionOpen(null); setReason(''); await load();
     } catch (e) {
       logger.error('claim action failed', e);
@@ -113,7 +117,9 @@ export default function ClaimDetailScreen() {
     catch (e) { logger.error('note failed', e); }
   }, [id, note, load]);
 
-  const isOpen = claim && ['OPEN', 'REOPENED'].includes(claim.status);
+  const underReview = claim && claim.approval_status === 'WAITING_APPROVAL';
+  const isOpen = claim && ['OPEN', 'REOPENED'].includes(claim.status) && !underReview;
+  const canSubmit = claim && ['DRAFT', 'REJECTED'].includes(claim.approval_status);
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg0)', fontFamily: 'var(--font-sans)' }}>
@@ -123,10 +129,14 @@ export default function ClaimDetailScreen() {
         actions={(
           <div style={{ display: 'flex', gap: 8 }}>
             <Button onClick={() => navigate('/claims')}>← Register</Button>
+            {canSubmit && <Button onClick={() => { setActionOpen('submit'); setReason(''); }}>Submit for Approval</Button>}
+            {underReview && <Button variant="primary" onClick={() => { setActionOpen('approve'); setReason(''); }}>Approve</Button>}
+            {underReview && <Button variant="danger" onClick={() => { setActionOpen('reject'); setReason(''); }}>Reject</Button>}
             {isOpen && <Button variant="primary" onClick={openMovement}>+ Movement</Button>}
             {isOpen && <Button onClick={() => { setActionOpen('close'); setReason(''); }}>Close</Button>}
             {isOpen && <Button variant="danger" onClick={() => { setActionOpen('decline'); setReason(''); }}>Decline</Button>}
-            {claim && !isOpen && <Button onClick={() => { setActionOpen('reopen'); setReason(''); }}>Reopen</Button>}
+            {claim && !underReview && !['OPEN', 'REOPENED'].includes(claim.status)
+              && <Button onClick={() => { setActionOpen('reopen'); setReason(''); }}>Reopen</Button>}
           </div>
         )}
       />
@@ -135,6 +145,22 @@ export default function ClaimDetailScreen() {
         {error && <div style={{ color: '#f87171', fontSize: 13, marginBottom: 12 }}>{error}</div>}
         {loading && <div style={{ color: 'var(--text-subtle)', padding: 24 }}>Loading…</div>}
 
+        {claim && underReview && (
+          <div style={{
+            padding: '10px 14px', borderRadius: 10, marginBottom: 14, fontSize: 12.5,
+            background: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.35)', color: '#fbbf24',
+          }}>
+            Waiting for approval{claim.submitted_by_name ? ` — submitted by ${claim.submitted_by_name}` : ''}{claim.submitted_at ? ` on ${fmtDate(claim.submitted_at)}` : ''}. The claim is frozen until it is approved or rejected.
+          </div>
+        )}
+        {claim && claim.approval_status === 'REJECTED' && (
+          <div style={{
+            padding: '10px 14px', borderRadius: 10, marginBottom: 14, fontSize: 12.5,
+            background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.35)', color: '#f87171',
+          }}>
+            Rejected{claim.reviewed_by_name ? ` by ${claim.reviewed_by_name}` : ''}{claim.reviewed_at ? ` on ${fmtDate(claim.reviewed_at)}` : ''}{claim.review_comment ? ` — “${claim.review_comment}”` : ''}. Revise and resubmit for approval.
+          </div>
+        )}
         {claim && (
           <>
             {/* Header facts */}
@@ -146,6 +172,7 @@ export default function ClaimDetailScreen() {
             }}>
               {[
                 ['Status', claim.status],
+                ['Approval', <ApprovalPill key="approval" status={claim.approval_status} />],
                 ['Loss date', fmtDate(claim.loss_date)],
                 ['Reported', fmtDate(claim.reported_date)],
                 ['Loss type', claim.loss_type + (claim.cat_event_ref ? ` · ${claim.cat_event_ref}` : '')],
@@ -255,19 +282,29 @@ export default function ClaimDetailScreen() {
 
       {/* Close/decline/reopen confirm */}
       <Modal open={!!actionOpen} onClose={() => setActionOpen(null)}
-        title={actionOpen === 'close' ? 'Close Claim' : actionOpen === 'decline' ? 'Decline Claim' : 'Reopen Claim'}
+        title={{
+          close: 'Close Claim', decline: 'Decline Claim', reopen: 'Reopen Claim',
+          submit: 'Submit for Approval', approve: 'Approve Claim', reject: 'Reject Claim',
+        }[actionOpen] || ''}
         footer={(
           <>
             <Button onClick={() => setActionOpen(null)}>Cancel</Button>
-            <Button variant={actionOpen === 'decline' ? 'danger' : 'primary'} loading={saving} onClick={submitAction}>Confirm</Button>
+            <Button variant={actionOpen === 'decline' || actionOpen === 'reject' ? 'danger' : 'primary'} loading={saving} onClick={submitAction}>Confirm</Button>
           </>
         )}>
         <div style={{ fontSize: 12.5, color: 'var(--text-subtle)', marginBottom: 12, lineHeight: 1.55 }}>
-          {actionOpen === 'reopen'
-            ? 'Reopening restates the closing position (OS remains 0) — book a RESERVE_CHANGE movement afterwards to re-establish the reserve.'
-            : 'Closing books a CLOSURE movement that zeroes the outstanding reserve. Paid-to-date is preserved.'}
+          {{
+            reopen: 'Reopening restates the closing position (OS remains 0) — book a RESERVE_CHANGE movement afterwards to re-establish the reserve.',
+            close: 'Closing books a CLOSURE movement that zeroes the outstanding reserve. Paid-to-date is preserved.',
+            decline: 'Declining books a CLOSURE movement that zeroes the outstanding reserve. Paid-to-date is preserved.',
+            submit: 'Submitting sends the claim for review. It is frozen — no edits, movements, or lifecycle changes — until it is approved or rejected.',
+            approve: 'Approving finalises the claim as submitted.',
+            reject: 'Rejecting returns the claim to the handler for revision. Give a reason so they know what to fix.',
+          }[actionOpen] || ''}
         </div>
-        <Field label="Reason"><Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" /></Field>
+        <Field label={actionOpen === 'reject' ? 'Reason (recommended)' : 'Reason'}>
+          <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" />
+        </Field>
       </Modal>
     </div>
   );

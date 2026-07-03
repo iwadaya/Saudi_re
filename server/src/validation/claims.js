@@ -38,6 +38,7 @@ const optionalText = (max) => z.preprocess(
 
 export const LOSS_TYPES = ['ATTRITIONAL', 'LARGE', 'CAT'];
 export const CLAIM_STATUSES = ['OPEN', 'REOPENED', 'CLOSED', 'DECLINED'];
+export const APPROVAL_STATUSES = ['DRAFT', 'WAITING_APPROVAL', 'REJECTED', 'FINALISED'];
 export const MOVEMENT_TYPES = ['ADVICE', 'RESERVE_CHANGE', 'PAYMENT', 'RECOVERY', 'CLOSURE', 'REOPEN'];
 export const FINANCE_STATUSES = ['PENDING_SETUP', 'ACTIVE', 'SUSPENDED', 'CLOSED'];
 
@@ -87,6 +88,11 @@ export const movementCreateSchema = z.object({
 export const claimCloseSchema = z.object({
   reason: optionalText(1000),
 }).strict();
+
+// ── POST /api/claims/:id/submit · /approve · /reject ────────────────────────
+// Approval workflow transitions share the { reason } shape (reject reasons are
+// surfaced back to the handler as review_comment).
+export const claimReviewSchema = claimCloseSchema;
 
 // ── POST /api/claims/:id/notes ───────────────────────────────────────────────
 export const claimNoteSchema = z.object({

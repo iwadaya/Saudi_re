@@ -38,6 +38,22 @@ function StatusPill({ status }) {
   );
 }
 
+const APPROVAL_STYLE = {
+  DRAFT:            { bg: 'rgba(148,163,184,0.14)', text: '#94a3b8', label: 'DRAFT' },
+  WAITING_APPROVAL: { bg: 'rgba(251,191,36,0.12)',  text: '#fbbf24', label: 'WAITING APPROVAL' },
+  REJECTED:         { bg: 'rgba(248,113,113,0.10)', text: '#f87171', label: 'REJECTED' },
+  FINALISED:        { bg: 'rgba(35,209,139,0.10)',  text: '#23d18b', label: 'FINALISED' },
+};
+export function ApprovalPill({ status }) {
+  const s = APPROVAL_STYLE[status] || APPROVAL_STYLE.DRAFT;
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 800, letterSpacing: '.08em', padding: '3px 10px',
+      borderRadius: 20, background: s.bg, color: s.text, whiteSpace: 'nowrap',
+    }}>{s.label}</span>
+  );
+}
+
 function KpiCard({ label, value, sub }) {
   return (
     <div style={{
@@ -65,6 +81,7 @@ export default function ClaimsHomeScreen() {
   const [error, setError] = useState('');
 
   const [statusFilter, setStatusFilter] = useState('');
+  const [approvalFilter, setApprovalFilter] = useState('');
   const [lossTypeFilter, setLossTypeFilter] = useState('');
   const [search, setSearch] = useState('');
 
@@ -79,7 +96,12 @@ export default function ClaimsHomeScreen() {
     try {
       const [s, c] = await Promise.all([
         api.getClaimsSummary(),
-        api.listClaims({ status: statusFilter || undefined, lossType: lossTypeFilter || undefined, q: search || undefined }),
+        api.listClaims({
+          status: statusFilter || undefined,
+          approvalStatus: approvalFilter || undefined,
+          lossType: lossTypeFilter || undefined,
+          q: search || undefined,
+        }),
       ]);
       setSummary(s);
       setClaims(Array.isArray(c) ? c : []);
@@ -87,7 +109,7 @@ export default function ClaimsHomeScreen() {
       logger.error('claims load failed', e);
       setError('Failed to load claims. Please retry.');
     } finally { setLoading(false); }
-  }, [statusFilter, lossTypeFilter, search]);
+  }, [statusFilter, approvalFilter, lossTypeFilter, search]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -138,23 +160,42 @@ export default function ClaimsHomeScreen() {
     <div style={{ minHeight: '100vh', background: 'var(--bg0)', fontFamily: 'var(--font-sans)' }}>
       <Topbar
         title="Claims"
-        subtitle="Treaty claims register"
-        actions={<Button variant="primary" onClick={openCreate}>+ New Claim</Button>}
+        subtitle="Claims dashboard & register"
+        actions={(
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button onClick={() => setApprovalFilter('WAITING_APPROVAL')}>
+              Review Claims{summary && Number(summary.waiting_approval_claims) > 0 ? ` (${summary.waiting_approval_claims})` : ''}
+            </Button>
+            <Button variant="primary" onClick={openCreate}>+ New Claim</Button>
+          </div>
+        )}
       />
 
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 20px' }}>
 
-        {/* KPIs */}
+        {/* Dashboard KPIs */}
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 22 }}>
-          <KpiCard label="Open Claims" value={summary ? summary.open_claims : '–'} sub={`${summary ? summary.total_claims : '–'} total`} />
+          <KpiCard label="Total Claims Paid to Date" value={summary ? fmtMoney(summary.total_paid_our_share) : '–'} sub="our share, excl. rejected" />
+          <KpiCard label="Draft Claims" value={summary ? summary.draft_claims : '–'} />
+          <KpiCard label="Waiting for Approval" value={summary ? summary.waiting_approval_claims : '–'} />
+          <KpiCard label="Rejected" value={summary ? summary.rejected_claims : '–'} />
+          <KpiCard label="Finalised" value={summary ? summary.finalised_claims : '–'} sub={`${summary ? summary.total_claims : '–'} claims total`} />
+        </div>
+
+        {/* Position KPIs */}
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 22 }}>
+          <KpiCard label="Open Claims" value={summary ? summary.open_claims : '–'} />
           <KpiCard label="Open Incurred (our share)" value={summary ? fmtMoney(summary.open_incurred_our_share) : '–'} />
           <KpiCard label="Outstanding (our share)" value={summary ? fmtMoney(summary.open_os_our_share) : '–'} />
-          <KpiCard label="Paid to Date (our share)" value={summary ? fmtMoney(summary.total_paid_our_share) : '–'} />
           <KpiCard label="CAT Claims" value={summary ? summary.cat_claims : '–'} />
         </div>
 
         {/* Filters */}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
+          <select value={approvalFilter} onChange={(e) => setApprovalFilter(e.target.value)} style={selStyle} aria-label="Filter by approval status">
+            <option value="">All approval states</option>
+            {['DRAFT', 'WAITING_APPROVAL', 'REJECTED', 'FINALISED'].map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+          </select>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={selStyle} aria-label="Filter by status">
             <option value="">All statuses</option>
             {['OPEN', 'REOPENED', 'CLOSED', 'DECLINED'].map((s) => <option key={s} value={s}>{s}</option>)}
@@ -178,17 +219,17 @@ export default function ClaimsHomeScreen() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
             <thead>
               <tr style={{ background: 'var(--surface-2)', textAlign: 'left' }}>
-                {['Claim Ref', 'Cedant / Treaty', 'Insured', 'Loss Date', 'Type', 'Status', 'Incurred 100%', 'Incurred (our)', 'OS (our)'].map((h, i) => (
-                  <th key={h} style={{ padding: '10px 12px', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-subtle)', textAlign: i >= 6 ? 'right' : 'left' }}>{h}</th>
+                {['Claim Ref', 'Cedant / Treaty', 'Insured', 'Loss Date', 'Type', 'Approval', 'Status', 'Incurred 100%', 'Incurred (our)', 'OS (our)'].map((h, i) => (
+                  <th key={h} style={{ padding: '10px 12px', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-subtle)', textAlign: i >= 7 ? 'right' : 'left' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={9} style={{ padding: 24, textAlign: 'center', color: 'var(--text-subtle)' }}>Loading…</td></tr>
+                <tr><td colSpan={10} style={{ padding: 24, textAlign: 'center', color: 'var(--text-subtle)' }}>Loading…</td></tr>
               )}
               {!loading && !filtered.length && (
-                <tr><td colSpan={9} style={{ padding: 24, textAlign: 'center', color: 'var(--text-subtle)' }}>No claims found. Book the first one with “+ New Claim”.</td></tr>
+                <tr><td colSpan={10} style={{ padding: 24, textAlign: 'center', color: 'var(--text-subtle)' }}>No claims found. Book the first one with “+ New Claim”.</td></tr>
               )}
               {!loading && filtered.map((c) => (
                 <tr key={c.claim_id}
@@ -205,6 +246,7 @@ export default function ClaimsHomeScreen() {
                   <td style={{ padding: '10px 12px', color: 'var(--text)' }}>{c.insured_name || '–'}</td>
                   <td style={{ padding: '10px 12px', color: 'var(--text)' }}>{fmtDate(c.loss_date)}</td>
                   <td style={{ padding: '10px 12px', color: 'var(--text-subtle)' }}>{c.loss_type}</td>
+                  <td style={{ padding: '10px 12px' }}><ApprovalPill status={c.approval_status} /></td>
                   <td style={{ padding: '10px 12px' }}><StatusPill status={c.status} /></td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--text)' }}>{fmtMoney(c.gross_incurred_100)} <span style={{ color: 'var(--text-subtle)', fontSize: 10 }}>{c.currency_code || ''}</span></td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--text)' }}>{fmtMoney(c.incurred_our_share)}</td>
