@@ -21,6 +21,7 @@ const fmtMoney = (v) => {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 };
 const fmtDate = (v) => (v ? String(v).slice(0, 10) : '–');
+const parseAmt = (v) => Number(String(v ?? '').replace(/,/g, ''));
 
 const STATUS_STYLE = {
   OPEN:     { bg: 'rgba(96,165,250,0.12)',  text: '#60a5fa' },
@@ -77,7 +78,7 @@ const kpiRowStyle = (min) => ({
 const EMPTY_FORM = {
   contract_id: '', loss_date: '', reported_date: '', insured_name: '',
   cedant_claim_ref: '', cause_of_loss: '', description: '',
-  loss_type: 'ATTRITIONAL', cat_event_ref: '', gross_paid_100: '0', gross_os_100: '0',
+  loss_type: 'ATTRITIONAL', cat_event_ref: '', gross_paid_100: '0', gross_os_100: '0', comment: '',
 };
 const EMPTY_PICKER = { country_id: '', cedant_id: '', uw_year: '', search: '' };
 
@@ -102,6 +103,7 @@ export default function ClaimsHomeScreen() {
   const [search, setSearch] = useState('');
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [createTab, setCreateTab] = useState(0); // 0 Details · 1 Claim Amounts · 2 Send for Approval
   const [contracts, setContracts] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [picker, setPicker] = useState(EMPTY_PICKER);
@@ -132,7 +134,7 @@ export default function ClaimsHomeScreen() {
   useEffect(() => { load(); }, [load]);
 
   const openCreate = useCallback(async () => {
-    setCreateOpen(true); setCreateError(''); setForm(EMPTY_FORM); setPicker(EMPTY_PICKER); setFiles([]);
+    setCreateOpen(true); setCreateTab(0); setCreateError(''); setForm(EMPTY_FORM); setPicker(EMPTY_PICKER); setFiles([]);
     try {
       const rows = await api.getClaimsEligibleContracts();
       setContracts(Array.isArray(rows) ? rows : []);
@@ -202,10 +204,43 @@ export default function ClaimsHomeScreen() {
     }
   }, [eligibleTreaties, form.contract_id]);
 
-  const submitCreate = useCallback(async () => {
+  const selectedTreaty = useMemo(
+    () => contracts.find((c) => c.contract_id === form.contract_id) || null,
+    [contracts, form.contract_id],
+  );
+
+  /** Per-tab validation; returns an error message or '' when the tab is good. */
+  const tabError = useCallback((tab) => {
+    if (tab === 0) {
+      if (!form.contract_id) return 'Select the treaty the claim attaches to.';
+      if (!form.loss_date) return 'Loss date is required.';
+    }
+    if (tab === 1) {
+      const paid = parseAmt(form.gross_paid_100);
+      const os = parseAmt(form.gross_os_100);
+      if (!Number.isFinite(paid) || paid < 0 || !Number.isFinite(os) || os < 0) {
+        return 'Opening paid and OS must be non-negative amounts.';
+      }
+    }
+    return '';
+  }, [form]);
+
+  /** Move to a tab, validating every tab before it. */
+  const goToTab = useCallback((target) => {
+    for (let t = 0; t < target; t += 1) {
+      const err = tabError(t);
+      if (err) { setCreateTab(t); setCreateError(err); return; }
+    }
     setCreateError('');
-    if (!form.contract_id) { setCreateError('Select the treaty the claim attaches to.'); return; }
-    if (!form.loss_date) { setCreateError('Loss date is required.'); return; }
+    setCreateTab(target);
+  }, [tabError]);
+
+  const submitCreate = useCallback(async (sendForApproval) => {
+    setCreateError('');
+    for (let t = 0; t <= 1; t += 1) {
+      const err = tabError(t);
+      if (err) { setCreateTab(t); setCreateError(err); return; }
+    }
     setSaving(true);
     try {
       const body = {
@@ -218,8 +253,9 @@ export default function ClaimsHomeScreen() {
         description: form.description || undefined,
         loss_type: form.loss_type,
         cat_event_ref: form.loss_type === 'CAT' ? (form.cat_event_ref || undefined) : undefined,
-        gross_paid_100: Number(String(form.gross_paid_100).replace(/,/g, '')) || 0,
-        gross_os_100: Number(String(form.gross_os_100).replace(/,/g, '')) || 0,
+        gross_paid_100: parseAmt(form.gross_paid_100) || 0,
+        gross_os_100: parseAmt(form.gross_os_100) || 0,
+        comment: form.comment || undefined,
       };
       const out = await api.createClaim(body);
       // Attachments ride along after the claim exists; a failed upload is
@@ -238,13 +274,21 @@ export default function ClaimsHomeScreen() {
       if (failed.length) {
         window.alert(`Claim ${out.claim_ref || ''} was created, but these attachments failed to upload: ${failed.join(', ')}. You can re-attach them on the claim screen.`);
       }
+      if (sendForApproval) {
+        try {
+          await api.submitClaim(out.claim_id);
+        } catch (e) {
+          logger.error('claim submit-for-approval failed', e);
+          window.alert(`Claim ${out.claim_ref || ''} was created as a draft, but sending it for approval failed. You can submit it from the claim screen.`);
+        }
+      }
       setCreateOpen(false);
       navigate(`/claims/${out.claim_id}`);
     } catch (e) {
       logger.error('claim create failed', e);
       setCreateError(errMsg(e, 'Claim creation failed.'));
     } finally { setSaving(false); }
-  }, [form, files, navigate]);
+  }, [form, files, navigate, tabError]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e?.target ? e.target.value : e }));
 
@@ -351,89 +395,197 @@ export default function ClaimsHomeScreen() {
         </div>
       </div>
 
-      {/* New Claim modal */}
+      {/* New Claim wizard — full screen, tabbed */}
       <Modal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         title="New Claim"
+        className="ui-modal--full"
+        closeOnBackdrop={false}
         footer={(
           <>
             <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button variant="primary" loading={saving} onClick={submitCreate}>Create Claim</Button>
+            {createTab > 0 && <Button onClick={() => goToTab(createTab - 1)}>← Back</Button>}
+            {createTab < 2 && <Button variant="primary" onClick={() => goToTab(createTab + 1)}>Next →</Button>}
+            {createTab === 2 && <Button loading={saving} onClick={() => submitCreate(false)}>Create Draft</Button>}
+            {createTab === 2 && <Button variant="primary" loading={saving} onClick={() => submitCreate(true)}>Create &amp; Send for Approval</Button>}
           </>
         )}
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          {/* Treaty picker: country → cedant → treaty, with UW year + search */}
-          <Field label="Country">
-            <select value={picker.country_id} onChange={setPickerField('country_id')} style={{ ...selStyle, width: '100%' }}>
-              <option value="">All countries</option>
-              {countries.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Cedant">
-            <select value={picker.cedant_id} onChange={setPickerField('cedant_id')} style={{ ...selStyle, width: '100%' }}>
-              <option value="">All cedants{picker.country_id ? ' in country' : ''}</option>
-              {cedants.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </Field>
-          <Field label="UW year">
-            <select value={picker.uw_year} onChange={setPickerField('uw_year')} style={{ ...selStyle, width: '100%' }}>
-              <option value="">All years</option>
-              {uwYears.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
-          </Field>
-          <Field label="Search treaties">
-            <Input value={picker.search} onChange={setPickerField('search')} placeholder="Contract ID / description…" />
-          </Field>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <Field label={`Treaty (SIGNED / BOUND only — ${eligibleTreaties.length} match${eligibleTreaties.length === 1 ? '' : 'es'})`} required>
-              <select value={form.contract_id} onChange={set('contract_id')} style={{ ...selStyle, width: '100%' }}>
-                <option value="">Select treaty…</option>
-                {eligibleTreaties.map((c) => (
-                  <option key={c.contract_id} value={c.contract_id}>{treatyLabel(c)}</option>
-                ))}
-              </select>
-            </Field>
-            {form.contract_id && (() => {
-              const sel = contracts.find((c) => c.contract_id === form.contract_id);
-              return sel?.contract_description
-                ? <div style={{ fontSize: 11.5, color: 'var(--text-subtle)', marginTop: 4 }}>{sel.contract_description}</div>
-                : null;
-            })()}
-          </div>
-          <Field label="Loss date" required><Input type="date" value={form.loss_date} onChange={set('loss_date')} /></Field>
-          <Field label="Reported date"><Input type="date" value={form.reported_date} onChange={set('reported_date')} /></Field>
-          <Field label="Insured"><Input value={form.insured_name} onChange={set('insured_name')} placeholder="Insured name" /></Field>
-          <Field label="Cedant claim ref"><Input value={form.cedant_claim_ref} onChange={set('cedant_claim_ref')} placeholder="Cedant's reference" /></Field>
-          <Field label="Loss type">
-            <select value={form.loss_type} onChange={set('loss_type')} style={{ ...selStyle, width: '100%' }}>
-              {['ATTRITIONAL', 'LARGE', 'CAT'].map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </Field>
-          {form.loss_type === 'CAT' && (
-            <Field label="CAT event ref"><Input value={form.cat_event_ref} onChange={set('cat_event_ref')} placeholder="e.g. Jeddah Floods 2026" /></Field>
-          )}
-          <Field label="Cause of loss"><Input value={form.cause_of_loss} onChange={set('cause_of_loss')} placeholder="e.g. Fire" /></Field>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <Field label="Description"><Input value={form.description} onChange={set('description')} placeholder="Advice narrative" /></Field>
-          </div>
-          <Field label="Opening paid @100%"><Input inputMode="numeric" value={form.gross_paid_100} onChange={set('gross_paid_100')} /></Field>
-          <Field label="Opening OS reserve @100%"><Input inputMode="numeric" value={form.gross_os_100} onChange={set('gross_os_100')} /></Field>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <Field label="Attachments">
-              <input
-                type="file" multiple
-                onChange={(e) => setFiles(Array.from(e.target.files || []))}
-                style={{ ...selStyle, width: '100%', padding: '7px 10px' }}
-                aria-label="Claim attachments"
-              />
-            </Field>
-            {files.length > 0 && (
-              <div style={{ fontSize: 11.5, color: 'var(--text-subtle)', marginTop: 4 }}>
-                {files.length} file{files.length === 1 ? '' : 's'} will be attached: {files.map((f) => f.name).join(', ')}
+        {/* Tab bar */}
+        <div role="tablist" aria-label="New claim steps" style={{ display: 'flex', gap: 4, borderBottom: '1px solid rgba(var(--accent-rgb),0.16)', marginBottom: 20 }}>
+          {['1 · Details', '2 · Claim Amounts', '3 · Send for Approval'].map((t, i) => (
+            <button key={t} type="button" role="tab" aria-selected={i === createTab} onClick={() => goToTab(i)} style={tabStyle(i === createTab)}>
+              {t}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', width: '100%' }}>
+          <div style={{ maxWidth: 960, margin: '0 auto' }}>
+
+            {/* ── Tab 1 · Details ── */}
+            {createTab === 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div style={{ gridColumn: '1 / -1', ...sectionHead }}>Treaty</div>
+                <Field label="Country">
+                  <select value={picker.country_id} onChange={setPickerField('country_id')} style={{ ...selStyle, width: '100%' }}>
+                    <option value="">All countries</option>
+                    {countries.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Cedant">
+                  <select value={picker.cedant_id} onChange={setPickerField('cedant_id')} style={{ ...selStyle, width: '100%' }}>
+                    <option value="">All cedants{picker.country_id ? ' in country' : ''}</option>
+                    {cedants.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="UW year">
+                  <select value={picker.uw_year} onChange={setPickerField('uw_year')} style={{ ...selStyle, width: '100%' }}>
+                    <option value="">All years</option>
+                    {uwYears.map((y) => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </Field>
+                <Field label="Search treaties">
+                  <Input value={picker.search} onChange={setPickerField('search')} placeholder="Contract ID / description…" />
+                </Field>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <Field label={`Treaty (SIGNED / BOUND only — ${eligibleTreaties.length} match${eligibleTreaties.length === 1 ? '' : 'es'})`} required>
+                    <select value={form.contract_id} onChange={set('contract_id')} style={{ ...selStyle, width: '100%' }}>
+                      <option value="">Select treaty…</option>
+                      {eligibleTreaties.map((c) => (
+                        <option key={c.contract_id} value={c.contract_id}>{treatyLabel(c)}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  {selectedTreaty?.contract_description && (
+                    <div style={{ fontSize: 11.5, color: 'var(--text-subtle)', marginTop: 4 }}>{selectedTreaty.contract_description}</div>
+                  )}
+                </div>
+
+                <div style={{ gridColumn: '1 / -1', ...sectionHead }}>Loss</div>
+                <Field label="Loss date" required><Input type="date" value={form.loss_date} onChange={set('loss_date')} /></Field>
+                <Field label="Reported date"><Input type="date" value={form.reported_date} onChange={set('reported_date')} /></Field>
+                <Field label="Insured"><Input value={form.insured_name} onChange={set('insured_name')} placeholder="Insured name" /></Field>
+                <Field label="Cedant claim ref"><Input value={form.cedant_claim_ref} onChange={set('cedant_claim_ref')} placeholder="Cedant's reference" /></Field>
+                <Field label="Loss type">
+                  <select value={form.loss_type} onChange={set('loss_type')} style={{ ...selStyle, width: '100%' }}>
+                    {['ATTRITIONAL', 'LARGE', 'CAT'].map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </Field>
+                {form.loss_type === 'CAT' && (
+                  <Field label="CAT event ref"><Input value={form.cat_event_ref} onChange={set('cat_event_ref')} placeholder="e.g. Jeddah Floods 2026" /></Field>
+                )}
+                <Field label="Cause of loss"><Input value={form.cause_of_loss} onChange={set('cause_of_loss')} placeholder="e.g. Fire" /></Field>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <Field label="Description"><Input value={form.description} onChange={set('description')} placeholder="Advice narrative" /></Field>
+                </div>
+
+                <div style={{ gridColumn: '1 / -1', ...sectionHead }}>Attachments</div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <Field label="Supporting documents (cedant advice, adjuster report, …)">
+                    <input
+                      type="file" multiple
+                      onChange={(e) => setFiles(Array.from(e.target.files || []))}
+                      style={{ ...selStyle, width: '100%', padding: '7px 10px' }}
+                      aria-label="Claim attachments"
+                    />
+                  </Field>
+                  {files.length > 0 && (
+                    <div style={{ fontSize: 11.5, color: 'var(--text-subtle)', marginTop: 4 }}>
+                      {files.length} file{files.length === 1 ? '' : 's'} will be attached: {files.map((f) => f.name).join(', ')}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
+
+            {/* ── Tab 2 · Claim Amounts ── */}
+            {createTab === 1 && (() => {
+              const paid = parseAmt(form.gross_paid_100) || 0;
+              const os = parseAmt(form.gross_os_100) || 0;
+              const line = selectedTreaty?.signed_line_pct != null ? Number(selectedTreaty.signed_line_pct) : null;
+              const ccy = selectedTreaty?.currency_code || '';
+              const share = (v) => (line == null ? null : (v * line) / 100);
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ gridColumn: '1 / -1', ...sectionHead }}>Opening position @ 100% (cumulative)</div>
+                  <div style={{ gridColumn: '1 / -1', fontSize: 12.5, color: 'var(--text-subtle)', lineHeight: 1.55 }}>
+                    Enter the cedant-advised position at 100% — it is booked as movement #1 (ADVICE) on the claim ledger.
+                  </div>
+                  <Field label={`Opening paid @100%${ccy ? ` (${ccy})` : ''}`}>
+                    <Input inputMode="numeric" value={form.gross_paid_100} onChange={set('gross_paid_100')} />
+                  </Field>
+                  <Field label={`Opening OS reserve @100%${ccy ? ` (${ccy})` : ''}`}>
+                    <Input inputMode="numeric" value={form.gross_os_100} onChange={set('gross_os_100')} />
+                  </Field>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <Field label="Movement comment"><Input value={form.comment} onChange={set('comment')} placeholder="e.g. Initial advice per cedant email" /></Field>
+                  </div>
+
+                  <div style={{ gridColumn: '1 / -1', ...sectionHead }}>Position preview</div>
+                  <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                    {[
+                      ['Incurred @100%', fmtMoney(paid + os)],
+                      [`Our line${line != null ? ` (${line}%)` : ''}`, line != null ? `${line}%` : 'select a treaty'],
+                      ['Paid (our share)', share(paid) != null ? fmtMoney(share(paid)) : '–'],
+                      ['OS (our share)', share(os) != null ? fmtMoney(share(os)) : '–'],
+                      ['Incurred (our share)', share(paid + os) != null ? fmtMoney(share(paid + os)) : '–'],
+                    ].map(([k, v]) => (
+                      <div key={k} style={{ padding: '14px 16px', borderRadius: 12, background: 'var(--surface-2)', border: '1px solid rgba(var(--accent-rgb),0.14)' }}>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 6 }}>{k}</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)' }}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── Tab 3 · Send for Approval ── */}
+            {createTab === 2 && (() => {
+              const paid = parseAmt(form.gross_paid_100) || 0;
+              const os = parseAmt(form.gross_os_100) || 0;
+              const line = selectedTreaty?.signed_line_pct != null ? Number(selectedTreaty.signed_line_pct) : null;
+              const ccy = selectedTreaty?.currency_code || '';
+              const rows = [
+                ['Treaty', selectedTreaty ? treatyLabel(selectedTreaty) : '–'],
+                ['Contract description', selectedTreaty?.contract_description || '–'],
+                ['Country', selectedTreaty?.country_name || '–'],
+                ['Loss date', form.loss_date || '–'],
+                ['Reported date', form.reported_date || 'today'],
+                ['Insured', form.insured_name || '–'],
+                ['Cedant claim ref', form.cedant_claim_ref || '–'],
+                ['Loss type', form.loss_type + (form.loss_type === 'CAT' && form.cat_event_ref ? ` · ${form.cat_event_ref}` : '')],
+                ['Cause of loss', form.cause_of_loss || '–'],
+                ['Description', form.description || '–'],
+                [`Opening paid @100%${ccy ? ` (${ccy})` : ''}`, fmtMoney(paid)],
+                [`Opening OS @100%${ccy ? ` (${ccy})` : ''}`, fmtMoney(os)],
+                ['Incurred (our share)', line != null ? fmtMoney(((paid + os) * line) / 100) : '–'],
+                ['Attachments', files.length ? files.map((f) => f.name).join(', ') : 'none'],
+              ];
+              return (
+                <div>
+                  <div style={sectionHead}>Review &amp; submit</div>
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12,
+                    padding: '16px 18px', borderRadius: 14, marginBottom: 18,
+                    background: 'var(--surface-2)', border: '1px solid rgba(var(--accent-rgb),0.14)', fontSize: 12.5,
+                  }}>
+                    {rows.map(([k, v]) => (
+                      <div key={k}>
+                        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 3 }}>{k}</div>
+                        <div style={{ color: 'var(--text)', fontWeight: 600, overflowWrap: 'anywhere' }}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-subtle)', lineHeight: 1.6 }}>
+                    <b style={{ color: 'var(--text)' }}>Create Draft</b> books the claim and leaves it in DRAFT so you can keep working on it.<br />
+                    <b style={{ color: 'var(--text)' }}>Create &amp; Send for Approval</b> books the claim and submits it for review immediately — it is then frozen until approved or rejected.
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
         {createError && <div style={{ color: '#f87171', fontSize: 12.5, marginTop: 12 }}>{createError}</div>}
@@ -447,3 +599,17 @@ const selStyle = {
   border: '1px solid rgba(var(--accent-rgb),0.25)', borderRadius: 8,
   padding: '8px 10px', fontSize: 12.5, fontFamily: 'var(--font-sans)',
 };
+
+const sectionHead = {
+  fontSize: 11, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase',
+  color: 'var(--text-subtle)', marginTop: 6,
+};
+
+const tabStyle = (active) => ({
+  background: 'none', border: 'none', cursor: 'pointer',
+  padding: '10px 16px', fontSize: 12.5, fontFamily: 'var(--font-sans)',
+  fontWeight: active ? 800 : 600,
+  color: active ? 'var(--accent)' : 'var(--text-subtle)',
+  borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
+  marginBottom: -1,
+});
