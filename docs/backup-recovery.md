@@ -66,6 +66,42 @@ job, `s3:GetObject` + `s3:ListBucket` for restore-verify. The Render Cron image
 (`Dockerfile.jobs`) ships the AWS CLI; GitHub Actions passes the same env from
 secrets.
 
+### Encryption at rest
+
+Dumps contain cedant, treaty, claim and PII data and, once uploaded, live on a
+third-party object store. Set **`BACKUP_ENCRYPTION_PASSPHRASE`** and both scripts
+switch to encrypted mode:
+
+- `backup-db.sh` runs `gpg --symmetric --cipher-algo AES256` on the dump **before**
+  any retention/upload and shreds the plaintext; the artifact becomes
+  `universe-<stamp>.dump.gpg`. A failed encryption fails the job — it never falls
+  back to shipping plaintext.
+- `verify-restore.sh` decrypts with the same passphrase into a scratch file,
+  restores it, and shreds the plaintext on exit. **Proving the ciphertext opens
+  with the operational passphrase is part of the weekly DR guarantee.**
+
+Store the passphrase in the secret manager (Render/GitHub secrets), **never** in
+the repo or alongside the backups. This is client-side encryption; it is
+complementary to, not a replacement for, bucket server-side encryption (SSE),
+which you should also enable.
+
+### Uploaded documents (attachments)
+
+`pg_dump` captures the **database only**. Uploaded files (treaty/quote/fac/claim
+attachments) live outside Postgres and are backed up by **`scripts/backup-uploads.sh`**:
+
+- **Local-disk backend (`UPLOAD_DIR`)** — ephemeral on most PaaS hosts, so it
+  *must* be mirrored off-box. The script tars `UPLOAD_DIR`, optionally encrypts
+  it (same `BACKUP_ENCRYPTION_PASSPHRASE`), and uploads to
+  `s3://$BACKUP_S3_BUCKET/$BACKUP_S3_PREFIX/uploads-<stamp>.tar.gz[.gpg]`.
+  Schedule it alongside `backup-db.sh`.
+- **Cloudinary backend** — assets already have a durable third-party copy, but a
+  *single, unversioned* one. Enable Cloudinary's **auto-backup** add-on (mirrors
+  every asset to your own S3/GCS bucket) and/or Cloudinary's account backup, so a
+  Cloudinary-side deletion or account issue is survivable. The DB rows in
+  `contract_document` / `fac_document` / `claim_document` are the manifest of
+  what should exist; a full restore reconciles those keys against the mirror.
+
 ### Object-storage retention (lifecycle, not the script)
 
 `BACKUP_RETENTION_DAYS` only prunes the **local** `BACKUP_DIR`. Retention of the
@@ -121,6 +157,12 @@ Mechanism is committed in code; these are the deploy-time settings:
 - [x] RPO/RTO targets committed (≤24h / ≤4h) — revise here + the two config
       files if a contract sets a tighter SLA; add PITR for sub-24h RPO.
 - [x] Object-storage upload/fetch wired into `backup-db.sh` / `verify-restore.sh`.
+- [x] Encryption-at-rest (`BACKUP_ENCRYPTION_PASSPHRASE`) and uploaded-document DR
+      (`scripts/backup-uploads.sh`) wired in code.
+- [ ] Set `BACKUP_ENCRYPTION_PASSPHRASE` (secret) in every backup/verify
+      scheduler, and enable bucket **SSE**.
+- [ ] Schedule `scripts/backup-uploads.sh` (local-disk backend) or enable
+      Cloudinary auto-backup (Cloudinary backend).
 - [ ] Choose scheduler (GitHub Actions and/or Render Cron) and enable it.
 - [ ] Create the bucket; set `BACKUP_S3_BUCKET` + least-privilege `AWS_*` creds
       (and `BACKUP_S3_ENDPOINT` for non-AWS). Set `BACKUP_S3_BUCKET` as a secret

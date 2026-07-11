@@ -10,11 +10,13 @@ on:
   pull_request:
     paths:
       - 'Dockerfile'
+      - 'Dockerfile.jobs'
       - '.dockerignore'
       - 'package*.json'
       - 'server/**'
       - 'client/**'
       - 'shared/**'
+      - 'scripts/**'
       - '.github/workflows/image-security.yml'
 
 concurrency:
@@ -31,13 +33,13 @@ jobs:
     env:
       IMAGE: universe3:ci-${{ github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3.7.1
 
       - name: Build image (load into local docker)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # v6.9.0
         with:
           context: .
           load: true
@@ -47,7 +49,7 @@ jobs:
 
       # ── SBOM (always produced, even if the scan later fails the job) ──
       - name: Generate SBOM (Syft, SPDX-JSON)
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@fc46e51fd3cb168ffb36c6d1915723c47db58abb # v0.17.7
         with:
           image: ${{ env.IMAGE }}
           format: spdx-json
@@ -55,7 +57,7 @@ jobs:
 
       - name: Upload SBOM artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: sbom-${{ github.sha }}
           path: sbom.spdx.json
@@ -64,7 +66,7 @@ jobs:
       # ── Vulnerability scan ──
       # Report HIGH+CRITICAL to code scanning (non-blocking visibility) …
       - name: Trivy scan → SARIF (report)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
         with:
           image-ref: ${{ env.IMAGE }}
           format: sarif
@@ -75,7 +77,7 @@ jobs:
       - name: Upload Trivy SARIF to code scanning
         if: always()
         continue-on-error: true # don't fail the job if code scanning is off
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@f09c1c0a94de965c15400f5634aa42fac8fb8f88 # v3.27.5
         with:
           sarif_file: trivy-results.sarif
 
@@ -83,9 +85,31 @@ jobs:
       # without being noisy on day one. Tighten to HIGH,CRITICAL once the base
       # image is on a regular bump cadence.
       - name: Trivy scan → gate (fail on fixable CRITICAL)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
         with:
           image-ref: ${{ env.IMAGE }}
+          format: table
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+      # ── Cron/backup jobs image (Dockerfile.jobs). Previously unscanned — its
+      #    debian base + postgresql-client/awscli layers carry their own CVE
+      #    surface. Build and gate it on the same fixable-CRITICAL bar. ──
+      - name: Build jobs image (Dockerfile.jobs)
+        uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # v6.9.0
+        with:
+          context: .
+          file: Dockerfile.jobs
+          load: true
+          tags: universe3-jobs:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy scan jobs image → gate (fail on fixable CRITICAL)
+        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
+        with:
+          image-ref: universe3-jobs:ci-${{ github.sha }}
           format: table
           severity: CRITICAL
           ignore-unfixed: true

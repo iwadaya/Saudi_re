@@ -182,4 +182,14 @@ describe('validateIdentityConfig — tolerant off, strict on', () => {
     const { warnings } = validateIdentityConfig(cfg({ IDENTITY_DEFAULT_ROLE: 'CU' }));
     expect(warnings.join(' ')).toMatch(/over-provisioned/);
   });
+
+  it('SSO on + no MFA + IDENTITY_ENFORCE_MFA → the MFA gap escalates to an error (fail-closed)', () => {
+    const { errors, warnings } = validateIdentityConfig(cfg({
+      IDENTITY_SSO_ENABLED: 'true', IDENTITY_ISSUER: 'i', IDENTITY_CLIENT_ID: 'c',
+      IDENTITY_CLIENT_SECRET: 's', IDENTITY_REDIRECT_URI: 'https://app/cb',
+      IDENTITY_ENFORCE_MFA: '1',
+    }));
+    expect(errors.join(' ')).toMatch(/MFA would not be enforced/);
+    expect(warnings.join(' ')).not.toMatch(/MFA would not be enforced/);
+  });
 });

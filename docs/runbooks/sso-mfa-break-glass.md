@@ -21,9 +21,16 @@ posture is surfaced by `server/src/startup/productionPosture.js`.
 | Break-glass | small, audited, alerted | `IDENTITY_BREAK_GLASS_USERS` (D4) |
 | Authority change → re-auth | revocation epoch bump | role re-mapped every SSO login; change revokes sessions (D5) |
 
-The server **fails closed**: with no `IDENTITY_REQUIRED_ACR/AMR` set, MFA is not
-enforced; with no break-glass list, there is no local emergency path. The boot
-posture check logs a warning for each gap — do not ship production with them.
+By default the server is **tolerant**: with no `IDENTITY_REQUIRED_ACR/AMR` set,
+MFA is not enforced in-app, and with no break-glass list there is no local
+emergency path — the boot posture check logs a warning for each gap. Do not ship
+production with them.
+
+To make MFA **fail-closed**, set `IDENTITY_ENFORCE_MFA=1`: the server then
+*refuses to boot* unless SSO is enabled **and** at least one of
+`IDENTITY_REQUIRED_ACR/AMR` is configured (the MFA warning escalates to a fatal
+error in both the boot gate and the posture check). Recommended for enterprise
+rollouts so a config that silently skips MFA can never reach production.
 
 ## 2. Enable SSO + MFA (rollout)
 

@@ -1,0 +1,50 @@
+name: codeql
+
+# Static application security testing (SAST) for first-party JavaScript/TypeScript.
+# Complements the dependency/image scanners (npm audit in ci.yml, Trivy in
+# image-security.yml) by analysing OUR OWN code for injection, unsafe data flow,
+# prototype pollution, etc. Results land in the repo's Code scanning tab.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    - cron: '0 6 * * 1' # weekly Mon 06:00 UTC — catch newly-published query updates
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to code scanning
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@f09c1c0a94de965c15400f5634aa42fac8fb8f88 # v3.27.5
+        with:
+          languages: javascript-typescript
+          # security-and-quality adds maintainability queries on top of the
+          # default security set; drop to `security-extended` if it gets noisy.
+          queries: security-and-quality
+
+      # No compiled build step — JS/TS is analysed as-is. Autobuild is a no-op
+      # here but kept for forward-compat if a build-required language is added.
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@f09c1c0a94de965c15400f5634aa42fac8fb8f88 # v3.27.5
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@f09c1c0a94de965c15400f5634aa42fac8fb8f88 # v3.27.5
+        with:
+          category: /language:javascript-typescript

@@ -37,6 +37,11 @@ concurrency:
   group: scheduled-jobs-${{ github.ref }}
   cancel-in-progress: false
 
+# Least-privilege: these jobs read the repo, run scripts, and upload a run
+# artifact — none write back to the repo or need elevated token scope.
+permissions:
+  contents: read
+
 jobs:
   # ── Restore-verification drill (self-contained: proves the backup+restore
   #    tooling end-to-end against a throwaway Postgres, no prod access). ──
@@ -65,8 +70,8 @@ jobs:
       ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
       ALERT_SOURCE: github-actions/restore-verification
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version-file: .nvmrc
       - name: Install postgresql-client (pg_dump/pg_restore/psql)
@@ -103,7 +108,7 @@ jobs:
       ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
       ALERT_SOURCE: github-actions/db-backup
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Skip if no prod DB configured
         id: guard
         run: |
@@ -121,7 +126,7 @@ jobs:
       # lifecycle (see docs/backup-recovery.md); this 7-day artifact is a safety net.
       - name: Upload dump artifact
         if: steps.guard.outputs.skip != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: db-backup-${{ github.run_id }}
           path: ${{ github.workspace }}/backup-out/*.dump
@@ -138,8 +143,8 @@ jobs:
       ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
       ALERT_SOURCE: github-actions/snapshot-cleanup
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version-file: .nvmrc
       - name: Run snapshot cleanup (skips if no prod DB)
@@ -159,8 +164,8 @@ jobs:
       ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
       ALERT_SOURCE: github-actions/ldf-refresh
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version-file: .nvmrc
       - name: Run LDF benchmark refresh (skips if no prod DB)

@@ -163,7 +163,39 @@ report-uri  /csp-report;
 - **Regression monitoring:** `/csp-report` stays wired so violations are logged
   even while enforcing.
 
-## Reporting
+## Static analysis & secret scanning
 
-Report suspected vulnerabilities to the maintainers privately rather than via a
-public issue.
+Beyond the runtime `npm audit` gate and the Trivy image scan, the pipeline runs:
+
+- **CodeQL** (`.github/workflows/codeql.yml`) — SAST over first-party JS/TS on
+  every push/PR and weekly; findings surface in the repo's Code scanning tab.
+- **Dependency licence scan** (`ci.yml` → `license-scan`) — fails the build on a
+  strong/network-copyleft licence (GPL/AGPL/LGPL/SSPL/EUPL/CDDL) in any shipped
+  dependency, protecting the proprietary licence (`LICENSE`, `UNLICENSED`).
+- **GitHub-native secret scanning + push protection** — enable these in the
+  repository's Security settings (Settings → Code security). This is the primary
+  control against committed credentials; push protection blocks a secret before
+  it ever lands. Rotate immediately (and follow the incident runbook) if the
+  scanner or a reviewer flags one.
+
+## Reporting a vulnerability
+
+We welcome reports from security researchers and users.
+
+- **Contact:** email **security@darchville.com** (PGP key on request). Do **not**
+  open a public GitHub issue for a suspected vulnerability.
+- **Include:** affected component/URL, a description, reproduction steps or PoC,
+  and impact assessment. A machine-readable pointer to this policy is published at
+  `/.well-known/security.txt`.
+- **Acknowledgement SLA:** within **2 business days**. **Triage & severity** within
+  **5 business days**. We aim to remediate Critical/High issues within **30 days**
+  and Medium/Low within **90 days**, and will keep you updated on progress.
+- **Coordinated disclosure:** please give us a reasonable window (target **90 days**)
+  to remediate before any public disclosure, and coordinate timing with us.
+- **Safe harbour:** we will not pursue or support legal action against researchers
+  who act in good faith, avoid privacy violations and service disruption, only
+  interact with accounts/data they own or have explicit permission to test, and
+  give us a reasonable time to respond before disclosure.
+
+Security incidents (as opposed to reports) are handled per
+`docs/runbooks/incident-response.md` → *Security incidents*.

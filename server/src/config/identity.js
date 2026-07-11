@@ -79,6 +79,10 @@ export function getIdentityConfig(envObj = process.env) {
     defaultRole: VALID_ROLE_CODES.has(defaultRoleRaw) ? defaultRoleRaw : DEFAULT_LOW_PRIV_ROLE,
     requiredAcr: parseList(envObj.IDENTITY_REQUIRED_ACR),
     requiredAmr: parseList(envObj.IDENTITY_REQUIRED_AMR),
+    // Fail-closed switch: when true, an SSO config that does not actually enforce
+    // MFA (no required acr/amr) is a FATAL boot error, not a warning. Opt-in so
+    // existing deployments are unaffected until they choose to enforce.
+    enforceMfa: toBool(envObj.IDENTITY_ENFORCE_MFA),
     breakGlassUsers: parseList(envObj.IDENTITY_BREAK_GLASS_USERS).map((s) => s.toLowerCase()),
   };
 }
@@ -166,7 +170,12 @@ export function validateIdentityConfig(config = getIdentityConfig()) {
   if (!config.clientSecret) errors.push('IDENTITY_CLIENT_SECRET is required when SSO is enabled (confidential client).');
   if (!config.redirectUri) errors.push('IDENTITY_REDIRECT_URI is required when SSO is enabled.');
   if (!config.requiredAcr.length && !config.requiredAmr.length) {
-    warnings.push('SSO enabled but no IDENTITY_REQUIRED_ACR/AMR set — MFA would not be enforced in-app (D2).');
+    const msg = 'SSO enabled but no IDENTITY_REQUIRED_ACR/AMR set — MFA would not be enforced in-app (D2).';
+    if (config.enforceMfa) {
+      errors.push(msg + ' IDENTITY_ENFORCE_MFA is set → fatal (fail-closed).');
+    } else {
+      warnings.push(msg + ' Set IDENTITY_ENFORCE_MFA=1 to make this a hard boot failure.');
+    }
   }
   if (!config.breakGlassUsers.length) {
     warnings.push('SSO enabled but no IDENTITY_BREAK_GLASS_USERS set — there is no local break-glass admin path (D4).');

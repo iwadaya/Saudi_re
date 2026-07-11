@@ -7,13 +7,22 @@
 #
 # Build context is the repo root; only the scripts are needed at runtime — the
 # Render Cron service supplies the command via `startCommand` in render.yaml.
+#
+# Base is pinned to the Debian stable codename (bookworm); this image is now
+# built and Trivy-scanned in .github/workflows/image-security.yml, so a fixable
+# CRITICAL in the base or the apt layers fails CI. For a fully reproducible
+# supply chain, pin by digest (debian:bookworm-slim@sha256:…) and bump it
+# deliberately when the scanner flags a fixed base CVE — same stance as the
+# runtime Dockerfile.
 FROM debian:bookworm-slim
 
 # postgresql-client → pg_dump/pg_restore/psql; awscli → durable object-storage
 # upload/fetch (S3-compatible: AWS, MinIO, R2, Spaces, GCS via XML/HMAC) used by
 # backup-db.sh / verify-restore.sh when BACKUP_S3_BUCKET is set.
+# gnupg → symmetric AES-256 encryption of dumps at rest (backup-db.sh /
+# verify-restore.sh when BACKUP_ENCRYPTION_PASSPHRASE is set).
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends postgresql-client awscli ca-certificates curl bash coreutils \
+  && apt-get install -y --no-install-recommends postgresql-client awscli gnupg ca-certificates curl bash coreutils \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
