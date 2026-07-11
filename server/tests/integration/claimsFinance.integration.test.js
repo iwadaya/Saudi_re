@@ -19,6 +19,9 @@ import { pool } from '../../src/db/pool.js';
 const UW_YEAR = 2000 + (process.pid % 90);
 const SIGNED_LINE = 12.5;
 const EPI = 4_000_000;
+// A second, real uw_user (seeded 'underwriter', level 4) to act as the approver
+// so approvals are never self-approvals. Its id satisfies the reviewed_by FK.
+const APPROVER_ID = '00000000-0000-0000-0000-000000000002';
 
 describe.skipIf(shouldSkipDb)('integration: claims + finance modules', () => {
   let harness;
@@ -207,6 +210,32 @@ describe.skipIf(shouldSkipDb)('integration: claims + finance modules', () => {
     expect(fs.active).toBeGreaterThanOrEqual(1);
   });
 
+  it('M1 — finance status: role-gated, state-machine enforced, no acknowledge bypass', async () => {
+    const setStatus = (status, extra = {}) =>
+      harness.fetchApp('POST', `/api/finance/entries/${entryId}/status`, { body: { status }, ...extra });
+
+    // Below approver tier → 403 (was ungated: any underwriter could flip status).
+    const junior = await setStatus('SUSPENDED', { headers: { 'x-user-level': '5' } });
+    expect(junior.status).toBe(403);
+
+    // Legal ACTIVE → SUSPENDED → ACTIVE round-trip (entry is ACTIVE from the ack).
+    expect((await setStatus('SUSPENDED')).status).toBe(200);
+    expect((await setStatus('ACTIVE')).status).toBe(200);
+
+    // No-op (same status) is rejected.
+    expect((await setStatus('ACTIVE')).status).toBe(422);
+
+    // Cannot drive an entry back to PENDING_SETUP, and PENDING→ACTIVE is not a
+    // /status path — that would bypass the acknowledge attribution.
+    const illegal = await setStatus('PENDING_SETUP');
+    expect(illegal.status).toBe(422);
+    expect((await illegal.json()).code).toBe('ILLEGAL_FINANCE_TRANSITION');
+
+    // Leaves the entry ACTIVE for downstream assertions.
+    const cur = await harness.fetchApp('GET', `/api/finance/entries/${entryId}`).then((r) => r.json());
+    expect(cur.status).toBe('ACTIVE');
+  });
+
   it('approval workflow: claims start DRAFT and submit freezes the claim', async () => {
     let detail = await harness.fetchApp('GET', `/api/claims/${claimId}`).then((r) => r.json());
     expect(detail.approval_status).toBe('DRAFT');
@@ -244,11 +273,26 @@ describe.skipIf(shouldSkipDb)('integration: claims + finance modules', () => {
     const badApprove = await harness.fetchApp('POST', `/api/claims/${claimId}/approve`, { body: {} });
     expect(badApprove.status).toBe(422);
 
-    // Rejected claims are editable again, then resubmit → approve.
+    // Rejected claims are editable again, then resubmit (as the default submitter).
     const edit = await harness.fetchApp('PUT', `/api/claims/${claimId}`, { body: { insured_name: 'IT Insured (revised)' } });
     expect(edit.status).toBe(200);
     expect((await harness.fetchApp('POST', `/api/claims/${claimId}/submit`, { body: {} })).status).toBe(200);
-    const approve = await harness.fetchApp('POST', `/api/claims/${claimId}/approve`, { body: { reason: 'Looks right' } });
+
+    // H1 — segregation of duties: the SUBMITTER cannot approve their own claim.
+    const selfApprove = await harness.fetchApp('POST', `/api/claims/${claimId}/approve`, { body: { reason: 'me again' } });
+    expect(selfApprove.status).toBe(403);
+    expect((await selfApprove.json()).code).toBe('SELF_APPROVAL_FORBIDDEN');
+
+    // H1 — approval needs an approver-tier actor; a below-threshold user is 403.
+    const juniorApprove = await harness.fetchApp('POST', `/api/claims/${claimId}/approve`, {
+      body: { reason: 'no authority' }, headers: { 'x-user-id': APPROVER_ID, 'x-user-level': '5' },
+    });
+    expect(juniorApprove.status).toBe(403);
+
+    // A DIFFERENT approver (level ≤ 4) finalises it.
+    const approve = await harness.fetchApp('POST', `/api/claims/${claimId}/approve`, {
+      body: { reason: 'Looks right' }, headers: { 'x-user-id': APPROVER_ID, 'x-user-role': 'CU' },
+    });
     expect(approve.status).toBe(200);
     expect(await auditCount('CLAIM', claimId, 'CLAIM_SUBMITTED')).toBe(2);
     expect(await auditCount('CLAIM', claimId, 'CLAIM_APPROVED')).toBe(1);
@@ -257,11 +301,24 @@ describe.skipIf(shouldSkipDb)('integration: claims + finance modules', () => {
     expect(detail.approval_status).toBe('FINALISED');
     expect(detail.reviewed_at).toBeTruthy();
 
-    // Finalised claims keep developing — the ledger accepts movements again.
+    // H2 — a movement on a FINALISED claim restates the position, so the stale
+    // approval drops back to DRAFT for re-review (the ledger still accepts it).
     const mv = await harness.fetchApp('POST', `/api/claims/${claimId}/movements`, {
       body: { movement_type: 'RESERVE_CHANGE', gross_paid_100: 250_000, gross_os_100: 100_000, comment: 'Reserve re-established' },
     });
     expect(mv.status).toBe(201);
+    detail = await harness.fetchApp('GET', `/api/claims/${claimId}`).then((r) => r.json());
+    expect(detail.approval_status).toBe('DRAFT');
+    expect(detail.reviewed_at).toBeFalsy();
+
+    // Re-review cycle restores FINALISED (submitter submits, approver approves).
+    expect((await harness.fetchApp('POST', `/api/claims/${claimId}/submit`, { body: {} })).status).toBe(200);
+    const reApprove = await harness.fetchApp('POST', `/api/claims/${claimId}/approve`, {
+      body: { reason: 'Re-approved after restatement' }, headers: { 'x-user-id': APPROVER_ID, 'x-user-role': 'CU' },
+    });
+    expect(reApprove.status).toBe(200);
+    detail = await harness.fetchApp('GET', `/api/claims/${claimId}`).then((r) => r.json());
+    expect(detail.approval_status).toBe('FINALISED');
   });
 
   it('eligible-contracts supports the country → cedant cascade, UW-year filter, and search', async () => {

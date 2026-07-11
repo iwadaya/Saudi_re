@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import { pool } from '../db/pool.js';
 import { asyncHandler } from '../helpers.js';
+import { requireMinLevel } from '../middleware/requestContext.js';
 import { validateBody } from '../lib/validate.js';
 import { withTransaction } from '../db/withTransaction.js';
 import { logAudit, resolveAuditActor } from '../services/audit.js';
@@ -309,11 +310,19 @@ router.put('/claims/:id', validateBody(claimUpdateSchema), asyncHandler(async (r
   }
   if (!sets.length) return res.status(400).json({ error: 'No updatable fields supplied' });
 
+  // Editing the header of an already-FINALISED claim invalidates that approval:
+  // it silently drops back to DRAFT (review metadata cleared) so the finalised
+  // stamp never sits over figures the reviewer never saw. It must then be
+  // re-submitted and re-approved.
   const { rows } = await pool.query(
-    `UPDATE public.claim SET ${sets.join(', ')}, updated_at = now()
+    `UPDATE public.claim SET ${sets.join(', ')}, updated_at = now(),
+            approval_status     = CASE WHEN approval_status = 'FINALISED' THEN 'DRAFT' ELSE approval_status END,
+            reviewed_at         = CASE WHEN approval_status = 'FINALISED' THEN NULL   ELSE reviewed_at END,
+            reviewed_by_user_id = CASE WHEN approval_status = 'FINALISED' THEN NULL   ELSE reviewed_by_user_id END,
+            review_comment      = CASE WHEN approval_status = 'FINALISED' THEN NULL   ELSE review_comment END
       WHERE claim_id = $1 AND status IN ('OPEN','REOPENED')
         AND approval_status <> 'WAITING_APPROVAL'
-      RETURNING claim_id, claim_ref`,
+      RETURNING claim_id, claim_ref, approval_status`,
     params,
   );
   if (!rows.length) {
@@ -327,7 +336,7 @@ router.put('/claims/:id', validateBody(claimUpdateSchema), asyncHandler(async (r
   await logAudit(null, {
     entityType: 'CLAIM', entityId: id, eventType: 'CLAIM_UPDATED',
     actor: { id: actor.actorUserId, name: actor.actorName, role: actor.actorRole },
-    payload: { changed: Object.keys(b) },
+    payload: { changed: Object.keys(b), approval_reset: rows[0].approval_status === 'DRAFT' },
   });
   res.json({ ok: true, ...rows[0] });
 }));
@@ -373,11 +382,23 @@ router.post('/claims/:id/movements', validateBody(movementCreateSchema), asyncHa
        b.comment ?? null, actor.actorUserId ?? null],
     );
 
+    // A new movement restates the position, so any prior FINALISED approval no
+    // longer describes the current figures — drop back to DRAFT for re-review.
+    const approvalReset = claim.approval_status === 'FINALISED';
+    if (approvalReset) {
+      await client.query(
+        `UPDATE public.claim
+            SET approval_status = 'DRAFT', reviewed_at = NULL,
+                reviewed_by_user_id = NULL, review_comment = NULL, updated_at = now()
+          WHERE claim_id = $1`, [id]);
+    }
+
     await logAudit(client, {
       entityType: 'CLAIM', entityId: id, eventType: 'MOVEMENT_BOOKED',
       actor: { id: actor.actorUserId, name: actor.actorName, role: actor.actorRole },
       payload: { movement_no: nextNo, movement_type: b.movement_type,
-                 gross_paid_100: b.gross_paid_100, gross_os_100: b.gross_os_100 },
+                 gross_paid_100: b.gross_paid_100, gross_os_100: b.gross_os_100,
+                 approval_reset: approvalReset },
     }, { critical: true });
 
     return mvRows[0];
@@ -464,6 +485,12 @@ router.post('/claims/:id/reopen', validateBody(claimCloseSchema), asyncHandler(
  * DRAFT|REJECTED → WAITING_APPROVAL → FINALISED | REJECTED. While a claim is
  * WAITING_APPROVAL every other mutation (edits, movements, close/reopen) is
  * frozen, so the reviewer decides on exactly what was submitted.
+ *
+ * Segregation of duties: submit is open to any authenticated author, but
+ * approve/reject are the REVIEWER's actions — the routes require an approver
+ * (requireMinLevel(4), matching the codebase's canApprove tier) and, for a
+ * FINALISE, the reviewer must not be the person who submitted it (no
+ * self-approval).
  */
 async function transitionApproval(req, res, { toStatus, from, eventType }) {
   const { id } = req.params;
@@ -472,13 +499,21 @@ async function transitionApproval(req, res, { toStatus, from, eventType }) {
 
   const out = await withTransaction(async (client) => {
     const { rows: clRows } = await client.query(
-      `SELECT claim_id, claim_ref, approval_status FROM public.claim
+      `SELECT claim_id, claim_ref, approval_status, submitted_by_user_id FROM public.claim
         WHERE claim_id = $1 FOR UPDATE`, [id]);
     if (!clRows.length) { const e = new Error('Claim not found'); e.status = 404; throw e; }
     const claim = clRows[0];
     if (!from.includes(claim.approval_status)) {
       const e = new Error(`Cannot move a ${claim.approval_status} claim to ${toStatus}.`);
       e.status = 422; e.code = 'ILLEGAL_APPROVAL_TRANSITION'; throw e;
+    }
+    // No self-approval: the reviewer who FINALISES a claim must be someone other
+    // than its submitter (a four-eyes control on financially material figures).
+    if (toStatus === 'FINALISED'
+      && claim.submitted_by_user_id != null && actor.actorUserId != null
+      && String(claim.submitted_by_user_id) === String(actor.actorUserId)) {
+      const e = new Error('You cannot approve a claim you submitted — approval needs a second person.');
+      e.status = 403; e.code = 'SELF_APPROVAL_FORBIDDEN'; throw e;
     }
 
     if (toStatus === 'WAITING_APPROVAL') {
@@ -518,10 +553,10 @@ async function transitionApproval(req, res, { toStatus, from, eventType }) {
 router.post('/claims/:id/submit', validateBody(claimReviewSchema), asyncHandler(
   (req, res) => transitionApproval(req, res, { toStatus: 'WAITING_APPROVAL', from: ['DRAFT', 'REJECTED'], eventType: 'CLAIM_SUBMITTED' })));
 
-router.post('/claims/:id/approve', validateBody(claimReviewSchema), asyncHandler(
+router.post('/claims/:id/approve', requireMinLevel(4), validateBody(claimReviewSchema), asyncHandler(
   (req, res) => transitionApproval(req, res, { toStatus: 'FINALISED', from: ['WAITING_APPROVAL'], eventType: 'CLAIM_APPROVED' })));
 
-router.post('/claims/:id/reject', validateBody(claimReviewSchema), asyncHandler(
+router.post('/claims/:id/reject', requireMinLevel(4), validateBody(claimReviewSchema), asyncHandler(
   (req, res) => transitionApproval(req, res, { toStatus: 'REJECTED', from: ['WAITING_APPROVAL'], eventType: 'CLAIM_REJECTED' })));
 
 // ── POST /api/claims/:id/notes ───────────────────────────────────────────────
