@@ -1,0 +1,7 @@
+# Universe 3 — security disclosure policy (RFC 9116)
+# Served at https://<your-domain>/.well-known/security.txt
+Contact: mailto:security@darchville.com
+Expires: 2027-07-11T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://<your-domain>/.well-known/security.txt
+Policy: https://github.com/Darchville-Analytics/modelling_tool/blob/main/SECURITY.md

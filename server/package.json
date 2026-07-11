@@ -2,6 +2,7 @@
   "name": "universe3-server",
   "version": "1.0.0",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "dev": "node --watch src/index.js",
@@ -14,6 +15,7 @@
     "relocate:misfiled-renewal-packs": "node scripts/relocate-misfiled-renewal-packs.js",
     "audit:ownership": "node scripts/audit-contract-quote-ownership.js",
     "audit:public-docs": "node scripts/audit-public-documents.js",
+    "gdpr:anonymize-user": "node scripts/anonymize-user.js",
     "refresh:ldf-benchmarks": "node src/jobs/refreshLdfBenchmarks.js"
   },
   "dependencies": {

@@ -186,6 +186,29 @@ export function checkDemoAuthConfig({ nodeEnv: ne, allowDemoAuth } = {}) {
 }
 
 /**
+ * Fail-closed MFA enforcement (opt-in). When IDENTITY_ENFORCE_MFA is truthy the
+ * operator is asserting "MFA must be enforced." We then refuse to boot on a
+ * config that would NOT actually enforce it — SSO off (nothing carries the
+ * assurance claims) or SSO on with no IDENTITY_REQUIRED_ACR/AMR (the acr/amr
+ * check is a no-op). Unset ⇒ no-op, so existing deployments are unaffected.
+ * Reads raw env (no import of the identity module) to stay dependency-free.
+ */
+export function checkMfaEnforcementConfig({ enforceMfa, ssoEnabled, requiredAcr, requiredAmr } = {}) {
+  const errors = [];
+  if (!toBool(enforceMfa, false)) return errors; // opt-in only
+  if (!toBool(ssoEnabled, false)) {
+    errors.push('IDENTITY_ENFORCE_MFA is set but IDENTITY_SSO_ENABLED is off — MFA is enforced via SSO acr/amr claims. Enable SSO or unset IDENTITY_ENFORCE_MFA.');
+    return errors;
+  }
+  const hasAcr = String(requiredAcr || '').trim().length > 0;
+  const hasAmr = String(requiredAmr || '').trim().length > 0;
+  if (!hasAcr && !hasAmr) {
+    errors.push('IDENTITY_ENFORCE_MFA is set but neither IDENTITY_REQUIRED_ACR nor IDENTITY_REQUIRED_AMR is configured — the in-app acr/amr check would be a no-op. Set the required assurance level/methods so MFA is actually enforced (fail-closed).');
+  }
+  return errors;
+}
+
+/**
  * Fail-fast secret validation, called at the very top of bootstrap. In
  * production an invalid/missing secret — or an enabled demo-auth backdoor — is
  * fatal: we console.error and exit(1) rather than boot with forgeable tokens or
@@ -200,6 +223,12 @@ export function validateEnv() {
       sessionSecret: process.env.SESSION_SECRET || '',
     }),
     ...checkDemoAuthConfig({ nodeEnv, allowDemoAuth: process.env.ALLOW_DEMO_AUTH }),
+    ...checkMfaEnforcementConfig({
+      enforceMfa: process.env.IDENTITY_ENFORCE_MFA,
+      ssoEnabled: process.env.IDENTITY_SSO_ENABLED,
+      requiredAcr: process.env.IDENTITY_REQUIRED_ACR,
+      requiredAmr: process.env.IDENTITY_REQUIRED_AMR,
+    }),
   ];
   if (errors.length) {
     console.error('[env] Refusing to start with an insecure configuration:\n  - ' + errors.join('\n  - '));

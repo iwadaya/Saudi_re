@@ -1,7 +1,7 @@
 // Secret-config validation: production refuses to boot without a strong
 // AUTH_JWT_SECRET; dev/test mints an ephemeral one.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { checkSecretsConfig, checkDemoAuthConfig, validateEnv, INSECURE_SECRET_PLACEHOLDER } from './env.js';
+import { checkSecretsConfig, checkDemoAuthConfig, checkMfaEnforcementConfig, validateEnv, INSECURE_SECRET_PLACEHOLDER } from './env.js';
 
 const STRONG = 'x'.repeat(40);
 
@@ -56,6 +56,25 @@ describe('checkDemoAuthConfig (A6 — demo-auth fenced from production)', () => 
   });
   it('development with ALLOW_DEMO_AUTH=true is fine (dev/test convenience)', () => {
     expect(checkDemoAuthConfig({ nodeEnv: 'development', allowDemoAuth: 'true' })).toEqual([]);
+  });
+});
+
+describe('checkMfaEnforcementConfig (fail-closed MFA, opt-in)', () => {
+  it('unset IDENTITY_ENFORCE_MFA is a no-op regardless of the rest', () => {
+    expect(checkMfaEnforcementConfig({ enforceMfa: undefined, ssoEnabled: 'false' })).toEqual([]);
+    expect(checkMfaEnforcementConfig({ enforceMfa: 'false', ssoEnabled: 'true', requiredAcr: '', requiredAmr: '' })).toEqual([]);
+  });
+  it('enforce + SSO off → error (nothing carries the assurance claims)', () => {
+    expect(checkMfaEnforcementConfig({ enforceMfa: '1', ssoEnabled: 'false' }))
+      .toEqual([expect.stringMatching(/IDENTITY_SSO_ENABLED is off/)]);
+  });
+  it('enforce + SSO on + no acr/amr → error (in-app check is a no-op)', () => {
+    expect(checkMfaEnforcementConfig({ enforceMfa: '1', ssoEnabled: 'true', requiredAcr: '', requiredAmr: '' }))
+      .toEqual([expect.stringMatching(/neither IDENTITY_REQUIRED_ACR nor IDENTITY_REQUIRED_AMR/)]);
+  });
+  it('enforce + SSO on + acr OR amr set → OK', () => {
+    expect(checkMfaEnforcementConfig({ enforceMfa: '1', ssoEnabled: 'true', requiredAcr: 'urn:mfa', requiredAmr: '' })).toEqual([]);
+    expect(checkMfaEnforcementConfig({ enforceMfa: '1', ssoEnabled: 'true', requiredAcr: '', requiredAmr: 'mfa' })).toEqual([]);
   });
 });
 

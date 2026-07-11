@@ -3,6 +3,7 @@
   "private": true,
   "version": "3.0.0",
   "description": "Universe 3 — Reinsurance Treaty Pricing & Modelling Tool",
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
