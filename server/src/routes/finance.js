@@ -12,13 +12,27 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { asyncHandler } from '../helpers.js';
+import { requireMinLevel } from '../middleware/requestContext.js';
 import { validateBody } from '../lib/validate.js';
+import { withTransaction } from '../db/withTransaction.js';
 import { logAudit, resolveAuditActor } from '../services/audit.js';
 import { financeStatusSchema, FINANCE_STATUSES } from '../validation/claims.js';
 
 const router = Router();
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Allowed finance-entry status transitions (source → permitted targets). The
+// PENDING_SETUP → ACTIVE handoff goes ONLY through /acknowledge (which records
+// who acknowledged and when), so /status cannot mint an ACTIVE entry without
+// that attribution; CLOSED is terminal (no resurrection). This is the finance
+// ledger's state machine — enforced under a row lock below.
+const FINANCE_TRANSITIONS = {
+  PENDING_SETUP: [],                 // must be acknowledged, not set active here
+  ACTIVE: ['SUSPENDED', 'CLOSED'],
+  SUSPENDED: ['ACTIVE', 'CLOSED'],
+  CLOSED: [],                        // terminal
+};
 
 const ENTRY_SELECT = `
   SELECT
@@ -116,26 +130,46 @@ router.post('/finance/entries/:id/acknowledge', asyncHandler(async (req, res) =>
 }));
 
 // ── POST /api/finance/entries/:id/status ─────────────────────────────────────
-// Explicit status set (SUSPENDED / CLOSED / back to ACTIVE), audited.
-router.post('/finance/entries/:id/status', validateBody(financeStatusSchema), asyncHandler(async (req, res) => {
+// Explicit status set (SUSPENDED / CLOSED / reactivate SUSPENDED→ACTIVE). A
+// controlled financial mutation: requires an approver-tier actor
+// (requireMinLevel(4)) and a legal transition per FINANCE_TRANSITIONS, checked
+// under a row lock. Setting a PENDING_SETUP entry ACTIVE is rejected here — that
+// path is /acknowledge, which records the acknowledger.
+router.post('/finance/entries/:id/status', requireMinLevel(4), validateBody(financeStatusSchema), asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!UUID_RE.test(id)) return res.status(400).json({ error: 'Invalid entry id' });
   const { status, notes } = req.body;
   const actor = await resolveAuditActor(req);
-  const { rows } = await pool.query(
-    `UPDATE public.finance_treaty_entry
-        SET status = $2, notes = COALESCE($3, notes), updated_at = now()
-      WHERE entry_id = $1
-      RETURNING entry_id, contract_id, status`,
-    [id, status, notes ?? null],
-  );
-  if (!rows.length) return res.status(404).json({ error: 'Finance entry not found' });
-  await logAudit(null, {
-    entityType: 'FINANCE_ENTRY', entityId: id, eventType: 'FINANCE_STATUS_CHANGED',
-    actor: { id: actor.actorUserId, name: actor.actorName, role: actor.actorRole },
-    payload: { to: status, notes: notes ?? null },
+
+  const out = await withTransaction(async (client) => {
+    const { rows: cur } = await client.query(
+      'SELECT status FROM public.finance_treaty_entry WHERE entry_id = $1 FOR UPDATE', [id]);
+    if (!cur.length) { const e = new Error('Finance entry not found'); e.status = 404; throw e; }
+    const from = cur[0].status;
+    if (from === status) { const e = new Error(`Finance entry is already ${status}.`); e.status = 422; e.code = 'FINANCE_NOOP_TRANSITION'; throw e; }
+    const allowed = FINANCE_TRANSITIONS[from] || [];
+    if (!allowed.includes(status)) {
+      const hint = from === 'PENDING_SETUP' && status === 'ACTIVE' ? ' Use /acknowledge to activate a pending entry.' : '';
+      const e = new Error(`Illegal finance transition ${from} → ${status}.${hint}`);
+      e.status = 422; e.code = 'ILLEGAL_FINANCE_TRANSITION'; throw e;
+    }
+
+    const { rows } = await client.query(
+      `UPDATE public.finance_treaty_entry
+          SET status = $2, notes = COALESCE($3, notes), updated_at = now()
+        WHERE entry_id = $1
+        RETURNING entry_id, contract_id, status`,
+      [id, status, notes ?? null],
+    );
+    await logAudit(client, {
+      entityType: 'FINANCE_ENTRY', entityId: id, eventType: 'FINANCE_STATUS_CHANGED',
+      actor: { id: actor.actorUserId, name: actor.actorName, role: actor.actorRole },
+      payload: { from, to: status, notes: notes ?? null },
+    }, { critical: true });
+    return rows[0];
   });
-  res.json({ ok: true, ...rows[0] });
+
+  res.json({ ok: true, ...out });
 }));
 
 export default router;
