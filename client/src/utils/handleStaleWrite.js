@@ -92,7 +92,7 @@ function showStaleWriteModal({ entityType, timestamp }) {
     const message = document.createElement('p');
     message.textContent = `Your colleague saved this ${entityType} at ${formatTimestamp(timestamp)}. Your changes will overwrite theirs unless you refresh.`;
     applyStyles(message, {
-      color: 'rgba(var(--text-rgb), 0.86)',
+      color: 'rgba(var(--text-rgb),0.86)',
       fontSize: '14px',
       lineHeight: '1.5',
       margin: '0 0 18px',

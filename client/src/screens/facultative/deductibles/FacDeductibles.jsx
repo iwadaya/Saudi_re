@@ -14,7 +14,7 @@ const stripDigits = v => String(v ?? '').replace(/[^\d]/g,'');
 function FR({ label, children }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 10, alignItems: 'center', minHeight: 36 }}>
-      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)' }}>{label}</div>
+      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)' }}>{label}</div>
       <div>{children}</div>
     </div>
   );
@@ -144,7 +144,7 @@ export default function FacDeductibles() {
         </div>
 
         {checklist.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.5)', padding: '14px 0' }}>
+          <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)', padding: '14px 0' }}>
             Loading clause catalogue…
           </div>
         ) : (
@@ -171,7 +171,7 @@ export default function FacDeductibles() {
                         {missing && <span style={{ width: 8, height: 8, borderRadius: 4, background: 'var(--accent-rose)', flexShrink: 0 }} />}
                         <div>
                           <div>{row.clause_name}</div>
-                          <div style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.5)', marginTop: 1 }}>
+                          <div style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.7)', marginTop: 1 }}>
                             {row.clause_code}{row.clause_category ? ` · ${row.clause_category}` : ''}
                           </div>
                         </div>

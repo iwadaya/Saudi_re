@@ -339,7 +339,7 @@ export default function NpExpiringStructure() {
               <section className="np-struct-card glass" style={{ marginBottom: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 24, padding: '14px 18px', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <label htmlFor={numLayersSelectId} style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', color: 'rgba(var(--text-rgb),0.5)', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>LAYERS</label>
+                    <label htmlFor={numLayersSelectId} style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', color: 'rgba(var(--text-rgb),0.7)', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>LAYERS</label>
                     <select id={numLayersSelectId} className="np-mini-input np-mini-select" style={{ width: 90 }} value={numLayersInput} onChange={e => handleNumLayersChange(e.target.value)}>
                       <option value="">—</option>
                       {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => <option key={n} value={n}>{n}</option>)}
@@ -351,7 +351,7 @@ export default function NpExpiringStructure() {
                     { key: 'profit_commission_pct', label: 'PROFIT COMM. %' },
                   ].map(({ key, label }) => (
                     <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <label style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', color: 'rgba(var(--text-rgb),0.45)', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>{label}</label>
+                      <label style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', color: 'rgba(var(--text-rgb),0.58)', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>{label}</label>
                       <PctInput
                         className="np-mini-input np-mini-input--center"
                         style={{ width: 90 }}

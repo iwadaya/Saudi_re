@@ -348,7 +348,7 @@
   font-size: 10px;
   letter-spacing: .14em;
   text-transform: uppercase;
-  color: rgba(var(--text-rgb),.62);
+  color: rgba(var(--text-rgb),.75);
   background: var(--table-head-bg);
   border-bottom: 1px solid var(--stroke-soft);
 }

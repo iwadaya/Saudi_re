@@ -34,7 +34,7 @@ export function PropPricingReadOnlyBanner({ isReadOnly, offerStatus, setShowOffe
             <div style={{ fontWeight: 800, fontSize: 13, color: offerStatus === 'SIGNED' ? 'var(--accent)' : offerStatus === 'DECLINED' ? 'var(--accent-rose)' : 'var(--accent-amber)' }}>
               Contract {offerStatus.replace(/_/g, ' ')} — Read Only
             </div>
-            <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.45)', marginTop: 1 }}>
+            <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.58)', marginTop: 1 }}>
               Pricing data is locked. Open the {offerStatus === 'SIGNED' || offerStatus === 'NTU' ? 'offer modal to review details' : 'offer modal to review this decision'}.
             </div>
           </div>

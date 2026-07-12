@@ -220,7 +220,7 @@ export default function FacSummary() {
   if (loading || !risk) {
     return (
       <WizardLayout routeKey={ROUTE_KEY} title="Summary & Approval" headerPill="FACULTATIVE">
-        <div style={{ padding: 40, textAlign: 'center', color: 'rgba(var(--text-rgb),0.5)' }}>Loading…</div>
+        <div style={{ padding: 40, textAlign: 'center', color: 'rgba(var(--text-rgb),0.7)' }}>Loading…</div>
       </WizardLayout>
     );
   }
@@ -583,7 +583,7 @@ function SignatureSlot({ title, event, fallback }) {
         {title}
       </div>
       {empty ? (
-        <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.55)', fontStyle: 'italic' }}>{fallback}</div>
+        <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.7)', fontStyle: 'italic' }}>{fallback}</div>
       ) : (
         <div style={{ fontSize: 12 }}>
           <div style={{ color: 'var(--text)', fontWeight: 700 }}>{event.actor || 'Unknown'}</div>

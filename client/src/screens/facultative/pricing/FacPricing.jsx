@@ -39,8 +39,8 @@ function FR({ label, children, hint }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 10, alignItems: 'center', minHeight: 36 }}>
       <div>
-        <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)' }}>{label}</div>
-        {hint && <div style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.45)', marginTop: 1 }}>{hint}</div>}
+        <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)' }}>{label}</div>
+        {hint && <div style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.58)', marginTop: 1 }}>{hint}</div>}
       </div>
       <div>{children}</div>
     </div>
@@ -636,7 +636,7 @@ export default function FacPricing() {
           </div>
 
           {relevantExtensions.length === 0 && (
-            <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.45)', padding: '8px 0' }}>No classes selected on Risk Detail — select classes to see relevant extensions</div>
+            <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.58)', padding: '8px 0' }}>No classes selected on Risk Detail — select classes to see relevant extensions</div>
           )}
 
           {relevantExtensions.map(({ category, extensions: exts }) => {

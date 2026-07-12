@@ -11,7 +11,7 @@ export function BfIelrBar({ inputId, ielr, onIelrChange }) {
     <div style={{ display: 'flex', gap: 16, alignItems: 'center', margin: '12px 0', padding: '10px 16px', borderRadius: 14, background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.2)' }}>
       <label style={{ fontSize: 12, color: 'var(--accent-amber)', fontWeight: 600 }} htmlFor={inputId}>Initial Expected Loss Ratio (IELR)</label>
       <input id={inputId} className="fi" type="number" min="0" max="2" step="0.01" value={ielr} onChange={e => onIelrChange(e.target.value)} style={{ width: 100, textAlign: 'center', borderColor: 'rgba(249,115,22,0.4)' }} />
-      <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)' }}>{(Number(ielr) * 100 || 0).toFixed(0)}%</span>
+      <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.7)' }}>{(Number(ielr) * 100 || 0).toFixed(0)}%</span>
     </div>
   );
 }
@@ -32,7 +32,7 @@ export function BfPremiumAchievedBar({ inputId, percentAchieved, onPercentAchiev
         onChange={(e) => onPercentAchievedChange(e.target.value)}
         style={{ width: 100, textAlign: 'center', borderColor: 'rgba(99,102,241,0.4)' }}
       />
-      <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)' }}>
+      <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.7)' }}>
         {(Number(percentAchieved) * 100 || 0).toFixed(0)}%
       </span>
       {suggestedPercentAchieved != null && (
@@ -49,7 +49,7 @@ export function BfPremiumAchievedBar({ inputId, percentAchieved, onPercentAchiev
           Use observed avg ({(suggestedPercentAchieved * 100).toFixed(1)}%)
         </button>
       )}
-      <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)', flexBasis: '100%' }}>
+      <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.7)', flexBasis: '100%' }}>
         Average over past years; default 100 %. &gt;100 % means past premium overachieved budget, &lt;100 % means underachieved.
       </span>
     </div>

@@ -130,7 +130,7 @@ export function LinkRatioView({ matrix, years, numDevYears, excluded, setExclude
 
   return (
     <div>
-      <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.5)', marginBottom: 8, padding: '8px 14px', borderRadius: 10, background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
+      <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.7)', marginBottom: 8, padding: '8px 14px', borderRadius: 10, background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
         Click any link ratio to exclude/include from weighted average. Excluded cells shown in red strikethrough.
       </div>
       <div style={{ overflowX: 'auto' }}>
@@ -159,8 +159,8 @@ export function LinkRatioView({ matrix, years, numDevYears, excluded, setExclude
               {filteredPattern.map((v, c) => <td key={c} className="tri-cell"><div className="tri-inp" style={{ fontWeight: 700, color: 'var(--accent)' }}>{fmt4(v)}</div></td>)}
             </tr>
             <tr>
-              <td className="tri-yr" style={{ color: 'rgba(var(--text-rgb),0.5)' }}>CDF</td>
-              {filteredCdfs.map((v, c) => <td key={c} className="tri-cell"><div className="tri-inp" style={{ color: 'rgba(var(--text-rgb),0.6)' }}>{fmt4(v)}</div></td>)}
+              <td className="tri-yr" style={{ color: 'rgba(var(--text-rgb),0.7)' }}>CDF</td>
+              {filteredCdfs.map((v, c) => <td key={c} className="tri-cell"><div className="tri-inp" style={{ color: 'rgba(var(--text-rgb),0.75)' }}>{fmt4(v)}</div></td>)}
             </tr>
           </tbody>
         </table>

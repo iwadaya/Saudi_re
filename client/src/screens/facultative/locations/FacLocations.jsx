@@ -164,7 +164,7 @@ function LocationCard({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.10em',
-                         color: 'rgba(var(--text-rgb),0.65)' }}>LOCATION {index + 1}</span>
+                         color: 'rgba(var(--text-rgb),0.78)' }}>LOCATION {index + 1}</span>
           {isTopLocation && (
             <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
                            padding: '2px 8px', borderRadius: 20,

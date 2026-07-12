@@ -300,7 +300,7 @@
   font-size: 12px;
   font-weight: 400 !important;
   letter-spacing: .02em;
-  color: rgba(var(--text-rgb),.65);
+  color: rgba(var(--text-rgb),.78);
   margin-bottom: 6px;
 }
 
@@ -354,7 +354,7 @@
   text-align: center;
   font-size: 11px;
   font-weight: 400 !important;
-  color: rgba(var(--text-rgb),.55);
+  color: rgba(var(--text-rgb),.7);
 }
 /* =========================================================
    TRIANGLES (ALL) — Premium Triangle typography + cells
@@ -382,7 +382,7 @@
   font-size: 12px !important;
   font-weight: 400 !important;
   letter-spacing: .01em !important;
-  color: rgba(var(--text-rgb),.65) !important;
+  color: rgba(var(--text-rgb),.78) !important;
 }
 
 /* 3) Center the UW/dev headers too (optional, matches your request vibe) */
@@ -395,7 +395,7 @@
 .TRIANGLES_PAGE .tri-uy{
   font-weight: 400 !important;
   text-align: center !important;
-  color: rgba(var(--text-rgb),.65) !important;
+  color: rgba(var(--text-rgb),.78) !important;
 }
 
 /* 5) Numeric cells: centered + “justified feel” using tabular numerals */
@@ -471,7 +471,7 @@
   font-size: 10px;
   letter-spacing: .4px;
   text-transform: uppercase;
-  color: rgba(var(--text-rgb),.6);
+  color: rgba(var(--text-rgb),.75);
 }
 
 .TRIANGLES_PAGE .tri-df-table{
@@ -494,7 +494,7 @@
 }
 
 /* TriangleScreen layout — moved off inline styles (frontend-budget). */
-.PROP_TRIANGLES .tri-loading-msg{ padding: 32px; color: rgba(var(--text-rgb),.55); }
+.PROP_TRIANGLES .tri-loading-msg{ padding: 32px; color: rgba(var(--text-rgb),.7); }
 .PROP_TRIANGLES .tri-info-bar{
   display: flex; gap: 24px; padding: 10px 16px; margin-bottom: 14px;
   border-radius: 10px; background: var(--surface-hover);

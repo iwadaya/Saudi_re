@@ -62,7 +62,7 @@ const onFieldBlur = (e) => {
 // so they don't count against the screens-layer inline-style budget.
 const SSO_DIVIDER = { display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0' };
 const SSO_DIVIDER_LINE = { flex: 1, height: 1, background: 'var(--hairline)' };
-const SSO_DIVIDER_TEXT = { fontSize: 10, color: 'rgba(var(--text-rgb),.4)', letterSpacing: '.08em', textTransform: 'uppercase' };
+const SSO_DIVIDER_TEXT = { fontSize: 10, color: 'rgba(var(--text-rgb),.58)', letterSpacing: '.08em', textTransform: 'uppercase' };
 const SSO_BUTTON = {
   width: '100%', minHeight: FIELD_HEIGHT, borderRadius: FIELD_RADIUS,
   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -122,7 +122,7 @@ function TestAccessPanel({ onLogin }) {
       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 10 }}>
         Test Access — Underwriter
       </div>
-      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.5)', marginBottom: 12, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.7)', marginBottom: 12, lineHeight: 1.5 }}>
         Enter your name. You'll be remembered on this device — no password needed.
       </div>
       <input
@@ -323,7 +323,7 @@ export default function LoginScreen() {
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,rgba(35,209,139,.9),rgba(18,160,100,.9))', fontSize: 22, fontWeight: 900, color: '#04120b', marginBottom: 12, boxShadow: '0 8px 24px rgba(35,209,139,.3)' }}>U3</div>
           <div style={{ fontSize: 20, fontWeight: 700, color: 'rgba(var(--text-rgb),.92)', letterSpacing: '.01em' }}>The Universe™</div>
-          <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)', marginTop: 3, letterSpacing: '.07em', textTransform: 'uppercase' }}>Reinsurance Underwriting Platform</div>
+          <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.7)', marginTop: 3, letterSpacing: '.07em', textTransform: 'uppercase' }}>Reinsurance Underwriting Platform</div>
         </div>
 
         <div className="glass" style={{ borderRadius: 16, padding: 24, border: '1px solid var(--hairline)' }}>
@@ -333,9 +333,9 @@ export default function LoginScreen() {
             </div>
           )}
           <div style={{ marginBottom: 18 }}>
-            <label htmlFor="login-user" style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'rgba(var(--text-rgb),.55)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 8 }}>Underwriter</label>
+            <label htmlFor="login-user" style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'rgba(var(--text-rgb),.7)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 8 }}>Underwriter</label>
             {loadingUsers ? (
-              <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.5)', padding: '10px 0' }} aria-live="polite">Loading users…</div>
+              <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.7)', padding: '10px 0' }} aria-live="polite">Loading users…</div>
             ) : (
               <div style={{ position: 'relative' }}>
                 <select
@@ -355,14 +355,14 @@ export default function LoginScreen() {
                 </select>
                 {/* Custom chevron — the native arrow is removed by appearance:none
                     so the select height matches the password input exactly. */}
-                <span aria-hidden="true" style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'rgba(var(--text-rgb),.55)', fontSize: 10 }}>▼</span>
+                <span aria-hidden="true" style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'rgba(var(--text-rgb),.7)', fontSize: 10 }}>▼</span>
               </div>
             )}
           </div>
 
           <form onSubmit={handleLogin} aria-label="Sign in">
             <div style={{ marginBottom: 16 }}>
-              <label htmlFor="login-password" style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'rgba(var(--text-rgb),.55)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 6 }}>Password</label>
+              <label htmlFor="login-password" style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'rgba(var(--text-rgb),.7)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 6 }}>Password</label>
               <div style={{ position: 'relative' }}>
                 <input id="login-password" type={showPw ? 'text' : 'password'} className="form-input"
                   value={password} onChange={e => { setPassword(e.target.value); setError(''); }}
@@ -374,13 +374,13 @@ export default function LoginScreen() {
                 <button type="button" onClick={() => setShowPw(v => !v)}
                   aria-label={showPw ? 'Hide password' : 'Show password'}
                   aria-pressed={showPw}
-                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(var(--text-rgb),.45)', fontSize: 12, padding: 2 }}>
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(var(--text-rgb),.58)', fontSize: 12, padding: 2 }}>
                   <span aria-hidden="true">{showPw ? '▼' : '▶'}</span>
                 </button>
               </div>
               {import.meta.env.DEV && (
-                <div id="login-hint" style={{ fontSize: 10, color: 'rgba(var(--text-rgb),.4)', marginTop: 5 }}>
-                  Demo: <span style={{ fontFamily: 'var(--font-mono)', color: 'rgba(var(--text-rgb),.55)' }}>demo2026</span>
+                <div id="login-hint" style={{ fontSize: 10, color: 'rgba(var(--text-rgb),.58)', marginTop: 5 }}>
+                  Demo: <span style={{ fontFamily: 'var(--font-mono)', color: 'rgba(var(--text-rgb),.7)' }}>demo2026</span>
                 </div>
               )}
             </div>
@@ -454,7 +454,7 @@ export default function LoginScreen() {
           )}
         </div>
 
-        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 10, color: 'rgba(var(--text-rgb),.35)', letterSpacing: '.04em' }}>
+        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 10, color: 'rgba(var(--text-rgb),.5)', letterSpacing: '.04em' }}>
           The Universe™ · by Darchville Analytics
         </div>
       </div>

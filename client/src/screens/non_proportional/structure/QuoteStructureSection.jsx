@@ -185,7 +185,7 @@ export function QuoteStructureSection({
 
       {/* ── Empty state ── */}
       {numLayers === 0 && (
-        <div style={{ padding: '28px 18px', textAlign: 'center', color: 'rgba(var(--text-rgb),0.4)', fontSize: 13 }}>
+        <div style={{ padding: '28px 18px', textAlign: 'center', color: 'rgba(var(--text-rgb),0.58)', fontSize: 13 }}>
           Select the number of layers above to define the quote structure.
         </div>
       )}

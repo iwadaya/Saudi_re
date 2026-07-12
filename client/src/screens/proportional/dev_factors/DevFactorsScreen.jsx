@@ -51,7 +51,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   // triangleMeta not yet loaded (e.g. just after a hard reset, before
   // PropTreatyDetail re-fetches the contract). Avoid rendering with a bogus year range.
   // Guard must stay after all hooks — Rules of Hooks.
-  if (!startYear) return <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill}><div style={{ padding: 32, color: 'rgba(var(--text-rgb),.5)' }}>Loading…</div></WizardLayout>;
+  if (!startYear) return <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill}><div style={{ padding: 32, color: 'rgba(var(--text-rgb),.7)' }}>Loading…</div></WizardLayout>;
 
   return (
     <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill} onBeforeNext={save} onBeforeBack={save}>
@@ -188,7 +188,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                 <div className="df-section-head"><div className="df-section-title">Underwriter Chosen Factors</div></div>
                 <div className="df-chosen-controls">
                   <div className="df-chosen-left">
-                    <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.5)', marginBottom: 4 }}>Chosen factors base</div>
+                    <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.7)', marginBottom: 4 }}>Chosen factors base</div>
                     <div className="toggle-group df-chosen-toggle">
                       <button type="button" className={`toggle-option${chosenBase === 'ACTUAL' ? ' active' : ''}`} onClick={() => switchBase('ACTUAL')}>ACTUAL</button>
                       <button type="button" className={`toggle-option${chosenBase === 'PARAM' ? ' active' : ''}`} onClick={() => switchBase('PARAM')}>PARAMETRIZED</button>
@@ -208,7 +208,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
 
             {/* ═══ LINK RATIOS VIEW ═══ */}
             {view === 'LINK_RATIOS' && (<>
-              <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.55)', marginBottom: 8, padding: '8px 14px', borderRadius: 10, background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
+              <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.7)', marginBottom: 8, padding: '8px 14px', borderRadius: 10, background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
                 Excluding link ratios here will <b style={{ color: 'var(--accent-amber)' }}>override</b> the Underwriter Chosen Factors with the recalculated {(AVG_METHOD_LABEL[avgMethod] || 'Weighted').toLowerCase()} averages.
               </div>
               <LinkRatioView

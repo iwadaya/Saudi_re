@@ -27,7 +27,7 @@
   background: rgba(var(--accent-blue-rgb), 0.05);
 }
 .facdoc-dropzone-idle { text-align: center; }
-.facdoc-dropzone-title { font-size: 13px; font-weight: 800; color: rgba(var(--text-rgb), 0.85); }
+.facdoc-dropzone-title { font-size: 13px; font-weight: 800; color: rgba(var(--text-rgb),0.85); }
 .facdoc-dropzone-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
 .facdoc-file-input { display: none; }
 .facdoc-upload-row {
@@ -36,7 +36,7 @@
   gap: 12px;
   align-items: end;
 }
-.facdoc-upload-name { font-size: 12px; font-weight: 700; color: rgba(var(--text-rgb), 0.85); }
+.facdoc-upload-name { font-size: 12px; font-weight: 700; color: rgba(var(--text-rgb),0.85); }
 .facdoc-upload-meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
 .facdoc-kind-label,
 .facdoc-field-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
@@ -72,9 +72,9 @@
 }
 
 /* ── Documents list ─────────────────────────────────────────────────── */
-.facdoc-list-loading { padding: 30px; text-align: center; color: rgba(var(--text-rgb), 0.5); font-size: 12px; }
-.facdoc-list-empty { padding: 30px; text-align: center; color: rgba(var(--text-rgb), 0.45); font-size: 12px; }
-.facdoc-doc-name { font-weight: 600; color: rgba(var(--text-rgb), 0.85); }
+.facdoc-list-loading { padding: 30px; text-align: center; color: rgba(var(--text-rgb),0.7); font-size: 12px; }
+.facdoc-list-empty { padding: 30px; text-align: center; color: rgba(var(--text-rgb),0.58); font-size: 12px; }
+.facdoc-doc-name { font-weight: 600; color: rgba(var(--text-rgb),0.85); }
 .facdoc-doc-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .facdoc-doc-date { font-size: 10px; color: var(--muted); margin-top: 2px; }
 .ui-table td.facdoc-td-dim { color: var(--muted); }
@@ -94,7 +94,7 @@
   cursor: pointer;
   text-align: left;
 }
-.facdoc-linkbtn:disabled { color: rgba(var(--text-rgb), 0.35); cursor: not-allowed; }
+.facdoc-linkbtn:disabled { color: rgba(var(--text-rgb),0.5); cursor: not-allowed; }
 .facdoc-link-preview { color: var(--accent-blue); margin-right: 12px; }
 .facdoc-link-download { color: var(--accent-blue); margin-right: 12px; text-decoration: none; }
 .facdoc-link-view { color: var(--accent-blue); margin-right: 12px; }
@@ -115,7 +115,7 @@
 }
 @keyframes facdoc-spin { to { transform: rotate(360deg); } }
 .facdoc-status-running { font-size: 11px; color: var(--accent-blue); }
-.facdoc-status-none { font-size: 11px; color: rgba(var(--text-rgb), 0.45); }
+.facdoc-status-none { font-size: 11px; color: rgba(var(--text-rgb),0.58); }
 .facdoc-status-ok { font-weight: 700; color: var(--accent); }
 .facdoc-status-pending-count { margin-left: 6px; font-size: 10px; color: rgba(var(--accent-rgb), 0.75); }
 .facdoc-status-failed { font-size: 11px; font-weight: 700; color: var(--accent-rose); }
@@ -179,7 +179,7 @@
 .ui-btn.facdoc-btn--cancel:hover:not(:disabled) {
   background: transparent;
   border-color: var(--stroke-soft);
-  color: rgba(var(--text-rgb), 0.80);
+  color: rgba(var(--text-rgb),0.80);
   border-radius: 6px;
   font-weight: 400;
 }
@@ -244,7 +244,7 @@
 .facdoc-rec-field {
   font-size: 11px;
   font-weight: 700;
-  color: rgba(var(--text-rgb), 0.85);
+  color: rgba(var(--text-rgb),0.85);
   font-family: var(--font-mono);
 }
 .facdoc-conf { display: flex; align-items: center; gap: 6px; }
@@ -274,14 +274,14 @@
 .facdoc-val--old {
   background: var(--surface-hover);
   border: 1px solid var(--stroke-soft);
-  color: rgba(var(--text-rgb), 0.65);
+  color: rgba(var(--text-rgb),0.78);
 }
 .facdoc-val--new {
   background: rgba(var(--accent-rgb), 0.05);
   border: 1px solid rgba(var(--accent-rgb), 0.20);
   color: var(--text);
 }
-.facdoc-val-null { color: rgba(var(--text-rgb), 0.5); }
+.facdoc-val-null { color: rgba(var(--text-rgb),0.7); }
 .facdoc-diff-arrow { color: rgba(var(--accent-rgb), 0.85); font-size: 14px; font-weight: 700; }
 .facdoc-rationale {
   font-size: 11px;
@@ -348,7 +348,7 @@
   box-shadow: none;
 }
 .facdoc-drawer .ui-modal__body { padding: 0; }
-.facdoc-drawer-loading { padding: 30px; text-align: center; color: rgba(var(--text-rgb), 0.55); }
+.facdoc-drawer-loading { padding: 30px; text-align: center; color: rgba(var(--text-rgb),0.7); }
 .facdoc-drawer-head { padding: 18px 20px; border-bottom: 1px solid var(--hairline); }
 .facdoc-drawer-head-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .facdoc-drawer-eyebrow {
@@ -378,8 +378,8 @@
   margin-bottom: 6px;
 }
 .facdoc-section-label--recs { color: var(--muted); margin-bottom: 8px; }
-.facdoc-summary-text { font-size: 12px; line-height: 1.6; color: rgba(var(--text-rgb), 0.85); }
-.facdoc-muted-note { color: rgba(var(--text-rgb), 0.5); }
+.facdoc-summary-text { font-size: 12px; line-height: 1.6; color: rgba(var(--text-rgb),0.85); }
+.facdoc-muted-note { color: rgba(var(--text-rgb),0.7); }
 .facdoc-analysis-error {
   margin-top: 10px;
   padding: 8px 12px;
@@ -413,7 +413,7 @@
   border-radius: 6px;
   background: var(--control-bg);
   font-size: 10px;
-  color: rgba(var(--text-rgb), 0.80);
+  color: rgba(var(--text-rgb),0.80);
   overflow-x: auto;
   max-height: 280px;
 }
@@ -430,7 +430,7 @@
 .facdoc-bulk { padding: 0 20px 8px; display: flex; align-items: center; gap: 10px; }
 .facdoc-bulk-progress { font-size: 11px; color: var(--muted); }
 .facdoc-recs { padding: 6px 20px 30px; }
-.facdoc-empty-recs { font-size: 11px; color: rgba(var(--text-rgb), 0.5); }
+.facdoc-empty-recs { font-size: 11px; color: rgba(var(--text-rgb),0.7); }
 
 /* ── Recommendation status groups ───────────────────────────────────── */
 .facdoc-group { margin-bottom: 14px; }
@@ -441,7 +441,7 @@
 .facdoc-group-toggle--accepted { color: var(--accent); }
 .facdoc-group-toggle--rejected { color: var(--accent-rose); }
 .facdoc-group-toggle--superseded { color: var(--muted); }
-.facdoc-group-count { color: rgba(var(--text-rgb), 0.5); font-weight: 700; }
+.facdoc-group-count { color: rgba(var(--text-rgb),0.7); font-weight: 700; }
 .facdoc-group-screen { margin-bottom: 8px; }
 .facdoc-screen-label {
   font-size: 9px;

@@ -155,14 +155,14 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
             Underwriting Factors — Drivers of Rate &amp; Score
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18 }}>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
                           textTransform: 'uppercase', color: 'var(--muted)' }}>Scheme</div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: 'color-mix(in srgb, #a855f7 75%, var(--text))', fontVariantNumeric: 'tabular-nums' }}>{scheme}</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: 'color-mix(in srgb, #a855f7 75%, var(--text))', fontVariantNumeric: 'tabular-nums', lineHeight: '22px' }}>{scheme.replace(/_/g, ' ')}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
                           textTransform: 'uppercase', color: 'var(--muted)' }}>Score</div>
             <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>
               {liveScore ? liveScore.underwriting_score.toFixed(2) : '—'}
@@ -179,7 +179,7 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
       {!collapsed && (
         <>
           {qualitativeFactors.length === 0 ? (
-            <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)', padding: '8px 0' }}>
+            <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)', padding: '8px 0' }}>
               Loading factor catalogue…
             </div>
           ) : (
@@ -281,7 +281,7 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
 export function EngineReadout({ output, premiums, totalLocSar }) {
   if (!output) {
     return (
-      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)', padding: '12px 0' }}>
+      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)', padding: '12px 0' }}>
         Engine waiting for reference data… (occupancies, factors and locations must load first).
       </div>
     );
@@ -333,7 +333,7 @@ export function EngineReadout({ output, premiums, totalLocSar }) {
         ))}
       </div>
       {Number.isFinite(totalLocSar) && totalLocSar > 0 && (
-        <div style={{ marginTop: 8, fontSize: 10, color: 'rgba(var(--text-rgb),0.5)' }}>
+        <div style={{ marginTop: 8, fontSize: 10, color: 'rgba(var(--text-rgb),0.7)' }}>
           Premium computed against total location SAR SI = {money(totalLocSar)}.
         </div>
       )}

@@ -309,7 +309,8 @@ describe('FacPricing golden master', () => {
     // ── UW factors panel (score excludes market rate ⇒ band score 0) ──
     expect(screen.getByText('72.00')).toBeInTheDocument();
     expect(screen.getByText('B · ACCEPT_WITH_CAUTION')).toBeInTheDocument();
-    expect(screen.getByText('WITH_BI')).toBeInTheDocument();
+    // Scheme enum is humanized for display (underscores become spaces).
+    expect(screen.getByText('WITH BI')).toBeInTheDocument();
     expect(screen.getByText('score 95.00')).toBeInTheDocument(); // CONSTRUCTION chip
     expect(screen.getByDisplayValue('Premier petrochemical risk')).toBeInTheDocument();
 

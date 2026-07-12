@@ -104,11 +104,11 @@ export default function RelatedTreatiesSection({ riskId, hasCedant, hasCob }) {
     <>
       <SectionTitle>Related Treaties</SectionTitle>
       {!enabled ? (
-        <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)', padding: '8px 0' }}>
+        <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)', padding: '8px 0' }}>
           Select a cedant and a class of business above to surface eligible treaties.
         </div>
       ) : loading ? (
-        <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)', padding: '8px 0' }}>
+        <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)', padding: '8px 0' }}>
           Loading eligible treaties…
         </div>
       ) : (

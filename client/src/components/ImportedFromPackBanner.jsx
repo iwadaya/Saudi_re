@@ -85,7 +85,7 @@ export default function ImportedFromPackBanner({ quoteId, importedFromState }) {
         .ipb-act {
           background: none; border: none; padding: 4px 8px;
           font-size: 11px; cursor: pointer;
-          color: rgba(var(--text-rgb),.55); text-decoration: underline;
+          color: rgba(var(--text-rgb),.7); text-decoration: underline;
           text-underline-offset: 2px;
         }
         .ipb-act:hover { color: rgba(var(--text-rgb),.85); }

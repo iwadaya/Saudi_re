@@ -63,7 +63,7 @@ export default function ImportProgressModal({ open, filename }) {
                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .ipm-phase-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
         .ipm-phase { display: flex; align-items: center; gap: 8px;
-                     font-size: 12px; color: rgba(var(--text-rgb),0.45); }
+                     font-size: 12px; color: rgba(var(--text-rgb),0.58); }
         .ipm-phase.active { color: var(--accent); font-weight: 700; }
         .ipm-phase.done   { color: rgba(var(--text-rgb),0.7); }
         .ipm-dot {

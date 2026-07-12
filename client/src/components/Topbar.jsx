@@ -138,7 +138,7 @@ export default function Topbar({ title, subtitle, actions }) {
               {/* Theme */}
               {session && (
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--hairline)' }}>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(var(--text-rgb),0.45)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Theme</div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(var(--text-rgb),0.58)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Theme</div>
                   <ThemeSwitcher />
                 </div>
               )}
@@ -147,13 +147,13 @@ export default function Topbar({ title, subtitle, actions }) {
                   always enforced server-side regardless of this toggle. */}
               {session && (
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--hairline)' }}>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(var(--text-rgb),0.45)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>View treaties</div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(var(--text-rgb),0.58)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>View treaties</div>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                     <input type="checkbox" checked={viewAll} onChange={(e) => setViewAll(e.target.checked)}
                       style={{ width: 14, height: 14, accentColor: 'var(--accent)', cursor: 'pointer', flexShrink: 0 }} />
                     <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.80)' }}>Show everyone&apos;s treaties (read-only)</span>
                   </label>
-                  <div style={{ fontSize: 9, color: 'rgba(var(--text-rgb),0.45)', marginTop: 4, lineHeight: 1.4 }}>
+                  <div style={{ fontSize: 9, color: 'rgba(var(--text-rgb),0.58)', marginTop: 4, lineHeight: 1.4 }}>
                     You can view others&apos; treaties but can only edit ones assigned to you.
                   </div>
                 </div>
@@ -162,7 +162,7 @@ export default function Topbar({ title, subtitle, actions }) {
               {/* Identity / view-as */}
               {session && (
                 <div ref={ref} style={{ position: 'relative', padding: '12px 16px', borderBottom: '1px solid var(--hairline)' }}>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(var(--text-rgb),0.45)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Role</div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(var(--text-rgb),0.58)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Role</div>
                   <button
                     onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px 4px 6px', borderRadius: 20, background: displayC.bg, border: `1px solid ${displayC.border}`, cursor: 'pointer', position: 'relative', width: '100%' }}
@@ -182,7 +182,7 @@ export default function Topbar({ title, subtitle, actions }) {
                         }
                       </div>
                     </div>
-                    <span style={{ fontSize: 9, color: 'rgba(var(--text-rgb),0.45)', marginLeft: 2 }}>▾</span>
+                    <span style={{ fontSize: 9, color: 'rgba(var(--text-rgb),0.58)', marginLeft: 2 }}>▾</span>
                   </button>
 
                   {/* View Portfolio sub-dropdown — anchored to the role
@@ -190,7 +190,7 @@ export default function Topbar({ title, subtitle, actions }) {
                       without resizing it. */}
                   {open && (
                     <div style={{ position: 'absolute', top: '100%', left: 16, right: 16, marginTop: 6, background: 'var(--panel-bg-strong)', border: '1px solid var(--hairline-strong)', borderRadius: 14, boxShadow: '0 24px 64px rgba(0,0,0,0.35)', zIndex: 99999, overflow: 'hidden' }}>
-                      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--hairline)', fontSize: 10, fontWeight: 700, color: 'rgba(var(--text-rgb),0.45)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+                      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--hairline)', fontSize: 10, fontWeight: 700, color: 'rgba(var(--text-rgb),0.58)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
                         View Portfolio
                       </div>
                       <button onClick={selectSelf} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 14px', border: 'none', background: !isViewing ? 'rgba(var(--accent-rgb),0.10)' : 'transparent', cursor: 'pointer', borderBottom: '1px solid var(--hairline)' }}>
@@ -199,7 +199,7 @@ export default function Topbar({ title, subtitle, actions }) {
                         </div>
                         <div style={{ flex: 1, textAlign: 'left' }}>
                           <div style={{ fontSize: 12, fontWeight: 700, color: !isViewing ? 'var(--accent)' : 'rgba(var(--text-rgb),0.80)' }}>{ROLE_LABELS[rc] || rc} <span style={{ fontSize: 9, opacity: 0.6 }}>(me)</span></div>
-                          <div style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.45)' }}>{limit ? limit : '—'}</div>
+                          <div style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.58)' }}>{limit ? limit : '—'}</div>
                         </div>
                         {!isViewing && <span style={{ fontSize: 10, color: 'var(--accent)' }}>✓</span>}
                       </button>
@@ -237,7 +237,7 @@ export default function Topbar({ title, subtitle, actions }) {
                   server takes the actor from the verified token, never a body id. */}
               {session && (
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--hairline)' }}>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(var(--text-rgb),0.45)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Password</div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(var(--text-rgb),0.58)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Password</div>
                   {!pwOpen ? (
                     <>
                       <button type="button" onClick={() => { setPwOpen(true); setPwDone(false); }}

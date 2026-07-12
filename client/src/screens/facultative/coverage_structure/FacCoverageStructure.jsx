@@ -15,7 +15,7 @@ const stripDigits = v => String(v ?? '').replace(/[^\d]/g,'');
 function FR({ label, children }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 10, alignItems: 'center', minHeight: 36 }}>
-      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)' }}>{label}</div>
+      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)' }}>{label}</div>
       <div>{children}</div>
     </div>
   );

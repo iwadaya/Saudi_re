@@ -103,7 +103,7 @@ export default function NpDecisionBar({
                     <span className={`bbg-status bbg-status--${offerStatus.toLowerCase()}`}>{offerStatus.replace(/_/g, ' ')}</span>
                   )}
                   {isTerminal && (
-                    <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.5)', marginLeft: 8 }}>
+                    <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)', marginLeft: 8 }}>
                       Pricing locked — open offer modal to review.
                     </span>
                   )}
