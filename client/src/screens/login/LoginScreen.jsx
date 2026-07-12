@@ -116,8 +116,8 @@ function TestAccessPanel({ onLogin }) {
       marginTop: 12,
       padding: '16px',
       borderRadius: 12,
-      background: 'rgba(35,209,139,0.07)',
-      border: '1px solid rgba(35,209,139,0.25)',
+      background: 'rgba(var(--accent-rgb),0.07)',
+      border: '1px solid rgba(var(--accent-rgb),0.25)',
     }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 10 }}>
         Test Access — Underwriter
@@ -197,7 +197,7 @@ function AddUserPanel({ onCreated, onCancel }) {
   // carry no inline sizing — only the dashed test-panel container, the title,
   // and the column gap do.
   return (
-    <div style={{ marginTop: 12, padding: '16px', borderRadius: 12, background: 'rgba(35,209,139,0.07)', border: '1px dashed rgba(35,209,139,0.40)' }}>
+    <div style={{ marginTop: 12, padding: '16px', borderRadius: 12, background: 'rgba(var(--accent-rgb),0.07)', border: '1px dashed rgba(var(--accent-rgb),0.40)' }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 10 }}>
         Add User — Test Utility
       </div>
@@ -321,7 +321,7 @@ export default function LoginScreen() {
       <div style={{ width: '100%', maxWidth: 420 }}>
 
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,rgba(35,209,139,.9),rgba(18,160,100,.9))', fontSize: 22, fontWeight: 900, color: '#04120b', marginBottom: 12, boxShadow: '0 8px 24px rgba(35,209,139,.3)' }}>U3</div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,rgba(var(--accent-rgb),.9),rgba(var(--accent2-rgb),.9))', fontSize: 22, fontWeight: 900, color: 'var(--accent-contrast)', marginBottom: 12, boxShadow: '0 8px 24px rgba(var(--accent-rgb),.3)' }}>U3</div>
           <div style={{ fontSize: 20, fontWeight: 700, color: 'rgba(var(--text-rgb),.92)', letterSpacing: '.01em' }}>The Universe™</div>
           <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.7)', marginTop: 3, letterSpacing: '.07em', textTransform: 'uppercase' }}>Reinsurance Underwriting Platform</div>
         </div>
@@ -424,7 +424,7 @@ export default function LoginScreen() {
               <button
                 type="button"
                 onClick={() => { setShowAddUser(true); setAddUserSuccess(''); }}
-                style={{ width: '100%', background: 'none', border: '1px dashed rgba(35,209,139,0.30)', borderRadius: 8, padding: '9px 12px', color: 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer', letterSpacing: '.03em', transition: 'all .15s' }}
+                style={{ width: '100%', background: 'none', border: '1px dashed rgba(var(--accent-rgb),0.30)', borderRadius: 8, padding: '9px 12px', color: 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer', letterSpacing: '.03em', transition: 'all .15s' }}
               >
                 + Add user (test)
               </button>
@@ -441,9 +441,9 @@ export default function LoginScreen() {
               <button
                 type="button"
                 onClick={() => setShowTestPanel(true)}
-                style={{ width: '100%', background: 'none', border: '1px dashed rgba(35,209,139,0.30)', borderRadius: 8, padding: '9px 12px', color: 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer', letterSpacing: '.03em', transition: 'all .15s' }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(35,209,139,0.55)'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(35,209,139,0.30)'}
+                style={{ width: '100%', background: 'none', border: '1px dashed rgba(var(--accent-rgb),0.30)', borderRadius: 8, padding: '9px 12px', color: 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer', letterSpacing: '.03em', transition: 'all .15s' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(var(--accent-rgb),0.55)'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(var(--accent-rgb),0.30)'}
               >
                 Testing? Enter without password →
               </button>
