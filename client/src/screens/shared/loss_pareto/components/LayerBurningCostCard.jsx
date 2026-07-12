@@ -26,7 +26,7 @@ export default function LayerBurningCostCard({
 
       {/* Weight controls */}
       <div style={{ padding: '10px 14px 4px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 11, color: 'rgba(148,163,184,0.7)', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}>Method</span>
+        <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}>Method</span>
 
         {/* Presets */}
         {[
@@ -41,9 +41,9 @@ export default function LayerBurningCostCard({
               onClick={() => { onSetWeights({ wEmp: p.wE, wModel: p.wM }); }}
               style={{
                 fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
-                border: `1px solid ${active ? 'rgba(0,212,255,0.6)' : 'rgba(255,255,255,0.12)'}`,
+                border: `1px solid ${active ? 'rgba(0,212,255,0.6)' : 'var(--hairline-strong)'}`,
                 background: active ? 'rgba(0,212,255,0.12)' : 'transparent',
-                color: active ? '#00d4ff' : 'rgba(148,163,184,0.7)',
+                color: active ? 'var(--accent-blue)' : 'var(--muted)',
               }}
             >
               {p.label}
@@ -52,20 +52,20 @@ export default function LayerBurningCostCard({
         })}
 
         {/* Custom weight inputs */}
-        <span style={{ fontSize: 11, color: 'rgba(148,163,184,0.5)', marginLeft: 8 }}>Custom:</span>
+        <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 8 }}>Custom:</span>
         {[
           { label: 'Empirical %', val: wEmp,   set: v => onSetWeights({ wEmp: Math.max(0, Math.min(100, Number(v) || 0)) })  },
           { label: 'Model %',     val: wModel, set: v => onSetWeights({ wModel: Math.max(0, Math.min(100, Number(v) || 0)) }) },
         ].map(({ label, val, set }) => (
-          <label key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'rgba(148,163,184,0.65)' }}>
+          <label key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--muted)' }}>
             {label}
             <input
               type="number" min="0" max="100" value={val}
               onChange={e => set(e.target.value)}
               style={{
                 width: 54, textAlign: 'center', fontSize: 12, fontWeight: 700,
-                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: 6, color: '#00d4ff', padding: '3px 6px', outline: 'none',
+                background: 'var(--control-bg)', border: '1px solid var(--hairline-strong)',
+                borderRadius: 6, color: 'var(--accent-blue)', padding: '3px 6px', outline: 'none',
               }}
             />
           </label>
@@ -73,7 +73,7 @@ export default function LayerBurningCostCard({
 
         {/* Weight total indicator */}
         {(wEmp + wModel) > 0 && (wEmp + wModel) !== 100 && (
-          <span style={{ fontSize: 10, color: '#f59e0b', marginLeft: 4 }}>
+          <span style={{ fontSize: 10, color: 'var(--accent-amber)', marginLeft: 4 }}>
             ⚠ Weights sum to {wEmp + wModel}% — blended ROL uses proportional share, not 100% total.
           </span>
         )}
@@ -90,8 +90,8 @@ export default function LayerBurningCostCard({
               <th className="num">RP at Attach.</th>
               <th className="num">Empirical ROL</th>
               <th className="num">Model ROL</th>
-              <th className="num" style={{ color: '#00d4ff' }}>Blended ROL</th>
-              <th className="num" style={{ color: '#00d4ff' }}>Annual Loss</th>
+              <th className="num" style={{ color: 'var(--accent-blue)' }}>Blended ROL</th>
+              <th className="num" style={{ color: 'var(--accent-blue)' }}>Annual Loss</th>
             </tr>
           </thead>
           <tbody>
@@ -100,25 +100,25 @@ export default function LayerBurningCostCard({
                 : row.rp >= 10000 ? '>10,000y'
                 : row.rp >= 100   ? `1-in-${Math.round(row.rp)}y`
                 :                   `1-in-${row.rp.toFixed(1)}y`;
-              const rpColor = row.rp == null ? 'rgba(148,163,184,0.4)'
-                : row.rp >= 50 ? '#f87171' : row.rp >= 10 ? '#f59e0b' : '#4ade80';
+              const rpColor = row.rp == null ? 'var(--muted)'
+                : row.rp >= 50 ? 'var(--accent-rose)' : row.rp >= 10 ? 'var(--accent-amber)' : 'var(--accent)';
               return (
                 <tr key={row.idx}>
-                  <td style={{ color: '#00d4ff', fontWeight: 700 }}>{row.layer}</td>
+                  <td style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{row.layer}</td>
                   <td className="num">{fmt(row.D)}</td>
                   <td className="num">{fmt(row.L)}</td>
                   <td className="num" style={{ color: rpColor, fontWeight: 600 }}>{rpLabel}</td>
-                  <td className="num" style={{ color: 'rgba(226,232,240,0.7)' }}>
+                  <td className="num" style={{ color: 'rgba(var(--text-rgb),.7)' }}>
                     {row.empiricalRol > 0 ? (row.empiricalRol * 100).toFixed(3) + '%' : '—'}
                   </td>
                   <td className="num" style={{ color: '#a78bfa' }}>
                     {row.modelRol > 0 ? (row.modelRol * 100).toFixed(3) + '%' : '—'}
-                    {row.error && <span style={{ fontSize: 10, color: '#f59e0b', marginLeft: 4 }}>⚠</span>}
+                    {row.error && <span style={{ fontSize: 10, color: 'var(--accent-amber)', marginLeft: 4 }}>⚠</span>}
                   </td>
-                  <td className="num" style={{ color: '#00d4ff', fontWeight: 700 }}>
+                  <td className="num" style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>
                     {row.blendedRol > 0 ? (row.blendedRol * 100).toFixed(3) + '%' : '—'}
                   </td>
-                  <td className="num" style={{ color: '#4ade80' }}>
+                  <td className="num" style={{ color: 'var(--accent)' }}>
                     {fmt(Math.round(row.blendedAnnual))}
                   </td>
                 </tr>
@@ -129,7 +129,7 @@ export default function LayerBurningCostCard({
       </div>
 
       {structureLayers.length === 0 && (
-        <div style={{ padding: '10px 14px', fontSize: 11, color: 'rgba(251,191,36,0.7)' }}>
+        <div style={{ padding: '10px 14px', fontSize: 11, color: 'var(--accent-amber)' }}>
           No structure layers found for this peril type. Define layers in the Structure screen first.
         </div>
       )}

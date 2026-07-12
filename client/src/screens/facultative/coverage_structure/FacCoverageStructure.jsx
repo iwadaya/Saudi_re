@@ -15,14 +15,14 @@ const stripDigits = v => String(v ?? '').replace(/[^\d]/g,'');
 function FR({ label, children }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 10, alignItems: 'center', minHeight: 36 }}>
-      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>{label}</div>
+      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)' }}>{label}</div>
       <div>{children}</div>
     </div>
   );
 }
 function Sec({ title, children }) {
   return <>
-    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(0,212,255,0.55)', marginTop: 28, marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{title}</div>
+    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--accent-blue-rgb),0.75)', marginTop: 28, marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid var(--hairline)' }}>{title}</div>
     {children}
   </>;
 }
@@ -102,9 +102,9 @@ export default function FacCoverageStructure() {
             {['PROPORTIONAL', 'NON_PROPORTIONAL'].map(t => (
               <button key={t} onClick={() => set('placement_type', t)} style={{
                 appearance: 'none', cursor: 'pointer', padding: '8px 20px', borderRadius: 8, fontSize: 12, fontWeight: 700,
-                border: f.placement_type === t ? '1px solid rgba(0,212,255,0.50)' : '1px solid rgba(148,163,184,0.18)',
-                background: f.placement_type === t ? 'rgba(0,212,255,0.10)' : 'rgba(8,16,40,0.45)',
-                color: f.placement_type === t ? '#00d4ff' : 'rgba(148,163,184,0.70)',
+                border: f.placement_type === t ? '1px solid rgba(var(--accent-blue-rgb),0.50)' : '1px solid var(--stroke-soft)',
+                background: f.placement_type === t ? 'rgba(var(--accent-blue-rgb),0.10)' : 'var(--control-bg)',
+                color: f.placement_type === t ? 'var(--accent-blue)' : 'var(--muted)',
               }}>{t === 'PROPORTIONAL' ? 'Proportional (QS)' : 'Non-Proportional (XL)'}</button>
             ))}
           </div>

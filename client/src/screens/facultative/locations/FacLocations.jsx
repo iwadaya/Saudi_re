@@ -99,7 +99,7 @@ function FieldCell({ value, onChange, align = 'right', placeholder, width }) {
 function DerivedCell({ value, accent }) {
   return (
     <div style={{ textAlign: 'right', padding: '6px 8px', fontSize: 11, fontVariantNumeric: 'tabular-nums',
-                   color: accent || 'rgba(226,232,240,0.65)' }}>
+                   color: accent || 'rgba(var(--text-rgb),0.65)' }}>
       {value ? fmt0(value) : '—'}
     </div>
   );
@@ -131,10 +131,10 @@ function LocationCard({
     const cPmlSar = kind === 'PD' ? c.pdCarrierPmlSar  : c.biCarrierPmlSar;
 
     const label = kind === 'PD' ? 'Material Damage' : 'Business Interruption';
-    const accent = kind === 'PD' ? '#00d4ff' : '#fbbf24';
+    const accent = kind === 'PD' ? 'var(--accent-blue)' : 'var(--accent-amber)';
 
     return (
-      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+      <tr style={{ borderBottom: '1px solid var(--hairline)' }}>
         <td style={{ padding: '6px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '.08em',
                      textTransform: 'uppercase', color: accent }}>{label}</td>
         <td style={{ padding: '4px 4px' }}>
@@ -146,35 +146,35 @@ function LocationCard({
             placeholder="%" />
         </td>
         <td><DerivedCell value={pmlOrg} /></td>
-        <td><DerivedCell value={siSar}  accent="rgba(226,232,240,0.85)" /></td>
-        <td><DerivedCell value={pmlSar} accent="rgba(226,232,240,0.85)" /></td>
+        <td><DerivedCell value={siSar}  accent="rgba(var(--text-rgb),0.85)" /></td>
+        <td><DerivedCell value={pmlSar} accent="rgba(var(--text-rgb),0.85)" /></td>
         <td><DerivedCell value={cSiOrg} /></td>
         <td><DerivedCell value={cPmlOrg} /></td>
-        <td><DerivedCell value={cSiSar}  accent="#23d18b" /></td>
-        <td><DerivedCell value={cPmlSar} accent="#23d18b" /></td>
+        <td><DerivedCell value={cSiSar}  accent="var(--accent)" /></td>
+        <td><DerivedCell value={cPmlSar} accent="var(--accent)" /></td>
       </tr>
     );
   };
 
   return (
-    <div style={{ background: 'rgba(8,14,30,0.40)', border: '1px solid rgba(255,255,255,0.08)',
+    <div style={{ background: 'var(--control-bg)', border: '1px solid var(--hairline)',
                   borderRadius: 12, padding: '14px 16px', marginBottom: 12,
-                  borderLeft: isTopLocation ? '3px solid #23d18b' : '3px solid transparent' }}>
+                  borderLeft: isTopLocation ? '3px solid var(--accent)' : '3px solid transparent' }}>
       {/* Header row: location-level fields */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.10em',
-                         color: 'rgba(148,163,184,0.55)' }}>LOCATION {index + 1}</span>
+                         color: 'rgba(var(--text-rgb),0.65)' }}>LOCATION {index + 1}</span>
           {isTopLocation && (
             <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
                            padding: '2px 8px', borderRadius: 20,
-                           background: 'rgba(35,209,139,0.10)', border: '1px solid rgba(35,209,139,0.30)',
-                           color: '#23d18b' }}>TOP LOCATION</span>
+                           background: 'rgba(var(--accent-rgb),0.10)', border: '1px solid rgba(var(--accent-rgb),0.30)',
+                           color: 'var(--accent)' }}>TOP LOCATION</span>
           )}
         </div>
         {canRemove && (
           <span role="button" tabIndex={0} aria-label={`Remove location ${index + 1}`}
-                style={{ cursor: 'pointer', color: '#f87171', fontSize: 16 }}
+                style={{ cursor: 'pointer', color: 'var(--accent-rose)', fontSize: 16 }}
                 onClick={() => onRemove(index)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRemove(index); }
@@ -209,12 +209,12 @@ function LocationCard({
       {/* Sub-table: MD and BI rows */}
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
         <thead>
-          <tr style={{ background: 'rgba(5,8,16,0.5)' }}>
+          <tr style={{ background: 'var(--table-head-bg)' }}>
             {HEADERS.map((h) => (
               <th key={h} style={{ padding: '6px 6px',
                                    textAlign: h === 'Particulars' ? 'left' : 'right',
                                    fontSize: 9, fontWeight: 800, letterSpacing: '.10em',
-                                   textTransform: 'uppercase', color: 'rgba(148,163,184,0.50)' }}>{h}</th>
+                                   textTransform: 'uppercase', color: 'var(--muted)' }}>{h}</th>
             ))}
           </tr>
         </thead>
@@ -360,7 +360,7 @@ export default function FacLocations() {
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Locations & SI" headerPill="FACULTATIVE" onBeforeNext={save} onBeforeBack={save}>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '8px 0 40px' }}>
-        <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.55)', marginBottom: 16 }}>
+        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16 }}>
           One card per location with separate Material Damage and Business Interruption rows.
           PML %, FX rate and the carrier&apos;s signed share drive the SAR columns automatically.
         </div>
@@ -390,36 +390,36 @@ export default function FacLocations() {
 
         {rows.length < MAX_LOCATIONS && (
           <button onClick={onAddRow} style={{ marginTop: 4, appearance: 'none',
-            border: '1px dashed rgba(35,209,139,0.30)', background: 'rgba(35,209,139,0.05)',
-            color: '#23d18b', borderRadius: 8, padding: '8px 16px', fontSize: 11,
+            border: '1px dashed rgba(var(--accent-rgb),0.30)', background: 'rgba(var(--accent-rgb),0.05)',
+            color: 'var(--accent)', borderRadius: 8, padding: '8px 16px', fontSize: 11,
             fontWeight: 700, cursor: 'pointer' }}>
             + Add Location ({rows.length} / {MAX_LOCATIONS})
           </button>
         )}
         {overSoftWarn && (
-          <div style={{ marginTop: 6, fontSize: 10, color: 'rgba(251,191,36,0.70)' }}>
+          <div style={{ marginTop: 6, fontSize: 10, color: 'rgba(var(--accent-amber-rgb),0.85)' }}>
             More than {WARN_LOCATIONS} locations — consider grouping smaller sites for performance.
           </div>
         )}
 
         {/* Bottom totals (SAR) */}
-        <div style={{ marginTop: 20, padding: '12px 16px', background: 'rgba(0,212,255,0.05)',
-                       border: '1px solid rgba(0,212,255,0.20)', borderRadius: 10,
+        <div style={{ marginTop: 20, padding: '12px 16px', background: 'rgba(var(--accent-blue-rgb),0.05)',
+                       border: '1px solid rgba(var(--accent-blue-rgb),0.20)', borderRadius: 10,
                        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
           <div>
             <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
-                          textTransform: 'uppercase', color: 'rgba(0,212,255,0.55)' }}>Material Damage SAR</div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: '#00d4ff', marginTop: 2 }}>{fmt0(totals.pdSar)}</div>
+                          textTransform: 'uppercase', color: 'rgba(var(--accent-blue-rgb),0.75)' }}>Material Damage SAR</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-blue)', marginTop: 2 }}>{fmt0(totals.pdSar)}</div>
           </div>
           <div>
             <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
-                          textTransform: 'uppercase', color: 'rgba(251,191,36,0.55)' }}>Business Interruption SAR</div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: '#fbbf24', marginTop: 2 }}>{fmt0(totals.biSar)}</div>
+                          textTransform: 'uppercase', color: 'rgba(var(--accent-amber-rgb),0.75)' }}>Business Interruption SAR</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-amber)', marginTop: 2 }}>{fmt0(totals.biSar)}</div>
           </div>
           <div>
             <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
-                          textTransform: 'uppercase', color: 'rgba(35,209,139,0.55)' }}>Grand Total SAR</div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: '#23d18b', marginTop: 2 }}>{fmt0(totals.grand)}</div>
+                          textTransform: 'uppercase', color: 'rgba(var(--accent-rgb),0.75)' }}>Grand Total SAR</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent)', marginTop: 2 }}>{fmt0(totals.grand)}</div>
           </div>
         </div>
       </div>

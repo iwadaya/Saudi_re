@@ -77,11 +77,11 @@ export default function LossParetoScreen({ routeKey, title, headerPill, lossType
     <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill} onBeforeNext={saveSnapshot} onBeforeBack={saveSnapshot}>
       {() => (
         <div className="LARGE_LOSS_PARETO_PAGE">
-          {loading ? <div style={{padding:32,color:'rgba(255,255,255,.4)'}}>Loading…</div> : count === 0 ? (
-            <div style={{padding:32,textAlign:'center',color:'rgba(255,255,255,.4)'}}>No selected losses. Go to Loss Selection first.</div>
+          {loading ? <div style={{padding:32,color:'rgba(var(--text-rgb),.5)'}}>Loading…</div> : count === 0 ? (
+            <div style={{padding:32,textAlign:'center',color:'rgba(var(--text-rgb),.5)'}}>No selected losses. Go to Loss Selection first.</div>
           ) : (<>
             {portfolioFallback && (
-              <div style={{margin:'0 0 14px',padding:'10px 16px',borderRadius:10,background:'rgba(251,191,36,0.08)',border:'1px solid rgba(251,191,36,0.30)',fontSize:12,color:'rgba(253,230,138,0.95)',lineHeight:1.5}}>
+              <div style={{margin:'0 0 14px',padding:'10px 16px',borderRadius:10,background:'rgba(251,191,36,0.08)',border:'1px solid rgba(251,191,36,0.30)',fontSize:12,color:'var(--accent-amber)',lineHeight:1.5}}>
                 <b style={{letterSpacing:'.04em'}}>PORTFOLIO AVERAGE.</b>{' '}
                 This treaty has no {lossType === 'cat' ? 'CAT' : 'large'} losses of its own — the curve below is fitted to the cedant's wider portfolio
                 ({lossType === 'cat' ? 'CAT' : 'large'} losses from {portfolioFallback.treatyCount} other {portfolioFallback.treatyCount === 1 ? 'treaty' : 'treaties'}). Add losses on the Loss Selection step to fit this treaty's own experience.
@@ -100,10 +100,10 @@ export default function LossParetoScreen({ routeKey, title, headerPill, lossType
                 </div>
               </div>
               <div className="llp-hero-right" style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-                {saving && <span style={{fontSize:11,color:'rgba(255,255,255,.4)'}}>Saving…</span>}
-                {saveError && <span style={{fontSize:11,color:'#f87171'}}>⚠ {saveError}</span>}
-                {lastSaveTime && !saving && !saveError && <span style={{fontSize:11,color:'#4ade80'}}>✓ Saved</span>}
-                <button className="llp-pill-btn" style={{background:'rgba(34,197,94,0.15)',borderColor:'rgba(34,197,94,0.4)',color:'#4ade80'}} onClick={async()=>{const ok=await saveSnapshot();if(!ok)showToast('Save failed — check console');}}>💾 Save Curve</button>
+                {saving && <span style={{fontSize:11,color:'rgba(var(--text-rgb),.5)'}}>Saving…</span>}
+                {saveError && <span style={{fontSize:11,color:'var(--accent-rose)'}}>⚠ {saveError}</span>}
+                {lastSaveTime && !saving && !saveError && <span style={{fontSize:11,color:'var(--accent)'}}>✓ Saved</span>}
+                <button className="llp-pill-btn" style={{background:'rgba(34,197,94,0.15)',borderColor:'rgba(34,197,94,0.4)',color:'var(--accent)'}} onClick={async()=>{const ok=await saveSnapshot();if(!ok)showToast('Save failed — check console');}}>💾 Save Curve</button>
                 <button className="llp-pill-btn" onClick={()=>actions.setShowChart(true)}>View Sev-Freq Curve</button>
               </div>
             </div>

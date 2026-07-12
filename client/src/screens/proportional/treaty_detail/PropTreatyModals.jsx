@@ -28,7 +28,7 @@ export function FR({ label, missing, children }) {
       className={missing ? 'fr-row required-missing' : 'fr-row'}
       style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 10, alignItems: 'center', minHeight: 36 }}
     >
-      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
+      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.55)' }}>
         {label}{missing && <span style={{ color: '#f87171', marginLeft: 4 }}>*</span>}
       </div>
       <div>{children}</div>
@@ -44,6 +44,7 @@ export function TogglePill({ options, value, onChange, ariaLabel }) {
         <button key={String(o.value)} type="button"
           className={`toggle-option${value === o.value ? ' active' : ''}`}
           aria-pressed={value === o.value}
+          style={value === o.value ? undefined : { color: 'rgba(var(--text-rgb),.82)' }}
           onClick={() => onChange(o.value)}>{o.label}</button>
       ))}
     </div>
@@ -102,7 +103,7 @@ export function SlidingScaleModal({ table, provisional, onSave, onClose }) {
   return (
     <div className="modal-backdrop" role="presentation" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal glass" role="dialog" aria-modal="true" aria-labelledby="sliding-scale-title" style={{ width: 'min(680px, 94vw)', maxHeight: '88vh' }}>
-        <div className="modal-title" id="sliding-scale-title" style={{ color: '#f97316' }}>
+        <div className="modal-title" id="sliding-scale-title" style={{ color: 'var(--accent-amber)' }}>
           <span>Sliding Scale Commission Table</span>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
@@ -151,15 +152,15 @@ export function EpiSplitModal({ split, classIds, classList, qsEpi, surplusEpi, o
   return (
     <div className="modal-backdrop" role="presentation" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal glass" role="dialog" aria-modal="true" aria-labelledby="epi-split-title" style={{ width: 'min(680px, 94vw)', maxHeight: '88vh' }}>
-        <div className="modal-title" id="epi-split-title" style={{ color: '#f97316' }}>
+        <div className="modal-title" id="epi-split-title" style={{ color: 'var(--accent-amber)' }}>
           <span>EPI Split by Line of Business</span>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
         <div style={{ padding: '16px 24px', overflowY: 'auto', flex: 1 }}>
-          <div style={{ display: 'flex', gap: 18, background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '10px 16px', marginBottom: 18, fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
-            <span>QS: <b style={{ color: '#e5e7eb' }}>{fmtComma(qsEpi) || '—'}</b></span>
-            <span>Surplus: <b style={{ color: '#e5e7eb' }}>{fmtComma(surplusEpi) || '—'}</b></span>
-            <span>Total: <b style={{ color: '#e5e7eb' }}>{totalRef ? fmtComma(String(Math.round(totalRef))) : '—'}</b></span>
+          <div style={{ display: 'flex', gap: 18, background: 'var(--surface-hover)', borderRadius: 8, padding: '10px 16px', marginBottom: 18, fontSize: 12, color: 'rgba(var(--text-rgb),.55)' }}>
+            <span>QS: <b style={{ color: 'var(--text)' }}>{fmtComma(qsEpi) || '—'}</b></span>
+            <span>Surplus: <b style={{ color: 'var(--text)' }}>{fmtComma(surplusEpi) || '—'}</b></span>
+            <span>Total: <b style={{ color: 'var(--text)' }}>{totalRef ? fmtComma(String(Math.round(totalRef))) : '—'}</b></span>
           </div>
           <table className="data-table" style={{ fontSize: 13 }}>
             <thead><tr><th>Line of Business</th><th>Premium</th><th style={{ textAlign: 'right' }}>% of Total</th></tr></thead>
@@ -171,7 +172,7 @@ export function EpiSplitModal({ split, classIds, classList, qsEpi, surplusEpi, o
               </tr>
             ))}</tbody>
             <tfoot><tr style={{ fontWeight: 700 }}><td>TOTAL</td><td>{totalSplit ? fmtComma(String(Math.round(totalSplit))) : '—'}</td>
-              <td style={{ textAlign: 'right', color: totalRef > 0 && Math.abs(totalSplit - totalRef) < 1 ? '#4ade80' : '#f97316' }}>{totalRef > 0 && totalSplit > 0 ? ((totalSplit / totalRef) * 100).toFixed(1) + '%' : '—'}</td>
+              <td style={{ textAlign: 'right', color: totalRef > 0 && Math.abs(totalSplit - totalRef) < 1 ? 'var(--accent)' : 'var(--accent-amber)' }}>{totalRef > 0 && totalSplit > 0 ? ((totalSplit / totalRef) * 100).toFixed(1) + '%' : '—'}</td>
             </tr></tfoot>
           </table>
         </div>

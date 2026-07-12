@@ -418,10 +418,10 @@ export default function NpExcessDevFactors() {
           <div className="df-section-sub">
             Enter LDFs from benchmark or market data
             <span style={{ marginLeft: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Dev periods:</span>
+              <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.5)' }}>Dev periods:</span>
               <input type="number" min={1} max={15} value={manualLdfCount}
                 onChange={e => { setManualLdfCount(Math.max(1, Math.min(15, Number(e.target.value) || 1))); setDirty(true); }}
-                style={{ width: 52, textAlign: 'center', background: 'rgba(8,16,40,0.4)', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 6, color: 'rgba(226,232,240,0.9)', fontSize: 12, padding: '2px 4px' }} />
+                style={{ width: 52, textAlign: 'center', background: 'var(--control-bg)', border: '1px solid var(--stroke-soft)', borderRadius: 6, color: 'var(--text)', fontSize: 12, padding: '2px 4px' }} />
             </span>
           </div>
         </div>
@@ -482,7 +482,7 @@ export default function NpExcessDevFactors() {
                   type="number" step="0.01" min="1"
                   value={tailFactor}
                   onChange={e => { setTailFactor(e.target.value); setDirty(true); }}
-                  style={{ width: 72, textAlign: 'center', background: 'rgba(8,16,40,0.4)', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 6, color: 'rgba(226,232,240,0.9)', fontSize: 12, padding: '2px 6px' }}
+                  style={{ width: 72, textAlign: 'center', background: 'var(--control-bg)', border: '1px solid var(--stroke-soft)', borderRadius: 6, color: 'var(--text)', fontSize: 12, padding: '2px 6px' }}
                 />
               </div>
             </div>
@@ -511,11 +511,11 @@ export default function NpExcessDevFactors() {
           {/* BF IELR */}
           {dataMode === 'TRIANGLE' && projMethod === 'BF' && (
             <div style={{ display: 'flex', gap: 16, alignItems: 'center', margin: '12px 0', padding: '10px 16px', borderRadius: 14, background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.2)' }}>
-              <label htmlFor={ielrInputId} style={{ fontSize: 12, color: 'rgba(253,186,116,0.9)', fontWeight: 600 }}>Initial Expected XS Loss Ratio (IELR)</label>
+              <label htmlFor={ielrInputId} style={{ fontSize: 12, color: 'var(--accent-amber)', fontWeight: 600 }}>Initial Expected XS Loss Ratio (IELR)</label>
               <input id={ielrInputId} type="number" min="0" max="2" step="0.01" value={ielr}
                 onChange={e => setIelr(e.target.value)}
-                style={{ width: 100, textAlign: 'center', background: 'rgba(8,16,40,0.4)', border: '1px solid rgba(249,115,22,0.4)', borderRadius: 6, color: 'rgba(226,232,240,0.9)', fontSize: 13, padding: '4px 8px' }} />
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{(Number(ielr) * 100 || 0).toFixed(0)}%</span>
+                style={{ width: 100, textAlign: 'center', background: 'var(--control-bg)', border: '1px solid rgba(249,115,22,0.4)', borderRadius: 6, color: 'var(--text)', fontSize: 13, padding: '4px 8px' }} />
+              <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.5)' }}>{(Number(ielr) * 100 || 0).toFixed(0)}%</span>
             </div>
           )}
 
@@ -538,7 +538,7 @@ export default function NpExcessDevFactors() {
               {saveMsg && (
                 <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6,
                   background: saveMsg.type === 'ok' ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)',
-                  color: saveMsg.type === 'ok' ? '#4ade80' : '#f87171',
+                  color: saveMsg.type === 'ok' ? 'var(--accent)' : 'var(--accent-rose)',
                   border: `1px solid ${saveMsg.type === 'ok' ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)'}` }}>
                   {saveMsg.text}
                 </span>
@@ -567,7 +567,7 @@ export default function NpExcessDevFactors() {
                   borderRadius: 8,
                   background: 'rgba(251,146,60,0.08)',
                   border: '1px solid rgba(251,146,60,0.30)',
-                  color: '#fbbf24',
+                  color: 'var(--accent-amber)',
                   fontSize: 12,
                   lineHeight: 1.5,
                 }}
@@ -592,7 +592,7 @@ export default function NpExcessDevFactors() {
               {/* TRIANGLE: avg method */}
               {dataMode === 'TRIANGLE' && (
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center', margin: '12px 0' }}>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Average</span>
+                  <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.5)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Average</span>
                   <div className="toggle-group">
                     {['weighted', 'simple', 'last3', 'last5'].map(m => (
                       <button type="button" key={m} className={`toggle-option${avgMethod === m ? ' active' : ''}`}
@@ -635,7 +635,7 @@ export default function NpExcessDevFactors() {
                   </div>
                   <div className="df-chosen-controls">
                     <div className="df-chosen-left">
-                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>Base</div>
+                      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.5)', marginBottom: 4 }}>Base</div>
                       <div className="toggle-group df-chosen-toggle">
                         <button type="button" className={`toggle-option${chosenBase === 'ACTUAL' ? ' active' : ''}`} onClick={() => switchBase('ACTUAL')}>
                           {dataMode === 'DIRECT' ? 'INPUT' : 'ACTUAL'}
@@ -649,7 +649,7 @@ export default function NpExcessDevFactors() {
                   {chosenLdfs.length > 0
                     ? <FactorTable pattern={chosenLdfs} cdfs={chosenCdfs} editable onChange={handleChosenChange} sectionClass="df-card--chosen" />
                     : <div className="muted" style={{ padding: 12 }}>
-                        <button style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#4ade80', cursor: 'pointer' }}
+                        <button style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: 'var(--accent)', cursor: 'pointer' }}
                           onClick={() => switchBase(chosenBase)}>
                           ↳ Load factors from {chosenBase === 'PARAM' ? 'parametrized' : dataMode === 'DIRECT' ? 'input' : 'actual'} set
                         </button>
@@ -690,7 +690,7 @@ export default function NpExcessDevFactors() {
                   onPatternChange={applyLinkRatioPattern}
                 />
                 {excluded.size > 0 && (
-                  <div style={{ marginTop: 8, fontSize: 11, color: 'rgba(248,113,113,0.8)' }}>
+                  <div style={{ marginTop: 8, fontSize: 11, color: 'rgba(var(--accent-rose-rgb),0.9)' }}>
                     {excluded.size} ratio(s) excluded
                   </div>
                 )}

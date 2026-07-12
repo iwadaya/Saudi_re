@@ -104,28 +104,28 @@ export default function RelatedTreatiesSection({ riskId, hasCedant, hasCob }) {
     <>
       <SectionTitle>Related Treaties</SectionTitle>
       {!enabled ? (
-        <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.45)', padding: '8px 0' }}>
+        <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)', padding: '8px 0' }}>
           Select a cedant and a class of business above to surface eligible treaties.
         </div>
       ) : loading ? (
-        <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.45)', padding: '8px 0' }}>
+        <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)', padding: '8px 0' }}>
           Loading eligible treaties…
         </div>
       ) : (
         <>
           {/* Empty state */}
           {links.length === 0 && !adding && (
-            <div style={{ padding: '14px 16px', background: 'rgba(8,14,30,0.50)',
-                           border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10 }}>
-              <div style={{ fontSize: 12, color: 'rgba(226,232,240,0.75)', marginBottom: 8 }}>
+            <div style={{ padding: '14px 16px', background: 'var(--control-bg)',
+                           border: '1px solid var(--hairline)', borderRadius: 10 }}>
+              <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.75)', marginBottom: 8 }}>
                 {eligible.length === 0
                   ? 'No eligible treaties found for this cedant + class in the policy window.'
                   : `${eligible.length} eligible treaty${eligible.length === 1 ? '' : 'ies'} found for this cedant + class.`}
               </div>
               {eligible.length > 0 && (
                 <button onClick={() => setAdding(true)} style={{
-                  appearance: 'none', border: '1px solid rgba(0,212,255,0.30)',
-                  background: 'rgba(0,212,255,0.08)', color: '#00d4ff',
+                  appearance: 'none', border: '1px solid rgba(var(--accent-blue-rgb),0.30)',
+                  background: 'rgba(var(--accent-blue-rgb),0.08)', color: 'var(--accent-blue)',
                   borderRadius: 6, padding: '6px 14px', fontSize: 11, fontWeight: 700,
                   cursor: 'pointer',
                 }}>Link one</button>
@@ -138,12 +138,12 @@ export default function RelatedTreatiesSection({ riskId, hasCedant, hasCob }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {links.map((l) => (
                 <div key={l.link_id} style={{ padding: '10px 14px',
-                                                background: 'rgba(8,14,30,0.50)',
-                                                border: '1px solid rgba(255,255,255,0.06)',
+                                                background: 'var(--control-bg)',
+                                                border: '1px solid var(--hairline)',
                                                 borderRadius: 10,
                                                 borderLeft: `3px solid ${LINK_TYPE_COLOR[l.link_type] || '#94a3b8'}` }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(226,232,240,0.90)' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(var(--text-rgb),0.90)' }}>
                       {l.contract_label}
                     </span>
                     <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 800,
@@ -154,7 +154,7 @@ export default function RelatedTreatiesSection({ riskId, hasCedant, hasCob }) {
                       {LINK_TYPE_LABEL[l.link_type] || l.link_type}
                     </span>
                     {l.capacity_used != null && (
-                      <span style={{ fontSize: 11, color: 'rgba(148,163,184,0.65)', fontVariantNumeric: 'tabular-nums' }}>
+                      <span style={{ fontSize: 11, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
                         cap used: {Number(l.capacity_used).toLocaleString('en-US')}
                       </span>
                     )}
@@ -164,12 +164,12 @@ export default function RelatedTreatiesSection({ riskId, hasCedant, hasCob }) {
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onUnlink(l); }
                           }}
-                          style={{ cursor: 'pointer', color: '#f87171', fontSize: 11, fontWeight: 600 }}>
+                          style={{ cursor: 'pointer', color: 'var(--accent-rose)', fontSize: 11, fontWeight: 600 }}>
                       Unlink
                     </span>
                   </div>
                   {l.notes && (
-                    <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.65)', fontStyle: 'italic',
+                    <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic',
                                     marginTop: 4 }}>
                       “{l.notes}”
                     </div>
@@ -178,8 +178,8 @@ export default function RelatedTreatiesSection({ riskId, hasCedant, hasCob }) {
               ))}
               {!adding && pickerOptions.length > 0 && (
                 <button onClick={() => setAdding(true)} style={{
-                  alignSelf: 'flex-start', appearance: 'none', border: '1px dashed rgba(0,212,255,0.30)',
-                  background: 'rgba(0,212,255,0.05)', color: '#00d4ff',
+                  alignSelf: 'flex-start', appearance: 'none', border: '1px dashed rgba(var(--accent-blue-rgb),0.30)',
+                  background: 'rgba(var(--accent-blue-rgb),0.05)', color: 'var(--accent-blue)',
                   borderRadius: 6, padding: '6px 14px', fontSize: 11, fontWeight: 700,
                   cursor: 'pointer', marginTop: 6,
                 }}>+ Link another treaty</button>
@@ -190,8 +190,8 @@ export default function RelatedTreatiesSection({ riskId, hasCedant, hasCob }) {
           {/* Inline panel */}
           {adding && (
             <div style={{ marginTop: 10, padding: '14px 16px',
-                           background: 'rgba(0,212,255,0.04)',
-                           border: '1px solid rgba(0,212,255,0.25)', borderRadius: 10 }}>
+                           background: 'rgba(var(--accent-blue-rgb),0.04)',
+                           border: '1px solid rgba(var(--accent-blue-rgb),0.25)', borderRadius: 10 }}>
               <FR label="Treaty">
                 <select className="fi" value={draft.contract_id}
                         onChange={(e) => setDraft((d) => ({ ...d, contract_id: e.target.value }))}>
@@ -223,13 +223,13 @@ export default function RelatedTreatiesSection({ riskId, hasCedant, hasCob }) {
               </FR>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
                 <button onClick={() => { setAdding(false); setToast(null); }}
-                        style={{ appearance: 'none', border: '1px solid rgba(148,163,184,0.20)',
-                                  background: 'transparent', color: 'rgba(226,232,240,0.80)',
+                        style={{ appearance: 'none', border: '1px solid var(--stroke-soft)',
+                                  background: 'transparent', color: 'rgba(var(--text-rgb),0.80)',
                                   borderRadius: 6, padding: '6px 14px', fontSize: 11,
                                   cursor: 'pointer' }}>Cancel</button>
                 <button onClick={onSaveDraft} disabled={!draft.contract_id || saving}
-                        style={{ appearance: 'none', border: '1px solid rgba(35,209,139,0.40)',
-                                  background: 'rgba(35,209,139,0.10)', color: '#23d18b',
+                        style={{ appearance: 'none', border: '1px solid rgba(var(--accent-rgb),0.40)',
+                                  background: 'rgba(var(--accent-rgb),0.10)', color: 'var(--accent)',
                                   borderRadius: 6, padding: '6px 14px', fontSize: 11, fontWeight: 700,
                                   cursor: (!draft.contract_id || saving) ? 'not-allowed' : 'pointer',
                                   opacity: (!draft.contract_id || saving) ? 0.5 : 1 }}>
@@ -241,9 +241,9 @@ export default function RelatedTreatiesSection({ riskId, hasCedant, hasCob }) {
 
           {toast && (
             <div style={{ marginTop: 8, padding: '6px 12px', fontSize: 11,
-                           background: toast.kind === 'error' ? 'rgba(248,113,113,0.08)' : 'rgba(35,209,139,0.08)',
-                           border: `1px solid ${toast.kind === 'error' ? 'rgba(248,113,113,0.30)' : 'rgba(35,209,139,0.30)'}`,
-                           color: toast.kind === 'error' ? '#f87171' : '#23d18b',
+                           background: toast.kind === 'error' ? 'rgba(var(--accent-rose-rgb),0.08)' : 'rgba(var(--accent-rgb),0.08)',
+                           border: `1px solid ${toast.kind === 'error' ? 'rgba(var(--accent-rose-rgb),0.30)' : 'rgba(var(--accent-rgb),0.30)'}`,
+                           color: toast.kind === 'error' ? 'var(--accent-rose)' : 'var(--accent)',
                            borderRadius: 6 }}>
               {toast.text}
             </div>

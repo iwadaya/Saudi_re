@@ -34,6 +34,7 @@ html[data-theme="midnight"]{
   --glass-grad-bot: rgba(10,18,32,.70);
   --text:#f1f5f9;
   --text-strong: rgba(241,245,249,1);
+  --text-rgb: 241, 245, 249;
   --muted:#c8daf0;
   --muted-2: rgba(184,204,223,.8);
   --text-subtle: rgba(226,232,240,.62);
@@ -83,6 +84,7 @@ html[data-theme="ocean"]{
   --glass-grad-bot: rgba(5,23,35,.68);
   --text:#e0f2fe;
   --text-strong: #f0f9ff;
+  --text-rgb: 224, 242, 254;
   --muted:#a7d7ef;
   --muted-2: rgba(167,215,239,.8);
   --text-subtle: rgba(224,242,254,.62);
@@ -132,6 +134,7 @@ html[data-theme="graphite"]{
   --glass-grad-bot: rgba(14,15,21,.70);
   --text:#ede9fe;
   --text-strong: #f5f3ff;
+  --text-rgb: 237, 233, 254;
   --muted:#c4b5fd;
   --muted-2: rgba(196,181,253,.75);
   --text-subtle: rgba(237,233,254,.60);
@@ -181,6 +184,7 @@ html[data-theme="sunset"]{
   --glass-grad-bot: rgba(23,13,22,.70);
   --text:#fff7ed;
   --text-strong: #fffbeb;
+  --text-rgb: 255, 247, 237;
   --muted:#fed7aa;
   --muted-2: rgba(254,215,170,.75);
   --text-subtle: rgba(255,247,237,.60);
@@ -230,6 +234,7 @@ html[data-theme="daylight"]{
   --glass-grad-bot: rgba(248,250,252,.82);
   --text:#0f172a;
   --text-strong:#020617;
+  --text-rgb: 15, 23, 42;
   --muted:#475569;
   --muted-2: rgba(71,85,105,.85);
   --text-subtle: rgba(51,65,85,.68);
@@ -252,4 +257,10 @@ html[data-theme="daylight"]{
   --shadow2: 0 10px 30px rgba(15,23,42,.08);
   --shadow-high: 0 24px 70px rgba(15,23,42,.12);
   --shadow-control: 0 10px 24px rgba(15,23,42,.08), inset 0 1px 0 rgba(255,255,255,.78);
+  /* Numeric-table header text (tokens.css default is light-on-dark). */
+  --num-th-color: rgba(51,65,85,.78);
+  /* HUD overlay lines (cockpit.css) — dark hairlines instead of light. */
+  --hud-line: rgba(15,23,42,.08);
+  --hud-line-2: rgba(15,23,42,.13);
+  --hud-shadow: 0 18px 50px rgba(15,23,42,.14);
 }

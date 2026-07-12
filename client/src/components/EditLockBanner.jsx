@@ -39,7 +39,7 @@ export default function EditLockBanner({ contractId, quoteId, isQuote = false, a
       background: 'rgba(248,113,113,0.10)', border: '1px solid rgba(248,113,113,0.35)',
     }}>
       <span style={{ fontSize: 13, fontWeight: 700, color: '#f87171' }}>🔒 Read-only</span>
-      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>
+      <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.75)' }}>
         {assignedToName ? `— assigned to ${assignedToName}. ` : '— this is unassigned. '}
         {id ? 'Claim it (if unassigned) or have it allocated to you to edit.' : 'Have it allocated to you to edit.'}
       </span>

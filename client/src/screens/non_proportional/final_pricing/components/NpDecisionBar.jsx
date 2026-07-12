@@ -53,7 +53,7 @@ export default function NpDecisionBar({
                   </button>
                   <button
                     className="bbg-btn"
-                    style={{ borderColor: 'rgba(34,197,94,0.5)', color: '#4ade80', display: 'flex', alignItems: 'center', gap: 6 }}
+                    style={{ borderColor: 'rgba(34,197,94,0.5)', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 6 }}
                     title="Export the whole contract to Excel — one sheet per screen, in wizard order (Treaty Detail → Final Pricing)"
                     onClick={() => {
                       const progRows = layers.map((l) => {
@@ -103,7 +103,7 @@ export default function NpDecisionBar({
                     <span className={`bbg-status bbg-status--${offerStatus.toLowerCase()}`}>{offerStatus.replace(/_/g, ' ')}</span>
                   )}
                   {isTerminal && (
-                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginLeft: 8 }}>
+                    <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.5)', marginLeft: 8 }}>
                       Pricing locked — open offer modal to review.
                     </span>
                   )}

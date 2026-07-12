@@ -51,30 +51,31 @@ export default function ImportProgressModal({ open, filename }) {
           width: min(440px, 100%);
           border-radius: 18px;
           border: 1px solid rgba(var(--accent-rgb), .18);
-          background: linear-gradient(180deg, rgba(var(--accent-rgb), .08), rgba(10,18,32,.92));
+          background: var(--surface-elevated);
+          background-image: linear-gradient(180deg, rgba(var(--accent-rgb), .08), rgba(var(--accent-rgb), .02));
           box-shadow: 0 30px 80px rgba(0,0,0,.45);
-          color: rgba(226,232,240,0.92);
+          color: var(--text);
           padding: 22px;
         }
         .ipm-title { font-size: 13px; font-weight: 800; letter-spacing: .08em;
                      text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
-        .ipm-file  { font-size: 12px; color: rgba(226,232,240,0.60); margin-bottom: 14px;
+        .ipm-file  { font-size: 12px; color: rgba(var(--text-rgb),0.60); margin-bottom: 14px;
                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .ipm-phase-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
         .ipm-phase { display: flex; align-items: center; gap: 8px;
-                     font-size: 12px; color: rgba(226,232,240,0.45); }
+                     font-size: 12px; color: rgba(var(--text-rgb),0.45); }
         .ipm-phase.active { color: var(--accent); font-weight: 700; }
-        .ipm-phase.done   { color: rgba(226,232,240,0.7); }
+        .ipm-phase.done   { color: rgba(var(--text-rgb),0.7); }
         .ipm-dot {
           width: 7px; height: 7px; border-radius: 50%;
-          background: rgba(226,232,240,0.18);
+          background: rgba(var(--text-rgb),0.18);
         }
         .ipm-phase.active .ipm-dot {
           background: var(--accent);
           box-shadow: 0 0 6px var(--accent);
           animation: ipm-pulse 1.3s ease-in-out infinite;
         }
-        .ipm-phase.done .ipm-dot { background: rgba(226,232,240,0.55); }
+        .ipm-phase.done .ipm-dot { background: rgba(var(--text-rgb),0.55); }
         @keyframes ipm-pulse {
           0%, 100% { opacity: .55; transform: scale(1); }
           50%      { opacity: 1;   transform: scale(1.18); }

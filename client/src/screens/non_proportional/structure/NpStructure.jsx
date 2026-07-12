@@ -62,7 +62,7 @@ export default function NpStructure() {
               {quoteMode && (
                 <section className="np-struct-card glass" style={{ marginBottom: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 18px' }}>
-                    <label style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }} htmlFor={structuresCountSelectId}>
+                    <label style={{ fontSize: 13, fontWeight: 700, color: 'rgba(var(--text-rgb),0.6)', whiteSpace: 'nowrap' }} htmlFor={structuresCountSelectId}>
                       Structures to Quote
                     </label>
                     <select
@@ -76,7 +76,7 @@ export default function NpStructure() {
                         <option key={n} value={n}>{n}</option>
                       ))}
                     </select>
-                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>
+                    <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.45)' }}>
                       Number of alternative structures to quote
                     </span>
                   </div>

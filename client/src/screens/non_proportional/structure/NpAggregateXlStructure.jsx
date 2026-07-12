@@ -207,7 +207,7 @@ export default function NpAggregateXlStructure({ currency = 'SAR', readOnly = fa
             </tbody>
           </table>
         </div>
-        <div style={{ padding: '10px 16px 14px', fontSize: 11, color: 'rgba(148,163,184,0.55)', lineHeight: 1.5 }}>
+        <div style={{ padding: '10px 16px 14px', fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
           Number of layers comes from Treaty Detail. Aggregate Limit
           /&nbsp;Deductible apply to the annual aggregate; Deductible and
           AAD apply per-loss.
@@ -224,7 +224,7 @@ export default function NpAggregateXlStructure({ currency = 'SAR', readOnly = fa
           </div>
         </div>
         {cobNames.length === 0 ? (
-          <div style={{ padding: '18px 22px', fontSize: 12, color: 'rgba(148,163,184,0.65)' }}>
+          <div style={{ padding: '18px 22px', fontSize: 12, color: 'var(--muted)' }}>
             No classes of business selected on Treaty Detail — pick at
             least one class there to set inner limits here.
           </div>
@@ -253,7 +253,7 @@ export default function NpAggregateXlStructure({ currency = 'SAR', readOnly = fa
                         style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                         title={name}
                       >
-                        <span style={{ padding: '0 10px', color: 'rgba(226,232,240,0.85)', fontWeight: 600, fontSize: 12 }}>
+                        <span style={{ padding: '0 10px', color: 'rgba(var(--text-rgb),0.85)', fontWeight: 600, fontSize: 12 }}>
                           {name}
                         </span>
                       </td>
@@ -268,7 +268,7 @@ export default function NpAggregateXlStructure({ currency = 'SAR', readOnly = fa
             </table>
           </div>
         )}
-        <div style={{ padding: '10px 16px 14px', fontSize: 11, color: 'rgba(148,163,184,0.55)', lineHeight: 1.5 }}>
+        <div style={{ padding: '10px 16px 14px', fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
           Classes come from Treaty Detail. Inner Limit / Inner Deductible
           cap or floor an individual class inside the aggregate cover —
           leave blank if a class has no inner sublimit.
@@ -297,12 +297,12 @@ function Toggle({ label, hint, checked, disabled, onChange }) {
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
-        style={{ accentColor: '#00d4ff', width: 16, height: 16 }}
+        style={{ accentColor: 'var(--accent-blue)', width: 16, height: 16 }}
       />
       <span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(226,232,240,0.90)' }}>{label}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{label}</span>
         {hint && (
-          <span style={{ marginLeft: 8, fontSize: 11, color: 'rgba(148,163,184,0.55)' }}>· {hint}</span>
+          <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--muted)' }}>· {hint}</span>
         )}
       </span>
     </label>

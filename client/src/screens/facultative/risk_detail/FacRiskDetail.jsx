@@ -38,19 +38,19 @@ function SectionCobChecklist({ sectionIndex, selected, facClasses, classesByCate
     onChange(sectionIndex, [...next]);
   };
   return (
-    <div style={{ background: 'rgba(8,14,30,0.50)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 16px', marginBottom: 10 }}>
-      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.10em', color: 'rgba(0,212,255,0.50)', marginBottom: 10 }}>SECTION {sectionIndex + 1} — CLASSES COVERED</div>
+    <div style={{ background: 'var(--control-bg)', border: '1px solid var(--hairline)', borderRadius: 12, padding: '14px 16px', marginBottom: 10 }}>
+      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.10em', color: 'rgba(var(--accent-blue-rgb),0.75)', marginBottom: 10 }}>SECTION {sectionIndex + 1} — CLASSES COVERED</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
         {Object.entries(classesByCategory).map(([cat, items]) => (
           <React.Fragment key={cat}>
-            <div style={{ gridColumn: '1 / -1', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', color: 'rgba(148,163,184,0.40)', marginTop: 6, marginBottom: 2, textTransform: 'uppercase' }}>{cat}</div>
+            <div style={{ gridColumn: '1 / -1', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', color: 'rgba(var(--text-rgb),0.5)', marginTop: 6, marginBottom: 2, textTransform: 'uppercase' }}>{cat}</div>
             {items.map(c => {
               const checked = selected.has(c.fac_cob_id);
               return (
-                <label key={c.fac_cob_id} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12, background: checked ? 'rgba(0,212,255,0.06)' : 'transparent', color: checked ? 'rgba(226,232,240,0.90)' : 'rgba(148,163,184,0.55)', transition: 'all .12s' }}>
+                <label key={c.fac_cob_id} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12, background: checked ? 'rgba(var(--accent-blue-rgb),0.06)' : 'transparent', color: checked ? 'rgba(var(--text-rgb),0.90)' : 'rgba(var(--text-rgb),0.55)', transition: 'all .12s' }}>
                   <input type="checkbox" checked={checked} onChange={() => toggle(c.fac_cob_id)} style={{ width: 13, height: 13, accentColor: '#00d4ff' }} />
                   <span>{c.class_name}</span>
-                  {c.is_project && <span style={{ fontSize: 8, color: 'rgba(251,191,36,0.60)', marginLeft: 4 }}>PROJECT</span>}
+                  {c.is_project && <span style={{ fontSize: 8, color: 'rgba(var(--accent-amber-rgb),0.75)', marginLeft: 4 }}>PROJECT</span>}
                 </label>
               );
             })}
@@ -62,7 +62,7 @@ function SectionCobChecklist({ sectionIndex, selected, facClasses, classesByCate
           {[...selected].map(id => {
             const cls = facClasses.find(c => c.fac_cob_id === id);
             return cls ? (
-              <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, background: 'rgba(0,212,255,0.10)', border: '1px solid rgba(0,212,255,0.25)', color: '#00d4ff', fontSize: 10, fontWeight: 700 }}>
+              <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, background: 'rgba(var(--accent-blue-rgb),0.10)', border: '1px solid rgba(var(--accent-blue-rgb),0.25)', color: 'var(--accent-blue)', fontSize: 10, fontWeight: 700 }}>
                 {cls.class_name}
                 <span role="button" tabIndex={0} aria-label={`Remove ${cls.class_name}`}
                   style={{ cursor: 'pointer', opacity: 0.6, fontSize: 12, lineHeight: 1 }}
@@ -356,7 +356,7 @@ export default function FacRiskDetail() {
             outside on purpose — see the refLists comment above. */}
         <AsyncBoundary loading={loading} error={loadError} onRetry={refetch} label="risk detail">
 
-        {f.fac_ref && <div style={{ fontSize: 12, color: '#00d4ff', fontFamily: 'var(--font-mono)', fontWeight: 700, marginBottom: 20 }}>{f.fac_ref}</div>}
+        {f.fac_ref && <div style={{ fontSize: 12, color: 'var(--accent-blue)', fontFamily: 'var(--font-mono)', fontWeight: 700, marginBottom: 20 }}>{f.fac_ref}</div>}
 
         {/* ── Parties ── */}
         <SectionTitle>Parties</SectionTitle>
@@ -371,7 +371,7 @@ export default function FacRiskDetail() {
             <option value="">{f.country_id ? '— Select Cedant —' : '— Select Country First —'}</option>
             {filteredCedants.map(c => <option key={c.company_id || c.id} value={c.company_id || c.id}>{c.company_name || c.name}</option>)}
           </select>
-          {f.country_id && filteredCedants.length === 0 && <div style={{ fontSize: 10, color: 'rgba(251,191,36,0.70)', marginTop: 4 }}>No cedants found for this country</div>}
+          {f.country_id && filteredCedants.length === 0 && <div style={{ fontSize: 10, color: 'rgba(var(--accent-amber-rgb),0.80)', marginTop: 4 }}>No cedants found for this country</div>}
         </FR>
         <FR label="Broker">
           <select className="fi" value={f.broker_id} onChange={e => set('broker_id', e.target.value)}>
@@ -403,7 +403,7 @@ export default function FacRiskDetail() {
         <FR label="Renewal / New">
           <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
             {['New', 'Renewal'].map(opt => (
-              <label key={opt} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+              <label key={opt} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, color: 'var(--text)' }}>
                 <input type="radio" name="renewal_or_new" value={opt} checked={f.renewal_or_new === opt} onChange={e => set('renewal_or_new', e.target.value)} style={{ accentColor: '#00d4ff' }} />
                 {opt}
               </label>
@@ -426,7 +426,7 @@ export default function FacRiskDetail() {
         <FR label="Multi-Location">
           <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
             {[['Yes', true], ['No', false]].map(([label, val]) => (
-              <label key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+              <label key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, color: 'var(--text)' }}>
                 <input type="radio" name="multi_location_flag" checked={f.multi_location_flag === val} onChange={() => set('multi_location_flag', val)} style={{ accentColor: '#00d4ff' }} />
                 {label}
               </label>
@@ -436,7 +436,7 @@ export default function FacRiskDetail() {
         <FR label="Multi-Occupancy">
           <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
             {[['Yes', true], ['No', false]].map(([label, val]) => (
-              <label key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+              <label key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, color: 'var(--text)' }}>
                 <input type="radio" name="multi_occupancy_flag" checked={f.multi_occupancy_flag === val} onChange={() => set('multi_occupancy_flag', val)} style={{ accentColor: '#00d4ff' }} />
                 {label}
               </label>
@@ -473,20 +473,20 @@ export default function FacRiskDetail() {
           {f.occupancy_code && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 8, fontSize: 11 }}>
               <div>
-                <div style={{ color: 'rgba(148,163,184,0.45)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Hazard Grade</div>
-                <div style={{ color: '#e2e8f0', fontWeight: 700 }}>{effectiveHazardGrade ?? '—'}</div>
+                <div style={{ color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Hazard Grade</div>
+                <div style={{ color: 'var(--text)', fontWeight: 700 }}>{effectiveHazardGrade ?? '—'}</div>
               </div>
               <div>
-                <div style={{ color: 'rgba(148,163,184,0.45)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Hazard Category</div>
-                <div style={{ color: '#e2e8f0', fontWeight: 700 }}>{f.hazard_category || '—'}</div>
+                <div style={{ color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Hazard Category</div>
+                <div style={{ color: 'var(--text)', fontWeight: 700 }}>{f.hazard_category || '—'}</div>
               </div>
               <div>
-                <div style={{ color: 'rgba(148,163,184,0.45)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Risk Category</div>
-                <div style={{ color: '#e2e8f0', fontWeight: 700 }}>{f.risk_category || '—'}</div>
+                <div style={{ color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Risk Category</div>
+                <div style={{ color: 'var(--text)', fontWeight: 700 }}>{f.risk_category || '—'}</div>
               </div>
               <div>
-                <div style={{ color: 'rgba(148,163,184,0.45)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Frequency</div>
-                <div style={{ color: '#e2e8f0', fontWeight: 700 }}>{f.frequency_category || '—'}</div>
+                <div style={{ color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Frequency</div>
+                <div style={{ color: 'var(--text)', fontWeight: 700 }}>{f.frequency_category || '—'}</div>
               </div>
             </div>
           )}
@@ -523,16 +523,16 @@ export default function FacRiskDetail() {
         {/* ── Sums Insured — one row per checked COB ── */}
         <SectionTitle>Sums Insured (100% Basis)</SectionTitle>
         {allSelectedCobs.length === 0 && (
-          <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.35)', padding: '12px 0' }}>Select classes of business above to enter sums insured</div>
+          <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.45)', padding: '12px 0' }}>Select classes of business above to enter sums insured</div>
         )}
         {allSelectedCobs.map(({ id, section }) => {
           const cls = facClasses.find(c => c.fac_cob_id === id);
           if (!cls) return null;
           const catColor = CATEGORY_COLORS[cls.category] || '#94a3b8';
           return (
-            <div key={id} style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 12, alignItems: 'center', marginBottom: 8, padding: '8px 14px', background: 'rgba(8,14,30,0.40)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, borderLeft: `3px solid ${catColor}` }}>
+            <div key={id} style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 12, alignItems: 'center', marginBottom: 8, padding: '8px 14px', background: 'var(--control-bg)', border: '1px solid var(--hairline)', borderRadius: 10, borderLeft: `3px solid ${catColor}` }}>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(226,232,240,0.85)' }}>{cls.class_name}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(var(--text-rgb),0.85)' }}>{cls.class_name}</div>
                 <div style={{ fontSize: 9, color: catColor, fontWeight: 700, letterSpacing: '.08em', marginTop: 1 }}>SEC {section + 1} · {cls.category}</div>
               </div>
               <CommaInput value={cobSiValues[id] || ''} onChange={v => handleCobSiChange(id, v)} placeholder="Sum Insured" />
@@ -542,9 +542,9 @@ export default function FacRiskDetail() {
 
         {/* Total SI */}
         {totalSi > 0 && (
-          <div style={{ marginTop: 10, padding: '10px 16px', background: 'rgba(35,209,139,0.06)', border: '1px solid rgba(35,209,139,0.20)', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.10em', color: 'rgba(35,209,139,0.55)', textTransform: 'uppercase' }}>Total Sum Insured</span>
-            <span style={{ fontSize: 18, fontWeight: 900, color: '#23d18b' }}>{fmt(totalSi)}</span>
+          <div style={{ marginTop: 10, padding: '10px 16px', background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.20)', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.10em', color: 'rgba(var(--accent-rgb),0.75)', textTransform: 'uppercase' }}>Total Sum Insured</span>
+            <span style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent)' }}>{fmt(totalSi)}</span>
           </div>
         )}
 

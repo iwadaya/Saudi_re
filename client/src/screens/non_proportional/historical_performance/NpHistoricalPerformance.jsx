@@ -194,20 +194,20 @@ export default function NpHistoricalPerformance() {
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(226,232,240,0.90)' }}>Underwriting Year Performance</div>
-            <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.50)', marginTop: 2 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Underwriting Year Performance</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
               {startYear} – {uwYear} · {yearRange.length} years · Paste from Excel supported
             </div>
           </div>
           <button onClick={() => setShowMA(true)} style={{
             appearance: 'none', border: '1px solid rgba(0,212,255,0.30)', background: 'rgba(0,212,255,0.06)',
-            color: '#00d4ff', borderRadius: 8, padding: '7px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+            color: 'var(--accent-blue)', borderRadius: 8, padding: '7px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
           }}>📊 Moving Averages</button>
         </div>
 
         {/* ── Main table ── */}
         <AsyncBoundary loading={loading} error={loadError} onRetry={refetch} label="historical performance">
-        <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid var(--hairline)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900, tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: '8%' }} />

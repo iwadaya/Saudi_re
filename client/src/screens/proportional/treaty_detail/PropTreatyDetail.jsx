@@ -485,19 +485,19 @@ export default function PropTreatyDetail() {
 
         {/* ── Summary bar ── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
+          <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.55)' }}>
             Cedant: <b>{cedantName || '—'}</b>{' · '}Country: <b>{countries.find(c => String(c.id) === String(s.countryId))?.name || '—'}</b>
             {' · '}Broker: <b>{brokerName || '—'}</b>{' · '}Currency: <b>{currencyCode || '—'}</b>{' · '}Treaty Type: <b>{selectedTypeName || '—'}</b>
             {cobNames.length > 0 && <>{' · '}COB: <b>{cobNames.join(', ')}</b></>}
           </div>
           {s.parentContractId && (
             <div style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'4px 10px', borderRadius:8,
-              background:'rgba(96,165,250,0.10)', border:'1px solid rgba(96,165,250,0.30)', fontSize:11, color:'#60a5fa', fontWeight:700 }}>
+              background:'rgba(96,165,250,0.10)', border:'1px solid rgba(96,165,250,0.30)', fontSize:11, color:'var(--accent-blue)', fontWeight:700 }}>
               🔄 Renewal — linked to prior year contract
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>Triangulations available</span>
+            <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.55)' }}>Triangulations available</span>
             <TogglePill options={[{ value: true, label: 'YES' }, { value: false, label: 'NO' }]}
               value={s.triangulationsAvailable !== false} onChange={v => update({ triangulationsAvailable: v })}
               ariaLabel="Triangulations available" />
@@ -506,8 +506,8 @@ export default function PropTreatyDetail() {
 
         {/* ── Contract description ── */}
         {contractDescription && (
-          <div style={{ padding: '8px 14px', marginBottom: 14, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
-            <span style={{ color: 'rgba(255,255,255,0.4)', marginRight: 8 }}>Contract:</span>{contractDescription}
+          <div style={{ padding: '8px 14px', marginBottom: 14, borderRadius: 10, background: 'var(--surface-hover)', border: '1px solid var(--hairline)', fontSize: 12, color: 'rgba(var(--text-rgb),.7)' }}>
+            <span style={{ color: 'rgba(var(--text-rgb),.4)', marginRight: 8 }}>Contract:</span>{contractDescription}
           </div>
         )}
 
@@ -574,7 +574,7 @@ export default function PropTreatyDetail() {
                 <option value="">Select treaty type…</option>{treatyTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></FR>
               <FR label="Line of Business" missing={missingFields.has('Line of Business')}>
                 <button className={fi} type="button" onClick={() => setShowCobModal(true)}
-                  style={{ textAlign: 'left', cursor: 'pointer', color: (s.classIds || []).length ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)' }}>
+                  style={{ textAlign: 'left', cursor: 'pointer', color: (s.classIds || []).length ? 'rgba(var(--text-rgb),.9)' : 'rgba(var(--text-rgb),.4)' }}>
                   {cobText} <span style={{ float: 'right', opacity: 0.3 }}>▾</span>
                 </button>
               </FR>
@@ -627,7 +627,7 @@ export default function PropTreatyDetail() {
                 ariaLabel="Commission mode" />
             </div>
             <div style={{ padding: '10px 18px 18px', flex: 1 }}>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>Choose between a single fixed commission or a sliding scale commission structure.</div>
+              <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.5)', marginBottom: 12 }}>Choose between a single fixed commission or a sliding scale commission structure.</div>
               <div style={{ opacity: isFixed ? 1 : 0.35, pointerEvents: isFixed ? 'auto' : 'none' }}>
                 <div className="mini-title">FIXED COMMISSION</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -645,7 +645,7 @@ export default function PropTreatyDetail() {
                 </div>
                 <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
                   <button className="orange-gloss-btn" onClick={() => setShowSliding(true)}>Enter slide manually</button>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{(s.slidingTable || []).filter(r => r.lossRatioPct || r.commissionPct).length} row(s)</span>
+                  <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)' }}>{(s.slidingTable || []).filter(r => r.lossRatioPct || r.commissionPct).length} row(s)</span>
                 </div>
               </div>
               <div style={{ marginTop: 14 }}>
@@ -673,7 +673,7 @@ export default function PropTreatyDetail() {
                 ariaLabel="Loss participation enabled" />
             </div>
             <div style={{ padding: '10px 18px 18px', flex: 1 }}>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>Capture loss participation corridors where the reinsurer share changes above a given loss ratio.</div>
+              <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.5)', marginBottom: 12 }}>Capture loss participation corridors where the reinsurer share changes above a given loss ratio.</div>
               <div style={{ opacity: s.lossPartEnabled !== false ? 1 : 0.35, pointerEvents: s.lossPartEnabled !== false ? 'auto' : 'none' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <FR label="Min Loss Ratio %" missing={missingFields.has('LP Min Loss Ratio %')}><PctInput className={fi} placeholder="e.g. 70%" value={s.minLossRatioPct || ''} onChange={v => update({ minLossRatioPct: v })} /></FR>
@@ -696,7 +696,7 @@ export default function PropTreatyDetail() {
               </div>
               <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
                 <button className="orange-gloss-btn" onClick={() => { if (!(s.classIds || []).length) { showToast?.('Select Lines of Business first'); return; } setShowEpiSplit(true); }}>EPI Split</button>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{epiSplitCount > 0 ? `${epiSplitCount} class(es)` : ''}</span>
+                <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)' }}>{epiSplitCount > 0 ? `${epiSplitCount} class(es)` : ''}</span>
               </div>
               <div className="mini-title" style={{ marginTop: 16 }}>BROKERAGE &amp; TAXES</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -721,23 +721,23 @@ export default function PropTreatyDetail() {
           <div className="modal-backdrop" role="presentation" style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onClick={e => { if (e.target === e.currentTarget) setShowLpSlides(false); }}>
             <div className="glass" role="dialog" aria-modal="true" aria-labelledby="lp-slides-title"
-              style={{ width: 460, borderRadius: 16, border: '1px solid rgba(255,255,255,0.12)', padding: 24 }}>
+              style={{ width: 460, borderRadius: 16, border: '1px solid var(--hairline-strong)', padding: 24 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
                 <div>
-                  <div id="lp-slides-title" style={{ fontSize: 13, fontWeight: 800, color: 'rgba(255,255,255,0.9)' }}>Stepped Loss Participation</div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>Define up to 5 corridors with different reinsurer shares</div>
+                  <div id="lp-slides-title" style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>Stepped Loss Participation</div>
+                  <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)', marginTop: 2 }}>Define up to 5 corridors with different reinsurer shares</div>
                 </div>
-                <button type="button" aria-label="Close" onClick={() => setShowLpSlides(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: 18, cursor: 'pointer' }}>✕</button>
+                <button type="button" aria-label="Close" onClick={() => setShowLpSlides(false)} style={{ background: 'none', border: 'none', color: 'rgba(var(--text-rgb),.5)', fontSize: 18, cursor: 'pointer' }}>✕</button>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
                 <div />
                 {['Min LR %', 'Max LR %', 'Re Share %'].map(h => (
-                  <div key={h} style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>{h}</div>
+                  <div key={h} style={{ fontSize: 9, fontWeight: 700, color: 'rgba(var(--text-rgb),.5)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>{h}</div>
                 ))}
               </div>
               {(s.lpSlides || []).slice(0, 5).map((row, i) => (
                 <div key={i} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 1fr 1fr', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.25)', textAlign: 'center' }}>{i + 1}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(var(--text-rgb),.35)', textAlign: 'center' }}>{i + 1}</div>
                   <PctInput className={fi} placeholder="e.g. 70%" value={row.minLr || ''}
                     aria-label={`Corridor ${i + 1} minimum loss ratio`}
                     onChange={v => { const sl = [...(s.lpSlides||[])]; sl[i] = {...sl[i], minLr: v}; update({ lpSlides: sl }); }}
@@ -752,7 +752,7 @@ export default function PropTreatyDetail() {
                     style={{ textAlign: 'center' }} />
                 </div>
               ))}
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginBottom: 16 }}>Leave unused rows blank.</div>
+              <div style={{ fontSize: 10, color: 'rgba(var(--text-rgb),.35)', marginBottom: 16 }}>Leave unused rows blank.</div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <button type="button" className="bbg-btn" onClick={() => update({ lpSlides: [{minLr:'',maxLr:'',share:''},{minLr:'',maxLr:'',share:''},{minLr:'',maxLr:'',share:''},{minLr:'',maxLr:'',share:''},{minLr:'',maxLr:'',share:''}] })}>Clear All</button>
                 <button type="button" className="action-pill action-pill--primary" style={{ padding: '6px 20px' }} onClick={() => setShowLpSlides(false)}>Done</button>

@@ -11,7 +11,7 @@ function FR({ label, children }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 10,
                    alignItems: 'center', minHeight: 34, marginBottom: 10 }}>
-      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>{label}</div>
+      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)' }}>{label}</div>
       <div>{children}</div>
     </div>
   );
@@ -19,7 +19,7 @@ function FR({ label, children }) {
 
 function Toggle({ value, onChange, label }) {
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text)' }}>
       <input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
       {label}
     </label>
@@ -29,7 +29,7 @@ function Toggle({ value, onChange, label }) {
 function Sec({ children, title }) {
   return (
     <>
-      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(0,212,255,0.55)', marginTop: 28, marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{title}</div>
+      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--accent-blue-rgb),0.75)', marginTop: 28, marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid var(--hairline)' }}>{title}</div>
       {children}
     </>
   );
@@ -75,7 +75,7 @@ export default function FacCope() {
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="COPE Assessment" headerPill="FACULTATIVE" onBeforeNext={save} onBeforeBack={save}>
       <div style={{ maxWidth: 720, margin: '0 auto', padding: '8px 0 40px' }}>
-        <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.55)', marginBottom: 8 }}>
+        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
           Construction · Occupation · Protection · Exposure — the four pillars of risk quality assessment.
         </div>
 

@@ -27,10 +27,10 @@ function MiniLineChart({ title, years, treaty, raw, portfolioAvg, color, portfol
   const pad=(yMax-yMin)*0.15||0.05; yMin-=pad; yMax+=pad;
   const xOf=i=>PL+(years.length>1?(i/(years.length-1))*cw:cw/2);
   const yOf=v=>PT+ch-((v-yMin)/(yMax-yMin))*ch;
-  const polyline=(data,clr,dash=false,sw=2)=>{
+  const polyline=(data,clr,dash=false,sw=2,cls)=>{
     if(!data.length) return null;
     const pts=data.map((v,i)=>`${xOf(i).toFixed(1)},${yOf(v).toFixed(1)}`).join(' ');
-    return <polyline points={pts} fill="none" stroke={clr} strokeWidth={sw} strokeDasharray={dash?'4,3':'none'} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>;
+    return <polyline points={pts} fill="none" className={cls} stroke={cls ? undefined : clr} strokeWidth={sw} strokeDasharray={dash?'4,3':'none'} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>;
   };
   const yTicks=Array.from({length:5},(_,i)=>yMin+(yMax-yMin)*(i/4));
   const step=years.length>12?3:years.length>6?2:1;
@@ -38,11 +38,11 @@ function MiniLineChart({ title, years, treaty, raw, portfolioAvg, color, portfol
     <div className="ma-chart-card">
       <div className="ma-chart-card-title">{title}</div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" className="crisp-grid" style={{display:'block', fontFamily:'inherit', fontVariantNumeric:'tabular-nums'}}>
-        {yTicks.map((v,i)=>(<g key={i}><line x1={PL} y1={yOf(v)} x2={W-PR} y2={yOf(v)} stroke="rgba(255,255,255,0.07)" strokeWidth={1} shapeRendering="crispEdges" vectorEffect="non-scaling-stroke"/><text x={PL-6} y={yOf(v)+4} textAnchor="end" fill="rgba(255,255,255,0.65)" fontSize={10} fontWeight="500">{yFmt(v)}</text></g>))}
-        {years.map((yr,i)=>i%step===0||i===years.length-1?(<text key={yr} x={xOf(i)} y={H-4} textAnchor="middle" fill="rgba(255,255,255,0.70)" fontSize={10} fontWeight="500">{yr}</text>):null)}
+        {yTicks.map((v,i)=>(<g key={i}><line x1={PL} y1={yOf(v)} x2={W-PR} y2={yOf(v)} className="ma-grid-y" strokeWidth={1} shapeRendering="crispEdges" vectorEffect="non-scaling-stroke"/><text x={PL-6} y={yOf(v)+4} textAnchor="end" className="ma-tick" fontSize={10} fontWeight="500">{yFmt(v)}</text></g>))}
+        {years.map((yr,i)=>i%step===0||i===years.length-1?(<text key={yr} x={xOf(i)} y={H-4} textAnchor="middle" className="ma-tick ma-tick--x" fontSize={10} fontWeight="500">{yr}</text>):null)}
         <line x1={PL} y1={yOf(portfolioAvg)} x2={W-PR} y2={yOf(portfolioAvg)} stroke={portfolioColor} strokeWidth={1.5} strokeDasharray="6,4" opacity={0.7} vectorEffect="non-scaling-stroke"/>
-        {polyline(raw,'rgba(255,255,255,0.18)',false,1)}
-        {raw.map((v,i)=><circle key={i} cx={xOf(i)} cy={yOf(v)} r={2} fill="rgba(255,255,255,0.25)"/>)}
+        {polyline(raw,null,false,1,'ma-raw-line')}
+        {raw.map((v,i)=><circle key={i} cx={xOf(i)} cy={yOf(v)} r={2} className="ma-raw-dot"/>)}
         {polyline(treaty,color,false,2.5)}
         {treaty.map((v,i)=><circle key={i} cx={xOf(i)} cy={yOf(v)} r={3} fill={color}/>)}
       </svg>
@@ -121,7 +121,7 @@ export default function PropMovingAverageCharts({ yearly, terms }) {
     return (
       <div className="ma-charts-section">
         <div className="ma-charts-header"><div className="ma-charts-title">Moving Averages</div></div>
-        <div style={{padding:20,color:'rgba(255,255,255,0.4)',fontSize:13}}>{message}</div>
+        <div style={{padding:20,color:'rgba(var(--text-rgb),.5)',fontSize:13}}>{message}</div>
       </div>
     );
   }
@@ -137,7 +137,7 @@ export default function PropMovingAverageCharts({ yearly, terms }) {
       <div className="ma-legend">
         <span className="ma-legend-item"><span className="ma-legend-dot" style={{background:'currentColor'}}></span> Treaty ({win}yr MA)</span>
         <span className="ma-legend-item" style={{color:'#60a5fa'}}><span className="ma-legend-dot" style={{background:'#60a5fa'}}></span> Portfolio Avg</span>
-        <span className="ma-legend-item" style={{color:'rgba(255,255,255,0.25)'}}><span className="ma-legend-dot" style={{background:'rgba(255,255,255,0.25)'}}></span> Treaty (raw)</span>
+        <span className="ma-legend-item" style={{color:'rgba(var(--text-rgb),.35)'}}><span className="ma-legend-dot" style={{background:'rgba(var(--text-rgb),.35)'}}></span> Treaty (raw)</span>
       </div>
       <div className="ma-charts-grid">
         {charts.map(ch=>(<MiniLineChart key={ch.title} title={ch.title} years={years} treaty={ch.treaty} raw={ch.raw} portfolioAvg={ch.portfolioAvg} color={ch.color} portfolioColor={ch.portfolioColor} yFmt={ch.yFmt}/>))}

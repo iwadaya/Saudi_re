@@ -153,23 +153,23 @@ export default function FacPendingRecsBanner({ routeKey }) {
            transition: 'background .12s',
          }}>
       <span aria-hidden="true" style={{ fontSize: 14 }}>📄</span>
-      <span style={{ fontSize: 12, color: '#e2e8f0', flex: 1 }}>
+      <span style={{ fontSize: 12, color: 'var(--text)', flex: 1 }}>
         <strong style={{ color: '#a855f7' }}>
           {totalCount} recommendation{totalCount === 1 ? '' : 's'}
         </strong>
         {' from '}
-        <span style={{ color: 'rgba(226,232,240,0.85)' }}>
+        <span style={{ color: 'rgba(var(--text-rgb),0.85)' }}>
           {docLabel}
         </span>
         {analyses.length > 1 && forScreen.length > 1
-          ? <span style={{ color: 'rgba(148,163,184,0.55)' }}>{` (+${forScreen.length - 1} more)`}</span>
+          ? <span style={{ color: 'var(--muted)' }}>{` (+${forScreen.length - 1} more)`}</span>
           : null}
         {' — '}
         <span style={{ color: '#a855f7', fontWeight: 700 }}>Review</span>
       </span>
       <button type="button" onClick={dismiss}
               style={{ background: 'none', border: 'none', fontFamily: 'inherit', lineHeight: 'inherit',
-                       cursor: 'pointer', color: 'rgba(148,163,184,0.55)', fontSize: 14, padding: '0 4px' }}
+                       cursor: 'pointer', color: 'var(--muted)', fontSize: 14, padding: '0 4px' }}
               title="Dismiss for this session"
               aria-label="Dismiss banner">×</button>
     </div>

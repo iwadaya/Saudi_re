@@ -164,17 +164,17 @@
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.14);
-  background: rgba(255,255,255,0.04);
-  color: rgba(255,255,255,0.86);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-hover);
+  color: rgba(var(--text-rgb),.86);
   cursor: pointer;
   font-size: 18px;
   line-height: 1;
 }
 
 .modal-close:hover{
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(255,255,255,0.22);
+  background: var(--control-hover);
+  border-color: var(--stroke);
 }
 
 .screen-modal-body,

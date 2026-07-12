@@ -445,7 +445,7 @@ export default function LossSelectionScreen({ routeKey, title, headerPill, lossT
   const content = (
         <div className="LOSS_SELECTION_PAGE">
           {lossStale && (
-            <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5 }}>
+            <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: 'var(--accent-amber)', fontSize: 12, lineHeight: 1.5 }}>
               Losses have been added or edited since the last selection was saved — review and re-save your selection.
             </div>
           )}

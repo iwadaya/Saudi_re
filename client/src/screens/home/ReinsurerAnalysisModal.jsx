@@ -52,6 +52,10 @@ const tdStyle = {
   padding: '7px 8px',
   verticalAlign: 'middle',
   fontVariantNumeric: 'tabular-nums',
+  // Hardcoded light, NOT var(--text): these cells sit inside the always-dark
+  // bm-modal panel, where inheriting the theme's body colour renders
+  // dark-on-dark in light themes.
+  color: 'rgba(226,232,240,0.88)',
 };
 
 const fmt = (n) => (n > 0 ? formatWithCommas(Math.round(n)) : '—');

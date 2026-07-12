@@ -11,7 +11,7 @@
   font-size: 20px;
   font-weight: 900;
   letter-spacing: .2px;
-  color: rgba(241,245,249,.96);
+  color: var(--text);
 }
 .LARGE_LOSS_LIST_PAGE .ll-sub{
   margin-top: 6px;
@@ -23,7 +23,7 @@
 .LARGE_LOSS_LIST_PAGE .ll-sub-hint{
   margin-left: 8px;
   opacity: .85;
-  color: rgba(148,163,184,.9);
+  color: var(--muted);
 }
 
 /* Toolbar */
@@ -31,7 +31,7 @@
   margin-top: 12px;
   border-radius: 18px;
   padding: 12px 12px;
-  border: 1px solid rgba(148,163,184,.14);
+  border: 1px solid var(--stroke-soft);
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -44,12 +44,12 @@
   font-size: 11px;
   letter-spacing: .14em;
   text-transform: uppercase;
-  color: rgba(148,163,184,.85);
+  color: var(--muted);
 }
 .LARGE_LOSS_LIST_PAGE .ll-date-shell{
   border-radius: var(--radius-pill);
-  border: 1px solid rgba(148,163,184,.18);
-  background: rgba(8,16,40,.28);
+  border: 1px solid var(--stroke-soft);
+  background: var(--control-bg);
   padding: 8px 12px;
   display: flex;
   align-items: center;
@@ -59,7 +59,7 @@
   border: none;
   outline: none;
   background: transparent;
-  color: rgba(226,232,240,.92);
+  color: rgba(var(--text-rgb),.92);
   font-size: 13px;
 }
 .LARGE_LOSS_LIST_PAGE .ll-toolbar-right{
@@ -73,9 +73,9 @@
 /* Buttons */
 .LARGE_LOSS_LIST_PAGE .ll-btn{
   border-radius: var(--radius-pill);
-  border: 1px solid rgba(148,163,184,.20);
-  background: rgba(8,16,40,.40);
-  color: rgba(226,232,240,.90);
+  border: 1px solid var(--stroke-soft);
+  background: var(--control-bg);
+  color: rgba(var(--text-rgb),.90);
   padding: 10px 14px;
   font-size: 12px;
   font-weight: 750;
@@ -84,12 +84,12 @@
 }
 .LARGE_LOSS_LIST_PAGE .ll-btn:hover{
   border-color: rgba(90,170,200,.30);
-  background: rgba(7,14,26,.55);
+  background: var(--control-hover);
 }
 .LARGE_LOSS_LIST_PAGE .ll-btn--primary{
   border: 1px solid rgba(var(--accent-rgb),.35);
   background: linear-gradient(180deg, rgba(var(--accent-rgb),.85), rgba(var(--accent2-rgb),.75));
-  color: #001b12;
+  color: var(--accent-contrast);
   box-shadow: 0 0 22px rgba(var(--accent-rgb),.18);
 }
 .LARGE_LOSS_LIST_PAGE .ll-btn--primary:hover{ filter: brightness(1.04); }
@@ -103,8 +103,8 @@
 .LARGE_LOSS_LIST_PAGE .ll-section{
   margin-top: 12px;
   border-radius: 18px;
-  border: 1px solid rgba(148,163,184,.14);
-  background: rgba(8,16,40,.18);
+  border: 1px solid var(--stroke-soft);
+  background: var(--surface-muted);
   padding: 12px;
 }
 .LARGE_LOSS_LIST_PAGE .ll-section-title{
@@ -124,8 +124,8 @@
   margin-top: 10px;
   overflow: auto;
   border-radius: 16px;
-  border: 1px solid rgba(148,163,184,.12);
-  background: rgba(8,16,40,.22);
+  border: 1px solid var(--stroke-soft);
+  background: var(--surface-muted);
 }
 .LARGE_LOSS_LIST_PAGE .ll-table{
   width: 100%;
@@ -136,10 +136,10 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  background: rgba(12,14,16,.88);
+  background: var(--table-head-bg);
   backdrop-filter: blur(8px);
   padding: 10px 10px;
-  border-bottom: 1px solid rgba(148,163,184,.14);
+  border-bottom: 1px solid var(--stroke-soft);
   font-size: 11px;
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -149,9 +149,9 @@
 }
 .LARGE_LOSS_LIST_PAGE .ll-table tbody td{
   padding: 8px 8px;
-  border-bottom: 1px solid rgba(148,163,184,.09);
+  border-bottom: 1px solid var(--hairline);
 }
-.LARGE_LOSS_LIST_PAGE .ll-table tbody tr:hover td{ background: rgba(255,255,255,.02); }
+.LARGE_LOSS_LIST_PAGE .ll-table tbody tr:hover td{ background: var(--table-row-hover); }
 
 .LARGE_LOSS_LIST_PAGE .ll-td--num{ text-align: center; }
 .LARGE_LOSS_LIST_PAGE .ll-td--tight{ width: 140px; }
@@ -162,9 +162,9 @@
   width: 100%;
   height: 34px;
   border-radius: 12px;
-  border: 1px solid rgba(148,163,184,.14);
-  background: rgba(8,16,40,.45);
-  color: rgba(226,232,240,.92);
+  border: 1px solid var(--stroke-soft);
+  background: var(--control-bg);
+  color: rgba(var(--text-rgb),.92);
   padding: 0 10px;
   outline: none;
 }
@@ -174,7 +174,7 @@
 }
 .LARGE_LOSS_LIST_PAGE .ll-input--readonly{
   opacity: .82;
-  background: rgba(8,16,40,.35);
+  background: var(--control-bg);
 }
 .LARGE_LOSS_LIST_PAGE .ll-input--num{
   text-align: center;
@@ -187,9 +187,9 @@
   width: 100%;
   height: 34px;
   border-radius: 12px;
-  border: 1px solid rgba(148,163,184,.14);
-  background: rgba(8,16,40,.45);
-  color: rgba(226,232,240,.92);
+  border: 1px solid var(--stroke-soft);
+  background: var(--control-bg);
+  color: rgba(var(--text-rgb),.92);
   padding: 0 34px 0 10px;
   outline: none;
   appearance: none;
@@ -257,14 +257,14 @@
   font-weight: 850;
   letter-spacing: .02em;
 
-  color: rgba(226,232,240,.92);
+  color: rgba(var(--text-rgb),.92);
   background:
     linear-gradient(to bottom,
       rgba(var(--accent-rgb),.10),
-      rgba(8,16,40,.26)
+      var(--control-bg)
     );
 
-  border: 1px solid rgba(148,163,184,.18);
+  border: 1px solid var(--stroke-soft);
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.06),
     0 10px 20px rgba(0,0,0,.20);
@@ -293,7 +293,7 @@
   background:
     linear-gradient(to bottom,
       rgba(var(--accent-rgb),.16),
-      rgba(8,16,40,.22)
+      var(--control-bg)
     );
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.08),
@@ -329,12 +329,12 @@
   background:
     radial-gradient(1200px 500px at 35% 0%,
       rgba(90,170,200,.06),
-      rgba(8,16,40,.42) 55%,
-      rgba(8,16,40,.62) 100%),
+      var(--surface-muted) 55%,
+      var(--surface-2) 100%),
     linear-gradient(to top, rgba(148,163,184,.08) 1px, transparent 1px),
     linear-gradient(to right, rgba(148,163,184,.06) 1px, transparent 1px);
   background-size: auto, 100% 42px, 42px 100%;
-  border: 1px solid rgba(148,163,184,.12);
+  border: 1px solid var(--stroke-soft);
   border-radius: 16px;
   overflow: auto;
 }
@@ -348,13 +348,13 @@
   font-size: 10px;
   letter-spacing: .14em;
   text-transform: uppercase;
-  color: rgba(226,232,240,.62);
-  background: rgba(8,16,40,.78);
-  border-bottom: 1px solid rgba(148,163,184,.12);
+  color: rgba(var(--text-rgb),.62);
+  background: var(--table-head-bg);
+  border-bottom: 1px solid var(--stroke-soft);
 }
 .LARGE_LOSS_LIST_PAGE .ll-table tbody td{
   padding: 6px 6px; /* tighter */
-  border-bottom: 1px solid rgba(148,163,184,.08);
+  border-bottom: 1px solid var(--hairline);
 }
 
 /* ✅ Inputs look like dev triangle “cells” (rounded, glossy, subtle green tint) */
@@ -362,9 +362,9 @@
   height: 32px;
   border-radius: 12px;
 
-  border: 1px solid rgba(148,163,184,.12);
-  background: rgba(8,16,40,.22);
-  color: rgba(226,232,240,.90);
+  border: 1px solid var(--stroke-soft);
+  background: var(--control-bg);
+  color: rgba(var(--text-rgb),.90);
 
   padding: 0 10px;
   font-size: 12px;
@@ -398,7 +398,7 @@
 
 .LARGE_LOSS_LIST_PAGE .ll-input--readonly{
   opacity: .78;
-  background: rgba(8,16,40,.18);
+  background: var(--control-bg);
 }
 
 /* Numeric alignment */

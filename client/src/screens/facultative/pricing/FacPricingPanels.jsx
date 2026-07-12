@@ -158,16 +158,16 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                          textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>Scheme</div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#a855f7', fontVariantNumeric: 'tabular-nums' }}>{scheme}</div>
+                          textTransform: 'uppercase', color: 'var(--muted)' }}>Scheme</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: 'color-mix(in srgb, #a855f7 75%, var(--text))', fontVariantNumeric: 'tabular-nums' }}>{scheme}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                          textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>Score</div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: '#23d18b', fontVariantNumeric: 'tabular-nums' }}>
+                          textTransform: 'uppercase', color: 'var(--muted)' }}>Score</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>
               {liveScore ? liveScore.underwriting_score.toFixed(2) : '—'}
               {liveScore?.capacity_grade && (
-                <span style={{ marginLeft: 8, fontSize: 10, color: 'rgba(35,209,139,0.65)' }}>
+                <span style={{ marginLeft: 8, fontSize: 10, color: 'rgba(var(--accent-rgb),0.85)' }}>
                   {liveScore.capacity_grade} · {liveScore.uw_action}
                 </span>
               )}
@@ -179,7 +179,7 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
       {!collapsed && (
         <>
           {qualitativeFactors.length === 0 ? (
-            <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.45)', padding: '8px 0' }}>
+            <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)', padding: '8px 0' }}>
               Loading factor catalogue…
             </div>
           ) : (
@@ -196,23 +196,23 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
                   <div style={{ display: 'grid', gridTemplateColumns: ROW_COLS,
                                  gap: 16, alignItems: 'center',
                                  padding: '0 0 8px',
-                                 borderBottom: '1px solid rgba(255,255,255,0.06)',
+                                 borderBottom: '1px solid var(--hairline)',
                                  marginBottom: 8 }}>
                     <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                                   textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>
+                                   textTransform: 'uppercase', color: 'var(--muted)' }}>
                       Factor
                     </div>
                     <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                                   textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)' }}>
+                                   textTransform: 'uppercase', color: 'var(--muted)' }}>
                       Option
                     </div>
                     <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                                   textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)',
+                                   textTransform: 'uppercase', color: 'var(--muted)',
                                    textAlign: 'right' }}>
                       Score
                     </div>
                     <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                                   textTransform: 'uppercase', color: 'rgba(148,163,184,0.45)',
+                                   textTransform: 'uppercase', color: 'var(--muted)',
                                    textAlign: 'right' }}>
                       Loading
                     </div>
@@ -225,8 +225,8 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
                       <div key={factor.factor_code} style={{ display: 'grid',
                            gridTemplateColumns: ROW_COLS, gap: 16, alignItems: 'center',
                            padding: '8px 0',
-                           borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                        <div style={{ fontSize: 12, color: 'rgba(226,232,240,0.85)' }}>
+                           borderBottom: '1px solid var(--hairline)' }}>
+                        <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.85)' }}>
                           {factor.factor_name}
                         </div>
                         <select className="fi" value={selectedLabel}
@@ -241,14 +241,14 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
                         </select>
                         <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums',
                                       fontSize: 11, fontWeight: 700,
-                                      color: selectedOpt ? '#23d18b' : 'rgba(148,163,184,0.30)' }}>
+                                      color: selectedOpt ? 'var(--accent)' : 'rgba(var(--text-rgb),0.4)' }}>
                           {selectedOpt ? `score ${selectedOpt.score}` : '—'}
                         </div>
                         <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums',
                                       fontSize: 11, fontWeight: 700,
                                       color: factor.affects_rate
-                                        ? (selectedOpt ? '#fbbf24' : 'rgba(148,163,184,0.30)')
-                                        : 'rgba(148,163,184,0.35)' }}>
+                                        ? (selectedOpt ? 'var(--accent-amber)' : 'rgba(var(--text-rgb),0.4)')
+                                        : 'rgba(var(--text-rgb),0.45)' }}>
                           {factor.affects_rate
                             ? (selectedOpt ? pctChip(selectedOpt.discount_loading || 0) : '—')
                             : 'score only'}
@@ -281,14 +281,14 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
 export function EngineReadout({ output, premiums, totalLocSar }) {
   if (!output) {
     return (
-      <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.45)', padding: '12px 0' }}>
+      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)', padding: '12px 0' }}>
         Engine waiting for reference data… (occupancies, factors and locations must load first).
       </div>
     );
   }
   if (output._error) {
     return (
-      <div style={{ fontSize: 12, color: '#f87171', padding: '12px 0' }}>
+      <div style={{ fontSize: 12, color: 'var(--accent-rose)', padding: '12px 0' }}>
         {(output.warnings || []).join(' / ') || 'Engine error.'}
       </div>
     );
@@ -324,27 +324,27 @@ export function EngineReadout({ output, premiums, totalLocSar }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
         {rows.map(([label, value]) => (
           <div key={label} style={{ display: 'flex', justifyContent: 'space-between',
-               padding: '6px 12px', background: 'rgba(8,14,30,0.40)',
-               border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8 }}>
-            <span style={{ fontSize: 11, color: 'rgba(148,163,184,0.65)' }}>{label}</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(226,232,240,0.90)',
+               padding: '6px 12px', background: 'var(--control-bg)',
+               border: '1px solid var(--hairline)', borderRadius: 8 }}>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>{label}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(var(--text-rgb),0.90)',
                            fontVariantNumeric: 'tabular-nums' }}>{value}</span>
           </div>
         ))}
       </div>
       {Number.isFinite(totalLocSar) && totalLocSar > 0 && (
-        <div style={{ marginTop: 8, fontSize: 10, color: 'rgba(148,163,184,0.40)' }}>
+        <div style={{ marginTop: 8, fontSize: 10, color: 'rgba(var(--text-rgb),0.5)' }}>
           Premium computed against total location SAR SI = {money(totalLocSar)}.
         </div>
       )}
       {(output.warnings || []).length > 0 && (
         <div style={{ marginTop: 10, padding: '8px 12px',
-                       background: 'rgba(251,191,36,0.05)',
-                       border: '1px solid rgba(251,191,36,0.25)', borderRadius: 8 }}>
+                       background: 'rgba(var(--accent-amber-rgb),0.05)',
+                       border: '1px solid rgba(var(--accent-amber-rgb),0.25)', borderRadius: 8 }}>
           <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                        color: 'rgba(251,191,36,0.70)', marginBottom: 4 }}>WARNINGS</div>
+                        color: 'rgba(var(--accent-amber-rgb),0.85)', marginBottom: 4 }}>WARNINGS</div>
           {output.warnings.map((w, i) => (
-            <div key={i} style={{ fontSize: 11, color: 'rgba(251,191,36,0.80)' }}>{w}</div>
+            <div key={i} style={{ fontSize: 11, color: 'rgba(var(--accent-amber-rgb),0.9)' }}>{w}</div>
           ))}
         </div>
       )}

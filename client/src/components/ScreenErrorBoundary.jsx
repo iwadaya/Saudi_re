@@ -37,10 +37,10 @@ export default class ScreenErrorBoundary extends React.Component {
         maxWidth: 720, margin: '3rem auto',
       }}>
         <h2 style={{ color: '#f87171', marginTop: 0 }}>This screen failed to render</h2>
-        <p style={{ color: '#d7dceb', lineHeight: 1.5 }}>
+        <p style={{ color: 'var(--text)', lineHeight: 1.5 }}>
           {msg}
         </p>
-        <p style={{ color: '#9aa3bf', fontSize: 13 }}>
+        <p style={{ color: 'var(--muted)', fontSize: 13 }}>
           Other parts of the app still work — go back or reload to try again.
         </p>
         <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>

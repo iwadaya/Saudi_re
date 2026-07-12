@@ -331,7 +331,7 @@ export default function NpExpiringStructure() {
             <>
               {autoPopMsg && (
                 <div className="df-card df-card--notice" style={{ marginBottom: 12 }}>
-                  <div className="df-note" style={{ color: '#4ade80' }}>ℹ {autoPopMsg}</div>
+                  <div className="df-note" style={{ color: 'var(--accent)' }}>ℹ {autoPopMsg}</div>
                 </div>
               )}
 
@@ -339,7 +339,7 @@ export default function NpExpiringStructure() {
               <section className="np-struct-card glass" style={{ marginBottom: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 24, padding: '14px 18px', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <label htmlFor={numLayersSelectId} style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>LAYERS</label>
+                    <label htmlFor={numLayersSelectId} style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', color: 'rgba(var(--text-rgb),0.5)', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>LAYERS</label>
                     <select id={numLayersSelectId} className="np-mini-input np-mini-select" style={{ width: 90 }} value={numLayersInput} onChange={e => handleNumLayersChange(e.target.value)}>
                       <option value="">—</option>
                       {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => <option key={n} value={n}>{n}</option>)}
@@ -351,7 +351,7 @@ export default function NpExpiringStructure() {
                     { key: 'profit_commission_pct', label: 'PROFIT COMM. %' },
                   ].map(({ key, label }) => (
                     <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <label style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>{label}</label>
+                      <label style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', color: 'rgba(var(--text-rgb),0.45)', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>{label}</label>
                       <PctInput
                         className="np-mini-input np-mini-input--center"
                         style={{ width: 90 }}
@@ -362,7 +362,7 @@ export default function NpExpiringStructure() {
                     </div>
                   ))}
                   <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    {saveMsg && <span style={{ fontSize: 12, color: saveMsg.includes('failed') ? '#f87171' : '#4ade80' }}>{saveMsg}</span>}
+                    {saveMsg && <span style={{ fontSize: 12, color: saveMsg.includes('failed') ? 'var(--accent-rose)' : 'var(--accent)' }}>{saveMsg}</span>}
                     <button className="np-green-pill" type="button" onClick={handleManualSave}>SAVE</button>
                   </div>
                 </div>
@@ -430,7 +430,7 @@ export default function NpExpiringStructure() {
                     {layers.length > 1 && (
                       <tfoot>
                         <tr style={{ borderTop: '2px solid rgba(0,212,255,0.45)', background: 'rgba(0,212,255,0.06)' }}>
-                          <th className="np-table-sticky cell-center" style={{ color: '#00d4ff', fontSize: 10, letterSpacing: '.08em', fontWeight: 800, background: 'rgba(0,212,255,0.08)' }}>TOTAL</th>
+                          <th className="np-table-sticky cell-center" style={{ color: 'var(--accent-blue)', fontSize: 10, letterSpacing: '.08em', fontWeight: 800, background: 'rgba(0,212,255,0.08)' }}>TOTAL</th>
                           <td className="np-col"><div className="np-cell-input"><input className="np-mini-input np-mini-input--center np-mini-input--readonly" readOnly value={fmtC(totals.limit)} placeholder="—" /><span className="np-sfx">{currency}</span></div></td>
                           <td className="np-col"><div className="np-cell-input"><input className="np-mini-input np-mini-input--center np-mini-input--readonly" readOnly value={layers[0]?.deductible ? fmtC(layers[0].deductible) : '—'} placeholder="—" /><span className="np-sfx">{currency}</span></div></td>
                           <td className="np-col"><div className="np-cell-input"><input className="np-mini-input np-mini-input--center np-mini-input--readonly" readOnly value={totals.aggregateLimit ? fmtC(totals.aggregateLimit) : ''} placeholder="—" /><span className="np-sfx">{currency}</span></div></td>

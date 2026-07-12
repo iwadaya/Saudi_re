@@ -52,9 +52,9 @@ export default function NpTreatyPricingSections({
                 <div className="df-card df-card--notice" style={{ margin: '16px 0', padding: '20px 24px', borderRadius: 10, background: 'rgba(0,212,255,0.07)', border: '1px solid rgba(0,212,255,0.25)', display: 'flex', alignItems: 'center', gap: 14 }}>
                   <span style={{ fontSize: 22 }}>⚠️</span>
                   <div>
-                    <div style={{ fontWeight: 600, color: '#00d4ff', marginBottom: 4 }}>No structure defined yet</div>
-                    <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
-                      Please complete the <strong style={{ color: 'rgba(255,255,255,0.8)' }}>NP Structure</strong> screen first to define layers before pricing can be calculated.
+                    <div style={{ fontWeight: 600, color: 'var(--accent-blue)', marginBottom: 4 }}>No structure defined yet</div>
+                    <div style={{ fontSize: 13, color: 'rgba(var(--text-rgb),0.7)' }}>
+                      Please complete the <strong style={{ color: 'rgba(var(--text-rgb),0.9)' }}>NP Structure</strong> screen first to define layers before pricing can be calculated.
                     </div>
                   </div>
                 </div>
@@ -69,13 +69,13 @@ export default function NpTreatyPricingSections({
                     onClick={runCalcEngine}>
                     {calcEngineRunning ? '⟳ Calculating…' : '⚡ Run Actuarial Engine'}
                   </button>
-                  <span style={{ fontSize:12, color:'rgba(226,232,240,0.55)' }}>
+                  <span style={{ fontSize:12, color:'rgba(var(--text-rgb),0.55)' }}>
                     {mode === 'RISK' ? 'Pure Burn · Pareto · MBBEFD Exposure Rating'
                       : mode === 'CAT' ? 'Pure Burn · Pareto · CRESTA Exposure Rating'
                       : 'Pure Burn · Pareto · MBBEFD + CRESTA Exposure Rating'}
                   </span>
                   {calcEngineError && (
-                    <span style={{ fontSize:12, color:'#f87171', marginLeft:'auto' }}>{calcEngineError}</span>
+                    <span style={{ fontSize:12, color:'var(--accent-rose)', marginLeft:'auto' }}>{calcEngineError}</span>
                   )}
                 </div>
               )}
@@ -118,8 +118,8 @@ export default function NpTreatyPricingSections({
                           : 'Country and class of business required for market intelligence.'}
                         onClick={() => marketAvailable && setMarketModalOpen(true)}
                         style={{
-                          borderColor: marketAvailable ? 'rgba(103,232,249,0.45)' : 'rgba(255,255,255,0.14)',
-                          color: marketAvailable ? '#67e8f9' : 'rgba(255,255,255,0.30)',
+                          borderColor: marketAvailable ? 'rgba(103,232,249,0.45)' : 'var(--hairline-strong)',
+                          color: marketAvailable ? 'var(--accent-blue)' : 'rgba(var(--text-rgb),0.4)',
                           cursor: marketAvailable ? 'pointer' : 'not-allowed',
                         }}
                       >📊 Market Intelligence</button>
@@ -347,7 +347,7 @@ export default function NpTreatyPricingSections({
                       </div>
                     </div>
                     <div className="np-final-card np-final-card--flush">
-                      <div style={{ padding: '7px 14px', fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(226,232,240,0.35)', borderBottom: '1px solid rgba(148,163,184,0.08)' }}>
+                      <div style={{ padding: '7px 14px', fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),0.45)', borderBottom: '1px solid var(--hairline)' }}>
                         Programme Limits &amp; Downside
                       </div>
                       <div className="np-final-table-wrap np-final-table-wrap--wide">

@@ -9,7 +9,7 @@
 export function BasisToggleBar({ basis, onSetBasis, isIncurred, onShowStrippedModal }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '0 0 12px', padding: '10px 14px', borderRadius: 12, background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.30)' }}>
-      <span style={{ fontSize: 12, fontWeight: 700, color: '#bae6fd', letterSpacing: '.04em' }}>Triangle basis</span>
+      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-blue)', letterSpacing: '.04em' }}>Triangle basis</span>
       <div className="toggle-group" style={{ boxShadow: '0 0 0 1px rgba(148,163,184,0.18)' }}>
         <button
           type="button"
@@ -39,7 +39,7 @@ export function BasisToggleBar({ basis, onSetBasis, isIncurred, onShowStrippedMo
           style={{
             marginLeft: 'auto', fontSize: 11, fontWeight: 700, letterSpacing: '.04em',
             padding: '7px 14px', borderRadius: 8, cursor: 'pointer',
-            border: '1px solid rgba(16,185,129,0.45)', color: '#6ee7b7',
+            border: '1px solid rgba(16,185,129,0.45)', color: 'var(--accent)',
             background: 'rgba(16,185,129,0.10)', whiteSpace: 'nowrap',
           }}
         >▦ Stripped Incurred Triangle</button>
@@ -87,7 +87,7 @@ export function ViewToggle({ view, onSetView }) {
 export function AvgMethodToggle({ avgMethod, onSelectAvgMethod }) {
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
-      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Average</span>
+      <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Average</span>
       <div className="toggle-group">
         {['weighted', 'simple', 'last3', 'last5'].map(m => (
           <button type="button" key={m} className={`toggle-option${avgMethod === m ? ' active' : ''}`} onClick={() => onSelectAvgMethod(m)}>

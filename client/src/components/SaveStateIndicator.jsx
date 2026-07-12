@@ -70,7 +70,7 @@ export default function SaveStateIndicator({ saveState, onRetry }) {
   if (saveState.status === 'saving') {
     return (
       <div role="status" aria-live="polite"
-        style={{ ...base, background: '#1e293b', color: '#cbd5e1', borderColor: '#334155' }}>
+        style={{ ...base, background: 'var(--surface-elevated)', color: 'var(--muted)', borderColor: 'var(--stroke-soft)' }}>
         <span aria-hidden="true">● </span>Saving…
       </div>
     );

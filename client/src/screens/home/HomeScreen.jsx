@@ -121,20 +121,20 @@ function DraftRow({ item, onOpen, onAllocate, canAllocate, viewingOther }) {
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(item); }
         }}>
         <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-          <div className="draft-title" style={{ color: '#f8fafc', fontWeight: 600 }}>{item.cedantName || 'Untitled'}</div>
+          <div className="draft-title" style={{ color: 'var(--text)', fontWeight: 600 }}>{item.cedantName || 'Untitled'}</div>
           {item.isQuote && (
-            <span style={{ fontSize:9, padding:'1px 6px', borderRadius:10, background:'rgba(251,191,36,0.12)', border:'1px solid rgba(251,191,36,0.35)', color:'#fbbf24', fontWeight:700, whiteSpace:'nowrap' }}>
+            <span style={{ fontSize:9, padding:'1px 6px', borderRadius:10, background:'rgba(var(--accent-amber-rgb),0.12)', border:'1px solid rgba(var(--accent-amber-rgb),0.35)', color:'var(--accent-amber)', fontWeight:700, whiteSpace:'nowrap' }}>
               📋 QUOTE{item.quoteRef ? ` · ${item.quoteRef}` : ''}
             </span>
           )}
         </div>
-        <div className="draft-sub" style={{ color: '#cbd5e1', fontSize: 11, marginBottom: 2 }}>
+        <div className="draft-sub" style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 2 }}>
           {item.country ? `${item.country} · ` : ''}{item.uwYear ? `${item.uwYear} · ` : ''}Broker: {item.broker || '–'} · COB: {item.cob || '–'}
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:2 }}>
           <div className={`draft-meta ${statusClass(wf.key)}`}>{wf.label} · {item.treatyType || '–'} · {item.updatedAt ? formatDate(item.updatedAt) : 'New'}</div>
           {item.isRenewal && (
-            <span style={{ fontSize:9, padding:'1px 6px', borderRadius:10, background:'rgba(96,165,250,0.12)', border:'1px solid rgba(96,165,250,0.30)', color:'#60a5fa', fontWeight:700, whiteSpace:'nowrap' }}>
+            <span style={{ fontSize:9, padding:'1px 6px', borderRadius:10, background:'rgba(var(--accent-blue-rgb),0.12)', border:'1px solid rgba(var(--accent-blue-rgb),0.30)', color:'var(--accent-blue)', fontWeight:700, whiteSpace:'nowrap' }}>
               🔄 Renewal
             </span>
           )}
@@ -147,7 +147,7 @@ function DraftRow({ item, onOpen, onAllocate, canAllocate, viewingOther }) {
       </div>
       <div style={{ display:'flex', gap:6, flexShrink:0, alignItems:'center' }}>
         {viewingOther && canAllocate && (
-          <button onClick={() => onAllocate(item)} style={{ padding:'4px 10px', borderRadius:6, border:'1px solid rgba(35,209,139,0.45)', background:'rgba(35,209,139,0.10)', color:'#23d18b', fontSize:11, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
+          <button onClick={() => onAllocate(item)} style={{ padding:'4px 10px', borderRadius:6, border:'1px solid rgba(var(--accent-rgb),0.45)', background:'rgba(var(--accent-rgb),0.10)', color:'var(--accent)', fontSize:11, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
             + Allocate
           </button>
         )}
@@ -167,7 +167,7 @@ function DraftRow({ item, onOpen, onAllocate, canAllocate, viewingOther }) {
 /* ── Filter Bar ── */
 function FilterBar({ countries, cedants, countryFilter, cedantFilter, onCountryChange, onCedantChange }) {
   return (
-    <div style={{ display: 'flex', gap: 8, padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--hairline)', flexWrap: 'wrap' }}>
       <select className="form-input" style={{ flex: '1 1 140px', fontSize: 11, padding: '5px 8px', minWidth: 0 }}
         value={countryFilter} onChange={e => { onCountryChange(e.target.value); onCedantChange(''); }}>
         <option value="">All Countries</option>
@@ -207,7 +207,7 @@ function FilteredPanel({ title, badge, items, loading, emptyMsg, onOpen, badgeSt
         <div className="panel-title">{title}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {filtered.length !== items.length && (
-            <span style={{ fontSize: 10, color: '#fbbf24', marginRight: 4 }}>{filtered.length}/{items.length}</span>
+            <span style={{ fontSize: 10, color: 'var(--accent-amber)', marginRight: 4 }}>{filtered.length}/{items.length}</span>
           )}
           <div className="pill-mini" style={badgeStyle || {}}>{badge}</div>
         </div>
@@ -351,16 +351,16 @@ function RenewalConfirmModal({ candidate, busy, error, onConfirm, onCancel }) {
         <div className="renew-body">
           {error && <div className="renew-alert">{error}</div>}
           <div className="renew-field" style={{ display: 'block' }}>
-            <div style={{ fontSize: 11, color: '#cbd5e1', marginBottom: 4 }}>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>
               {candidate.country || '—'} · {candidate.uwYear || '—'}
             </div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: '#f8fafc' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
               {candidate.cedantName || 'Untitled'}
             </div>
-            <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
               {candidate.treatyType || '—'} · COB: {candidate.cob || '—'}
             </div>
-            <div style={{ fontSize: 12, color: '#fbbf24', marginTop: 6 }}>
+            <div style={{ fontSize: 12, color: 'var(--accent-amber)', marginTop: 6 }}>
               Renewal date: {renewalDate}
             </div>
           </div>
@@ -597,22 +597,22 @@ export default function HomeScreen() {
       </>} />
       <main className="workspace"><div className="container container--full">
         {viewingUser && (
-          <div style={{ padding:'8px 14px', borderRadius:10, background:'rgba(96,165,250,0.08)', border:'1px solid rgba(96,165,250,0.25)', marginBottom:12, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
-            <span style={{ fontSize:12, color:'rgba(255,255,255,0.70)' }}>
-              Viewing <strong style={{ color:'#60a5fa' }}>{viewingUser.role_name}</strong>'s work
+          <div style={{ padding:'8px 14px', borderRadius:10, background:'rgba(var(--accent-blue-rgb),0.08)', border:'1px solid rgba(var(--accent-blue-rgb),0.25)', marginBottom:12, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+            <span style={{ fontSize:12, color:'rgba(var(--text-rgb),0.70)' }}>
+              Viewing <strong style={{ color:'var(--accent-blue)' }}>{viewingUser.role_name}</strong>'s work
             </span>
-            {allocMsg && <span style={{ fontSize:12, fontWeight:700, color: allocMsg.startsWith('✓')?'#4ade80':'#f87171' }}>{allocMsg}</span>}
-            <span style={{ fontSize:10, color:'rgba(255,255,255,0.35)', marginLeft:'auto' }}>
+            {allocMsg && <span style={{ fontSize:12, fontWeight:700, color: allocMsg.startsWith('✓')?'var(--accent)':'var(--accent-rose)' }}>{allocMsg}</span>}
+            <span style={{ fontSize:10, color:'rgba(var(--text-rgb),0.45)', marginLeft:'auto' }}>
               {viewingUser.hierarchy_level >= myLevel ? '✓ You can allocate DRAFT items from this user' : '— View only (they outrank you)'}
             </span>
-            <button onClick={() => { setViewingUser(null); setAllocMsg(''); }} style={{ marginLeft:'auto', fontSize:10, color:'rgba(255,255,255,0.40)', background:'none', border:'none', cursor:'pointer', padding:'2px 6px' }}>✕ Back to my work</button>
+            <button onClick={() => { setViewingUser(null); setAllocMsg(''); }} style={{ marginLeft:'auto', fontSize:10, color:'rgba(var(--text-rgb),0.45)', background:'none', border:'none', cursor:'pointer', padding:'2px 6px' }}>✕ Back to my work</button>
           </div>
         )}
 
         <div className="crumb glass">
-          <span className="dot" style={backgroundRefreshing ? { background: '#23d18b', boxShadow: '0 0 6px #23d18b' } : {}} />
+          <span className="dot" style={backgroundRefreshing ? { background: 'var(--accent)', boxShadow: '0 0 6px var(--accent)' } : {}} />
           <span className="crumb-text">{viewingUser ? `VIEWING: ${(viewingUser.role_name || '').toUpperCase()}` : 'WORKSPACE: HOME PAGE'}</span>
-          {backgroundRefreshing && <span style={{ fontSize: 9, color: 'rgba(35,209,139,0.6)', marginLeft: 6, letterSpacing: '.06em' }}>SYNCING</span>}
+          {backgroundRefreshing && <span style={{ fontSize: 9, color: 'rgba(var(--accent-rgb),0.75)', marginLeft: 6, letterSpacing: '.06em' }}>SYNCING</span>}
         </div>
         <section className="hero glass">
           <div className="hero-top"><div className="welcome-row"><span className="welcome-pill">WELCOME</span><h1 className="welcome-title">{getUserDisplayName() || 'Underwriter'}</h1></div>

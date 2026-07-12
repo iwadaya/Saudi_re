@@ -43,7 +43,7 @@ export default function MonteCarloSection({ inputs, setInput, result, layerResul
           onChange={(e) => setInput({ useMonteCarlo: e.target.checked })}
           style={{ accentColor: COLORS.cyan, width: 16, height: 16 }}
         />
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(226,232,240,0.85)' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(var(--text-rgb),0.85)' }}>
           Run Monte Carlo
         </span>
       </label>

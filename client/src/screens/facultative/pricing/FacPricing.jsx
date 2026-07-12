@@ -39,8 +39,8 @@ function FR({ label, children, hint }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 10, alignItems: 'center', minHeight: 36 }}>
       <div>
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>{label}</div>
-        {hint && <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.30)', marginTop: 1 }}>{hint}</div>}
+        <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)' }}>{label}</div>
+        {hint && <div style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.45)', marginTop: 1 }}>{hint}</div>}
       </div>
       <div>{children}</div>
     </div>
@@ -48,7 +48,7 @@ function FR({ label, children, hint }) {
 }
 function Sec({ title, color, children }) {
   return <>
-    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: color || 'rgba(0,212,255,0.55)', marginTop: 28, marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{title}</div>
+    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: color || 'rgba(var(--accent-blue-rgb),0.75)', marginTop: 28, marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid var(--hairline)' }}>{title}</div>
     {children}
   </>;
 }
@@ -526,13 +526,13 @@ export default function FacPricing() {
         display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px',
         borderRadius: 8, cursor: 'pointer', fontSize: 12,
         background: checked ? 'rgba(168,85,247,0.08)' : 'transparent',
-        border: checked ? '1px solid rgba(168,85,247,0.30)' : '1px solid rgba(255,255,255,0.06)',
-        color: checked ? 'rgba(226,232,240,0.90)' : 'rgba(148,163,184,0.60)',
+        border: checked ? '1px solid rgba(168,85,247,0.30)' : '1px solid var(--hairline)',
+        color: checked ? 'rgba(var(--text-rgb),0.90)' : 'var(--muted)',
         transition: 'all .15s',
       }}>
         <input type="checkbox" checked={checked} onChange={() => toggleExtension(ext.id)} style={{ width: 14, height: 14, accentColor: catColor || '#a855f7' }} />
         <span style={{ flex: 1 }}>{ext.label}</span>
-        <span style={{ fontSize: 10, fontWeight: 700, color: checked ? (catColor || '#a855f7') : 'rgba(148,163,184,0.35)', fontVariantNumeric: 'tabular-nums' }}>+{ext.loadingPct}%</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: checked ? (catColor || '#a855f7') : 'rgba(var(--text-rgb),0.45)', fontVariantNumeric: 'tabular-nums' }}>+{ext.loadingPct}%</span>
       </label>
     );
   };
@@ -544,15 +544,15 @@ export default function FacPricing() {
         {readOnly && <EditLockBanner facRiskId={riskId} assignedToName={lockAssignedToName} onAllocated={refreshLock} />}
         <ReadOnlyWrap readOnly={readOnly}>
         {tsi > 0 && (
-          <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.45)', marginBottom: 8 }}>
-            Total Sum Insured: <span style={{ color: '#00d4ff', fontWeight: 700 }}>{tsi.toLocaleString('en-US')}</span>
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
+            Total Sum Insured: <span style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{tsi.toLocaleString('en-US')}</span>
           </div>
         )}
 
         <UwFactorsPanel riskId={riskId} risk={risk} onSelectionsChange={setUwSelections} />
 
         {/* ── Engine inputs ── */}
-        <Sec title="Engine Inputs" color="rgba(0,212,255,0.65)">
+        <Sec title="Engine Inputs" color="rgba(var(--accent-blue-rgb),0.85)">
           <FR label="Indemnity Period (months)" hint="Drives the BI rate multiplier (1–60)">
             <input className="fi" type="number" min={1} max={60} value={eng.indemnity_months}
                    onChange={(e) => setEngField('indemnity_months', e.target.value)} style={{ width: 100 }} />
@@ -592,7 +592,7 @@ export default function FacPricing() {
                          }}
                          placeholder="0..1" style={{ width: 100, fontSize: 12, textAlign: 'right' }} />
                   <span role="button" tabIndex={0} aria-label={`Remove cover loading ${ext.label || i + 1}`}
-                        style={{ cursor: 'pointer', color: '#f87171', fontSize: 14 }}
+                        style={{ cursor: 'pointer', color: 'var(--accent-rose)', fontSize: 14 }}
                         onClick={() => removeExtraCover(i)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); removeExtraCover(i); }
@@ -616,8 +616,8 @@ export default function FacPricing() {
                     _newLabel: '', _newPct: '',
                   }));
                   dirty.current = true;
-                }} style={{ appearance: 'none', border: '1px solid rgba(0,212,255,0.30)',
-                            background: 'rgba(0,212,255,0.08)', color: '#00d4ff', borderRadius: 6,
+                }} style={{ appearance: 'none', border: '1px solid rgba(var(--accent-blue-rgb),0.30)',
+                            background: 'rgba(var(--accent-blue-rgb),0.08)', color: 'var(--accent-blue)', borderRadius: 6,
                             padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>+ Add</button>
               </div>
             </div>
@@ -625,18 +625,18 @@ export default function FacPricing() {
         </Sec>
 
         {/* ── Engine output (read-only) ── */}
-        <Sec title="Engine Output" color="rgba(35,209,139,0.65)">
+        <Sec title="Engine Output" color="rgba(var(--accent-rgb),0.85)">
           <EngineReadout output={engineOutput} premiums={enginePremiums} totalLocSar={totalLocSar} />
         </Sec>
 
         {/* ── Extensions — filtered by selected COB categories ── */}
-        <Sec title="Extensions" color="rgba(168,85,247,0.55)">
-          <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.45)', marginBottom: 12 }}>
+        <Sec title="Extensions" color="rgba(168,85,247,0.8)">
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 12 }}>
             Extensions shown are based on classes selected on the Risk Detail page. Check applicable extensions — each adds a loading to the base rate.
           </div>
 
           {relevantExtensions.length === 0 && (
-            <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.35)', padding: '8px 0' }}>No classes selected on Risk Detail — select classes to see relevant extensions</div>
+            <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.45)', padding: '8px 0' }}>No classes selected on Risk Detail — select classes to see relevant extensions</div>
           )}
 
           {relevantExtensions.map(({ category, extensions: exts }) => {
@@ -654,7 +654,7 @@ export default function FacPricing() {
           {/* Custom extensions */}
           {customExtensions.length > 0 && (
             <div style={{ marginTop: 14, marginBottom: 8 }}>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em', color: 'rgba(251,191,36,0.60)', marginBottom: 6, textTransform: 'uppercase' }}>CUSTOM EXTENSIONS</div>
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em', color: 'rgba(var(--accent-amber-rgb),0.8)', marginBottom: 6, textTransform: 'uppercase' }}>CUSTOM EXTENSIONS</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
                 {customExtensions.map(ext => (
                   <div key={ext.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -664,7 +664,7 @@ export default function FacPricing() {
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); removeCustomExtension(ext.id); }
                       }}
-                      style={{ cursor: 'pointer', color: 'rgba(248,113,113,0.50)', fontSize: 13, padding: '0 4px' }} title="Remove">✕</span>
+                      style={{ cursor: 'pointer', color: 'rgba(var(--accent-rose-rgb),0.7)', fontSize: 13, padding: '0 4px' }} title="Remove">✕</span>
                   </div>
                 ))}
               </div>
@@ -678,8 +678,8 @@ export default function FacPricing() {
             <PctInput value={newExtLoading} onChange={v => setNewExtLoading(v)}
               placeholder="Loading %" style={{ width: 90 }} />
             <button onClick={addCustomExtension} disabled={!newExtLabel.trim() || !numOrNull(newExtLoading)} style={{
-              appearance: 'none', border: '1px solid rgba(251,191,36,0.35)', background: 'rgba(251,191,36,0.08)',
-              color: '#fbbf24', borderRadius: 8, padding: '7px 14px', fontSize: 11, fontWeight: 700,
+              appearance: 'none', border: '1px solid rgba(var(--accent-amber-rgb),0.35)', background: 'rgba(var(--accent-amber-rgb),0.08)',
+              color: 'var(--accent-amber)', borderRadius: 8, padding: '7px 14px', fontSize: 11, fontWeight: 700,
               cursor: newExtLabel.trim() && numOrNull(newExtLoading) ? 'pointer' : 'not-allowed',
               opacity: newExtLabel.trim() && numOrNull(newExtLoading) ? 1 : 0.4,
             }}>+ Add</button>
@@ -697,7 +697,7 @@ export default function FacPricing() {
           <FR label="Market Rate (‰)" hint="Average set rate for this class/region">
             <input className="fi" type="number" value={f.market_rate_per_mille} onChange={e => set('market_rate_per_mille', e.target.value)} min={0} step={0.001} style={{ width: 120 }} />
           </FR>
-          <FR label="Market Premium"><div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(226,232,240,0.80)' }}>{fmtN(f.market_premium)}</div></FR>
+          <FR label="Market Premium"><div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(var(--text-rgb),0.85)' }}>{fmtN(f.market_premium)}</div></FR>
           <FR label="Source"><input className="fi" value={f.market_source} onChange={e => set('market_source', e.target.value)} placeholder="e.g. Market benchmark 2026, Broker indication" /></FR>
         </Sec>
 
@@ -714,44 +714,44 @@ export default function FacPricing() {
           <FR label="Expected Loss Ratio %"><PctInput value={f.expected_loss_ratio} onChange={v => set('expected_loss_ratio', v)} style={{ width: 100 }} /></FR>
           <FR label="Loading %"><PctInput value={f.loading_pct} onChange={v => set('loading_pct', v)} style={{ width: 100 }} placeholder="Expense + profit" /></FR>
           <FR label="Actuarial Rate (‰)"><input className="fi" type="number" value={f.actuarial_rate_per_mille} onChange={e => set('actuarial_rate_per_mille', e.target.value)} min={0} step={0.001} style={{ width: 120 }} /></FR>
-          <FR label="Actuarial Premium"><div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(226,232,240,0.80)' }}>{fmtN(f.actuarial_premium)}</div></FR>
+          <FR label="Actuarial Premium"><div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(var(--text-rgb),0.85)' }}>{fmtN(f.actuarial_premium)}</div></FR>
           {f.actuarial_method === 'BURNING_COST' && (
             <FR label="Burning Cost Ratio"><input className="fi" type="number" value={f.burning_cost_ratio} onChange={e => set('burning_cost_ratio', e.target.value)} min={0} step={0.01} style={{ width: 100 }} /></FR>
           )}
         </Sec>
 
         {/* ── Blend ── */}
-        <Sec title="③ Blended Rate" color="rgba(251,191,36,0.55)">
+        <Sec title="③ Blended Rate" color="rgba(var(--accent-amber-rgb),0.8)">
           <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
             <FR label="Market Weight %"><PctInput value={f.market_weight_pct} onChange={v => { set('market_weight_pct', v); set('actuarial_weight_pct', String(100 - (Number(v) || 0))); }} style={{ width: 80 }} /></FR>
             <FR label="Actuarial Weight %"><PctInput value={f.actuarial_weight_pct} onChange={() => {}} readOnly style={{ width: 80, opacity: 0.6 }} /></FR>
           </div>
-          <FR label="Blended Rate (‰)"><div style={{ fontSize: 14, fontWeight: 800, color: '#fbbf24' }}>{cleanNum(f.blended_rate_per_mille) || '—'}</div></FR>
-          <FR label="Blended Premium"><div style={{ fontSize: 14, fontWeight: 800, color: '#fbbf24' }}>{fmtN(f.blended_premium)}</div></FR>
+          <FR label="Blended Rate (‰)"><div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-amber)' }}>{cleanNum(f.blended_rate_per_mille) || '—'}</div></FR>
+          <FR label="Blended Premium"><div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-amber)' }}>{fmtN(f.blended_premium)}</div></FR>
         </Sec>
 
         {/* ── Final ── */}
-        <Sec title="④ Final UW Rate" color="rgba(35,209,139,0.65)">
+        <Sec title="④ Final UW Rate" color="rgba(var(--accent-rgb),0.85)">
           <FR label="UW Adjustment %" hint="+ surcharge / - discount">
             <PctInput value={f.uw_adjustment_pct} onChange={v => set('uw_adjustment_pct', v)} style={{ width: 100 }} />
           </FR>
           <FR label="Adjustment Reason"><input className="fi" value={f.uw_adjustment_reason} onChange={e => set('uw_adjustment_reason', e.target.value)} placeholder="e.g. Poor housekeeping, NatCat exposure" /></FR>
 
           {extensionsLoadingPct > 0 && (
-            <div style={{ marginTop: 8, fontSize: 11, color: 'rgba(168,85,247,0.60)' }}>
+            <div style={{ marginTop: 8, fontSize: 11, color: 'rgba(168,85,247,0.85)' }}>
               Extensions loading applied: +{extensionsLoadingPct}% on base rate
             </div>
           )}
 
-          <div style={{ marginTop: 16, padding: 16, background: 'rgba(35,209,139,0.06)', border: '1px solid rgba(35,209,139,0.25)', borderRadius: 12 }}>
+          <div style={{ marginTop: 16, padding: 16, background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.25)', borderRadius: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(35,209,139,0.55)' }}>Final Rate (‰)</div>
-                <div style={{ fontSize: 24, fontWeight: 900, color: '#23d18b', marginTop: 4 }}>{cleanNum(f.final_rate_per_mille) || '—'}</div>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--accent-rgb),0.8)' }}>Final Rate (‰)</div>
+                <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--accent)', marginTop: 4 }}>{cleanNum(f.final_rate_per_mille) || '—'}</div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(35,209,139,0.55)' }}>Final Premium</div>
-                <div style={{ fontSize: 24, fontWeight: 900, color: '#23d18b', marginTop: 4 }}>{fmtN(f.final_premium)}</div>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--accent-rgb),0.8)' }}>Final Premium</div>
+                <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--accent)', marginTop: 4 }}>{fmtN(f.final_premium)}</div>
               </div>
             </div>
           </div>

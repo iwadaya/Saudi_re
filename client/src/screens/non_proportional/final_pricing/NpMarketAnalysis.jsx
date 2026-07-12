@@ -230,7 +230,7 @@ export default function NpMarketAnalysis({
               padding: '6px 14px', borderRadius: 999, fontSize: 11, fontWeight: 700,
               border: active ? `1px solid ${def.color}` : '1px solid rgba(148,163,184,0.20)',
               background: active ? `${def.color}12` : 'transparent',
-              color: active ? def.color : 'rgba(148,163,184,0.50)',
+              color: active ? def.color : 'var(--muted)',
               opacity: hasPts ? 1 : 0.4,
               transition: 'all .15s',
             }}>
@@ -286,8 +286,8 @@ export default function NpMarketAnalysis({
       </div>
 
       {/* ── Comparison Table by Layer ── */}
-      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(0,212,255,0.50)', marginBottom: 10 }}>Benchmark Comparison by Layer</div>
-      <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(var(--accent-blue-rgb),0.75)', marginBottom: 10 }}>Benchmark Comparison by Layer</div>
+      <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid var(--hairline)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
           <thead>
             <tr style={{ background: '#050810' }}>

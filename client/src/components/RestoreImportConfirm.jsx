@@ -15,16 +15,16 @@ export default function RestoreImportConfirm({ open, onConfirm, onCancel, busy =
         .ric-panel {
           width: min(420px, 100%);
           border-radius: 14px;
-          border: 1px solid rgba(148,163,184,0.20);
-          background: linear-gradient(180deg, rgba(15,23,42,0.96), rgba(2,6,23,0.98));
-          color: rgba(226,232,240,0.92);
+          border: 1px solid var(--stroke-soft);
+          background: var(--panel-bg-strong);
+          color: var(--text);
           padding: 22px 22px 18px;
           box-shadow: 0 24px 60px rgba(0,0,0,.45);
         }
         .ric-title { font-size: 13px; font-weight: 800; letter-spacing: .06em;
                      text-transform: uppercase; margin-bottom: 10px; }
         .ric-msg { font-size: 13px; line-height: 1.5;
-                   color: rgba(226,232,240,0.80); margin-bottom: 18px; }
+                   color: rgba(var(--text-rgb),0.80); margin-bottom: 18px; }
         .ric-actions { display: flex; gap: 8px; justify-content: flex-end; }
         .ric-btn {
           padding: 8px 16px; border-radius: 8px; cursor: pointer;
@@ -32,10 +32,10 @@ export default function RestoreImportConfirm({ open, onConfirm, onCancel, busy =
           letter-spacing: .04em; border: 1px solid transparent;
         }
         .ric-btn--ghost {
-          background: transparent; color: rgba(226,232,240,0.78);
-          border-color: rgba(148,163,184,0.25);
+          background: transparent; color: rgba(var(--text-rgb),0.78);
+          border-color: var(--stroke-soft);
         }
-        .ric-btn--ghost:hover { background: rgba(255,255,255,0.04); }
+        .ric-btn--ghost:hover { background: var(--surface-hover); }
         .ric-btn--primary {
           background: rgba(248, 113, 113, 0.90); color: #1a0a0a;
         }

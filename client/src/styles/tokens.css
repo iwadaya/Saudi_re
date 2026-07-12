@@ -36,6 +36,10 @@
   --muted-2: rgba(184,204,223,.8);
   --text-muted: var(--muted);
   --text-subtle: rgba(226,232,240,.62);
+  /* Raw RGB components of --text — use with rgba() when a screen needs
+     alpha-faded text (e.g. rgba(var(--text-rgb),.55)). Themes override this
+     so light themes get dark faded text instead of invisible white. */
+  --text-rgb: 241, 245, 249;
 
   /* Brand */
   --accent:#1fe08d;

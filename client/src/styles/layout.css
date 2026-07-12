@@ -35,8 +35,8 @@ button{ font-family:inherit; }
   width: 240px;
   min-width: 240px;
   padding: 16px 12px;
-  background: rgba(0,0,0,0.25);
-  border-right: 1px solid rgba(255,255,255,0.06);
+  background: var(--surface-muted);
+  border-right: 1px solid var(--hairline);
   overflow-y: auto;
   flex-shrink: 0;
   height: 100%;            /* fill available height */
@@ -47,8 +47,8 @@ button{ font-family:inherit; }
 /* Thin custom scrollbar for sidebar */
 .wizard-tabs::-webkit-scrollbar{ width: 4px; }
 .wizard-tabs::-webkit-scrollbar-track{ background: transparent; }
-.wizard-tabs::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.12); border-radius: 4px; }
-.wizard-tabs::-webkit-scrollbar-thumb:hover{ background: rgba(255,255,255,0.2); }
+.wizard-tabs::-webkit-scrollbar-thumb{ background: rgba(var(--text-rgb),0.12); border-radius: 4px; }
+.wizard-tabs::-webkit-scrollbar-thumb:hover{ background: rgba(var(--text-rgb),0.2); }
 
 .wizard-tab-group{
   margin-bottom: 16px;
@@ -59,7 +59,7 @@ button{ font-family:inherit; }
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  color: rgba(255,255,255,0.55);
+  color: rgba(var(--text-rgb),.55);
   padding: 6px 10px 4px;
   margin-bottom: 2px;
 }
@@ -73,15 +73,15 @@ button{ font-family:inherit; }
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: rgba(255,255,255,0.78);
+  color: rgba(var(--text-rgb),.78);
   font-size: 13px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 
 .wizard-tab:hover{
-  background: rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.9);
+  background: var(--surface-hover);
+  color: rgba(var(--text-rgb),.9);
 }
 
 .wizard-tab--active{
@@ -145,7 +145,7 @@ button{ font-family:inherit; }
     min-width: unset;
     max-height: 50vh;
     border-right: none;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid var(--hairline);
   }
 }
 
@@ -246,11 +246,11 @@ button{ font-family:inherit; }
 .screen-modal{
   width: min(1280px, 96vw);
   max-height: 92vh;
-  background: linear-gradient(180deg, #0b1220, #070c16);
+  background: var(--panel-bg-strong);
   border-radius: 16px;
   box-shadow:
     0 20px 60px rgba(0, 0, 0, 0.6),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    inset 0 0 0 1px var(--hairline);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -258,7 +258,7 @@ button{ font-family:inherit; }
 
 .screen-modal-header{
   padding: 12px 16px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid var(--hairline);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -272,16 +272,16 @@ button{ font-family:inherit; }
 
 .screen-modal-close{
   appearance: none;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.04);
-  color: rgba(255,255,255,0.88);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-hover);
+  color: rgba(var(--text-rgb),.88);
   border-radius: 10px;
   padding: 6px 10px;
   cursor: pointer;
 }
 
 .screen-modal-close:hover{
-  background: rgba(255,255,255,0.08);
+  background: var(--control-hover);
 }
 
 .screen-modal-body{
@@ -298,11 +298,11 @@ button{ font-family:inherit; }
   width: min(900px, 92vw);
   max-height: 85vh;
 
-  background: linear-gradient(180deg, #0b1220, #070c16);
+  background: var(--panel-bg-strong);
   border-radius: 16px;
   box-shadow:
     0 20px 60px rgba(0, 0, 0, 0.6),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    inset 0 0 0 1px var(--hairline);
 
   display: flex;
   flex-direction: column;
@@ -313,7 +313,7 @@ button{ font-family:inherit; }
   padding: 16px 20px;
   font-weight: 600;
   letter-spacing: 0.3px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .slide-modal-body{
@@ -324,7 +324,7 @@ button{ font-family:inherit; }
 
 .slide-modal-footer{
   padding: 14px 20px;
-  border-top: 1px solid rgba(255,255,255,0.08);
+  border-top: 1px solid var(--hairline);
   display: flex;
   justify-content: space-between;
 }
@@ -388,12 +388,12 @@ button{ font-family:inherit; }
 .slide-modal #cancelSlide{
   appearance:none;
   cursor:pointer;
-  color:rgba(255,255,255,.92);
+  color:rgba(var(--text-rgb),.92);
   font-weight:650;
   padding:10px 16px;
   border-radius:12px;
-  background: rgba(255,255,255,.06);
-  border: 1px solid rgba(255,255,255,.14);
+  background: var(--surface-hover);
+  border: 1px solid var(--hairline-strong);
   box-shadow:
     0 10px 22px rgba(0,0,0,.35),
     0 1px 0 rgba(255,255,255,.08) inset;
@@ -402,8 +402,8 @@ button{ font-family:inherit; }
 
 .slide-modal .btn.ghost:hover,
 .slide-modal #cancelSlide:hover{
-  background: rgba(255,255,255,.09);
-  border-color: rgba(255,255,255,.20);
+  background: var(--control-hover);
+  border-color: var(--stroke);
   transform: translateY(-1px);
 }
 
@@ -453,9 +453,9 @@ button{ font-family:inherit; }
   width:34px;
   height:30px;
   border-radius:10px;
-  border:1px solid rgba(255,255,255,.14);
-  background: rgba(0,0,0,.28);
-  color: rgba(255,255,255,.85);
+  border:1px solid var(--hairline-strong);
+  background: var(--control-bg);
+  color: rgba(var(--text-rgb),.85);
   cursor:pointer;
   box-shadow: 0 8px 18px rgba(0,0,0,.35);
   transition: transform .12s ease, border-color .12s ease, background .12s ease, box-shadow .12s ease;
