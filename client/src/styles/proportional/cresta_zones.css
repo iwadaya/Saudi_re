@@ -6,11 +6,11 @@
 /* Hero */
 .CRESTA_AGGREGATES_PAGE .ca-hero{ margin-bottom: 10px; }
 .CRESTA_AGGREGATES_PAGE .ca-title{
-  font-size: 16px; font-weight: 900; color: rgba(226,232,240,.92);
+  font-size: 16px; font-weight: 900; color: rgba(var(--text-rgb),.92);
   letter-spacing: .02em;
 }
 .CRESTA_AGGREGATES_PAGE .ca-sub{
-  font-size: 12px; color: rgba(148,163,184,.65); margin-top: 4px;
+  font-size: 12px; color: var(--muted); margin-top: 4px;
 }
 
 /* Saved country pills */
@@ -19,10 +19,10 @@
 }
 .CRESTA_AGGREGATES_PAGE .ca-savedlabel{
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .10em;
-  color: rgba(148,163,184,.65);
+  color: var(--muted);
 }
 .CRESTA_AGGREGATES_PAGE .ca-pills-area{ display: flex; gap: 6px; flex-wrap: wrap; }
-.CRESTA_AGGREGATES_PAGE .ca-pill-none{ font-size: 11px; color: rgba(148,163,184,.40); font-style: italic; }
+.CRESTA_AGGREGATES_PAGE .ca-pill-none{ font-size: 11px; color: rgba(var(--text-rgb),.45); font-style: italic; }
 .CRESTA_AGGREGATES_PAGE .ca-saved-pill{
   height: 26px; padding: 0 12px; border-radius: 999px;
   font-size: 11px; font-weight: 700; cursor: pointer;
@@ -51,12 +51,12 @@
 }
 .CRESTA_AGGREGATES_PAGE .ca-flabel{
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
-  color: rgba(148,163,184,.70);
+  color: var(--muted);
 }
 .CRESTA_AGGREGATES_PAGE .ca-select{
   height: 30px; padding: 0 10px; border-radius: 8px;
   border: 1px solid rgba(var(--accent-rgb),.30) !important;
-  background: rgba(8,16,40,.30) !important; color: rgba(226,232,240,.90);
+  background: var(--control-bg) !important; color: rgba(var(--text-rgb),.90);
   font-size: 12px; font-weight: 500; appearance: none; -webkit-appearance: none;
   min-width: 160px;
 }
@@ -65,14 +65,14 @@
 /* Treaty type toggle */
 .CRESTA_AGGREGATES_PAGE .ca-toggle-group{
   display: flex; gap: 2px; padding: 2px; border-radius: 8px;
-  border: 1px solid rgba(148,163,184,.15); background: rgba(8,16,40,.20);
+  border: 1px solid var(--stroke-soft); background: var(--control-bg);
 }
 .CRESTA_AGGREGATES_PAGE .ca-toggle-btn{
   height: 26px; padding: 0 10px; border: none; border-radius: 6px;
   font-size: 11px; font-weight: 700; cursor: pointer;
-  background: transparent; color: rgba(148,163,184,.60); transition: all .12s ease;
+  background: transparent; color: var(--muted); transition: all .12s ease;
 }
-.CRESTA_AGGREGATES_PAGE .ca-toggle-btn:hover{ color: rgba(226,232,240,.80); }
+.CRESTA_AGGREGATES_PAGE .ca-toggle-btn:hover{ color: rgba(var(--text-rgb),.80); }
 .CRESTA_AGGREGATES_PAGE .ca-toggle-btn.active{
   background: rgba(var(--accent-rgb),.12); color: rgba(var(--accent-rgb),.95);
   border: 1px solid rgba(var(--accent-rgb),.30);
@@ -81,15 +81,15 @@
 /* Buttons */
 .CRESTA_AGGREGATES_PAGE .ca-btn{
   height: 28px; padding: 0 12px; border-radius: 6px; font-size: 11px; font-weight: 700;
-  cursor: pointer; border: 1px solid rgba(148,163,184,.22); background: rgba(8,16,40,.20);
-  color: rgba(226,232,240,.80); transition: all .12s ease; white-space: nowrap;
+  cursor: pointer; border: 1px solid var(--stroke-soft); background: var(--control-bg);
+  color: rgba(var(--text-rgb),.80); transition: all .12s ease; white-space: nowrap;
 }
-.CRESTA_AGGREGATES_PAGE .ca-btn:hover{ border-color: rgba(148,163,184,.40); background: rgba(148,163,184,.08); }
+.CRESTA_AGGREGATES_PAGE .ca-btn:hover{ border-color: var(--stroke); background: var(--control-hover); }
 .CRESTA_AGGREGATES_PAGE .ca-btn--ghost{ border-color: rgba(239,68,68,.25); color: rgba(239,68,68,.70); }
 .CRESTA_AGGREGATES_PAGE .ca-btn--ghost:hover{ border-color: rgba(239,68,68,.45); background: rgba(239,68,68,.06); }
 .CRESTA_AGGREGATES_PAGE .ca-btn--save{ border-color: rgba(var(--accent-rgb),.30); color: rgba(var(--accent-rgb),.90); }
 .CRESTA_AGGREGATES_PAGE .ca-btn--save:hover{ border-color: rgba(var(--accent-rgb),.55); background: rgba(var(--accent-rgb),.06); }
-.CRESTA_AGGREGATES_PAGE .ca-btn--dirty{ border-color: rgba(251,146,60,.50); color: rgba(251,146,60,.95); animation: ca-pulse 1.5s infinite; }
+.CRESTA_AGGREGATES_PAGE .ca-btn--dirty{ border-color: rgba(251,146,60,.50); color: var(--accent-amber); animation: ca-pulse 1.5s infinite; }
 @keyframes ca-pulse{ 0%,100%{box-shadow:none;} 50%{box-shadow:0 0 0 3px rgba(251,146,60,.10);} }
 .CRESTA_AGGREGATES_PAGE .ca-btn[disabled]{ opacity:.4; cursor:not-allowed; }
 
@@ -102,15 +102,15 @@
   display: flex; gap: 12px; margin-bottom: 10px; flex-wrap: wrap;
 }
 .CRESTA_AGGREGATES_PAGE .ca-info-tag{
-  font-size: 11px; color: rgba(148,163,184,.60); padding: 3px 10px;
-  border-radius: 6px; border: 1px solid rgba(148,163,184,.10); background: rgba(8,16,40,.15);
+  font-size: 11px; color: var(--muted); padding: 3px 10px;
+  border-radius: 6px; border: 1px solid var(--hairline); background: var(--control-bg);
 }
-.CRESTA_AGGREGATES_PAGE .ca-info-tag strong{ color: rgba(226,232,240,.85); }
+.CRESTA_AGGREGATES_PAGE .ca-info-tag strong{ color: rgba(var(--text-rgb),.85); }
 
 /* Table */
 .CRESTA_AGGREGATES_PAGE .ca-table-wrap{
   overflow-x: auto; border-radius: 10px;
-  border: 1px solid rgba(148,163,184,.12); background: rgba(8,16,40,.15);
+  border: 1px solid var(--stroke-soft); background: var(--surface-muted);
 }
 .CRESTA_AGGREGATES_PAGE .ca-table{
   width: 100%; border-collapse: separate; border-spacing: 3px;
@@ -124,24 +124,24 @@
 .CRESTA_AGGREGATES_PAGE .ca-td--id{ width: 80px; }
 .CRESTA_AGGREGATES_PAGE .ca-td--name{ min-width: 160px; }
 .CRESTA_AGGREGATES_PAGE .ca-td--total{
-  text-align: center; font-size: 12px; font-weight: 700; color: rgba(226,232,240,.90);
+  text-align: center; font-size: 12px; font-weight: 700; color: rgba(var(--text-rgb),.90);
   font-variant-numeric: tabular-nums; padding: 4px 10px;
 }
 
 .CRESTA_AGGREGATES_PAGE .ca-inp{
   width: 100%; height: 26px; padding: 0 8px;
   border: 1px solid rgba(var(--accent-rgb),.15); border-radius: 4px;
-  background: rgba(var(--accent-rgb),.03); color: rgba(226,232,240,.90);
+  background: rgba(var(--accent-rgb),.03); color: rgba(var(--text-rgb),.90);
   font-size: 12px; font-family: inherit;
   box-shadow: none !important; appearance: none; -webkit-appearance: none;
   transition: border-color .12s ease, background .12s ease;
 }
 .CRESTA_AGGREGATES_PAGE .ca-inp:focus{ border-color: rgba(var(--accent-rgb),.45); background: rgba(var(--accent-rgb),.06); outline: none; }
-.CRESTA_AGGREGATES_PAGE .ca-inp::placeholder{ color: rgba(148,163,184,.25); }
+.CRESTA_AGGREGATES_PAGE .ca-inp::placeholder{ color: rgba(var(--text-rgb),.35); }
 .CRESTA_AGGREGATES_PAGE .ca-inp--num{ text-align: center; font-variant-numeric: tabular-nums; }
 .CRESTA_AGGREGATES_PAGE .ca-inp--ro{
   border-color: rgba(148,163,184,.08); background: rgba(148,163,184,.03);
-  color: rgba(148,163,184,.70); cursor: default;
+  color: var(--muted); cursor: default;
 }
 .CRESTA_AGGREGATES_PAGE .ca-table tbody tr:hover .ca-inp{ border-color: rgba(var(--accent-rgb),.28); background: rgba(var(--accent-rgb),.04); }
 .CRESTA_AGGREGATES_PAGE .ca-table tbody tr:hover .ca-inp--ro{ border-color: rgba(148,163,184,.15); background: rgba(148,163,184,.04); }
@@ -160,28 +160,28 @@
 }
 .CRESTA_AGGREGATES_PAGE .ca-modal{
   width: 520px; max-width: 92vw; border-radius: 16px;
-  border: 1px solid rgba(var(--accent-rgb),.18); background: rgba(15,23,42,.96);
+  border: 1px solid rgba(var(--accent-rgb),.18); background: var(--surface-elevated);
   box-shadow: 0 30px 60px rgba(0,0,0,.50); overflow: hidden;
 }
 .CRESTA_AGGREGATES_PAGE .ca-modal-head{
   display: flex; justify-content: space-between; align-items: center;
-  padding: 14px 18px; border-bottom: 1px solid rgba(var(--accent-rgb),.12); background: rgba(8,16,40,.40);
+  padding: 14px 18px; border-bottom: 1px solid rgba(var(--accent-rgb),.12); background: var(--surface-muted);
 }
 .CRESTA_AGGREGATES_PAGE .ca-modal-title{
-  font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; color: rgba(226,232,240,.92);
+  font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; color: rgba(var(--text-rgb),.92);
 }
 .CRESTA_AGGREGATES_PAGE .ca-modal-x{
-  background: none; border: 1px solid rgba(148,163,184,.18); border-radius: 999px;
-  padding: 4px 10px; color: rgba(148,163,184,.80); cursor: pointer; font-size: 14px;
+  background: none; border: 1px solid var(--stroke-soft); border-radius: 999px;
+  padding: 4px 10px; color: var(--muted); cursor: pointer; font-size: 14px;
 }
-.CRESTA_AGGREGATES_PAGE .ca-modal-x:hover{ color: #fff; border-color: rgba(148,163,184,.40); }
+.CRESTA_AGGREGATES_PAGE .ca-modal-x:hover{ color: var(--text); border-color: var(--stroke); }
 .CRESTA_AGGREGATES_PAGE .ca-modal-body{ padding: 18px; }
 .CRESTA_AGGREGATES_PAGE .ca-modal-sub{
-  font-size: 12px; color: rgba(148,163,184,.70); margin-bottom: 16px; line-height: 1.4;
+  font-size: 12px; color: var(--muted); margin-bottom: 16px; line-height: 1.4;
 }
 .CRESTA_AGGREGATES_PAGE .ca-modal-foot{
   display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px;
-  border-top: 1px solid rgba(148,163,184,.10);
+  border-top: 1px solid var(--hairline);
 }
 
 /* Distribution grid */
@@ -190,7 +190,7 @@
   display: grid; grid-template-columns: 180px 90px 1fr; gap: 10px; align-items: center;
 }
 .CRESTA_AGGREGATES_PAGE .ca-dist-label{
-  font-size: 12px; font-weight: 600; color: rgba(226,232,240,.85);
+  font-size: 12px; font-weight: 600; color: rgba(var(--text-rgb),.85);
 }
 .CRESTA_AGGREGATES_PAGE .ca-dist-inp-wrap{
   display: flex; align-items: center; gap: 4px;
@@ -198,7 +198,7 @@
 .CRESTA_AGGREGATES_PAGE .ca-dist-inp{
   width: 64px; height: 28px; padding: 0 8px; border-radius: 6px; text-align: center;
   border: 1px solid rgba(var(--accent-rgb),.25) !important;
-  background: rgba(8,16,40,.25) !important; color: rgba(226,232,240,.90);
+  background: var(--control-bg) !important; color: rgba(var(--text-rgb),.90);
   font-size: 12px; box-shadow: none !important;
 }
 .CRESTA_AGGREGATES_PAGE .ca-dist-inp:focus{ border-color: rgba(var(--accent-rgb),.50) !important; outline: none; }
@@ -210,10 +210,10 @@
 }
 .CRESTA_AGGREGATES_PAGE .ca-dist-total{
   margin-top: 12px; font-size: 12px; padding: 8px 12px; border-radius: 8px;
-  border: 1px solid rgba(148,163,184,.15); background: rgba(8,16,40,.20);
+  border: 1px solid var(--stroke-soft); background: var(--control-bg);
 }
 .CRESTA_AGGREGATES_PAGE .ca-dist-total--ok{ color: rgba(var(--accent-rgb),.90); border-color: rgba(var(--accent-rgb),.25); }
-.CRESTA_AGGREGATES_PAGE .ca-dist-total--err{ color: rgba(251,146,60,.90); border-color: rgba(251,146,60,.25); }
+.CRESTA_AGGREGATES_PAGE .ca-dist-total--err{ color: var(--accent-amber); border-color: rgba(251,146,60,.25); }
 
 /* ═══ COB TABS ═══ */
 .ca-cob-tabs {
@@ -224,7 +224,7 @@
 }
 .ca-cob-tabs-label {
   font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
-  color: rgba(148,163,184,.7); font-weight: 800;
+  color: var(--muted); font-weight: 800;
 }
 .ca-cob-tabs-row {
   display: flex; gap: 6px; flex-wrap: wrap;
@@ -232,16 +232,16 @@
 .ca-cob-tab {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 7px 14px; border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.04);
-  color: rgba(255,255,255,.7);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-hover);
+  color: rgba(var(--text-rgb),.7);
   font-size: 12px; font-weight: 700;
   cursor: pointer; transition: all .15s;
   font-family: inherit; white-space: nowrap;
 }
 .ca-cob-tab:hover:not(:disabled) {
-  border-color: rgba(255,255,255,.25);
-  background: rgba(255,255,255,.08);
+  border-color: var(--stroke);
+  background: var(--control-hover);
 }
 .ca-cob-tab.active {
   font-weight: 900;
@@ -265,7 +265,7 @@
   background: rgba(251,191,36,.08);
   border: 1px solid rgba(251,191,36,.25);
   border-radius: 10px;
-  color: rgba(251,191,36,.9);
+  color: var(--accent-amber);
   font-size: 13px; font-weight: 600;
   margin-bottom: 12px;
 }

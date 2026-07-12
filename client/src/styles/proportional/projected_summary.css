@@ -43,8 +43,8 @@
 .PROJECTED_SUMMARY_PAGE .ps-card {
   border-radius: 16px;
   padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(20, 24, 28, 0.55);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-2);
   backdrop-filter: blur(10px);
 }
 
@@ -118,8 +118,8 @@
   margin-top: 8px;
   border-radius: 14px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(10, 12, 14, 0.55);
+  border: 1px solid var(--hairline);
+  background: var(--surface-muted);
 }
 
 /* Chart surface */
@@ -131,8 +131,8 @@
   align-items: flex-end;
 
   background-image:
-    linear-gradient(to top, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
-    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    linear-gradient(to top, rgba(var(--text-rgb), 0.06) 1px, transparent 1px),
+    linear-gradient(to right, rgba(var(--text-rgb), 0.04) 1px, transparent 1px);
   background-size: 100% 42px, 42px 100%;
 }
 
@@ -185,7 +185,7 @@
   grid-auto-columns: 1fr;
   gap: 0;
   padding: 8px 10px 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--hairline);
 }
 
 .PROJECTED_SUMMARY_PAGE .ps-x-tick {
@@ -212,8 +212,8 @@
 .PROJECTED_SUMMARY_PAGE .ps-table-wrap {
   overflow: auto;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(10, 12, 14, 0.4);
+  border: 1px solid var(--hairline);
+  background: var(--surface-muted);
 }
 
 .PROJECTED_SUMMARY_PAGE .ps-table {
@@ -225,19 +225,19 @@
 .PROJECTED_SUMMARY_PAGE .ps-table thead th {
   position: sticky;
   top: 0;
-  background: rgba(12, 14, 16, 0.9);
+  background: var(--table-head-bg);
   backdrop-filter: blur(8px);
   font-size: 11px;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   opacity: 0.9;
   padding: 10px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .PROJECTED_SUMMARY_PAGE .ps-table td {
   padding: 10px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--hairline);
   font-size: 12px;
 }
 
@@ -254,8 +254,8 @@
 
 .PROJECTED_SUMMARY_PAGE .ps-total td {
   font-weight: 800;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.03);
+  border-top: 1px solid var(--hairline-strong);
+  background: var(--surface-hover);
 }
 
 /* =========================================================
@@ -315,9 +315,9 @@
   align-items: center;
   justify-content: center;
 
-  background: rgba(8,16,40,.22);
-  border: 1px solid rgba(148,163,184,.18);
-  color: rgba(226,232,240,.88);
+  background: var(--control-bg);
+  border: 1px solid var(--stroke-soft);
+  color: rgba(var(--text-rgb),.88);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -426,7 +426,7 @@
   justify-content: center;       /* ✅ center horizontally */
   text-align: center;            /* ✅ center text */
 
-  background: rgba(8,16,40,.22);
+  background: var(--control-bg);
   border: 1px solid rgba(var(--accent-rgb),.22);   /* faint green */
 
   /* faint glossy edge like dev triangles */
@@ -435,7 +435,7 @@
     0 0 0 1px rgba(var(--accent-rgb),.10),
     0 0 6px rgba(var(--accent-rgb),.10);
 
-  color: rgba(226,232,240,.88);
+  color: rgba(var(--text-rgb),.88);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -468,8 +468,8 @@
 
 .PROJECTED_SUMMARY_PAGE .sheet-panel-inner{
   /* bluish depth */
-  background: rgba(2, 6, 23, .22);
-  border: 1px solid rgba(148,163,184,.10);
+  background: var(--surface-muted);
+  border: 1px solid var(--hairline);
   border-radius: 18px;
 }
 
@@ -484,7 +484,7 @@
   position: relative;
   border-radius: 18px;
   padding: 10px;
-  background: rgba(2, 6, 23, .18);
+  background: var(--surface-muted);
 
   /* subtle grid lines */
   background-image:
@@ -492,21 +492,21 @@
     linear-gradient(to right, rgba(148,163,184,.06) 1px, transparent 1px);
   background-size: 100% 44px, 44px 100%;
 
-  border: 1px solid rgba(148,163,184,.10);
+  border: 1px solid var(--hairline);
   box-shadow: 0 14px 34px rgba(0,0,0,.18);
 }
 
 /* ensure cards float cleanly on top */
 .PROJECTED_SUMMARY_PAGE .ps-card{
-  background: rgba(8,16,40,.22); /* more “blue glass” */
-  border: 1px solid rgba(148,163,184,.12);
+  background: var(--surface-2); /* more “blue glass” */
+  border: 1px solid var(--stroke-soft);
   box-shadow: 0 12px 30px rgba(0,0,0,.18);
 }
 
 /* charts also match the bluish surface */
 .PROJECTED_SUMMARY_PAGE .ps-chart-shell{
-  border: 1px solid rgba(148,163,184,.12);
-  background: rgba(8,16,40,.22);
+  border: 1px solid var(--stroke-soft);
+  background: var(--surface-muted);
 }
 
 /* chart surface uses the same grid style but a touch finer */
@@ -526,7 +526,7 @@
     linear-gradient(
       to bottom,
       rgba(var(--accent-rgb),.10),
-      rgba(8,16,40,.26)
+      var(--control-bg)
     );
 
   border: 1px solid rgba(var(--accent-rgb),.22);
@@ -543,7 +543,7 @@
     linear-gradient(
       to bottom,
       rgba(var(--accent-rgb),.14),
-      rgba(8,16,40,.28)
+      var(--control-bg)
     );
 
   border-color: rgba(var(--accent-rgb),.30);
@@ -563,7 +563,7 @@
     linear-gradient(
       to bottom,
       rgba(239,68,68,.14),
-      rgba(8,16,40,.28)
+      var(--control-bg)
     );
 
   box-shadow:
@@ -583,20 +583,20 @@
 
 /* headers: compact, flat */
 .PROJECTED_SUMMARY_PAGE .ps-table th{
-  background: rgba(8,16,40,.55);
-  border: 1px solid rgba(148,163,184,.22);
+  background: var(--table-head-bg);
+  border: 1px solid var(--stroke-soft);
   padding: 8px 10px;
   font-size: 11px;
   font-weight: 500;
   letter-spacing: .10em;
   text-transform: uppercase;
-  color: rgba(226,232,240,.70);
+  color: rgba(var(--text-rgb),.70);
   text-align: center;
 }
 
 /* cells: remove pill look */
 .PROJECTED_SUMMARY_PAGE .ps-table td{
-  border: 1px solid rgba(148,163,184,.18);
+  border: 1px solid var(--stroke-soft);
   padding: 0; /* let inner cell control padding */
   background: transparent;
 }
@@ -606,7 +606,7 @@
   border-radius: 0 !important;     /* ✅ square */
   box-shadow: none !important;     /* ✅ no glow */
   border: none !important;         /* borders live on td now */
-  background: rgba(8,16,40,.18);    /* subtle flat fill */
+  background: var(--control-bg);    /* subtle flat fill */
   height: 36px;                    /* consistent row height */
   padding: 0 12px;
 
@@ -614,7 +614,7 @@
   align-items: center;
   justify-content: center;         /* ✅ centered like Excel */
 
-  color: rgba(226,232,240,.88);
+  color: rgba(var(--text-rgb),.88);
   font-size: 12px;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
@@ -639,7 +639,7 @@
 
 /* total row: subtle emphasis without “pill” */
 .PROJECTED_SUMMARY_PAGE .ps-total td .ps-cell{
-  background: rgba(8,16,40,.28);
+  background: var(--surface-muted);
 }
 /* =========================================================
    PROJECTED SUMMARY — Centered cells, NO green fill
@@ -656,8 +656,8 @@
   text-align: center !important;
 
   /* remove green / colored fills */
-  background: rgba(8,16,40,.18) !important;
-  color: rgba(226,232,240,.90);
+  background: var(--control-bg) !important;
+  color: rgba(var(--text-rgb),.90);
 }
 
 /* Keep grid crisp and neutral */
@@ -667,7 +667,7 @@
 
 /* Total row: slightly stronger neutral (not green) */
 .PROJECTED_SUMMARY_PAGE .ps-total td .ps-cell{
-  background: rgba(8,16,40,.28) !important;
+  background: var(--surface-muted) !important;
 }
 
 /* Hot LR cells stay red and centered */
@@ -688,8 +688,8 @@
 
 /* Neutral cell background (keep clean) */
 .PROJECTED_SUMMARY_PAGE .ps-cell{
-  background: rgba(8,16,40,.18) !important;
-  color: rgba(226,232,240,.92);
+  background: var(--control-bg) !important;
+  color: rgba(var(--text-rgb),.92);
   transition: background .15s ease, box-shadow .15s ease;
 }
 

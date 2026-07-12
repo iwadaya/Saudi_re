@@ -83,19 +83,19 @@ function UltimateSummaryTable({ ayRows, ldfs, tailFactor }) {
                 <td className="df-c"><div className="df-val">{r.count}</div></td>
                 <td className="df-c"><div className="df-val">{fmtN(r.reported)}</div></td>
                 <td className="df-c"><div className="df-val">{fmt4(r.cdf)}</div></td>
-                <td className="df-c"><div className="df-val" style={{ color: r.ibnr > 0 ? '#f87171' : 'rgba(226,232,240,0.7)' }}>{fmtN(r.ibnr)}</div></td>
+                <td className="df-c"><div className="df-val" style={{ color: r.ibnr > 0 ? 'var(--accent-rose)' : 'rgba(var(--text-rgb),0.7)' }}>{fmtN(r.ibnr)}</div></td>
                 <td className="df-c"><div className="df-val" style={{ fontWeight: 700 }}>{fmtN(r.ultimate)}</div></td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr style={{ borderTop: '2px solid rgba(34,197,94,0.25)' }}>
-              <td className="df-r df-r--sticky" style={{ color: '#4ade80' }}>Total</td>
+              <td className="df-r df-r--sticky" style={{ color: 'var(--accent)' }}>Total</td>
               <td className="df-c"><div className="df-val">—</div></td>
-              <td className="df-c"><div className="df-val" style={{ color: '#4ade80' }}>{fmtN(totReported)}</div></td>
+              <td className="df-c"><div className="df-val" style={{ color: 'var(--accent)' }}>{fmtN(totReported)}</div></td>
               <td className="df-c"><div className="df-val">—</div></td>
-              <td className="df-c"><div className="df-val" style={{ color: '#f87171' }}>{fmtN(totIbnr)}</div></td>
-              <td className="df-c"><div className="df-val" style={{ color: '#4ade80', fontWeight: 700 }}>{fmtN(totUltimate)}</div></td>
+              <td className="df-c"><div className="df-val" style={{ color: 'var(--accent-rose)' }}>{fmtN(totIbnr)}</div></td>
+              <td className="df-c"><div className="df-val" style={{ color: 'var(--accent)', fontWeight: 700 }}>{fmtN(totUltimate)}</div></td>
             </tr>
           </tfoot>
         </table>
@@ -311,7 +311,7 @@ export default function NpLossDevFactors({ routeKey, title, headerPill, lossType
                   type="number" step="0.01" min="1"
                   value={tailFactor}
                   onChange={e => { setTailFactor(e.target.value); setDirty(true); }}
-                  style={{ width: 72, textAlign: 'center', background: 'rgba(8,16,40,0.4)', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 6, color: 'rgba(226,232,240,0.9)', fontSize: 12, padding: '2px 6px' }}
+                  style={{ width: 72, textAlign: 'center', background: 'var(--control-bg)', border: '1px solid var(--stroke-soft)', borderRadius: 6, color: 'var(--text)', fontSize: 12, padding: '2px 6px' }}
                 />
               </div>
             </div>
@@ -320,7 +320,7 @@ export default function NpLossDevFactors({ routeKey, title, headerPill, lossType
               {saveMsg && (
                 <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6,
                   background: saveMsg.type === 'ok' ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)',
-                  color: saveMsg.type === 'ok' ? '#4ade80' : '#f87171',
+                  color: saveMsg.type === 'ok' ? 'var(--accent)' : 'var(--accent-rose)',
                   border: `1px solid ${saveMsg.type === 'ok' ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)'}` }}>
                   {saveMsg.text}
                 </span>
@@ -358,11 +358,11 @@ export default function NpLossDevFactors({ routeKey, title, headerPill, lossType
                   <div className="df-section-sub">
                     Enter LDFs to develop {lossType === 'cat' ? 'cat' : 'large'} losses to ultimate.
                     <span style={{ marginLeft: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Dev periods:</span>
+                      <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.5)' }}>Dev periods:</span>
                       <input
                         type="number" min={1} max={15} value={manualLdfCount}
                         onChange={e => { setManualLdfCount(Math.max(1, Math.min(15, Number(e.target.value) || 1))); setDirty(true); }}
-                        style={{ width: 52, textAlign: 'center', background: 'rgba(8,16,40,0.4)', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 6, color: 'rgba(226,232,240,0.9)', fontSize: 12, padding: '2px 4px' }}
+                        style={{ width: 52, textAlign: 'center', background: 'var(--control-bg)', border: '1px solid var(--stroke-soft)', borderRadius: 6, color: 'var(--text)', fontSize: 12, padding: '2px 4px' }}
                       />
                     </span>
                   </div>
@@ -393,13 +393,13 @@ export default function NpLossDevFactors({ routeKey, title, headerPill, lossType
                         </td>
                       </tr>
                       <tr>
-                        <td className="df-r df-r--sticky" style={{ color: 'rgba(147,197,253,0.9)' }}>CDF</td>
+                        <td className="df-r df-r--sticky" style={{ color: 'var(--accent-blue)' }}>CDF</td>
                         {computedCdfs.map((v, i) => (
                           <td key={i} className="df-c">
-                            <div className="df-val" style={{ color: 'rgba(147,197,253,0.9)' }}>{fmt4(v)}</div>
+                            <div className="df-val" style={{ color: 'var(--accent-blue)' }}>{fmt4(v)}</div>
                           </td>
                         ))}
-                        <td className="df-c"><div className="df-val" style={{ color: 'rgba(147,197,253,0.9)' }}>1.0000</div></td>
+                        <td className="df-c"><div className="df-val" style={{ color: 'var(--accent-blue)' }}>1.0000</div></td>
                       </tr>
                     </tbody>
                   </table>

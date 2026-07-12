@@ -76,8 +76,8 @@ function CobCell({ value, cobOptions, onChange, onPaste, dataRow, dataCol }) {
           display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer',
           padding: '4px 6px', borderRadius: 4, fontSize: 12, minHeight: 28,
           background: isUnknown ? 'rgba(251,191,36,0.12)' : 'transparent',
-          border: isUnknown ? '1px solid rgba(251,191,36,0.4)' : '1px solid rgba(255,255,255,0.1)',
-          color: isUnknown ? '#fbbf24' : value ? '#fff' : 'rgba(255,255,255,0.3)',
+          border: isUnknown ? '1px solid rgba(251,191,36,0.4)' : '1px solid var(--hairline)',
+          color: isUnknown ? 'var(--accent-amber)' : value ? 'var(--text)' : 'rgba(var(--text-rgb),.4)',
         }}
         title={isUnknown ? `"${value}" is not in the treaty's class of business list` : ''}
         onPaste={e => { if (onPaste) { e.target.dataset.row = dataRow; e.target.dataset.col = dataCol; onPaste(e); } }}
@@ -92,11 +92,11 @@ function CobCell({ value, cobOptions, onChange, onPaste, dataRow, dataCol }) {
         <div style={{
           position: 'absolute', top: '100%', left: 0, zIndex: 999,
           minWidth: 200, maxHeight: 220, overflowY: 'auto',
-          background: '#0f1a2e', border: '1px solid rgba(255,255,255,0.15)',
+          background: 'var(--surface-elevated)', border: '1px solid var(--hairline-strong)',
           borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
         }}>
           {cobOptions.length === 0 ? (
-            <div style={{ padding: '8px 12px', fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+            <div style={{ padding: '8px 12px', fontSize: 11, color: 'rgba(var(--text-rgb),.5)' }}>
               No classes on treaty — add in Treaty Detail
             </div>
           ) : (
@@ -106,7 +106,7 @@ function CobCell({ value, cobOptions, onChange, onPaste, dataRow, dataCol }) {
                 tabIndex={0}
                 onClick={() => { onChange(''); setOpen(false); }}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(''); setOpen(false); } }}
-                style={{ padding: '7px 12px', fontSize: 12, color: 'rgba(255,255,255,0.4)', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.08)' }}
+                style={{ padding: '7px 12px', fontSize: 12, color: 'rgba(var(--text-rgb),.5)', cursor: 'pointer', borderBottom: '1px solid var(--hairline)' }}
               >
                 — Clear —
               </div>
@@ -120,9 +120,9 @@ function CobCell({ value, cobOptions, onChange, onPaste, dataRow, dataCol }) {
                   style={{
                     padding: '7px 12px', fontSize: 12, cursor: 'pointer',
                     background: value === c.name ? 'rgba(0,232,184,0.12)' : 'transparent',
-                    color: value === c.name ? '#00e8b8' : '#fff',
+                    color: value === c.name ? 'var(--accent)' : 'var(--text)',
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.07)'}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-hover)'}
                   onMouseLeave={e => e.currentTarget.style.background = value === c.name ? 'rgba(0,232,184,0.12)' : 'transparent'}
                 >
                   {c.name}
@@ -132,7 +132,7 @@ function CobCell({ value, cobOptions, onChange, onPaste, dataRow, dataCol }) {
           )}
           {/* Allow freetext not in list */}
           {isUnknown && (
-            <div style={{ padding: '6px 12px', borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: 10, color: '#fbbf24' }}>
+            <div style={{ padding: '6px 12px', borderTop: '1px solid var(--hairline)', fontSize: 10, color: 'var(--accent-amber)' }}>
               ⚠ Current value "{value}" not in treaty classes
             </div>
           )}
@@ -430,7 +430,7 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
               {unknownCobCount > 0 && (
                 <div style={{ display:'flex', alignItems:'center', gap:5, padding:'3px 10px',
                   borderRadius:5, background:'rgba(251,191,36,0.12)', border:'1px solid rgba(251,191,36,0.35)',
-                  fontSize:11, color:'#fbbf24', fontWeight:600 }}>
+                  fontSize:11, color:'var(--accent-amber)', fontWeight:600 }}>
                   ⚠ {unknownCobCount} row{unknownCobCount !== 1 ? 's' : ''} with unrecognised class
                 </div>
               )}
@@ -509,8 +509,8 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                           </td>
                         ))}
                         <td className="ll-td ll-td--calc">{inc > 0 ? fmtN(inc) : '–'}</td>
-                        <td className="ll-td" style={{ fontSize: 11, color: empty ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)' }}>
-                          {empty ? '' : (r.reportedDate || (r.lossId ? '—' : <span style={{ color: '#00e8b8' }}>on save</span>))}
+                        <td className="ll-td" style={{ fontSize: 11, color: empty ? 'rgba(var(--text-rgb),.35)' : 'rgba(var(--text-rgb),.55)' }}>
+                          {empty ? '' : (r.reportedDate || (r.lossId ? '—' : <span style={{ color: 'var(--accent)' }}>on save</span>))}
                         </td>
                       </tr>
                     );

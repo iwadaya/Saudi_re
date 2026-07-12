@@ -6,29 +6,29 @@
    inline style already used them (var(--font-mono)). The `.ui-btn.*` /
    `.ui-badge.*` / `.ui-modal.*` rules pin the screen's existing skin
    onto the design-system primitives (which supply the semantics, focus
-   ring and disabled handling). No new colors — every hex/rgba below
-   existed in FacDocuments.jsx before the migration. */
+   ring and disabled handling). Colors were tokenized for the daylight
+   theme; token values in dark themes match the original hex/rgba. */
 
 /* ── Page scaffold ──────────────────────────────────────────────────── */
 .facdoc-page { max-width: 900px; margin: 0 auto; padding: 8px 0 40px; }
-.facdoc-intro { font-size: 12px; color: rgba(148, 163, 184, 0.55); margin-bottom: 16px; }
+.facdoc-intro { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
 
 /* ── Upload zone ────────────────────────────────────────────────────── */
 .facdoc-dropzone {
   padding: 18px;
   border-radius: 14px;
-  border: 2px dashed rgba(148, 163, 184, 0.30);
-  background: rgba(8, 14, 30, 0.50);
+  border: 2px dashed var(--stroke-soft);
+  background: var(--control-bg);
   margin-bottom: 18px;
   transition: border-color .12s, background .12s;
 }
 .facdoc-dropzone--active {
-  border-color: #00d4ff;
-  background: rgba(0, 212, 255, 0.05);
+  border-color: var(--accent-blue);
+  background: rgba(var(--accent-blue-rgb), 0.05);
 }
 .facdoc-dropzone-idle { text-align: center; }
-.facdoc-dropzone-title { font-size: 13px; font-weight: 800; color: rgba(226, 232, 240, 0.85); }
-.facdoc-dropzone-hint { font-size: 11px; color: rgba(148, 163, 184, 0.45); margin-top: 4px; }
+.facdoc-dropzone-title { font-size: 13px; font-weight: 800; color: rgba(var(--text-rgb), 0.85); }
+.facdoc-dropzone-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
 .facdoc-file-input { display: none; }
 .facdoc-upload-row {
   display: grid;
@@ -36,10 +36,10 @@
   gap: 12px;
   align-items: end;
 }
-.facdoc-upload-name { font-size: 12px; font-weight: 700; color: rgba(226, 232, 240, 0.85); }
-.facdoc-upload-meta { font-size: 10px; color: rgba(148, 163, 184, 0.55); margin-top: 2px; }
+.facdoc-upload-name { font-size: 12px; font-weight: 700; color: rgba(var(--text-rgb), 0.85); }
+.facdoc-upload-meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
 .facdoc-kind-label,
-.facdoc-field-label { font-size: 10px; color: rgba(148, 163, 184, 0.55); margin-bottom: 4px; }
+.facdoc-field-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
 
 /* Treaty-style upload form: file info on top, then the metadata fields
    (kind / title / description) and the action buttons. */
@@ -56,29 +56,29 @@
 /* ── Toast / poll hint ──────────────────────────────────────────────── */
 .facdoc-toast { padding: 8px 14px; margin-bottom: 12px; font-size: 12px; border-radius: 8px; }
 .facdoc-toast--ok {
-  background: rgba(35, 209, 139, 0.08);
-  border: 1px solid rgba(35, 209, 139, 0.30);
-  color: #23d18b;
+  background: rgba(var(--accent-rgb), 0.08);
+  border: 1px solid rgba(var(--accent-rgb), 0.30);
+  color: var(--accent);
 }
 .facdoc-toast--error {
-  background: rgba(248, 113, 113, 0.08);
-  border: 1px solid rgba(248, 113, 113, 0.30);
-  color: #f87171;
+  background: rgba(var(--accent-rose-rgb), 0.08);
+  border: 1px solid rgba(var(--accent-rose-rgb), 0.30);
+  color: var(--accent-rose);
 }
 .facdoc-toast--warn {
-  background: rgba(251, 191, 36, 0.08);
-  border: 1px solid rgba(251, 191, 36, 0.30);
-  color: #fbbf24;
+  background: rgba(var(--accent-amber-rgb), 0.08);
+  border: 1px solid rgba(var(--accent-amber-rgb), 0.30);
+  color: var(--accent-amber);
 }
 
 /* ── Documents list ─────────────────────────────────────────────────── */
-.facdoc-list-loading { padding: 30px; text-align: center; color: rgba(148, 163, 184, 0.40); font-size: 12px; }
-.facdoc-list-empty { padding: 30px; text-align: center; color: rgba(148, 163, 184, 0.30); font-size: 12px; }
-.facdoc-doc-name { font-weight: 600; color: rgba(226, 232, 240, 0.85); }
-.facdoc-doc-desc { font-size: 11px; color: rgba(148, 163, 184, 0.65); margin-top: 2px; }
-.facdoc-doc-date { font-size: 10px; color: rgba(148, 163, 184, 0.55); margin-top: 2px; }
-.ui-table td.facdoc-td-dim { color: rgba(148, 163, 184, 0.55); }
-.ui-table td.facdoc-td-user { font-size: 11px; color: rgba(148, 163, 184, 0.65); }
+.facdoc-list-loading { padding: 30px; text-align: center; color: rgba(var(--text-rgb), 0.5); font-size: 12px; }
+.facdoc-list-empty { padding: 30px; text-align: center; color: rgba(var(--text-rgb), 0.45); font-size: 12px; }
+.facdoc-doc-name { font-weight: 600; color: rgba(var(--text-rgb), 0.85); }
+.facdoc-doc-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.facdoc-doc-date { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.ui-table td.facdoc-td-dim { color: var(--muted); }
+.ui-table td.facdoc-td-user { font-size: 11px; color: var(--muted); }
 .ui-table td.facdoc-td-actions { white-space: nowrap; }
 
 /* Link-style buttons — replace the row's clickable <span>s with real
@@ -94,13 +94,13 @@
   cursor: pointer;
   text-align: left;
 }
-.facdoc-linkbtn:disabled { color: rgba(148, 163, 184, 0.30); cursor: not-allowed; }
-.facdoc-link-preview { color: #00d4ff; margin-right: 12px; }
-.facdoc-link-download { color: #38bdf8; margin-right: 12px; text-decoration: none; }
-.facdoc-link-view { color: #00d4ff; margin-right: 12px; }
-.facdoc-link-reanalyse { color: #fbbf24; margin-right: 12px; }
-.facdoc-link-delete { color: #f87171; }
-.facdoc-link-remove { display: inline-block; margin-top: 8px; color: #f87171; font-weight: 400; }
+.facdoc-linkbtn:disabled { color: rgba(var(--text-rgb), 0.35); cursor: not-allowed; }
+.facdoc-link-preview { color: var(--accent-blue); margin-right: 12px; }
+.facdoc-link-download { color: var(--accent-blue); margin-right: 12px; text-decoration: none; }
+.facdoc-link-view { color: var(--accent-blue); margin-right: 12px; }
+.facdoc-link-reanalyse { color: var(--accent-amber); margin-right: 12px; }
+.facdoc-link-delete { color: var(--accent-rose); }
+.facdoc-link-remove { display: inline-block; margin-top: 8px; color: var(--accent-rose); font-weight: 400; }
 
 /* ── Per-row analysis status cell ───────────────────────────────────── */
 .facdoc-status-cell { display: flex; align-items: center; gap: 8px; }
@@ -108,23 +108,23 @@
   width: 10px;
   height: 10px;
   border-radius: 5px;
-  border: 2px solid rgba(0, 212, 255, 0.30);
-  border-top-color: #00d4ff;
+  border: 2px solid rgba(var(--accent-blue-rgb), 0.30);
+  border-top-color: var(--accent-blue);
   display: inline-block;
   animation: facdoc-spin 0.9s linear infinite;
 }
 @keyframes facdoc-spin { to { transform: rotate(360deg); } }
-.facdoc-status-running { font-size: 11px; color: #00d4ff; }
-.facdoc-status-none { font-size: 11px; color: rgba(148, 163, 184, 0.35); }
-.facdoc-status-ok { font-weight: 700; color: #23d18b; }
-.facdoc-status-pending-count { margin-left: 6px; font-size: 10px; color: rgba(35, 209, 139, 0.55); }
-.facdoc-status-failed { font-size: 11px; font-weight: 700; color: #f87171; }
+.facdoc-status-running { font-size: 11px; color: var(--accent-blue); }
+.facdoc-status-none { font-size: 11px; color: rgba(var(--text-rgb), 0.45); }
+.facdoc-status-ok { font-weight: 700; color: var(--accent); }
+.facdoc-status-pending-count { margin-left: 6px; font-size: 10px; color: rgba(var(--accent-rgb), 0.75); }
+.facdoc-status-failed { font-size: 11px; font-weight: 700; color: var(--accent-rose); }
 
 /* ── Badge overrides (kind + target-screen pills keep their look) ───── */
 .ui-badge.facdoc-badge--kind {
-  background: rgba(0, 212, 255, 0.08);
-  border-color: rgba(0, 212, 255, 0.20);
-  color: #00d4ff;
+  background: rgba(var(--accent-blue-rgb), 0.08);
+  border-color: rgba(var(--accent-blue-rgb), 0.20);
+  color: var(--accent-blue);
   font-weight: 700;
   text-transform: none;
   letter-spacing: normal;
@@ -133,7 +133,7 @@
 .ui-badge.facdoc-badge--screen {
   background: rgba(168, 85, 247, 0.10);
   border-color: rgba(168, 85, 247, 0.30);
-  color: #a855f7;
+  color: color-mix(in srgb, #a855f7 75%, var(--text));
   font-size: 9px;
   letter-spacing: .10em;
   padding: 2px 8px;
@@ -142,52 +142,52 @@
 /* ── Button skins — exact pre-migration colors pinned on .ui-btn ────── */
 .ui-btn.facdoc-btn--accept,
 .ui-btn.facdoc-btn--accept:hover:not(:disabled) {
-  background: rgba(35, 209, 139, 0.10);
-  border-color: rgba(35, 209, 139, 0.40);
-  color: #23d18b;
+  background: rgba(var(--accent-rgb), 0.10);
+  border-color: rgba(var(--accent-rgb), 0.40);
+  color: var(--accent);
   border-radius: 6px;
 }
 .ui-btn.facdoc-btn--bulk-accept,
 .ui-btn.facdoc-btn--bulk-accept:hover:not(:disabled) {
-  background: rgba(35, 209, 139, 0.08);
-  border-color: rgba(35, 209, 139, 0.40);
-  color: #23d18b;
+  background: rgba(var(--accent-rgb), 0.08);
+  border-color: rgba(var(--accent-rgb), 0.40);
+  color: var(--accent);
   border-radius: 6px;
 }
 .ui-btn.facdoc-btn--edit,
 .ui-btn.facdoc-btn--edit:hover:not(:disabled) {
-  background: rgba(0, 212, 255, 0.08);
-  border-color: rgba(0, 212, 255, 0.40);
-  color: #00d4ff;
+  background: rgba(var(--accent-blue-rgb), 0.08);
+  border-color: rgba(var(--accent-blue-rgb), 0.40);
+  color: var(--accent-blue);
   border-radius: 6px;
 }
 .ui-btn.facdoc-btn--reject,
 .ui-btn.facdoc-btn--reject:hover:not(:disabled) {
-  background: rgba(248, 113, 113, 0.08);
-  border-color: rgba(248, 113, 113, 0.40);
-  color: #f87171;
+  background: rgba(var(--accent-rose-rgb), 0.08);
+  border-color: rgba(var(--accent-rose-rgb), 0.40);
+  color: var(--accent-rose);
   border-radius: 6px;
 }
 .ui-btn.facdoc-btn--reject-confirm,
 .ui-btn.facdoc-btn--reject-confirm:hover:not(:disabled) {
-  background: rgba(248, 113, 113, 0.10);
-  border-color: rgba(248, 113, 113, 0.40);
-  color: #f87171;
+  background: rgba(var(--accent-rose-rgb), 0.10);
+  border-color: rgba(var(--accent-rose-rgb), 0.40);
+  color: var(--accent-rose);
   border-radius: 6px;
 }
 .ui-btn.facdoc-btn--cancel,
 .ui-btn.facdoc-btn--cancel:hover:not(:disabled) {
   background: transparent;
-  border-color: rgba(148, 163, 184, 0.20);
-  color: rgba(226, 232, 240, 0.80);
+  border-color: var(--stroke-soft);
+  color: rgba(var(--text-rgb), 0.80);
   border-radius: 6px;
   font-weight: 400;
 }
 .ui-btn.facdoc-btn--retry,
 .ui-btn.facdoc-btn--retry:hover:not(:disabled) {
-  background: rgba(248, 113, 113, 0.05);
-  border-color: rgba(248, 113, 113, 0.30);
-  color: #f87171;
+  background: rgba(var(--accent-rose-rgb), 0.05);
+  border-color: rgba(var(--accent-rose-rgb), 0.30);
+  color: var(--accent-rose);
   border-radius: 6px;
   font-size: 10px;
   padding: 2px 8px;
@@ -195,8 +195,8 @@
 }
 .ui-btn.facdoc-btn--undo {
   background: transparent;
-  border: 1px dashed rgba(35, 209, 139, 0.30);
-  color: rgba(35, 209, 139, 0.55);
+  border: 1px dashed rgba(var(--accent-rgb), 0.30);
+  color: rgba(var(--accent-rgb), 0.75);
   border-radius: 6px;
   font-size: 10px;
   font-weight: 400;
@@ -207,9 +207,9 @@
 .ui-btn.facdoc-btn--choose,
 .ui-btn.facdoc-btn--choose:hover:not(:disabled) {
   margin-top: 10px;
-  background: rgba(0, 212, 255, 0.10);
-  border-color: rgba(0, 212, 255, 0.30);
-  color: #00d4ff;
+  background: rgba(var(--accent-blue-rgb), 0.10);
+  border-color: rgba(var(--accent-blue-rgb), 0.30);
+  color: var(--accent-blue);
   border-radius: 8px;
   font-size: 12px;
   padding: 8px 18px;
@@ -230,21 +230,21 @@
 .facdoc-rec {
   padding: 12px 14px;
   border-radius: 10px;
-  background: rgba(8, 14, 30, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--control-bg);
+  border: 1px solid var(--hairline);
   margin-bottom: 8px;
   transition: background 0.6s, border-color 0.6s;
 }
 .facdoc-rec--applied {
-  background: rgba(35, 209, 139, 0.07);
-  border-color: rgba(35, 209, 139, 0.40);
+  background: rgba(var(--accent-rgb), 0.07);
+  border-color: rgba(var(--accent-rgb), 0.40);
 }
 .facdoc-rec-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .facdoc-rec-tags { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .facdoc-rec-field {
   font-size: 11px;
   font-weight: 700;
-  color: rgba(226, 232, 240, 0.85);
+  color: rgba(var(--text-rgb), 0.85);
   font-family: var(--font-mono);
 }
 .facdoc-conf { display: flex; align-items: center; gap: 6px; }
@@ -252,7 +252,7 @@
   width: 64px;
   height: 6px;
   border-radius: 3px;
-  background: rgba(148, 163, 184, 0.10);
+  background: var(--surface-hover);
   overflow: hidden;
 }
 .facdoc-conf-fill { height: 100%; }
@@ -272,20 +272,20 @@
   word-break: break-word;
 }
 .facdoc-val--old {
-  background: rgba(148, 163, 184, 0.05);
-  border: 1px solid rgba(148, 163, 184, 0.15);
-  color: rgba(226, 232, 240, 0.65);
+  background: var(--surface-hover);
+  border: 1px solid var(--stroke-soft);
+  color: rgba(var(--text-rgb), 0.65);
 }
 .facdoc-val--new {
-  background: rgba(35, 209, 139, 0.05);
-  border: 1px solid rgba(35, 209, 139, 0.20);
-  color: #e2e8f0;
+  background: rgba(var(--accent-rgb), 0.05);
+  border: 1px solid rgba(var(--accent-rgb), 0.20);
+  color: var(--text);
 }
-.facdoc-val-null { color: rgba(148, 163, 184, 0.40); }
-.facdoc-diff-arrow { color: rgba(35, 209, 139, 0.65); font-size: 14px; font-weight: 700; }
+.facdoc-val-null { color: rgba(var(--text-rgb), 0.5); }
+.facdoc-diff-arrow { color: rgba(var(--accent-rgb), 0.85); font-size: 14px; font-weight: 700; }
 .facdoc-rationale {
   font-size: 11px;
-  color: rgba(148, 163, 184, 0.70);
+  color: var(--muted);
   font-style: italic;
   line-height: 1.4;
 }
@@ -293,8 +293,8 @@
 .facdoc-editor {
   margin-top: 8px;
   padding: 8px 10px;
-  background: rgba(0, 212, 255, 0.04);
-  border: 1px solid rgba(0, 212, 255, 0.25);
+  background: rgba(var(--accent-blue-rgb), 0.04);
+  border: 1px solid rgba(var(--accent-blue-rgb), 0.25);
   border-radius: 6px;
 }
 .facdoc-editor-label {
@@ -302,7 +302,7 @@
   font-weight: 800;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: rgba(0, 212, 255, 0.65);
+  color: rgba(var(--accent-blue-rgb), 0.85);
   margin-bottom: 6px;
 }
 .fi.facdoc-editor-field { width: 100%; font-size: 12px; }
@@ -310,8 +310,8 @@
 .facdoc-reject {
   margin-top: 8px;
   padding: 8px 10px;
-  background: rgba(248, 113, 113, 0.04);
-  border: 1px solid rgba(248, 113, 113, 0.25);
+  background: rgba(var(--accent-rose-rgb), 0.04);
+  border: 1px solid rgba(var(--accent-rose-rgb), 0.25);
   border-radius: 6px;
 }
 .fi.facdoc-reject-input { width: 100%; font-size: 12px; resize: vertical; }
@@ -323,14 +323,14 @@
   align-items: center;
   gap: 8px;
   font-size: 11px;
-  color: #23d18b;
+  color: var(--accent);
 }
 /* Session-scoped undo (Phase 4.2): the value was restored; the rec row
    itself stays ACCEPTED server-side, so this marker carries the state. */
-.facdoc-applied-row--undone { color: rgba(148, 163, 184, 0.85); }
+.facdoc-applied-row--undone { color: var(--muted); }
 .facdoc-undo-error {
   font-size: 10px;
-  color: #f87171;
+  color: var(--accent-rose);
 }
 
 /* ── Analysis drawer (Modal primitive reshaped to the side drawer) ──── */
@@ -342,51 +342,51 @@
   width: 520px;
   max-height: none;
   border-radius: 0;
-  background: #0a1422;
+  background: var(--panel-bg-strong);
   border: none;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid var(--hairline);
   box-shadow: none;
 }
 .facdoc-drawer .ui-modal__body { padding: 0; }
-.facdoc-drawer-loading { padding: 30px; text-align: center; color: rgba(148, 163, 184, 0.45); }
-.facdoc-drawer-head { padding: 18px 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.facdoc-drawer-loading { padding: 30px; text-align: center; color: rgba(var(--text-rgb), 0.55); }
+.facdoc-drawer-head { padding: 18px 20px; border-bottom: 1px solid var(--hairline); }
 .facdoc-drawer-head-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .facdoc-drawer-eyebrow {
   font-size: 10px;
   font-weight: 800;
   letter-spacing: .14em;
   text-transform: uppercase;
-  color: rgba(0, 212, 255, 0.55);
+  color: rgba(var(--accent-blue-rgb), 0.75);
 }
 .ui-btn.facdoc-drawer-close {
   font-size: 18px;
   font-weight: 400;
-  color: rgba(148, 163, 184, 0.65);
+  color: var(--muted);
   padding: 0 6px;
   min-height: 0;
 }
-.facdoc-drawer-title { font-size: 14px; font-weight: 800; color: #e2e8f0; }
+.facdoc-drawer-title { font-size: 14px; font-weight: 800; color: var(--text); }
 .facdoc-drawer-meta { display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
-.facdoc-drawer-when { font-size: 10px; color: rgba(148, 163, 184, 0.55); }
+.facdoc-drawer-when { font-size: 10px; color: var(--muted); }
 .facdoc-summary { padding: 16px 20px; }
 .facdoc-section-label {
   font-size: 9px;
   font-weight: 800;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: rgba(148, 163, 184, 0.45);
+  color: var(--muted);
   margin-bottom: 6px;
 }
-.facdoc-section-label--recs { color: rgba(148, 163, 184, 0.55); margin-bottom: 8px; }
-.facdoc-summary-text { font-size: 12px; line-height: 1.6; color: rgba(226, 232, 240, 0.85); }
-.facdoc-muted-note { color: rgba(148, 163, 184, 0.40); }
+.facdoc-section-label--recs { color: var(--muted); margin-bottom: 8px; }
+.facdoc-summary-text { font-size: 12px; line-height: 1.6; color: rgba(var(--text-rgb), 0.85); }
+.facdoc-muted-note { color: rgba(var(--text-rgb), 0.5); }
 .facdoc-analysis-error {
   margin-top: 10px;
   padding: 8px 12px;
   font-size: 11px;
-  background: rgba(248, 113, 113, 0.08);
-  border: 1px solid rgba(248, 113, 113, 0.25);
-  color: #f87171;
+  background: rgba(var(--accent-rose-rgb), 0.08);
+  border: 1px solid rgba(var(--accent-rose-rgb), 0.25);
+  color: var(--accent-rose);
   border-radius: 6px;
 }
 .facdoc-extracted { padding: 6px 20px 14px; }
@@ -404,16 +404,16 @@
   font-weight: 800;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: rgba(148, 163, 184, 0.55);
+  color: var(--muted);
   margin-bottom: 6px;
 }
 .facdoc-extracted-pre {
   margin: 0;
   padding: 10px 12px;
   border-radius: 6px;
-  background: rgba(5, 8, 16, 0.55);
+  background: var(--control-bg);
   font-size: 10px;
-  color: rgba(226, 232, 240, 0.80);
+  color: rgba(var(--text-rgb), 0.80);
   overflow-x: auto;
   max-height: 280px;
 }
@@ -422,31 +422,31 @@
   padding: 4px 12px;
   border-radius: 20px;
   font-size: 11px;
-  background: rgba(35, 209, 139, 0.10);
-  border: 1px solid rgba(35, 209, 139, 0.30);
-  color: #23d18b;
+  background: rgba(var(--accent-rgb), 0.10);
+  border: 1px solid rgba(var(--accent-rgb), 0.30);
+  color: var(--accent);
 }
-.facdoc-applied-link { color: #23d18b; text-decoration: underline; margin-left: 4px; }
+.facdoc-applied-link { color: var(--accent); text-decoration: underline; margin-left: 4px; }
 .facdoc-bulk { padding: 0 20px 8px; display: flex; align-items: center; gap: 10px; }
-.facdoc-bulk-progress { font-size: 11px; color: rgba(148, 163, 184, 0.65); }
+.facdoc-bulk-progress { font-size: 11px; color: var(--muted); }
 .facdoc-recs { padding: 6px 20px 30px; }
-.facdoc-empty-recs { font-size: 11px; color: rgba(148, 163, 184, 0.40); }
+.facdoc-empty-recs { font-size: 11px; color: rgba(var(--text-rgb), 0.5); }
 
 /* ── Recommendation status groups ───────────────────────────────────── */
 .facdoc-group { margin-bottom: 14px; }
 .facdoc-disclosure--group { letter-spacing: .10em; }
 /* Status colors come after .facdoc-disclosure so they win at equal
    specificity. */
-.facdoc-group-toggle--pending { color: #00d4ff; }
-.facdoc-group-toggle--accepted { color: #23d18b; }
-.facdoc-group-toggle--rejected { color: #f87171; }
-.facdoc-group-toggle--superseded { color: rgba(148, 163, 184, 0.60); }
-.facdoc-group-count { color: rgba(148, 163, 184, 0.45); font-weight: 700; }
+.facdoc-group-toggle--pending { color: var(--accent-blue); }
+.facdoc-group-toggle--accepted { color: var(--accent); }
+.facdoc-group-toggle--rejected { color: var(--accent-rose); }
+.facdoc-group-toggle--superseded { color: var(--muted); }
+.facdoc-group-count { color: rgba(var(--text-rgb), 0.5); font-weight: 700; }
 .facdoc-group-screen { margin-bottom: 8px; }
 .facdoc-screen-label {
   font-size: 9px;
   font-weight: 800;
   letter-spacing: .12em;
-  color: rgba(148, 163, 184, 0.45);
+  color: var(--muted);
   margin-bottom: 4px;
 }

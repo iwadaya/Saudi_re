@@ -146,11 +146,11 @@ export default function CoveredProportionalSection({ coveredProps, setCoveredPro
 
       {/* DB picker panel */}
       {mode === 'db' && (
-        <div style={{ padding: '16px 18px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,212,255,0.03)' }}>
+        <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--hairline)', background: 'rgba(0,212,255,0.03)' }}>
           {/* Filter bar */}
           <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Country</span>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'rgba(var(--text-rgb),0.45)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Country</span>
               <select className="np-mini-input np-mini-select" style={{ width: 180, textAlign: 'left' }}
                 value={filterCountry} onChange={e => setFilterCountry(e.target.value)}>
                 <option value="">All Countries</option>
@@ -158,7 +158,7 @@ export default function CoveredProportionalSection({ coveredProps, setCoveredPro
               </select>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Cedant</span>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'rgba(var(--text-rgb),0.45)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Cedant</span>
               <select className="np-mini-input np-mini-select" style={{ width: 210, textAlign: 'left' }}
                 value={filterCedant} onChange={e => setFilterCedant(e.target.value)}>
                 <option value="">All Cedants</option>
@@ -166,10 +166,10 @@ export default function CoveredProportionalSection({ coveredProps, setCoveredPro
               </select>
             </div>
             {dbLoading && (
-              <span style={{ fontSize: 11, color: 'rgba(0,212,255,0.6)', fontWeight: 600 }}>⟳ Loading…</span>
+              <span style={{ fontSize: 11, color: 'var(--accent-blue)', fontWeight: 600 }}>⟳ Loading…</span>
             )}
             {!dbLoading && (
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginLeft: 'auto' }}>
+              <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.4)', marginLeft: 'auto' }}>
                 {dbProgrammes.length} programme{dbProgrammes.length !== 1 ? 's' : ''} found
               </span>
             )}
@@ -177,31 +177,31 @@ export default function CoveredProportionalSection({ coveredProps, setCoveredPro
 
           {/* Results table */}
           {!dbLoading && dbProgrammes.length === 0 ? (
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', padding: '10px 0', textAlign: 'center' }}>
+            <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.4)', padding: '10px 0', textAlign: 'center' }}>
               No proportional programmes found. Try adjusting the filters.
             </div>
           ) : !dbLoading && (
-            <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--hairline)' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
-                  <tr style={{ background: 'rgba(255,255,255,0.04)' }}>
+                  <tr style={{ background: 'var(--surface-hover)' }}>
                     {['UW Year','Cedant','Treaty Type','Country','Status',''].map(h => (
-                      <th key={h} style={{ padding: '7px 12px', textAlign: 'left', fontSize: 10, fontWeight: 700, letterSpacing: '.08em', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>{h}</th>
+                      <th key={h} style={{ padding: '7px 12px', textAlign: 'left', fontSize: 10, fontWeight: 700, letterSpacing: '.08em', color: 'rgba(var(--text-rgb),0.5)', textTransform: 'uppercase', borderBottom: '1px solid var(--hairline)' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {dbProgrammes.map((p, i) => (
                     <tr key={i}
-                      style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background .12s' }}
+                      style={{ borderBottom: '1px solid var(--hairline)', transition: 'background .12s' }}
                       onMouseEnter={e => e.currentTarget.style.background='rgba(0,212,255,0.06)'}
                       onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                      <td style={{ padding: '7px 12px', color: 'rgba(255,255,255,0.55)', fontVariantNumeric: 'tabular-nums' }}>{p.uw_year || '—'}</td>
-                      <td style={{ padding: '7px 12px', color: '#fff', fontWeight: 600 }}>{p.cedant_name || '—'}</td>
-                      <td style={{ padding: '7px 12px', color: 'rgba(255,255,255,0.65)' }}>{p.treaty_type_name || '—'}</td>
-                      <td style={{ padding: '7px 12px', color: 'rgba(255,255,255,0.45)', fontSize: 11 }}>{p.country_name || '—'}</td>
+                      <td style={{ padding: '7px 12px', color: 'rgba(var(--text-rgb),0.55)', fontVariantNumeric: 'tabular-nums' }}>{p.uw_year || '—'}</td>
+                      <td style={{ padding: '7px 12px', color: 'var(--text)', fontWeight: 600 }}>{p.cedant_name || '—'}</td>
+                      <td style={{ padding: '7px 12px', color: 'rgba(var(--text-rgb),0.65)' }}>{p.treaty_type_name || '—'}</td>
+                      <td style={{ padding: '7px 12px', color: 'rgba(var(--text-rgb),0.45)', fontSize: 11 }}>{p.country_name || '—'}</td>
                       <td style={{ padding: '7px 12px' }}>
-                        <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 6, background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.45)', fontWeight: 700, letterSpacing: '.06em' }}>
+                        <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 6, background: 'var(--surface-hover)', color: 'rgba(var(--text-rgb),0.45)', fontWeight: 700, letterSpacing: '.06em' }}>
                           {p.uw_status || p.status || '—'}
                         </span>
                       </td>
@@ -243,10 +243,10 @@ export default function CoveredProportionalSection({ coveredProps, setCoveredPro
                     {mode === 'db' && r.contractId ? (
                       /* DB-linked row: show name + clear button */
                       <div style={{ display:'flex', alignItems:'center', gap:6, width:'100%' }}>
-                        <span style={{ flex:1, fontSize:12, color:'rgba(255,255,255,0.85)', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}
+                        <span style={{ flex:1, fontSize:12, color:'rgba(var(--text-rgb),0.85)', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}
                           title={r.programme}>{r.programme || '—'}</span>
                         <button type="button"
-                          style={{ background:'none', border:'none', color:'rgba(255,255,255,0.3)', cursor:'pointer', fontSize:13, padding:'0 2px', flexShrink:0 }}
+                          style={{ background:'none', border:'none', color:'rgba(var(--text-rgb),0.4)', cursor:'pointer', fontSize:13, padding:'0 2px', flexShrink:0 }}
                           onClick={() => { updateRow(i,'programme',''); updateRow(i,'contractId',''); }}
                           title="Unlink">✕</button>
                       </div>
@@ -284,7 +284,7 @@ export default function CoveredProportionalSection({ coveredProps, setCoveredPro
                 {mode === 'manual' && (
                   <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                     <button type="button"
-                      style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.25)', borderRadius: 6, color: '#f87171', cursor: 'pointer', fontSize: 13, padding: '2px 7px', lineHeight: 1 }}
+                      style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.25)', borderRadius: 6, color: 'var(--accent-rose)', cursor: 'pointer', fontSize: 13, padding: '2px 7px', lineHeight: 1 }}
                       onClick={() => removeRow(i)}
                       title="Remove row">✕</button>
                   </td>
@@ -296,11 +296,11 @@ export default function CoveredProportionalSection({ coveredProps, setCoveredPro
       </div>
 
       {/* Add row / footer actions */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--hairline)' }}>
         <button className="np-green-pill" type="button" style={{ fontSize: 11 }} onClick={addRow}>+ Add Row</button>
         {rows.length > 0 && (
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
-            {rows.filter(r => r.programme).length} programme{rows.filter(r => r.programme).length !== 1 ? 's' : ''} · Total capacity: <span style={{ color: 'rgba(0,212,255,0.8)', fontWeight: 700 }}>{fmtC(String(rows.reduce((s,r) => s + (parseFloat(String(r.totalCapacity||'').replace(/,/g,''))||0), 0)))} {currency}</span>
+          <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.45)' }}>
+            {rows.filter(r => r.programme).length} programme{rows.filter(r => r.programme).length !== 1 ? 's' : ''} · Total capacity: <span style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{fmtC(String(rows.reduce((s,r) => s + (parseFloat(String(r.totalCapacity||'').replace(/,/g,''))||0), 0)))} {currency}</span>
           </div>
         )}
       </div>

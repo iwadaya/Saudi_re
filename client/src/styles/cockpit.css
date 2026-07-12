@@ -44,7 +44,7 @@ body::after{
   border-color: var(--hud-line-2);
   background:
     radial-gradient(120% 200% at 10% 0%, rgba(255,255,255,.08), rgba(255,255,255,0) 50%),
-    linear-gradient(180deg, rgba(11,22,39,.88), rgba(11,22,39,.55));
+    linear-gradient(180deg, var(--glass-grad-top), var(--glass-grad-bot));
 }
 
 /* Sticky, cockpit-style topbar */
@@ -83,21 +83,21 @@ body::after{
 /* Tabs: more like toggles on a console */
 .tabs-dock{
   border-top: 1px solid var(--hud-line);
-  background: rgba(8,16,40,.28);
+  background: var(--surface-muted);
   backdrop-filter: blur(10px);
 }
 
 .tabsbar .tab{
-  border: 1px solid rgba(148,163,184,.14);
-  background: rgba(8,16,40,.42);
-  color: rgba(226,232,240,.86);
+  border: 1px solid var(--stroke-soft);
+  background: var(--control-bg);
+  color: rgba(var(--text-rgb),.86);
   box-shadow: 0 10px 22px rgba(0,0,0,.30);
 }
 
 .tabsbar .tab.tab--active{
   border-color: rgba(var(--accent-rgb),.42);
   background: rgba(var(--accent-rgb),.10);
-  color: rgba(220,252,231,.96);
+  color: var(--accent);
   box-shadow: 0 14px 32px rgba(0,0,0,.42), 0 0 24px rgba(var(--accent-rgb),.16);
 }
 
@@ -123,8 +123,8 @@ body::after{
 
 .table th,
 .data-table th{
-  background: rgba(8,16,40,.46);
-  border-bottom: 1px solid rgba(148,163,184,.14);
+  background: var(--table-head-bg);
+  border-bottom: 1px solid var(--stroke-soft);
 }
 
 /* Wizard dock: make it feel like a control bar */
@@ -413,7 +413,7 @@ body::after{
 .view-tabs,
 .tabs-dock{
   border: 1px solid var(--hairline-strong);
-  background: rgba(6,12,22,.46);
+  background: var(--control-bg);
   box-shadow: var(--shadow-control);
   backdrop-filter: saturate(135%) blur(12px);
 }
@@ -437,7 +437,7 @@ body::after{
 
 .tabs-dock{
   border-radius: 10px;
-  background: rgba(6,12,22,.50);
+  background: var(--control-bg);
 }
 
 .tabsbar .tab{

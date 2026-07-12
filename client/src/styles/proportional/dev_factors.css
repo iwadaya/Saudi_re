@@ -13,7 +13,7 @@
 .DEV_FACTORS_PAGE .sheet-header-row{
   padding-bottom: 10px;
   margin-bottom: 10px;
-  border-bottom: 1px solid rgba(148,163,184,.14);
+  border-bottom: 1px solid var(--stroke-soft);
 }
 
 /* ---------------------------------------
@@ -30,8 +30,8 @@
   margin-top: 10px;
   padding: 12px 12px;
   border-radius: 18px;
-  background: rgba(8,16,40,.18);
-  border: 1px solid rgba(148,163,184,.14);
+  background: var(--surface-muted);
+  border: 1px solid var(--stroke-soft);
   box-shadow: 0 8px 18px rgba(0,0,0,.14); /* softened */
 }
 
@@ -48,8 +48,8 @@
   border-radius: 999px;
   padding: 10px 12px;
 
-  background: rgba(8,16,40,.22);
-  border: 1px solid rgba(148,163,184,.18);
+  background: var(--control-bg);
+  border: 1px solid var(--stroke-soft);
 
   display: flex;
   align-items: baseline;
@@ -63,7 +63,7 @@
   font-size: 11px;
   letter-spacing: .14em;
   text-transform: uppercase;
-  color: rgba(226,232,240,.70);
+  color: rgba(var(--text-rgb),.70);
   font-weight: 600; /* reduced */
   padding-left: 2px;
   white-space: nowrap;
@@ -72,7 +72,7 @@
 .DEV_FACTORS_PAGE .df-mini-value{
   font-size: 13px;
   font-weight: 600; /* reduced */
-  color: rgba(226,232,240,.92);
+  color: rgba(var(--text-rgb),.92);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -84,23 +84,23 @@
 
   padding: 8px 10px;
   border-radius: 999px;
-  background: rgba(8,16,40,.18);
-  border: 1px solid rgba(148,163,184,.14);
+  background: var(--control-bg);
+  border: 1px solid var(--stroke-soft);
 }
 
 .DEV_FACTORS_PAGE .df-method-label{
   font-size: 11px;
   letter-spacing: .14em;
   text-transform: uppercase;
-  color: rgba(226,232,240,.62);
+  color: rgba(var(--text-rgb),.62);
   font-weight: 600; /* reduced */
   white-space: nowrap;
 }
 
 /* Toggle fallback styling (modern + clear) */
 .DEV_FACTORS_PAGE .toggle-group{
-  background: rgba(8,16,40,.22);
-  border: 1px solid rgba(148,163,184,.14);
+  background: var(--control-bg);
+  border: 1px solid var(--stroke-soft);
   border-radius: 999px;
 }
 
@@ -115,13 +115,13 @@
 
   padding: 8px 12px;
   border-radius: 999px;
-  color: rgba(226,232,240,.70);
+  color: rgba(var(--text-rgb),.70);
   user-select: none;
 }
 
 .DEV_FACTORS_PAGE .toggle-option.active{
   background: rgba(var(--accent-rgb),.14);
-  color: rgba(226,232,240,.92);
+  color: rgba(var(--text-rgb),.92);
   border: 1px solid rgba(var(--accent-rgb),.35);
 }
 
@@ -132,7 +132,7 @@
 
 .DEV_FACTORS_PAGE .df-help{
   margin: 10px 2px 10px;
-  color: rgba(148,163,184,.82);
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -143,8 +143,8 @@
 .DEV_FACTORS_PAGE .df-card{
   border-radius: 18px;
   padding: 10px;
-  background: rgba(8,16,40,.14);
-  border: 1px solid rgba(148,163,184,.12);
+  background: var(--surface-muted);
+  border: 1px solid var(--stroke-soft);
   box-shadow: 0 8px 18px rgba(0,0,0,.14); /* softened */
 }
 
@@ -154,7 +154,7 @@
 
 .DEV_FACTORS_PAGE .df-note{
   font-size: 13px;
-  color: rgba(226,232,240,.85);
+  color: rgba(var(--text-rgb),.85);
   line-height: 1.45;
   font-weight: 400;
 }
@@ -185,10 +185,10 @@
 
 .DEV_FACTORS_PAGE .tri-r-head,
 .DEV_FACTORS_PAGE .tri-r-sticky{
-  background: rgba(8,16,40,.72);
+  background: var(--table-head-bg);
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(148,163,184,.10);
-  color: rgba(226,232,240,.65);
+  border-bottom: 1px solid var(--hairline);
+  color: rgba(var(--text-rgb),.65);
   font-size: 11px;
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -214,7 +214,7 @@
 }
 
 .DEV_FACTORS_PAGE .tri-r-sticky--row{
-  color: rgba(226,232,240,.90);
+  color: rgba(var(--text-rgb),.90);
   font-size: 13px;
   letter-spacing: .02em;
   text-transform: none;
@@ -224,8 +224,8 @@
 /* ✅ Green-accent table grid */
 .DEV_FACTORS_PAGE .tri-r-cell{
   border-bottom: 1px solid rgba(var(--accent-rgb),.12);
-  border-right: 1px solid rgba(148,163,184,.10);
-  background: rgba(8,16,40,.10);
+  border-right: 1px solid var(--hairline);
+  background: var(--table-row-alt);
   padding: 0;
 }
 
@@ -245,9 +245,9 @@
   min-width: 140px;
   height: 38px;
 
-  border: 1px solid rgba(148,163,184,.10);
-  background: rgba(8,16,40,.18);
-  color: rgba(226,232,240,.88);
+  border: 1px solid var(--hairline);
+  background: var(--control-bg);
+  color: rgba(var(--text-rgb),.88);
 
   border-radius: 12px;
   padding: 0 12px;
@@ -280,13 +280,13 @@
 .DEV_FACTORS_PAGE .df-section-title{
   font-size: 14px;
   font-weight: 600; /* reduced */
-  color: rgba(226,232,240,.92);
+  color: rgba(var(--text-rgb),.92);
 }
 
 .DEV_FACTORS_PAGE .df-section-sub{
   margin-top: 4px;
   font-size: 12px;
-  color: rgba(148,163,184,.82);
+  color: var(--muted);
 }
 
 .DEV_FACTORS_PAGE .df-blocks{
@@ -303,11 +303,11 @@
 }
 
 .DEV_FACTORS_PAGE .df-h{
-  background: rgba(8,16,40,.72);
+  background: var(--table-head-bg);
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(148,163,184,.10);
+  border-bottom: 1px solid var(--hairline);
 
-  color: rgba(226,232,240,.65);
+  color: rgba(var(--text-rgb),.65);
   font-size: 11px;
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -333,12 +333,12 @@
   left: 0;
   z-index: 5;
 
-  background: rgba(8,16,40,.80);
-  border-bottom: 1px solid rgba(148,163,184,.10);
+  background: var(--table-head-bg);
+  border-bottom: 1px solid var(--hairline);
 
   padding: 10px 12px;
   font-weight: 600; /* reduced */
-  color: rgba(226,232,240,.90);
+  color: rgba(var(--text-rgb),.90);
   white-space: nowrap;
 
   border-right: 1px solid rgba(var(--accent-rgb),.22);
@@ -352,8 +352,8 @@
 
 .DEV_FACTORS_PAGE .df-c{
   border-bottom: 1px solid rgba(var(--accent-rgb),.12);
-  border-right: 1px solid rgba(148,163,184,.10);
-  background: rgba(8,16,40,.10);
+  border-right: 1px solid var(--hairline);
+  background: var(--table-row-alt);
   padding: 0;
 }
 
@@ -363,14 +363,14 @@
   height: 38px;
   margin: 6px;
   border-radius: 12px;
-  background: rgba(8,16,40,.18);
-  border: 1px solid rgba(148,163,184,.10);
+  background: var(--control-bg);
+  border: 1px solid var(--hairline);
   display: flex;
   align-items: center;
   justify-content: flex-end;
   padding: 0 12px;
 
-  color: rgba(226,232,240,.88);
+  color: rgba(var(--text-rgb),.88);
   font-weight: 500; /* reduced */
   font-variant-numeric: tabular-nums;
 }
@@ -387,8 +387,8 @@
 .DEV_FACTORS_PAGE .df-uw-row{
   border-radius: 18px;
   padding: 12px 12px;
-  background: rgba(8,16,40,.14);
-  border: 1px solid rgba(148,163,184,.12);
+  background: var(--surface-muted);
+  border: 1px solid var(--stroke-soft);
   box-shadow: 0 8px 18px rgba(0,0,0,.14);
 }
 
@@ -402,7 +402,7 @@
 .DEV_FACTORS_PAGE .df-uw-title{
   font-size: 16px;
   font-weight: 600; /* reduced */
-  color: rgba(226,232,240,.92);
+  color: rgba(var(--text-rgb),.92);
 }
 
 .DEV_FACTORS_PAGE .df-uw-toggle .toggle-group{
@@ -421,9 +421,9 @@
   border-radius: 999px;
   min-width: 180px;
   padding: 10px 16px;
-  border: 1px solid rgba(148,163,184,.35);
-  background: rgba(8,16,40,.25);
-  color: rgba(226,232,240,.85);
+  border: 1px solid var(--stroke);
+  background: var(--control-bg);
+  color: rgba(var(--text-rgb),.85);
   font-weight: 500; /* reduced */
 }
 
@@ -431,7 +431,7 @@
   background: transparent;
   border: 1px solid rgba(var(--accent-rgb),.75);
   box-shadow: 0 0 0 6px rgba(var(--accent-rgb),.10);
-  color: rgba(226,232,240,.92);
+  color: rgba(var(--text-rgb),.92);
   font-weight: 600; /* reduced */
 }
 
@@ -482,7 +482,7 @@
   font-size: 12px;
   font-weight: 500;
 
-  background: rgba(8,16,40,.22);
+  background: var(--control-bg);
   border: 1px solid rgba(var(--accent-rgb),.22);
 }
 
@@ -504,7 +504,7 @@
   font-size: 12px;
   font-weight: 500;
 
-  background: rgba(8,16,40,.22);
+  background: var(--control-bg);
   border: 1px solid rgba(var(--accent-rgb),.22);
 }
 
@@ -591,9 +591,9 @@
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 
-  background: rgba(8,16,40,.22);
-  border: 1px solid rgba(148,163,184,.22);
-  color: rgba(226,232,240,.88);
+  background: var(--control-bg);
+  border: 1px solid var(--stroke-soft);
+  color: rgba(var(--text-rgb),.88);
 }
 
 /* ---------- Row separators only (very subtle) ---------- */
@@ -618,8 +618,8 @@
 .DEV_FACTORS_PAGE .tri-r-input,
 .DEV_FACTORS_PAGE .df-val{
   box-shadow: none;
-  border-color: rgba(148,163,184,.22);
-  background: rgba(8,16,40,.22);
+  border-color: var(--stroke-soft);
+  background: var(--control-bg);
 }
 
 /* Apply glow ONLY if the cell has content */
@@ -631,7 +631,7 @@
     linear-gradient(
       to bottom,
       rgba(var(--accent-rgb),.10),
-      rgba(8,16,40,.24)
+      var(--control-bg)
     );
 
   box-shadow:
@@ -671,8 +671,8 @@
 
 /* Re-apply STANDARD neutral pill styling */
 .DEV_FACTORS_PAGE .tri-r-cell--diag .tri-r-input{
-  background: rgba(8,16,40,.22) !important;
-  border: 1px solid rgba(148,163,184,.22) !important;
+  background: var(--control-bg) !important;
+  border: 1px solid var(--stroke-soft) !important;
 }
 
 /* Apply faint green glow ONLY if diagonal cell has content */
@@ -683,7 +683,7 @@
     linear-gradient(
       to bottom,
       rgba(var(--accent-rgb),.10),
-      rgba(8,16,40,.24)
+      var(--control-bg)
     ) !important;
 
   box-shadow:
@@ -716,7 +716,7 @@
 /* optional: header / label tint */
 .DEV_FACTORS_PAGE .parametrized-section th,
 .DEV_FACTORS_PAGE .section--parametrized th{
-  color: rgba(147,197,253,.85);               /* lighter blue */
+  color: var(--accent-blue);               /* lighter blue */
 }
 
 
@@ -739,7 +739,7 @@
 /* optional: header / label tint */
 .DEV_FACTORS_PAGE .underwriter-section th,
 .DEV_FACTORS_PAGE .section--underwriter th{
-  color: rgba(253,186,116,.90);                /* soft orange */
+  color: var(--accent-amber);                /* soft orange */
 }
 /* =========================================================
    DEV FACTORS — Section theming
@@ -760,7 +760,7 @@
 
 .DEV_FACTORS_PAGE .df-section:has(.df-section-title:is(:contains("Parametrized"), :contains("PARAMETRIZED"))) .df-section-title,
 .DEV_FACTORS_PAGE .df-section:has(.df-section-title:is(:contains("Parametrized"), :contains("PARAMETRIZED"))) .df-section-sub{
-  color: rgba(147,197,253,.90);              /* soft blue */
+  color: var(--accent-blue);              /* soft blue */
 }
 
 /* focus glow for editable cells inside parametrized (if any) */
@@ -782,7 +782,7 @@
 
 .DEV_FACTORS_PAGE .df-section:has(.df-section-title:is(:contains("Underwriter"), :contains("UNDERWRITER"))) .df-section-title,
 .DEV_FACTORS_PAGE .df-section:has(.df-section-title:is(:contains("Underwriter"), :contains("UNDERWRITER"))) .df-section-sub{
-  color: rgba(253,186,116,.92);              /* soft orange */
+  color: var(--accent-amber);              /* soft orange */
 }
 
 /* focus glow for chosen inputs (these are editable) */
@@ -804,7 +804,7 @@
 
 .DEV_FACTORS_PAGE .df-section--parametrized .df-section-title,
 .DEV_FACTORS_PAGE .df-section--parametrized .df-section-sub{
-  color: rgba(147,197,253,.90);
+  color: var(--accent-blue);
 }
 
 .DEV_FACTORS_PAGE .df-section--parametrized .df-input:focus{
@@ -820,7 +820,7 @@
 
 .DEV_FACTORS_PAGE .df-section--underwriter .df-section-title,
 .DEV_FACTORS_PAGE .df-section--underwriter .df-section-sub{
-  color: rgba(253,186,116,.92);
+  color: var(--accent-amber);
 }
 
 .DEV_FACTORS_PAGE .df-section--underwriter .df-input:focus{
@@ -868,7 +868,7 @@
 /* Section title tint */
 .DEV_FACTORS_PAGE .df-section--parametrized .df-section-title,
 .DEV_FACTORS_PAGE .df-section--parametrized .df-section-sub{
-  color: rgba(147,197,253,.90);
+  color: var(--accent-blue);
 }
 .DEV_FACTORS_PAGE .df-section--parametrized .df-c,
 .DEV_FACTORS_PAGE .df-section--parametrized .df-h,
@@ -884,7 +884,7 @@
 .DEV_FACTORS_PAGE .df-section--parametrized .df-val{
   background: rgba(59,130,246,.12) !important;     /* blue tint */
   border: 1px solid rgba(59,130,246,.45) !important;
-  color: rgba(226,232,240,.95) !important;
+  color: rgba(var(--text-rgb),.95) !important;
 
   box-shadow:
     inset 0 0 0 1px rgba(59,130,246,.25),
@@ -905,7 +905,7 @@
 /* Header / row labels stay neutral */
 .DEV_FACTORS_PAGE .df-section--parametrized .df-r,
 .DEV_FACTORS_PAGE .df-section--parametrized .df-h{
-  color: rgba(147,197,253,.85);
+  color: var(--accent-blue);
 }
 
 /* ---------------------------------------------------------
@@ -924,7 +924,7 @@
   background: rgba(30,58,138,.35) !important;     /* blue-900-ish */
   border: 1px solid rgba(37,99,235,.65) !important;
 
-  color: rgba(226,232,240,.97) !important;
+  color: rgba(var(--text-rgb),.97) !important;
 
   box-shadow:
     inset 0 0 0 1px rgba(37,99,235,.35),
@@ -974,7 +974,7 @@
   padding: 8px 12px;
   border: 1px solid rgba(249,115,22,.70);
   background: rgba(249,115,22,.14);
-  color: rgba(255,237,213,.95);
+  color: var(--accent-amber);
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
@@ -993,7 +993,7 @@
   padding: 0 10px;                       /* compact */
   border: 1px solid rgba(249,115,22,.55) !important;
   background: rgba(249,115,22,.10) !important;
-  color: rgba(226,232,240,.95) !important;
+  color: rgba(var(--text-rgb),.95) !important;
   text-align: center;                    /* matches your request */
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
@@ -1043,7 +1043,7 @@
   font-size: 12px !important;
   font-weight: 500 !important;
   font-variant-numeric: tabular-nums !important;
-  color: rgba(226,232,240,0.88) !important;
+  color: rgba(var(--text-rgb),0.88) !important;
   line-height: 21px !important;
   outline: none !important;
   -webkit-appearance: none !important;
@@ -1058,7 +1058,7 @@
 }
 
 .DEV_FACTORS_PAGE .df-input:focus{
-  background: rgba(255,255,255,0.03) !important;
+  background: var(--surface-hover) !important;
   box-shadow: inset 0 0 0 1px rgba(148,163,184,0.2) !important;
 }
 
@@ -1073,8 +1073,8 @@
 .DEV_FACTORS_PAGE .df-h,
 .DEV_FACTORS_PAGE .df-h--sticky{
   padding: 8px 10px !important;
-  background: rgba(8,16,40,0.72) !important;
-  border-bottom: 1px solid rgba(148,163,184,0.10) !important;
+  background: var(--table-head-bg) !important;
+  border-bottom: 1px solid var(--hairline) !important;
   box-shadow: none !important;
   border-right: none !important;
 }
@@ -1082,7 +1082,7 @@
 .DEV_FACTORS_PAGE .df-r,
 .DEV_FACTORS_PAGE .df-r--sticky{
   padding: 6px 12px !important;
-  background: rgba(8,16,40,0.72) !important;
+  background: var(--table-head-bg) !important;
   border-bottom: 1px solid rgba(148,163,184,0.06) !important;
   border-right: 1px solid rgba(148,163,184,0.08) !important;
   box-shadow: none !important;
@@ -1112,13 +1112,13 @@
   box-shadow: none !important;
 }
 .DEV_FACTORS_PAGE .df-section--parametrized .df-val{
-  color: rgba(147,197,253,0.90) !important;
+  color: var(--accent-blue) !important;
   background: transparent !important;
   border: none !important;
 }
 .DEV_FACTORS_PAGE .df-section--parametrized .df-h,
 .DEV_FACTORS_PAGE .df-section--parametrized .df-r{
-  background: rgba(8,16,40,0.72) !important;
+  background: var(--table-head-bg) !important;
 }
 .DEV_FACTORS_PAGE .df-section--parametrized .df-c{
   border-bottom: 1px solid rgba(148,163,184,0.06) !important;
@@ -1133,14 +1133,14 @@
   border: none !important;
   background: transparent !important;
   box-shadow: none !important;
-  color: rgba(253,186,116,0.92) !important;
+  color: var(--accent-amber) !important;
 }
 .DEV_FACTORS_PAGE .df-section--underwriter .df-input:focus{
-  background: rgba(255,255,255,0.03) !important;
+  background: var(--surface-hover) !important;
   box-shadow: inset 0 0 0 1px rgba(249,115,22,0.25) !important;
 }
 .DEV_FACTORS_PAGE .df-section--underwriter .df-input:hover{
-  background: rgba(255,255,255,0.02) !important;
+  background: var(--surface-hover) !important;
   border: none !important;
 }
 .DEV_FACTORS_PAGE .df-section--underwriter .df-c,
@@ -1150,7 +1150,7 @@
 
 /* Row hover - subtle */
 .DEV_FACTORS_PAGE .df-table tbody tr:hover td{
-  background: rgba(255,255,255,0.02) !important;
+  background: var(--table-row-hover) !important;
 }
 .DEV_FACTORS_PAGE .df-table tbody tr:hover .df-val,
 .DEV_FACTORS_PAGE .df-table tbody tr:hover .df-input{
@@ -1166,3 +1166,11 @@
   background: transparent !important;
   box-shadow: none !important;
 }
+
+/* ── ComparisonGraph SVG chart ────────────────────────────────────────────
+   var() is invalid inside SVG presentation attributes, so the themed grid
+   and axis-tick colors are applied via these classes instead. */
+.cg-grid-y{ stroke: rgba(var(--text-rgb),.08); }
+.cg-grid-x{ stroke: rgba(var(--text-rgb),.06); }
+.cg-tick{ fill: rgba(var(--text-rgb),.55); }
+.cg-tick--x{ fill: rgba(var(--text-rgb),.60); }

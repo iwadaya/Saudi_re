@@ -352,7 +352,7 @@ export default function SlipIngestButton({
           padding: '7px 14px', borderRadius: 999,
           border: `1px solid ${color}`,
           background: `${color}18`,
-          color: 'rgba(253,186,116,0.95)',
+          color: 'var(--accent-amber)',
           fontSize: 12, fontWeight: 600, cursor: busy ? 'default' : 'pointer',
           opacity: busy ? 0.75 : 1,
           transition: 'all 0.15s',
@@ -362,7 +362,7 @@ export default function SlipIngestButton({
         {busy && (
           <span style={{
             display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
-            border: '2px solid rgba(255,255,255,0.25)', borderTopColor: color,
+            border: '2px solid rgba(var(--text-rgb),0.25)', borderTopColor: color,
             animation: 'spin 0.7s linear infinite',
           }} />
         )}
@@ -384,9 +384,9 @@ export default function SlipIngestButton({
       )}
 
       {status === 'done' && lastResult && (
-        <div style={{ fontSize: 10, color: 'rgba(34,197,94,0.7)', maxWidth: 360, lineHeight: 1.4 }}>
+        <div style={{ fontSize: 10, color: 'var(--accent)', maxWidth: 360, lineHeight: 1.4 }}>
           {lastResult._provider && (
-            <span style={{ color: 'rgba(148,163,184,0.7)', marginRight: 4 }}>via {lastResult._provider}:</span>
+            <span style={{ color: 'var(--muted)', marginRight: 4 }}>via {lastResult._provider}:</span>
           )}
           {filledCount ? `Filled ${filledCount} blank field${filledCount === 1 ? '' : 's'}. ` : 'No blank fields filled. '}
           {lastReview?.verified?.length ? `Verified ${lastReview.verified.length}. ` : ''}
@@ -396,32 +396,32 @@ export default function SlipIngestButton({
       )}
 
       {status === 'done' && lastReview?.conflicts?.length > 0 && (
-        <div style={{ maxWidth: 420, width: 'min(420px, 80vw)', border: '1px solid rgba(248,113,113,0.28)', background: 'rgba(127,29,29,0.12)', borderRadius: 8, padding: '8px 10px', fontSize: 11, color: 'rgba(254,226,226,0.88)', lineHeight: 1.35 }}>
-          <div style={{ fontWeight: 800, marginBottom: 6, color: 'rgba(252,165,165,0.95)' }}>Slip differs from current detail</div>
+        <div style={{ maxWidth: 420, width: 'min(420px, 80vw)', border: '1px solid rgba(248,113,113,0.28)', background: 'rgba(127,29,29,0.12)', borderRadius: 8, padding: '8px 10px', fontSize: 11, color: 'rgba(var(--text-rgb),0.88)', lineHeight: 1.35 }}>
+          <div style={{ fontWeight: 800, marginBottom: 6, color: 'var(--accent-rose)' }}>Slip differs from current detail</div>
           {lastReview.conflicts.slice(0, 5).map(item => (
             <div key={item.key} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center', padding: '5px 0', borderTop: '1px solid rgba(248,113,113,0.14)' }}>
               <div>
                 <b>{item.label}</b>
-                <div style={{ color: 'rgba(254,202,202,0.72)' }}>Current: {item.currentDisplay || 'blank'}</div>
-                <div style={{ color: 'rgba(254,202,202,0.92)' }}>Slip: {item.slipDisplay || 'blank'}</div>
+                <div style={{ color: 'rgba(var(--text-rgb),0.72)' }}>Current: {item.currentDisplay || 'blank'}</div>
+                <div style={{ color: 'rgba(var(--text-rgb),0.92)' }}>Slip: {item.slipDisplay || 'blank'}</div>
               </div>
               <button
                 type="button"
                 onClick={() => onFill?.({ [item.key]: item.slipValue })}
-                style={{ borderRadius: 999, border: '1px solid rgba(252,165,165,0.45)', background: 'rgba(248,113,113,0.14)', color: 'rgba(254,226,226,0.95)', padding: '4px 8px', fontSize: 10, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                style={{ borderRadius: 999, border: '1px solid rgba(248,113,113,0.45)', background: 'rgba(248,113,113,0.14)', color: 'var(--accent-rose)', padding: '4px 8px', fontSize: 10, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
               >
                 Use slip
               </button>
             </div>
           ))}
           {lastReview.conflicts.length > 5 && (
-            <div style={{ color: 'rgba(254,202,202,0.70)', paddingTop: 4 }}>+{lastReview.conflicts.length - 5} more mismatch(es)</div>
+            <div style={{ color: 'rgba(var(--text-rgb),0.70)', paddingTop: 4 }}>+{lastReview.conflicts.length - 5} more mismatch(es)</div>
           )}
         </div>
       )}
 
       {status === 'done' && !lastReview?.conflicts?.length && lastReview?.missing?.length > 0 && (
-        <div style={{ maxWidth: 360, fontSize: 10, color: 'rgba(251,191,36,0.78)', lineHeight: 1.4 }}>
+        <div style={{ maxWidth: 360, fontSize: 10, color: 'var(--accent-amber)', lineHeight: 1.4 }}>
           Not found on slip: {lastReview.missing.slice(0, 6).map(x => x.label).join(', ')}
           {lastReview.missing.length > 6 ? ` +${lastReview.missing.length - 6} more` : ''}
         </div>

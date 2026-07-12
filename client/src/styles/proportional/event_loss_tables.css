@@ -1,28 +1,28 @@
 .EVENT_LOSS_TABLES_PAGE .elt-shell { padding: 16px; }
 
-.EVENT_LOSS_TABLES_PAGE .elt-title{ margin: 12px 0 6px; font-size: 28px; font-weight: 800; color: rgba(241,245,249,.95); }
-.EVENT_LOSS_TABLES_PAGE .elt-sub{ margin: 0 0 14px; max-width: 980px; color: rgba(148,163,184,.85); line-height: 1.35; }
+.EVENT_LOSS_TABLES_PAGE .elt-title{ margin: 12px 0 6px; font-size: 28px; font-weight: 800; color: var(--text); }
+.EVENT_LOSS_TABLES_PAGE .elt-sub{ margin: 0 0 14px; max-width: 980px; color: var(--muted); line-height: 1.35; }
 
 .EVENT_LOSS_TABLES_PAGE .elt-filter{
   display:flex; gap: 14px; flex-wrap: wrap; align-items:flex-end;
   margin-bottom: 14px;
 }
 .EVENT_LOSS_TABLES_PAGE .elt-field{ min-width: 220px; }
-.EVENT_LOSS_TABLES_PAGE .elt-label{ font-size: 13px; color: rgba(148,163,184,.85); margin-bottom: 8px; }
+.EVENT_LOSS_TABLES_PAGE .elt-label{ font-size: 13px; color: var(--muted); margin-bottom: 8px; }
 .EVENT_LOSS_TABLES_PAGE .elt-select,
 .EVENT_LOSS_TABLES_PAGE .elt-input{
   width: 220px; height: 40px; border-radius: 12px;
-  border: 1px solid rgba(148,163,184,.18);
-  background: rgba(8,16,40,.45); color: rgba(226,232,240,.92);
+  border: 1px solid var(--stroke-soft);
+  background: var(--control-bg); color: rgba(var(--text-rgb),.92);
   padding: 0 12px; outline: none;
 }
 
 .EVENT_LOSS_TABLES_PAGE .elt-actions{ margin-left:auto; display:flex; gap:10px; flex-wrap: wrap; }
 .EVENT_LOSS_TABLES_PAGE .elt-btn{
   border-radius: 999px;
-  border: 1px solid rgba(148,163,184,.22);
-  background: rgba(8,16,40,.18);
-  color: rgba(226,232,240,.9);
+  border: 1px solid var(--stroke-soft);
+  background: var(--control-bg);
+  color: rgba(var(--text-rgb),.9);
   padding: 10px 14px;
   font-weight: 750;
   cursor: pointer;
@@ -34,20 +34,20 @@
 .EVENT_LOSS_TABLES_PAGE .elt-btn--primary{
   border-color: rgba(var(--accent-rgb),.45);
   background: linear-gradient(180deg, rgba(var(--accent-rgb),.95), rgba(var(--accent2-rgb),.75));
-  color: rgba(8,16,40,.92);
+  color: var(--accent-contrast);
   box-shadow: 0 14px 30px rgba(var(--accent-rgb),.12);
 }
 
 .EVENT_LOSS_TABLES_PAGE .elt-table-wrap{
   border-radius: 16px;
-  border: 1px solid rgba(148,163,184,.12);
+  border: 1px solid var(--stroke-soft);
   overflow: hidden;
 }
 .EVENT_LOSS_TABLES_PAGE .elt-table-label{
   padding: 10px 12px;
-  color: rgba(148,163,184,.9);
-  background: rgba(8,16,40,.26);
-  border-bottom: 1px solid rgba(148,163,184,.12);
+  color: var(--muted);
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--stroke-soft);
 }
 .EVENT_LOSS_TABLES_PAGE .elt-table{
   width: 100%;
@@ -57,26 +57,26 @@
 }
 .EVENT_LOSS_TABLES_PAGE .elt-table thead th{
   position: sticky; top: 0; z-index: 2;
-  background: rgba(15,23,42,.85);
-  color: rgba(226,232,240,.72);
+  background: var(--table-head-bg);
+  color: rgba(var(--text-rgb),.72);
   font-weight: 800;
   font-size: 12px;
   letter-spacing: .12em;
   text-transform: uppercase;
   padding: 12px 10px;
-  border-bottom: 1px solid rgba(148,163,184,.16);
+  border-bottom: 1px solid var(--stroke-soft);
 }
 .EVENT_LOSS_TABLES_PAGE .elt-table tbody td{
   padding: 8px 8px;
-  border-bottom: 1px solid rgba(148,163,184,.10);
+  border-bottom: 1px solid var(--hairline);
 }
 .EVENT_LOSS_TABLES_PAGE .elt-cell{
   width: 100%;
   height: 34px;
   border-radius: 10px;
-  border: 1px solid rgba(148,163,184,.20);
-  background: rgba(8,16,40,.55);
-  color: rgba(226,232,240,.92);
+  border: 1px solid var(--stroke-soft);
+  background: var(--control-bg);
+  color: rgba(var(--text-rgb),.92);
   padding: 0 10px;
   outline: none;
 }

@@ -684,11 +684,11 @@ export default function ExcelImportAgent() {
                 Default MODIFIED; pick ACTUAL to import the gross triangle. */}
             {selectedSheets.some(s => s.type === 'triangle') && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                <span style={{ fontSize: 12, color: 'var(--text-subtle)' }}>Import triangles as</span>
+                <span style={{ fontSize: 12, color: 'rgba(226,232,240,0.6)' }}>Import triangles as</span>
                 <div role="group" aria-label="Triangle variant" style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.12)' }}>
                   {['MODIFIED', 'ACTUAL'].map(v => { const active = triangleVariant === v; return (
                     <button key={v} type="button" aria-pressed={active} onClick={() => setTriangleVariant(v)}
-                      style={{ padding: '4px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none', background: active ? 'var(--accent)' : 'transparent', color: active ? 'var(--accent-contrast)' : 'var(--text-subtle)' }}>
+                      style={{ padding: '4px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none', background: active ? 'var(--accent)' : 'transparent', color: active ? 'var(--accent-contrast)' : 'rgba(226,232,240,0.6)' }}>
                       {v === 'MODIFIED' ? 'Modified' : 'Actual'}
                     </button>
                   ); })}
@@ -739,7 +739,7 @@ export default function ExcelImportAgent() {
         )}
 
         {!hasFile && (
-          <div style={{ padding: '40px 0', textAlign: 'center', color: 'rgba(226,232,240,0.2)', fontSize: 13 }}>
+          <div style={{ padding: '40px 0', textAlign: 'center', color: 'rgba(226,232,240,0.5)', fontSize: 13 }}>
             No workbook loaded. Drop a file above to begin.
           </div>
         )}

@@ -226,8 +226,8 @@ export default function PropNoTriangulation() {
                     <div>
                       <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', marginBottom: 5 }}>Start Year</div>
                       <div style={{
-                        background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
-                        color: 'rgba(255,255,255,0.5)', padding: '8px 14px', borderRadius: 4, width: 100,
+                        background: 'var(--surface-hover)', border: '1px solid var(--hairline)',
+                        color: 'rgba(var(--text-rgb),.5)', padding: '8px 14px', borderRadius: 4, width: 100,
                         fontFamily: 'var(--font-mono)', fontSize: 13, userSelect: 'none',
                         display: 'flex', alignItems: 'center', gap: 6,
                       }}>
@@ -238,8 +238,8 @@ export default function PropNoTriangulation() {
                     <div>
                       <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', marginBottom: 5 }}>Renewal Year</div>
                       <div style={{
-                        background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
-                        color: 'rgba(255,255,255,0.5)', padding: '8px 14px', borderRadius: 4, width: 100,
+                        background: 'var(--surface-hover)', border: '1px solid var(--hairline)',
+                        color: 'rgba(var(--text-rgb),.5)', padding: '8px 14px', borderRadius: 4, width: 100,
                         fontFamily: 'var(--font-mono)', fontSize: 13, userSelect: 'none',
                         display: 'flex', alignItems: 'center', gap: 6,
                       }}>
@@ -260,13 +260,13 @@ export default function PropNoTriangulation() {
                   >🔍 LDF Analysis</button>
                 </div>
                 {/* Large / CAT stripping basis (persisted per treaty) */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#bae6fd' }}>Large / CAT losses</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--hairline)' }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-blue)' }}>Large / CAT losses</span>
                   <div className="toggle-group">
-                    <button type="button" className={`toggle-option${stripLargeCat ? ' active' : ''}`} onClick={() => setStrip(true)}>Strip from incurred</button>
-                    <button type="button" className={`toggle-option${!stripLargeCat ? ' active' : ''}`} onClick={() => setStrip(false)}>Keep in incurred</button>
+                    <button type="button" className={`toggle-option${stripLargeCat ? ' active' : ''}`} style={stripLargeCat ? undefined : { color: 'rgba(var(--text-rgb),.82)' }} onClick={() => setStrip(true)}>Strip from incurred</button>
+                    <button type="button" className={`toggle-option${!stripLargeCat ? ' active' : ''}`} style={!stripLargeCat ? undefined : { color: 'rgba(var(--text-rgb),.82)' }} onClick={() => setStrip(false)}>Keep in incurred</button>
                   </div>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                  <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)' }}>
                     Saved per treaty. Strip removes large/CAT from incurred before projecting and adds them back unprojected; Keep projects the full incurred and folds everything into attritional.
                   </span>
                 </div>
@@ -276,12 +276,12 @@ export default function PropNoTriangulation() {
               <div className="nt-table-card glass" style={{ padding: '0 0 8px 0' }}>
                 <table className="nt-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed' }}>
                   <thead>
-                    <tr style={{ background: 'rgba(5,8,16,0.85)' }}>
-                      <th style={{ width: 90, textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.60)', whiteSpace: 'nowrap' }}>UW Year</th>
-                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.60)' }}>Gross Premium</th>
-                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.60)' }}>Paid Claims</th>
-                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.60)' }}>OS Claims</th>
-                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid rgba(255,255,255,0.10)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.60)' }}>Incurred (Calc)</th>
+                    <tr style={{ background: 'var(--table-head-bg)' }}>
+                      <th style={{ width: 90, textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),.6)', whiteSpace: 'nowrap' }}>UW Year</th>
+                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),.6)' }}>Gross Premium</th>
+                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),.6)' }}>Paid Claims</th>
+                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),.6)' }}>OS Claims</th>
+                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),.6)' }}>Incurred (Calc)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -289,7 +289,7 @@ export default function PropNoTriangulation() {
                       const row = getRow(year);
                       const inc = incurred(row);
                       return (
-                        <tr key={year} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                        <tr key={year} style={{ borderBottom: '1px solid var(--hairline)' }}>
                           <td style={{ textAlign: 'center', padding: '6px 8px' }}>
                             <span style={{
                               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -312,8 +312,8 @@ export default function PropNoTriangulation() {
                                 onBlur={e => handleBlur(year, col, e.target.value)}
                                 onPaste={e => handlePaste(e, yi, ci)}
                                 style={{
-                                  width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)',
-                                  color: 'white', padding: '8px 10px', borderRadius: 6,
+                                  width: '100%', background: 'var(--control-bg)', border: '1px solid var(--hairline)',
+                                  color: 'var(--text)', padding: '8px 10px', borderRadius: 6,
                                 }}
                               />
                             </td>
@@ -324,8 +324,8 @@ export default function PropNoTriangulation() {
                               readOnly tabIndex={-1}
                               value={fmtC(inc)}
                               style={{
-                                width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid transparent',
-                                color: 'rgba(255,255,255,0.6)', padding: '8px 10px', borderRadius: 6, cursor: 'default',
+                                width: '100%', background: 'var(--surface-hover)', border: '1px solid transparent',
+                                color: 'rgba(var(--text-rgb),.6)', padding: '8px 10px', borderRadius: 6, cursor: 'default',
                               }}
                             />
                           </td>
@@ -339,13 +339,13 @@ export default function PropNoTriangulation() {
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                           padding: '3px 12px', borderRadius: 6,
                           background: 'rgba(0,212,255,0.10)', border: '1px solid rgba(0,212,255,0.30)',
-                          color: '#00d4ff', fontSize: 11, fontWeight: 800, letterSpacing: '.06em',
+                          color: 'var(--accent-blue)', fontSize: 11, fontWeight: 800, letterSpacing: '.06em',
                         }}>Total</span>
                       </td>
-                      <td className="num" style={{ padding: 6, color: 'rgba(255,255,255,0.8)', paddingRight: 12 }}>{fmtC(totals.premium)}</td>
-                      <td className="num" style={{ padding: 6, color: 'rgba(255,255,255,0.8)', paddingRight: 12 }}>{fmtC(totals.paid)}</td>
-                      <td className="num" style={{ padding: 6, color: 'rgba(255,255,255,0.8)', paddingRight: 12 }}>{fmtC(totals.os)}</td>
-                      <td className="num" style={{ padding: 6, color: 'rgba(255,255,255,0.6)', paddingRight: 12 }}>{fmtC(totals.incurred)}</td>
+                      <td className="num" style={{ padding: 6, color: 'rgba(var(--text-rgb),.8)', paddingRight: 12 }}>{fmtC(totals.premium)}</td>
+                      <td className="num" style={{ padding: 6, color: 'rgba(var(--text-rgb),.8)', paddingRight: 12 }}>{fmtC(totals.paid)}</td>
+                      <td className="num" style={{ padding: 6, color: 'rgba(var(--text-rgb),.8)', paddingRight: 12 }}>{fmtC(totals.os)}</td>
+                      <td className="num" style={{ padding: 6, color: 'rgba(var(--text-rgb),.6)', paddingRight: 12 }}>{fmtC(totals.incurred)}</td>
                     </tr>
                   </tbody>
                 </table>

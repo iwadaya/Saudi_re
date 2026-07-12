@@ -256,8 +256,8 @@ export default function PropProjectedSummary() {
         <div className="ps-card-head">
           <div className="ps-card-head-left"><div className="ps-card-title">{title}</div><div className="ps-card-sub">{subtitle}</div></div>
           {showToggle && <div className="ps-card-head-right"><div className="ps-metric-toggle"><div className="toggle-group">
-            <button type="button" className={`toggle-option ${topMetric === 'PREMIUM' ? 'active' : ''}`} onClick={() => setTopMetric('PREMIUM')}>Premium</button>
-            <button type="button" className={`toggle-option ${topMetric === 'LOSSES' ? 'active' : ''}`} onClick={() => setTopMetric('LOSSES')}>Losses</button>
+            <button type="button" className={`toggle-option ${topMetric === 'PREMIUM' ? 'active' : ''}`} style={topMetric === 'PREMIUM' ? undefined : { color: 'rgba(var(--text-rgb),.82)' }} onClick={() => setTopMetric('PREMIUM')}>Premium</button>
+            <button type="button" className={`toggle-option ${topMetric === 'LOSSES' ? 'active' : ''}`} style={topMetric === 'LOSSES' ? undefined : { color: 'rgba(var(--text-rgb),.82)' }} onClick={() => setTopMetric('LOSSES')}>Losses</button>
           </div></div></div>}
         </div>
         <div className="ps-legend">
@@ -323,17 +323,17 @@ export default function PropProjectedSummary() {
           ) : (
             <div className="ps-page">
               <h2 className="ps-h2">Ultimate – Projected vs Actual
-                {sourceLabel && <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 12, color: source === 'saved-factors' ? 'var(--accent)' : 'rgba(255,255,255,.45)' }}>
+                {sourceLabel && <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 12, color: source === 'saved-factors' ? 'var(--accent)' : 'rgba(var(--text-rgb),.45)' }}>
                   ({sourceLabel})
                 </span>}
               </h2>
               {usedPlaceholderLdfs && (
-                <div role="alert" style={{ margin: '0 0 12px', padding: '12px 16px', borderRadius: 10, background: 'rgba(249,115,22,0.14)', border: '2px solid #f97316', color: '#fdba74', fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>
+                <div role="alert" style={{ margin: '0 0 12px', padding: '12px 16px', borderRadius: 10, background: 'rgba(249,115,22,0.14)', border: '2px solid #f97316', color: 'var(--accent-amber)', fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>
                   No saved development factors found — projection is using placeholder benchmark curves. Go to the Development Factors screen to select and save factors before relying on these figures.
                 </div>
               )}
               {staleMessages.length > 0 && (
-                <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5 }}>
+                <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: 'var(--accent-amber)', fontSize: 12, lineHeight: 1.5 }}>
                   {staleMessages.map((m, i) => <div key={i}>{m}</div>)}
                 </div>
               )}
@@ -344,10 +344,10 @@ export default function PropProjectedSummary() {
                 background: 'rgba(56,189,248,0.06)',
                 border: '1px solid rgba(56,189,248,0.22)',
                 fontSize: 12,
-                color: 'rgba(226,232,240,0.78)',
+                color: 'rgba(var(--text-rgb),.78)',
                 lineHeight: 1.5,
               }}>
-                <b style={{ color: '#38bdf8', letterSpacing: '.04em' }}>UNCAPPED ULTIMATES.</b>{' '}
+                <b style={{ color: 'var(--accent-blue)', letterSpacing: '.04em' }}>UNCAPPED ULTIMATES.</b>{' '}
                 Premium and loss values shown here are the raw triangle / dev-factor
                 projections. Treaty caps, sliding commission, profit commission (with
                 LCF) and loss-participation credits are <b>not</b> applied — those
@@ -382,7 +382,7 @@ export default function PropProjectedSummary() {
                             cursor: 'pointer',
                             border: '1px solid rgba(56,189,248,0.45)',
                             background: 'rgba(56,189,248,0.08)',
-                            color: '#7dd3fc',
+                            color: 'var(--accent-blue)',
                           }}
                         >
                           ▦ Loss Breakdown
@@ -398,7 +398,7 @@ export default function PropProjectedSummary() {
                             cursor: 'pointer',
                             border: '1px solid rgba(99,102,241,0.45)',
                             background: showAnalyses ? 'rgba(99,102,241,0.20)' : 'rgba(99,102,241,0.08)',
-                            color: '#c7d2fe',
+                            color: 'var(--accent-blue)',
                           }}
                         >
                           {showAnalyses ? '▾ Analyses' : '▸ Analyses'}
@@ -412,20 +412,20 @@ export default function PropProjectedSummary() {
                           return d > 0 ? 'UNDER' : d < 0 ? 'OVER' : 'BALANCED';
                         };
                         const toneFor = (status) => status === 'UNDER'
-                          ? { bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.35)', text: '#fca5a5', label: 'Under Reserving', detail: 'Paid ultimate exceeds incurred ultimate — case reserves may be too low.' }
+                          ? { bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.35)', text: 'var(--accent-rose)', label: 'Under Reserving', detail: 'Paid ultimate exceeds incurred ultimate — case reserves may be too low.' }
                           : status === 'OVER'
-                            ? { bg: 'rgba(34,197,94,0.10)', border: 'rgba(34,197,94,0.35)', text: '#86efac', label: 'Over Reserving', detail: 'Incurred ultimate exceeds paid ultimate — case reserves may be conservative.' }
+                            ? { bg: 'rgba(34,197,94,0.10)', border: 'rgba(34,197,94,0.35)', text: 'var(--accent)', label: 'Over Reserving', detail: 'Incurred ultimate exceeds paid ultimate — case reserves may be conservative.' }
                             : status === 'BALANCED'
-                              ? { bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.35)', text: '#cbd5e1', label: 'Balanced', detail: 'Paid and incurred ultimates align.' }
-                              : { bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.35)', text: '#94a3b8', label: 'No Data', detail: 'Paid and incurred projections are unavailable.' };
+                              ? { bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.35)', text: 'var(--muted)', label: 'Balanced', detail: 'Paid and incurred ultimates align.' }
+                              : { bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.35)', text: 'var(--muted)', label: 'No Data', detail: 'Paid and incurred projections are unavailable.' };
                         const combinedTone = toneFor(reservingStatus);
                         return (
                           <div style={{ marginBottom: 10 }}>
                             {/* ── Per-year comparison ── */}
-                            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'rgba(15,23,42,0.45)', border: '1px solid rgba(99,102,241,0.25)' }}>
+                            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--surface-hover)', border: '1px solid rgba(99,102,241,0.25)' }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
-                                <div style={{ fontSize: 12, fontWeight: 800, color: '#c7d2fe', letterSpacing: '0.04em' }}>RESERVING ANALYSIS — PER YEAR</div>
-                                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>Paid Ultimate vs Incurred Ultimate</div>
+                                <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--accent-blue)', letterSpacing: '0.04em' }}>RESERVING ANALYSIS — PER YEAR</div>
+                                <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.55)' }}>Paid Ultimate vs Incurred Ultimate</div>
                               </div>
                               <div className="ps-table-wrap">
                                 <table className="ps-table">
@@ -470,9 +470,9 @@ export default function PropProjectedSummary() {
                             <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 10, background: combinedTone.bg, border: `1px solid ${combinedTone.border}` }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                                 <div style={{ fontSize: 12, fontWeight: 800, color: combinedTone.text, letterSpacing: '0.04em' }}>COMBINED — {combinedTone.label.toUpperCase()}</div>
-                                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>Δ {fmt0(reservingDelta)}</div>
+                                <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.55)' }}>Δ {fmt0(reservingDelta)}</div>
                               </div>
-                              <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>{combinedTone.detail}</div>
+                              <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(var(--text-rgb),.65)' }}>{combinedTone.detail}</div>
                             </div>
                           </div>
                         );
@@ -537,23 +537,23 @@ export default function PropProjectedSummary() {
               onClick={e => { if (e.target === e.currentTarget) setShowLossModal(false); }}
               style={{ position: 'fixed', inset: 0, zIndex: 120000, background: 'rgba(2,6,23,0.72)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
             >
-              <div role="dialog" aria-modal="true" className="glass" style={{ width: 'min(1380px,96vw)', maxHeight: '88vh', overflow: 'auto', borderRadius: 16, border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(8,16,40,0.97)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid rgba(148,163,184,0.14)' }}>
+              <div role="dialog" aria-modal="true" className="glass" style={{ width: 'min(1380px,96vw)', maxHeight: '88vh', overflow: 'auto', borderRadius: 16, border: '1px solid var(--stroke-soft)', background: 'var(--panel-bg-strong)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--stroke-soft)' }}>
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: '0.03em', color: '#e2e8f0' }}>Loss Breakdown — Actual vs Projected</div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>Attritional = ultimate / incurred loss − large − CAT (raw incurred from the saved loss grids)</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: '0.03em', color: 'var(--text)' }}>Loss Breakdown — Actual vs Projected</div>
+                    <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)', marginTop: 2 }}>Attritional = ultimate / incurred loss − large − CAT (raw incurred from the saved loss grids)</div>
                   </div>
-                  <button onClick={() => setShowLossModal(false)} style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid rgba(148,163,184,0.25)', background: 'transparent', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 14 }}>✕</button>
+                  <button onClick={() => setShowLossModal(false)} style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid var(--stroke-soft)', background: 'transparent', color: 'rgba(var(--text-rgb),.7)', cursor: 'pointer', fontSize: 14 }}>✕</button>
                 </div>
-                <div style={{ display: 'flex', padding: '0 20px', borderBottom: '1px solid rgba(148,163,184,0.14)' }}>
+                <div style={{ display: 'flex', padding: '0 20px', borderBottom: '1px solid var(--stroke-soft)' }}>
                   {[{ k: 'abs', l: 'Amounts' }, { k: 'pct', l: 'Percentages' }].map(t => (
-                    <button key={t.k} onClick={() => setModalTab(t.k)} style={{ padding: '12px 18px', fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer', background: 'transparent', color: modalTab === t.k ? '#38bdf8' : 'rgba(255,255,255,0.45)', borderBottom: modalTab === t.k ? '2px solid #38bdf8' : '2px solid transparent', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{t.l}</button>
+                    <button key={t.k} onClick={() => setModalTab(t.k)} style={{ padding: '12px 18px', fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer', background: 'transparent', color: modalTab === t.k ? 'var(--accent-blue)' : 'rgba(var(--text-rgb),.45)', borderBottom: modalTab === t.k ? '2px solid var(--accent-blue)' : '2px solid transparent', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{t.l}</button>
                   ))}
                 </div>
                 <div style={{ padding: 20 }}>
                   {lossModalBases.map(base => (
                     <div key={base.key} style={{ marginBottom: 18 }}>
-                      <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: '#c7d2fe', marginBottom: 8 }}>{base.label}</div>
+                      <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: 'var(--accent-blue)', marginBottom: 8 }}>{base.label}</div>
                       <div className="ps-table-wrap">
                         <table className="ps-table">
                           <thead><tr>

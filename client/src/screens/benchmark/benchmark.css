@@ -768,6 +768,35 @@
   border-color: rgba(35,209,139,0.40);
   background: rgba(35,209,139,0.04);
 }
+/* PctInput renders type="text", which matches the global themed
+   :is(input[type="text"],…) rule in components.css (specificity 0,1,1). That
+   outranks the plain .bm-cell class (0,1,0), so in light themes the Rate %
+   cells picked up the theme's light control background, 12px radius and a
+   dark-faded placeholder — unreadable on this intentionally dark terminal
+   page. Re-assert the terminal cell style at higher specificity; values are
+   hardcoded dark on purpose, like the rest of this screen. */
+input.bm-cell.bm-cell {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 5px;
+  color: rgba(226,232,240,0.90);
+  box-shadow: none;
+  padding: 0 8px;
+  font-size: 12px;
+}
+input.bm-cell.bm-cell:focus {
+  border-color: rgba(35,209,139,0.40);
+  background: rgba(35,209,139,0.04);
+  box-shadow: none;
+}
+/* The global ::placeholder rule uses rgba(var(--text-rgb),…) — dark in light
+   themes, i.e. invisible on this dark page. Hardcode a light placeholder for
+   every bm control (the shell/cards stay dark in every theme). */
+.bm-cell::placeholder,
+.bm-cell-input::placeholder,
+.bm-input::placeholder {
+  color: rgba(148,163,184,0.45);
+}
 /* Narrower min-width only — height stays var(--bm-row-control-h) from .bm-cell. */
 .bm-cell--sm { min-width: 60px; }
 /* Computed/read-only cells: borderless tabular text, same row height, centered. */

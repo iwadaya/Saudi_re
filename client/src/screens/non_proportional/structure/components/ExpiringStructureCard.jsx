@@ -38,10 +38,10 @@ export default function ExpiringStructureCard({
               Override
             </button>
           )}
-          <span style={{ fontSize: 12, color: 'rgba(226,232,240,0.45)', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.45)', whiteSpace: 'nowrap' }}>
             Layers
           </span>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(226,232,240,0.75)', minWidth: 24, textAlign: 'center' }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(var(--text-rgb),0.75)', minWidth: 24, textAlign: 'center' }}>
             {expiringLayerCount || '—'}
           </span>
         </div>
@@ -49,7 +49,7 @@ export default function ExpiringStructureCard({
 
       {/* Renewal auto-populate notice */}
       {isRenewal && expiringAutoPopulated && (
-        <div style={{ margin: '0 14px 10px', padding: '8px 12px', borderRadius: 10, background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.25)', fontSize: 12, color: 'rgba(34,211,238,0.9)' }}>
+        <div style={{ margin: '0 14px 10px', padding: '8px 12px', borderRadius: 10, background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.25)', fontSize: 12, color: 'var(--accent-blue)' }}>
           ⟳ Expiring structure auto-loaded from prior year contract. Data is read-only. Click <b>Override</b> above to edit.
         </div>
       )}
@@ -64,7 +64,7 @@ export default function ExpiringStructureCard({
           const locked = isRenewal && expiringAutoPopulated;
           return (
             <div key={k}>
-              <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.55)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</div>
+              <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.55)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</div>
               <input
                 className={`np-mini-input${locked ? ' np-mini-input--readonly' : ''}`}
                 value={expiringTerms[k] ?? ''}
@@ -160,7 +160,7 @@ export default function ExpiringStructureCard({
             return (
               <tfoot>
                 <tr style={{ borderTop: '2px solid rgba(0,212,255,0.45)', background: 'rgba(0,212,255,0.06)' }}>
-                  <th className="np-table-sticky cell-center" style={{ color: '#00d4ff', fontSize: 10, letterSpacing: '.08em', fontWeight: 800, background: 'rgba(0,212,255,0.08)' }}>TOTAL</th>
+                  <th className="np-table-sticky cell-center" style={{ color: 'var(--accent-blue)', fontSize: 10, letterSpacing: '.08em', fontWeight: 800, background: 'rgba(0,212,255,0.08)' }}>TOTAL</th>
                   <td><CommaInput value={totLimit ? String(totLimit) : ''} readOnly suffix={currency} onChange={() => {}} /></td>
                   <td><CommaInput value={firstDed ? String(firstDed) : ''} readOnly suffix={currency} onChange={() => {}} /></td>
                   <td><CommaInput value={totAgg ? String(totAgg) : ''} readOnly suffix={currency} onChange={() => {}} /></td>

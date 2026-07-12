@@ -14,7 +14,7 @@ const stripDigits = v => String(v ?? '').replace(/[^\d]/g,'');
 function FR({ label, children }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 10, alignItems: 'center', minHeight: 36 }}>
-      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>{label}</div>
+      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)' }}>{label}</div>
       <div>{children}</div>
     </div>
   );
@@ -104,7 +104,7 @@ export default function FacDeductibles() {
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Deductibles & Terms" headerPill="FACULTATIVE" onBeforeNext={save} onBeforeBack={save}>
       <div style={{ maxWidth: 720, margin: '0 auto', padding: '8px 0 40px' }}>
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(0,212,255,0.55)', marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Deductible Structure</div>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--accent-blue-rgb),0.75)', marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid var(--hairline)' }}>Deductible Structure</div>
 
         <FR label="Deductible Amount">
           <input className="fi" type="text" inputMode="numeric" value={fmtComma(f.deductible_amount)} onChange={e => set('deductible_amount', stripDigits(e.target.value))} placeholder="0" />
@@ -115,28 +115,28 @@ export default function FacDeductibles() {
             placeholder={"e.g.\nFire & Allied Perils: 1% of SI, min USD 50,000\nNatural Catastrophe: 2% of SI, min USD 100,000\nMachinery Breakdown: USD 25,000 each & every loss\nBusiness Interruption: 60 days waiting period"} />
         </FR>
 
-        <div style={{ marginTop: 28, padding: 16, background: 'rgba(0,212,255,0.04)', border: '1px solid rgba(0,212,255,0.12)', borderRadius: 10 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(0,212,255,0.60)', marginBottom: 6 }}>Deductible Guidance</div>
-          <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.55)', lineHeight: 1.7 }}>
+        <div style={{ marginTop: 28, padding: 16, background: 'rgba(var(--accent-blue-rgb),0.04)', border: '1px solid rgba(var(--accent-blue-rgb),0.12)', borderRadius: 10 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(var(--accent-blue-rgb),0.80)', marginBottom: 6 }}>Deductible Guidance</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
             Deductibles should reflect the cedant&apos;s retention appetite and the nature of the risk. Common structures include flat monetary amounts per occurrence, percentage of sum insured with minimum/maximum amounts, and time-based waiting periods for BI covers. NatCat deductibles are typically higher than standard fire perils.
           </div>
         </div>
 
         {/* ── Clauses & Exclusions checklist ── */}
-        <div style={{ marginTop: 32, paddingBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.06)',
+        <div style={{ marginTop: 32, paddingBottom: 6, borderBottom: '1px solid var(--hairline)',
                        display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase',
-                        color: 'rgba(0,212,255,0.55)' }}>
+                        color: 'rgba(var(--accent-blue-rgb),0.75)' }}>
             Clauses &amp; Exclusions Checklist
           </div>
           {missingMandatory > 0 && (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
                           padding: '3px 10px', borderRadius: 20,
-                          background: 'rgba(248,113,113,0.10)',
-                          border: '1px solid rgba(248,113,113,0.30)' }}>
-              <span style={{ width: 8, height: 8, borderRadius: 4, background: '#f87171' }} />
+                          background: 'rgba(var(--accent-rose-rgb),0.10)',
+                          border: '1px solid rgba(var(--accent-rose-rgb),0.30)' }}>
+              <span style={{ width: 8, height: 8, borderRadius: 4, background: 'var(--accent-rose)' }} />
               <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.10em',
-                             color: '#f87171', textTransform: 'uppercase' }}>
+                             color: 'var(--accent-rose)', textTransform: 'uppercase' }}>
                 {missingMandatory} mandatory missing
               </span>
             </div>
@@ -144,19 +144,19 @@ export default function FacDeductibles() {
         </div>
 
         {checklist.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.40)', padding: '14px 0' }}>
+          <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.5)', padding: '14px 0' }}>
             Loading clause catalogue…
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 10 }}>
             <thead>
-              <tr style={{ background: 'rgba(5,8,16,0.5)' }}>
+              <tr style={{ background: 'var(--table-head-bg)' }}>
                 {['Clause', 'Mandatory', 'Checked', 'Comments'].map((h) => (
                   <th key={h} style={{ padding: '8px 10px',
                                        textAlign: h === 'Checked' || h === 'Mandatory' ? 'center' : 'left',
                                        fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                                       textTransform: 'uppercase', color: 'rgba(148,163,184,0.50)',
-                                       borderBottom: '1px solid rgba(255,255,255,0.08)' }}>{h}</th>
+                                       textTransform: 'uppercase', color: 'var(--muted)',
+                                       borderBottom: '1px solid var(--hairline)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -164,21 +164,21 @@ export default function FacDeductibles() {
               {checklist.map((row) => {
                 const missing = row.is_mandatory && !row.is_checked;
                 return (
-                  <tr key={row.clause_code} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <tr key={row.clause_code} style={{ borderBottom: '1px solid var(--hairline)' }}>
                     <td style={{ padding: '8px 10px', fontSize: 12,
-                                  color: 'rgba(226,232,240,0.85)' }}>
+                                  color: 'rgba(var(--text-rgb),0.85)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {missing && <span style={{ width: 8, height: 8, borderRadius: 4, background: '#f87171', flexShrink: 0 }} />}
+                        {missing && <span style={{ width: 8, height: 8, borderRadius: 4, background: 'var(--accent-rose)', flexShrink: 0 }} />}
                         <div>
                           <div>{row.clause_name}</div>
-                          <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.40)', marginTop: 1 }}>
+                          <div style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.5)', marginTop: 1 }}>
                             {row.clause_code}{row.clause_category ? ` · ${row.clause_category}` : ''}
                           </div>
                         </div>
                       </div>
                     </td>
                     <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11,
-                                  color: row.is_mandatory ? '#fbbf24' : 'rgba(148,163,184,0.40)' }}>
+                                  color: row.is_mandatory ? 'var(--accent-amber)' : 'rgba(var(--text-rgb),0.5)' }}>
                       {row.is_mandatory ? 'Mandatory' : 'Optional'}
                     </td>
                     <td style={{ padding: '8px 10px', textAlign: 'center' }}>

@@ -20,7 +20,7 @@ function formatTimestamp(value) {
 
 function buttonStyle(kind) {
   const base = {
-    border: '1px solid rgba(148, 163, 184, 0.35)',
+    border: '1px solid var(--stroke)',
     borderRadius: '8px',
     cursor: 'pointer',
     fontSize: '13px',
@@ -33,14 +33,14 @@ function buttonStyle(kind) {
       ...base,
       background: 'rgba(248, 113, 113, 0.16)',
       borderColor: 'rgba(248, 113, 113, 0.5)',
-      color: '#fecaca',
+      color: 'var(--accent-rose)',
     };
   }
   return {
     ...base,
     background: 'rgba(59, 130, 246, 0.18)',
     borderColor: 'rgba(96, 165, 250, 0.5)',
-    color: '#bfdbfe',
+    color: 'var(--accent-blue)',
   };
 }
 
@@ -65,11 +65,11 @@ function showStaleWriteModal({ entityType, timestamp }) {
     });
 
     const panel = applyStyles(document.createElement('div'), {
-      background: 'rgba(15, 23, 42, 0.98)',
-      border: '1px solid rgba(148, 163, 184, 0.28)',
+      background: 'var(--panel-bg-strong)',
+      border: '1px solid var(--stroke-soft)',
       borderRadius: '8px',
       boxShadow: '0 24px 80px rgba(0, 0, 0, 0.38)',
-      color: '#e5e7eb',
+      color: 'var(--text)',
       maxWidth: '480px',
       padding: '22px',
       width: 'min(480px, 100%)',
@@ -83,7 +83,7 @@ function showStaleWriteModal({ entityType, timestamp }) {
     title.id = 'stale-write-title';
     title.textContent = 'Concurrent edit detected';
     applyStyles(title, {
-      color: '#f8fafc',
+      color: 'var(--text)',
       fontSize: '17px',
       fontWeight: '800',
       marginBottom: '10px',
@@ -92,7 +92,7 @@ function showStaleWriteModal({ entityType, timestamp }) {
     const message = document.createElement('p');
     message.textContent = `Your colleague saved this ${entityType} at ${formatTimestamp(timestamp)}. Your changes will overwrite theirs unless you refresh.`;
     applyStyles(message, {
-      color: 'rgba(226, 232, 240, 0.86)',
+      color: 'rgba(var(--text-rgb), 0.86)',
       fontSize: '14px',
       lineHeight: '1.5',
       margin: '0 0 18px',

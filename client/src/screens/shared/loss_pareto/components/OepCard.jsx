@@ -33,7 +33,7 @@ export default function OepCard({ showOep, onToggle, oepRows, onSetOepRow, oepLa
 
           {/* OEP input grid */}
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(148,163,184,0.5)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>
               OEP Curve Input
             </div>
             <table className="llp-table" style={{ width: 300 }}>
@@ -53,9 +53,9 @@ export default function OepCard({ showOep, onToggle, oepRows, onSetOepRow, oepLa
                         onChange={e => onSetOepRow(i, 'rp', e.target.value)}
                         style={{
                           width: '100%', textAlign: 'center', fontSize: 12,
-                          background: 'rgba(255,255,255,0.05)',
-                          border: '1px solid rgba(255,255,255,0.10)',
-                          borderRadius: 4, color: '#00d4ff', padding: '4px 6px', outline: 'none',
+                          background: 'var(--control-bg)',
+                          border: '1px solid var(--hairline)',
+                          borderRadius: 4, color: 'var(--accent-blue)', padding: '4px 6px', outline: 'none',
                         }}
                       />
                     </td>
@@ -67,9 +67,9 @@ export default function OepCard({ showOep, onToggle, oepRows, onSetOepRow, oepLa
                         onChange={e => onSetOepRow(i, 'loss', e.target.value)}
                         style={{
                           width: '100%', textAlign: 'right', fontSize: 12,
-                          background: 'rgba(255,255,255,0.05)',
-                          border: '1px solid rgba(255,255,255,0.10)',
-                          borderRadius: 4, color: 'rgba(226,232,240,0.9)', padding: '4px 6px', outline: 'none',
+                          background: 'var(--control-bg)',
+                          border: '1px solid var(--hairline)',
+                          borderRadius: 4, color: 'rgba(var(--text-rgb),.9)', padding: '4px 6px', outline: 'none',
                         }}
                       />
                     </td>
@@ -77,7 +77,7 @@ export default function OepCard({ showOep, onToggle, oepRows, onSetOepRow, oepLa
                 ))}
               </tbody>
             </table>
-            <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.4)', marginTop: 6 }}>
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>
               Minimum 2 rows with values. Piecewise linear interpolation between points.
             </div>
           </div>
@@ -85,7 +85,7 @@ export default function OepCard({ showOep, onToggle, oepRows, onSetOepRow, oepLa
           {/* OEP layer results */}
           {oepLayerRols.length > 0 && oepLayerRols.some(l => l.rol > 0) && (
             <div style={{ flex: 1, minWidth: 300 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(148,163,184,0.5)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>
                 OEP Layer Burning Cost
               </div>
               <table className="llp-table" style={{ width: '100%' }}>
@@ -94,7 +94,7 @@ export default function OepCard({ showOep, onToggle, oepRows, onSetOepRow, oepLa
                     <th>Layer</th>
                     <th className="num">RP at Attach.</th>
                     <th className="num">Annual Loss</th>
-                    <th className="num" style={{ color: '#f59e0b' }}>OEP ROL</th>
+                    <th className="num" style={{ color: 'var(--accent-amber)' }}>OEP ROL</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -105,10 +105,10 @@ export default function OepCard({ showOep, onToggle, oepRows, onSetOepRow, oepLa
                       :                   `1-in-${row.rp.toFixed(1)}y`;
                     return (
                       <tr key={row.idx}>
-                        <td style={{ color: '#00d4ff', fontWeight: 700 }}>{row.layer}</td>
-                        <td className="num" style={{ color: 'rgba(226,232,240,0.7)' }}>{rpLabel}</td>
-                        <td className="num" style={{ color: '#4ade80' }}>{fmt(Math.round(row.annualLoss))}</td>
-                        <td className="num" style={{ fontWeight: 700, color: '#f59e0b' }}>
+                        <td style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{row.layer}</td>
+                        <td className="num" style={{ color: 'rgba(var(--text-rgb),.7)' }}>{rpLabel}</td>
+                        <td className="num" style={{ color: 'var(--accent)' }}>{fmt(Math.round(row.annualLoss))}</td>
+                        <td className="num" style={{ fontWeight: 700, color: 'var(--accent-amber)' }}>
                           {row.rol > 0 ? (row.rol * 100).toFixed(3) + '%' : '—'}
                         </td>
                       </tr>
@@ -116,14 +116,14 @@ export default function OepCard({ showOep, onToggle, oepRows, onSetOepRow, oepLa
                   })}
                 </tbody>
               </table>
-              <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.4)', marginTop: 6 }}>
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>
                 Integration: 500-step trapezoidal rule. OEP ROL is independent of the Pareto/distribution fit above.
               </div>
             </div>
           )}
 
           {oepPts.length < 2 && (
-            <div style={{ fontSize: 11, color: 'rgba(251,191,36,0.65)', alignSelf: 'center' }}>
+            <div style={{ fontSize: 11, color: 'var(--accent-amber)', alignSelf: 'center' }}>
               Enter at least 2 loss values to compute layer costs.
             </div>
           )}

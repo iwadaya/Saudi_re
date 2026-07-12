@@ -24,7 +24,7 @@ export function MunichToggleCard({ munichAvailable, useMunich, onToggleMunich, s
             display: 'flex', alignItems: 'center', gap: 8,
             cursor: munichAvailable ? 'pointer' : 'not-allowed',
             opacity: munichAvailable ? 1 : 0.55,
-            fontSize: 13, color: '#bae6fd', fontWeight: 600,
+            fontSize: 13, color: 'var(--accent-blue)', fontWeight: 600,
           }}
         >
           <input
@@ -41,20 +41,20 @@ export function MunichToggleCard({ munichAvailable, useMunich, onToggleMunich, s
           style={{
             fontSize: 11, padding: '3px 10px', borderRadius: 6,
             cursor: 'pointer', border: '1px solid rgba(56,189,248,0.35)',
-            background: 'rgba(56,189,248,0.08)', color: '#bae6fd',
+            background: 'rgba(56,189,248,0.08)', color: 'var(--accent-blue)',
           }}
         >
           {showMunichHelp ? 'Hide info' : 'When to use this?'}
         </button>
         {!munichAvailable && (
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+          <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)' }}>
             Available on the Incurred Development Factors screen.
           </span>
         )}
       </div>
       {showMunichHelp && (
-        <div style={{ fontSize: 12, lineHeight: 1.55, color: 'rgba(226,232,240,0.85)' }}>
-          <b style={{ color: '#bae6fd' }}>What it does.</b>{' '}
+        <div style={{ fontSize: 12, lineHeight: 1.55, color: 'rgba(var(--text-rgb),.85)' }}>
+          <b style={{ color: 'var(--accent-blue)' }}>What it does.</b>{' '}
           Munich Chain Ladder (Quarg & Mack, 2004) extends the standard chain ladder by
           using the correlation between paid/incurred (P/I) ratios and the link ratios.
           Each step's link ratio is adjusted upward when paid is currently below the
@@ -62,25 +62,25 @@ export function MunichToggleCard({ munichAvailable, useMunich, onToggleMunich, s
           for incurred. The two correlation slopes λ_P and λ_I are estimated once from
           Pearson residuals on the historical triangle.
           <br /><br />
-          <b style={{ color: '#bae6fd' }}>When to use it.</b>{' '}
+          <b style={{ color: 'var(--accent-blue)' }}>When to use it.</b>{' '}
           Reach for MCL when:
           <ul style={{ margin: '4px 0 4px 18px' }}>
             <li>The paid-only and incurred-only chain-ladder ultimates persistently disagree.</li>
             <li>You have enough history (≥ 3 origin years × ≥ 3 dev periods) for residuals to be meaningful.</li>
             <li>The book has a stable case-reserving philosophy — MCL assumes the P/I relationship is informative.</li>
           </ul>
-          <b style={{ color: '#bae6fd' }}>When to avoid it.</b>{' '}
+          <b style={{ color: 'var(--accent-blue)' }}>When to avoid it.</b>{' '}
           Skip MCL on very thin triangles, on lines where case reserves swing wildly
           (the residual correlation becomes noise rather than signal), or when paid and
           incurred ultimates already agree — vanilla CL is simpler and as accurate.
           {mclResult && (
             <>
               <br /><br />
-              <b style={{ color: '#bae6fd' }}>This triangle:</b>{' '}
+              <b style={{ color: 'var(--accent-blue)' }}>This triangle:</b>{' '}
               λ_P = {mclResult.lambdaP == null ? '—' : mclResult.lambdaP.toFixed(4)},
               {' '}λ_I = {mclResult.lambdaI == null ? '—' : mclResult.lambdaI.toFixed(4)}.
               {mclResult.warnings?.length > 0 && (
-                <span style={{ color: '#fbbf24' }}> {mclResult.warnings.join(' ')}</span>
+                <span style={{ color: 'var(--accent-amber)' }}> {mclResult.warnings.join(' ')}</span>
               )}
             </>
           )}
@@ -129,7 +129,7 @@ export function MclProjectionsTable({ mcl }) {
         </table>
       </div></div>
       {mcl.warnings?.length > 0 && (
-        <div style={{ marginTop: 8, fontSize: 11, color: '#fbbf24' }}>
+        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--accent-amber)' }}>
           {mcl.warnings.map((w, i) => <div key={i}>⚠ {w}</div>)}
         </div>
       )}

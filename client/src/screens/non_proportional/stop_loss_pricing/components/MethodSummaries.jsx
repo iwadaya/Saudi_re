@@ -123,15 +123,15 @@ export function MonteCarloSummary({ result, limit }) {
           <div
             key={label}
             style={{
-              background: 'rgba(255,255,255,0.02)',
-              border: '1px solid rgba(255,255,255,0.06)',
+              background: 'var(--surface-hover)',
+              border: '1px solid var(--hairline)',
               borderRadius: 8,
               padding: '8px 10px',
               textAlign: 'center',
             }}
           >
             <div style={styles.resultLabel}>{label}</div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: 'rgba(226,232,240,0.85)', fontVariantNumeric: 'tabular-nums' }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: 'rgba(var(--text-rgb),0.85)', fontVariantNumeric: 'tabular-nums' }}>
               {fmtMoneyFull(v)}
             </div>
           </div>

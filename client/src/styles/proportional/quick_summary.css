@@ -25,7 +25,8 @@
 }
 
 .qs-hero-sub {
-  color: #94a3b8;
+  /* Sits on the always-dark qs-hero band — keep hardcoded light. */
+  color: #c3cedd;
   font-size: 14px;
   max-width: 600px;
   line-height: 1.5;
@@ -66,7 +67,7 @@
 .qs-section-title {
   font-size: 16px;
   font-weight: 700;
-  color: #e2e8f0;
+  color: var(--text);
   margin-bottom: 4px;
 }
 
@@ -79,15 +80,15 @@
 .qs-table-wrap {
   overflow-x: auto;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(15, 23, 42, 0.3);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-muted);
 }
 
 .qs-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  color: #cbd5e1;
+  color: var(--muted);
   white-space: nowrap;
 }
 
@@ -95,13 +96,13 @@
 .qs-table td {
   padding: 12px 16px;
   text-align: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .qs-table th {
-  background: rgba(30, 41, 59, 0.5);
+  background: var(--table-head-bg);
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--muted);
   text-transform: uppercase;
   font-size: 11px;
   letter-spacing: 0.05em;
@@ -111,13 +112,13 @@
   text-align: center;
   position: sticky;
   left: 0;
-  background: rgba(30, 41, 59, 0.9); /* Sticky contrast */
+  background: var(--table-head-bg); /* Sticky contrast */
   z-index: 10;
 }
 
 .qs-table .qs-year {
   text-align: center;
-  color: #fff;
+  color: var(--text);
   font-weight: 600;
   position: sticky;
   left: 0;
@@ -125,10 +126,10 @@
 }
 
 .qs-total {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface-hover);
   font-weight: 700;
-  color: #fff;
-  border-top: 2px solid rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  border-top: 2px solid var(--hairline-strong);
 }
 
 /* --- 4. Modals (Portfolio Stats) --- */
@@ -302,8 +303,8 @@
 }
 
 /* --- 7. Utility Classes --- */
-.qs-neg { color: #f87171; font-weight: 600; } /* Red for negative results */
-.qs-pos { color: #4ade80; font-weight: 600; } /* Green for positive results */
+.qs-neg { color: var(--accent-rose); font-weight: 600; } /* Red for negative results */
+.qs-pos { color: var(--accent); font-weight: 600; } /* Green for positive results */
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
@@ -362,7 +363,7 @@
     linear-gradient(
       to bottom,
       rgba(var(--accent-rgb),.08),
-      rgba(8,16,40,.26)
+      var(--control-bg)
     );
 
   border: 1px solid rgba(var(--accent-rgb),.18);
@@ -373,7 +374,7 @@
     0 0 0 1px rgba(var(--accent-rgb),.10),
     0 0 6px rgba(var(--accent-rgb),.08);
 
-  color: rgba(226,232,240,.88);
+  color: rgba(var(--text-rgb),.88);
   font-weight: 650;          /* not bold-heavy */
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -397,7 +398,7 @@
     linear-gradient(
       to bottom,
       rgba(148,163,184,.08),
-      rgba(8,16,40,.26)
+      var(--control-bg)
     );
   border-color: rgba(148,163,184,.18);
   box-shadow:
@@ -411,7 +412,7 @@
    <div class="qs-cell-pill qs-cell-pill--neg">
 --------------------------------------------------------- */
 .QUICK_SUMMARY_PAGE .qs-cell-pill.qs-cell-pill--neg{
-  color: rgba(248,113,113,.92);
+  color: var(--accent-rose);
 
   border-color: rgba(248,113,113,.38);
 
@@ -419,7 +420,7 @@
     linear-gradient(
       to bottom,
       rgba(248,113,113,.14),
-      rgba(8,16,40,.28)
+      var(--control-bg)
     );
 
   box-shadow:
@@ -430,7 +431,7 @@
 
 /* totals row still reads as total, but uses same pill */
 .QUICK_SUMMARY_PAGE .qs-total{
-  background: rgba(8,16,40,.12);
+  background: var(--table-row-alt);
 }
 .QUICK_SUMMARY_PAGE .qs-total .qs-cell-pill{
   font-weight: 750;
@@ -471,7 +472,7 @@
   font-size: 12px;                 /* was 14px */
   line-height: 1.35;
   max-width: 720px;
-  color: rgba(148,163,184,.86);
+  color: rgba(195,206,221,.88);
 }
 
 /* Align buttons nicely and keep them compact */
@@ -769,8 +770,8 @@
   gap: 14px;
   padding: 14px 16px;
   border-radius: 20px;
-  border: 1px solid rgba(148,163,184,.16);
-  background: rgba(8,16,40,.35);
+  border: 1px solid var(--stroke-soft);
+  background: var(--surface-2);
   backdrop-filter: blur(14px);
 }
 
@@ -778,13 +779,13 @@
   font-size: 22px;
   font-weight: 900;
   letter-spacing: -.02em;
-  color: rgba(226,232,240,.94);
+  color: rgba(var(--text-rgb),.94);
 }
 
 .QUICK_SUMMARY_PAGE .qs-hero2-sub{
   margin-top: 4px;
   font-size: 12px;
-  color: rgba(148,163,184,.78);
+  color: var(--muted);
 }
 
 .QUICK_SUMMARY_PAGE .qs-hero2-right{
@@ -795,9 +796,9 @@
 .QUICK_SUMMARY_PAGE .qs-neo-btn{
   border-radius: 999px;
   padding: 9px 14px;
-  border: 1px solid rgba(148,163,184,.22);
-  background: rgba(8,16,40,.25);
-  color: rgba(226,232,240,.85);
+  border: 1px solid var(--stroke-soft);
+  background: var(--control-bg);
+  color: rgba(var(--text-rgb),.85);
   font-weight: 800;
   cursor: pointer;
   transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
@@ -818,8 +819,8 @@
 .QUICK_SUMMARY_PAGE .qs-kpi{
   padding: 12px 12px;
   border-radius: 18px;
-  border: 1px solid rgba(148,163,184,.16);
-  background: rgba(8,16,40,.30);
+  border: 1px solid var(--stroke-soft);
+  background: var(--control-bg);
   backdrop-filter: blur(12px);
 }
 
@@ -836,20 +837,20 @@
   font-size: 11px;
   letter-spacing: .10em;
   text-transform: uppercase;
-  color: rgba(148,163,184,.75);
+  color: var(--muted);
 }
 
 .QUICK_SUMMARY_PAGE .qs-kpi-value{
   margin-top: 6px;
   font-size: 18px;
   font-weight: 900;
-  color: rgba(226,232,240,.95);
+  color: rgba(var(--text-rgb),.95);
 }
 
 .QUICK_SUMMARY_PAGE .qs-kpi-sub{
   margin-top: 4px;
   font-size: 12px;
-  color: rgba(148,163,184,.78);
+  color: var(--muted);
 }
 
 .QUICK_SUMMARY_PAGE .qs-grid2{
@@ -861,8 +862,8 @@
 
 .QUICK_SUMMARY_PAGE .qs-card{
   border-radius: 20px;
-  border: 1px solid rgba(148,163,184,.16);
-  background: rgba(8,16,40,.28);
+  border: 1px solid var(--stroke-soft);
+  background: var(--surface-2);
   backdrop-filter: blur(14px);
   padding: 12px;
 }
@@ -885,12 +886,12 @@
 .QUICK_SUMMARY_PAGE .qs-card-title{
   font-size: 14px;
   font-weight: 900;
-  color: rgba(226,232,240,.92);
+  color: rgba(var(--text-rgb),.92);
 }
 
 .QUICK_SUMMARY_PAGE .qs-card-sub{
   font-size: 12px;
-  color: rgba(148,163,184,.78);
+  color: var(--muted);
   margin-top: 2px;
 }
 
@@ -900,9 +901,9 @@
   font-size: 12px;
   font-weight: 900;
   letter-spacing: .02em;
-  border: 1px solid rgba(148,163,184,.18);
-  color: rgba(226,232,240,.86);
-  background: rgba(8,16,40,.25);
+  border: 1px solid var(--stroke-soft);
+  color: rgba(var(--text-rgb),.86);
+  background: var(--control-bg);
 }
 
 .QUICK_SUMMARY_PAGE .qs-card-chip--green{
@@ -918,8 +919,8 @@
   overflow:auto;
   border-radius: 14px;
   outline: none;
-  border: 1px solid rgba(148,163,184,.10);
-  background: rgba(8,16,40,.22);
+  border: 1px solid var(--hairline);
+  background: var(--surface-muted);
 }
 
 /* Excel-ish clean table, still futuristic */
@@ -957,14 +958,14 @@
   position: sticky;
   top: 0;
   z-index: 5;
-  background: rgba(8,16,40,.65);
+  background: var(--table-head-bg);
   backdrop-filter: blur(10px);
   padding: 10px 10px;
   font-size: 11px;
   letter-spacing: .10em;
   text-transform: uppercase;
-  color: rgba(148,163,184,.88);
-  border-bottom: 1px solid rgba(148,163,184,.14);
+  color: var(--muted);
+  border-bottom: 1px solid var(--stroke-soft);
 }
 
 .QUICK_SUMMARY_PAGE .qs-table-modern td{
@@ -989,12 +990,12 @@
 /* first column (year) subtle */
 .QUICK_SUMMARY_PAGE .qs-col-year .qs-td{
   font-weight: 900;
-  color: rgba(226,232,240,.88);
+  color: rgba(var(--text-rgb),.88);
 }
 
 .QUICK_SUMMARY_PAGE .qs-td{
   font-size: 13px;
-  color: rgba(226,232,240,.86);
+  color: rgba(var(--text-rgb),.86);
   white-space: nowrap;
 }
 
@@ -1005,17 +1006,17 @@
 }
 
 .QUICK_SUMMARY_PAGE .qs-val--neg .qs-td{
-  color: rgba(251,113,133,.95);
+  color: var(--accent-rose);
   font-weight: 900;
 }
 
 .QUICK_SUMMARY_PAGE .qs-val--pos .qs-td{
-  color: rgba(74,222,128,.95);
+  color: var(--accent);
   font-weight: 900;
 }
 
 .QUICK_SUMMARY_PAGE .qs-total td{
-  background: rgba(8,16,40,.40);
+  background: var(--surface-muted);
   border-bottom: none;
 }
 .QUICK_SUMMARY_PAGE .qs-total .qs-td{
@@ -1026,7 +1027,7 @@
 .QUICK_SUMMARY_PAGE .qs-hint{
   margin-top: 10px;
   font-size: 12px;
-  color: rgba(148,163,184,.75);
+  color: var(--muted);
   text-align: center;
 }
 
@@ -1124,7 +1125,7 @@
 
 /* --- GREEN GLOW: each cell gets a subtle shadow glow --- */
 .QUICK_SUMMARY_PAGE .qs-table-modern td{
-  background: rgba(8,16,40,.22);
+  background: var(--control-bg);
   box-shadow:
     inset 0 0 0 1px rgba(var(--accent-rgb),.18),
     0 0 0 1px rgba(var(--accent-rgb),.10),
@@ -1153,7 +1154,7 @@
 
 /* totals: keep it premium but still glowing */
 .QUICK_SUMMARY_PAGE .qs-total td{
-  background: rgba(8,16,40,.38) !important;
+  background: var(--surface-muted) !important;
   box-shadow:
     inset 0 0 0 1px rgba(var(--accent-rgb),.22),
     0 0 18px rgba(var(--accent-rgb),.10) !important;
@@ -1247,7 +1248,7 @@
 .QUICK_SUMMARY_PAGE .qs-table-modern td,
 .QUICK_SUMMARY_PAGE .qs-table-modern th{
   border: 1px solid rgba(var(--accent-rgb),.45) !important;
-  background: rgba(8,16,40,.18) !important;
+  background: var(--control-bg) !important;
 }
 
 /* hover: flat highlight only (no glow) */
@@ -1262,7 +1263,7 @@
 
 /* totals row — slightly stronger but still flat */
 .QUICK_SUMMARY_PAGE .qs-total td{
-  background: rgba(8,16,40,.28) !important;
+  background: var(--surface-muted) !important;
 }
 /* =========================================================
    QUICK SUMMARY — FLAT GREY BORDERS (NO SHADOWS)
@@ -1280,8 +1281,8 @@
 /* neutral grey borders */
 .QUICK_SUMMARY_PAGE .qs-table-modern td,
 .QUICK_SUMMARY_PAGE .qs-table-modern th{
-  border: 1px solid rgba(148,163,184,.35) !important; /* slate-400 */
-  background: rgba(8,16,40,.18) !important;
+  border: 1px solid var(--stroke) !important; /* slate-400 */
+  background: var(--control-bg) !important;
 }
 
 /* hover: subtle neutral highlight */
@@ -1296,7 +1297,7 @@
 
 /* totals row: slightly stronger neutral */
 .QUICK_SUMMARY_PAGE .qs-total td{
-  background: rgba(8,16,40,.28) !important;
+  background: var(--surface-muted) !important;
 }
 /* =========================================================
    QUICK SUMMARY — EXCEL GRID (RECTANGLE CELLS) + UW FIX
@@ -1331,7 +1332,7 @@
 .QUICK_SUMMARY_PAGE .qs-table-modern td,
 .QUICK_SUMMARY_PAGE .qs-table.qs-stats th,
 .QUICK_SUMMARY_PAGE .qs-table.qs-stats td {
-  border: 1px solid rgba(148,163,184,.24) !important; /* greyish */
+  border: 1px solid var(--stroke-soft) !important; /* greyish */
 }
 
 /* Center all numeric cells, keep first column readable */
@@ -1376,7 +1377,7 @@
 /* Optional: keep header distinct but still rectangular */
 .QUICK_SUMMARY_PAGE .qs-table-modern thead th,
 .QUICK_SUMMARY_PAGE .qs-table.qs-stats thead th {
-  background: rgba(8,16,40,.45) !important;
+  background: var(--table-head-bg) !important;
 }
 
 /* Total row subtle (still rectangular) */
@@ -1384,7 +1385,7 @@
 .QUICK_SUMMARY_PAGE .qs-table-modern .qs-total td,
 .QUICK_SUMMARY_PAGE .qs-table.qs-stats .qs-total th,
 .QUICK_SUMMARY_PAGE .qs-table.qs-stats .qs-total td {
-  background: rgba(8,16,40,.28) !important;
+  background: var(--surface-muted) !important;
 }
 /* QUICK SUMMARY: remove background grid lines */
 .QUICK_SUMMARY_PAGE .sheet-grid{
@@ -1468,3 +1469,32 @@
   border-color: rgba(168,85,247,0.22);
   box-shadow: 0 12px 26px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 6px rgba(168,85,247,0.06);
 }
+
+/* =========================================================
+   DAYLIGHT FIX — dark-modal restore.
+   The Portfolio Stats/Analysis modal keeps its intentional dark
+   "futuristic" skin in every theme, but several table classes above are
+   shared with the (themed) main page. Restore the original light-on-dark
+   values for those shared classes when they render inside the modal.
+========================================================= */
+.QUICK_SUMMARY_PAGE .qs-modal .qs-table{ color: #cbd5e1; }
+.QUICK_SUMMARY_PAGE .qs-modal .qs-table th{ background: rgba(30, 41, 59, 0.5); color: #94a3b8; }
+.QUICK_SUMMARY_PAGE .qs-modal .qs-table th.qs-left{ background: rgba(30, 41, 59, 0.9); }
+.QUICK_SUMMARY_PAGE .qs-modal .qs-table .qs-year{ color: #fff; }
+.QUICK_SUMMARY_PAGE .qs-modal .qs-table-wrap{ border-color: rgba(255,255,255,0.1); background: rgba(15, 23, 42, 0.3); }
+.QUICK_SUMMARY_PAGE .qs-modal .qs-td{ color: rgba(226,232,240,.86); }
+.QUICK_SUMMARY_PAGE .qs-modal .qs-col-year .qs-td{ color: rgba(226,232,240,.88); }
+.QUICK_SUMMARY_PAGE .qs-modal .qs-table-modern thead th,
+.QUICK_SUMMARY_PAGE .qs-modal .qs-table.qs-stats thead th{ background: rgba(8,16,40,.45) !important; color: rgba(148,163,184,.88); }
+.QUICK_SUMMARY_PAGE .qs-modal .qs-table-modern th,
+.QUICK_SUMMARY_PAGE .qs-modal .qs-table-modern td,
+.QUICK_SUMMARY_PAGE .qs-modal .qs-table.qs-stats th,
+.QUICK_SUMMARY_PAGE .qs-modal .qs-table.qs-stats td{ border-color: rgba(148,163,184,.24) !important; background: transparent !important; }
+.QUICK_SUMMARY_PAGE .qs-modal .qs-table-modern .qs-total th,
+.QUICK_SUMMARY_PAGE .qs-modal .qs-table-modern .qs-total td,
+.QUICK_SUMMARY_PAGE .qs-modal .qs-table.qs-stats .qs-total th,
+.QUICK_SUMMARY_PAGE .qs-modal .qs-table.qs-stats .qs-total td{ background: rgba(8,16,40,.28) !important; }
+.QUICK_SUMMARY_PAGE .qs-modal .qs-total{ background: rgba(255, 255, 255, 0.03); color: #fff; }
+.QUICK_SUMMARY_PAGE .qs-modal .qs-neg{ color: #f87171; }
+.QUICK_SUMMARY_PAGE .qs-modal .qs-pos{ color: #4ade80; }
+.QUICK_SUMMARY_PAGE .qs-modal .qs-hint{ color: rgba(148,163,184,.75); }

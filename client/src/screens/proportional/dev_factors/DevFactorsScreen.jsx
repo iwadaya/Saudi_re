@@ -51,7 +51,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
   // triangleMeta not yet loaded (e.g. just after a hard reset, before
   // PropTreatyDetail re-fetches the contract). Avoid rendering with a bogus year range.
   // Guard must stay after all hooks — Rules of Hooks.
-  if (!startYear) return <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill}><div style={{ padding: 32, color: 'rgba(255,255,255,0.5)' }}>Loading…</div></WizardLayout>;
+  if (!startYear) return <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill}><div style={{ padding: 32, color: 'rgba(var(--text-rgb),.5)' }}>Loading…</div></WizardLayout>;
 
   return (
     <WizardLayout routeKey={routeKey} title={title} headerPill={headerPill} onBeforeNext={save} onBeforeBack={save}>
@@ -59,22 +59,22 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
         <div className="DEV_FACTORS_PAGE">
           {/* Staleness — triangle saved more recently than these factors */}
           {stale && (
-            <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5 }}>
+            <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: 'var(--accent-amber)', fontSize: 12, lineHeight: 1.5 }}>
               Triangle updated since factors were last saved — consider reviewing dev factors.
             </div>
           )}
           {/* Zero-loss warning — no large/cat losses identified yet */}
           {showZeroLossWarning && (
-            <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: '#fbbf24', fontSize: 12, lineHeight: 1.5, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.30)', color: 'var(--accent-amber)', fontSize: 12, lineHeight: 1.5, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
               <div style={{ flex: 1 }}>
                 No large losses or cat losses have been identified. Consider reviewing the Large Loss and Cat Loss screens before finalising factors.
                 <div style={{ marginTop: 8 }}>
-                  <button type="button" onClick={() => wizard?.goTo?.('PROP_LARGE_LOSS_LIST')} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', border: '1px solid rgba(251,146,60,0.4)', background: 'rgba(251,146,60,0.10)', color: '#fbbf24' }}>
+                  <button type="button" onClick={() => wizard?.goTo?.('PROP_LARGE_LOSS_LIST')} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', border: '1px solid rgba(251,146,60,0.4)', background: 'rgba(251,146,60,0.10)', color: 'var(--accent-amber)' }}>
                     Go to Large Loss screen →
                   </button>
                 </div>
               </div>
-              <button type="button" aria-label="Dismiss warning" onClick={dismissLossWarning} style={{ background: 'none', border: 'none', color: '#fbbf24', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+              <button type="button" aria-label="Dismiss warning" onClick={dismissLossWarning} style={{ background: 'none', border: 'none', color: 'var(--accent-amber)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
             </div>
           )}
 
@@ -91,10 +91,10 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
 
           {/* Stripped-mode info banner */}
           {showStrippedBanner && (
-            <div role="status" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.25)', color: '#86efac', fontSize: 12, lineHeight: 1.5 }}>
+            <div role="status" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.25)', color: 'var(--accent)', fontSize: 12, lineHeight: 1.5 }}>
               {exclusions.largeLossCount} large loss{exclusions.largeLossCount === 1 ? '' : 'es'} and {exclusions.catLossCount} cat loss{exclusions.catLossCount === 1 ? '' : 'es'} have been excluded from this triangle. Selected factors reflect the underlying attritional experience.
               {exclusions.proxyPlaced > 0 && (
-                <div style={{ marginTop: 6, color: '#fbbf24' }}>
+                <div style={{ marginTop: 6, color: 'var(--accent-amber)' }}>
                   ⚠ {exclusions.proxyPlaced} loss{exclusions.proxyPlaced === 1 ? '' : 'es'} placed by loss date (actuarial reported date not set) — their development period is an estimate. Set a reported date on the loss screens to place them precisely.
                 </div>
               )}
@@ -188,7 +188,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                 <div className="df-section-head"><div className="df-section-title">Underwriter Chosen Factors</div></div>
                 <div className="df-chosen-controls">
                   <div className="df-chosen-left">
-                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>Chosen factors base</div>
+                    <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.5)', marginBottom: 4 }}>Chosen factors base</div>
                     <div className="toggle-group df-chosen-toggle">
                       <button type="button" className={`toggle-option${chosenBase === 'ACTUAL' ? ' active' : ''}`} onClick={() => switchBase('ACTUAL')}>ACTUAL</button>
                       <button type="button" className={`toggle-option${chosenBase === 'PARAM' ? ' active' : ''}`} onClick={() => switchBase('PARAM')}>PARAMETRIZED</button>
@@ -208,8 +208,8 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
 
             {/* ═══ LINK RATIOS VIEW ═══ */}
             {view === 'LINK_RATIOS' && (<>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginBottom: 8, padding: '8px 14px', borderRadius: 10, background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
-                Excluding link ratios here will <b style={{ color: '#fb923c' }}>override</b> the Underwriter Chosen Factors with the recalculated {(AVG_METHOD_LABEL[avgMethod] || 'Weighted').toLowerCase()} averages.
+              <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.55)', marginBottom: 8, padding: '8px 14px', borderRadius: 10, background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
+                Excluding link ratios here will <b style={{ color: 'var(--accent-amber)' }}>override</b> the Underwriter Chosen Factors with the recalculated {(AVG_METHOD_LABEL[avgMethod] || 'Weighted').toLowerCase()} averages.
               </div>
               <LinkRatioView
                 matrix={calcs.matrix}
@@ -225,7 +225,7 @@ export default function DevFactorsScreen({ routeKey, title, headerPill }) {
                   try { await save(); showToast?.('Link ratio factors saved'); }
                   catch (e) { showToast?.(`Save failed: ${e?.message || 'server error'}`); }
                 }}>💾 Save Link Ratio Factors</button>
-                {excluded.size > 0 && <span style={{ fontSize: 11, color: 'rgba(248,113,113,0.8)' }}>{excluded.size} ratio(s) excluded</span>}
+                {excluded.size > 0 && <span style={{ fontSize: 11, color: 'var(--accent-rose)' }}>{excluded.size} ratio(s) excluded</span>}
                 {dirty && <span className="muted">Unsaved changes</span>}
               </div>
             </>)}

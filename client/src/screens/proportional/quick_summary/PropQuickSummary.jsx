@@ -134,6 +134,9 @@ export function QuickSummaryEmbed({ contractId: propContractId }) {
     return () => { cancelled = true; };
   }, [appState.propTreatyDetail, appState.quoteMode, contractId]);
 
+  /* The embed renders inside the pricing screen's Bloomberg insight modal
+     (.bbg-modal — intentionally dark in every theme), so hardcoded light
+     text here is correct. */
   if (loading) return <div style={{padding:40,textAlign:'center',color:'rgba(255,255,255,0.5)'}}>Loading Quick Summary...</div>;
   if (error) return <div style={{padding:40,textAlign:'center',color:'#f87171'}}>Error: {error}</div>;
   if (!calcRows.length) return <div style={{padding:40,textAlign:'center',color:'rgba(255,255,255,0.5)'}}>No triangle data available for Quick Summary.</div>;
@@ -277,7 +280,7 @@ export default function PropQuickSummary() {
         <div className="qs-card-head"><div><div className="qs-card-title">Projected by Underwriting Year (Ultimate)</div><div className="qs-card-sub">
           Based on Ultimate Loss Projections + Treaty Terms
           {projSource === 'saved-factors' && <span style={{ marginLeft: 8, color: 'var(--accent)', fontSize: 11 }}>● Using saved dev factors</span>}
-          {projSource === 'triangle-recalc' && <span style={{ marginLeft: 8, color: '#f59e0b', fontSize: 11 }}>● Recalculated (no saved factors)</span>}
+          {projSource === 'triangle-recalc' && <span style={{ marginLeft: 8, color: 'var(--accent-amber)', fontSize: 11 }}>● Recalculated (no saved factors)</span>}
         </div></div>
           <div className="qs-card-chip qs-card-chip--green">PROJECTED</div></div>
         <KPIRow items={[
@@ -447,6 +450,7 @@ export default function PropQuickSummary() {
                             .filter(r => r.share > 0 && r.maxLr > r.minLr);
                           const useTable = corridors.length > 1;
                           return (<>
+                            {/* StatsModal sits on the dark qs-modal shell (dark in every theme) — keep light text. */}
                             <tr><th className="qs-left qs-term" colSpan={2} style={{ paddingTop: 10, color: 'rgba(255,255,255,0.7)' }}>Loss Participation {useTable && <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>(stepped)</span>}</th></tr>
                             {useTable
                               ? corridors.map((c, i) => (
@@ -501,11 +505,11 @@ export default function PropQuickSummary() {
                 background: 'rgba(0,232,184,0.05)',
                 border: '1px solid rgba(0,232,184,0.22)',
                 fontSize: 12,
-                color: 'rgba(226,232,240,0.78)',
+                color: 'rgba(var(--text-rgb),.78)',
                 lineHeight: 1.5,
                 width: '100%',
               }}>
-                <b style={{ color: '#00e8b8', letterSpacing: '.04em' }}>POST-TREATY-TERMS.</b>{' '}
+                <b style={{ color: 'var(--accent)', letterSpacing: '.04em' }}>POST-TREATY-TERMS.</b>{' '}
                 Premium / claims totals are the same projected ultimates shown on the
                 Projected Summary, then transformed by this treaty's <b>loss cap</b>,
                 commission (fixed or sliding), brokerage, taxes, profit commission

@@ -69,7 +69,7 @@ export default function ImportedFromPackBanner({ quoteId, importedFromState }) {
           padding: 9px 14px; border-radius: 10px;
           background: rgba(var(--accent-rgb), .08);
           border: 1px solid rgba(var(--accent-rgb), .26);
-          color: rgba(226,232,240,.92);
+          color: rgba(var(--text-rgb),.92);
           font-size: 12px; font-family: inherit;
           margin: 0 0 12px 0;
         }
@@ -78,17 +78,17 @@ export default function ImportedFromPackBanner({ quoteId, importedFromState }) {
         .ipb-source { color: var(--accent); font-weight: 700; }
         .ipb-warn {
           font-size: 10px; padding: 2px 8px; border-radius: 10px;
-          background: rgba(250,191,36,.14); color: #fbbf24;
+          background: rgba(250,191,36,.14); color: var(--accent-amber);
           border: 1px solid rgba(250,191,36,.28);
           letter-spacing: .05em; text-transform: uppercase; font-weight: 700;
         }
         .ipb-act {
           background: none; border: none; padding: 4px 8px;
           font-size: 11px; cursor: pointer;
-          color: rgba(226,232,240,.55); text-decoration: underline;
+          color: rgba(var(--text-rgb),.55); text-decoration: underline;
           text-underline-offset: 2px;
         }
-        .ipb-act:hover { color: rgba(226,232,240,.85); }
+        .ipb-act:hover { color: rgba(var(--text-rgb),.85); }
       `}</style>
       <div className="ipb" role="status">
         <span className="ipb-icon">📥</span>

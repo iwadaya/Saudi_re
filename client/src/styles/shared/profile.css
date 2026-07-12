@@ -4,7 +4,7 @@
 ========================================================= */
 
 .PROFILE_SCREEN{ font-size: 13px; }
-.pf-loading{ padding: 30px; text-align: center; color: rgba(148,163,184,.75); }
+.pf-loading{ padding: 30px; text-align: center; color: var(--muted); }
 
 /* ── COB Tabs ── */
 .PROFILE_SCREEN .pf-cob-tabs{
@@ -14,13 +14,13 @@
   display: flex; align-items: center; gap: 7px;
   height: 32px; padding: 0 14px; border-radius: 999px;
   font-size: 12px; font-weight: 700; cursor: pointer;
-  border: 1.5px solid rgba(148,163,184,.18);
-  background: transparent; color: rgba(148,163,184,.78);
+  border: 1.5px solid var(--stroke-soft);
+  background: transparent; color: var(--muted);
   transition: all .15s ease;
 }
 .PROFILE_SCREEN .pf-cob-tab:hover{
-  border-color: rgba(148,163,184,.35);
-  color: rgba(226,232,240,.80);
+  border-color: var(--stroke);
+  color: rgba(var(--text-rgb),.80);
 }
 .PROFILE_SCREEN .pf-cob-tab--active{
   font-weight: 800;
@@ -36,14 +36,14 @@
 }
 .PROFILE_SCREEN .pf-kpi{
   padding: 10px 14px; border-radius: 12px; min-width: 100px; text-align: center;
-  border: 1px solid rgba(148,163,184,.16); background: rgba(8,16,40,.25);
+  border: 1px solid var(--stroke-soft); background: var(--control-bg);
 }
 .PROFILE_SCREEN .pf-kpi-label{
   font-size: 10px; text-transform: uppercase; letter-spacing: .10em;
-  color: rgba(148,163,184,.70); margin-bottom: 4px;
+  color: var(--muted); margin-bottom: 4px;
 }
 .PROFILE_SCREEN .pf-kpi-value{
-  font-size: 16px; font-weight: 800; color: rgba(226,232,240,.92);
+  font-size: 16px; font-weight: 800; color: rgba(var(--text-rgb),.92);
 }
 
 /* ── Toolbar ── */
@@ -58,13 +58,13 @@
 
 .PROFILE_SCREEN .pf-btn{
   height: 28px; padding: 0 10px; border-radius: 6px; font-size: 11px;
-  font-weight: 700; cursor: pointer; border: 1px solid rgba(148,163,184,.22);
-  background: rgba(8,16,40,.20); color: rgba(226,232,240,.80);
+  font-weight: 700; cursor: pointer; border: 1px solid var(--stroke-soft);
+  background: var(--control-bg); color: rgba(var(--text-rgb),.80);
   transition: all .12s ease; white-space: nowrap;
 }
-.PROFILE_SCREEN .pf-btn:hover{ border-color: rgba(148,163,184,.40); background: rgba(148,163,184,.08); }
+.PROFILE_SCREEN .pf-btn:hover{ border-color: var(--stroke); background: var(--control-hover); }
 .PROFILE_SCREEN .pf-btn--save{ border-color: rgba(var(--accent-rgb),.30); color: rgba(var(--accent-rgb),.90); }
-.PROFILE_SCREEN .pf-btn--dirty{ border-color: rgba(251,146,60,.50); color: rgba(251,146,60,.95); animation: pf-pulse 1.5s infinite; }
+.PROFILE_SCREEN .pf-btn--dirty{ border-color: rgba(251,146,60,.50); color: var(--accent-amber); animation: pf-pulse 1.5s infinite; }
 @keyframes pf-pulse{ 0%,100%{ box-shadow:none; } 50%{ box-shadow: 0 0 0 3px rgba(251,146,60,.10); } }
 .PROFILE_SCREEN .pf-btn--x{
   width: 22px; height: 22px; padding: 0; border-radius: 4px;
@@ -81,7 +81,7 @@
 /* ── Table ── */
 .PROFILE_SCREEN .pf-table-wrap{
   overflow-x: auto; border-radius: 10px;
-  border: 1px solid rgba(148,163,184,.12); background: rgba(8,16,40,.15);
+  border: 1px solid var(--stroke-soft); background: var(--surface-muted);
 }
 .PROFILE_SCREEN .pf-table{
   width: 100%; border-collapse: separate; border-spacing: 3px;
@@ -99,11 +99,11 @@
   padding: 0; vertical-align: middle; text-align: center;
 }
 .PROFILE_SCREEN .pf-td--rate{
-  font-size: 12px; color: rgba(59,130,246,.90); font-weight: 600;
+  font-size: 12px; color: var(--accent-blue); font-weight: 600;
   font-variant-numeric: tabular-nums; padding: 0 8px; white-space: nowrap;
 }
 .PROFILE_SCREEN .pf-td--total{
-  font-size: 12px; color: rgba(226,232,240,.90); font-weight: 700;
+  font-size: 12px; color: rgba(var(--text-rgb),.90); font-weight: 700;
   font-variant-numeric: tabular-nums; padding: 4px 8px;
 }
 .PROFILE_SCREEN .pf-td--x{ width: 32px; }
@@ -112,7 +112,7 @@
 .PROFILE_SCREEN .pf-inp{
   width: 100%; height: 26px; padding: 0 8px;
   border: 1px solid rgba(var(--accent-rgb),.15); border-radius: 4px;
-  background: rgba(var(--accent-rgb),.03); color: rgba(226,232,240,.90);
+  background: rgba(var(--accent-rgb),.03); color: rgba(var(--text-rgb),.90);
   font-size: 12px; font-family: inherit;
   box-shadow: none !important; appearance: none; -webkit-appearance: none;
   transition: border-color .12s ease, background .12s ease;
@@ -120,7 +120,7 @@
 .PROFILE_SCREEN .pf-inp:focus{
   border-color: rgba(var(--accent-rgb),.45); background: rgba(var(--accent-rgb),.06); outline: none;
 }
-.PROFILE_SCREEN .pf-inp::placeholder{ color: rgba(148,163,184,.4); }
+.PROFILE_SCREEN .pf-inp::placeholder{ color: rgba(var(--text-rgb),.45); }
 .PROFILE_SCREEN .pf-inp--num{
   text-align: center; font-variant-numeric: tabular-nums;
 }
@@ -138,13 +138,13 @@
 }
 
 .PROFILE_SCREEN .pf-hint{
-  font-size: 11px; color: rgba(148,163,184,.45); padding: 6px 8px;
+  font-size: 11px; color: rgba(var(--text-rgb),.55); padding: 6px 8px;
 }
 
 /* ═══ COB TABS LABEL + ROW (for pill layout) ═══ */
 .PROFILE_SCREEN .pf-cob-tabs-label {
   font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
-  color: rgba(148,163,184,.7); font-weight: 800;
+  color: var(--muted); font-weight: 800;
   margin-bottom: 6px; display: block;
 }
 .PROFILE_SCREEN .pf-cob-tabs-row {
@@ -153,7 +153,7 @@
 .PROFILE_SCREEN .pf-no-cobs {
   padding: 14px 18px; border-radius: 10px;
   background: rgba(251,191,36,.06); border: 1px solid rgba(251,191,36,.2);
-  color: rgba(251,191,36,.85); font-size: 13px; font-weight: 600;
+  color: var(--accent-amber); font-size: 13px; font-weight: 600;
   margin-bottom: 14px;
 }
 
@@ -163,15 +163,15 @@
 .PROFILE_SCREEN .pf-exposure-panel {
   border-radius: 14px;
   border: 1px solid rgba(var(--accent-rgb),.18);
-  background: rgba(8,16,40,.22);
+  background: var(--surface-muted);
   padding: 16px 18px;
 }
 .PROFILE_SCREEN .pf-exp-head { margin-bottom: 14px; }
 .PROFILE_SCREEN .pf-exp-title {
-  font-size: 15px; font-weight: 800; color: rgba(241,245,249,.95);
+  font-size: 15px; font-weight: 800; color: var(--text);
 }
 .PROFILE_SCREEN .pf-exp-sub {
-  font-size: 12px; color: rgba(148,163,184,.7); margin-top: 2px;
+  font-size: 12px; color: var(--muted); margin-top: 2px;
 }
 
 /* Params row */
@@ -184,30 +184,30 @@
 }
 .PROFILE_SCREEN .pf-exp-label {
   font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .1em; color: rgba(148,163,184,.75);
+  letter-spacing: .1em; color: var(--muted);
 }
 .PROFILE_SCREEN .pf-exp-input {
   height: 34px; border-radius: 8px; padding: 0 10px;
-  border: 1px solid rgba(var(--accent-rgb),.25); background: rgba(8,16,40,.35);
-  color: rgba(226,232,240,.92); font-size: 13px; outline: none; width: 120px;
+  border: 1px solid rgba(var(--accent-rgb),.25); background: var(--control-bg);
+  color: rgba(var(--text-rgb),.92); font-size: 13px; outline: none; width: 120px;
 }
 .PROFILE_SCREEN .pf-exp-input--sm { width: 80px; }
 .PROFILE_SCREEN .pf-exp-input:focus { border-color: rgba(var(--accent-rgb),.5); }
 .PROFILE_SCREEN .pf-exp-select {
   height: 34px; border-radius: 8px; padding: 0 8px;
-  border: 1px solid rgba(var(--accent-rgb),.25); background: rgba(8,16,40,.35);
-  color: rgba(226,232,240,.92); font-size: 12px; outline: none; min-width: 240px;
+  border: 1px solid rgba(var(--accent-rgb),.25); background: var(--control-bg);
+  color: rgba(var(--text-rgb),.92); font-size: 12px; outline: none; min-width: 240px;
 }
 .PROFILE_SCREEN .pf-exp-hint {
-  font-size: 10px; color: rgba(148,163,184,.5);
+  font-size: 10px; color: rgba(var(--text-rgb),.55);
 }
 
 /* KPI strip */
 .PROFILE_SCREEN .pf-exp-kpis {
   display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;
 }
-.PROFILE_SCREEN .pf-kpi--green .pf-kpi-value { color: #4ade80; }
-.PROFILE_SCREEN .pf-kpi--blue .pf-kpi-value { color: #38bdf8; }
+.PROFILE_SCREEN .pf-kpi--green .pf-kpi-value { color: var(--accent); }
+.PROFILE_SCREEN .pf-kpi--blue .pf-kpi-value { color: var(--accent-blue); }
 
 /* Chart row */
 .PROFILE_SCREEN .pf-exp-chart-row {
@@ -215,11 +215,11 @@
 }
 .PROFILE_SCREEN .pf-exp-chart-wrap {
   flex: 0 0 320px; height: 200px;
-  border-radius: 10px; border: 1px solid rgba(148,163,184,.1);
-  background: rgba(8,16,40,.3); overflow: hidden;
+  border-radius: 10px; border: 1px solid var(--hairline);
+  background: var(--surface-muted); overflow: hidden;
 }
 .PROFILE_SCREEN .pf-exp-chart-title {
-  font-size: 11px; font-weight: 700; color: rgba(148,163,184,.6);
+  font-size: 11px; font-weight: 700; color: var(--muted);
   padding: 6px 10px 0; letter-spacing: .05em;
 }
 .PROFILE_SCREEN .pf-exp-curves-table {
@@ -230,10 +230,10 @@
 }
 .PROFILE_SCREEN .pf-table--sm th {
   font-size: 10px; padding: 4px 6px; text-align: right;
-  color: rgba(148,163,184,.6); font-weight: 700;
+  color: var(--muted); font-weight: 700;
 }
 .PROFILE_SCREEN .pf-table--sm td {
-  padding: 3px 6px; text-align: right; color: rgba(226,232,240,.7);
+  padding: 3px 6px; text-align: right; color: rgba(var(--text-rgb),.7);
   font-variant-numeric: tabular-nums;
 }
 .PROFILE_SCREEN .pf-table--sm td:first-child,
@@ -241,8 +241,8 @@
 
 /* Audit footer */
 .PROFILE_SCREEN .pf-exp-audit {
-  font-size: 11px; color: rgba(148,163,184,.5);
-  padding-top: 8px; border-top: 1px solid rgba(148,163,184,.08);
+  font-size: 11px; color: rgba(var(--text-rgb),.55);
+  padding-top: 8px; border-top: 1px solid var(--hairline);
   display: flex; flex-wrap: wrap; gap: 4px;
   font-variant-numeric: tabular-nums;
 }
@@ -252,7 +252,7 @@
   height: 28px; padding: 0 12px; border-radius: 8px;
   border: 1px solid rgba(var(--accent-rgb),.35);
   background: rgba(var(--accent-rgb),.10);
-  color: rgba(226,232,240,.92);
+  color: rgba(var(--text-rgb),.92);
   font-size: 11px; font-weight: 700; letter-spacing: .04em;
   cursor: pointer;
 }
@@ -261,26 +261,26 @@
   margin-bottom: 12px; padding: 12px 14px;
   border-radius: 10px;
   border: 1px solid rgba(var(--accent-rgb),.18);
-  background: rgba(8,16,40,.32);
-  font-size: 12px; color: rgba(226,232,240,.85); line-height: 1.55;
+  background: var(--surface-muted);
+  font-size: 12px; color: rgba(var(--text-rgb),.85); line-height: 1.55;
 }
 .PROFILE_SCREEN .pf-exp-help-title {
   font-size: 11px; font-weight: 800; letter-spacing: .08em;
-  text-transform: uppercase; color: rgba(148,163,184,.85); margin-bottom: 6px;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 6px;
 }
 .PROFILE_SCREEN .pf-exp-help-list { margin: 0; padding-left: 18px; }
 .PROFILE_SCREEN .pf-exp-help-list li { margin: 3px 0; }
 .PROFILE_SCREEN .pf-exp-help code {
   font-size: 11px; padding: 1px 5px; border-radius: 4px;
-  background: rgba(8,16,40,.55); color: #93c5fd;
+  background: var(--control-bg); color: var(--accent-blue);
 }
 
 /* Reconciliation banner */
 .PROFILE_SCREEN .pf-exp-align {
   margin-bottom: 12px; padding: 10px 12px;
-  border-radius: 10px; border: 1px solid rgba(148,163,184,.18);
-  background: rgba(8,16,40,.28);
-  font-size: 12px; color: rgba(226,232,240,.88);
+  border-radius: 10px; border: 1px solid var(--stroke-soft);
+  background: var(--surface-muted);
+  font-size: 12px; color: rgba(var(--text-rgb),.88);
 }
 .PROFILE_SCREEN .pf-exp-align--ok   { border-color: rgba(74,222,128,.45); background: rgba(74,222,128,.06); }
 .PROFILE_SCREEN .pf-exp-align--warn { border-color: rgba(245,158,11,.45); background: rgba(245,158,11,.06); }
@@ -289,21 +289,21 @@
   display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
   font-variant-numeric: tabular-nums;
 }
-.PROFILE_SCREEN .pf-exp-align-sub { margin-top: 4px; font-size: 11px; color: rgba(148,163,184,.75); }
+.PROFILE_SCREEN .pf-exp-align-sub { margin-top: 4px; font-size: 11px; color: var(--muted); }
 .PROFILE_SCREEN .pf-exp-align-tag {
   font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
-  color: rgba(148,163,184,.75);
-  padding: 2px 8px; border-radius: 999px; border: 1px solid rgba(148,163,184,.25);
+  color: var(--muted);
+  padding: 2px 8px; border-radius: 999px; border: 1px solid var(--stroke-soft);
 }
 .PROFILE_SCREEN .pf-exp-align-diff { font-weight: 700; }
-.PROFILE_SCREEN .pf-exp-align--ok   .pf-exp-align-diff { color: #4ade80; }
-.PROFILE_SCREEN .pf-exp-align--warn .pf-exp-align-diff { color: #fbbf24; }
-.PROFILE_SCREEN .pf-exp-align--err  .pf-exp-align-diff { color: #f87171; }
+.PROFILE_SCREEN .pf-exp-align--ok   .pf-exp-align-diff { color: var(--accent); }
+.PROFILE_SCREEN .pf-exp-align--warn .pf-exp-align-diff { color: var(--accent-amber); }
+.PROFILE_SCREEN .pf-exp-align--err  .pf-exp-align-diff { color: var(--accent-rose); }
 .PROFILE_SCREEN .pf-exp-align-btn {
   height: 26px; padding: 0 10px; border-radius: 6px;
   border: 1px solid rgba(var(--accent-rgb),.4);
   background: rgba(var(--accent-rgb),.12);
-  color: rgba(226,232,240,.92);
+  color: rgba(var(--text-rgb),.92);
   font-size: 11px; font-weight: 700; cursor: pointer;
 }
 .PROFILE_SCREEN .pf-exp-align-btn:hover { background: rgba(var(--accent-rgb),.2); }
@@ -314,7 +314,7 @@
   border-radius: 10px;
   border: 1px solid rgba(245,158,11,.4);
   background: rgba(245,158,11,.06);
-  color: #fcd34d;
+  color: var(--accent-amber);
   font-size: 12px; line-height: 1.5;
 }
 .PROFILE_SCREEN .pf-exp-warnings li { margin: 2px 0; }

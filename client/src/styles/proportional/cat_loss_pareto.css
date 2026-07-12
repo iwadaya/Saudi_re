@@ -15,8 +15,8 @@
 .llp-params {
   margin-bottom: 20px;
   padding: 24px;
-  background: rgba(30, 41, 59, 0.4); /* Glass Effect */
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--surface-2); /* Glass Effect */
+  border: 1px solid var(--hairline);
   border-radius: 12px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
@@ -27,19 +27,19 @@
   align-items: center;
   margin-bottom: 20px;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .llp-card-title {
   font-size: 16px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--text);
   letter-spacing: -0.01em;
 }
 
 .llp-mini-btn {
   background: rgba(59, 130, 246, 0.1);
-  color: #60a5fa;
+  color: var(--accent-blue);
   border: 1px solid rgba(59, 130, 246, 0.2);
   padding: 6px 14px;
   border-radius: 6px;
@@ -71,7 +71,7 @@
 
 .llp-label {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--muted);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -87,26 +87,26 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
+  background: var(--surface-hover);
+  color: var(--muted);
   font-size: 9px;
   cursor: help;
 }
 
 .llp-input {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--control-bg);
+  border: 1px solid var(--hairline-strong);
   border-radius: 6px;
   padding: 10px 12px;
-  color: #fff;
+  color: var(--text);
   font-size: 13px;
   font-family: var(--font-sans);
   transition: border-color 0.2s, background 0.2s;
 }
 
 .llp-input:focus {
-  border-color: #3b82f6;
-  background: rgba(15, 23, 42, 0.9);
+  border-color: var(--accent-blue);
+  background: var(--control-bg);
   outline: none;
 }
 
@@ -115,14 +115,14 @@
   opacity: 0.6;
   cursor: default;
   border-style: dashed;
-  color: #94a3b8;
+  color: var(--muted);
 }
 
 /* --- Cards (Bottom Section) --- */
 .llp-card {
   padding: 24px;
-  background: rgba(30, 41, 59, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
   border-radius: 12px;
   height: 100%;
   display: flex;
@@ -134,13 +134,13 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  color: #cbd5e1;
+  color: var(--muted);
 }
 
 .llp-rp-table th, 
 .llp-rp-table td {
   padding: 12px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--hairline);
   text-align: center;
 }
 
@@ -187,8 +187,8 @@
 }
 
 .llp-modal {
-  background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface-elevated);
+  border: 1px solid var(--hairline-strong);
   border-radius: 12px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   display: flex;
@@ -198,15 +198,15 @@
 
 .llp-modal-head {
   padding: 16px 24px;
-  background: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--surface-hover);
+  border-bottom: 1px solid var(--hairline);
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
 .llp-modal-title {
-  color: #fff;
+  color: var(--text);
   font-weight: 700;
   font-size: 15px;
 }
@@ -214,7 +214,7 @@
 .llp-x {
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--muted);
   font-size: 20px;
   cursor: pointer;
   padding: 4px;
@@ -224,8 +224,8 @@
 }
 
 .llp-x:hover { 
-  color: #fff; 
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--text); 
+  background: var(--control-hover);
 }
 
 .llp-chart-container {
@@ -241,7 +241,7 @@
   justify-content: center;
   color: #64748b;
   font-size: 13px;
-  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border: 1px dashed var(--hairline-strong);
   margin: 20px;
   border-radius: 8px;
 }

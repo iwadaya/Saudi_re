@@ -26,19 +26,19 @@ function RoleDot({ code }) {
 function UserRow({ user, onEdit, onMandate }) {
   const rc = user.role_code;
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr auto', gap:12, alignItems:'center', padding:'10px 16px', borderBottom:'1px solid rgba(255,255,255,.06)', fontSize:12 }}>
+    <div style={{ display:'grid', gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr auto', gap:12, alignItems:'center', padding:'10px 16px', borderBottom:'1px solid var(--hairline)', fontSize:12 }}>
       <div>
-        <div style={{ fontWeight:600, color:'rgba(255,255,255,.88)' }}>{user.display_name}</div>
-        <div style={{ fontSize:10, color:'rgba(255,255,255,.35)', marginTop:2 }}>{user.email} · {user.office || 'Riyadh'}</div>
+        <div style={{ fontWeight:600, color:'rgba(var(--text-rgb),.88)' }}>{user.display_name}</div>
+        <div style={{ fontSize:10, color:'rgba(var(--text-rgb),.35)', marginTop:2 }}>{user.email} · {user.office || 'Riyadh'}</div>
       </div>
       <div style={{ display:'flex', alignItems:'center' }}>
         <RoleDot code={rc} />
-        <span style={{ color:'rgba(255,255,255,.65)' }}>{user.role_name || ROLE_LABELS[rc]}</span>
+        <span style={{ color:'rgba(var(--text-rgb),.65)' }}>{user.role_name || ROLE_LABELS[rc]}</span>
       </div>
-      <div style={{ color:'rgba(255,255,255,.55)' }}>{fmtLimit(user.treaty_limit_usd)}</div>
-      <div style={{ color:'rgba(255,255,255,.45)' }}>{user.treaty_type_scope || 'BOTH'}</div>
+      <div style={{ color:'rgba(var(--text-rgb),.55)' }}>{fmtLimit(user.treaty_limit_usd)}</div>
+      <div style={{ color:'rgba(var(--text-rgb),.45)' }}>{user.treaty_type_scope || 'BOTH'}</div>
       <div>
-        <span style={{ padding:'2px 8px', borderRadius:10, fontSize:10, fontWeight:700, background:user.is_active ? 'rgba(35,209,139,.12)' : 'rgba(248,113,113,.10)', color:user.is_active ? '#23d18b' : '#f87171', border:`1px solid ${user.is_active ? 'rgba(35,209,139,.25)' : 'rgba(248,113,113,.22)'}` }}>
+        <span style={{ padding:'2px 8px', borderRadius:10, fontSize:10, fontWeight:700, background:user.is_active ? 'rgba(35,209,139,.12)' : 'rgba(248,113,113,.10)', color:user.is_active ? 'var(--accent)' : '#f87171', border:`1px solid ${user.is_active ? 'rgba(35,209,139,.25)' : 'rgba(248,113,113,.22)'}` }}>
           {user.is_active ? 'Active' : 'Inactive'}
         </span>
       </div>
@@ -82,7 +82,7 @@ function MandateModal({ user, onClose, onSave }) {
 
   const fi = (label, key, opts = {}) => (
     <div style={{ marginBottom:14 }}>
-      <label style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>{label}</label>
+      <label style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(var(--text-rgb),.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>{label}</label>
       <input className="form-input" type={opts.type || 'text'} value={form[key]}
         onChange={e => set(key, e.target.value)} placeholder={opts.placeholder || ''} style={{ width:'100%' }} />
     </div>
@@ -91,20 +91,20 @@ function MandateModal({ user, onClose, onSave }) {
   return (
     <div className="modal-backdrop" role="presentation" style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.65)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="glass" role="dialog" aria-modal="true" style={{ width:'100%', maxWidth:480, borderRadius:16, padding:24, border:'1px solid rgba(255,255,255,.12)', maxHeight:'85vh', overflowY:'auto' }}>
+      <div className="glass" role="dialog" aria-modal="true" style={{ width:'100%', maxWidth:480, borderRadius:16, padding:24, border:'1px solid var(--hairline-strong)', maxHeight:'85vh', overflowY:'auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
           <div>
-            <div style={{ fontSize:14, fontWeight:700, color:'rgba(255,255,255,.90)' }}>Mandate — {user.display_name}</div>
-            <div style={{ fontSize:11, color:'rgba(255,255,255,.38)', marginTop:2 }}>{user.role_name || user.role_code}</div>
+            <div style={{ fontSize:14, fontWeight:700, color:'rgba(var(--text-rgb),.90)' }}>Mandate — {user.display_name}</div>
+            <div style={{ fontSize:11, color:'rgba(var(--text-rgb),.38)', marginTop:2 }}>{user.role_name || user.role_code}</div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close" style={{ background:'none', border:'none', color:'rgba(255,255,255,.40)', fontSize:18, cursor:'pointer', lineHeight:1 }}>✕</button>
+          <button type="button" onClick={onClose} aria-label="Close" style={{ background:'none', border:'none', color:'rgba(var(--text-rgb),.40)', fontSize:18, cursor:'pointer', lineHeight:1 }}>✕</button>
         </div>
 
         {fi('Treaty Authority Limit (USD)', 'treaty_limit_usd', { type:'number', placeholder:'Leave blank = unlimited' })}
         {fi('Single Risk Limit (USD)', 'single_risk_limit_usd', { type:'number', placeholder:'Leave blank = use treaty limit' })}
 
         <div style={{ marginBottom:14 }}>
-          <label htmlFor={`${fieldId}-scope`} style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>Treaty Type Scope</label>
+          <label htmlFor={`${fieldId}-scope`} style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(var(--text-rgb),.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>Treaty Type Scope</label>
           <select id={`${fieldId}-scope`} className="form-input" value={form.treaty_type_scope} onChange={e => set('treaty_type_scope', e.target.value)} style={{ width:'100%' }}>
             <option value="BOTH">Both Proportional & Non-Proportional</option>
             <option value="PROP_ONLY">Proportional Only</option>
@@ -113,7 +113,7 @@ function MandateModal({ user, onClose, onSave }) {
         </div>
 
         <div style={{ marginBottom:14 }}>
-          <label htmlFor={`${fieldId}-approvals`} style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>Approvals Required</label>
+          <label htmlFor={`${fieldId}-approvals`} style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(var(--text-rgb),.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>Approvals Required</label>
           <select id={`${fieldId}-approvals`} className="form-input" value={form.approvals_required} onChange={e => set('approvals_required', e.target.value)} style={{ width:'100%' }}>
             <option value={1}>1 — Single approval</option>
             <option value={2}>2 — Dual approval</option>
@@ -155,7 +155,7 @@ function AddUserModal({ roles, onClose, onSave }) {
 
   const fi = (label, key, opts = {}) => (
     <div style={{ marginBottom:14 }}>
-      <label style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>{label}</label>
+      <label style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(var(--text-rgb),.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>{label}</label>
       {opts.select ? (
         <select className="form-input" value={form[key]} onChange={e => set(key, e.target.value)} style={{ width:'100%' }}>{opts.select}</select>
       ) : (
@@ -167,10 +167,10 @@ function AddUserModal({ roles, onClose, onSave }) {
   return (
     <div className="modal-backdrop" role="presentation" style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.65)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="glass" role="dialog" aria-modal="true" style={{ width:'100%', maxWidth:460, borderRadius:16, padding:24, border:'1px solid rgba(255,255,255,.12)' }}>
+      <div className="glass" role="dialog" aria-modal="true" style={{ width:'100%', maxWidth:460, borderRadius:16, padding:24, border:'1px solid var(--hairline-strong)' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-          <div style={{ fontSize:14, fontWeight:700, color:'rgba(255,255,255,.90)' }}>Add New User</div>
-          <button type="button" onClick={onClose} aria-label="Close" style={{ background:'none', border:'none', color:'rgba(255,255,255,.40)', fontSize:18, cursor:'pointer' }}>✕</button>
+          <div style={{ fontSize:14, fontWeight:700, color:'rgba(var(--text-rgb),.90)' }}>Add New User</div>
+          <button type="button" onClick={onClose} aria-label="Close" style={{ background:'none', border:'none', color:'rgba(var(--text-rgb),.40)', fontSize:18, cursor:'pointer' }}>✕</button>
         </div>
         {fi('Full Name', 'display_name', { placeholder:'Full name' })}
         {fi('Username', 'username', { placeholder:'username' })}
@@ -183,7 +183,7 @@ function AddUserModal({ roles, onClose, onSave }) {
         )})}
         {fi('Office', 'office', { placeholder:'Riyadh, Dubai, London…' })}
         {fi('Phone', 'phone', { placeholder:'+966 5X XXX XXXX (optional)' })}
-        <div style={{ fontSize:11, color:'rgba(255,255,255,.30)', marginBottom:14 }}>The server sets a temporary password for the new user, who must reset it on first login.</div>
+        <div style={{ fontSize:11, color:'rgba(var(--text-rgb),.40)', marginBottom:14 }}>The server sets a temporary password for the new user, who must reset it on first login.</div>
         {err && <div style={{ color:'#f87171', fontSize:12, marginBottom:12 }}>{err}</div>}
         <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
@@ -219,7 +219,7 @@ export default function UserManagementScreen() {
 
   // Guard: only CE/CU
   if (!isAtLeast(2)) {
-    return <div style={{ padding:32, color:'rgba(255,255,255,.5)', fontSize:13 }}>Access restricted to Chief Underwriter and Chief Executive.</div>;
+    return <div style={{ padding:32, color:'rgba(var(--text-rgb),.5)', fontSize:13 }}>Access restricted to Chief Underwriter and Chief Executive.</div>;
   }
 
   const filtered = users.filter(u => {
@@ -234,8 +234,8 @@ export default function UserManagementScreen() {
 
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20, flexWrap:'wrap', gap:12 }}>
           <div>
-            <div style={{ fontSize:17, fontWeight:700, color:'rgba(255,255,255,.90)' }}>Platform Users</div>
-            <div style={{ fontSize:12, color:'rgba(255,255,255,.40)', marginTop:2 }}>{users.length} users across {roles.length} roles</div>
+            <div style={{ fontSize:17, fontWeight:700, color:'rgba(var(--text-rgb),.90)' }}>Platform Users</div>
+            <div style={{ fontSize:12, color:'rgba(var(--text-rgb),.40)', marginTop:2 }}>{users.length} users across {roles.length} roles</div>
           </div>
           <div style={{ display:'flex', gap:8 }}>
             <input className="form-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search users…" style={{ width:200, fontSize:12 }} />
@@ -244,7 +244,7 @@ export default function UserManagementScreen() {
         </div>
 
         {loading ? (
-          <div style={{ color:'rgba(255,255,255,.40)', fontSize:13, padding:24 }}>Loading…</div>
+          <div style={{ color:'rgba(var(--text-rgb),.40)', fontSize:13, padding:24 }}>Loading…</div>
         ) : (
           roles.map(role => {
             const roleUsers = filtered.filter(u => u.role_code === role.role_code);
@@ -255,12 +255,12 @@ export default function UserManagementScreen() {
               <div key={role.role_id} style={{ marginBottom:24 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, paddingLeft:4 }}>
                   <span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', background:color }} />
-                  <span style={{ fontSize:12, fontWeight:700, color:'rgba(255,255,255,.65)', textTransform:'uppercase', letterSpacing:'.06em' }}>{role.role_name}</span>
-                  <span style={{ fontSize:10, color:'rgba(255,255,255,.30)' }}>Lvl {role.hierarchy_level} · {role.authority_limit_usd ? fmtLimit(role.authority_limit_usd) + ' role default' : 'Unlimited'}</span>
-                  <span style={{ fontSize:10, color:'rgba(255,255,255,.25)', marginLeft:'auto' }}>{roleUsers.length} user{roleUsers.length !== 1 ? 's' : ''}</span>
+                  <span style={{ fontSize:12, fontWeight:700, color:'rgba(var(--text-rgb),.65)', textTransform:'uppercase', letterSpacing:'.06em' }}>{role.role_name}</span>
+                  <span style={{ fontSize:10, color:'rgba(var(--text-rgb),.40)' }}>Lvl {role.hierarchy_level} · {role.authority_limit_usd ? fmtLimit(role.authority_limit_usd) + ' role default' : 'Unlimited'}</span>
+                  <span style={{ fontSize:10, color:'rgba(var(--text-rgb),.35)', marginLeft:'auto' }}>{roleUsers.length} user{roleUsers.length !== 1 ? 's' : ''}</span>
                 </div>
-                <div className="glass" style={{ borderRadius:12, border:'1px solid rgba(255,255,255,.08)', overflow:'hidden' }}>
-                  <div style={{ display:'grid', gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr auto', gap:12, padding:'8px 16px', borderBottom:'1px solid rgba(255,255,255,.06)', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.30)', textTransform:'uppercase', letterSpacing:'.06em' }}>
+                <div className="glass" style={{ borderRadius:12, border:'1px solid var(--hairline)', overflow:'hidden' }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr auto', gap:12, padding:'8px 16px', borderBottom:'1px solid var(--hairline)', fontSize:10, fontWeight:700, color:'rgba(var(--text-rgb),.40)', textTransform:'uppercase', letterSpacing:'.06em' }}>
                     <div>Name</div><div>Role</div><div>Treaty Limit</div><div>Scope</div><div>Status</div><div>Actions</div>
                   </div>
                   {roleUsers.map(u => (

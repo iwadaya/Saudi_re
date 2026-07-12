@@ -35,9 +35,9 @@ const FIELD_STYLE = {
   padding: '0 38px 0 12px',
   fontSize: 13,
   fontFamily: 'inherit',
-  color: 'rgba(255,255,255,0.92)',
-  background: 'rgba(15,23,42,0.92)',
-  border: '1px solid rgba(148,163,184,0.35)',
+  color: 'var(--text)',
+  background: 'var(--control-bg)',
+  border: '1px solid var(--stroke-soft)',
   borderRadius: FIELD_RADIUS,
   outline: 'none',
   appearance: 'none',
@@ -54,21 +54,21 @@ const onFieldFocus = (e) => {
   e.currentTarget.style.boxShadow = '0 0 0 3px rgba(var(--accent-rgb),0.1)';
 };
 const onFieldBlur = (e) => {
-  e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)';
+  e.currentTarget.style.borderColor = 'var(--stroke-soft)';
   e.currentTarget.style.boxShadow = 'none';
 };
 
 // SSO block styling — const objects referenced with a single brace (style={obj})
 // so they don't count against the screens-layer inline-style budget.
 const SSO_DIVIDER = { display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0' };
-const SSO_DIVIDER_LINE = { flex: 1, height: 1, background: 'rgba(255,255,255,.10)' };
-const SSO_DIVIDER_TEXT = { fontSize: 10, color: 'rgba(255,255,255,.30)', letterSpacing: '.08em', textTransform: 'uppercase' };
+const SSO_DIVIDER_LINE = { flex: 1, height: 1, background: 'var(--hairline)' };
+const SSO_DIVIDER_TEXT = { fontSize: 10, color: 'rgba(var(--text-rgb),.4)', letterSpacing: '.08em', textTransform: 'uppercase' };
 const SSO_BUTTON = {
   width: '100%', minHeight: FIELD_HEIGHT, borderRadius: FIELD_RADIUS,
   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
   fontSize: 13, fontWeight: 700, cursor: 'pointer',
-  color: 'rgba(255,255,255,.92)', background: 'rgba(15,23,42,0.92)',
-  border: '1px solid rgba(148,163,184,0.35)',
+  color: 'var(--text)', background: 'var(--control-bg)',
+  border: '1px solid var(--stroke-soft)',
 };
 // Error banner for ?sso_error — const (single-brace ref) to stay budget-neutral.
 const SSO_ERR_BANNER = {
@@ -119,10 +119,10 @@ function TestAccessPanel({ onLogin }) {
       background: 'rgba(35,209,139,0.07)',
       border: '1px solid rgba(35,209,139,0.25)',
     }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(35,209,139,0.8)', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 10 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 10 }}>
         Test Access — Underwriter
       </div>
-      <div style={{ fontSize: 12, color: 'rgba(255,255,255,.45)', marginBottom: 12, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.5)', marginBottom: 12, lineHeight: 1.5 }}>
         Enter your name. You'll be remembered on this device — no password needed.
       </div>
       <input
@@ -198,7 +198,7 @@ function AddUserPanel({ onCreated, onCancel }) {
   // and the column gap do.
   return (
     <div style={{ marginTop: 12, padding: '16px', borderRadius: 12, background: 'rgba(35,209,139,0.07)', border: '1px dashed rgba(35,209,139,0.40)' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(35,209,139,0.8)', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 10 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 10 }}>
         Add User — Test Utility
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -322,20 +322,20 @@ export default function LoginScreen() {
 
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,rgba(35,209,139,.9),rgba(18,160,100,.9))', fontSize: 22, fontWeight: 900, color: '#04120b', marginBottom: 12, boxShadow: '0 8px 24px rgba(35,209,139,.3)' }}>U3</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: 'rgba(255,255,255,.92)', letterSpacing: '.01em' }}>The Universe™</div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,.35)', marginTop: 3, letterSpacing: '.07em', textTransform: 'uppercase' }}>Reinsurance Underwriting Platform</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: 'rgba(var(--text-rgb),.92)', letterSpacing: '.01em' }}>The Universe™</div>
+          <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)', marginTop: 3, letterSpacing: '.07em', textTransform: 'uppercase' }}>Reinsurance Underwriting Platform</div>
         </div>
 
-        <div className="glass" style={{ borderRadius: 16, padding: 24, border: '1px solid rgba(255,255,255,.10)' }}>
+        <div className="glass" style={{ borderRadius: 16, padding: 24, border: '1px solid var(--hairline)' }}>
           {ssoError && (
             <div role="alert" style={SSO_ERR_BANNER}>
               {ssoError}
             </div>
           )}
           <div style={{ marginBottom: 18 }}>
-            <label htmlFor="login-user" style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.40)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 8 }}>Underwriter</label>
+            <label htmlFor="login-user" style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'rgba(var(--text-rgb),.55)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 8 }}>Underwriter</label>
             {loadingUsers ? (
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,.35)', padding: '10px 0' }} aria-live="polite">Loading users…</div>
+              <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.5)', padding: '10px 0' }} aria-live="polite">Loading users…</div>
             ) : (
               <div style={{ position: 'relative' }}>
                 <select
@@ -355,14 +355,14 @@ export default function LoginScreen() {
                 </select>
                 {/* Custom chevron — the native arrow is removed by appearance:none
                     so the select height matches the password input exactly. */}
-                <span aria-hidden="true" style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'rgba(255,255,255,0.45)', fontSize: 10 }}>▼</span>
+                <span aria-hidden="true" style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'rgba(var(--text-rgb),.55)', fontSize: 10 }}>▼</span>
               </div>
             )}
           </div>
 
           <form onSubmit={handleLogin} aria-label="Sign in">
             <div style={{ marginBottom: 16 }}>
-              <label htmlFor="login-password" style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.40)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 6 }}>Password</label>
+              <label htmlFor="login-password" style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'rgba(var(--text-rgb),.55)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 6 }}>Password</label>
               <div style={{ position: 'relative' }}>
                 <input id="login-password" type={showPw ? 'text' : 'password'} className="form-input"
                   value={password} onChange={e => { setPassword(e.target.value); setError(''); }}
@@ -374,13 +374,13 @@ export default function LoginScreen() {
                 <button type="button" onClick={() => setShowPw(v => !v)}
                   aria-label={showPw ? 'Hide password' : 'Show password'}
                   aria-pressed={showPw}
-                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,.30)', fontSize: 12, padding: 2 }}>
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(var(--text-rgb),.45)', fontSize: 12, padding: 2 }}>
                   <span aria-hidden="true">{showPw ? '▼' : '▶'}</span>
                 </button>
               </div>
               {import.meta.env.DEV && (
-                <div id="login-hint" style={{ fontSize: 10, color: 'rgba(255,255,255,.22)', marginTop: 5 }}>
-                  Demo: <span style={{ fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,.38)' }}>demo2026</span>
+                <div id="login-hint" style={{ fontSize: 10, color: 'rgba(var(--text-rgb),.4)', marginTop: 5 }}>
+                  Demo: <span style={{ fontFamily: 'var(--font-mono)', color: 'rgba(var(--text-rgb),.55)' }}>demo2026</span>
                 </div>
               )}
             </div>
@@ -416,15 +416,15 @@ export default function LoginScreen() {
 
           {/* ── Add user (test utility — DEV builds only, compiled out of prod) ── */}
           {import.meta.env.DEV && (
-          <div style={{ marginTop: 16, borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 14 }}>
+          <div style={{ marginTop: 16, borderTop: '1px solid var(--hairline)', paddingTop: 14 }}>
             {addUserSuccess && !showAddUser && (
-              <div role="status" style={{ fontSize: 11, color: 'rgba(35,209,139,0.85)', marginBottom: 10 }}>{addUserSuccess}</div>
+              <div role="status" style={{ fontSize: 11, color: 'var(--accent)', marginBottom: 10 }}>{addUserSuccess}</div>
             )}
             {!showAddUser ? (
               <button
                 type="button"
                 onClick={() => { setShowAddUser(true); setAddUserSuccess(''); }}
-                style={{ width: '100%', background: 'none', border: '1px dashed rgba(35,209,139,0.30)', borderRadius: 8, padding: '9px 12px', color: 'rgba(35,209,139,0.65)', fontSize: 12, fontWeight: 600, cursor: 'pointer', letterSpacing: '.03em', transition: 'all .15s' }}
+                style={{ width: '100%', background: 'none', border: '1px dashed rgba(35,209,139,0.30)', borderRadius: 8, padding: '9px 12px', color: 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer', letterSpacing: '.03em', transition: 'all .15s' }}
               >
                 + Add user (test)
               </button>
@@ -436,12 +436,12 @@ export default function LoginScreen() {
 
           {/* ── Test Access (DEV builds only — compiled out of production) ── */}
           {import.meta.env.DEV && (
-          <div style={{ marginTop: 16, borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 14 }}>
+          <div style={{ marginTop: 16, borderTop: '1px solid var(--hairline)', paddingTop: 14 }}>
             {!showTestPanel ? (
               <button
                 type="button"
                 onClick={() => setShowTestPanel(true)}
-                style={{ width: '100%', background: 'none', border: '1px dashed rgba(35,209,139,0.30)', borderRadius: 8, padding: '9px 12px', color: 'rgba(35,209,139,0.65)', fontSize: 12, fontWeight: 600, cursor: 'pointer', letterSpacing: '.03em', transition: 'all .15s' }}
+                style={{ width: '100%', background: 'none', border: '1px dashed rgba(35,209,139,0.30)', borderRadius: 8, padding: '9px 12px', color: 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer', letterSpacing: '.03em', transition: 'all .15s' }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(35,209,139,0.55)'}
                 onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(35,209,139,0.30)'}
               >
@@ -454,7 +454,7 @@ export default function LoginScreen() {
           )}
         </div>
 
-        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 10, color: 'rgba(255,255,255,.18)', letterSpacing: '.04em' }}>
+        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 10, color: 'rgba(var(--text-rgb),.35)', letterSpacing: '.04em' }}>
           The Universe™ · by Darchville Analytics
         </div>
       </div>

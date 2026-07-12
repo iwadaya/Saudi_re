@@ -32,38 +32,38 @@ export default function WarningsDrawer({ open, onClose, warnings = [], unmatched
         .wdr-panel {
           position: fixed; top: 0; right: 0; bottom: 0;
           width: min(440px, 100%);
-          background: linear-gradient(180deg, rgba(15,23,42,0.96), rgba(2,6,23,0.98));
+          background: var(--panel-bg-strong);
           border-left: 1px solid rgba(var(--accent-rgb), 0.22);
           box-shadow: -20px 0 40px rgba(0,0,0,0.45);
-          color: rgba(226,232,240,0.92);
+          color: var(--text);
           z-index: 1101;
           display: flex; flex-direction: column;
         }
         .wdr-head {
           display: flex; justify-content: space-between; align-items: center;
           padding: 16px 22px;
-          border-bottom: 1px solid rgba(255,255,255,0.06);
+          border-bottom: 1px solid var(--hairline);
         }
         .wdr-title {
           font-size: 13px; font-weight: 800; letter-spacing: .08em;
           text-transform: uppercase;
         }
         .wdr-close {
-          background: none; border: none; color: rgba(255,255,255,0.55);
+          background: none; border: none; color: rgba(var(--text-rgb),0.55);
           font-size: 18px; cursor: pointer; padding: 4px 8px;
         }
-        .wdr-close:hover { color: rgba(255,255,255,0.9); }
+        .wdr-close:hover { color: rgba(var(--text-rgb),0.9); }
         .wdr-body { padding: 18px 22px; overflow-y: auto; flex: 1; }
         .wdr-section { margin-bottom: 22px; }
         .wdr-section h4 {
           font-size: 11px; font-weight: 800; letter-spacing: .12em;
-          text-transform: uppercase; color: rgba(226,232,240,0.55);
+          text-transform: uppercase; color: rgba(var(--text-rgb),0.55);
           margin: 0 0 8px 0;
         }
         .wdr-list { list-style: none; padding: 0; margin: 0; display: flex;
                     flex-direction: column; gap: 8px; }
         .wdr-item {
-          font-size: 12px; color: rgba(226,232,240,0.82);
+          font-size: 12px; color: rgba(var(--text-rgb),0.82);
           padding: 9px 12px; border-radius: 8px;
           background: rgba(250, 191, 36, 0.06);
           border: 1px solid rgba(250, 191, 36, 0.18);
@@ -74,7 +74,7 @@ export default function WarningsDrawer({ open, onClose, warnings = [], unmatched
           border-color: rgba(248, 113, 113, 0.22);
         }
         .wdr-empty {
-          font-size: 12px; color: rgba(226,232,240,0.55);
+          font-size: 12px; color: rgba(var(--text-rgb),0.55);
           padding: 14px 0;
         }
       `}</style>

@@ -35,9 +35,9 @@
 }
 
 .dash-tab{
-  border: 1px solid rgba(90,170,200,.18);
-  background: rgba(10,18,32,.35);
-  color: rgba(255,255,255,.88);
+  border: 1px solid var(--stroke-soft);
+  background: var(--control-bg);
+  color: rgba(var(--text-rgb),.88);
   padding: 9px 12px;
   border-radius: 14px;
   font-weight: 700;
@@ -47,8 +47,8 @@
 }
 
 .dash-tab--active{
-  border-color: rgba(0,255,153,.35);
-  box-shadow: 0 0 0 3px rgba(0,255,153,.08);
+  border-color: rgba(var(--accent-rgb),.45);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.08);
 }
 
 .dash-block{
@@ -124,7 +124,7 @@
 .dash-th{
   position: sticky;
   top: 0;
-  background: rgba(8,14,24,.88);
+  background: var(--table-head-bg);
   cursor: pointer;
 }
 
@@ -160,8 +160,8 @@
 .dash-select{
   width: 100%;
   border-radius: 12px;
-  border: 1px solid rgba(90,170,200,.24);
-  background: rgba(10,18,32,.40);
+  border: 1px solid var(--stroke-soft);
+  background: var(--control-bg);
   color: var(--text);
   padding: 10px 10px;
   outline: none;
@@ -177,9 +177,9 @@
   margin-top: 10px;
   padding: 10px 12px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 90, 90, .22);
-  background: rgba(255, 90, 90, .08);
-  color: rgba(255,255,255,.9);
+  border: 1px solid rgba(var(--accent-rose-rgb), .22);
+  background: rgba(var(--accent-rose-rgb), .08);
+  color: rgba(var(--text-rgb),.9);
 }
 
 /* KPI tiles (Portfolio Overview top cards)
@@ -269,16 +269,16 @@
   font-size: 9px;
   font-weight: 700;
   letter-spacing: .04em;
-  color: #00ff99;
-  background: rgba(0,255,153,.12);
+  color: var(--accent);
+  background: rgba(var(--accent-rgb),.12);
   border-radius: 5px;
   padding: 2px 7px;
   margin-left: 8px;
   vertical-align: middle;
 }
 
-.dash-pos{ color: #00ff99; }
-.dash-neg{ color: #ff6b6b; }
+.dash-pos{ color: var(--accent); }
+.dash-neg{ color: var(--accent-rose); }
 
 table.dash-tech td.dash-tcell{
   position: relative;
@@ -294,14 +294,14 @@ table.dash-tech td.dash-tcell::after{
   inset: 0;
   background: linear-gradient(to bottom right,
     transparent calc(50% - 0.5px),
-    rgba(255,255,255,.18) 0,
-    rgba(255,255,255,.18) calc(50% + 0.5px),
+    var(--hairline-strong) 0,
+    var(--hairline-strong) calc(50% + 0.5px),
     transparent 0);
   pointer-events: none;
 }
 table.dash-tech td.dash-tcell--empty::after{ opacity: .4; }
-table.dash-tech td.dash-tcell--np{   box-shadow: inset 3px 0 0 #ffb020; }
-table.dash-tech td.dash-tcell--prop{ box-shadow: inset 3px 0 0 #00ff99; }
+table.dash-tech td.dash-tcell--np{   box-shadow: inset 3px 0 0 var(--accent-amber); }
+table.dash-tech td.dash-tcell--prop{ box-shadow: inset 3px 0 0 var(--accent); }
 .dash-tcell-tl{
   position: absolute;
   top: 5px;
@@ -310,13 +310,13 @@ table.dash-tech td.dash-tcell--prop{ box-shadow: inset 3px 0 0 #00ff99; }
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   font-weight: 700;
-  color: rgba(255,255,255,.92);
+  color: rgba(var(--text-rgb),.92);
 }
 .dash-tcell-kx{
   font-size: 8px;
   font-weight: 700;
   letter-spacing: .04em;
-  color: rgba(255,255,255,.45);
+  color: rgba(var(--text-rgb),.5);
 }
 .dash-tcell-br{
   position: absolute;
@@ -329,8 +329,8 @@ table.dash-tech td.dash-tcell--prop{ box-shadow: inset 3px 0 0 #00ff99; }
 }
 
 .dash-tr-total td{
-  background: rgba(255,255,255,.04);
-  border-top: 1px solid rgba(255,255,255,.18);
+  background: var(--surface-hover);
+  border-top: 1px solid var(--hairline-strong);
 }
 
 .dash-tech-legend{
@@ -340,18 +340,18 @@ table.dash-tech td.dash-tcell--prop{ box-shadow: inset 3px 0 0 #00ff99; }
   align-items: center;
   padding: 14px 4px 4px;
   font-size: 11.5px;
-  color: rgba(255,255,255,.6);
+  color: rgba(var(--text-rgb),.65);
 }
-.dash-tech-legend b{ color: rgba(255,255,255,.9); font-weight: 700; }
+.dash-tech-legend b{ color: rgba(var(--text-rgb),.9); font-weight: 700; }
 .dash-lz{ display: flex; align-items: center; gap: 7px; }
 .dash-sq{
   width: 26px;
   height: 26px;
   border-radius: 5px;
-  border: 1px solid rgba(255,255,255,.18);
+  border: 1px solid var(--hairline-strong);
   position: relative;
   flex: 0 0 auto;
-  background: rgba(255,255,255,.04);
+  background: var(--surface-hover);
 }
 .dash-sq::after{
   content: "";
@@ -359,29 +359,29 @@ table.dash-tech td.dash-tcell--prop{ box-shadow: inset 3px 0 0 #00ff99; }
   inset: 0;
   background: linear-gradient(to bottom right,
     transparent calc(50% - 0.5px),
-    rgba(255,255,255,.3) 0,
-    rgba(255,255,255,.3) calc(50% + 0.5px),
+    rgba(var(--text-rgb),.3) 0,
+    rgba(var(--text-rgb),.3) calc(50% + 0.5px),
     transparent 0);
 }
 .dash-sq i{ position: absolute; font-style: normal; font-family: ui-monospace, monospace; font-size: 7px; font-weight: 700; }
-.dash-sq i.a{ top: 2px; left: 3px; color: rgba(255,255,255,.9); }
-.dash-sq i.b{ bottom: 2px; right: 3px; color: #00ff99; }
+.dash-sq i.a{ top: 2px; left: 3px; color: rgba(var(--text-rgb),.9); }
+.dash-sq i.b{ bottom: 2px; right: 3px; color: var(--accent); }
 .dash-pill{ display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
-.dash-pill--prop{ background: #00ff99; }
-.dash-pill--np{ background: #ffb020; }
+.dash-pill--prop{ background: var(--accent); }
+.dash-pill--np{ background: var(--accent-amber); }
 
 /* segmented Table/Chart toggle */
 .dash-seg{
   display: inline-flex;
   gap: 2px;
-  background: rgba(255,255,255,.05);
+  background: var(--surface-hover);
   border-radius: 8px;
   padding: 3px;
 }
 .dash-seg-btn{
   border: none;
   background: transparent;
-  color: rgba(255,255,255,.5);
+  color: rgba(var(--text-rgb),.55);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: .04em;
@@ -390,7 +390,7 @@ table.dash-tech td.dash-tcell--prop{ box-shadow: inset 3px 0 0 #00ff99; }
   cursor: pointer;
   transition: all .15s;
 }
-.dash-seg-btn--on{ background: rgba(0,212,255,.18); color: #00d4ff; }
+.dash-seg-btn--on{ background: rgba(var(--accent-blue-rgb),.18); color: var(--accent-blue); }
 
 /* inline premium bar inside a band-table cell */
 .dash-barcell{ position: relative; display: block; min-width: 120px; }
@@ -410,7 +410,7 @@ table.dash-tech td.dash-tcell--prop{ box-shadow: inset 3px 0 0 #00ff99; }
   gap: 7px 16px;
   margin-top: 10px;
   font-size: 11.5px;
-  color: rgba(255,255,255,.6);
+  color: rgba(var(--text-rgb),.65);
 }
 .dash-li{ display: flex; align-items: center; gap: 6px; }
 .dash-sw{ width: 11px; height: 11px; border-radius: 3px; flex: 0 0 auto; }

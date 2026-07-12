@@ -66,7 +66,7 @@ function useEscapeKey(enabled, onEscape) {
 function FR({ label, children }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 10, alignItems: 'center', minHeight: 36 }}>
-      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>{label}</div>
+      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)' }}>{label}</div>
       <div>{children}</div>
     </div>
   );
@@ -82,7 +82,7 @@ function CommaInput({ value, onChange, placeholder, readOnly, disabled, suffix }
       <input className="fi" type="text" inputMode="numeric" placeholder={placeholder}
         value={display} onChange={handleChange} readOnly={readOnly} disabled={disabled}
         style={suffix ? { paddingRight: 40 } : {}} />
-      {suffix && <span style={{ position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',fontSize:11,color:'rgba(255,255,255,.35)',pointerEvents:'none' }}>{suffix}</span>}
+      {suffix && <span style={{ position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',fontSize:11,color:'rgba(var(--text-rgb),.45)',pointerEvents:'none' }}>{suffix}</span>}
     </div>
   );
 }
@@ -506,24 +506,24 @@ export default function NpTreatyDetail() {
           {quoteMode && s.contractId && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 8,
               background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.30)', fontSize: 12 }}>
-              <span style={{ color: '#fbbf24', fontWeight: 700 }}>
+              <span style={{ color: 'var(--accent-amber)', fontWeight: 700 }}>
                 📋 {s.quoteRef || `QT-${s.startYear || new Date().getFullYear()}-${s.contractId?.slice(-6)?.toUpperCase()}`}
               </span>
               {s.quoteVersion > 1 && (
-                <span style={{ fontSize: 10, color: 'rgba(251,191,36,0.65)', fontWeight: 600 }}>v{s.quoteVersion}</span>
+                <span style={{ fontSize: 10, color: 'rgba(var(--accent-amber-rgb),0.75)', fontWeight: 600 }}>v{s.quoteVersion}</span>
               )}
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontFamily: 'var(--font-mono)' }}>
+              <span style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.45)', fontFamily: 'var(--font-mono)' }}>
                 {s.contractId?.slice(0,8)}…
               </span>
             </div>
           )}
           {s.parentContractId && (
             <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8,
-              background: 'rgba(96,165,250,0.10)', border: '1px solid rgba(96,165,250,0.30)', fontSize: 11, color: '#60a5fa', fontWeight: 700 }}>
+              background: 'rgba(96,165,250,0.10)', border: '1px solid rgba(96,165,250,0.30)', fontSize: 11, color: 'var(--accent-blue)', fontWeight: 700 }}>
               🔄 Renewal — linked to prior year contract
             </div>
           )}
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
+          <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)' }}>
             Cedant: <b>{cedantName || '—'}</b>{' · '}Country: <b>{countryName || '—'}</b>
             {' · '}Broker: <b>{brokerName || '—'}</b>{' · '}Currency: <b>{currencyCode || '—'}</b>{' · '}Type: <b>{selectedTypeName || '—'}</b>
             {cobNames.length > 0 && <>{' · '}COB: <b>{cobNames.join(', ')}</b></>}
@@ -532,8 +532,8 @@ export default function NpTreatyDetail() {
 
         {/* ── Contract description (matches proportional) ── */}
         {contractDescription && (
-          <div style={{ padding: '8px 14px', marginBottom: 14, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
-            <span style={{ color: 'rgba(255,255,255,0.4)', marginRight: 8 }}>Contract:</span>{contractDescription}
+          <div style={{ padding: '8px 14px', marginBottom: 14, borderRadius: 10, background: 'var(--surface-hover)', border: '1px solid var(--hairline)', fontSize: 12, color: 'rgba(var(--text-rgb),0.7)' }}>
+            <span style={{ color: 'rgba(var(--text-rgb),0.5)', marginRight: 8 }}>Contract:</span>{contractDescription}
           </div>
         )}
 
@@ -632,7 +632,7 @@ export default function NpTreatyDetail() {
                 <option value="">Select treaty type…</option>{treatyTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></FR>
               <FR label="Classes of Business">
                 <button className="fi" type="button" onClick={() => setShowCobModal(true)}
-                  style={{ textAlign: 'left', cursor: 'pointer', color: (s.classIds || []).length ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)' }}>
+                  style={{ textAlign: 'left', cursor: 'pointer', color: (s.classIds || []).length ? 'var(--text)' : 'rgba(var(--text-rgb),0.4)' }}>
                   {cobText} <span style={{ float: 'right', opacity: 0.3 }}>▾</span>
                 </button>
               </FR>

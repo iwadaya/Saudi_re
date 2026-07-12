@@ -560,8 +560,8 @@ export default function PropCrestaAggregates({ embedded = false, routeKeyOverrid
                   const tabStyle = isActive
                     ? { borderColor: cob.color.border, background: cob.color.active, color: cob.color.text }
                     : cob.eligible
-                      ? { borderColor: 'rgba(255,255,255,.12)', background: 'rgba(255,255,255,.04)', color: 'rgba(255,255,255,.7)' }
-                      : { borderColor: 'rgba(255,255,255,.06)', background: 'rgba(255,255,255,.02)', color: 'rgba(255,255,255,.25)', cursor: 'not-allowed' };
+                      ? { borderColor: 'var(--hairline-strong)', background: 'var(--surface-hover)', color: 'rgba(var(--text-rgb),.7)' }
+                      : { borderColor: 'var(--hairline)', background: 'var(--surface-hover)', color: 'rgba(var(--text-rgb),.35)', cursor: 'not-allowed' };
                   return (
                     <button key={cob.id} className={`ca-cob-tab ${isActive?'active':''} ${!cob.eligible?'ca-cob-tab--disabled':''}`}
                       style={tabStyle} disabled={!cob.eligible}
@@ -583,7 +583,7 @@ export default function PropCrestaAggregates({ embedded = false, routeKeyOverrid
             </div>
           )}
           {zoneRefMissing && (
-            <div className="ca-disabled-banner" style={{ background: 'rgba(245,158,11,.10)', borderColor: 'rgba(245,158,11,.45)', color: 'rgba(245,158,11,.95)' }}>
+            <div className="ca-disabled-banner" style={{ background: 'rgba(245,158,11,.10)', borderColor: 'rgba(245,158,11,.45)', color: 'var(--accent-amber)' }}>
               No reference zones are seeded for this country in <code>ref_cresta_zone</code>. Showing generic Zone&nbsp;1–10 placeholders — please ask the data steward to populate the table.
             </div>
           )}
@@ -623,7 +623,7 @@ export default function PropCrestaAggregates({ embedded = false, routeKeyOverrid
               </div>
               <div className="ca-gold-right">
                 {saveMsg && <span className={`ca-msg ca-msg--${saveMsg.type}`}>{saveMsg.text}</span>}
-                <label className="ca-combined-toggle" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,.7)', fontSize: '13px', cursor: 'pointer', marginRight: '8px' }}>
+                <label className="ca-combined-toggle" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(var(--text-rgb),.7)', fontSize: '13px', cursor: 'pointer', marginRight: '8px' }}>
                   <input
                     type="checkbox"
                     checked={combined}

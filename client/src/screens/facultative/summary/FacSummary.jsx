@@ -37,19 +37,19 @@ const fmtPct = (frac) => {
 
 // Grade band colouring per the prompt: A-C green, D-F amber, G-I orange, J-K red.
 function gradeColor(grade) {
-  if (!grade) return 'rgba(148,163,184,0.55)';
+  if (!grade) return 'rgba(148,163,184,0.75)';
   if (['A', 'B', 'C'].includes(grade)) return '#23d18b';
   if (['D', 'E', 'F'].includes(grade)) return '#fbbf24';
   if (['G', 'H', 'I'].includes(grade)) return '#f97316';
   if (['J', 'K'].includes(grade))      return '#f87171';
-  return 'rgba(148,163,184,0.55)';
+  return 'rgba(148,163,184,0.75)';
 }
 
 function Row({ label, value, color }) {
   return (
     <div className="fac-row">
       <span className="fac-row-label">{label}</span>
-      <span className="fac-row-value" style={{ color: color || 'rgba(226,232,240,0.85)' }}>{value}</span>
+      <span className="fac-row-value" style={{ color: color || 'rgba(var(--text-rgb),0.85)' }}>{value}</span>
     </div>
   );
 }
@@ -57,7 +57,7 @@ function Row({ label, value, color }) {
 function Sec({ title, color, children }) {
   return (
     <div className="fac-sec">
-      <div className="fac-sec-title" style={{ color: color || 'rgba(0,212,255,0.55)' }}>{title}</div>
+      <div className="fac-sec-title" style={{ color: color || 'rgba(var(--accent-blue-rgb),0.75)' }}>{title}</div>
       {children}
     </div>
   );
@@ -220,7 +220,7 @@ export default function FacSummary() {
   if (loading || !risk) {
     return (
       <WizardLayout routeKey={ROUTE_KEY} title="Summary & Approval" headerPill="FACULTATIVE">
-        <div style={{ padding: 40, textAlign: 'center', color: 'rgba(148,163,184,0.40)' }}>Loading…</div>
+        <div style={{ padding: 40, textAlign: 'center', color: 'rgba(var(--text-rgb),0.5)' }}>Loading…</div>
       </WizardLayout>
     );
   }
@@ -231,21 +231,21 @@ export default function FacSummary() {
     return (
       <WizardLayout routeKey={ROUTE_KEY} title="Summary & Approval" headerPill={risk.bound_reference || risk.fac_ref || 'FACULTATIVE'}>
         <div style={{ maxWidth: 540, margin: '60px auto', padding: 30,
-                       background: 'rgba(251,191,36,0.06)',
-                       border: '1px solid rgba(251,191,36,0.25)',
+                       background: 'rgba(var(--accent-amber-rgb),0.06)',
+                       border: '1px solid rgba(var(--accent-amber-rgb),0.25)',
                        borderRadius: 12, textAlign: 'center' }}>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em',
-                        textTransform: 'uppercase', color: '#fbbf24', marginBottom: 8 }}>
+                        textTransform: 'uppercase', color: 'var(--accent-amber)', marginBottom: 8 }}>
             Pricing incomplete
           </div>
-          <div style={{ fontSize: 13, color: 'rgba(226,232,240,0.85)', marginBottom: 16 }}>
+          <div style={{ fontSize: 13, color: 'rgba(var(--text-rgb),0.85)', marginBottom: 16 }}>
             The Summary screen needs a computed underwriting score before it
             can render. Open the Pricing screen, pick the factor selections,
             and the engine will fill in the rest.
           </div>
           <button onClick={() => navigate(`/fac/${riskId}/pricing`)} style={{
-            appearance: 'none', border: '1px solid rgba(0,212,255,0.30)',
-            background: 'rgba(0,212,255,0.10)', color: '#00d4ff',
+            appearance: 'none', border: '1px solid rgba(var(--accent-blue-rgb),0.30)',
+            background: 'rgba(var(--accent-blue-rgb),0.10)', color: 'var(--accent-blue)',
             borderRadius: 8, padding: '10px 24px', fontSize: 12, fontWeight: 700,
             cursor: 'pointer',
           }}>← Return to Pricing</button>
@@ -381,7 +381,7 @@ export default function FacSummary() {
         </Sec>
 
         {/* ── 3. Capacity Panel ── */}
-        <Sec title="Capacity" color="rgba(168,85,247,0.55)">
+        <Sec title="Capacity" color="rgba(168,85,247,0.8)">
           <div className="fac-grid-2">
             <div>
               <Row label="Territorial Cap (SAR)"        value={fmt0(territorialCap)} />
@@ -390,15 +390,15 @@ export default function FacSummary() {
               <Row label="Max Capacity (engine)"        value={`${fmtPct(pricing.max_capacity_pct)} = ${fmt0(pricing.max_capacity_sar)}`} color="#a855f7" />
             </div>
             <div>
-              <Row label="Carrier Exposure — Top Loc."  value={fmt0(carrierTopSi)} color="#23d18b" />
-              <Row label="Carrier Exposure — All Locs." value={fmt0(carrierAllSi)} color="#23d18b" />
+              <Row label="Carrier Exposure — Top Loc."  value={fmt0(carrierTopSi)} color="var(--accent)" />
+              <Row label="Carrier Exposure — All Locs." value={fmt0(carrierAllSi)} color="var(--accent)" />
               <Row label="Total PD / BI SAR"            value={`${fmt0(totalPdSar)} / ${fmt0(totalBiSar)}`} />
               <Row label="Total SAR SI"                 value={fmt0(totalSar)} />
-              <Row label="Premium Expected"             value={fmt0(pricing.expected_premium)} color="#23d18b" />
+              <Row label="Premium Expected"             value={fmt0(pricing.expected_premium)} color="var(--accent)" />
             </div>
           </div>
           <div className="fac-edit-row">
-            <div className="fac-edit-label" style={{ color: 'rgba(168,85,247,0.70)' }}>
+            <div className="fac-edit-label" style={{ color: 'color-mix(in srgb, #a855f7 75%, var(--text))' }}>
               Capacity Proposed %
             </div>
             <input className="fi fac-edit-input" type="number" min={0} max={1} step={0.0001}
@@ -409,23 +409,23 @@ export default function FacSummary() {
         </Sec>
 
         {/* ── 4. Rate Panel ── */}
-        <Sec title="Rate" color="rgba(35,209,139,0.55)">
+        <Sec title="Rate" color="rgba(var(--accent-rgb),0.8)">
           <div className="fac-grid-2">
             <div>
               <Row label="Technical Rate (‰, no NatCat)" value={fmt4(pricing.technical_rate_pm)} />
               <Row label="Total Rate (‰)"                value={fmt4(pricing.total_rate_pm)} />
               <Row label="Final Net Rate (‰)"            value={fmt4(pricing.final_net_rate_pm)} />
-              <Row label="Final Gross Rate (‰)"          value={fmt4(pricing.final_gross_rate_pm)} color="#23d18b" />
+              <Row label="Final Gross Rate (‰)"          value={fmt4(pricing.final_gross_rate_pm)} color="var(--accent)" />
             </div>
             <div>
               <Row label="Market vs Tech %"   value={fmtPct(pricing.market_vs_tech_pct)} />
               <Row label="Market vs Tech Band" value={pricing.market_vs_tech_band || '—'} />
               <Row label="Technical Premium"  value={fmt0(pricing.technical_premium)} />
-              <Row label="Expected Premium"   value={fmt0(pricing.expected_premium)} color="#23d18b" />
+              <Row label="Expected Premium"   value={fmt0(pricing.expected_premium)} color="var(--accent)" />
             </div>
           </div>
           <div className="fac-edit-row">
-            <div className="fac-edit-label" style={{ color: 'rgba(35,209,139,0.70)' }}>
+            <div className="fac-edit-label" style={{ color: 'rgba(var(--accent-rgb),0.9)' }}>
               Accepted Rate (‰)
             </div>
             <input className="fi fac-edit-input" type="number" min={0} step={0.0001}
@@ -445,10 +445,10 @@ export default function FacSummary() {
         {/* ── 6. Reference Numbers ── */}
         <Sec title="Reference Numbers">
           <div className="fac-grid-2">
-            <Row label="FAC Reference"      value={risk.fac_ref || '—'} color="#00d4ff" />
+            <Row label="FAC Reference"      value={risk.fac_ref || '—'} color="var(--accent-blue)" />
             <Row label="Expiring Reference" value={risk.expiring_reference || '—'} />
-            <Row label="Bound Reference"    value={risk.bound_reference || '—'} color={risk.bound_reference ? '#23d18b' : 'rgba(148,163,184,0.40)'} />
-            <Row label="Status"             value={risk.status} color={risk.status === 'BOUND' ? '#23d18b' : risk.status === 'DECLINED' ? '#f87171' : '#00d4ff'} />
+            <Row label="Bound Reference"    value={risk.bound_reference || '—'} color={risk.bound_reference ? 'var(--accent)' : 'rgba(var(--text-rgb),0.5)'} />
+            <Row label="Status"             value={risk.status} color={risk.status === 'BOUND' ? 'var(--accent)' : risk.status === 'DECLINED' ? 'var(--accent-rose)' : 'var(--accent-blue)'} />
           </div>
         </Sec>
 
@@ -475,11 +475,11 @@ export default function FacSummary() {
             <div style={{ flex: 1 }} />
             {actionMessage && (
               <div style={{ fontSize: 11, fontWeight: 700, padding: '6px 12px', borderRadius: 6,
-                            background: actionMessage.kind === 'error' ? 'rgba(248,113,113,0.10)'
-                                      : actionMessage.kind === 'info'  ? 'rgba(0,212,255,0.10)'
-                                      : 'rgba(35,209,139,0.10)',
-                            color: actionMessage.kind === 'error' ? '#f87171'
-                                 : actionMessage.kind === 'info'  ? '#00d4ff' : '#23d18b' }}>
+                            background: actionMessage.kind === 'error' ? 'rgba(var(--accent-rose-rgb),0.10)'
+                                      : actionMessage.kind === 'info'  ? 'rgba(var(--accent-blue-rgb),0.10)'
+                                      : 'rgba(var(--accent-rgb),0.10)',
+                            color: actionMessage.kind === 'error' ? 'var(--accent-rose)'
+                                 : actionMessage.kind === 'info'  ? 'var(--accent-blue)' : 'var(--accent)' }}>
                 {actionMessage.text}
               </div>
             )}
@@ -496,8 +496,8 @@ export default function FacSummary() {
         {/* Back to portfolio */}
         <div style={{ marginTop: 20, textAlign: 'center' }}>
           <button onClick={() => navigate('/fac')} style={{
-            appearance: 'none', border: '1px solid rgba(148,163,184,0.18)',
-            background: 'rgba(8,16,40,0.45)', color: 'rgba(226,232,240,0.80)',
+            appearance: 'none', border: '1px solid var(--stroke-soft)',
+            background: 'var(--control-bg)', color: 'rgba(var(--text-rgb),0.80)',
             borderRadius: 8, padding: '10px 24px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
           }}>← Back to Fac Portfolio</button>
         </div>
@@ -512,13 +512,13 @@ export default function FacSummary() {
                          zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                onClick={(e) => { if (e.target === e.currentTarget) setDeclineModal({ open: false, reason: '', error: '' }); }}>
             <div role="dialog" aria-modal="true"
-                 style={{ width: 480, padding: 22, background: '#0f1729',
-                          border: '1px solid rgba(248,113,113,0.30)', borderRadius: 12 }}>
+                 style={{ width: 480, padding: 22, background: 'var(--surface-elevated)',
+                          border: '1px solid rgba(var(--accent-rose-rgb),0.30)', borderRadius: 12 }}>
               <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.10em',
-                            textTransform: 'uppercase', color: '#f87171', marginBottom: 10 }}>
+                            textTransform: 'uppercase', color: 'var(--accent-rose)', marginBottom: 10 }}>
                 Decline Risk
               </div>
-              <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.70)', marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
                 Provide a reason (at least 5 characters). This will be recorded
                 in the audit log and set the risk status to <strong>DECLINED</strong>.
               </div>
@@ -527,17 +527,17 @@ export default function FacSummary() {
                         placeholder="e.g. Beyond mandate; loss ratio history above threshold; …"
                         style={{ width: '100%', resize: 'vertical', fontSize: 12 }} />
               {declineModal.error && (
-                <div style={{ marginTop: 6, fontSize: 11, color: '#f87171' }}>{declineModal.error}</div>
+                <div style={{ marginTop: 6, fontSize: 11, color: 'var(--accent-rose)' }}>{declineModal.error}</div>
               )}
               <div style={{ marginTop: 14, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                 <button onClick={() => setDeclineModal({ open: false, reason: '', error: '' })}
-                        style={{ appearance: 'none', border: '1px solid rgba(148,163,184,0.20)',
-                                  background: 'transparent', color: 'rgba(226,232,240,0.80)',
+                        style={{ appearance: 'none', border: '1px solid var(--stroke-soft)',
+                                  background: 'transparent', color: 'rgba(var(--text-rgb),0.80)',
                                   borderRadius: 6, padding: '8px 18px', fontSize: 12, fontWeight: 700,
                                   cursor: 'pointer' }}>Cancel</button>
                 <button onClick={onConfirmDecline} disabled={actionBusy === 'decline'}
-                        style={{ appearance: 'none', border: '1px solid rgba(248,113,113,0.40)',
-                                  background: 'rgba(248,113,113,0.10)', color: '#f87171',
+                        style={{ appearance: 'none', border: '1px solid rgba(var(--accent-rose-rgb),0.40)',
+                                  background: 'rgba(var(--accent-rose-rgb),0.10)', color: 'var(--accent-rose)',
                                   borderRadius: 6, padding: '8px 18px', fontSize: 12, fontWeight: 700,
                                   cursor: 'pointer' }}>Confirm Decline</button>
               </div>
@@ -551,10 +551,10 @@ export default function FacSummary() {
 
 function ActionButton({ onClick, disabled, busy, kind, children, title }) {
   const palettes = {
-    neutral: { border: 'rgba(148,163,184,0.30)', bg: 'rgba(8,16,40,0.45)', color: 'rgba(226,232,240,0.85)' },
-    primary: { border: 'rgba(0,212,255,0.40)',   bg: 'rgba(0,212,255,0.10)', color: '#00d4ff' },
-    success: { border: 'rgba(35,209,139,0.40)',  bg: 'rgba(35,209,139,0.10)', color: '#23d18b' },
-    danger:  { border: 'rgba(248,113,113,0.40)', bg: 'rgba(248,113,113,0.10)', color: '#f87171' },
+    neutral: { border: 'var(--stroke-soft)', bg: 'var(--control-bg)', color: 'rgba(var(--text-rgb),0.85)' },
+    primary: { border: 'rgba(var(--accent-blue-rgb),0.40)',   bg: 'rgba(var(--accent-blue-rgb),0.10)', color: 'var(--accent-blue)' },
+    success: { border: 'rgba(var(--accent-rgb),0.40)',  bg: 'rgba(var(--accent-rgb),0.10)', color: 'var(--accent)' },
+    danger:  { border: 'rgba(var(--accent-rose-rgb),0.40)', bg: 'rgba(var(--accent-rose-rgb),0.10)', color: 'var(--accent-rose)' },
   };
   const p = palettes[kind] || palettes.neutral;
   const isDisabled = disabled || busy;
@@ -575,19 +575,19 @@ function ActionButton({ onClick, disabled, busy, kind, children, title }) {
 function SignatureSlot({ title, event, fallback }) {
   const empty = !event;
   return (
-    <div style={{ padding: '10px 14px', background: empty ? 'rgba(8,14,30,0.30)' : 'rgba(35,209,139,0.05)',
-                   border: '1px dashed', borderColor: empty ? 'rgba(148,163,184,0.20)' : 'rgba(35,209,139,0.30)',
+    <div style={{ padding: '10px 14px', background: empty ? 'var(--control-bg)' : 'rgba(var(--accent-rgb),0.05)',
+                   border: '1px dashed', borderColor: empty ? 'var(--stroke-soft)' : 'rgba(var(--accent-rgb),0.30)',
                    borderRadius: 8 }}>
       <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                    textTransform: 'uppercase', color: 'rgba(148,163,184,0.55)', marginBottom: 4 }}>
+                    textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 4 }}>
         {title}
       </div>
       {empty ? (
-        <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.45)', fontStyle: 'italic' }}>{fallback}</div>
+        <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.55)', fontStyle: 'italic' }}>{fallback}</div>
       ) : (
         <div style={{ fontSize: 12 }}>
-          <div style={{ color: '#e2e8f0', fontWeight: 700 }}>{event.actor || 'Unknown'}</div>
-          <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.55)', marginTop: 2 }}>
+          <div style={{ color: 'var(--text)', fontWeight: 700 }}>{event.actor || 'Unknown'}</div>
+          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
             {event.event_type.replace('FAC_', '').toLowerCase()} · {new Date(event.created_at).toLocaleString()}
           </div>
         </div>

@@ -93,88 +93,88 @@ export default function FacLossHistory() {
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Loss History" headerPill="FACULTATIVE" onBeforeNext={save} onBeforeBack={save}>
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: '8px 0 40px' }}>
-        <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.55)', marginBottom: 16 }}>
+        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16 }}>
           FGU (from the ground up) loss experience — minimum 3 years. Enter all material losses with details and mitigation measures taken.
         </div>
 
         {/* ── Ten-year matrix ── */}
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em',
-                        textTransform: 'uppercase', color: 'rgba(0,212,255,0.55)',
+                        textTransform: 'uppercase', color: 'rgba(var(--accent-blue-rgb),0.75)',
                         marginBottom: 10, paddingBottom: 6,
-                        borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                        borderBottom: '1px solid var(--hairline)' }}>
             10-Year Loss Matrix
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
             <thead>
-              <tr style={{ background: 'rgba(5,8,16,0.6)' }}>
+              <tr style={{ background: 'var(--table-head-bg)' }}>
                 {['Year', 'Claims', 'FGU Paid', 'FGU O/S', 'FGU Incurred', 'RI Incurred', 'As-if Claim Ratio'].map((h) => (
                   <th key={h} style={{ padding: '8px 10px',
                                        textAlign: h === 'Year' ? 'left' : 'right',
                                        fontSize: 9, fontWeight: 800, letterSpacing: '.10em',
-                                       textTransform: 'uppercase', color: 'rgba(148,163,184,0.50)',
-                                       borderBottom: '1px solid rgba(255,255,255,0.08)',
+                                       textTransform: 'uppercase', color: 'var(--muted)',
+                                       borderBottom: '1px solid var(--hairline)',
                                        whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {matrix.map((m) => (
-                <tr key={m.year} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                <tr key={m.year} style={{ borderBottom: '1px solid var(--hairline)' }}>
                   <td style={{ padding: '6px 10px', fontVariantNumeric: 'tabular-nums',
-                                color: 'rgba(226,232,240,0.80)', fontWeight: 700 }}>{m.year}</td>
+                                color: 'rgba(var(--text-rgb),0.80)', fontWeight: 700 }}>{m.year}</td>
                   <td style={{ padding: '6px 10px', textAlign: 'right',
                                 fontVariantNumeric: 'tabular-nums',
-                                color: m.count ? 'rgba(226,232,240,0.85)' : 'rgba(148,163,184,0.35)' }}>
+                                color: m.count ? 'rgba(var(--text-rgb),0.85)' : 'rgba(var(--text-rgb),0.4)' }}>
                     {m.count || '—'}
                   </td>
                   <td style={{ padding: '6px 10px', textAlign: 'right',
                                 fontVariantNumeric: 'tabular-nums',
-                                color: m.fguPaid ? '#f87171' : 'rgba(148,163,184,0.35)' }}>
+                                color: m.fguPaid ? 'var(--accent-rose)' : 'rgba(var(--text-rgb),0.4)' }}>
                     {fmt0(m.fguPaid)}
                   </td>
                   <td style={{ padding: '6px 10px', textAlign: 'right',
                                 fontVariantNumeric: 'tabular-nums',
-                                color: m.fguOS ? '#fbbf24' : 'rgba(148,163,184,0.35)' }}>
+                                color: m.fguOS ? 'var(--accent-amber)' : 'rgba(var(--text-rgb),0.4)' }}>
                     {fmt0(m.fguOS)}
                   </td>
                   <td style={{ padding: '6px 10px', textAlign: 'right',
                                 fontVariantNumeric: 'tabular-nums',
                                 fontWeight: 700,
-                                color: m.fguIncurred ? '#23d18b' : 'rgba(148,163,184,0.35)' }}>
+                                color: m.fguIncurred ? 'var(--accent)' : 'rgba(var(--text-rgb),0.4)' }}>
                     {fmt0(m.fguIncurred)}
                   </td>
                   <td style={{ padding: '6px 10px', textAlign: 'right',
                                 fontVariantNumeric: 'tabular-nums',
-                                color: m.riIncurred ? 'rgba(226,232,240,0.85)' : 'rgba(148,163,184,0.35)' }}>
+                                color: m.riIncurred ? 'rgba(var(--text-rgb),0.85)' : 'rgba(var(--text-rgb),0.4)' }}>
                     {fmt0(m.riIncurred)}
                   </td>
                   <td style={{ padding: '6px 10px', textAlign: 'right',
-                                color: 'rgba(148,163,184,0.35)' }}>—</td>
+                                color: 'rgba(var(--text-rgb),0.4)' }}>—</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <div style={{ marginTop: 6, fontSize: 10, color: 'rgba(148,163,184,0.40)' }}>
+          <div style={{ marginTop: 6, fontSize: 10, color: 'rgba(var(--text-rgb),0.5)' }}>
             As-if claim ratio shows &lsquo;—&rsquo; until premium-per-year is captured against this risk.
           </div>
         </div>
 
         {rows.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'rgba(148,163,184,0.35)', fontSize: 12, background: 'rgba(8,14,30,0.50)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
-            No losses recorded. <span role="button" tabIndex={0} style={{ color: '#23d18b', cursor: 'pointer' }}
+          <div style={{ padding: 40, textAlign: 'center', color: 'rgba(var(--text-rgb),0.55)', fontSize: 12, background: 'var(--control-bg)', borderRadius: 12, border: '1px solid var(--hairline)' }}>
+            No losses recorded. <span role="button" tabIndex={0} style={{ color: 'var(--accent)', cursor: 'pointer' }}
               onClick={addRow}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addRow(); }
               }}>Add a loss record →</span>
-            <div style={{ marginTop: 8, fontSize: 11, color: 'rgba(148,163,184,0.25)' }}>A clean loss history is positive for pricing.</div>
+            <div style={{ marginTop: 8, fontSize: 11, color: 'rgba(var(--text-rgb),0.4)' }}>A clean loss history is positive for pricing.</div>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
-              <tr style={{ background: 'rgba(5,8,16,0.6)' }}>
+              <tr style={{ background: 'var(--table-head-bg)' }}>
                 {['Year', 'Date', 'Description', 'Cause', 'FGU Paid', 'FGU O/S', 'FGU Incurred', 'Mitigation', ''].map(h => (
-                  <th key={h} style={{ padding: '8px 8px', textAlign: ['FGU Paid','FGU O/S','FGU Incurred'].includes(h) ? 'right' : 'left', fontSize: 9, fontWeight: 800, letterSpacing: '.10em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.50)', borderBottom: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap' }}>{h}</th>
+                  <th key={h} style={{ padding: '8px 8px', textAlign: ['FGU Paid','FGU O/S','FGU Incurred'].includes(h) ? 'right' : 'left', fontSize: 9, fontWeight: 800, letterSpacing: '.10em', textTransform: 'uppercase', color: 'var(--muted)', borderBottom: '1px solid var(--hairline)', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -182,17 +182,17 @@ export default function FacLossHistory() {
               {rows.map((r, i) => {
                 const incurred = (numOrNull(r.fgu_paid) || 0) + (numOrNull(r.fgu_outstanding) || 0);
                 return (
-                  <tr key={r._key} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <tr key={r._key} style={{ borderBottom: '1px solid var(--hairline)' }}>
                     <td style={{ padding: '4px 4px', width: 70 }}><input className="fi" type="number" value={r.loss_year} onChange={e => setRow(i, 'loss_year', e.target.value)} style={{ width: 65, fontSize: 12 }} /></td>
                     <td style={{ padding: '4px 4px', width: 120 }}><input className="fi" type="date" value={r.loss_date} onChange={e => setRow(i, 'loss_date', e.target.value)} style={{ fontSize: 11 }} /></td>
                     <td style={{ padding: '4px 4px' }}><input className="fi" value={r.loss_description || ''} onChange={e => setRow(i, 'loss_description', e.target.value)} placeholder="Loss details" style={{ fontSize: 12 }} /></td>
                     <td style={{ padding: '4px 4px', width: 110 }}><input className="fi" value={r.cause_of_loss || ''} onChange={e => setRow(i, 'cause_of_loss', e.target.value)} placeholder="Cause" style={{ fontSize: 12 }} /></td>
                     <td style={{ padding: '4px 4px', width: 110 }}><input className="fi" type="text" inputMode="numeric" value={fmtComma(r.fgu_paid)} onChange={e => setRow(i, 'fgu_paid', stripDigits(e.target.value))} style={{ textAlign: 'right', fontSize: 12 }} /></td>
                     <td style={{ padding: '4px 4px', width: 110 }}><input className="fi" type="text" inputMode="numeric" value={fmtComma(r.fgu_outstanding)} onChange={e => setRow(i, 'fgu_outstanding', stripDigits(e.target.value))} style={{ textAlign: 'right', fontSize: 12 }} /></td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: incurred ? '#fbbf24' : 'rgba(148,163,184,0.35)', width: 110 }}>{incurred ? incurred.toLocaleString('en-US') : '—'}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: incurred ? 'var(--accent-amber)' : 'rgba(var(--text-rgb),0.4)', width: 110 }}>{incurred ? incurred.toLocaleString('en-US') : '—'}</td>
                     <td style={{ padding: '4px 4px', width: 140 }}><input className="fi" value={r.mitigation_measures || ''} onChange={e => setRow(i, 'mitigation_measures', e.target.value)} placeholder="Actions taken" style={{ fontSize: 11 }} /></td>
                     <td style={{ padding: '4px 4px', width: 28 }}><span role="button" tabIndex={0} aria-label="Remove loss record"
-                      style={{ cursor: 'pointer', color: '#f87171', fontSize: 16 }}
+                      style={{ cursor: 'pointer', color: 'var(--accent-rose)', fontSize: 16 }}
                       onClick={() => removeRow(i)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); removeRow(i); }
@@ -202,18 +202,18 @@ export default function FacLossHistory() {
               })}
             </tbody>
             <tfoot>
-              <tr style={{ borderTop: '2px solid rgba(0,212,255,0.20)' }}>
-                <td colSpan={4} style={{ padding: '8px 8px', fontSize: 11, fontWeight: 700, color: 'rgba(0,212,255,0.60)' }}>TOTAL ({rows.length} losses)</td>
-                <td style={{ padding: '8px 8px', textAlign: 'right', fontWeight: 700, color: '#f87171', fontSize: 12 }}>{totalPaid ? totalPaid.toLocaleString('en-US') : '—'}</td>
-                <td style={{ padding: '8px 8px', textAlign: 'right', fontWeight: 700, color: '#fbbf24', fontSize: 12 }}>{totalOS ? totalOS.toLocaleString('en-US') : '—'}</td>
-                <td style={{ padding: '8px 8px', textAlign: 'right', fontWeight: 900, color: '#23d18b', fontSize: 12 }}>{(totalPaid + totalOS) ? (totalPaid + totalOS).toLocaleString('en-US') : '—'}</td>
+              <tr style={{ borderTop: '2px solid rgba(var(--accent-blue-rgb),0.20)' }}>
+                <td colSpan={4} style={{ padding: '8px 8px', fontSize: 11, fontWeight: 700, color: 'rgba(var(--accent-blue-rgb),0.80)' }}>TOTAL ({rows.length} losses)</td>
+                <td style={{ padding: '8px 8px', textAlign: 'right', fontWeight: 700, color: 'var(--accent-rose)', fontSize: 12 }}>{totalPaid ? totalPaid.toLocaleString('en-US') : '—'}</td>
+                <td style={{ padding: '8px 8px', textAlign: 'right', fontWeight: 700, color: 'var(--accent-amber)', fontSize: 12 }}>{totalOS ? totalOS.toLocaleString('en-US') : '—'}</td>
+                <td style={{ padding: '8px 8px', textAlign: 'right', fontWeight: 900, color: 'var(--accent)', fontSize: 12 }}>{(totalPaid + totalOS) ? (totalPaid + totalOS).toLocaleString('en-US') : '—'}</td>
                 <td colSpan={2}></td>
               </tr>
             </tfoot>
           </table>
         )}
 
-        <button onClick={addRow} style={{ marginTop: 12, appearance: 'none', border: '1px dashed rgba(35,209,139,0.30)', background: 'rgba(35,209,139,0.05)', color: '#23d18b', borderRadius: 8, padding: '8px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>+ Add Loss Record</button>
+        <button onClick={addRow} style={{ marginTop: 12, appearance: 'none', border: '1px dashed rgba(var(--accent-rgb),0.30)', background: 'rgba(var(--accent-rgb),0.05)', color: 'var(--accent)', borderRadius: 8, padding: '8px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>+ Add Loss Record</button>
       </div>
     </WizardLayout>
   );
