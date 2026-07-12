@@ -139,8 +139,8 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
 
   return (
     <div style={{ marginBottom: 20, padding: '14px 18px',
-                  background: 'rgba(168,85,247,0.04)',
-                  border: '1px solid rgba(168,85,247,0.25)', borderRadius: 12 }}>
+                  background: 'rgba(var(--accent-blue-rgb),0.05)',
+                  border: '1px solid rgba(var(--accent-blue-rgb),0.28)', borderRadius: 12 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: collapsed ? 0 : 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
@@ -149,9 +149,9 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
              onKeyDown={(e) => {
                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCollapsed((c) => !c); }
              }}>
-          <span style={{ fontSize: 13, color: 'rgba(168,85,247,0.80)' }}>{collapsed ? '▶' : '▼'}</span>
+          <span style={{ fontSize: 13, color: 'rgba(var(--accent-blue-rgb),0.80)' }}>{collapsed ? '▶' : '▼'}</span>
           <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em',
-                         textTransform: 'uppercase', color: 'rgba(168,85,247,0.80)' }}>
+                         textTransform: 'uppercase', color: 'rgba(var(--accent-blue-rgb),0.80)' }}>
             Underwriting Factors — Drivers of Rate &amp; Score
           </span>
         </div>
@@ -159,7 +159,7 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
                           textTransform: 'uppercase', color: 'var(--muted)' }}>Scheme</div>
-            <div style={{ fontSize: 12, fontWeight: 800, color: 'color-mix(in srgb, #a855f7 75%, var(--text))', fontVariantNumeric: 'tabular-nums', lineHeight: '22px' }}>{scheme.replace(/_/g, ' ')}</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: 'rgba(var(--accent-blue-rgb),0.9)', fontVariantNumeric: 'tabular-nums', lineHeight: '22px' }}>{scheme.replace(/_/g, ' ')}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em',

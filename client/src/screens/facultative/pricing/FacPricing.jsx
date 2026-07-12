@@ -552,7 +552,7 @@ export default function FacPricing() {
         <UwFactorsPanel riskId={riskId} risk={risk} onSelectionsChange={setUwSelections} />
 
         {/* ── Engine inputs ── */}
-        <Sec title="Engine Inputs" color="rgba(var(--accent-blue-rgb),0.85)">
+        <Sec title="Engine Inputs">
           <FR label="Indemnity Period (months)" hint="Drives the BI rate multiplier (1–60)">
             <input className="fi" type="number" min={1} max={60} value={eng.indemnity_months}
                    onChange={(e) => setEngField('indemnity_months', e.target.value)} style={{ width: 100 }} />
@@ -625,12 +625,12 @@ export default function FacPricing() {
         </Sec>
 
         {/* ── Engine output (read-only) ── */}
-        <Sec title="Engine Output" color="rgba(var(--accent-rgb),0.85)">
+        <Sec title="Engine Output">
           <EngineReadout output={engineOutput} premiums={enginePremiums} totalLocSar={totalLocSar} />
         </Sec>
 
         {/* ── Extensions — filtered by selected COB categories ── */}
-        <Sec title="Extensions" color="rgba(168,85,247,0.8)">
+        <Sec title="Extensions">
           <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 12 }}>
             Extensions shown are based on classes selected on the Risk Detail page. Check applicable extensions — each adds a loading to the base rate.
           </div>
@@ -721,7 +721,7 @@ export default function FacPricing() {
         </Sec>
 
         {/* ── Blend ── */}
-        <Sec title="③ Blended Rate" color="rgba(var(--accent-amber-rgb),0.8)">
+        <Sec title="③ Blended Rate">
           <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
             <FR label="Market Weight %"><PctInput value={f.market_weight_pct} onChange={v => { set('market_weight_pct', v); set('actuarial_weight_pct', String(100 - (Number(v) || 0))); }} style={{ width: 80 }} /></FR>
             <FR label="Actuarial Weight %"><PctInput value={f.actuarial_weight_pct} onChange={() => {}} readOnly style={{ width: 80, opacity: 0.6 }} /></FR>
@@ -731,7 +731,7 @@ export default function FacPricing() {
         </Sec>
 
         {/* ── Final ── */}
-        <Sec title="④ Final UW Rate" color="rgba(var(--accent-rgb),0.85)">
+        <Sec title="④ Final UW Rate">
           <FR label="UW Adjustment %" hint="+ surcharge / - discount">
             <PctInput value={f.uw_adjustment_pct} onChange={v => set('uw_adjustment_pct', v)} style={{ width: 100 }} />
           </FR>

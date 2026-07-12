@@ -533,8 +533,10 @@ body.np-modal-open { overflow: hidden; }
   border-top:    1px solid var(--hairline);
 }
 .qss-section .bm-cob-section-title {
-  font-size:   13px;
+  /* Match .np-struct-card-h2 so all section titles on this screen share one scale. */
+  font-size:   0.95rem;
   font-weight: 700;
+  letter-spacing: 0.2px;
   color:       var(--text);
 }
 .qss-section .bm-cob-section-hint {

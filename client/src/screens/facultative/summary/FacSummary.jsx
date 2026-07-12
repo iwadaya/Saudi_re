@@ -381,7 +381,7 @@ export default function FacSummary() {
         </Sec>
 
         {/* ── 3. Capacity Panel ── */}
-        <Sec title="Capacity" color="rgba(168,85,247,0.8)">
+        <Sec title="Capacity">
           <div className="fac-grid-2">
             <div>
               <Row label="Territorial Cap (SAR)"        value={fmt0(territorialCap)} />
@@ -409,7 +409,7 @@ export default function FacSummary() {
         </Sec>
 
         {/* ── 4. Rate Panel ── */}
-        <Sec title="Rate" color="rgba(var(--accent-rgb),0.8)">
+        <Sec title="Rate">
           <div className="fac-grid-2">
             <div>
               <Row label="Technical Rate (‰, no NatCat)" value={fmt4(pricing.technical_rate_pm)} />
