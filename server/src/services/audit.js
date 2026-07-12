@@ -105,41 +105,6 @@ export async function logAudit(client, {
 }
 
 /**
- * Retrieve audit history for an entity (newest first).
- * Throws on DB errors so callers can distinguish "no history" from
- * "audit service unavailable" — the previous catch-and-return-`[]`
- * silently hid outages and made compliance lookups look complete when
- * they weren't.
- */
-export async function getAuditTrail(entityType, entityId, { limit = 100 } = {}) {
-  try {
-    if (entityType === "CONTRACT") {
-      const { rows } = await pool.query(
-        `SELECT event_id, contract_id AS entity_id, event_type, actor, payload, created_at
-           FROM public.contract_audit_event
-          WHERE contract_id = $1
-          ORDER BY created_at DESC LIMIT $2`,
-        [entityId, limit]
-      );
-      return rows;
-    }
-    const { rows } = await pool.query(
-      `SELECT event_id, entity_id, event_type, actor, payload, comment, created_at
-         FROM public.audit_log
-        WHERE entity_type = $1 AND entity_id = $2
-        ORDER BY created_at DESC LIMIT $3`,
-      [entityType, entityId, limit]
-    );
-    return rows;
-  } catch (err) {
-    logger.error("getAuditTrail failed", {
-      message: err.message, entityType, entityId,
-    });
-    throw err;
-  }
-}
-
-/**
  * Resolve the acting user for AUDIT from VERIFIED identity only.
  *
  * The id comes from req.user.userId (set by the authenticate middleware — a

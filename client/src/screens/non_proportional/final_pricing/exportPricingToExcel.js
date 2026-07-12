@@ -2,14 +2,10 @@
  * exportPricingToExcel.js
  * Builds the NP Final Pricing sheets.
  *
- * Split into a pure sheet-builder (`buildNpPricingSheets`) and a thin
- * download wrapper (`exportNpPricingToExcel`). The builder is reused by the
- * whole-contract workbook exporter (npWorkbookExporters.js) so the final
- * pricing sheets are byte-for-byte identical whether you export just this
- * screen or the full Treaty-Detail -> Final-Pricing sequence.
- *
- * exceljs is lazy-loaded via the excel util so it stays out of the main
- * vendor bundle.
+ * A pure sheet-builder (`buildNpPricingSheets`) consumed by the
+ * whole-contract workbook exporter (npWorkbookExporters.js) for the
+ * Treaty-Detail -> Final-Pricing sequence. No I/O here — the exporter
+ * owns the workbook and download.
  */
 function toNum(v) {
   const n = parseFloat(String(v ?? '').replace(/[^0-9.-]/g, ''));
@@ -143,27 +139,4 @@ export function buildNpPricingSheets(data) {
   }
 
   return sheets;
-}
-
-function applyAutoWidth(ws, aoa) {
-  const ncols = aoa.reduce((m, r) => Math.max(m, r.length), 0);
-  ws.columns = Array.from({ length: ncols }, (_, i) => ({
-    width: Math.min(60, Math.max(12, ...aoa.map((r) => String(r[i] ?? '').length + 2))),
-  }));
-}
-
-/**
- * Standalone "Export this screen" download - unchanged output, now built on
- * the shared builder above.
- */
-export async function exportNpPricingToExcel(data) {
-  const { createWorkbook } = await import('../../../utils/excel');
-  const wb = await createWorkbook();
-  for (const s of buildNpPricingSheets(data)) {
-    const ws = wb.appendSheet(s.name, s.aoa);
-    applyAutoWidth(ws, s.aoa);
-  }
-  const { cedantName, uwYear } = data || {};
-  const filename = `NP_Pricing_${(cedantName||'Export').replace(/\s+/g,'_')}_${uwYear||new Date().getFullYear()}.xlsx`;
-  await wb.writeFile(filename);
 }

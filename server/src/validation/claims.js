@@ -37,9 +37,7 @@ const optionalText = (max) => z.preprocess(
 );
 
 export const LOSS_TYPES = ['ATTRITIONAL', 'LARGE', 'CAT'];
-export const CLAIM_STATUSES = ['OPEN', 'REOPENED', 'CLOSED', 'DECLINED'];
 export const APPROVAL_STATUSES = ['DRAFT', 'WAITING_APPROVAL', 'REJECTED', 'FINALISED'];
-export const MOVEMENT_TYPES = ['ADVICE', 'RESERVE_CHANGE', 'PAYMENT', 'RECOVERY', 'CLOSURE', 'REOPEN'];
 export const FINANCE_STATUSES = ['PENDING_SETUP', 'ACTIVE', 'SUSPENDED', 'CLOSED'];
 
 // ── POST /api/claims ─────────────────────────────────────────────────────────
