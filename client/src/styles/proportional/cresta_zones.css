@@ -22,7 +22,7 @@
   color: var(--muted);
 }
 .CRESTA_AGGREGATES_PAGE .ca-pills-area{ display: flex; gap: 6px; flex-wrap: wrap; }
-.CRESTA_AGGREGATES_PAGE .ca-pill-none{ font-size: 11px; color: rgba(var(--text-rgb),.45); font-style: italic; }
+.CRESTA_AGGREGATES_PAGE .ca-pill-none{ font-size: 11px; color: rgba(var(--text-rgb),.58); font-style: italic; }
 .CRESTA_AGGREGATES_PAGE .ca-saved-pill{
   height: 26px; padding: 0 12px; border-radius: 999px;
   font-size: 11px; font-weight: 700; cursor: pointer;
@@ -137,7 +137,7 @@
   transition: border-color .12s ease, background .12s ease;
 }
 .CRESTA_AGGREGATES_PAGE .ca-inp:focus{ border-color: rgba(var(--accent-rgb),.45); background: rgba(var(--accent-rgb),.06); outline: none; }
-.CRESTA_AGGREGATES_PAGE .ca-inp::placeholder{ color: rgba(var(--text-rgb),.35); }
+.CRESTA_AGGREGATES_PAGE .ca-inp::placeholder{ color: rgba(var(--text-rgb),.5); }
 .CRESTA_AGGREGATES_PAGE .ca-inp--num{ text-align: center; font-variant-numeric: tabular-nums; }
 .CRESTA_AGGREGATES_PAGE .ca-inp--ro{
   border-color: rgba(148,163,184,.08); background: rgba(148,163,184,.03);

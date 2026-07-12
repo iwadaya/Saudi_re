@@ -92,7 +92,7 @@
   font-size: 11px;
   letter-spacing: .14em;
   text-transform: uppercase;
-  color: rgba(var(--text-rgb),.62);
+  color: rgba(var(--text-rgb),.75);
   font-weight: 600; /* reduced */
   white-space: nowrap;
 }
@@ -188,7 +188,7 @@
   background: var(--table-head-bg);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--hairline);
-  color: rgba(var(--text-rgb),.65);
+  color: rgba(var(--text-rgb),.78);
   font-size: 11px;
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -307,7 +307,7 @@
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--hairline);
 
-  color: rgba(var(--text-rgb),.65);
+  color: rgba(var(--text-rgb),.78);
   font-size: 11px;
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -1172,5 +1172,5 @@
    and axis-tick colors are applied via these classes instead. */
 .cg-grid-y{ stroke: rgba(var(--text-rgb),.08); }
 .cg-grid-x{ stroke: rgba(var(--text-rgb),.06); }
-.cg-tick{ fill: rgba(var(--text-rgb),.55); }
+.cg-tick{ fill: rgba(var(--text-rgb),.7); }
 .cg-tick--x{ fill: rgba(var(--text-rgb),.60); }

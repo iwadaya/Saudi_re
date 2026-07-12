@@ -69,7 +69,7 @@ export default function NpTreatyPricingSections({
                     onClick={runCalcEngine}>
                     {calcEngineRunning ? '⟳ Calculating…' : '⚡ Run Actuarial Engine'}
                   </button>
-                  <span style={{ fontSize:12, color:'rgba(var(--text-rgb),0.55)' }}>
+                  <span style={{ fontSize:12, color:'rgba(var(--text-rgb),0.7)' }}>
                     {mode === 'RISK' ? 'Pure Burn · Pareto · MBBEFD Exposure Rating'
                       : mode === 'CAT' ? 'Pure Burn · Pareto · CRESTA Exposure Rating'
                       : 'Pure Burn · Pareto · MBBEFD + CRESTA Exposure Rating'}
@@ -347,7 +347,7 @@ export default function NpTreatyPricingSections({
                       </div>
                     </div>
                     <div className="np-final-card np-final-card--flush">
-                      <div style={{ padding: '7px 14px', fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),0.45)', borderBottom: '1px solid var(--hairline)' }}>
+                      <div style={{ padding: '7px 14px', fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),0.58)', borderBottom: '1px solid var(--hairline)' }}>
                         Programme Limits &amp; Downside
                       </div>
                       <div className="np-final-table-wrap np-final-table-wrap--wide">

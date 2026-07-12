@@ -425,7 +425,7 @@ export default function PropProjectedSummary() {
                             <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--surface-hover)', border: '1px solid rgba(99,102,241,0.25)' }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
                                 <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--accent-blue)', letterSpacing: '0.04em' }}>RESERVING ANALYSIS — PER YEAR</div>
-                                <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.55)' }}>Paid Ultimate vs Incurred Ultimate</div>
+                                <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.7)' }}>Paid Ultimate vs Incurred Ultimate</div>
                               </div>
                               <div className="ps-table-wrap">
                                 <table className="ps-table">
@@ -470,9 +470,9 @@ export default function PropProjectedSummary() {
                             <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 10, background: combinedTone.bg, border: `1px solid ${combinedTone.border}` }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                                 <div style={{ fontSize: 12, fontWeight: 800, color: combinedTone.text, letterSpacing: '0.04em' }}>COMBINED — {combinedTone.label.toUpperCase()}</div>
-                                <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.55)' }}>Δ {fmt0(reservingDelta)}</div>
+                                <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.7)' }}>Δ {fmt0(reservingDelta)}</div>
                               </div>
-                              <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(var(--text-rgb),.65)' }}>{combinedTone.detail}</div>
+                              <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(var(--text-rgb),.78)' }}>{combinedTone.detail}</div>
                             </div>
                           </div>
                         );
@@ -541,7 +541,7 @@ export default function PropProjectedSummary() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--stroke-soft)' }}>
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: '0.03em', color: 'var(--text)' }}>Loss Breakdown — Actual vs Projected</div>
-                    <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)', marginTop: 2 }}>Attritional = ultimate / incurred loss − large − CAT (raw incurred from the saved loss grids)</div>
+                    <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.7)', marginTop: 2 }}>Attritional = ultimate / incurred loss − large − CAT (raw incurred from the saved loss grids)</div>
                   </div>
                   <button onClick={() => setShowLossModal(false)} style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid var(--stroke-soft)', background: 'transparent', color: 'rgba(var(--text-rgb),.7)', cursor: 'pointer', fontSize: 14 }}>✕</button>
                 </div>

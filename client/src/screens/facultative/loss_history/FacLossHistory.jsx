@@ -150,24 +150,24 @@ export default function FacLossHistory() {
                     {fmt0(m.riIncurred)}
                   </td>
                   <td style={{ padding: '6px 10px', textAlign: 'right',
-                                color: 'rgba(var(--text-rgb),0.4)' }}>—</td>
+                                color: 'rgba(var(--text-rgb),0.58)' }}>—</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <div style={{ marginTop: 6, fontSize: 10, color: 'rgba(var(--text-rgb),0.5)' }}>
+          <div style={{ marginTop: 6, fontSize: 10, color: 'rgba(var(--text-rgb),0.7)' }}>
             As-if claim ratio shows &lsquo;—&rsquo; until premium-per-year is captured against this risk.
           </div>
         </div>
 
         {rows.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'rgba(var(--text-rgb),0.55)', fontSize: 12, background: 'var(--control-bg)', borderRadius: 12, border: '1px solid var(--hairline)' }}>
+          <div style={{ padding: 40, textAlign: 'center', color: 'rgba(var(--text-rgb),0.7)', fontSize: 12, background: 'var(--control-bg)', borderRadius: 12, border: '1px solid var(--hairline)' }}>
             No losses recorded. <span role="button" tabIndex={0} style={{ color: 'var(--accent)', cursor: 'pointer' }}
               onClick={addRow}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addRow(); }
               }}>Add a loss record →</span>
-            <div style={{ marginTop: 8, fontSize: 11, color: 'rgba(var(--text-rgb),0.4)' }}>A clean loss history is positive for pricing.</div>
+            <div style={{ marginTop: 8, fontSize: 11, color: 'rgba(var(--text-rgb),0.58)' }}>A clean loss history is positive for pricing.</div>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>

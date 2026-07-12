@@ -29,14 +29,14 @@ function UserRow({ user, onEdit, onMandate }) {
     <div style={{ display:'grid', gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr auto', gap:12, alignItems:'center', padding:'10px 16px', borderBottom:'1px solid var(--hairline)', fontSize:12 }}>
       <div>
         <div style={{ fontWeight:600, color:'rgba(var(--text-rgb),.88)' }}>{user.display_name}</div>
-        <div style={{ fontSize:10, color:'rgba(var(--text-rgb),.35)', marginTop:2 }}>{user.email} · {user.office || 'Riyadh'}</div>
+        <div style={{ fontSize:10, color:'rgba(var(--text-rgb),.5)', marginTop:2 }}>{user.email} · {user.office || 'Riyadh'}</div>
       </div>
       <div style={{ display:'flex', alignItems:'center' }}>
         <RoleDot code={rc} />
-        <span style={{ color:'rgba(var(--text-rgb),.65)' }}>{user.role_name || ROLE_LABELS[rc]}</span>
+        <span style={{ color:'rgba(var(--text-rgb),.78)' }}>{user.role_name || ROLE_LABELS[rc]}</span>
       </div>
-      <div style={{ color:'rgba(var(--text-rgb),.55)' }}>{fmtLimit(user.treaty_limit_usd)}</div>
-      <div style={{ color:'rgba(var(--text-rgb),.45)' }}>{user.treaty_type_scope || 'BOTH'}</div>
+      <div style={{ color:'rgba(var(--text-rgb),.7)' }}>{fmtLimit(user.treaty_limit_usd)}</div>
+      <div style={{ color:'rgba(var(--text-rgb),.58)' }}>{user.treaty_type_scope || 'BOTH'}</div>
       <div>
         <span style={{ padding:'2px 8px', borderRadius:10, fontSize:10, fontWeight:700, background:user.is_active ? 'rgba(35,209,139,.12)' : 'rgba(248,113,113,.10)', color:user.is_active ? 'var(--accent)' : '#f87171', border:`1px solid ${user.is_active ? 'rgba(35,209,139,.25)' : 'rgba(248,113,113,.22)'}` }}>
           {user.is_active ? 'Active' : 'Inactive'}
@@ -219,7 +219,7 @@ export default function UserManagementScreen() {
 
   // Guard: only CE/CU
   if (!isAtLeast(2)) {
-    return <div style={{ padding:32, color:'rgba(var(--text-rgb),.5)', fontSize:13 }}>Access restricted to Chief Underwriter and Chief Executive.</div>;
+    return <div style={{ padding:32, color:'rgba(var(--text-rgb),.7)', fontSize:13 }}>Access restricted to Chief Underwriter and Chief Executive.</div>;
   }
 
   const filtered = users.filter(u => {
@@ -255,9 +255,9 @@ export default function UserManagementScreen() {
               <div key={role.role_id} style={{ marginBottom:24 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, paddingLeft:4 }}>
                   <span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', background:color }} />
-                  <span style={{ fontSize:12, fontWeight:700, color:'rgba(var(--text-rgb),.65)', textTransform:'uppercase', letterSpacing:'.06em' }}>{role.role_name}</span>
+                  <span style={{ fontSize:12, fontWeight:700, color:'rgba(var(--text-rgb),.78)', textTransform:'uppercase', letterSpacing:'.06em' }}>{role.role_name}</span>
                   <span style={{ fontSize:10, color:'rgba(var(--text-rgb),.40)' }}>Lvl {role.hierarchy_level} · {role.authority_limit_usd ? fmtLimit(role.authority_limit_usd) + ' role default' : 'Unlimited'}</span>
-                  <span style={{ fontSize:10, color:'rgba(var(--text-rgb),.35)', marginLeft:'auto' }}>{roleUsers.length} user{roleUsers.length !== 1 ? 's' : ''}</span>
+                  <span style={{ fontSize:10, color:'rgba(var(--text-rgb),.5)', marginLeft:'auto' }}>{roleUsers.length} user{roleUsers.length !== 1 ? 's' : ''}</span>
                 </div>
                 <div className="glass" style={{ borderRadius:12, border:'1px solid var(--hairline)', overflow:'hidden' }}>
                   <div style={{ display:'grid', gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr auto', gap:12, padding:'8px 16px', borderBottom:'1px solid var(--hairline)', fontSize:10, fontWeight:700, color:'rgba(var(--text-rgb),.40)', textTransform:'uppercase', letterSpacing:'.06em' }}>

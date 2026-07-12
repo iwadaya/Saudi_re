@@ -28,7 +28,7 @@ export function FR({ label, missing, children }) {
       className={missing ? 'fr-row required-missing' : 'fr-row'}
       style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 10, alignItems: 'center', minHeight: 36 }}
     >
-      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.55)' }}>
+      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.7)' }}>
         {label}{missing && <span style={{ color: '#f87171', marginLeft: 4 }}>*</span>}
       </div>
       <div>{children}</div>
@@ -157,7 +157,7 @@ export function EpiSplitModal({ split, classIds, classList, qsEpi, surplusEpi, o
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
         <div style={{ padding: '16px 24px', overflowY: 'auto', flex: 1 }}>
-          <div style={{ display: 'flex', gap: 18, background: 'var(--surface-hover)', borderRadius: 8, padding: '10px 16px', marginBottom: 18, fontSize: 12, color: 'rgba(var(--text-rgb),.55)' }}>
+          <div style={{ display: 'flex', gap: 18, background: 'var(--surface-hover)', borderRadius: 8, padding: '10px 16px', marginBottom: 18, fontSize: 12, color: 'rgba(var(--text-rgb),.7)' }}>
             <span>QS: <b style={{ color: 'var(--text)' }}>{fmtComma(qsEpi) || '—'}</b></span>
             <span>Surplus: <b style={{ color: 'var(--text)' }}>{fmtComma(surplusEpi) || '—'}</b></span>
             <span>Total: <b style={{ color: 'var(--text)' }}>{totalRef ? fmtComma(String(Math.round(totalRef))) : '—'}</b></span>

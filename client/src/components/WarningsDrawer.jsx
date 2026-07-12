@@ -49,7 +49,7 @@ export default function WarningsDrawer({ open, onClose, warnings = [], unmatched
           text-transform: uppercase;
         }
         .wdr-close {
-          background: none; border: none; color: rgba(var(--text-rgb),0.55);
+          background: none; border: none; color: rgba(var(--text-rgb),0.7);
           font-size: 18px; cursor: pointer; padding: 4px 8px;
         }
         .wdr-close:hover { color: rgba(var(--text-rgb),0.9); }
@@ -57,7 +57,7 @@ export default function WarningsDrawer({ open, onClose, warnings = [], unmatched
         .wdr-section { margin-bottom: 22px; }
         .wdr-section h4 {
           font-size: 11px; font-weight: 800; letter-spacing: .12em;
-          text-transform: uppercase; color: rgba(var(--text-rgb),0.55);
+          text-transform: uppercase; color: rgba(var(--text-rgb),0.7);
           margin: 0 0 8px 0;
         }
         .wdr-list { list-style: none; padding: 0; margin: 0; display: flex;
@@ -74,7 +74,7 @@ export default function WarningsDrawer({ open, onClose, warnings = [], unmatched
           border-color: rgba(248, 113, 113, 0.22);
         }
         .wdr-empty {
-          font-size: 12px; color: rgba(var(--text-rgb),0.55);
+          font-size: 12px; color: rgba(var(--text-rgb),0.7);
           padding: 14px 0;
         }
       `}</style>

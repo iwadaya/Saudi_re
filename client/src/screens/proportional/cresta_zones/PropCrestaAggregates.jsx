@@ -561,7 +561,7 @@ export default function PropCrestaAggregates({ embedded = false, routeKeyOverrid
                     ? { borderColor: cob.color.border, background: cob.color.active, color: cob.color.text }
                     : cob.eligible
                       ? { borderColor: 'var(--hairline-strong)', background: 'var(--surface-hover)', color: 'rgba(var(--text-rgb),.7)' }
-                      : { borderColor: 'var(--hairline)', background: 'var(--surface-hover)', color: 'rgba(var(--text-rgb),.35)', cursor: 'not-allowed' };
+                      : { borderColor: 'var(--hairline)', background: 'var(--surface-hover)', color: 'rgba(var(--text-rgb),.5)', cursor: 'not-allowed' };
                   return (
                     <button key={cob.id} className={`ca-cob-tab ${isActive?'active':''} ${!cob.eligible?'ca-cob-tab--disabled':''}`}
                       style={tabStyle} disabled={!cob.eligible}

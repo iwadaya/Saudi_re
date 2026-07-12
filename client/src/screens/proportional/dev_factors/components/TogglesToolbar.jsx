@@ -87,7 +87,7 @@ export function ViewToggle({ view, onSetView }) {
 export function AvgMethodToggle({ avgMethod, onSelectAvgMethod }) {
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
-      <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Average</span>
+      <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.7)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Average</span>
       <div className="toggle-group">
         {['weighted', 'simple', 'last3', 'last5'].map(m => (
           <button type="button" key={m} className={`toggle-option${avgMethod === m ? ' active' : ''}`} onClick={() => onSelectAvgMethod(m)}>

@@ -3,7 +3,7 @@
 ========================================================= */
 
 .LOSS_SELECTION_PAGE{ font-size: 13px; }
-.ls-loading{ padding: 30px; text-align: center; color: rgba(var(--text-rgb),.6); }
+.ls-loading{ padding: 30px; text-align: center; color: rgba(var(--text-rgb),.75); }
 
 /* ── KPIs ── */
 .LOSS_SELECTION_PAGE .ls-kpis{

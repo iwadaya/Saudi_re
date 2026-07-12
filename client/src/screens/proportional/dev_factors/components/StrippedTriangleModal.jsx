@@ -40,7 +40,7 @@ export default function StrippedTriangleModal({ onClose, stripLargeCat, exclusio
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--stroke-soft)' }}>
           <div>
             <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: '0.03em', color: 'var(--text)' }}>Incurred Triangle — Stripped of Large/CAT</div>
-            <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)', marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.7)', marginTop: 2 }}>
               {stripLargeCat
                 ? `Cumulative incurred (Paid + OS) with ${exclusions.largeLossCount} large and ${exclusions.catLossCount} CAT loss${(exclusions.largeLossCount + exclusions.catLossCount) === 1 ? '' : 'es'} removed — the attritional basis used for dev-factor selection.`
                 : 'Stripping is OFF — development factors are calculated on the full triangle. The attritional view below shows what stripping would remove, for reference only.'}

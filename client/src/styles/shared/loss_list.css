@@ -54,7 +54,7 @@
 
 .LOSS_LIST_PAGE .ll-count{
   font-size: 11px;
-  color: rgba(var(--text-rgb),.65);
+  color: rgba(var(--text-rgb),.78);
   padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--stroke-soft);
@@ -129,7 +129,7 @@
 .LOSS_LIST_PAGE .ll-loading{
   padding: 30px;
   text-align: center;
-  color: rgba(var(--text-rgb),.65);
+  color: rgba(var(--text-rgb),.78);
   font-size: 13px;
 }
 
@@ -178,7 +178,7 @@
   width: 32px;
   text-align: center;
   font-size: 10px;
-  color: rgba(var(--text-rgb),.45);
+  color: rgba(var(--text-rgb),.58);
   padding: 0 4px;
 }
 .LOSS_LIST_PAGE .ll-td--calc{
@@ -216,7 +216,7 @@
   outline: none;
 }
 .LOSS_LIST_PAGE .ll-inp::placeholder{
-  color: rgba(var(--text-rgb),.35);
+  color: rgba(var(--text-rgb),.5);
 }
 
 /* Numeric cells — right-aligned */

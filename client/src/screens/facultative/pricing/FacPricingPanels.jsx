@@ -139,8 +139,8 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
 
   return (
     <div style={{ marginBottom: 20, padding: '14px 18px',
-                  background: 'rgba(168,85,247,0.04)',
-                  border: '1px solid rgba(168,85,247,0.25)', borderRadius: 12 }}>
+                  background: 'rgba(var(--accent-blue-rgb),0.05)',
+                  border: '1px solid rgba(var(--accent-blue-rgb),0.28)', borderRadius: 12 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: collapsed ? 0 : 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
@@ -149,20 +149,20 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
              onKeyDown={(e) => {
                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCollapsed((c) => !c); }
              }}>
-          <span style={{ fontSize: 13, color: 'rgba(168,85,247,0.80)' }}>{collapsed ? '▶' : '▼'}</span>
+          <span style={{ fontSize: 13, color: 'rgba(var(--accent-blue-rgb),0.80)' }}>{collapsed ? '▶' : '▼'}</span>
           <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em',
-                         textTransform: 'uppercase', color: 'rgba(168,85,247,0.80)' }}>
+                         textTransform: 'uppercase', color: 'rgba(var(--accent-blue-rgb),0.80)' }}>
             Underwriting Factors — Drivers of Rate &amp; Score
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18 }}>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
                           textTransform: 'uppercase', color: 'var(--muted)' }}>Scheme</div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: 'color-mix(in srgb, #a855f7 75%, var(--text))', fontVariantNumeric: 'tabular-nums' }}>{scheme}</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: 'rgba(var(--accent-blue-rgb),0.9)', fontVariantNumeric: 'tabular-nums', lineHeight: '22px' }}>{scheme.replace(/_/g, ' ')}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
                           textTransform: 'uppercase', color: 'var(--muted)' }}>Score</div>
             <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>
               {liveScore ? liveScore.underwriting_score.toFixed(2) : '—'}
@@ -179,7 +179,7 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
       {!collapsed && (
         <>
           {qualitativeFactors.length === 0 ? (
-            <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)', padding: '8px 0' }}>
+            <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)', padding: '8px 0' }}>
               Loading factor catalogue…
             </div>
           ) : (
@@ -281,7 +281,7 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
 export function EngineReadout({ output, premiums, totalLocSar }) {
   if (!output) {
     return (
-      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)', padding: '12px 0' }}>
+      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)', padding: '12px 0' }}>
         Engine waiting for reference data… (occupancies, factors and locations must load first).
       </div>
     );
@@ -333,7 +333,7 @@ export function EngineReadout({ output, premiums, totalLocSar }) {
         ))}
       </div>
       {Number.isFinite(totalLocSar) && totalLocSar > 0 && (
-        <div style={{ marginTop: 8, fontSize: 10, color: 'rgba(var(--text-rgb),0.5)' }}>
+        <div style={{ marginTop: 8, fontSize: 10, color: 'rgba(var(--text-rgb),0.7)' }}>
           Premium computed against total location SAR SI = {money(totalLocSar)}.
         </div>
       )}

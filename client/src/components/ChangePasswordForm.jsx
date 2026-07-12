@@ -50,12 +50,12 @@ export default function ChangePasswordForm({ onSuccess, onCancel, submitLabel = 
           onChange={(e) => { f.set(e.target.value); setError(''); }}
           style={{ width: '100%', padding: '7px 9px', borderRadius: 7, border: '1px solid var(--hairline-strong)', background: 'var(--control-bg)', color: 'var(--text)', fontSize: 12, boxSizing: 'border-box' }} />
       ))}
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11, color: 'rgba(var(--text-rgb),0.6)' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11, color: 'rgba(var(--text-rgb),0.75)' }}>
         <input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)}
           style={{ width: 13, height: 13, accentColor: 'var(--accent)', cursor: 'pointer' }} />
         Show passwords
       </label>
-      {hint && !error && <div style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.55)' }}>{hint}</div>}
+      {hint && !error && <div style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.7)' }}>{hint}</div>}
       {error && <div role="alert" style={{ fontSize: 11, color: '#f87171' }}>{error}</div>}
       <div style={{ display: 'flex', gap: 8 }}>
         <button type="button" onClick={submit} disabled={!valid || busy}
@@ -64,7 +64,7 @@ export default function ChangePasswordForm({ onSuccess, onCancel, submitLabel = 
         </button>
         {onCancel && (
           <button type="button" onClick={onCancel}
-            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--hairline-strong)', background: 'transparent', color: 'rgba(var(--text-rgb),0.6)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--hairline-strong)', background: 'transparent', color: 'rgba(var(--text-rgb),0.75)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
             Cancel
           </button>
         )}

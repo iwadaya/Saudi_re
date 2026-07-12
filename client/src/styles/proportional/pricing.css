@@ -259,9 +259,10 @@
   display: block; width: 100%; box-sizing: border-box;
   padding: 9px 6px; border-radius: 10px; border: 1px solid;
   font-size: 12px; font-weight: 600; font-family: inherit;
-  letter-spacing: 0.01em; text-align: center; white-space: nowrap;
+  letter-spacing: 0.01em; text-align: center; white-space: normal;
+  line-height: 1.25;
   cursor: pointer; transition: filter 0.15s, opacity 0.15s;
-  overflow: hidden; text-overflow: ellipsis; background: transparent;
+  overflow: hidden; background: transparent;
 }
 .bbg-ib:hover { filter: brightness(1.25); }
 .bbg-ib--teal  { color: #2dd4bf; background: rgba(45,212,191,0.1); border-color: rgba(45,212,191,0.35); }
@@ -406,7 +407,7 @@
 
 /* Read-only value in share scenarios */
 .bbg-ro-val {
-  font-size: 13px; color: rgba(var(--text-rgb),0.65);
+  font-size: 13px; color: rgba(var(--text-rgb),0.78);
   font-variant-numeric: tabular-nums;
 }
 
@@ -520,7 +521,7 @@
    ═══════════════════════════════════════════════ */
 .bbg-loading {
   text-align: center; padding: 60px; font-size: 14px;
-  color: rgba(var(--text-rgb),0.5);
+  color: rgba(var(--text-rgb),0.7);
 }
 
 
@@ -822,7 +823,7 @@
    var() is invalid inside SVG presentation attributes, so the themed grid,
    ticks and raw-series marks are applied via these classes instead. */
 .ma-grid-y{ stroke: rgba(var(--text-rgb),.08); }
-.ma-tick{ fill: rgba(var(--text-rgb),.65); }
+.ma-tick{ fill: rgba(var(--text-rgb),.78); }
 .ma-tick--x{ fill: rgba(var(--text-rgb),.70); }
 .ma-raw-line{ stroke: rgba(var(--text-rgb),.22); }
-.ma-raw-dot{ fill: rgba(var(--text-rgb),.3); }
+.ma-raw-dot{ fill: rgba(var(--text-rgb),.5); }

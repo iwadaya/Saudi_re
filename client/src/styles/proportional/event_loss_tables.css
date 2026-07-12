@@ -1,6 +1,6 @@
 .EVENT_LOSS_TABLES_PAGE .elt-shell { padding: 16px; }
 
-.EVENT_LOSS_TABLES_PAGE .elt-title{ margin: 12px 0 6px; font-size: 28px; font-weight: 800; color: var(--text); }
+.EVENT_LOSS_TABLES_PAGE .elt-title{ margin: 12px 0 6px; font-size: 20px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
 .EVENT_LOSS_TABLES_PAGE .elt-sub{ margin: 0 0 14px; max-width: 980px; color: var(--muted); line-height: 1.35; }
 
 .EVENT_LOSS_TABLES_PAGE .elt-filter{

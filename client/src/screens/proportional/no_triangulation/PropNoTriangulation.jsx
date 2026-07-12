@@ -227,24 +227,24 @@ export default function PropNoTriangulation() {
                       <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', marginBottom: 5 }}>Start Year</div>
                       <div style={{
                         background: 'var(--surface-hover)', border: '1px solid var(--hairline)',
-                        color: 'rgba(var(--text-rgb),.5)', padding: '8px 14px', borderRadius: 4, width: 100,
+                        color: 'rgba(var(--text-rgb),.7)', padding: '8px 14px', borderRadius: 4, width: 100,
                         fontFamily: 'var(--font-mono)', fontSize: 13, userSelect: 'none',
                         display: 'flex', alignItems: 'center', gap: 6,
                       }}>
                         {startYear}
-                        <span style={{ fontSize: 9, opacity: 0.5, marginLeft: 2 }}>↗ TD</span>
+                        <span style={{ fontSize: 10, opacity: 0.75, marginLeft: 3 }}>↗ TD</span>
                       </div>
                     </div>
                     <div>
                       <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', marginBottom: 5 }}>Renewal Year</div>
                       <div style={{
                         background: 'var(--surface-hover)', border: '1px solid var(--hairline)',
-                        color: 'rgba(var(--text-rgb),.5)', padding: '8px 14px', borderRadius: 4, width: 100,
+                        color: 'rgba(var(--text-rgb),.7)', padding: '8px 14px', borderRadius: 4, width: 100,
                         fontFamily: 'var(--font-mono)', fontSize: 13, userSelect: 'none',
                         display: 'flex', alignItems: 'center', gap: 6,
                       }}>
                         {renewalYear}
-                        <span style={{ fontSize: 9, opacity: 0.5, marginLeft: 2 }}>↗ TD</span>
+                        <span style={{ fontSize: 10, opacity: 0.75, marginLeft: 3 }}>↗ TD</span>
                       </div>
                     </div>
                   </div>
@@ -266,7 +266,7 @@ export default function PropNoTriangulation() {
                     <button type="button" className={`toggle-option${stripLargeCat ? ' active' : ''}`} style={stripLargeCat ? undefined : { color: 'rgba(var(--text-rgb),.82)' }} onClick={() => setStrip(true)}>Strip from incurred</button>
                     <button type="button" className={`toggle-option${!stripLargeCat ? ' active' : ''}`} style={!stripLargeCat ? undefined : { color: 'rgba(var(--text-rgb),.82)' }} onClick={() => setStrip(false)}>Keep in incurred</button>
                   </div>
-                  <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)' }}>
+                  <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.7)' }}>
                     Saved per treaty. Strip removes large/CAT from incurred before projecting and adds them back unprojected; Keep projects the full incurred and folds everything into attritional.
                   </span>
                 </div>
@@ -277,11 +277,11 @@ export default function PropNoTriangulation() {
                 <table className="nt-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed' }}>
                   <thead>
                     <tr style={{ background: 'var(--table-head-bg)' }}>
-                      <th style={{ width: 90, textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),.6)', whiteSpace: 'nowrap' }}>UW Year</th>
-                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),.6)' }}>Gross Premium</th>
-                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),.6)' }}>Paid Claims</th>
-                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),.6)' }}>OS Claims</th>
-                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),.6)' }}>Incurred (Calc)</th>
+                      <th style={{ width: 90, textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),.75)', whiteSpace: 'nowrap' }}>UW Year</th>
+                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),.75)' }}>Gross Premium</th>
+                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),.75)' }}>Paid Claims</th>
+                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),.75)' }}>OS Claims</th>
+                      <th style={{ textAlign: 'center', padding: '11px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),.75)' }}>Incurred (Calc)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -325,7 +325,7 @@ export default function PropNoTriangulation() {
                               value={fmtC(inc)}
                               style={{
                                 width: '100%', background: 'var(--surface-hover)', border: '1px solid transparent',
-                                color: 'rgba(var(--text-rgb),.6)', padding: '8px 10px', borderRadius: 6, cursor: 'default',
+                                color: 'rgba(var(--text-rgb),.75)', padding: '8px 10px', borderRadius: 6, cursor: 'default',
                               }}
                             />
                           </td>
@@ -345,7 +345,7 @@ export default function PropNoTriangulation() {
                       <td className="num" style={{ padding: 6, color: 'rgba(var(--text-rgb),.8)', paddingRight: 12 }}>{fmtC(totals.premium)}</td>
                       <td className="num" style={{ padding: 6, color: 'rgba(var(--text-rgb),.8)', paddingRight: 12 }}>{fmtC(totals.paid)}</td>
                       <td className="num" style={{ padding: 6, color: 'rgba(var(--text-rgb),.8)', paddingRight: 12 }}>{fmtC(totals.os)}</td>
-                      <td className="num" style={{ padding: 6, color: 'rgba(var(--text-rgb),.6)', paddingRight: 12 }}>{fmtC(totals.incurred)}</td>
+                      <td className="num" style={{ padding: 6, color: 'rgba(var(--text-rgb),.75)', paddingRight: 12 }}>{fmtC(totals.incurred)}</td>
                     </tr>
                   </tbody>
                 </table>

@@ -89,7 +89,7 @@ function RegionBar({ name, actual, target }) {
   const pct = target > 0 ? Math.min(100, (actual / target) * 100) : 0;
   // Gradient end colour based on progress
   const endColor = pct >= 100 ? '#4ade80' : pct >= 75 ? '#00d4ff' : pct >= 50 ? '#a78bfa' : '#6366f1';
-  const achievedColor = pct >= 100 ? '#4ade80' : pct >= 75 ? '#00d4ff' : 'rgba(148,163,184,0.65)';
+  const achievedColor = pct >= 100 ? 'var(--accent)' : pct >= 75 ? 'var(--accent-blue)' : 'var(--muted)';
   return (
     <div className="region-card">
       <div className="region-top">
@@ -602,10 +602,10 @@ export default function HomeScreen() {
               Viewing <strong style={{ color:'var(--accent-blue)' }}>{viewingUser.role_name}</strong>'s work
             </span>
             {allocMsg && <span style={{ fontSize:12, fontWeight:700, color: allocMsg.startsWith('✓')?'var(--accent)':'var(--accent-rose)' }}>{allocMsg}</span>}
-            <span style={{ fontSize:10, color:'rgba(var(--text-rgb),0.45)', marginLeft:'auto' }}>
+            <span style={{ fontSize:10, color:'rgba(var(--text-rgb),0.58)', marginLeft:'auto' }}>
               {viewingUser.hierarchy_level >= myLevel ? '✓ You can allocate DRAFT items from this user' : '— View only (they outrank you)'}
             </span>
-            <button onClick={() => { setViewingUser(null); setAllocMsg(''); }} style={{ marginLeft:'auto', fontSize:10, color:'rgba(var(--text-rgb),0.45)', background:'none', border:'none', cursor:'pointer', padding:'2px 6px' }}>✕ Back to my work</button>
+            <button onClick={() => { setViewingUser(null); setAllocMsg(''); }} style={{ marginLeft:'auto', fontSize:10, color:'rgba(var(--text-rgb),0.58)', background:'none', border:'none', cursor:'pointer', padding:'2px 6px' }}>✕ Back to my work</button>
           </div>
         )}
 

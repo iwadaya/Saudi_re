@@ -47,7 +47,7 @@ export function MunichToggleCard({ munichAvailable, useMunich, onToggleMunich, s
           {showMunichHelp ? 'Hide info' : 'When to use this?'}
         </button>
         {!munichAvailable && (
-          <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.5)' }}>
+          <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),.7)' }}>
             Available on the Incurred Development Factors screen.
           </span>
         )}

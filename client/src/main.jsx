@@ -1,3 +1,6 @@
+// Self-hosted Inter (variable weight + optical size) — bundled by Vite so the
+// app never falls back to system fonts when CDN access is blocked.
+import '@fontsource-variable/inter/opsz.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';

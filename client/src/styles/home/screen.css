@@ -128,13 +128,12 @@
   min-width: 180px;
   border-radius: 14px;
   padding: 18px 20px;
-  border: 1px solid rgba(255,255,255,0.10);
-  background: rgba(8,14,30,0.70);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-elevated);
   transition: border-color .15s, background .15s;
 }
 .region-card:hover{
-  border-color: rgba(0,212,255,0.30);
-  background: rgba(8,14,30,0.85);
+  border-color: rgba(var(--accent-blue-rgb),0.35);
 }
 
 .region-top{
@@ -148,12 +147,12 @@
 .region-name{
   font-size: 15px;
   font-weight: 800;
-  color: rgba(226,232,240,0.95);
+  color: var(--text);
   letter-spacing: .01em;
 }
 .region-values{
   font-size: 13px;
-  color: rgba(148,163,184,0.75);
+  color: var(--muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -161,7 +160,7 @@
 .bar{
   height: 7px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.07);
+  background: rgba(var(--text-rgb),0.10);
   overflow: hidden;
   margin: 12px 0 0;
 }
@@ -176,7 +175,7 @@
 .region-achieved{
   margin-top: 8px;
   font-size: 11px;
-  color: rgba(148,163,184,0.65);
+  color: var(--muted);
   font-weight: 600;
   letter-spacing: .04em;
 }
@@ -207,7 +206,7 @@
 .draft-body{
   border-radius:14px;
   border:1px dashed var(--stroke);
-  background: rgba(10,18,32,.22);
+  background: var(--surface-muted);
   padding:14px;
   display:flex;
   flex-direction:column;
@@ -637,7 +636,7 @@
 /* ── Ownership UX (Mine / Everyone toggle + per-row ownership) ───────────── */
 .own-bar{ display:flex; align-items:center; gap:10px; padding:8px 12px; flex-wrap:wrap; }
 .own-seg{ display:inline-flex; border:1px solid var(--hairline-strong); border-radius:8px; overflow:hidden; }
-.own-seg button{ background:none; border:none; color:rgba(var(--text-rgb),.55); font-size:12px; font-weight:600; padding:6px 14px; cursor:pointer; }
+.own-seg button{ background:none; border:none; color:rgba(var(--text-rgb),.7); font-size:12px; font-weight:600; padding:6px 14px; cursor:pointer; }
 .own-seg button.is-active{ background:rgba(var(--accent-rgb),.15); color:var(--accent); }
 .own-row{ display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--hairline); }
 .own-row__main{ flex:1; min-width:0; }
@@ -658,6 +657,6 @@
 .own-trail-item b{ color:var(--text); }
 .own-pick{ display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; border:1px solid var(--hairline); margin-bottom:6px; cursor:pointer; }
 .own-pick:hover{ background:var(--surface-hover); }
-.own-empty{ padding:14px; color:rgba(var(--text-rgb),.45); font-size:12px; }
+.own-empty{ padding:14px; color:rgba(var(--text-rgb),.58); font-size:12px; }
 .own-row__main{ cursor:pointer; }
 .own-list{ max-height:420px; overflow-y:auto; }

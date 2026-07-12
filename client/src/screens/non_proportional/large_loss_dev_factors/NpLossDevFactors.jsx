@@ -358,7 +358,7 @@ export default function NpLossDevFactors({ routeKey, title, headerPill, lossType
                   <div className="df-section-sub">
                     Enter LDFs to develop {lossType === 'cat' ? 'cat' : 'large'} losses to ultimate.
                     <span style={{ marginLeft: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.5)' }}>Dev periods:</span>
+                      <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.7)' }}>Dev periods:</span>
                       <input
                         type="number" min={1} max={15} value={manualLdfCount}
                         onChange={e => { setManualLdfCount(Math.max(1, Math.min(15, Number(e.target.value) || 1))); setDirty(true); }}

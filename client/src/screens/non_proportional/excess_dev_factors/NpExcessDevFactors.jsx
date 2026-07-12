@@ -418,7 +418,7 @@ export default function NpExcessDevFactors() {
           <div className="df-section-sub">
             Enter LDFs from benchmark or market data
             <span style={{ marginLeft: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.5)' }}>Dev periods:</span>
+              <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.7)' }}>Dev periods:</span>
               <input type="number" min={1} max={15} value={manualLdfCount}
                 onChange={e => { setManualLdfCount(Math.max(1, Math.min(15, Number(e.target.value) || 1))); setDirty(true); }}
                 style={{ width: 52, textAlign: 'center', background: 'var(--control-bg)', border: '1px solid var(--stroke-soft)', borderRadius: 6, color: 'var(--text)', fontSize: 12, padding: '2px 4px' }} />
@@ -515,7 +515,7 @@ export default function NpExcessDevFactors() {
               <input id={ielrInputId} type="number" min="0" max="2" step="0.01" value={ielr}
                 onChange={e => setIelr(e.target.value)}
                 style={{ width: 100, textAlign: 'center', background: 'var(--control-bg)', border: '1px solid rgba(249,115,22,0.4)', borderRadius: 6, color: 'var(--text)', fontSize: 13, padding: '4px 8px' }} />
-              <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.5)' }}>{(Number(ielr) * 100 || 0).toFixed(0)}%</span>
+              <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.7)' }}>{(Number(ielr) * 100 || 0).toFixed(0)}%</span>
             </div>
           )}
 
@@ -592,7 +592,7 @@ export default function NpExcessDevFactors() {
               {/* TRIANGLE: avg method */}
               {dataMode === 'TRIANGLE' && (
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center', margin: '12px 0' }}>
-                  <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.5)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Average</span>
+                  <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.7)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Average</span>
                   <div className="toggle-group">
                     {['weighted', 'simple', 'last3', 'last5'].map(m => (
                       <button type="button" key={m} className={`toggle-option${avgMethod === m ? ' active' : ''}`}
@@ -635,7 +635,7 @@ export default function NpExcessDevFactors() {
                   </div>
                   <div className="df-chosen-controls">
                     <div className="df-chosen-left">
-                      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.5)', marginBottom: 4 }}>Base</div>
+                      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)', marginBottom: 4 }}>Base</div>
                       <div className="toggle-group df-chosen-toggle">
                         <button type="button" className={`toggle-option${chosenBase === 'ACTUAL' ? ' active' : ''}`} onClick={() => switchBase('ACTUAL')}>
                           {dataMode === 'DIRECT' ? 'INPUT' : 'ACTUAL'}

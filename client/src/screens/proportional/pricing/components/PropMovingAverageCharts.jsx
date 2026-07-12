@@ -121,7 +121,7 @@ export default function PropMovingAverageCharts({ yearly, terms }) {
     return (
       <div className="ma-charts-section">
         <div className="ma-charts-header"><div className="ma-charts-title">Moving Averages</div></div>
-        <div style={{padding:20,color:'rgba(var(--text-rgb),.5)',fontSize:13}}>{message}</div>
+        <div style={{padding:20,color:'rgba(var(--text-rgb),.7)',fontSize:13}}>{message}</div>
       </div>
     );
   }
@@ -137,7 +137,7 @@ export default function PropMovingAverageCharts({ yearly, terms }) {
       <div className="ma-legend">
         <span className="ma-legend-item"><span className="ma-legend-dot" style={{background:'currentColor'}}></span> Treaty ({win}yr MA)</span>
         <span className="ma-legend-item" style={{color:'#60a5fa'}}><span className="ma-legend-dot" style={{background:'#60a5fa'}}></span> Portfolio Avg</span>
-        <span className="ma-legend-item" style={{color:'rgba(var(--text-rgb),.35)'}}><span className="ma-legend-dot" style={{background:'rgba(var(--text-rgb),.35)'}}></span> Treaty (raw)</span>
+        <span className="ma-legend-item" style={{color:'rgba(var(--text-rgb),.5)'}}><span className="ma-legend-dot" style={{background:'rgba(var(--text-rgb),.35)'}}></span> Treaty (raw)</span>
       </div>
       <div className="ma-charts-grid">
         {charts.map(ch=>(<MiniLineChart key={ch.title} title={ch.title} years={years} treaty={ch.treaty} raw={ch.raw} portfolioAvg={ch.portfolioAvg} color={ch.color} portfolioColor={ch.portfolioColor} yFmt={ch.yFmt}/>))}

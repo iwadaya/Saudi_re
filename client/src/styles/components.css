@@ -96,7 +96,7 @@ h1,h2,h3{ margin: 0; }
   transition: border-color .12s ease, box-shadow .12s ease, transform .12s ease;
 }
 
-:is(input,textarea,select)::placeholder{ color: rgba(var(--text-rgb),.45); }
+:is(input,textarea,select)::placeholder{ color: rgba(var(--text-rgb),.58); }
 
 /* Native <select> dropdowns: the closed control is styled by the rule
    above, but the popup options are OS-painted. Without explicit styling
@@ -623,7 +623,7 @@ button{ font-family:inherit; }
   align-items: center;
 }
 
-.form-label{ font-size: 12px; color: rgba(var(--text-rgb),.6); display:block; margin-bottom:0; }
+.form-label{ font-size: 12px; color: rgba(var(--text-rgb),.75); display:block; margin-bottom:0; }
 
 /* ===== Form Inputs ===== */
 .form-input{
@@ -644,7 +644,7 @@ button{ font-family:inherit; }
   border-color: rgba(var(--accent-rgb),0.5);
   box-shadow: 0 0 0 3px rgba(var(--accent-rgb),0.1);
 }
-.form-input::placeholder{ color: rgba(var(--text-rgb),.35); }
+.form-input::placeholder{ color: rgba(var(--text-rgb),.5); }
 select.form-input{ cursor:pointer; appearance:auto; }
 
 .form-grid{
@@ -803,7 +803,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
   padding: 6px 14px;
   border-radius: var(--radius-pill);
   cursor: pointer;
-  color: rgba(var(--text-rgb),.5);
+  color: rgba(var(--text-rgb),.7);
   user-select: none;
   font-weight: 600;
   transition: all 0.15s;
@@ -1406,8 +1406,8 @@ select.form-input{ cursor:pointer; appearance:auto; }
 }
 .card-header-label{ font-weight:700; font-size:14px; letter-spacing:0.3px; }
 .card-tag{ font-size:10px; text-transform:uppercase; letter-spacing:0.1em; padding:3px 8px;
-  border-radius:20px; background:var(--surface-hover); color:rgba(var(--text-rgb),.55); }
-.card-desc{ padding:8px 18px 0; font-size:12px; color:rgba(var(--text-rgb),.5); }
+  border-radius:20px; background:var(--surface-hover); color:rgba(var(--text-rgb),.7); }
+.card-desc{ padding:8px 18px 0; font-size:12px; color:rgba(var(--text-rgb),.7); }
 
 /* card-head (alias for card-header used in treaty detail) */
 .card-head{
@@ -1420,7 +1420,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
 .toggle-btn{
   padding:5px 12px; border-radius:6px; font-size:11px; font-weight:600;
   letter-spacing:0.5px; cursor:pointer; border:1px solid var(--hairline-strong);
-  background:var(--surface-hover); color:rgba(var(--text-rgb),.5); transition:all 0.15s;
+  background:var(--surface-hover); color:rgba(var(--text-rgb),.7); transition:all 0.15s;
 }
 .toggle-btn:hover{ background:var(--control-hover); color:rgba(var(--text-rgb),.75); }
 .toggle-btn--active{ background:rgba(var(--accent-rgb),0.15); color:var(--accent); border-color:rgba(var(--accent-rgb),0.3); }
@@ -1436,7 +1436,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
 .form-grid-rows{ padding:12px 18px 18px; display:flex; flex-direction:column; gap:8px; }
 .form-row{ display:grid; grid-template-columns:minmax(140px,1fr) minmax(0,1.4fr); gap:8px; align-items:center; }
 .form-row--wide{ grid-template-columns:1fr; }
-.form-label{ font-size:12px; color:rgba(var(--text-rgb),.6); }
+.form-label{ font-size:12px; color:rgba(var(--text-rgb),.75); }
 .input-shell{
   display:flex; align-items:center; background:var(--control-bg);
   border:1px solid var(--stroke-soft); border-radius:10px; padding:0 10px;
@@ -1446,11 +1446,11 @@ select.form-input{ cursor:pointer; appearance:auto; }
   flex:1; background:transparent; border:none; outline:none; color:var(--text);
   font-size:13px; font-family:inherit; padding:6px 0; min-width:0;
 }
-.input-shell input.readonly{ color:rgba(var(--text-rgb),.45); }
-.input-shell input::placeholder{ color:rgba(var(--text-rgb),.3); }
+.input-shell input.readonly{ color:rgba(var(--text-rgb),.58); }
+.input-shell input::placeholder{ color:rgba(var(--text-rgb),.5); }
 .input-shell select{ cursor:pointer; appearance:auto; }
-.input-suffix{ font-size:11px; color:rgba(var(--text-rgb),.4); margin-left:4px; white-space:nowrap; }
-.icon{ font-size:11px; color:rgba(var(--text-rgb),.35); }
+.input-suffix{ font-size:11px; color:rgba(var(--text-rgb),.58); margin-left:4px; white-space:nowrap; }
+.icon{ font-size:11px; color:rgba(var(--text-rgb),.5); }
 
 /* Two-col sub-grid */
 .two-col{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
@@ -1459,14 +1459,14 @@ select.form-input{ cursor:pointer; appearance:auto; }
 .toggle-opt{
   padding:5px 12px; border-radius:6px; font-size:11px; font-weight:600;
   letter-spacing:0.5px; cursor:pointer; border:none;
-  background:transparent; color:rgba(var(--text-rgb),.5); transition:all 0.15s;
+  background:transparent; color:rgba(var(--text-rgb),.7); transition:all 0.15s;
 }
 .toggle-opt.active{ background:rgba(var(--accent-rgb),0.15); color:var(--accent); }
 .toggle-opt:hover:not(.active){ background:var(--surface-hover); color:rgba(var(--text-rgb),.7); }
 
 /* Mini section title */
 .mini-title{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px;
-  color:rgba(var(--text-rgb),.45); margin:4px 0; }
+  color:rgba(var(--text-rgb),.58); margin:4px 0; }
 
 /* Small buttons */
 .btn-sm{ padding:6px 14px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;
@@ -1509,13 +1509,13 @@ select.form-input{ cursor:pointer; appearance:auto; }
 /* Data table */
 .data-table{ width:100%; border-collapse:collapse; font-size:13px; }
 .data-table th{ text-align:center; padding:8px 10px; font-size:11px; font-weight:600;
-  text-transform:uppercase; letter-spacing:0.06em; color:rgba(var(--text-rgb),.6);
+  text-transform:uppercase; letter-spacing:0.06em; color:rgba(var(--text-rgb),.75);
   border-bottom:1px solid var(--hairline); }
 .data-table td{ padding:8px 10px; border-bottom:1px solid var(--hairline); color:rgba(var(--text-rgb),.92); text-align:center; }
 .data-table tbody tr:hover{ background:var(--table-row-hover); }
 .data-table input.form-input{ padding:4px 8px; }
 
-.muted{ color:rgba(var(--text-rgb),.5); font-size:12px; }
+.muted{ color:rgba(var(--text-rgb),.7); font-size:12px; }
 
 /* ── Treaty Detail compact form input ── */
 .fi{
@@ -1533,7 +1533,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
 }
 .fi:focus{ border-color: rgba(var(--accent-rgb),0.5); }
 .fi:disabled, .fi[readonly]{ opacity: 0.5; cursor: default; }
-.fi::placeholder{ color: rgba(var(--text-rgb),.3); }
+.fi::placeholder{ color: rgba(var(--text-rgb),.5); }
 select.fi{ cursor: pointer; appearance: auto; }
 
 /* Required-field highlight — applied by FR when a save() validator

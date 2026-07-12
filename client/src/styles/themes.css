@@ -37,7 +37,7 @@ html[data-theme="midnight"]{
   --text-rgb: 241, 245, 249;
   --muted:#c8daf0;
   --muted-2: rgba(184,204,223,.8);
-  --text-subtle: rgba(226,232,240,.62);
+  --text-subtle: rgba(226,232,240,.75);
   --accent:#1fe08d;
   --accent2:#12c97a;
   --accent-contrast:#07140f;
@@ -87,7 +87,7 @@ html[data-theme="ocean"]{
   --text-rgb: 224, 242, 254;
   --muted:#a7d7ef;
   --muted-2: rgba(167,215,239,.8);
-  --text-subtle: rgba(224,242,254,.62);
+  --text-subtle: rgba(224,242,254,.75);
   --accent:#22d3ee;
   --accent2:#06b6d4;
   --accent-contrast:#031316;
@@ -137,7 +137,7 @@ html[data-theme="graphite"]{
   --text-rgb: 237, 233, 254;
   --muted:#c4b5fd;
   --muted-2: rgba(196,181,253,.75);
-  --text-subtle: rgba(237,233,254,.60);
+  --text-subtle: rgba(237,233,254,.75);
   --accent:#a78bfa;
   --accent2:#8b5cf6;
   --accent-contrast:#120d20;
@@ -187,7 +187,7 @@ html[data-theme="sunset"]{
   --text-rgb: 255, 247, 237;
   --muted:#fed7aa;
   --muted-2: rgba(254,215,170,.75);
-  --text-subtle: rgba(255,247,237,.60);
+  --text-subtle: rgba(255,247,237,.75);
   --accent:#fbbf24;
   --accent2:#f97316;
   --accent-contrast:#1e1304;
@@ -237,7 +237,7 @@ html[data-theme="daylight"]{
   --text-rgb: 15, 23, 42;
   --muted:#475569;
   --muted-2: rgba(71,85,105,.85);
-  --text-subtle: rgba(51,65,85,.68);
+  --text-subtle: rgba(51,65,85,.80);
   --accent:#059669;
   --accent2:#047857;
   --accent-contrast:#f8fafc;
@@ -258,7 +258,7 @@ html[data-theme="daylight"]{
   --shadow-high: 0 24px 70px rgba(15,23,42,.12);
   --shadow-control: 0 10px 24px rgba(15,23,42,.08), inset 0 1px 0 rgba(255,255,255,.78);
   /* Numeric-table header text (tokens.css default is light-on-dark). */
-  --num-th-color: rgba(51,65,85,.78);
+  --num-th-color: rgba(51,65,85,.85);
   /* HUD overlay lines (cockpit.css) — dark hairlines instead of light. */
   --hud-line: rgba(15,23,42,.08);
   --hud-line-2: rgba(15,23,42,.13);

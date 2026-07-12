@@ -96,7 +96,7 @@ function CobCell({ value, cobOptions, onChange, onPaste, dataRow, dataCol }) {
           borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
         }}>
           {cobOptions.length === 0 ? (
-            <div style={{ padding: '8px 12px', fontSize: 11, color: 'rgba(var(--text-rgb),.5)' }}>
+            <div style={{ padding: '8px 12px', fontSize: 11, color: 'rgba(var(--text-rgb),.7)' }}>
               No classes on treaty — add in Treaty Detail
             </div>
           ) : (
@@ -106,7 +106,7 @@ function CobCell({ value, cobOptions, onChange, onPaste, dataRow, dataCol }) {
                 tabIndex={0}
                 onClick={() => { onChange(''); setOpen(false); }}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(''); setOpen(false); } }}
-                style={{ padding: '7px 12px', fontSize: 12, color: 'rgba(var(--text-rgb),.5)', cursor: 'pointer', borderBottom: '1px solid var(--hairline)' }}
+                style={{ padding: '7px 12px', fontSize: 12, color: 'rgba(var(--text-rgb),.7)', cursor: 'pointer', borderBottom: '1px solid var(--hairline)' }}
               >
                 — Clear —
               </div>

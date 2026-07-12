@@ -66,7 +66,7 @@ function useEscapeKey(enabled, onEscape) {
 function FR({ label, children }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 10, alignItems: 'center', minHeight: 36 }}>
-      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)' }}>{label}</div>
+      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)' }}>{label}</div>
       <div>{children}</div>
     </div>
   );
@@ -82,7 +82,7 @@ function CommaInput({ value, onChange, placeholder, readOnly, disabled, suffix }
       <input className="fi" type="text" inputMode="numeric" placeholder={placeholder}
         value={display} onChange={handleChange} readOnly={readOnly} disabled={disabled}
         style={suffix ? { paddingRight: 40 } : {}} />
-      {suffix && <span style={{ position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',fontSize:11,color:'rgba(var(--text-rgb),.45)',pointerEvents:'none' }}>{suffix}</span>}
+      {suffix && <span style={{ position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',fontSize:11,color:'rgba(var(--text-rgb),.58)',pointerEvents:'none' }}>{suffix}</span>}
     </div>
   );
 }
@@ -512,7 +512,7 @@ export default function NpTreatyDetail() {
               {s.quoteVersion > 1 && (
                 <span style={{ fontSize: 10, color: 'rgba(var(--accent-amber-rgb),0.75)', fontWeight: 600 }}>v{s.quoteVersion}</span>
               )}
-              <span style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.45)', fontFamily: 'var(--font-mono)' }}>
+              <span style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.58)', fontFamily: 'var(--font-mono)' }}>
                 {s.contractId?.slice(0,8)}…
               </span>
             </div>
@@ -523,7 +523,7 @@ export default function NpTreatyDetail() {
               🔄 Renewal — linked to prior year contract
             </div>
           )}
-          <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)' }}>
+          <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)' }}>
             Cedant: <b>{cedantName || '—'}</b>{' · '}Country: <b>{countryName || '—'}</b>
             {' · '}Broker: <b>{brokerName || '—'}</b>{' · '}Currency: <b>{currencyCode || '—'}</b>{' · '}Type: <b>{selectedTypeName || '—'}</b>
             {cobNames.length > 0 && <>{' · '}COB: <b>{cobNames.join(', ')}</b></>}
@@ -533,7 +533,7 @@ export default function NpTreatyDetail() {
         {/* ── Contract description (matches proportional) ── */}
         {contractDescription && (
           <div style={{ padding: '8px 14px', marginBottom: 14, borderRadius: 10, background: 'var(--surface-hover)', border: '1px solid var(--hairline)', fontSize: 12, color: 'rgba(var(--text-rgb),0.7)' }}>
-            <span style={{ color: 'rgba(var(--text-rgb),0.5)', marginRight: 8 }}>Contract:</span>{contractDescription}
+            <span style={{ color: 'rgba(var(--text-rgb),0.7)', marginRight: 8 }}>Contract:</span>{contractDescription}
           </div>
         )}
 

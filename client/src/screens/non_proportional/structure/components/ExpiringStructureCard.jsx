@@ -38,7 +38,7 @@ export default function ExpiringStructureCard({
               Override
             </button>
           )}
-          <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.45)', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.58)', whiteSpace: 'nowrap' }}>
             Layers
           </span>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(var(--text-rgb),0.75)', minWidth: 24, textAlign: 'center' }}>
@@ -64,7 +64,7 @@ export default function ExpiringStructureCard({
           const locked = isRenewal && expiringAutoPopulated;
           return (
             <div key={k}>
-              <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.55)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</div>
+              <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.7)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</div>
               <input
                 className={`np-mini-input${locked ? ' np-mini-input--readonly' : ''}`}
                 value={expiringTerms[k] ?? ''}

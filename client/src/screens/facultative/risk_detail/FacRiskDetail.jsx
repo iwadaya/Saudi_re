@@ -43,7 +43,7 @@ function SectionCobChecklist({ sectionIndex, selected, facClasses, classesByCate
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
         {Object.entries(classesByCategory).map(([cat, items]) => (
           <React.Fragment key={cat}>
-            <div style={{ gridColumn: '1 / -1', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', color: 'rgba(var(--text-rgb),0.5)', marginTop: 6, marginBottom: 2, textTransform: 'uppercase' }}>{cat}</div>
+            <div style={{ gridColumn: '1 / -1', fontSize: 9, fontWeight: 800, letterSpacing: '.12em', color: 'rgba(var(--text-rgb),0.7)', marginTop: 6, marginBottom: 2, textTransform: 'uppercase' }}>{cat}</div>
             {items.map(c => {
               const checked = selected.has(c.fac_cob_id);
               return (
@@ -523,7 +523,7 @@ export default function FacRiskDetail() {
         {/* ── Sums Insured — one row per checked COB ── */}
         <SectionTitle>Sums Insured (100% Basis)</SectionTitle>
         {allSelectedCobs.length === 0 && (
-          <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.45)', padding: '12px 0' }}>Select classes of business above to enter sums insured</div>
+          <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.58)', padding: '12px 0' }}>Select classes of business above to enter sums insured</div>
         )}
         {allSelectedCobs.map(({ id, section }) => {
           const cls = facClasses.find(c => c.fac_cob_id === id);

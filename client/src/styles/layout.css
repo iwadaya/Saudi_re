@@ -59,7 +59,7 @@ button{ font-family:inherit; }
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  color: rgba(var(--text-rgb),.55);
+  color: rgba(var(--text-rgb),.7);
   padding: 6px 10px 4px;
   margin-bottom: 2px;
 }
@@ -98,7 +98,10 @@ button{ font-family:inherit; }
 .wizard-content{
   flex: 1;
   min-width: 0;
-  padding: 20px 28px 80px;
+  /* Bottom padding reserves a clear lane for the floating Back/Next dock
+     (fixed at bottom: 76px, 40px tall) so it never covers table rows or
+     form fields at the end of a page. */
+  padding: 20px 28px 150px;
   overflow-y: auto;
   height: 100%;
 }
@@ -106,7 +109,7 @@ button{ font-family:inherit; }
 /* On very wide screens: give wizard content a comfortable reading width */
 @media (min-width: 1680px) {
   .wizard-content{
-    padding: 24px 48px 80px;
+    padding: 24px 48px 150px;
   }
 }
 

@@ -5,8 +5,8 @@ export function FR({ label, children, hint }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 12, alignItems: 'center', minHeight: 40, marginBottom: 6 }}>
       <div>
-        <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.55)' }}>{label}</div>
-        {hint && <div style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.45)', marginTop: 1 }}>{hint}</div>}
+        <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)' }}>{label}</div>
+        {hint && <div style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.58)', marginTop: 1 }}>{hint}</div>}
       </div>
       <div>{children}</div>
     </div>
