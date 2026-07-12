@@ -47,7 +47,7 @@ exists so that at 3am there is no ambiguity about who does what.
 | Pricing drift / actuarial anomaly | `docs/observability.md` → pricing drift |
 | Rate-limit store degraded | `server/src/lib/rateLimitStore.js` header + `docs/scaling.md` |
 | SSO / MFA lockout, need local admin | `docs/runbooks/sso-mfa-break-glass.md` |
-| Bad deploy | Roll back: Render → previous deploy; self-host → `git checkout <good-sha>` + rebuild (`docs/deployment.md` §Rollback). |
+| Bad deploy | Roll back: Render → previous deploy; self-host → `git checkout <good-sha>` + rebuild (`DEPLOYMENT.md` §9.1 Rollback). |
 | Failed backup / restore drill | `docs/backup-recovery.md` → Failure alerting |
 
 ## Security incidents
