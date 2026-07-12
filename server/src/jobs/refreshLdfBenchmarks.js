@@ -1,8 +1,7 @@
 // Refreshes the LDF benchmark materialized views.
 //
-// TODO(scheduling): There is no in-process scheduler in this codebase
-// (see startup/bootstrap.js for the standing TODO). Run this nightly
-// via the platform's cron facility (Render Cron / Kubernetes CronJob /
+// TODO(scheduling): There is no in-process scheduler in this codebase.
+// Run this nightly via the platform's cron facility (Render Cron / Kubernetes CronJob /
 // pg_cron / GH Actions) — `node src/jobs/refreshLdfBenchmarks.js`
 // from server/. CONCURRENTLY refresh won't block readers.
 //

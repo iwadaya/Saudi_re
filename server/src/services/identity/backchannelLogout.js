@@ -24,11 +24,6 @@ async function defaultJwks(cfg) {
   return keyset;
 }
 
-/** Reset the JWKS cache (tests / config reload). */
-export function _resetJwksCache() {
-  cachedJwks = null;
-}
-
 /**
  * Verify a logout_token and extract its session-targeting claims.
  * @param {string} token the raw logout_token JWT.

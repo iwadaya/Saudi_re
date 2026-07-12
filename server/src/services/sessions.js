@@ -104,15 +104,3 @@ export async function revokeSessionsByIdpSub(idpSub, reason = 'BACKCHANNEL_LOGOU
   );
   return rowCount;
 }
-
-/** Active (live, unexpired) sessions for a user — the admin "active sessions" view. */
-export async function listActiveSessions(userId) {
-  const { rows } = await pool.query(
-    `SELECT session_id, issued_at, last_seen_at, expires_at, auth_method, ip, user_agent
-       FROM public.auth_session
-      WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
-      ORDER BY issued_at DESC`,
-    [userId],
-  );
-  return rows;
-}

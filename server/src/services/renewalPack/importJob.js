@@ -23,7 +23,6 @@
 // job is recorded failed, no partial state is written.
 
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import { parseRenewalPack } from './parser.js';
 import { extractRenewalPack } from './extractor.js';
 import { mapExtractionToPages, userVisibleFilledPages } from './wizardMapper.js';
@@ -33,7 +32,6 @@ import { logger } from '../../lib/logger.js';
 import { writePage } from './pageRegistry.js';
 import { pool } from '../../db/pool.js';
 import { isRemoteStoragePath, resolveLocalStoragePath } from '../../lib/uploadStorage.js';
-import { env } from '../../config/env.js';
 
 /**
  * @param {object} args
@@ -231,7 +229,3 @@ async function defaultCrestaLookup({ zoneName, zoneCode, countryHint }) {
   );
   return rows[0] || null;
 }
-
-// Helpful for test stubs that want to seed a fake document into a tmp
-// dir without going through the real uploadStorage sink.
-export const _testHelpers = { defaultCrestaLookup, envUploadDir: () => env.uploadDir, path };

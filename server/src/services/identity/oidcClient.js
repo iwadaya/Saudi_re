@@ -35,11 +35,6 @@ export async function getConfiguration(cfg = getIdentityConfig()) {
   return config;
 }
 
-/** Reset the discovery cache (tests / config reload). */
-export function _resetConfigurationCache() {
-  cached = null;
-}
-
 /**
  * Begin an auth-code+PKCE login. Returns the authorization URL to redirect the
  * browser to, plus the per-attempt secrets (state, nonce, codeVerifier) the
