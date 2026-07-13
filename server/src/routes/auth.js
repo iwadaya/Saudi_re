@@ -7,6 +7,8 @@
 // hash; an admin create with no password gets a generated, scrypt-hashed temp
 // and must_change_password=true. The 'demo2026' shortcut is a dev/test-only
 // backdoor gated behind ALLOW_DEMO_AUTH and is never honoured in production.
+// Passwordless "name login" (Saudi Re pilot) is fail-closed behind
+// ALLOW_NAME_AUTH — see POST /auth/name-login below.
 
 import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
@@ -41,6 +43,8 @@ const PUBLIC_AUTH = new Set([
   'GET /auth/users',
   'GET /auth/roles',
   'POST /auth/users',
+  'POST /auth/name-login',
+  'GET /auth/name-login/status',
 ]);
 router.use((req, res, next) => {
   if (PUBLIC_AUTH.has(`${req.method} ${req.path}`)) return next();
@@ -115,6 +119,23 @@ function generateTempPassword() {
   return randomBytes(12).toString('base64url');
 }
 
+/** Derive a unique username from a person's name — first.surname, deduped with
+ *  a numeric suffix. Shared by the Add-user form path and name login. */
+async function deriveUniqueUsername(first, last) {
+  const base = `${first}.${last}`.toLowerCase().replace(/[^a-z0-9.]+/g, '');
+  let candidate = base;
+  let n = 1;
+  while (true) {
+    const { rows: dup } = await pool.query(
+      `SELECT 1 FROM public.uw_user WHERE username = $1 LIMIT 1`, [candidate]
+    );
+    if (!dup.length) break;
+    n += 1;
+    candidate = `${base}${n}`;
+  }
+  return candidate;
+}
+
 // A4 (user-enumeration): a fixed dummy scrypt hash, minted ONCE at module load
 // at the current cost. The login handler verifies the submitted password against
 // this whenever the username is unknown, so the "no such user" path spends the
@@ -154,6 +175,23 @@ function openRegistrationEnabled() {
   return process.env.ALLOW_OPEN_REGISTRATION === 'true';
 }
 
+// Passwordless "name login" (Saudi Re pilot): sign in with just a first name +
+// surname — the account is found (or created as an Underwriter) by
+// display name and a real server-side session is issued. FAIL-CLOSED exactly
+// like open registration: enabled ONLY when ALLOW_NAME_AUTH=true is set
+// explicitly on the deployment; absent or any other value → disabled.
+function nameAuthEnabled() {
+  return process.env.ALLOW_NAME_AUTH === 'true';
+}
+
+
+// Seeded demo/test accounts hidden from the PUBLIC (login-screen) user list so
+// a pilot deployment shows only real people. The rows themselves are untouched
+// (admins still see them when authenticated, and they can still sign in).
+const HIDDEN_DEMO_USERNAMES = new Set([
+  'cuo', 'underwriter',                             // migrations 034/037 demo pair
+  'edwin.taruvinga', 'catho.ba', 'chongo.nkalamo',  // migration 123 seeded testers
+]);
 
 // Static fallback — used when DB tables aren't ready yet (before migrations run)
 const DEMO_USERS_FALLBACK = [
@@ -384,6 +422,116 @@ router.post('/auth/logout', asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ── GET /api/auth/name-login/status — public posture probe ──────────────────
+// Mirrors /auth/sso/status: lets the SPA decide whether to render the
+// passwordless name sign-in form. Discloses only the on/off posture.
+router.get('/auth/name-login/status', (req, res) => {
+  res.json({ enabled: nameAuthEnabled() });
+});
+
+// ── POST /api/auth/name-login — passwordless name sign-in (pilot) ───────────
+// Signs a tester in with just first name + surname. An active user whose
+// display name matches (case-insensitively) is signed in; an unknown name gets
+// a fresh Underwriter account (lowest authority tier) holding an
+// unusable random scrypt hash, so the account can never be entered via the
+// password form. Issues the SAME revocable server-side session + httpOnly
+// cookie as password login — nothing downstream can tell the difference.
+router.post('/auth/name-login', asyncHandler(async (req, res) => {
+  if (!nameAuthEnabled()) {
+    return res.status(404).json({ error: 'Name sign-in is not enabled.', code: 'NAME_AUTH_DISABLED' });
+  }
+  const b = req.body || {};
+  const first = String(b.first_name || '').trim().replace(/\s+/g, ' ');
+  const last  = String(b.surname || '').trim().replace(/\s+/g, ' ');
+  if (!first || !last) {
+    return res.status(400).json({ error: 'First name and surname are required.' });
+  }
+  // Human-name shape only (letters incl. accents, spaces, hyphens, apostrophes,
+  // dots), bounded — keeps junk/injection-shaped strings out of display names.
+  const NAME_RE = /^[\p{L}][\p{L}' .-]{0,39}$/u;
+  if (!NAME_RE.test(first) || !NAME_RE.test(last)) {
+    return res.status(400).json({ error: 'Names may only contain letters, spaces, hyphens and apostrophes (max 40 characters).' });
+  }
+  const displayName = `${first} ${last}`;
+
+  let { rows } = await pool.query(
+    `SELECT * FROM public.v_user_mandate
+      WHERE lower(display_name) = lower($1) AND is_active = true
+      LIMIT 1`,
+    [displayName]
+  );
+
+  let firstLogin = false;
+  if (!rows.length) {
+    // First visit — create the tester as an Underwriter with a default mandate,
+    // exactly like the Add-user form path but with an unusable password. 'UW'
+    // is the current catalogue's underwriter code; 'TUW' covers legacy schemas.
+    const { rows: roleRows } = await pool.query(
+      `SELECT role_id FROM public.uw_role WHERE role_code = ANY($1) ORDER BY array_position($1, role_code) LIMIT 1`,
+      [['UW', 'TUW']]
+    );
+    if (!roleRows.length) {
+      return res.status(500).json({ error: 'Default underwriter role is not configured.' });
+    }
+    const roleId = roleRows[0].role_id;
+    const username = await deriveUniqueUsername(first, last);
+    // Random, discarded plaintext → the hash can never be matched by the
+    // password form; this account signs in by name only.
+    const passwordHash = await hashPassword(randomBytes(24).toString('base64url'));
+
+    const { rows: ins } = await pool.query(
+      `INSERT INTO public.uw_user
+         (username, display_name, email, role_id, office, phone, company_id, password_hash, must_change_password)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING user_id`,
+      [username, displayName, `${username}@universe3.app`, roleId, 'Riyadh', null, null, passwordHash, false]
+    );
+    await pool.query(
+      `INSERT INTO public.user_mandate (user_id, treaty_type_scope, approvals_required)
+       VALUES ($1, 'BOTH', 1) ON CONFLICT (user_id) DO NOTHING`,
+      [ins[0].user_id]
+    );
+    firstLogin = true;
+    await logAudit(pool, {
+      entityType: 'USER', entityId: ins[0].user_id,
+      eventType: 'USER_CREATED', actor: { id: ins[0].user_id, name: displayName },
+      payload: { username, role_id: roleId, name_auth: true },
+    }).catch(() => {});
+
+    ({ rows } = await pool.query(
+      `SELECT * FROM public.v_user_mandate WHERE user_id = $1 LIMIT 1`,
+      [ins[0].user_id]
+    ));
+    if (!rows.length) return res.status(500).json({ error: 'Could not create user.' });
+  }
+
+  const user = rows[0];
+
+  // Honour an account lock the same way password login does (generic 401).
+  if (user.locked_until && new Date(user.locked_until) > new Date()) {
+    return res.status(401).json({ error: 'Invalid credentials.' });
+  }
+
+  pool.query(
+    `UPDATE public.uw_user SET failed_attempts = 0, locked_until = NULL, last_login_at = now(), updated_at = now()
+     WHERE user_id = $1`,
+    [user.user_id]
+  ).catch(() => {});
+
+  await logAudit(pool, {
+    entityType: 'USER', entityId: user.user_id,
+    eventType: 'LOGIN', actor: { id: user.user_id, name: user.username || user.email },
+    payload: { office: user.office, method: 'NAME', first_login: firstLogin },
+  }).catch(() => {});
+
+  const sess = await createSession({
+    userId: user.user_id, authMethod: 'NAME',
+    ip: clientIp(req), userAgent: req.headers?.['user-agent'] || null,
+  });
+  setAuthCookies(res, signAuthToken({ sub: user.user_id, sid: sess.sessionId, epoch: sess.epoch }));
+  res.json({ session: buildSession(user) });
+}));
+
 // ── GET /api/auth/me — refresh session from the verified token ─────────────
 router.get('/auth/me', asyncHandler(async (req, res) => {
   // req.user is set by authenticate() from the bearer token (DB-backed).
@@ -517,9 +665,13 @@ router.get('/auth/users', asyncHandler(async (req, res) => {
            WHERE u.is_active = true
            ORDER BY u.display_name`
     );
-    if (rows.length) return res.json(rows);
     // No users yet — return static demo fallback
-    return res.json(DEMO_USERS_FALLBACK);
+    if (!rows.length) return res.json(DEMO_USERS_FALLBACK);
+    // Pre-auth (login screen) the seeded demo/test accounts are hidden so only
+    // real people are listed; the admin (authenticated) view keeps everyone.
+    return res.json(
+      authed ? rows : rows.filter(u => !HIDDEN_DEMO_USERNAMES.has(String(u.username || '').toLowerCase()))
+    );
   } catch (e) {
     // Tables not yet created — return static demo fallback so login screen works
     logger.warn('auth/users: DB tables not ready, using fallback', { error: e.message.split('\n')[0] });
@@ -596,21 +748,9 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
     displayName = `${first} ${last}`;
 
     // Username: supplied, else first.surname deduped with a numeric suffix.
-    if (b.username) {
-      finalUsername = String(b.username).trim().toLowerCase();
-    } else {
-      const base = `${first}.${last}`.toLowerCase().replace(/[^a-z0-9.]+/g, '');
-      finalUsername = base;
-      let n = 1;
-      while (true) {
-        const { rows: dup } = await pool.query(
-          `SELECT 1 FROM public.uw_user WHERE username = $1 LIMIT 1`, [finalUsername]
-        );
-        if (!dup.length) break;
-        n += 1;
-        finalUsername = `${base}${n}`;
-      }
-    }
+    finalUsername = b.username
+      ? String(b.username).trim().toLowerCase()
+      : await deriveUniqueUsername(first, last);
     finalEmail = b.email ? String(b.email).trim().toLowerCase() : `${finalUsername}@universe3.app`;
     passwordHash = await hashPassword(password);
   } else {

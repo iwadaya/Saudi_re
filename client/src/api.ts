@@ -246,6 +246,8 @@ const PATHS = {
   financeStatus: (id: string) => `/api/finance/entries/${enc(id)}/status`,
   mandateCheck: '/api/auth/mandate-check',
   authLogin: '/api/auth/login',
+  authNameLogin: '/api/auth/name-login',
+  authNameLoginStatus: '/api/auth/name-login/status',
   authLogout: '/api/auth/logout',
   authChangePassword: '/api/auth/change-password',
   authMe: '/api/auth/me',
@@ -842,6 +844,11 @@ export const api = {
   getUsers(opts?: RequestOpts): Promise<unknown> { return request(PATHS.authUsers, opts); },
   createUser(payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request(PATHS.authUsers, { method: 'POST', body: payload, ...opts }); },
   loginUser(payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request(PATHS.authLogin, { method: 'POST', body: payload, ...opts }); },
+  // Public passwordless (name) sign-in posture probe — mirrors getSsoStatus and
+  // drives whether the login screen shows the name form instead of a password.
+  getNameLoginStatus(opts?: RequestOpts): Promise<{ enabled: boolean }> { return request(PATHS.authNameLoginStatus, opts); },
+  // Passwordless name sign-in (pilot): first name + surname → real cookie session.
+  nameLogin(payload: { first_name: string; surname: string }, opts?: RequestOpts): Promise<unknown> { return request(PATHS.authNameLogin, { method: 'POST', body: payload, ...opts }); },
   // Clears the server's httpOnly auth + CSRF cookies. Best-effort on sign-out.
   logout(opts?: RequestOpts): Promise<unknown> { return request(PATHS.authLogout, { method: 'POST', body: {}, ...opts }); },
   // Verify the session via the httpOnly auth cookie and refresh from server truth.

@@ -61,6 +61,10 @@ function fakeQuery(sql, params = []) {
   if (sql.includes('FROM public.v_user_mandate vm')) {
     return Promise.resolve({ rows: scenario.loginUser ? [scenario.loginUser] : [] });
   }
+  // Name-login display-name lookup (passwordless pilot).
+  if (sql.includes('lower(display_name)')) {
+    return Promise.resolve({ rows: scenario.nameUser ? [scenario.nameUser] : [] });
+  }
   if (sql.includes('FROM public.v_user_mandate WHERE user_id')) {
     return Promise.resolve({ rows: scenario.mandateRow ? [{ user_id: params[0], ...scenario.mandateRow }] : [] });
   }
@@ -511,6 +515,88 @@ describe('POST /auth/login', () => {
   });
 });
 
+describe('POST /auth/name-login — passwordless name sign-in (Saudi Re pilot)', () => {
+  const isheRow = () => ({
+    user_id: 'u-ishe', username: 'ishe.wadaya', display_name: 'Ishe Wadaya', email: 'ishe.wadaya@universe3.app',
+    office: 'Riyadh', role_id: 'role-uw', role_code: 'TUW', role_name: 'Treaty Underwriter', hierarchy_level: 5,
+    can_override_below: false, effective_limit_usd: 10000000, treaty_type_scope: 'BOTH', approvals_required: 1,
+    is_active: true, locked_until: null, password_hash: 'scrypt$x$y', must_change_password: false,
+  });
+  const nameLogin = (body) => call(buildApp(), { method: 'POST', path: '/auth/name-login', body });
+  const authCookieOf = (res) => (res.cookies || []).find((c) => c.name === 'auth_token');
+
+  it('is FAIL-CLOSED: 404 when ALLOW_NAME_AUTH is unset', async () => {
+    delete process.env.ALLOW_NAME_AUTH;
+    const res = await nameLogin({ first_name: 'Ishe', surname: 'Wadaya' });
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('NAME_AUTH_DISABLED');
+  });
+
+  it('is FAIL-CLOSED: 404 for any non-"true" value', async () => {
+    process.env.ALLOW_NAME_AUTH = '1';
+    const res = await nameLogin({ first_name: 'Ishe', surname: 'Wadaya' });
+    expect(res.status).toBe(404);
+  });
+
+  it('signs an EXISTING user in by name — cookie session, no password, no new account', async () => {
+    process.env.ALLOW_NAME_AUTH = 'true';
+    scenario.nameUser = isheRow();
+    const res = await nameLogin({ first_name: 'Ishe', surname: 'Wadaya' });
+    expect(res.status).toBe(200);
+    expect(res.body.session.userId).toBe('u-ishe');
+    expect(res.body.session.displayName).toBe('Ishe Wadaya');
+    expect(res.body.session.token).toBeUndefined();          // token never in the body
+    const auth = authCookieOf(res);
+    expect(auth.value).toMatch(/.+\..+/);                    // signed token in httpOnly cookie
+    expect(auth.options.httpOnly).toBe(true);
+    // No account was minted for a known person.
+    expect(queryLog.some((q) => q.sql.includes('INSERT INTO public.uw_user'))).toBe(false);
+    // A real server-side session was created (revocable, same as password login).
+    expect(queryLog.some((q) => q.sql.includes('INSERT INTO public.auth_session'))).toBe(true);
+  });
+
+  it('creates the account on FIRST name-login (TUW role, default mandate, unusable scrypt password) then signs in', async () => {
+    process.env.ALLOW_NAME_AUTH = 'true';
+    scenario.nameUser = null;                 // unknown display name
+    scenario.mandateRow = isheRow();          // re-select after create
+    const res = await nameLogin({ first_name: 'Ishe', surname: 'Wadaya' });
+    expect(res.status).toBe(200);
+    expect(res.body.session.displayName).toBe('Ishe Wadaya');
+    expect(authCookieOf(res).value).toMatch(/.+\..+/);
+
+    const insert = queryLog.find((q) => q.sql.includes('INSERT INTO public.uw_user'));
+    expect(insert).toBeTruthy();
+    expect(insert.params[0]).toBe('ishe.wadaya');            // derived username
+    expect(insert.params[1]).toBe('Ishe Wadaya');            // display name
+    expect(insert.params[7]).toMatch(/^scrypt\$/);           // random, unusable scrypt hash
+    expect(insert.params[8]).toBe(false);                    // no forced password change
+    expect(queryLog.some((q) => q.sql.includes('INSERT INTO public.user_mandate'))).toBe(true);
+  });
+
+  it('rejects a missing or junk-shaped name with 400', async () => {
+    process.env.ALLOW_NAME_AUTH = 'true';
+    expect((await nameLogin({ first_name: 'Ishe' })).status).toBe(400);
+    expect((await nameLogin({ first_name: 'Robert;DROP TABLE', surname: 'Users' })).status).toBe(400);
+    expect((await nameLogin({ first_name: '12345', surname: 'Wadaya' })).status).toBe(400);
+  });
+
+  it('honours an account lock with the same generic 401 as password login', async () => {
+    process.env.ALLOW_NAME_AUTH = 'true';
+    scenario.nameUser = { ...isheRow(), locked_until: new Date(Date.now() + 3600e3).toISOString() };
+    const res = await nameLogin({ first_name: 'Ishe', surname: 'Wadaya' });
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: 'Invalid credentials.' });
+    expect((res.cookies || []).some((c) => c.name === 'auth_token' && !c.cleared)).toBe(false);
+  });
+
+  it('GET /auth/name-login/status reports the posture without leaking anything else', async () => {
+    delete process.env.ALLOW_NAME_AUTH;
+    expect((await call(buildApp(), { path: '/auth/name-login/status' })).body).toEqual({ enabled: false });
+    process.env.ALLOW_NAME_AUTH = 'true';
+    expect((await call(buildApp(), { path: '/auth/name-login/status' })).body).toEqual({ enabled: true });
+  });
+});
+
 describe('POST /auth/login — SSO-posture gate (Phase 0c, tolerant while SSO off)', () => {
   const row = (hash, username = 'ada.lovelace') => ({
     user_id: 'u-ada', username, display_name: 'Ada Lovelace', email: `${username}@universe3.app`,
@@ -860,6 +946,25 @@ describe('GET /auth/users', () => {
     expect(usersQuery).toBeTruthy();
     // The pre-auth query must not select PII / authority columns.
     expect(usersQuery.sql).not.toMatch(/user_mandate|treaty_limit_usd|single_risk_limit_usd|u\.email|u\.office|hierarchy_level/);
+  });
+
+  it('hides the seeded demo/test accounts from the PUBLIC login-screen list but keeps real people', async () => {
+    scenario.usersList = [
+      { user_id: 'u-cuo', username: 'cuo', display_name: 'Chief Underwriting Officer', role_code: 'CU', role_name: 'Chief Underwriter' },
+      { user_id: 'u-uw', username: 'underwriter', display_name: 'Underwriter', role_code: 'TUW', role_name: 'Underwriter' },
+      { user_id: 'u-edwin', username: 'edwin.taruvinga', display_name: 'Edwin Taruvinga', role_code: 'UW', role_name: 'Underwriter' },
+      { user_id: 'u-catho', username: 'catho.ba', display_name: 'Catho Ba', role_code: 'UW', role_name: 'Underwriter' },
+      { user_id: 'u-chongo', username: 'chongo.nkalamo', display_name: 'Chongo Nkalamo', role_code: 'CA', role_name: 'Chief Actuary' },
+      { user_id: 'u-ishe', username: 'ishe.wadaya', display_name: 'Ishe Wadaya', role_code: 'TUW', role_name: 'Underwriter' },
+    ];
+    // Unauthenticated (login screen): only the real person remains.
+    const anon = await call(buildApp(), { method: 'GET', path: '/auth/users' });
+    expect(anon.status).toBe(200);
+    expect(anon.body.map((u) => u.username)).toEqual(['ishe.wadaya']);
+    // Authenticated (admin screen): everyone is still visible.
+    currentUser = { userId: 'u-cu', roleCode: 'CU', hierarchyLevel: 2, displayName: 'CU' };
+    const authed = await call(buildApp(), { method: 'GET', path: '/auth/users' });
+    expect(authed.body).toHaveLength(6);
   });
 
   it('authenticated callers get the full record (mandate join) for the admin screen', async () => {

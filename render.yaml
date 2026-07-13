@@ -37,6 +37,13 @@ services:
       # ALLOW_DEMO_AUTH=true) for testing; production must not.
       - key: ALLOW_OPEN_REGISTRATION
         value: "false"
+      # ── Saudi Re pilot (TEMPORARY) ──
+      # Passwordless name login: testers sign in with first name + surname and
+      # get a real revocable cookie session (unknown names become Treaty
+      # Underwriter accounts). Fail-closed flag — flip to "false" (or delete)
+      # the moment the pilot ends and real credential/SSO login takes over.
+      - key: ALLOW_NAME_AUTH
+        value: "true"
       - key: DATABASE_URL
         sync: false
       # REQUIRED in production (validateEnv refuses to boot without it): the

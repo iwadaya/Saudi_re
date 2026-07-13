@@ -11,6 +11,8 @@ const { apiMock } = vi.hoisted(() => ({
     createUser: vi.fn(),
     loginUser: vi.fn(),
     getSsoStatus: vi.fn(),
+    getNameLoginStatus: vi.fn(),
+    nameLogin: vi.fn(),
   },
 }));
 
@@ -37,6 +39,8 @@ beforeEach(() => {
   apiMock.createUser.mockResolvedValue(TURING);
   apiMock.loginUser.mockResolvedValue({ session: { userId: ADA.user_id, roleCode: 'UW', displayName: 'role-title-not-name' } });
   apiMock.getSsoStatus.mockResolvedValue({ enabled: false, provider: null });
+  apiMock.getNameLoginStatus.mockResolvedValue({ enabled: false });
+  apiMock.nameLogin.mockResolvedValue({ session: { userId: 'u-ishe', roleCode: 'TUW', displayName: 'Ishe Wadaya', hierarchyLevel: 5 } });
 });
 
 describe('LoginScreen — SSO (Phase 1c)', () => {
@@ -129,6 +133,58 @@ describe('LoginScreen people dropdown', () => {
 
     await waitFor(() => expect(apiMock.loginUser).toHaveBeenCalledWith({ username: 'ada.lovelace', password: 'secret1' }));
     await waitFor(() => expect(getSession()?.displayName).toBe('Ada Lovelace'));
+  });
+});
+
+describe('LoginScreen — passwordless name sign-in (Saudi Re pilot)', () => {
+  beforeEach(() => {
+    apiMock.getNameLoginStatus.mockResolvedValue({ enabled: true });
+  });
+
+  it('replaces the password field with First name + Surname when the server enables name auth', async () => {
+    render(<LoginScreen />);
+    await screen.findByLabelText(/first name/i);
+    expect(screen.getByLabelText(/surname/i)).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Enter your password')).toBeNull();
+  });
+
+  it('signs in with just a name and stores the server session on this device', async () => {
+    render(<LoginScreen />);
+    fireEvent.change(await screen.findByLabelText(/first name/i), { target: { value: 'Ishe' } });
+    fireEvent.change(screen.getByLabelText(/surname/i), { target: { value: 'Wadaya' } });
+    fireEvent.click(screen.getByRole('button', { name: /Sign In/i }));
+
+    await waitFor(() => expect(apiMock.nameLogin).toHaveBeenCalledWith({ first_name: 'Ishe', surname: 'Wadaya' }));
+    await waitFor(() => expect(getSession()?.displayName).toBe('Ishe Wadaya'));
+    expect(apiMock.loginUser).not.toHaveBeenCalled();
+  });
+
+  it('keeps Sign In disabled until both names are entered', async () => {
+    render(<LoginScreen />);
+    await screen.findByLabelText(/first name/i);
+    expect(screen.getByRole('button', { name: /Sign In/i })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: 'Ishe' } });
+    expect(screen.getByRole('button', { name: /Sign In/i })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/surname/i), { target: { value: 'Wadaya' } });
+    expect(screen.getByRole('button', { name: /Sign In/i })).toBeEnabled();
+  });
+
+  it('picking a person from the dropdown pre-fills the name fields', async () => {
+    apiMock.getUsers.mockResolvedValue([{ ...ADA, display_name: 'Ishe Wadaya', user_id: 'u-ishe' }]);
+    render(<LoginScreen />);
+    const select = await screen.findByLabelText('Underwriter');
+    fireEvent.change(select, { target: { value: 'u-ishe' } });
+    expect(screen.getByLabelText(/first name/i).value).toBe('Ishe');
+    expect(screen.getByLabelText(/surname/i).value).toBe('Wadaya');
+  });
+
+  it('surfaces a server error from name login', async () => {
+    apiMock.nameLogin.mockRejectedValueOnce(new Error('Too many login attempts. Please wait a few minutes and try again.'));
+    render(<LoginScreen />);
+    fireEvent.change(await screen.findByLabelText(/first name/i), { target: { value: 'Ishe' } });
+    fireEvent.change(screen.getByLabelText(/surname/i), { target: { value: 'Wadaya' } });
+    fireEvent.click(screen.getByRole('button', { name: /Sign In/i }));
+    expect(await screen.findByText(/too many login attempts/i)).toBeInTheDocument();
   });
 });
 
