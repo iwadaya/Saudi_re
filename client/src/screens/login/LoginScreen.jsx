@@ -58,6 +58,15 @@ const onFieldBlur = (e) => {
   e.currentTarget.style.boxShadow = 'none';
 };
 
+// Name sign-in (pilot) styling — const objects referenced with a single brace
+// (style={obj}) so they stay budget-neutral, like the SSO block below.
+const NAME_FORM_ROW = { marginBottom: 16 };
+const NAME_FIELD_LABEL = { display: 'block', fontSize: 11, fontWeight: 600, color: 'rgba(var(--text-rgb),.7)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 6 };
+const NAME_FIELD_STACKED = { ...FIELD_STYLE, marginBottom: 10 };
+const NAME_HINT = { fontSize: 10, color: 'rgba(var(--text-rgb),.58)', marginTop: 6 };
+const LOGIN_ERR_BANNER = { padding: '8px 12px', borderRadius: 8, background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.30)', color: '#f87171', fontSize: 12, marginBottom: 14 };
+const signInBtnStyle = (disabled) => ({ width: '100%', minHeight: FIELD_HEIGHT, borderRadius: FIELD_RADIUS, fontSize: 14, fontWeight: 700, opacity: disabled ? 0.5 : 1 });
+
 // SSO block styling — const objects referenced with a single brace (style={obj})
 // so they don't count against the screens-layer inline-style budget.
 const SSO_DIVIDER = { display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0' };
@@ -243,6 +252,10 @@ export default function LoginScreen() {
   const [showTestPanel, setShowTestPanel] = useState(false);
   const [showAddUser, setShowAddUser]   = useState(false);
   const [addUserSuccess, setAddUserSuccess] = useState('');
+  // Passwordless name sign-in (pilot) — server-driven, mirrors the SSO probe.
+  const [nameAuth, setNameAuth]         = useState(false);
+  const [firstName, setFirstName]       = useState('');
+  const [surname, setSurname]           = useState('');
 
   // Already authenticated — skip login
   useEffect(() => {
@@ -255,7 +268,12 @@ export default function LoginScreen() {
   // unauthenticated callers, so an elevated role header would be misleading.
   const loadUsers = (selectUserId) => api.getUsers()
     .then(data => {
-      const list = Array.isArray(data) && data.length ? data : DEMO_FALLBACK;
+      // The server already substitutes its own fallback when the DB is empty
+      // and HIDES the seeded demo accounts pre-auth — so a successful (even
+      // empty) response is authoritative. DEMO_FALLBACK covers network
+      // failure only; re-adding it on an empty list would resurface the very
+      // dummy users the server just filtered out.
+      const list = Array.isArray(data) ? data : DEMO_FALLBACK;
       setUsers(list);
       // Only select a user when one is explicitly requested (e.g. just created
       // via Add-user). On a plain load nothing is pre-selected — the dropdown
@@ -277,6 +295,14 @@ export default function LoginScreen() {
       .catch(() => setSsoEnabled(false));
   }, []);
 
+  // Probe the passwordless name sign-in posture (Saudi Re pilot). When the
+  // server has it on, the password field is replaced by name + surname inputs.
+  useEffect(() => {
+    api.getNameLoginStatus()
+      .then(s => setNameAuth(!!s?.enabled))
+      .catch(() => setNameAuth(false));
+  }, []);
+
   const ssoError = SSO_ERRORS[searchParams.get('sso_error')] || '';
 
   const handleLogin = async (e) => {
@@ -292,6 +318,25 @@ export default function LoginScreen() {
       setSession({ ...session, displayName: selectedUser.display_name || session.displayName });
       // Forced first-login change: flip the gate so the mandatory "Set your
       // password" modal appears immediately (the AppShell overlay reads this).
+      if (session.mustChangePassword) requirePasswordChange();
+      navigate(canAccessApprovals() ? '/approvals' : '/select');
+    } catch (err) {
+      setError(err.message || 'Login failed.');
+    } finally { setLoading(false); }
+  };
+
+  // Passwordless name sign-in: the server finds (or creates) the person by
+  // display name and issues a real httpOnly cookie session; that session — the
+  // typed name included — is what gets stored on this device.
+  const handleNameLogin = async (e) => {
+    e.preventDefault();
+    const first = firstName.trim();
+    const last  = surname.trim();
+    if (!first || !last) { setError('Enter your first name and surname.'); return; }
+    setLoading(true); setError('');
+    try {
+      const { session } = await api.nameLogin({ first_name: first, surname: last });
+      setSession(session);
       if (session.mustChangePassword) requirePasswordChange();
       navigate(canAccessApprovals() ? '/approvals' : '/select');
     } catch (err) {
@@ -343,7 +388,18 @@ export default function LoginScreen() {
                   className="form-input"
                   aria-label="Underwriter"
                   value={sel?.user_id || ''}
-                  onChange={e => { setSelectedUser(users.find(u => u.user_id === e.target.value) || null); setError(''); }}
+                  onChange={e => {
+                    const u = users.find(x => x.user_id === e.target.value) || null;
+                    setSelectedUser(u);
+                    setError('');
+                    // Name mode: picking a person pre-fills the name fields so
+                    // one click + Sign In gets them back in as themselves.
+                    if (nameAuth && u?.display_name) {
+                      const parts = String(u.display_name).trim().split(/\s+/);
+                      setFirstName(parts[0] || '');
+                      setSurname(parts.slice(1).join(' '));
+                    }
+                  }}
                   onFocus={onFieldFocus}
                   onBlur={onFieldBlur}
                   style={FIELD_STYLE}
@@ -360,6 +416,44 @@ export default function LoginScreen() {
             )}
           </div>
 
+          {nameAuth ? (
+          /* ── Passwordless name sign-in (pilot) — no password field at all ── */
+          <form onSubmit={handleNameLogin} aria-label="Sign in">
+            <div style={NAME_FORM_ROW}>
+              <label htmlFor="login-first-name" style={NAME_FIELD_LABEL}>First name</label>
+              <input id="login-first-name" type="text" className="form-input"
+                value={firstName} onChange={e => { setFirstName(e.target.value); setError(''); }}
+                placeholder="First name" autoComplete="given-name" maxLength={40}
+                aria-invalid={!!error}
+                onFocus={onFieldFocus} onBlur={onFieldBlur}
+                style={NAME_FIELD_STACKED} />
+              <label htmlFor="login-surname" style={NAME_FIELD_LABEL}>Surname</label>
+              <input id="login-surname" type="text" className="form-input"
+                value={surname} onChange={e => { setSurname(e.target.value); setError(''); }}
+                placeholder="Surname" autoComplete="family-name" maxLength={40}
+                aria-describedby={error ? 'login-error' : undefined}
+                aria-invalid={!!error}
+                onFocus={onFieldFocus} onBlur={onFieldBlur}
+                style={FIELD_STYLE} />
+              <div style={NAME_HINT}>
+                No password needed — you'll be signed in (and remembered) by name.
+              </div>
+            </div>
+
+            {error && (
+              <div id="login-error" role="alert" style={LOGIN_ERR_BANNER}>
+                {error}
+              </div>
+            )}
+
+            <button type="submit" disabled={loading || !firstName.trim() || !surname.trim()}
+              className="action-pill action-pill--primary"
+              aria-label={loading ? 'Signing in' : 'Sign in'}
+              style={signInBtnStyle(loading || !firstName.trim() || !surname.trim())}>
+              {loading ? 'Signing in…' : <>Sign In <span aria-hidden="true">→</span></>}
+            </button>
+          </form>
+          ) : (
           <form onSubmit={handleLogin} aria-label="Sign in">
             <div style={{ marginBottom: 16 }}>
               <label htmlFor="login-password" style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'rgba(var(--text-rgb),.7)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 6 }}>Password</label>
@@ -398,6 +492,7 @@ export default function LoginScreen() {
               {loading ? 'Signing in…' : <>Sign In <span aria-hidden="true">→</span></>}
             </button>
           </form>
+          )}
 
           {/* ── Single sign-on (shown only when the server has SSO enabled) ── */}
           {ssoEnabled && (

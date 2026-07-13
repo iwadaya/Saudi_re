@@ -224,7 +224,13 @@ export function createLoginLimiter({ max = 5, windowMs = 15 * 60 * 1000, store =
     legacyHeaders: false,
     message: { error: 'Too many login attempts. Please wait a few minutes and try again.', code: 'TOO_MANY_LOGINS' },
     keyGenerator: (req) => {
-      const id = String(req.body?.username || req.body?.email || '').trim().toLowerCase();
+      // Identity: username/email (password login) or first+surname (name login),
+      // so one tester at a shared-office IP can't exhaust another's budget.
+      const id = String(
+        req.body?.username || req.body?.email
+        || [req.body?.first_name, req.body?.surname].filter(Boolean).join(' ')
+        || ''
+      ).trim().toLowerCase();
       return `login:${ipKeyGenerator(req.ip)}:${id}`;
     },
     ...(store ? { store } : {}),
@@ -276,7 +282,7 @@ export function passwordChangeGate(req, res, next) {
   const method = (req.method || 'GET').toUpperCase();
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return next();
   const path = req.path || '';
-  if (path === '/auth/change-password' || path === '/auth/login') return next();
+  if (path === '/auth/change-password' || path === '/auth/login' || path === '/auth/name-login') return next();
   return res.status(423).json({ error: 'Password change required', code: 'PWD_CHANGE_REQUIRED' });
 }
 
@@ -433,8 +439,9 @@ export function createApp() {
   app.use(express.json({ limit: '1mb' }));
 
   // Strict brute-force limiter on login (after JSON parse so the identity is
-  // available for keying; keyed on IP + identity).
-  app.use('/api/auth/login', createLoginLimiter());
+  // available for keying; keyed on IP + identity). Covers both the password
+  // login and the passwordless name login (Saudi Re pilot) with one budget.
+  app.use(['/api/auth/login', '/api/auth/name-login'], createLoginLimiter());
 
   // ── Authentication ──
   // authenticate sets req.user from a verified token (role/level re-read from

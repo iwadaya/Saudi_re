@@ -156,7 +156,7 @@ const CSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 // before any session/cookie exists, and logout's only effect is to drop the
 // session (so it must succeed even if the csrf cookie is gone). Paths are
 // relative to the /api mount, matching req.path under app.use('/api', …).
-const CSRF_EXEMPT = new Set(['/auth/login', '/auth/logout']);
+const CSRF_EXEMPT = new Set(['/auth/login', '/auth/name-login', '/auth/logout']);
 
 /**
  * CSRF double-submit guard. Enforced ONLY for cookie-authenticated, state-

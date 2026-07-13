@@ -362,6 +362,7 @@ Key variables (full list in `.env.example`):
 | `RUN_MIGRATIONS_ON_BOOT` | No | Defaults to `false`. Leave unset in production — run `npm run migrate:up --prefix server` as a pre-deploy step instead. Set to `true` only for the local docker-compose path. |
 | `CORS_ORIGIN` | Yes | Set to the public URL, e.g. `https://universe.internal.company.com`. **Do not use `*` in production.** |
 | `ALLOW_DEMO_AUTH` | No | **Dev/test only.** When `true`, enables the `demo2026` shortcut and `x-user-*` header identity. NEVER set in production — leave unset so only verified bearer tokens authenticate. |
+| `ALLOW_NAME_AUTH` | No | **Client-pilot testing only** (e.g. the Saudi Re pilot). When `true`, `POST /api/auth/name-login` signs a tester in with just first name + surname (no password) and issues a normal revocable cookie session; an unknown name gets an Underwriter account with an unusable random password. Fail-closed — off unless exactly `true`. Remove once the pilot moves to credential/SSO login. |
 | `OPENAI_API_KEY` | No | Required only for AI slip ingestion |
 | `UPLOAD_DIR` | No | Defaults to `./uploads` relative to project root |
 | `CLOUDINARY_URL` (or `CLOUDINARY_CLOUD_NAME`/`API_KEY`/`API_SECRET`) | **Yes (production)** | Durable **private** object storage for uploads. Without it, production uploads fail `503 STORAGE_NOT_DURABLE` (a web dyno's disk is ephemeral). Override with `ALLOW_LOCAL_UPLOADS=true` only for a single box with a persistent mounted volume. |
