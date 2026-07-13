@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Universe — Fixing the Git Clone Authentication Error</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.5pt; line-height: 1.5; color: #1a2332; margin: 0;
+  }
+  h1 { font-size: 19pt; color: #0e2a4e; margin: 0 0 4pt; }
+  h2 { font-size: 14pt; color: #0e2a4e; border-bottom: 2px solid #0e2a4e; padding-bottom: 3pt; margin: 22pt 0 8pt; page-break-after: avoid; }
+  h3 { font-size: 11.5pt; color: #14406e; margin: 14pt 0 6pt; page-break-after: avoid; }
+  p { margin: 5pt 0; }
+  table { border-collapse: collapse; width: 100%; margin: 8pt 0; page-break-inside: avoid; font-size: 9.5pt; }
+  th, td { border: 1px solid #b6c2d2; padding: 4pt 7pt; text-align: left; vertical-align: top; }
+  th { background: #e8eef6; color: #0e2a4e; font-weight: 600; }
+  tr:nth-child(even) td { background: #f6f8fb; }
+  code { font-family: "Consolas", "DejaVu Sans Mono", monospace; font-size: 9pt; background: #f0f3f7; padding: 0 3pt; border-radius: 2pt; }
+  pre {
+    font-family: "Consolas", "DejaVu Sans Mono", monospace; font-size: 8.8pt; line-height: 1.45;
+    background: #f0f3f7; border: 1px solid #cdd7e3; border-left: 3px solid #14406e;
+    padding: 7pt 9pt; border-radius: 3pt; white-space: pre-wrap; word-break: break-word;
+    page-break-inside: avoid; margin: 7pt 0;
+  }
+  pre.term {
+    background: #101826; color: #d7e0ee; border: 1px solid #2a3a55; border-left: 3px solid #b23a3a;
+  }
+  pre.term .err { color: #ff9d9d; }
+  ul, ol { margin: 5pt 0 5pt 0; padding-left: 20pt; }
+  li { margin: 3pt 0; }
+  .cover { text-align: center; padding-top: 130pt; page-break-after: always; }
+  .cover .rule { width: 60%; margin: 16pt auto; border-top: 3px solid #0e2a4e; }
+  .cover p.sub { font-size: 12.5pt; color: #33415c; margin: 8pt 0; }
+  .cover p.meta { font-size: 10.5pt; color: #5a6a82; }
+  .note {
+    background: #fdf6e3; border: 1px solid #e4cf8f; border-left: 4px solid #c9a227;
+    padding: 6pt 9pt; margin: 8pt 0; border-radius: 3pt; page-break-inside: avoid;
+  }
+  .danger {
+    background: #fbeeee; border: 1px solid #e3b1b1; border-left: 4px solid #b23a3a;
+    padding: 6pt 9pt; margin: 8pt 0; border-radius: 3pt; page-break-inside: avoid;
+  }
+  .ok {
+    background: #eef7ef; border: 1px solid #b3d4b6; border-left: 4px solid #2e7d32;
+    padding: 6pt 9pt; margin: 8pt 0; border-radius: 3pt; page-break-inside: avoid;
+  }
+  .footer-tag { color: #8794a8; font-size: 8.5pt; text-align: center; margin-top: 30pt; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Universe Reinsurance Platform</h1>
+  <div class="rule"></div>
+  <p class="sub">Runbook: Fixing the Git Clone Authentication Error</p>
+  <p class="sub">"Password authentication is not supported for Git operations"</p>
+  <p class="meta">Version 1.0 &mdash; July 2026 &mdash; Confidential &mdash; For Internal IT Use Only</p>
+  <p class="meta">Companion to the Universe Deployment Specification v2.0 (&sect;6.1, &sect;12.1)</p>
+</div>
+
+<h2>1. The Error</h2>
+<p>Attempting to clone the application repository onto the deployment server fails like this:</p>
+<pre class="term">gaudire@sr-urp:~$ sudo -u universe -H git clone https://github.com/iwadaya/universe.git /opt/universe
+Cloning into '/opt/universe'...
+Username for 'https://github.com': iwadaya
+Password for 'https://iwadaya@github.com':
+<span class="err">remote: Invalid username or token. Password authentication is not supported for Git operations.
+fatal: Authentication failed for 'https://github.com/iwadaya/universe.git/'</span></pre>
+
+<h3>1.1 Why It Happens (two separate problems)</h3>
+<table>
+  <tr><th style="width:30%">Problem</th><th>Explanation</th></tr>
+  <tr><td><b>1. Wrong repository URL</b></td><td>The repository has moved. <code>github.com/iwadaya/universe</code> (and the older <code>iwadaya/claude_universe</code>) no longer exist. The current private repository is <code>github.com/Darchville-Analytics/modelling_tool</code>.</td></tr>
+  <tr><td><b>2. Password typed at the prompt</b></td><td>GitHub removed account-password authentication for Git operations in August 2021. The "Password" prompt actually expects a <b>Personal Access Token (PAT)</b>. Typing your GitHub account password will always fail with exactly this message &mdash; even against a valid URL.</td></tr>
+</table>
+<p class="note"><b>Note:</b> because the old URL is dead, even a valid token used against <code>iwadaya/universe.git</code> would still fail. Both problems must be fixed together.</p>
+
+<h2>2. Fix Overview</h2>
+<ol>
+  <li>Create a fine-grained Personal Access Token on GitHub (&sect;3) &mdash; or set up an SSH deploy key instead (&sect;7).</li>
+  <li>Make sure the target directory <code>/opt/universe</code> is empty or removed, preserving <code>.env</code> and uploads if a previous install exists (&sect;4).</li>
+  <li>Store the credential for the <code>universe</code> user and clone from the correct URL (&sect;5).</li>
+  <li>Verify the clone and continue the deployment (&sect;6).</li>
+</ol>
+<p>Steps assume you are logged in as your admin account (e.g. <code>gaudire</code>) with sudo rights, and that the application runs as the dedicated non-root user <code>universe</code>.</p>
+
+<h2>3. Step 1 &mdash; Create a Fine-Grained Personal Access Token</h2>
+<p>On <b>github.com</b>, logged in as an account that has access to the <code>Darchville-Analytics/modelling_tool</code> repository:</p>
+<ol>
+  <li>Click your avatar (top-right) &rarr; <b>Settings</b>.</li>
+  <li>In the left sidebar, scroll to the bottom &rarr; <b>Developer settings</b>.</li>
+  <li>Choose <b>Personal access tokens &rarr; Fine-grained tokens</b> &rarr; <b>Generate new token</b>.</li>
+  <li>Fill in:
+    <ul>
+      <li><b>Token name:</b> e.g. <code>universe-deploy-sr-urp</code> (name it after the server so it's identifiable later)</li>
+      <li><b>Expiration:</b> 90 days (matches the rotation policy in the deployment spec &sect;9.2)</li>
+      <li><b>Resource owner:</b> <b>Darchville-Analytics</b> &mdash; <u>not</u> your personal account. If the org doesn't appear in the dropdown, your account is not a member; ask an org admin to invite you first.</li>
+      <li><b>Repository access:</b> <i>Only select repositories</i> &rarr; <code>modelling_tool</code></li>
+      <li><b>Permissions &rarr; Repository permissions:</b> <b>Contents: Read-only</b>. Nothing else is needed for a deploy box.</li>
+    </ul>
+  </li>
+  <li>Click <b>Generate token</b> and <b>copy it immediately</b> (it starts with <code>github_pat_&hellip;</code>). It is shown only once &mdash; if you lose it, regenerate.</li>
+</ol>
+<p class="note"><b>Org approval:</b> if Darchville-Analytics requires fine-grained token approval, the token stays "pending" until an org admin approves it under <i>Org Settings &rarr; Personal access tokens</i>. A pending token behaves exactly like a bad password &mdash; if your clone still fails after this runbook, check approval status first.</p>
+
+<h2>4. Step 2 &mdash; Make Sure /opt/universe Is Empty or Removed</h2>
+<p><code>git clone</code> refuses to clone into a directory that already contains files (<code>fatal: destination path '/opt/universe' already exists and is not an empty directory</code>). Check what is there before deleting anything.</p>
+
+<h3>4.1 Check the directory</h3>
+<pre>ls -la /opt/universe</pre>
+<table>
+  <tr><th style="width:42%">Result</th><th>What to do</th></tr>
+  <tr><td><code>No such file or directory</code></td><td>Nothing to clean up &mdash; go straight to Step 3 (&sect;5).</td></tr>
+  <tr><td>Directory exists but is <b>empty</b> (only <code>.</code> and <code>..</code> listed)</td><td>Also fine &mdash; git can clone into an empty directory. Go to Step 3 (&sect;5).</td></tr>
+  <tr><td>Directory has files in it</td><td>Continue with &sect;4.2 before removing.</td></tr>
+</table>
+<p class="note">A clone attempt that failed at authentication (as in &sect;1) normally leaves nothing behind &mdash; git cleans up after itself &mdash; so on this server the directory is most likely missing or empty.</p>
+
+<h3>4.2 If files exist: preserve anything irreplaceable first</h3>
+<p class="danger"><b>Before running <code>rm -rf</code>, check for the two things that cannot be recovered from GitHub:</b> the server's <code>.env</code> file (secrets and configuration) and the <code>uploads</code> directory (slips and documents uploaded by users). Everything else in the directory is just code that the fresh clone replaces.</p>
+<pre># Check whether either exists
+ls -la /opt/universe/.env
+ls -la /opt/universe/uploads</pre>
+<p>If either exists, back it up before deleting:</p>
+<pre>sudo cp /opt/universe/.env /root/universe.env.bak
+sudo cp -r /opt/universe/uploads /root/universe-uploads.bak</pre>
+
+<h3>4.3 Remove the directory</h3>
+<pre>sudo rm -rf /opt/universe</pre>
+<p class="danger"><b>Careful with this command.</b> Double-check the path before pressing Enter &mdash; <code>rm -rf</code> deletes recursively and permanently, with no confirmation and no recycle bin.</p>
+
+<h2>5. Step 3 &mdash; Store the Credential and Clone from the Correct URL</h2>
+<h3>5.1 Enable the credential store for the universe user</h3>
+<p>This makes git remember the token after the first use, so <code>git pull</code> and <code>deploy.sh</code> never prompt again:</p>
+<pre>sudo -u universe -H git config --global credential.helper store</pre>
+
+<h3>5.2 Clone</h3>
+<pre>sudo -u universe -H git clone \
+    https://github.com/Darchville-Analytics/modelling_tool.git /opt/universe</pre>
+<p>At the prompts:</p>
+<table>
+  <tr><th style="width:30%">Prompt</th><th>Enter</th></tr>
+  <tr><td><code>Username for 'https://github.com':</code></td><td>Your GitHub username (the account that owns the token)</td></tr>
+  <tr><td><code>Password for 'https://&hellip;':</code></td><td><b>Paste the fine-grained token</b> (<code>github_pat_&hellip;</code>) &mdash; NOT your GitHub account password. Nothing is echoed to the screen while you paste; that is normal &mdash; just press Enter.</td></tr>
+</table>
+<p>The token is saved to <code>/home/universe/.git-credentials</code> with mode 600 (readable only by the <code>universe</code> user).</p>
+
+<h3>5.3 If you backed up .env / uploads in &sect;4.2, restore them now</h3>
+<pre>sudo cp /root/universe.env.bak /opt/universe/.env
+sudo cp -r /root/universe-uploads.bak /opt/universe/uploads
+sudo chown -R universe:universe /opt/universe
+sudo chmod 600 /opt/universe/.env</pre>
+
+<h3>5.4 Alternative: existing checkout that only has the wrong URL</h3>
+<p>If a working install already exists and the only problem is that its remote still points at the old repository, do not delete anything &mdash; just repoint the remote:</p>
+<pre>cd /opt/universe
+sudo -u universe -H git remote set-url origin \
+    https://github.com/Darchville-Analytics/modelling_tool.git
+sudo -u universe -H git fetch origin
+sudo -u universe -H git pull origin main</pre>
+
+<h2>6. Step 4 &mdash; Verify and Continue the Deployment</h2>
+<pre># Confirm the clone landed and the remote is correct
+ls /opt/universe
+cd /opt/universe &amp;&amp; git remote -v
+# expect: origin  https://github.com/Darchville-Analytics/modelling_tool.git (fetch/push)
+
+# Confirm authenticated pulls work without prompting
+sudo -u universe -H git -C /opt/universe pull origin main</pre>
+<p class="ok"><b>Success looks like:</b> <code>git remote -v</code> shows the <code>Darchville-Analytics/modelling_tool</code> URL, and <code>git pull</code> completes (or says <code>Already up to date.</code>) without asking for a username or password.</p>
+<p>Then continue with the Deployment Specification v2.0 from &sect;6.2 onwards:</p>
+<pre>cd /opt/universe
+npm run install:all
+npm run build
+cp .env.example .env &amp;&amp; nano .env &amp;&amp; chmod 600 .env   # skip if you restored a backed-up .env
+npm run migrate:up --prefix server
+pm2 start ecosystem.config.cjs &amp;&amp; pm2 save</pre>
+
+<h2>7. Alternative Method &mdash; SSH Deploy Key (No Token on the Server)</h2>
+<p>If you prefer not to manage a PAT on the server (nothing to rotate every 90 days), use a read-only SSH deploy key instead. Requires outbound access to <code>github.com</code> on port 22.</p>
+<ol>
+  <li>Generate a key pair as the <code>universe</code> user:
+<pre>sudo -u universe -H ssh-keygen -t ed25519 -C "universe-deploy" -N "" \
+    -f /home/universe/.ssh/id_ed25519</pre></li>
+  <li>Print the public key and copy it:
+<pre>sudo -u universe -H cat /home/universe/.ssh/id_ed25519.pub</pre></li>
+  <li>On GitHub: open <code>Darchville-Analytics/modelling_tool</code> &rarr; <b>Settings &rarr; Deploy keys &rarr; Add deploy key</b>. Paste the key, name it after the server, and leave <b>"Allow write access" unticked</b> (a deploy box only needs to read).</li>
+  <li>Clone over SSH (directory rules from &sect;4 still apply):
+<pre>sudo -u universe -H git clone \
+    git@github.com:Darchville-Analytics/modelling_tool.git /opt/universe</pre>
+  On the first connection, type <code>yes</code> when asked to trust <code>github.com</code>'s host key.</li>
+</ol>
+<p class="note">A deploy key is tied to this one repository and this one server &mdash; it grants no access to anything else, which is why it's the tidiest option for shared servers.</p>
+
+<h2>8. Still Failing? Checklist</h2>
+<table>
+  <tr><th style="width:44%">Symptom</th><th>Check / fix</th></tr>
+  <tr><td>Same "Password authentication is not supported" after entering the token</td><td>You pasted the account password out of habit, or the token has a typo. Paste the <code>github_pat_&hellip;</code> value exactly; nothing echoes while pasting.</td></tr>
+  <tr><td><code>remote: Repository not found</code></td><td>URL typo, the token's <i>Repository access</i> doesn't include <code>modelling_tool</code>, the resource owner was set to your personal account instead of <b>Darchville-Analytics</b>, or your GitHub account lacks access to the repo. GitHub deliberately reports private-repo permission failures as "not found".</td></tr>
+  <tr><td>Token worked before, fails now</td><td>Token expired (90-day default) or was revoked. Generate a new one, then refresh the stored credential: <code>sudo -u universe -H rm /home/universe/.git-credentials</code> and pull once to re-enter it.</td></tr>
+  <tr><td>Token generated but clone fails immediately</td><td>Org token approval pending &mdash; ask a Darchville-Analytics admin to approve it (&sect;3 note).</td></tr>
+  <tr><td><code>destination path '/opt/universe' already exists and is not an empty directory</code></td><td>Directory not cleaned up &mdash; redo &sect;4 (back up <code>.env</code>/uploads, then <code>sudo rm -rf /opt/universe</code>), or use &sect;5.4 if the checkout is otherwise healthy.</td></tr>
+  <tr><td>Prompted for credentials on every pull</td><td>Credential helper not set for the right user. Re-run <code>sudo -u universe -H git config --global credential.helper store</code> (the <code>-H</code> matters &mdash; it makes git write to <code>/home/universe</code>, not your admin home) and pull once.</td></tr>
+  <tr><td>SSH clone: <code>Permission denied (publickey)</code></td><td>The deploy key isn't added to the repo, or the clone is running as a different user than the one whose key you generated. Test with <code>sudo -u universe -H ssh -T git@github.com</code>.</td></tr>
+  <tr><td>Connection timeouts to github.com</td><td>Corporate firewall/proxy: HTTPS needs outbound 443, SSH needs outbound 22. Ask network team to allow the server to reach <code>github.com</code>.</td></tr>
+</table>
+
+<h2>9. Security Notes</h2>
+<ul>
+  <li>Never use a GitHub <b>account password</b> or a classic full-scope token for deployments &mdash; scope the credential to one repository, read-only.</li>
+  <li>Rotate the PAT every 90 days (set a calendar reminder for the expiry date); deploy keys don't expire but should be removed when a server is decommissioned.</li>
+  <li>The stored credential file (<code>/home/universe/.git-credentials</code>) contains the token in plain text with mode 600 &mdash; do not loosen its permissions or copy it elsewhere.</li>
+  <li>Avoid embedding the token in the remote URL (<code>https://TOKEN@github.com/&hellip;</code>) as the old v1.0 manual suggested &mdash; it ends up readable in <code>.git/config</code> and in shell history.</li>
+  <li>Delete the temporary backups in <code>/root</code> (<code>universe.env.bak</code>, <code>universe-uploads.bak</code>) once the restored files are confirmed working.</li>
+</ul>
+
+<p class="footer-tag">Universe Reinsurance Platform &mdash; Confidential &mdash; For Internal IT Use Only &mdash; Git Clone Error Fix Runbook v1.0, July 2026</p>
+
+</body>
+</html>
