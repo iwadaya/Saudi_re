@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Universe Deployment Specification v2.0</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.5pt; line-height: 1.5; color: #1a2332; margin: 0;
+  }
+  h1 { font-size: 20pt; color: #0e2a4e; margin: 0 0 4pt; }
+  h2 { font-size: 14pt; color: #0e2a4e; border-bottom: 2px solid #0e2a4e; padding-bottom: 3pt; margin: 22pt 0 8pt; page-break-after: avoid; }
+  h3 { font-size: 11.5pt; color: #14406e; margin: 14pt 0 6pt; page-break-after: avoid; }
+  p { margin: 5pt 0; }
+  table { border-collapse: collapse; width: 100%; margin: 8pt 0; page-break-inside: avoid; font-size: 9.5pt; }
+  th, td { border: 1px solid #b6c2d2; padding: 4pt 7pt; text-align: left; vertical-align: top; }
+  th { background: #e8eef6; color: #0e2a4e; font-weight: 600; }
+  tr:nth-child(even) td { background: #f6f8fb; }
+  code { font-family: "Consolas", "DejaVu Sans Mono", monospace; font-size: 9pt; background: #f0f3f7; padding: 0 3pt; border-radius: 2pt; }
+  pre {
+    font-family: "Consolas", "DejaVu Sans Mono", monospace; font-size: 8.8pt; line-height: 1.45;
+    background: #f0f3f7; border: 1px solid #cdd7e3; border-left: 3px solid #14406e;
+    padding: 7pt 9pt; border-radius: 3pt; white-space: pre-wrap; word-break: break-word;
+    page-break-inside: avoid; margin: 7pt 0;
+  }
+  pre code { background: none; padding: 0; }
+  ul, ol { margin: 5pt 0 5pt 0; padding-left: 20pt; }
+  li { margin: 2.5pt 0; }
+  .cover { text-align: center; padding-top: 130pt; page-break-after: always; }
+  .cover .rule { width: 60%; margin: 16pt auto; border-top: 3px solid #0e2a4e; }
+  .cover p.sub { font-size: 12.5pt; color: #33415c; margin: 8pt 0; }
+  .cover p.meta { font-size: 10.5pt; color: #5a6a82; }
+  .note {
+    background: #fdf6e3; border: 1px solid #e4cf8f; border-left: 4px solid #c9a227;
+    padding: 6pt 9pt; margin: 8pt 0; border-radius: 3pt; page-break-inside: avoid;
+  }
+  .danger {
+    background: #fbeeee; border: 1px solid #e3b1b1; border-left: 4px solid #b23a3a;
+    padding: 6pt 9pt; margin: 8pt 0; border-radius: 3pt; page-break-inside: avoid;
+  }
+  .pagebreak { page-break-before: always; }
+  .footer-tag { color: #8794a8; font-size: 8.5pt; text-align: center; margin-top: 30pt; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Universe Reinsurance Platform</h1>
+  <div class="rule"></div>
+  <p class="sub">Work Environment Deployment Specification</p>
+  <p class="sub">Server, Database, Network, Security, Monitoring, and Go-Live Checklist</p>
+  <p class="meta">Version 2.0 &mdash; July 2026 &mdash; Confidential</p>
+  <p class="meta">Supersedes Version 1.0 (April 2026)</p>
+</div>
+
+<h2>Document Control</h2>
+<table>
+  <tr><th style="width:28%">Field</th><th>Detail</th></tr>
+  <tr><td>Document name</td><td>Universe Reinsurance Platform &mdash; Work Environment Deployment Specification</td></tr>
+  <tr><td>Version</td><td>2.0 (supersedes 1.0, April 2026)</td></tr>
+  <tr><td>Date</td><td>July 2026</td></tr>
+  <tr><td>Classification</td><td>Confidential &mdash; For Internal IT Use Only</td></tr>
+  <tr><td>Scope</td><td>Server, database, network, security, monitoring, and go-live readiness</td></tr>
+  <tr><td>Source repository</td><td><code>https://github.com/Darchville-Analytics/modelling_tool</code></td></tr>
+  <tr><td>Living companion doc</td><td><code>DEPLOYMENT.md</code> in the repository root &mdash; always confirm against the latest code before relying on this snapshot</td></tr>
+</table>
+
+<h3>What Changed Since Version 1.0</h3>
+<table>
+  <tr><th style="width:34%">Area</th><th>v1.0 (April 2026)</th><th>v2.0 (current)</th></tr>
+  <tr><td>Repository</td><td><code>github.com/iwadaya/claude_universe</code></td><td><code>github.com/Darchville-Analytics/modelling_tool</code> (org-owned, private)</td></tr>
+  <tr><td>Application port</td><td>3000</td><td><b>4000</b> (default in <code>.env.example</code>)</td></tr>
+  <tr><td>Auth secret variable</td><td><code>JWT_SECRET</code></td><td><code>AUTH_JWT_SECRET</code> &mdash; production <b>refuses to boot</b> without a strong (&ge;32 char) value</td></tr>
+  <tr><td>Migrations</td><td><code>npm run migrate</code></td><td><code>npm run migrate:status</code> / <code>npm run migrate:up</code> (<code>--prefix server</code>); run as an explicit pre-deploy step, <code>RUN_MIGRATIONS_ON_BOOT=false</code> in production</td></tr>
+  <tr><td>PM2</td><td>Manual <code>pm2 start</code> flags, fixed 4 instances</td><td>Bundled <code>ecosystem.config.cjs</code> (auto instance count, derived <code>DB_POOL_MAX</code>, graceful reload)</td></tr>
+  <tr><td>Nginx pattern</td><td>Nginx serves <code>client/dist</code>; proxies <code>/api</code> only</td><td>Express serves the built SPA itself; Nginx proxies <b>everything</b> to <code>127.0.0.1:4000</code>; <code>client_max_body_size 50M</code></td></tr>
+  <tr><td>Authentication</td><td>Demo-era auth</td><td>Real scrypt credential check + signed bearer tokens; enforcing CSP; 12-char password policy; optional enterprise SSO/MFA</td></tr>
+  <tr><td>New production requirements</td><td>&mdash;</td><td><code>CORS_ORIGIN</code>, durable upload storage (<code>CLOUDINARY_URL</code> or <code>ALLOW_LOCAL_UPLOADS=true</code>), <code>REDIS_URL</code> for cluster mode, optional ClamAV scanning</td></tr>
+  <tr><td>Backups</td><td>Hand-written <code>pg_dump</code> cron</td><td>Checked-in, restore-verified scripts: <code>scripts/backup-db.sh</code>, <code>scripts/verify-restore.sh</code>, <code>scripts/universe-backup.cron</code>, <code>scripts/backup-uploads.sh</code></td></tr>
+  <tr><td>Alternative runtimes</td><td>PM2 only</td><td>PM2 + Nginx (recommended), Docker Compose, or systemd &mdash; see <code>DEPLOYMENT.md</code> &sect;6</td></tr>
+</table>
+
+<h2>1. Deployment Overview</h2>
+<p>This specification defines the requirements for deploying the Universe Reinsurance Platform (repository name: <code>modelling_tool</code>) in a corporate work environment. It is intended for internal IT administrators responsible for provisioning, configuring, securing, monitoring, and releasing the platform into production. Follow the sections in sequence to achieve a clean and repeatable deployment.</p>
+
+<h3>1.1 Platform Stack</h3>
+<table>
+  <tr><th>Layer</th><th>Technology</th><th>Version</th><th>Purpose</th></tr>
+  <tr><td>Frontend</td><td>React + Vite</td><td>React 19 / Vite 6.x</td><td>Browser-based SPA compiled to static assets, served by the API server from <code>client/dist</code></td></tr>
+  <tr><td>Backend</td><td>Node.js + Express</td><td>Node.js 20.18.0 (pinned in <code>.nvmrc</code> / <code>.node-version</code>) / Express 5</td><td>REST API server, business logic, and static SPA hosting</td></tr>
+  <tr><td>Database</td><td>PostgreSQL</td><td>14+ (16 or 17 recommended)</td><td>Persistent application data storage</td></tr>
+  <tr><td>Process manager</td><td>PM2</td><td>Latest stable</td><td>Cluster mode, on-boot start, graceful reload (config bundled in repo)</td></tr>
+  <tr><td>Reverse proxy</td><td>Nginx</td><td>1.24+</td><td>HTTPS termination and proxying to the app on port 4000</td></tr>
+  <tr><td>Rate-limit store</td><td>Redis / Valkey</td><td>Any current</td><td><b>Required for multi-instance / PM2 cluster deployments</b> (shared rate limits)</td></tr>
+  <tr><td>Source control</td><td>Git + GitHub</td><td>Git 2.34+</td><td>Code repository and deployment source</td></tr>
+</table>
+<p>The Express server serves both the API under <code>/api/*</code> and the built SPA. <b>No separate frontend host is required.</b></p>
+
+<h2>2. Server Requirements</h2>
+<h3>2.1 Sizing (approx. 30 concurrent users)</h3>
+<table>
+  <tr><th>Resource</th><th>Minimum</th><th>Comfortable / recommended</th></tr>
+  <tr><td>CPU</td><td>2 vCPU</td><td>4 vCPU (PM2 cluster uses up to 4 workers by default)</td></tr>
+  <tr><td>RAM</td><td>4 GB (Postgres on a separate host) / 8 GB (co-located Postgres)</td><td>8&ndash;16 GB</td></tr>
+  <tr><td>Disk</td><td>20 GB SSD</td><td>50 GB SSD; separate volume for PostgreSQL data in production</td></tr>
+  <tr><td>Backup storage</td><td>Off-host target for nightly dumps</td><td>Sized for &ge;30 daily dumps + uploads archive</td></tr>
+  <tr><td>Network</td><td>1 Gbps NIC, static IP</td><td>Dual NICs where available</td></tr>
+</table>
+<p class="note"><b>Note:</b> these figures are a starting point; revise after running the k6 capacity tests in <code>load-test/</code> (see <code>docs/scaling.md</code>).</p>
+
+<h3>2.2 Operating System Baseline</h3>
+<table>
+  <tr><th style="width:30%">Item</th><th>Requirement</th></tr>
+  <tr><td>Operating system</td><td>Ubuntu Server 22.04 LTS or 24.04 LTS, 64-bit</td></tr>
+  <tr><td>Filesystem</td><td>ext4 or XFS for data volumes</td></tr>
+  <tr><td>Swap</td><td>4&ndash;8 GB swap partition</td></tr>
+  <tr><td>Timezone</td><td>Set to the local timezone using <code>timedatectl set-timezone</code></td></tr>
+  <tr><td>Locale</td><td>en_US.UTF-8</td></tr>
+  <tr><td>Automatic updates</td><td>Enable <code>unattended-upgrades</code> for security patches only</td></tr>
+</table>
+
+<h2>3. Software Requirements</h2>
+<h3>3.1 Required Software Stack</h3>
+<table>
+  <tr><th style="width:22%">Package</th><th>Requirement / installation notes</th></tr>
+  <tr><td>Node.js</td><td><b>20.18.0</b> &mdash; pinned in <code>.nvmrc</code> and <code>.node-version</code>; use exactly what is there. Install via NodeSource (<code>curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -</code>) or nvm.</td></tr>
+  <tr><td>npm</td><td>npm 10.x, included with Node.js 20</td></tr>
+  <tr><td>PM2</td><td><code>sudo npm install -g pm2</code>, then <code>pm2 startup</code></td></tr>
+  <tr><td>PostgreSQL</td><td>14, 15, 16, or 17. <code>sudo apt install postgresql-16 postgresql-contrib</code></td></tr>
+  <tr><td>Git</td><td>2.34+. <code>sudo apt install git</code></td></tr>
+  <tr><td>Nginx</td><td><code>sudo apt install nginx</code> for HTTPS and reverse proxying</td></tr>
+  <tr><td>Certbot</td><td>Only when using Let's Encrypt: <code>sudo apt install certbot python3-certbot-nginx</code></td></tr>
+  <tr><td>Redis / Valkey</td><td>Only for PM2 cluster mode or multi-instance deployments: <code>sudo apt install redis-server</code></td></tr>
+  <tr><td>ClamAV</td><td>Recommended for production upload scanning: <code>sudo apt install clamav-daemon</code></td></tr>
+</table>
+
+<h3>3.2 Installation Sequence</h3>
+<ol>
+  <li>Update the operating system: <code>sudo apt update &amp;&amp; sudo apt upgrade -y</code></li>
+  <li>Install Node.js 20.18.0 (NodeSource or nvm)</li>
+  <li>Install PostgreSQL and create the database user (&sect;4)</li>
+  <li>Install Git and configure GitHub access (&sect;6.1) &mdash; <b>password authentication no longer works; a token or SSH deploy key is required</b></li>
+  <li>Clone the repository (&sect;6.2)</li>
+  <li>Install PM2 globally; install Nginx; install Redis if clustering</li>
+  <li>Create and secure the <code>.env</code> file from <code>.env.example</code> (&sect;5)</li>
+  <li>Run <code>npm run install:all</code>, then <code>npm run build</code></li>
+  <li>Run database migrations: <code>npm run migrate:up --prefix server</code></li>
+  <li>Start the application: <code>pm2 start ecosystem.config.cjs</code></li>
+  <li>Configure the Nginx reverse proxy (&sect;7)</li>
+  <li>Install and validate the SSL certificate</li>
+  <li>Schedule backups (&sect;4.3) and verify health endpoints (&sect;10)</li>
+</ol>
+
+<h2>4. Database Setup</h2>
+<h3>4.1 PostgreSQL Installation and Initial Configuration</h3>
+<pre># Install PostgreSQL
+sudo apt install -y postgresql-16 postgresql-contrib
+sudo systemctl enable --now postgresql
+
+# Create the database user and database
+sudo -u postgres psql &lt;&lt;SQL
+CREATE USER universe WITH PASSWORD 'CHANGE_ME_STRONG_PASSWORD';
+CREATE DATABASE universe OWNER universe;
+GRANT ALL PRIVILEGES ON DATABASE universe TO universe;
+SQL</pre>
+<p>The resulting connection string is:</p>
+<pre>DATABASE_URL=postgresql://universe:CHANGE_ME_STRONG_PASSWORD@localhost:5432/universe</pre>
+<p class="note"><b>URL-encoding:</b> if the password contains URL-special characters (<code>@ : / # %</code>), URL-encode them &mdash; e.g. <code>Sahara@66</code> becomes <code>Sahara%4066</code>.</p>
+<p>For a separate database host, install <code>postgresql-client-16</code> on the app server, allow the app server's IP in <code>pg_hba.conf</code> on the DB host, and append <code>?sslmode=require</code> to <code>DATABASE_URL</code>.</p>
+
+<h3>4.2 Connection Sizing</h3>
+<p>Postgres <code>max_connections</code> defaults to 100. The app's per-process pool default is 50 (<code>DB_POOL_MAX</code>). Leave at least 30 connections free for migrations, ad-hoc queries, and monitoring. In PM2 cluster mode each worker has its own pool &mdash; <code>ecosystem.config.cjs</code> automatically derives a safe per-worker <code>DB_POOL_MAX</code> (total &le; 80), but verify <code>workers &times; DB_POOL_MAX &lt; max_connections</code> if you override anything.</p>
+<p>For a 16 GB server, baseline tuning in <code>/etc/postgresql/16/main/postgresql.conf</code>: <code>shared_buffers = 4GB</code>, <code>effective_cache_size = 12GB</code>, <code>maintenance_work_mem = 1GB</code>, <code>checkpoint_completion_target = 0.9</code>, <code>wal_buffers = 64MB</code>, <code>random_page_cost = 1.1</code>, <code>work_mem = 40MB</code>. Scale these down proportionally on smaller hosts.</p>
+
+<h3>4.3 Backup Schedule (use the checked-in scripts)</h3>
+<p>The repository ships restore-verified backup tooling &mdash; do not hand-write <code>pg_dump</code> cron lines.</p>
+<table>
+  <tr><th style="width:32%">Script</th><th>What it does</th></tr>
+  <tr><td><code>scripts/backup-db.sh</code></td><td>Compressed <code>pg_dump -Fc</code> of <code>DATABASE_URL</code> into <code>BACKUP_DIR</code> (default <code>/var/backups/universe</code>); prunes dumps older than <code>BACKUP_RETENTION_DAYS</code> (default 30)</td></tr>
+  <tr><td><code>scripts/verify-restore.sh</code></td><td>Restores the newest dump into a throwaway scratch DB, sanity-checks it, and exits non-zero if the dump won't restore &mdash; catches silently corrupt backups</td></tr>
+  <tr><td><code>scripts/backup-uploads.sh</code></td><td>Backs up the uploads directory (slips and documents) alongside the database</td></tr>
+  <tr><td><code>scripts/universe-backup.cron</code></td><td>Host-cron schedule: nightly dump at 02:00 + weekly restore rehearsal (Sun 03:30)</td></tr>
+</table>
+<pre># Install the schedule (set DATABASE_URL in the cron environment first)
+crontab scripts/universe-backup.cron     # or copy into /etc/cron.d/
+
+# One-off manual verification
+DATABASE_URL=postgresql://universe:PASSWORD@localhost:5432/universe \
+BACKUP_DIR=/var/backups/universe scripts/backup-db.sh
+DATABASE_URL=postgresql://universe:PASSWORD@localhost:5432/universe \
+BACKUP_DIR=/var/backups/universe scripts/verify-restore.sh   # exit 0 = restorable</pre>
+<p>Copy dumps to off-host storage daily, retain &ge;30 daily dumps, and document a monthly restore test. A backup that has not been restored successfully is not a verified backup.</p>
+
+<h2>5. Environment Configuration</h2>
+<p>Copy the template and secure it. The <code>.env</code> file contains secrets, must be created on the server, and must never be committed to Git (it is in <code>.gitignore</code>).</p>
+<pre>cd /opt/universe
+cp .env.example .env
+nano .env          # fill in real values
+chmod 600 .env</pre>
+
+<h3>5.1 Key Environment Variables</h3>
+<table>
+  <tr><th style="width:26%">Variable</th><th style="width:14%">Required</th><th>Notes</th></tr>
+  <tr><td><code>NODE_ENV</code></td><td>Yes</td><td>Set to <code>production</code></td></tr>
+  <tr><td><code>PORT</code></td><td>Yes</td><td>App listens here. Default <b>4000</b> (was 3000 in v1.0)</td></tr>
+  <tr><td><code>DATABASE_URL</code></td><td>Yes</td><td>Postgres connection string (&sect;4.1)</td></tr>
+  <tr><td><code>AUTH_JWT_SECRET</code></td><td><b>Yes (production)</b></td><td>Signs login bearer tokens. Must be &ge;32 chars. <b>The server refuses to start in production without a strong value.</b> Generate: <code>node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"</code></td></tr>
+  <tr><td><code>CORS_ORIGIN</code></td><td>Yes</td><td>The public URL, e.g. <code>https://universe.internal.company.com</code>. Never <code>*</code> in production</td></tr>
+  <tr><td><code>SESSION_TTL_HOURS</code></td><td>No</td><td>Token lifetime; default 8 (a working day)</td></tr>
+  <tr><td><code>RUN_MIGRATIONS_ON_BOOT</code></td><td>No</td><td>Set <code>false</code> in production; run migrations as an explicit pre-deploy step (&sect;6.4)</td></tr>
+  <tr><td><code>CLOUDINARY_URL</code></td><td><b>Yes (production)</b></td><td>Durable private object storage for uploads. Without it, production uploads fail <code>503 STORAGE_NOT_DURABLE</code>. On a single box with a persistent volume you may instead set <code>ALLOW_LOCAL_UPLOADS=true</code></td></tr>
+  <tr><td><code>CLAMAV_ENABLED</code></td><td>Recommended</td><td><code>true</code> streams every upload to clamd before storage, fail-closed (infected &rarr; 422; scanner down &rarr; 503). Also <code>CLAMAV_HOST</code>/<code>PORT</code>/<code>TIMEOUT_MS</code></td></tr>
+  <tr><td><code>REDIS_URL</code></td><td><b>Yes (cluster)</b></td><td>Shared rate-limit store. Required for PM2 cluster mode or multiple replicas; otherwise limits are per-process (N processes allow N&times; the ceiling)</td></tr>
+  <tr><td><code>PRICING_STRICT</code></td><td>No</td><td><code>1</code> rejects client pricing drift with HTTP 422. <code>ecosystem.config.cjs</code> pins it to <code>1</code> in production</td></tr>
+  <tr><td><code>DB_POOL_MAX</code> / <code>DB_POOL_MIN</code></td><td>No</td><td>Defaults 50 / 4 per process; auto-derived per worker in cluster mode</td></tr>
+  <tr><td><code>AI_FEATURES_ENABLED</code> + <code>OPENAI_API_KEY</code></td><td>No</td><td>Master gate for AI slip ingestion; fail-closed when unset. <code>ANTHROPIC_API_KEY</code> / <code>GEMINI_API_KEY</code> optional fallbacks</td></tr>
+  <tr><td><code>IDENTITY_SSO_ENABLED</code> + <code>IDENTITY_*</code></td><td>Recommended</td><td>Enterprise SSO/MFA (OIDC) with break-glass accounts. See <code>docs/runbooks/sso-mfa-break-glass.md</code></td></tr>
+  <tr><td><code>ALLOW_DEMO_AUTH</code></td><td><b>Never in production</b></td><td>Dev/test only &mdash; enables the demo password and header identity. The server refuses to boot in production if set</td></tr>
+</table>
+<p class="danger"><b>Boot-time secret gate:</b> with <code>NODE_ENV=production</code> the server validates secrets before serving and exits with a clear error if <code>AUTH_JWT_SECRET</code> is missing, a placeholder, or shorter than 32 characters. It also logs <code>[posture]</code> warnings at startup for risky-but-valid settings (no durable upload storage, no <code>REDIS_URL</code> while multi-instance, SSO/MFA gaps) &mdash; review and clear these before go-live.</p>
+
+<h3>5.2 Generating Secure Secrets</h3>
+<pre># Auth token secret (also fine for SESSION_SECRET)
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+# or
+openssl rand -hex 64
+
+# Database password
+openssl rand -base64 32</pre>
+
+<h2>6. Application Deployment</h2>
+
+<h3>6.1 GitHub Access &mdash; Read This Before Cloning</h3>
+<p class="danger"><b>GitHub no longer accepts account passwords for Git operations.</b> Attempting to clone over HTTPS and typing your GitHub password produces: <code>remote: Invalid username or token. Password authentication is not supported for Git operations.</code> Also note the repository has <b>moved</b>: the old <code>iwadaya/universe</code> and <code>iwadaya/claude_universe</code> URLs are dead &mdash; the current private repository is <code>Darchville-Analytics/modelling_tool</code>.</p>
+<p><b>Option 1 &mdash; Fine-grained Personal Access Token (recommended for HTTPS):</b></p>
+<ol>
+  <li>On GitHub: <i>Settings &rarr; Developer settings &rarr; Personal access tokens &rarr; Fine-grained tokens &rarr; Generate new token</i>.</li>
+  <li>Resource owner: <b>Darchville-Analytics</b>; Repository access: <i>Only select repositories</i> &rarr; <code>modelling_tool</code>; Permissions: <i>Contents: Read-only</i>. Set a 90-day expiry (rotate per &sect;9.2).</li>
+  <li>On the server, store the credential once for the deploy user, then clone. When prompted, username is your GitHub username and <b>the password is the token</b>, not your GitHub password:</li>
+</ol>
+<pre>sudo -u universe -H git config --global credential.helper store
+sudo -u universe -H git clone \
+    https://github.com/Darchville-Analytics/modelling_tool.git /opt/universe
+# Username: &lt;your-github-username&gt;
+# Password: &lt;paste the fine-grained PAT&gt;</pre>
+<p>The token is saved (mode 600) in <code>~universe/.git-credentials</code>, so subsequent <code>git pull</code> during deploys will not prompt.</p>
+<p><b>Option 2 &mdash; SSH deploy key (no token to rotate on the server):</b></p>
+<pre>sudo -u universe -H ssh-keygen -t ed25519 -C "universe-deploy" -N "" \
+    -f /home/universe/.ssh/id_ed25519
+sudo -u universe -H cat /home/universe/.ssh/id_ed25519.pub
+# Add this public key on GitHub: repo -&gt; Settings -&gt; Deploy keys -&gt;
+# "Add deploy key" (leave "Allow write access" unticked)
+sudo -u universe -H git clone \
+    git@github.com:Darchville-Analytics/modelling_tool.git /opt/universe</pre>
+<p><b>Migrating an existing checkout</b> that still points at the old URL:</p>
+<pre>cd /opt/universe
+git remote set-url origin https://github.com/Darchville-Analytics/modelling_tool.git
+git fetch origin &amp;&amp; git pull origin main</pre>
+
+<h3>6.2 Repository Setup</h3>
+<p>Create a dedicated application user and deploy into <code>/opt/universe</code>. Do not run the application as root.</p>
+<pre># Create dedicated system user
+sudo useradd -m -s /bin/bash universe
+
+# Clone (after configuring access per 6.1) and take ownership
+sudo -u universe -H git clone \
+    https://github.com/Darchville-Analytics/modelling_tool.git /opt/universe
+cd /opt/universe
+
+# Install dependencies for root, client, and server; build the frontend
+npm run install:all
+npm run build</pre>
+
+<h3>6.3 Deployment Script</h3>
+<p>The repository ships <code>deploy.sh</code> at the repo root &mdash; use it rather than writing your own. It pulls <code>main</code>, runs <code>npm ci</code> for root/client/server (reproducible installs from the lockfiles), rebuilds the frontend, applies migrations, and reloads PM2:</p>
+<pre>chmod +x /opt/universe/deploy.sh
+/opt/universe/deploy.sh</pre>
+
+<h3>6.4 Database Migrations</h3>
+<p>Migrations live in <code>server/src/db/migrations/</code>, run in single transactions with savepoints, are idempotent, and are guarded by a Postgres advisory lock (cluster workers cannot double-apply). They do <b>not</b> run on boot in production &mdash; run them as an explicit pre-deploy step so a bad migration fails the deploy instead of taking the running version down:</p>
+<pre>npm run migrate:status --prefix server   # show applied vs. pending
+npm run migrate:up     --prefix server   # apply all pending</pre>
+
+<h3>6.5 PM2 Configuration</h3>
+<p>Use the bundled <code>ecosystem.config.cjs</code> &mdash; do not start with ad-hoc flags. It configures cluster mode (workers = CPU count, capped at 4; override with <code>PM2_INSTANCES</code>), a derived per-worker <code>DB_POOL_MAX</code>, graceful reload timing, memory-limit restarts, merged logs, and <code>PRICING_STRICT=1</code>:</p>
+<pre>cd /opt/universe
+pm2 start ecosystem.config.cjs
+pm2 save
+pm2 startup     # follow the printed command to enable on-boot start</pre>
+<p class="note"><b>Cluster mode requires <code>REDIS_URL</code>:</b> rate limits are per-process without it, so 4 workers would allow 4&times; the intended ceiling. The production posture check logs a warning if this is missed.</p>
+
+<h3>6.6 Alternative Runtimes</h3>
+<p>The repo also supports <b>Docker Compose</b> (bundled <code>Dockerfile</code> + <code>docker-compose.yml</code>; review before production use &mdash; the compose file carries development defaults) and <b>systemd</b> (single-process, hardened unit file example). Full recipes are in <code>DEPLOYMENT.md</code> &sect;6.2&ndash;6.3. Pick one runtime; do not mix them.</p>
+
+<h2>7. Nginx Reverse Proxy and SSL</h2>
+<p>Nginx terminates HTTPS and forwards <b>all</b> traffic to the Node.js app on port 4000. Unlike v1.0, Nginx does <b>not</b> serve <code>client/dist</code> directly &mdash; Express serves the SPA itself, so a single <code>location /</code> proxy block suffices.</p>
+
+<h3>7.1 Nginx Site Configuration</h3>
+<p>Create <code>/etc/nginx/sites-available/universe</code>:</p>
+<pre>server {
+    listen 80;
+    server_name universe.internal.company.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name universe.internal.company.com;
+
+    ssl_certificate     /etc/ssl/universe/cert.pem;
+    ssl_certificate_key /etc/ssl/universe/key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    server_tokens off;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    client_max_body_size 50M;   # matches the app's 50 MB upload limit
+
+    location / {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 60s;
+    }
+}</pre>
+<pre>sudo ln -s /etc/nginx/sites-available/universe /etc/nginx/sites-enabled/
+sudo nginx -t &amp;&amp; sudo systemctl reload nginx</pre>
+
+<h3>7.2 SSL Certificate Options</h3>
+<table>
+  <tr><th style="width:26%">Option</th><th>Guidance</th></tr>
+  <tr><td>Internal CA</td><td>Preferred for corporate environments. Request a certificate for the server hostname, install <code>cert.pem</code> and <code>key.pem</code></td></tr>
+  <tr><td>Wildcard certificate</td><td>Recommended where <code>*.yourcompany.com</code> is already managed by IT/security</td></tr>
+  <tr><td>Let's Encrypt</td><td>Only if the server has public DNS + internet access: <code>sudo certbot --nginx -d universe.internal.company.com</code></td></tr>
+  <tr><td>Self-signed</td><td>Development only</td></tr>
+</table>
+
+<h2>8. Network and Firewall Configuration</h2>
+<h3>8.1 Required Ports</h3>
+<table>
+  <tr><th>Port</th><th>Direction</th><th>Requirement</th></tr>
+  <tr><td>22 / SSH</td><td>Inbound</td><td>Admin access only; restrict to IT team IP ranges</td></tr>
+  <tr><td>80 / HTTP</td><td>Inbound</td><td>Redirect to HTTPS only</td></tr>
+  <tr><td>443 / HTTPS</td><td>Inbound</td><td>Main application access for users</td></tr>
+  <tr><td><b>4000</b> / Node.js</td><td>Internal only</td><td>Block external access; Nginx proxies to this port (was 3000 in v1.0)</td></tr>
+  <tr><td>5432 / PostgreSQL</td><td>Internal only</td><td>Block all external access; database on localhost or private subnet only</td></tr>
+  <tr><td>6379 / Redis</td><td>Internal only</td><td>Only if clustering; never expose externally</td></tr>
+</table>
+
+<h3>8.2 UFW Firewall Baseline</h3>
+<pre>sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow from 192.168.1.0/24 to any port 22   # restrict SSH to admin range
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable &amp;&amp; sudo ufw status verbose</pre>
+
+<h3>8.3 DNS and Outbound Access</h3>
+<ul>
+  <li>A record for <code>universe.internal.company.com</code> (or <code>universe.internal</code> for LAN-only) pointing at the server IP.</li>
+  <li>If AI slip ingestion is enabled, the server must reach <code>api.openai.com</code> (and optionally <code>api.anthropic.com</code>, <code>generativelanguage.googleapis.com</code>).</li>
+  <li>The server must reach <code>github.com</code> over HTTPS (or SSH port 22) for deploys.</li>
+</ul>
+
+<h2>9. Security Requirements</h2>
+<h3>9.1 Access Control</h3>
+<table>
+  <tr><th style="width:28%">Area</th><th>Requirement</th></tr>
+  <tr><td>SSH authentication</td><td>Key authentication only; <code>PasswordAuthentication no</code> and <code>PermitRootLogin no</code> in <code>/etc/ssh/sshd_config</code></td></tr>
+  <tr><td>Application users</td><td>Real credential auth: scrypt-hashed passwords, signed bearer tokens, role and authority re-read from the DB on every request. Roles (Actuary, Underwriter, Chief roles, Admin) managed in-app</td></tr>
+  <tr><td>Password policy</td><td>Enforced minimum 12 characters; seeded temp password rejected on change; common weak values rejected</td></tr>
+  <tr><td>SSO / MFA</td><td>Recommended for production: OIDC SSO with enforced MFA and audited break-glass accounts (<code>docs/runbooks/sso-mfa-break-glass.md</code>)</td></tr>
+  <tr><td>sudo access</td><td>Named administrators only; never run the app as root &mdash; use the <code>universe</code> user</td></tr>
+  <tr><td>File permissions</td><td><code>chmod 600 .env</code>, <code>chmod 755 deploy.sh</code>, <code>chown -R universe:universe /opt/universe</code></td></tr>
+</table>
+
+<h3>9.2 Secrets Management</h3>
+<table>
+  <tr><th style="width:28%">Secret / asset</th><th>Requirement</th></tr>
+  <tr><td><code>.env</code> file</td><td>Server only, mode 600, never committed</td></tr>
+  <tr><td>GitHub access</td><td>Fine-grained PAT scoped to <code>modelling_tool</code> with <i>Contents: Read-only</i>, 90-day expiry, rotate on schedule &mdash; or a read-only SSH deploy key. Never use an account password (unsupported) or a classic full-scope token</td></tr>
+  <tr><td>Database password</td><td>&ge;32 characters, stored only in <code>.env</code> (URL-encoded if needed)</td></tr>
+  <tr><td><code>AUTH_JWT_SECRET</code></td><td>&ge;32 chars (48 random bytes recommended); production refuses to boot without it</td></tr>
+  <tr><td>Rotation</td><td>Rotate all secrets every 90 days, or immediately on suspected compromise</td></tr>
+</table>
+
+<h3>9.3 Security Hardening Checklist</h3>
+<ul>
+  <li>Disable root SSH login and SSH password authentication.</li>
+  <li>Enable automatic security updates (<code>unattended-upgrades</code>); install <code>fail2ban</code>.</li>
+  <li>Run the app as the non-root <code>universe</code> user; keep Node/Postgres/Nginx on supported versions.</li>
+  <li>PostgreSQL: <code>listen_addresses = 'localhost'</code> (or private subnet only); enable TLS for remote DB connections.</li>
+  <li>Nginx: <code>server_tokens off</code>, HSTS header enabled (the app itself already ships an <b>enforcing nonce-based Content-Security-Policy</b> via Helmet &mdash; do not add a conflicting CSP in Nginx).</li>
+  <li>Never set <code>ALLOW_DEMO_AUTH</code> or <code>ALLOW_OPEN_REGISTRATION</code> in production.</li>
+  <li>Enable ClamAV upload scanning (<code>CLAMAV_ENABLED=true</code>) with a reachable clamd.</li>
+  <li>Rotate or deactivate seeded accounts after first login (&sect;11.5).</li>
+</ul>
+
+<h2>10. Monitoring and Alerting</h2>
+<h3>10.1 Application Health Endpoints</h3>
+<table>
+  <tr><th style="width:30%">Endpoint</th><th>Purpose</th></tr>
+  <tr><td><code>GET /api/health</code></td><td>Shallow health, no DB round-trip &mdash; use for load-balancer probes</td></tr>
+  <tr><td><code>GET /api/health/deep</code></td><td>Forces a Postgres round-trip, returns pool stats. <code>db.ok</code> must be <code>true</code>; watch the <code>X-Pool-Waiting</code> header &mdash; sustained values &gt; 0 mean <code>DB_POOL_MAX</code> needs raising</td></tr>
+</table>
+<pre>curl -s http://localhost:4000/api/health | jq
+curl -s http://localhost:4000/api/health/deep | jq</pre>
+
+<h3>10.2 PM2 and System Checks</h3>
+<pre>pm2 monit                          # real-time monitoring
+pm2 status                         # process status
+pm2 logs universe --lines 100      # live logs (JSON to stdout)
+pm2 logs universe --err --lines 50 # error logs only
+free -h &amp;&amp; uptime                  # CPU / memory
+df -h                              # disk
+ss -tlnp | grep -E "80|443|4000|5432"   # listening ports</pre>
+
+<h3>10.3 Observability and Alerting</h3>
+<table>
+  <tr><th style="width:30%">Area</th><th>Recommendation</th></tr>
+  <tr><td>Tracing</td><td>Set <code>OTEL_ENABLED=1</code> and <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> for OpenTelemetry traces (<code>docs/observability.md</code>)</td></tr>
+  <tr><td>Metrics</td><td>Prometheus <code>/metrics</code> on <code>PROM_EXPORTER_PORT</code> (default 9464) when OTel is enabled</td></tr>
+  <tr><td>Uptime</td><td>Probe <code>/api/health</code> every 60 s (UptimeRobot / Grafana)</td></tr>
+  <tr><td>Log aggregation</td><td>Structured JSON logs to stdout; ship via PM2 &rarr; Loki/ELK; grep by <code>requestId</code></td></tr>
+  <tr><td>Alerting</td><td>Alert on repeated restarts, disk &gt; 85%, <code>[ratelimit] degraded</code> log lines, and <code>[posture]</code> startup warnings</td></tr>
+  <tr><td>Backup verification</td><td><code>scripts/verify-restore.sh</code> weekly (cron) + documented monthly manual restore test</td></tr>
+</table>
+
+<h2>11. Go-Live Checklist</h2>
+<p>Complete and sign off every item before releasing the platform to production.</p>
+<h3>11.1 Infrastructure</h3>
+<ul>
+  <li>Server provisioned per &sect;2; Ubuntu 22.04/24.04 LTS installed and updated.</li>
+  <li>Firewall configured; 80/443 open; 4000, 5432, 6379 internal only.</li>
+  <li>DNS record resolving; SSL certificate installed and HTTPS validated.</li>
+</ul>
+<h3>11.2 Software</h3>
+<ul>
+  <li>Node.js 20.18.0 installed (<code>node --version</code> matches <code>.nvmrc</code>).</li>
+  <li>PostgreSQL 14+ installed and running; PM2 installed with <code>pm2 startup</code> configured; Nginx configured.</li>
+  <li>Git access working via PAT or deploy key (&sect;6.1); repository cloned from <code>Darchville-Analytics/modelling_tool</code>.</li>
+  <li>Redis installed and <code>REDIS_URL</code> set if running cluster mode.</li>
+</ul>
+<h3>11.3 Configuration</h3>
+<ul>
+  <li><code>.env</code> created from <code>.env.example</code>, permissions 600, no <code>CHANGE_ME</code> placeholders remain.</li>
+  <li><code>NODE_ENV=production</code>; <code>AUTH_JWT_SECRET</code> is a strong generated value; <code>CORS_ORIGIN</code> set to the public URL.</li>
+  <li>Durable upload storage configured (<code>CLOUDINARY_URL</code>, or <code>ALLOW_LOCAL_UPLOADS=true</code> on a single persistent box).</li>
+  <li><code>ALLOW_DEMO_AUTH</code> and <code>ALLOW_OPEN_REGISTRATION</code> are NOT set.</li>
+  <li>Startup log shows no unresolved <code>[posture]</code> warnings.</li>
+</ul>
+<h3>11.4 Database</h3>
+<ul>
+  <li>User and database created; <code>npm run migrate:up --prefix server</code> completes; <code>migrate:status</code> shows no pending migrations.</li>
+  <li>Reference data seeded (expect 75 countries, 32 currencies on first boot).</li>
+  <li>Backup cron installed (&sect;4.3); first backup taken and <code>verify-restore.sh</code> exits 0.</li>
+</ul>
+<h3>11.5 Application</h3>
+<ul>
+  <li><code>npm run install:all</code> and <code>npm run build</code> completed; PM2 running via <code>ecosystem.config.cjs</code>; <code>pm2 save</code> run.</li>
+  <li><code>deploy.sh</code> tested end-to-end.</li>
+  <li>Seeded accounts handled: log in as the Chief Actuary account (<code>chongo.nkalamo</code>, temp password <code>Universe#1234</code>, forced change on first login), create real users via <i>Admin &rarr; Add User</i>, then rotate or deactivate every seeded account not needed.</li>
+</ul>
+<h3>11.6 Functional Testing</h3>
+<ul>
+  <li>App loads over HTTPS; login works and forces a password change on seeded accounts.</li>
+  <li><code>/api/health</code> and <code>/api/health/deep</code> return ok; treaty creation/saving works; NP and proportional pricing screens calculate; Actuarial Workbench loads.</li>
+  <li>PM2 restarts the app after a manual kill test; <code>deploy.sh</code> runs clean.</li>
+</ul>
+
+<h2>12. Common Issues and Troubleshooting</h2>
+
+<h3>12.1 Git Clone or Pull Fails: "Password authentication is not supported"</h3>
+<p>Symptom: <code>remote: Invalid username or token. Password authentication is not supported for Git operations. fatal: Authentication failed</code>.</p>
+<p>Causes and fix, in order:</p>
+<ol>
+  <li><b>Wrong URL:</b> the repository moved &mdash; use <code>https://github.com/Darchville-Analytics/modelling_tool.git</code>, not any <code>iwadaya/…</code> URL. For an existing checkout: <code>git remote set-url origin https://github.com/Darchville-Analytics/modelling_tool.git</code>.</li>
+  <li><b>Password typed at the prompt:</b> GitHub removed password auth for Git in 2021. At the password prompt paste a <b>fine-grained personal access token</b> (&sect;6.1 Option 1), or switch to an SSH deploy key (&sect;6.1 Option 2).</li>
+  <li><b>Token rejected:</b> confirm the token's resource owner is <code>Darchville-Analytics</code>, it includes <code>modelling_tool</code>, has <i>Contents: Read</i>, has not expired, and (for org repos) has been approved by an org admin.</li>
+  <li><b>Prompted on every pull:</b> enable the credential store for the deploy user: <code>sudo -u universe -H git config --global credential.helper store</code>, then pull once and enter the token.</li>
+</ol>
+
+<h3>12.2 Application Returns 500 Errors</h3>
+<p><code>pm2 logs universe --err --lines 30</code>. Common causes: missing <code>.env</code> variable, failed DB connection, or migrations not run.</p>
+
+<h3>12.3 Server Exits Immediately on Start (Production)</h3>
+<p>The boot-time secret gate is working as designed: set a strong <code>AUTH_JWT_SECRET</code> (&sect;5.1). The startup log states exactly which check failed.</p>
+
+<h3>12.4 Cannot Connect to the Database</h3>
+<p><code>sudo systemctl status postgresql</code>, then verify the URL with <code>psql "$DATABASE_URL" -c "SELECT 1"</code>. <code>ECONNREFUSED ::1:5432</code> means Postgres is down or <code>DATABASE_URL</code> is wrong. Check <code>pg_hba.conf</code> permits the connection; remember to URL-encode special characters in the password.</p>
+
+<h3>12.5 Nginx 502 Bad Gateway</h3>
+<p>Node is not listening on port 4000 (or <code>proxy_pass</code> doesn't match <code>PORT</code>):</p>
+<pre>pm2 status
+ss -tlnp | grep 4000
+pm2 restart universe   # if stopped</pre>
+
+<h3>12.6 Uploads Fail with 503 STORAGE_NOT_DURABLE</h3>
+<p>Production requires durable upload storage. Set <code>CLOUDINARY_URL</code>, or on a single box with a persistent volume set <code>ALLOW_LOCAL_UPLOADS=true</code> (&sect;5.1). A 503 on upload with <code>CLAMAV_ENABLED=true</code> can also mean clamd is unreachable &mdash; check <code>CLAMAV_HOST</code>/<code>CLAMAV_PORT</code>.</p>
+
+<h3>12.7 Login Screen Lists No Users / Login Fails After Fresh Install</h3>
+<p>Reference data didn't seed or migrations didn't run. Tail the logs for migration errors and re-run <code>npm run migrate:up --prefix server</code>.</p>
+
+<h3>12.8 Migration Fails</h3>
+<p>Read the SQL error &mdash; it identifies the failing statement. Migrations roll back atomically, so the DB is never half-applied; <code>permission denied</code> usually means the <code>GRANT ALL</code> from &sect;4.1 was missed. Re-run after fixing &mdash; <code>migrate:up</code> is idempotent.</p>
+
+<h3>12.9 PM2 App Keeps Restarting</h3>
+<p><code>pm2 logs universe --err</code>. Typical causes: missing env variables (see 12.3), port conflict on 4000, or a worker exceeding the 1 GB memory ceiling (check for <code>max_memory_restart</code> events in <code>pm2 show universe</code>).</p>
+
+<h3>12.10 HTTPS Certificate Error</h3>
+<p><code>sudo nginx -t</code>; if Let's Encrypt is used, <code>sudo certbot renew</code>.</p>
+
+<h2>Appendix A. Quick Command Reference</h2>
+<table>
+  <tr><th style="width:34%">Task</th><th>Command</th></tr>
+  <tr><td>Run deployment</td><td><code>/opt/universe/deploy.sh</code></td></tr>
+  <tr><td>Reload app (zero downtime)</td><td><code>pm2 reload ecosystem.config.cjs</code></td></tr>
+  <tr><td>Restart app</td><td><code>pm2 restart universe</code></td></tr>
+  <tr><td>View status</td><td><code>pm2 status</code></td></tr>
+  <tr><td>View live logs</td><td><code>pm2 logs universe --lines 100</code></td></tr>
+  <tr><td>View error logs</td><td><code>pm2 logs universe --err --lines 50</code></td></tr>
+  <tr><td>Migration status</td><td><code>npm run migrate:status --prefix server</code></td></tr>
+  <tr><td>Apply migrations</td><td><code>npm run migrate:up --prefix server</code></td></tr>
+  <tr><td>Shallow / deep health</td><td><code>curl -s localhost:4000/api/health | jq</code> &nbsp;/&nbsp; <code>…/api/health/deep | jq</code></td></tr>
+  <tr><td>Test / reload Nginx</td><td><code>sudo nginx -t</code> &nbsp;/&nbsp; <code>sudo systemctl reload nginx</code></td></tr>
+  <tr><td>Check ports</td><td><code>ss -tlnp | grep -E "80|443|4000|5432"</code></td></tr>
+  <tr><td>Backup now</td><td><code>scripts/backup-db.sh</code> (with <code>DATABASE_URL</code> set)</td></tr>
+  <tr><td>Verify backups restorable</td><td><code>scripts/verify-restore.sh</code></td></tr>
+</table>
+
+<h2>Appendix B. Production Readiness Summary</h2>
+<p>The deployment is production-ready only when the following are all true:</p>
+<ul>
+  <li>HTTPS works using an approved certificate; HSTS enabled; <code>server_tokens off</code>.</li>
+  <li>SSH is key-only and restricted to authorised administrators.</li>
+  <li>PostgreSQL and Redis are not externally exposed.</li>
+  <li>The application runs under the non-root <code>universe</code> user via <code>ecosystem.config.cjs</code>, with <code>pm2 save</code> + <code>pm2 startup</code> done.</li>
+  <li><code>AUTH_JWT_SECRET</code> is a strong generated secret; no <code>[posture]</code> warnings remain at startup.</li>
+  <li>Durable upload storage is configured; ClamAV scanning is enabled (or the risk is formally accepted).</li>
+  <li>GitHub access uses a scoped fine-grained PAT or read-only deploy key &mdash; never an account password.</li>
+  <li>Backups run automatically via <code>scripts/universe-backup.cron</code> and <code>verify-restore.sh</code> passes; restore tests are documented monthly.</li>
+  <li>Seeded accounts have been rotated or deactivated; monitoring and alerting are active.</li>
+  <li>The full go-live checklist (&sect;11) has been signed off.</li>
+</ul>
+
+<p class="footer-tag">Universe Reinsurance Platform &mdash; Confidential &mdash; For Internal IT Use Only &mdash; v2.0, July 2026</p>
+
+</body>
+</html>
