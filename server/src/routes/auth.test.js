@@ -948,23 +948,16 @@ describe('GET /auth/users', () => {
     expect(usersQuery.sql).not.toMatch(/user_mandate|treaty_limit_usd|single_risk_limit_usd|u\.email|u\.office|hierarchy_level/);
   });
 
-  it('hides the seeded demo/test accounts from the PUBLIC login-screen list but keeps real people', async () => {
+  it('lists the migration-132 demo personas alongside real people (nothing filtered)', async () => {
     scenario.usersList = [
-      { user_id: 'u-cuo', username: 'cuo', display_name: 'Chief Underwriting Officer', role_code: 'CU', role_name: 'Chief Underwriter' },
-      { user_id: 'u-uw', username: 'underwriter', display_name: 'Underwriter', role_code: 'TUW', role_name: 'Underwriter' },
-      { user_id: 'u-edwin', username: 'edwin.taruvinga', display_name: 'Edwin Taruvinga', role_code: 'UW', role_name: 'Underwriter' },
-      { user_id: 'u-catho', username: 'catho.ba', display_name: 'Catho Ba', role_code: 'UW', role_name: 'Underwriter' },
-      { user_id: 'u-chongo', username: 'chongo.nkalamo', display_name: 'Chongo Nkalamo', role_code: 'CA', role_name: 'Chief Actuary' },
-      { user_id: 'u-ishe', username: 'ishe.wadaya', display_name: 'Ishe Wadaya', role_code: 'TUW', role_name: 'Underwriter' },
+      { user_id: 'u-cuo', username: 'chief.underwriter', display_name: 'Chief Underwriter', role_code: 'CU', role_name: 'Chief Underwriter' },
+      { user_id: 'u-uw1', username: 'underwriter1', display_name: 'Underwriter 1', role_code: 'UW', role_name: 'Underwriter' },
+      { user_id: 'u-uw2', username: 'underwriter2', display_name: 'Underwriter 2', role_code: 'UW', role_name: 'Underwriter' },
+      { user_id: 'u-ishe', username: 'ishe.wadaya', display_name: 'Ishe Wadaya', role_code: 'UW', role_name: 'Underwriter' },
     ];
-    // Unauthenticated (login screen): only the real person remains.
     const anon = await call(buildApp(), { method: 'GET', path: '/auth/users' });
     expect(anon.status).toBe(200);
-    expect(anon.body.map((u) => u.username)).toEqual(['ishe.wadaya']);
-    // Authenticated (admin screen): everyone is still visible.
-    currentUser = { userId: 'u-cu', roleCode: 'CU', hierarchyLevel: 2, displayName: 'CU' };
-    const authed = await call(buildApp(), { method: 'GET', path: '/auth/users' });
-    expect(authed.body).toHaveLength(6);
+    expect(anon.body.map((u) => u.username)).toEqual(['chief.underwriter', 'underwriter1', 'underwriter2', 'ishe.wadaya']);
   });
 
   it('authenticated callers get the full record (mandate join) for the admin screen', async () => {

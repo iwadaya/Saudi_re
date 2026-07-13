@@ -13,8 +13,8 @@ import ThemeSwitcher from '../../components/ThemeSwitcher';
 // user record (set via the Add-user Title select) and drive routing/mandate
 // silently after login from the server's session response.
 const DEMO_FALLBACK = [
-  { user_id:'00000000-0000-0000-0000-000000000001', username:'cuo',         display_name:'Chief Underwriting Officer', email:'cuo@universe3.app', role_code:'CU',  office:'Riyadh', treaty_limit_usd:null,     approvals_required:1 },
-  { user_id:'00000000-0000-0000-0000-000000000002', username:'underwriter', display_name:'Underwriter',                email:'uw@universe3.app',  role_code:'TUW', office:'Riyadh', treaty_limit_usd:10000000, approvals_required:2 },
+  { user_id:'00000000-0000-0000-0000-000000000001', username:'chief.underwriter', display_name:'Chief Underwriter', email:'chief.underwriter@universe3.app', role_code:'CU', office:'Riyadh', treaty_limit_usd:null,     approvals_required:1 },
+  { user_id:'00000000-0000-0000-0000-000000000002', username:'underwriter1',      display_name:'Underwriter 1',     email:'underwriter1@universe3.app',      role_code:'UW', office:'Riyadh', treaty_limit_usd:25000000, approvals_required:1 },
 ];
 
 // One shared box model for every login control so the underwriter <select> and
@@ -388,18 +388,7 @@ export default function LoginScreen() {
                   className="form-input"
                   aria-label="Underwriter"
                   value={sel?.user_id || ''}
-                  onChange={e => {
-                    const u = users.find(x => x.user_id === e.target.value) || null;
-                    setSelectedUser(u);
-                    setError('');
-                    // Name mode: picking a person pre-fills the name fields so
-                    // one click + Sign In gets them back in as themselves.
-                    if (nameAuth && u?.display_name) {
-                      const parts = String(u.display_name).trim().split(/\s+/);
-                      setFirstName(parts[0] || '');
-                      setSurname(parts.slice(1).join(' '));
-                    }
-                  }}
+                  onChange={e => { setSelectedUser(users.find(u => u.user_id === e.target.value) || null); setError(''); }}
                   onFocus={onFieldFocus}
                   onBlur={onFieldBlur}
                   style={FIELD_STYLE}
@@ -416,44 +405,6 @@ export default function LoginScreen() {
             )}
           </div>
 
-          {nameAuth ? (
-          /* ── Passwordless name sign-in (pilot) — no password field at all ── */
-          <form onSubmit={handleNameLogin} aria-label="Sign in">
-            <div style={NAME_FORM_ROW}>
-              <label htmlFor="login-first-name" style={NAME_FIELD_LABEL}>First name</label>
-              <input id="login-first-name" type="text" className="form-input"
-                value={firstName} onChange={e => { setFirstName(e.target.value); setError(''); }}
-                placeholder="First name" autoComplete="given-name" maxLength={40}
-                aria-invalid={!!error}
-                onFocus={onFieldFocus} onBlur={onFieldBlur}
-                style={NAME_FIELD_STACKED} />
-              <label htmlFor="login-surname" style={NAME_FIELD_LABEL}>Surname</label>
-              <input id="login-surname" type="text" className="form-input"
-                value={surname} onChange={e => { setSurname(e.target.value); setError(''); }}
-                placeholder="Surname" autoComplete="family-name" maxLength={40}
-                aria-describedby={error ? 'login-error' : undefined}
-                aria-invalid={!!error}
-                onFocus={onFieldFocus} onBlur={onFieldBlur}
-                style={FIELD_STYLE} />
-              <div style={NAME_HINT}>
-                No password needed — you'll be signed in (and remembered) by name.
-              </div>
-            </div>
-
-            {error && (
-              <div id="login-error" role="alert" style={LOGIN_ERR_BANNER}>
-                {error}
-              </div>
-            )}
-
-            <button type="submit" disabled={loading || !firstName.trim() || !surname.trim()}
-              className="action-pill action-pill--primary"
-              aria-label={loading ? 'Signing in' : 'Sign in'}
-              style={signInBtnStyle(loading || !firstName.trim() || !surname.trim())}>
-              {loading ? 'Signing in…' : <>Sign In <span aria-hidden="true">→</span></>}
-            </button>
-          </form>
-          ) : (
           <form onSubmit={handleLogin} aria-label="Sign in">
             <div style={{ marginBottom: 16 }}>
               <label htmlFor="login-password" style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'rgba(var(--text-rgb),.7)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 6 }}>Password</label>
@@ -480,7 +431,7 @@ export default function LoginScreen() {
             </div>
 
             {error && (
-              <div id="login-error" role="alert" style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.30)', color: '#f87171', fontSize: 12, marginBottom: 14 }}>
+              <div id="login-error" role="alert" style={LOGIN_ERR_BANNER}>
                 {error}
               </div>
             )}
@@ -490,6 +441,41 @@ export default function LoginScreen() {
               aria-label={loading ? 'Signing in' : 'Sign in'}
               style={{ width: '100%', minHeight: FIELD_HEIGHT, borderRadius: FIELD_RADIUS, fontSize: 14, fontWeight: 700, opacity: (loading || !sel || !password) ? 0.5 : 1 }}>
               {loading ? 'Signing in…' : <>Sign In <span aria-hidden="true">→</span></>}
+            </button>
+          </form>
+
+          {/* ── Passwordless name sign-in (pilot) — offered ALONGSIDE the
+                 password form: demo personas (Underwriter 1…, Chief
+                 Underwriter) use the password; testers type their name. ── */}
+          {nameAuth && (
+          <form onSubmit={handleNameLogin} aria-label="Sign in by name">
+            <div style={SSO_DIVIDER} aria-hidden="true">
+              <span style={SSO_DIVIDER_LINE} />
+              <span style={SSO_DIVIDER_TEXT}>or sign in by name</span>
+              <span style={SSO_DIVIDER_LINE} />
+            </div>
+            <div style={NAME_FORM_ROW}>
+              <label htmlFor="login-first-name" style={NAME_FIELD_LABEL}>First name</label>
+              <input id="login-first-name" type="text" className="form-input"
+                value={firstName} onChange={e => { setFirstName(e.target.value); setError(''); }}
+                placeholder="First name" autoComplete="given-name" maxLength={40}
+                onFocus={onFieldFocus} onBlur={onFieldBlur}
+                style={NAME_FIELD_STACKED} />
+              <label htmlFor="login-surname" style={NAME_FIELD_LABEL}>Surname</label>
+              <input id="login-surname" type="text" className="form-input"
+                value={surname} onChange={e => { setSurname(e.target.value); setError(''); }}
+                placeholder="Surname" autoComplete="family-name" maxLength={40}
+                onFocus={onFieldFocus} onBlur={onFieldBlur}
+                style={FIELD_STYLE} />
+              <div style={NAME_HINT}>
+                No password needed — you'll be signed in (and remembered) by name.
+              </div>
+            </div>
+            <button type="submit" disabled={loading || !firstName.trim() || !surname.trim()}
+              className="action-pill action-pill--primary"
+              aria-label="Sign in without password"
+              style={signInBtnStyle(loading || !firstName.trim() || !surname.trim())}>
+              {loading ? 'Signing in…' : <>Sign in without password <span aria-hidden="true">→</span></>}
             </button>
           </form>
           )}

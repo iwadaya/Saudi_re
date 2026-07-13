@@ -185,18 +185,12 @@ function nameAuthEnabled() {
 }
 
 
-// Seeded demo/test accounts hidden from the PUBLIC (login-screen) user list so
-// a pilot deployment shows only real people. The rows themselves are untouched
-// (admins still see them when authenticated, and they can still sign in).
-const HIDDEN_DEMO_USERNAMES = new Set([
-  'cuo', 'underwriter',                             // migrations 034/037 demo pair
-  'edwin.taruvinga', 'catho.ba', 'chongo.nkalamo',  // migration 123 seeded testers
-]);
-
-// Static fallback — used when DB tables aren't ready yet (before migrations run)
+// Static fallback — used when DB tables aren't ready yet (before migrations
+// run). Mirrors the migration-132 demo personas (Chief Underwriter approves;
+// Underwriter 1 prices) so the login list looks the same either way.
 const DEMO_USERS_FALLBACK = [
-  { user_id:'00000000-0000-0000-0000-000000000001', username:'cuo', display_name:'Chief Underwriting Officer', email:'cuo@universe3.app', role_code:'CU', role_name:'Chief Underwriter', hierarchy_level:2, office:'Riyadh', treaty_limit_usd:null, approvals_required:1, is_active:true },
-  { user_id:'00000000-0000-0000-0000-000000000002', username:'underwriter', display_name:'Underwriter', email:'uw@universe3.app', role_code:'TUW', role_name:'Underwriter', hierarchy_level:5, office:'Riyadh', treaty_limit_usd:10000000, approvals_required:2, is_active:true },
+  { user_id:'00000000-0000-0000-0000-000000000001', username:'chief.underwriter', display_name:'Chief Underwriter', email:'chief.underwriter@universe3.app', role_code:'CU', role_name:'Chief Underwriter', hierarchy_level:2, office:'Riyadh', treaty_limit_usd:null, approvals_required:1, is_active:true },
+  { user_id:'00000000-0000-0000-0000-000000000002', username:'underwriter1', display_name:'Underwriter 1', email:'underwriter1@universe3.app', role_code:'UW', role_name:'Underwriter', hierarchy_level:4, office:'Riyadh', treaty_limit_usd:25000000, approvals_required:1, is_active:true },
 ];
 
 function buildSession(user) {
@@ -667,11 +661,7 @@ router.get('/auth/users', asyncHandler(async (req, res) => {
     );
     // No users yet — return static demo fallback
     if (!rows.length) return res.json(DEMO_USERS_FALLBACK);
-    // Pre-auth (login screen) the seeded demo/test accounts are hidden so only
-    // real people are listed; the admin (authenticated) view keeps everyone.
-    return res.json(
-      authed ? rows : rows.filter(u => !HIDDEN_DEMO_USERNAMES.has(String(u.username || '').toLowerCase()))
-    );
+    return res.json(rows);
   } catch (e) {
     // Tables not yet created — return static demo fallback so login screen works
     logger.warn('auth/users: DB tables not ready, using fallback', { error: e.message.split('\n')[0] });

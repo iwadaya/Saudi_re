@@ -141,41 +141,46 @@ describe('LoginScreen — passwordless name sign-in (Saudi Re pilot)', () => {
     apiMock.getNameLoginStatus.mockResolvedValue({ enabled: true });
   });
 
-  it('replaces the password field with First name + Surname when the server enables name auth', async () => {
+  it('offers name sign-in ALONGSIDE the password form (demo personas keep their password)', async () => {
     render(<LoginScreen />);
     await screen.findByLabelText(/first name/i);
     expect(screen.getByLabelText(/surname/i)).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText('Enter your password')).toBeNull();
+    // The password form stays — Underwriter 1 / Chief Underwriter sign in with demo2026.
+    expect(screen.getByPlaceholderText('Enter your password')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sign in without password/i })).toBeInTheDocument();
   });
 
   it('signs in with just a name and stores the server session on this device', async () => {
     render(<LoginScreen />);
     fireEvent.change(await screen.findByLabelText(/first name/i), { target: { value: 'Ishe' } });
     fireEvent.change(screen.getByLabelText(/surname/i), { target: { value: 'Wadaya' } });
-    fireEvent.click(screen.getByRole('button', { name: /Sign In/i }));
+    fireEvent.click(screen.getByRole('button', { name: /sign in without password/i }));
 
     await waitFor(() => expect(apiMock.nameLogin).toHaveBeenCalledWith({ first_name: 'Ishe', surname: 'Wadaya' }));
     await waitFor(() => expect(getSession()?.displayName).toBe('Ishe Wadaya'));
     expect(apiMock.loginUser).not.toHaveBeenCalled();
   });
 
-  it('keeps Sign In disabled until both names are entered', async () => {
+  it('keeps the name button disabled until both names are entered', async () => {
     render(<LoginScreen />);
     await screen.findByLabelText(/first name/i);
-    expect(screen.getByRole('button', { name: /Sign In/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /sign in without password/i })).toBeDisabled();
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: 'Ishe' } });
-    expect(screen.getByRole('button', { name: /Sign In/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /sign in without password/i })).toBeDisabled();
     fireEvent.change(screen.getByLabelText(/surname/i), { target: { value: 'Wadaya' } });
-    expect(screen.getByRole('button', { name: /Sign In/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /sign in without password/i })).toBeEnabled();
   });
 
-  it('picking a person from the dropdown pre-fills the name fields', async () => {
-    apiMock.getUsers.mockResolvedValue([{ ...ADA, display_name: 'Ishe Wadaya', user_id: 'u-ishe' }]);
+  it('password login still works for a demo persona while name mode is on', async () => {
+    apiMock.getUsers.mockResolvedValue([
+      { user_id: 'u-uw1', username: 'underwriter1', display_name: 'Underwriter 1', role_code: 'UW' },
+    ]);
     render(<LoginScreen />);
     const select = await screen.findByLabelText('Underwriter');
-    fireEvent.change(select, { target: { value: 'u-ishe' } });
-    expect(screen.getByLabelText(/first name/i).value).toBe('Ishe');
-    expect(screen.getByLabelText(/surname/i).value).toBe('Wadaya');
+    fireEvent.change(select, { target: { value: 'u-uw1' } });
+    fireEvent.change(screen.getByPlaceholderText('Enter your password'), { target: { value: 'demo2026' } });
+    fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
+    await waitFor(() => expect(apiMock.loginUser).toHaveBeenCalledWith({ username: 'underwriter1', password: 'demo2026' }));
   });
 
   it('surfaces a server error from name login', async () => {
@@ -183,7 +188,7 @@ describe('LoginScreen — passwordless name sign-in (Saudi Re pilot)', () => {
     render(<LoginScreen />);
     fireEvent.change(await screen.findByLabelText(/first name/i), { target: { value: 'Ishe' } });
     fireEvent.change(screen.getByLabelText(/surname/i), { target: { value: 'Wadaya' } });
-    fireEvent.click(screen.getByRole('button', { name: /Sign In/i }));
+    fireEvent.click(screen.getByRole('button', { name: /sign in without password/i }));
     expect(await screen.findByText(/too many login attempts/i)).toBeInTheDocument();
   });
 });
