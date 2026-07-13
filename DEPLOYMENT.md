@@ -4,6 +4,7 @@
 **Source repo:** https://github.com/Darchville-Analytics/modelling_tool
 **Snapshot date:** 14 May 2026
 **Last verified:** 2026-06-14 @ `d445dba` (bearer-token auth, enforcing CSP, 12-char password policy, and dev-only Compose all reflected below).
+**Consolidated:** 2026-07-12 — absorbed the former `docs/deployment.md` (host hardening, measured sizing baseline, rollback procedure, deployment changelog). This file is the single canonical deployment document.
 **Maintainer contact:** Isheanesu Wadaya (Riyadh, UTC+3)
 
 ---
@@ -38,7 +39,7 @@ Target user base: ~30 underwriters in a single office. The app is internal only 
 
 The Express server serves both the API under `/api/*` and the built SPA from `client/dist`. There is no separate frontend host required.
 
-Migrations live in `server/src/db/migrations/` (73 files at time of writing). Each migration runs in a single transaction with per-statement savepoints — a non-skippable failure rolls the whole migration back so a half-applied state is never recorded. They are idempotent and safe to re-run.
+Migrations live in `server/src/db/migrations/` (123 files at time of writing). Each migration runs in a single transaction with per-statement savepoints — a non-skippable failure rolls the whole migration back so a half-applied state is never recorded. They are idempotent and safe to re-run.
 
 Migrations do **not** run on app boot by default (`RUN_MIGRATIONS_ON_BOOT=false`). Run them as an explicit pre-deploy step:
 
@@ -65,7 +66,8 @@ Minimum specification for ~30 concurrent users:
 Notes:
 - The Node version is pinned in `.nvmrc` and `.node-version`. Use exactly what's there.
 - The 4 GB minimum assumes Postgres on a separate host. Co-locating Postgres on the same box pushes the minimum to 8 GB.
-- A real load test has not yet been run. Treat these numbers as a starting point and revise after measuring.
+- Sizing is backed by a measured k6 baseline: 459 req/s sustained at 300 virtual users on a single Node process, p95 < 500 ms on every surface except the dashboard aggregate (protocol and numbers in `docs/scaling.md`). ~30 real users generate nothing close to that, so the "comfortable" column is deliberately over-provisioned head-room.
+- Uplink: 100 Mbps is enough; 1 Gbps is comfortable. Excel exports and PDF uploads dominate the bytes.
 
 ## 4. Pre-flight checklist
 
@@ -346,6 +348,51 @@ journalctl -u universe -f
 
 Front with Nginx for TLS and connection management (same config as Option A).
 
+### 6.4 Host hardening (applies to every option)
+
+Ports — only SSH and the Nginx front door should be reachable from outside:
+
+| Port | Direction | Exposed? | Purpose |
+|------|-----------|----------|---------|
+| 22 | inbound | yes (SSH keys only, no password) | admin |
+| 80 | inbound | yes | Let's Encrypt ACME challenge → 301 to 443 |
+| 443 | inbound | yes | Nginx terminates TLS, reverse-proxies to app |
+| 4000 | internal | no (bind `127.0.0.1` only) | app HTTP |
+| 5432 | internal | no | Postgres |
+| 9464 | internal | no | Prometheus scrape (only if OTel enabled) |
+
+Firewall (ufw):
+
+```bash
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+sudo ufw --force enable
+sudo ufw status
+```
+
+Baseline checklist:
+
+- **SSH:** key-only — `PasswordAuthentication no` in `/etc/ssh/sshd_config`.
+- **TLS:** Let's Encrypt certs auto-renew via certbot's systemd timer.
+- **Secrets:** keep the populated `.env` mode 600, owned by the service user. A hardened layout keeps it outside the repo checkout (e.g. `/etc/universe/.env`, symlinked into the app directory) so a `git clean` can't touch it.
+- **Application user:** run as a dedicated non-root user with no shell (Option C shows the pattern; Option A works the same way).
+- **Database:** keep Postgres bound to localhost (or the private network for a separate DB host, §5.2).
+- **Patching:** enable `unattended-upgrades`, or patch manually on a monthly cadence.
+
+Log rotation — PM2 manages its own rotating logs; if you also write app logs to disk (e.g. `/var/log/universe/*.log`), add a logrotate policy so they can't fill the disk. `/etc/logrotate.d/universe`:
+
+```
+/var/log/universe/*.log {
+  daily
+  rotate 14
+  compress
+  delaycompress
+  missingok
+  notifempty
+  copytruncate
+}
+```
+
 ## 7. Environment variables
 
 Copy `.env.example` to `.env` and fill in real values. **Never commit the populated `.env` file** — it's in `.gitignore` already.
@@ -452,6 +499,26 @@ sudo systemctl restart universe                # Option C
 
 For an Option B (docker-compose) host that wants the same tighter control as A/C, unset `RUN_MIGRATIONS_ON_BOOT` in `docker-compose.yml` and run `npm run migrate:up --prefix server` (or `docker compose run --rm universe-app npm run migrate:up --prefix server`) before `up -d`.
 
+### 9.1 Rollback
+
+On Render, roll back to the previous deploy from the dashboard. On a self-hosted box:
+
+```bash
+cd /opt/universe
+git log --oneline -20                 # pick a known-good commit
+git checkout <good-commit>
+npm run install:all && npm run build
+npm run migrate:up --prefix server    # migrations are idempotent
+pm2 reload ecosystem.config.cjs       # or docker compose up -d --build / systemctl restart universe
+```
+
+If a migration itself is the problem, restore the newest Postgres dump (§11):
+
+```bash
+sudo -u postgres pg_restore --clean --if-exists \
+  -d universe /var/backups/universe/universe-<date>.dump
+```
+
 ## 10. Security notes — read before going live
 
 ### Resolved since the original snapshot (verified — no action needed)
@@ -494,6 +561,7 @@ schedule is your step; the app does not run them itself.
 |---|---|
 | `scripts/backup-db.sh` | Compressed `pg_dump -Fc` of `DATABASE_URL` into `BACKUP_DIR` (default `/var/backups/universe`), then prunes dumps older than `BACKUP_RETENTION_DAYS` (default 30). Logs to stderr; prints the dump path on stdout. |
 | `scripts/verify-restore.sh` | Restores the newest dump into a throwaway scratch DB on the same server, runs a sanity query (`public._migrations` and `public.country` row counts), drops the scratch DB, and **exits non-zero if the dump won't restore** — so a silently-corrupt backup is caught. |
+| `scripts/backup-uploads.sh` | Disaster-recovery for **uploaded documents** (they live outside Postgres). Mirrors the local-disk `UPLOAD_DIR` off-box; see `docs/backup-recovery.md` for the Cloudinary-backend equivalent. |
 | `scripts/universe-backup.cron` | Host-cron schedule: nightly dump (02:00) + weekly restore-rehearsal (Sun 03:30). |
 
 **Schedule it.** On a self-hosted host (§6 Option A/C): set `DATABASE_URL` (and optionally `BACKUP_DIR`/`BACKUP_RETENTION_DAYS`) in the cron environment, then `crontab scripts/universe-backup.cron` (or drop it in `/etc/cron.d/`). Send dumps to off-host storage and retain ≥ 30 days. Verify by hand once:
@@ -530,6 +598,10 @@ Logs go to stdout in JSON. Capture with PM2 / Docker / journalctl as appropriate
 | `X-Pool-Waiting` consistently > 0 | Pool exhaustion under load | Raise `DB_POOL_MAX`, ensure Postgres `max_connections` has headroom |
 | 502 Bad Gateway via Nginx | Node process down or wrong port | Check the runtime's status, confirm `proxy_pass` port matches `PORT` env var |
 | AI slip ingest returns 500 | `OPENAI_API_KEY` missing or invalid | Set the env var, restart. Feature is optional — disable the slip-ingest button if AI not desired. |
+| Save endpoints return 400 `VALIDATION_FAILED` | Client/schema drift | The error body lists offending `fields[]` — check `server/src/validation/` for the schema used on that route |
+| Browser shows stale UI after deploy | Browser cache | Hard refresh (Cmd-Shift-R) |
+| PM2 worker restarting repeatedly | App-level error at boot | `pm2 logs universe --lines 200`; check migration output |
+| Disk filling | Logs + uploads + backups | `du -sh /var/log/universe $UPLOAD_DIR /var/backups/universe` |
 
 ## 14. Repository structure (orientation)
 
@@ -577,6 +649,23 @@ These are items that affect deployment shape and need a decision:
 3. Backup retention policy — 30 days, 90 days, longer?
 4. Is the AI slip-ingest feature in scope for go-live, or is it disabled at launch?
 5. What's the patch cadence for the underlying Ubuntu, Node, and Postgres?
+
+## 17. Deployment changelog
+
+| Date | Change | Production env state | Notes |
+| --- | --- | --- | --- |
+| 2026-05-01 | Pricing drift strict-mode rollout recorded. | `PRICING_STRICT` remains unset for the 7-day warn-only window. Set `PRICING_STRICT=1` only after the triage tail is empty for 48h. | Runbook: [`docs/observability.md` → Pricing Drift Triage](./docs/observability.md#pricing-drift-triage). The production change is the host `.env`: add `PRICING_STRICT=1`, then `pm2 reload ecosystem.config.cjs`. Monitor `422 PRICING_DRIFT` and fix drift sources rather than rolling back the flag. |
+
+## 18. Converting this doc to PDF
+
+For handing to an IT team outside the repo (`sudo apt install -y pandoc` on the VM, or brew on a Mac):
+
+```bash
+pandoc DEPLOYMENT.md -o deployment.pdf --toc --toc-depth=2
+# No LaTeX toolchain? Go via HTML:
+pandoc DEPLOYMENT.md -o deployment.html --standalone --toc
+wkhtmltopdf deployment.html deployment.pdf
+```
 
 ---
 
