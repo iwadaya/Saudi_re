@@ -54,6 +54,15 @@ services:
       # Session/cookie secret (>=32 chars). Required secret for the prod service.
       - key: SESSION_SECRET
         sync: false
+      # ── AI features (slip upload/check, market intelligence) ──
+      # Master gate for all AI endpoints (lib/aiGovernance.js). Fail-closed:
+      # without this the slip-ingest button and the Market Intelligence modal
+      # return 403 AI_DISABLED even when provider keys are set. Enabling still
+      # requires at least one provider key below in the Render dashboard —
+      # market intelligence uses OPENAI_API_KEY specifically; slip ingestion
+      # tries Gemini first and falls back to OpenAI.
+      - key: AI_FEATURES_ENABLED
+        value: "true"
       - key: GEMINI_API_KEY
         sync: false
       - key: OPENAI_API_KEY
