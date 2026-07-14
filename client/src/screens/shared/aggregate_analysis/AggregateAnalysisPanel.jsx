@@ -309,8 +309,8 @@ export default function AggregateAnalysisPanel({ contractId, onMeta }) {
                 <tr className="agg-tr--foot">
                   <td className="agg-td agg-td--foot">TOTAL</td>
                   <td className="agg-td agg-td--num agg-td--foot-num">{fmtFull(contractTotal)}</td>
-                  {PERILS.slice(0,4).map(p => <td key={p} className="agg-td agg-td--num agg-td--w700">{fmtFull(data.zones?.reduce((s,r)=>s+cn(r[p]),0)||0)}</td>)}
-                  <td className="agg-td" /><td className="agg-td" />
+                  {PERILS.map(p => <td key={p} className="agg-td agg-td--num agg-td--w700">{fmtFull(contractByPeril[p] || 0)}</td>)}
+                  <td className="agg-td" />
                   <td className="agg-td agg-td--num agg-td--foot-dim">{fmtFull(portfolioTotal)}</td>
                   <td className="agg-td agg-td--w140">
                     {portfolioTotal > 0 ? (
@@ -405,6 +405,15 @@ export default function AggregateAnalysisPanel({ contractId, onMeta }) {
             return `${sign}${g.toFixed(1)}%`;
           };
           const hasShare = portfolioShareFrac > 0;
+          // Bound contracts already sit in the country portfolio at 100%, so
+          // applying a share first removes that contribution. Quotes are not
+          // in the book yet — their share is purely additive.
+          const inPortfolio = data.contract?.portfolio_includes_contract !== false;
+          const newTotalAtShare = (portCur, contractTot) => {
+            if (!hasShare) return portCur;
+            const contrib = contractTot * portfolioShareFrac;
+            return inPortfolio ? portCur - contractTot + contrib : portCur + contrib;
+          };
 
           return (
           <div className="agg-stack">
@@ -441,7 +450,7 @@ export default function AggregateAnalysisPanel({ contractId, onMeta }) {
                       const portCur = portfolioByPeril[p] || 0;
                       const contractPeril = contractByPeril[p] || 0;
                       const myContribAtShare = contractPeril * portfolioShareFrac;
-                      const newTotal = hasShare ? portCur - contractPeril + myContribAtShare : portCur;
+                      const newTotal = newTotalAtShare(portCur, contractPeril);
                       const growthPct = portCur > 0 ? ((newTotal - portCur) / portCur) * 100 : 0;
                       return (
                         <tr key={p}>
@@ -482,7 +491,7 @@ export default function AggregateAnalysisPanel({ contractId, onMeta }) {
                       const contractTot = totalOfRow(contractRow);
                       const portCur = totalOfRow(portfolioRow);
                       const myContribAtShare = contractTot * portfolioShareFrac;
-                      const newTotal = hasShare ? portCur - contractTot + myContribAtShare : portCur;
+                      const newTotal = newTotalAtShare(portCur, contractTot);
                       const growthPct = portCur > 0 ? ((newTotal - portCur) / portCur) * 100 : 0;
                       return (
                         <tr key={clsName}>

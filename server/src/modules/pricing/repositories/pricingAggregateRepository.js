@@ -133,7 +133,7 @@ export async function getAggDrilldown(contractId) {
   // the existing bound-contract book, so a quote is measured against the book.
   const contractResult = await pool.query(
     `SELECT c.contract_id, c.country_id, cnt.country_name, cnt.country_code,
-            c.signed_line_pct, c.uw_year
+            c.signed_line_pct, c.uw_year, c.uw_status
      FROM public.contract c
      LEFT JOIN public.country cnt ON cnt.country_id::text = c.country_id::text
      WHERE c.contract_id=$1`,
@@ -158,17 +158,27 @@ export async function getAggDrilldown(contractId) {
   }
   const contract = owner;
   const countryId = contract.country_id;
+  // The country-portfolio queries below include this contract's own rows only
+  // when it's a bound contract that passes the same status filter; quotes live
+  // in quote_cresta_data and are never part of the book. The client needs this
+  // to know whether "new portfolio total at share X" should first remove the
+  // contract's existing 100% contribution.
+  const portfolioIncludesContract =
+    ownerCol === 'contract_id' && !['DECLINED', 'NTU'].includes(contract.uw_status);
 
+  // Cresta rows are stored per (treaty_type, cob, zone) slice, so a zone can
+  // legitimately appear on several rows — aggregate to one row per zone or the
+  // By-Zone table repeats each zone once per class/treaty-type slice.
   const zonesRes = await pool.query(
     `SELECT
-      zone_id, zone_name,
-      COALESCE(eq_agg,0) AS eq_agg, COALESCE(ws_agg,0) AS ws_agg,
-      COALESCE(flood_agg,0) AS flood_agg, COALESCE(srcc_agg,0) AS srcc_agg,
-      COALESCE(others_agg,0) AS others_agg,
-      COALESCE(eq_agg,0)+COALESCE(ws_agg,0)+COALESCE(flood_agg,0)+COALESCE(srcc_agg,0)+COALESCE(others_agg,0) AS total_agg,
-      COALESCE(NULLIF(cob_name,''),'All Classes') AS cob_name
+      zone_id, MAX(NULLIF(zone_name,'')) AS zone_name,
+      SUM(COALESCE(eq_agg,0)) AS eq_agg, SUM(COALESCE(ws_agg,0)) AS ws_agg,
+      SUM(COALESCE(flood_agg,0)) AS flood_agg, SUM(COALESCE(srcc_agg,0)) AS srcc_agg,
+      SUM(COALESCE(others_agg,0)) AS others_agg,
+      SUM(COALESCE(eq_agg,0)+COALESCE(ws_agg,0)+COALESCE(flood_agg,0)+COALESCE(srcc_agg,0)+COALESCE(others_agg,0)) AS total_agg
      FROM ${crestaTable}
      WHERE ${ownerCol}=$1
+     GROUP BY zone_id
      ORDER BY total_agg DESC`,
     [contractId]
   );
@@ -194,7 +204,7 @@ export async function getAggDrilldown(contractId) {
   if (countryId) {
     const pzRes = await pool.query(
       `SELECT
-        cd.zone_id, cd.zone_name,
+        cd.zone_id, MAX(NULLIF(cd.zone_name,'')) AS zone_name,
         SUM(COALESCE(cd.eq_agg,0)) AS eq_agg, SUM(COALESCE(cd.ws_agg,0)) AS ws_agg,
         SUM(COALESCE(cd.flood_agg,0)) AS flood_agg, SUM(COALESCE(cd.srcc_agg,0)) AS srcc_agg,
         SUM(COALESCE(cd.others_agg,0)) AS others_agg,
@@ -204,7 +214,7 @@ export async function getAggDrilldown(contractId) {
        JOIN public.contract c ON c.contract_id = cd.contract_id
        WHERE c.country_id::text = $1::text
          AND c.uw_status NOT IN ('DECLINED','NTU')
-       GROUP BY cd.zone_id, cd.zone_name
+       GROUP BY cd.zone_id
        ORDER BY total_agg DESC`,
       [countryId]
     );
@@ -254,6 +264,7 @@ export async function getAggDrilldown(contractId) {
       country_code: contract.country_code,
       uw_year: contract.uw_year,
       signed_line_pct: contract.signed_line_pct,
+      portfolio_includes_contract: portfolioIncludesContract,
     },
     zones: zonesRes.rows,
     cob: cobRes.rows,
