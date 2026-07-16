@@ -1014,11 +1014,17 @@
 .DEV_FACTORS_PAGE .df-section--underwriter .df-table td{
   border-color: rgba(249,115,22,.22) !important;
 }
-/* Chosen base toggle pill ~20% bigger than current */
+/* Chosen base toggle pill, ~16% smaller than the stock toggle-group.
+   Sized via font-size/padding rather than transform:scale() — a persistent
+   scale on text re-rasterizes crisply in Chromium but can render soft in
+   Safari/Firefox. Matches the previous scale(.84) footprint. */
 .DEV_FACTORS_PAGE .df-chosen-toggle{
-  transform: scale(.84);
-  transform-origin: left top;
+  font-size: 9px;
+  padding: 2.5px;
   margin-top: 4px;
+}
+.DEV_FACTORS_PAGE .df-chosen-toggle .toggle-option{
+  padding: 5px 12px;
 }
 
 /* =========================================================
