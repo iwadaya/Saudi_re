@@ -5,6 +5,7 @@ import {
   fmtBal,
   fmtPctPoints,
   fmtX,
+  formatWithCommasDecimal,
   sanitizeNumber,
   toN,
   toNullableN,
@@ -94,6 +95,31 @@ describe('fmtBal — N/A-aware balance multiplier', () => {
     expect(fmtBal(undefined)).toBe('—');
     expect(fmtBal(NaN)).toBe('—');
     expect(fmtBal('abc')).toBe('—');
+  });
+});
+
+describe('formatWithCommasDecimal — live money-entry display', () => {
+  it('groups the integer part with commas', () => {
+    expect(formatWithCommasDecimal('1234567')).toBe('1,234,567');
+    expect(formatWithCommasDecimal(2500000)).toBe('2,500,000');
+  });
+  it('keeps typed fraction digits verbatim (no rounding)', () => {
+    expect(formatWithCommasDecimal('1234.56')).toBe('1,234.56');
+    expect(formatWithCommasDecimal('1234.5000')).toBe('1,234.5000');
+  });
+  it('preserves a trailing dot so the user can type a decimal', () => {
+    expect(formatWithCommasDecimal('1234.')).toBe('1,234.');
+  });
+  it('preserves a leading minus', () => {
+    expect(formatWithCommasDecimal('-1234.5')).toBe('-1,234.5');
+  });
+  it('re-groups values that already contain commas', () => {
+    expect(formatWithCommasDecimal('1,234,567')).toBe('1,234,567');
+  });
+  it('passes through empty / blank values', () => {
+    expect(formatWithCommasDecimal('')).toBe('');
+    expect(formatWithCommasDecimal(null)).toBe('');
+    expect(formatWithCommasDecimal(undefined)).toBe('');
   });
 });
 

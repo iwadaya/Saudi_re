@@ -8,6 +8,7 @@ import { api } from '../../api';
 import Topbar from '../../components/Topbar';
 import { Button, Field, Input, Modal } from '../../components/ui';
 import { logger } from '../../utils/logger';
+import { formatWithCommasDecimal, sanitizeNumber } from '../../utils/format';
 
 const errMsg = (e, fallback) => {
   const b = e?.body;
@@ -514,10 +515,10 @@ export default function ClaimsHomeScreen() {
                     Enter the cedant-advised position at 100% — it is booked as movement #1 (ADVICE) on the claim ledger.
                   </div>
                   <Field label={`Opening paid @100%${ccy ? ` (${ccy})` : ''}`}>
-                    <Input inputMode="numeric" value={form.gross_paid_100} onChange={set('gross_paid_100')} />
+                    <Input inputMode="decimal" value={formatWithCommasDecimal(form.gross_paid_100)} onChange={(e) => set('gross_paid_100')(sanitizeNumber(e.target.value))} />
                   </Field>
                   <Field label={`Opening OS reserve @100%${ccy ? ` (${ccy})` : ''}`}>
-                    <Input inputMode="numeric" value={form.gross_os_100} onChange={set('gross_os_100')} />
+                    <Input inputMode="decimal" value={formatWithCommasDecimal(form.gross_os_100)} onChange={(e) => set('gross_os_100')(sanitizeNumber(e.target.value))} />
                   </Field>
                   <div style={{ gridColumn: '1 / -1' }}>
                     <Field label="Movement comment"><Input value={form.comment} onChange={set('comment')} placeholder="e.g. Initial advice per cedant email" /></Field>

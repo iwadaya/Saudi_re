@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../../../api';
 import { FR, SectionTitle } from './FacRiskDetail.parts.jsx';
+import { formatWithCommasDecimal, sanitizeNumber } from '../../../utils/format';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Related Treaties section
@@ -211,8 +212,8 @@ export default function RelatedTreatiesSection({ riskId, hasCedant, hasCob }) {
               </FR>
               <FR label="Capacity Used" hint="Optional — SAR amount written into this treaty">
                 <input className="fi" type="text" inputMode="numeric"
-                       value={draft.capacity_used}
-                       onChange={(e) => setDraft((d) => ({ ...d, capacity_used: e.target.value }))}
+                       value={formatWithCommasDecimal(draft.capacity_used)}
+                       onChange={(e) => setDraft((d) => ({ ...d, capacity_used: sanitizeNumber(e.target.value) }))}
                        placeholder="e.g. 2,500,000" style={{ width: 200 }} />
               </FR>
               <FR label="Notes">

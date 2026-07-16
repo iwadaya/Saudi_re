@@ -3,7 +3,7 @@
 // premium-BF % achieved bar, and both projection tables. JSX moved VERBATIM;
 // numbers pinned by goldenMaster.test.jsx.
 import { fmt4, fmtPct } from '../state/devFactorsCalcs';
-import { formatWithCommas as fmtN } from '../../../../utils/format';
+import { formatWithCommas as fmtN, sanitizeNumber } from '../../../../utils/format';
 
 /* ═══════════════ BF IELR input bar (loss BF) ═══════════════ */
 export function BfIelrBar({ inputId, ielr, onIelrChange }) {
@@ -124,8 +124,9 @@ export function BFPremiumProjectionsTable({ bfResults, epiPerYear, onEpiChange }
                 <input
                   className="df-input"
                   type="text"
-                  value={epiPerYear?.[i] ?? ''}
-                  onChange={(e) => onEpiChange?.(i, e.target.value)}
+                  inputMode="numeric"
+                  value={fmtN(epiPerYear?.[i] ?? '')}
+                  onChange={(e) => onEpiChange?.(i, sanitizeNumber(e.target.value))}
                   placeholder="0"
                 />
               </td>

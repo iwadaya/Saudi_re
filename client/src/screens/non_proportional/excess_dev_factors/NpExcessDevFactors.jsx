@@ -13,8 +13,27 @@ import {
   deriveLdfsFromCdfs,
 } from '../../../logic/chainLadder';
 import { calculateBF } from '../../../logic/bornhuetterFerguson';
+import { formatWithCommasDecimal, sanitizeNumber } from '../../../utils/format';
 import '../../../styles/proportional/dev_factors.css';
 import { FactorTable, BFProjectionsTable, LinkRatioView, UltimateSummaryTable } from './NpExcessDevFactorsTables';
+
+// Comma-separated display for the triangle's numeric cum-loss cells: raw
+// digits while focused (so decimals type naturally), grouped when not.
+function CommaCell({ value, onChange, style }) {
+  const [editing, setEditing] = useState(false);
+  const [raw, setRaw] = useState('');
+  const display = value != null ? formatWithCommasDecimal(String(value)) : '';
+  return (
+    <input
+      className="df-input"
+      style={style}
+      value={editing ? raw : display}
+      onFocus={e => { setEditing(true); setRaw(value != null ? String(value) : ''); e.target.select(); }}
+      onChange={e => { const s = sanitizeNumber(e.target.value); setRaw(s); onChange(s === '' ? null : Number(s) || 0); }}
+      onBlur={() => setEditing(false)}
+    />
+  );
+}
 
 const ROUTE_KEY = 'NP_EXCESS_DEV_FACTORS';
 
@@ -356,10 +375,9 @@ export default function NpExcessDevFactors() {
                       return (
                         <td key={dm} className="df-c" style={{ opacity: isActive ? 1 : 0.2 }}>
                           {isActive
-                            ? <input
-                                className="df-input"
-                                value={cell?.cum_value != null ? String(cell.cum_value) : ''}
-                                onChange={e => setTriCell(yr, dm, e.target.value === '' ? null : Number(e.target.value) || 0)}
+                            ? <CommaCell
+                                value={cell?.cum_value}
+                                onChange={v => setTriCell(yr, dm, v)}
                                 style={{ width: 120, textAlign: 'right' }}
                               />
                             : <div className="df-val" style={{ background: 'rgba(8,16,40,0.05)' }} />
@@ -399,8 +417,9 @@ export default function NpExcessDevFactors() {
                   <td className="df-c">
                     <input
                       className="df-input"
-                      value={manualLosses[i] ?? ''}
-                      onChange={e => { const a = [...manualLosses]; a[i] = e.target.value; setManualLosses(a); setDirty(true); }}
+                      inputMode="decimal"
+                      value={formatWithCommasDecimal(manualLosses[i] ?? '')}
+                      onChange={e => { const a = [...manualLosses]; a[i] = sanitizeNumber(e.target.value); setManualLosses(a); setDirty(true); }}
                       style={{ width: 140, textAlign: 'right' }}
                     />
                   </td>

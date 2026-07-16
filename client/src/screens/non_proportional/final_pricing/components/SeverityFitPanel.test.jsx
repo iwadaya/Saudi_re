@@ -68,7 +68,7 @@ describe('SeverityFitPanel', () => {
   it('seeds the threshold from the snapshot and shows GPD params with CI + K-S', async () => {
     renderPanel();
     const thr = await screen.findByTestId('fq-severity-threshold-risk');
-    expect(thr).toHaveValue('1000000');
+    expect(thr).toHaveValue('1,000,000');
     // GPD (default) → ξ and σ editable, both seeded from the fit (post-render effect).
     await waitFor(() => expect(screen.getByTestId('fq-severity-param-risk-xi').value).toMatch(/-?\d/));
     expect(screen.getByTestId('fq-severity-param-risk-sigma').value).toMatch(/\d/);
@@ -101,7 +101,7 @@ describe('SeverityFitPanel', () => {
   it('hydrates family/threshold from a saved sim config (reproducible reload)', async () => {
     renderPanel({ savedConfig: { family: 'PARETO', threshold: 2000000, params: { alpha: 1.8 } } });
     const thr = await screen.findByTestId('fq-severity-threshold-risk');
-    expect(thr).toHaveValue('2000000');
+    expect(thr).toHaveValue('2,000,000');
     expect(screen.getByTestId('fq-severity-family-risk')).toHaveValue('PARETO');
     await waitFor(() => expect(screen.getByTestId('fq-severity-param-risk-alpha').value).toBe('1.8'));
   });
@@ -118,6 +118,6 @@ describe('SeverityFitPanel', () => {
     expect(await screen.findByTestId('fq-severity-panel-cat')).toBeInTheDocument();
     await waitFor(() => expect(api.getCatLosses).toHaveBeenCalled());
     const panel = within(screen.getByTestId('fq-severity-panel-cat'));
-    expect(panel.getByTestId('fq-severity-threshold-cat')).toHaveValue('1000000');
+    expect(panel.getByTestId('fq-severity-threshold-cat')).toHaveValue('1,000,000');
   });
 });

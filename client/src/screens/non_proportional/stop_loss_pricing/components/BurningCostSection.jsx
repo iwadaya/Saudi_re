@@ -7,6 +7,7 @@
 
 import { COLORS, styles, fmtMoneyFull } from './stopLossUi';
 import { BurningCostSummary } from './MethodSummaries';
+import { formatWithCommasDecimal, sanitizeNumber } from '../../../../utils/format';
 
 /**
  * @param {{
@@ -76,8 +77,9 @@ export default function BurningCostSection({
                   <td style={styles.td}>
                     <input
                       style={{ ...styles.input, maxWidth: 220, margin: '0 auto', textAlign: 'center' }}
-                      value={String(r.aggregateRaw ?? '')}
-                      onChange={(e) => setYearAggregate(r.year, e.target.value)}
+                      inputMode="decimal"
+                      value={formatWithCommasDecimal(r.aggregateRaw ?? '')}
+                      onChange={(e) => setYearAggregate(r.year, sanitizeNumber(e.target.value))}
                       onPaste={(e) => handleAggregatePaste(e, i)}
                       placeholder="0"
                     />

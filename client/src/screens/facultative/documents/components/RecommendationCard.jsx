@@ -7,6 +7,7 @@ import { Badge, Button } from '../../../../components/ui';
 import {
   confidenceColor, jsonPreview, inferInputKind, formatForEditor, parseFromEditor,
 } from '../documentsShared';
+import { formatWithCommasDecimal, sanitizeNumber } from '../../../../utils/format';
 
 const NO_UNDO = { available: false, reason: null, busy: false, done: false, error: null };
 
@@ -76,8 +77,9 @@ export default function RecommendationCard({
                    onChange={(e) => setEditedValue(e.target.value)} />
           )}
           {(inputKind === 'NUMERIC' || inputKind === 'INT') && (
-            <input className="fi facdoc-editor-field" type="number" value={editedValue}
-                   onChange={(e) => setEditedValue(e.target.value)} />
+            <input className="fi facdoc-editor-field" type="text" inputMode="decimal"
+                   value={formatWithCommasDecimal(editedValue)}
+                   onChange={(e) => setEditedValue(sanitizeNumber(e.target.value))} />
           )}
           {(inputKind === 'LOCATION_ARRAY' || inputKind === 'LOSS_APPEND') && (
             <textarea className="fi facdoc-editor-json" rows={5} value={editedValue}

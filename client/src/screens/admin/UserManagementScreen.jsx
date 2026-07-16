@@ -2,6 +2,7 @@
 // User & mandate management — accessible to CE and CU only
 import { useState, useId } from 'react';
 import { ROLE_LABELS, isAtLeast } from '../../utils/auth';
+import { formatWithCommasDecimal, sanitizeNumber } from '../../utils/format';
 import { api } from '../../api';
 import { useResource } from '../../hooks/useResource';
 import { Button } from '../../components/ui';
@@ -83,8 +84,9 @@ function MandateModal({ user, onClose, onSave }) {
   const fi = (label, key, opts = {}) => (
     <div style={{ marginBottom:14 }}>
       <label style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(var(--text-rgb),.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>{label}</label>
-      <input className="form-input" type={opts.type || 'text'} value={form[key]}
-        onChange={e => set(key, e.target.value)} placeholder={opts.placeholder || ''} style={{ width:'100%' }} />
+      <input className="form-input" type={opts.money ? 'text' : (opts.type || 'text')} inputMode={opts.money ? 'numeric' : undefined}
+        value={opts.money ? formatWithCommasDecimal(form[key]) : form[key]}
+        onChange={e => set(key, opts.money ? sanitizeNumber(e.target.value) : e.target.value)} placeholder={opts.placeholder || ''} style={{ width:'100%' }} />
     </div>
   );
 
@@ -100,8 +102,8 @@ function MandateModal({ user, onClose, onSave }) {
           <button type="button" onClick={onClose} aria-label="Close" style={{ background:'none', border:'none', color:'rgba(var(--text-rgb),.40)', fontSize:18, cursor:'pointer', lineHeight:1 }}>✕</button>
         </div>
 
-        {fi('Treaty Authority Limit (USD)', 'treaty_limit_usd', { type:'number', placeholder:'Leave blank = unlimited' })}
-        {fi('Single Risk Limit (USD)', 'single_risk_limit_usd', { type:'number', placeholder:'Leave blank = use treaty limit' })}
+        {fi('Treaty Authority Limit (USD)', 'treaty_limit_usd', { money:true, placeholder:'Leave blank = unlimited' })}
+        {fi('Single Risk Limit (USD)', 'single_risk_limit_usd', { money:true, placeholder:'Leave blank = use treaty limit' })}
 
         <div style={{ marginBottom:14 }}>
           <label htmlFor={`${fieldId}-scope`} style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(var(--text-rgb),.40)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>Treaty Type Scope</label>

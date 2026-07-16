@@ -265,7 +265,7 @@ export default function FQQuotePricingPanel({
                                 <td><FQPctCell value={l.rate}           onChange={(v) => setField('rate', v)} className="bm-cell bm-cell--sm bm-cell--flat" /></td>
                                 <td className="bm-calc bm-calc--hi">{toN(l.rol) > 0 ? `${toN(l.rol).toFixed(2)}%` : '—'}</td>
                                 <td className="bm-calc">{l.earnedPremium ? formatWithCommas(String(Math.round(toN(l.earnedPremium)))) : '—'}</td>
-                                <td><input className="bm-cell bm-cell--sm" value={l.mdp} onChange={(e) => setField('mdp', e.target.value)} placeholder="—" /></td>
+                                <td><FQNumCell className="bm-cell bm-cell--sm" value={l.mdp} onChange={(v) => setField('mdp', v)} /></td>
                                 <td><select className="bm-cell bm-cell--sm" value={l.reinstatements ?? ''} onChange={(e) => setField('reinstatements', e.target.value)}>{REINSTATEMENT_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}</select></td>
                                 <td className="bm-calc bm-calc--dim">{geomean > 0 ? formatWithCommas(String(Math.round(geomean))) : '—'}</td>
                                 <td className="bm-calc bm-calc--dim">{xGE > 0 ? xGE.toFixed(4) : '—'}</td>

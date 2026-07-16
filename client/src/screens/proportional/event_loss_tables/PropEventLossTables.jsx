@@ -5,10 +5,13 @@ import { useGlobalToast } from '../../../hooks/useToast';
 import WizardLayout from '../../../components/WizardLayout';
 import { handleStaleWrite } from '../../../utils/handleStaleWrite';
 import { logger } from '../../../utils/logger';
+import { formatWithCommas, sanitizeNumber } from '../../../utils/format';
 
 const ROUTE_KEY = 'PROP_EVENT_LOSS_TABLES';
 const COLS = ['eventId','peril','region','returnPeriod','grossLoss','netQs','netXl','ultimateNetLoss','comment'];
 const HEADERS = ['Event ID','Peril','Region / CRESTA','Return Period (yrs)','Gross Loss','Net of QS','Net of XL','Ultimate Net Loss','Comment'];
+// Money columns render with thousands separators; state keeps the raw digits.
+const MONEY_COLS = new Set(['grossLoss','netQs','netXl','ultimateNetLoss']);
 
 function defaultRows() {
   // Four visibly empty rows. Used both as the first-render placeholder
@@ -102,7 +105,9 @@ export default function PropEventLossTables() {
           </div>
           <div className="elt-table-wrap"><div className="elt-table-label">Event losses by vendor event ID</div>
             <table className="elt-table"><thead><tr>{HEADERS.map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>
-              {rows.map((r, i) => <tr key={i}>{COLS.map(c => <td key={c}><input className="elt-cell" value={r[c] || ''} onChange={e => updateRow(i, c, e.target.value)} /></td>)}</tr>)}
+              {rows.map((r, i) => <tr key={i}>{COLS.map(c => <td key={c}><input className="elt-cell" inputMode={MONEY_COLS.has(c) ? 'numeric' : undefined}
+                value={MONEY_COLS.has(c) ? formatWithCommas(r[c] || '') : (r[c] || '')}
+                onChange={e => updateRow(i, c, MONEY_COLS.has(c) ? sanitizeNumber(e.target.value) : e.target.value)} /></td>)}</tr>)}
             </tbody></table>
           </div>
           {dirty && <div className="muted" style={{ marginTop: 8 }}>Unsaved changes</div>}

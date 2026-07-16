@@ -6,6 +6,7 @@
 
 import { styles, Field } from './stopLossUi';
 import { ExposureRatingSummary } from './MethodSummaries';
+import { formatWithCommasDecimal, sanitizeNumber } from '../../../../utils/format';
 
 /**
  * @param {{
@@ -52,8 +53,9 @@ export default function ExposureRatingSection({ inputs, setInput, result, layerR
             <Field label="Severity Mean" hint="E[X] per claim">
               <input
                 style={styles.input}
-                value={inputs.sevMean}
-                onChange={(e) => setInput({ sevMean: e.target.value })}
+                inputMode="decimal"
+                value={formatWithCommasDecimal(inputs.sevMean)}
+                onChange={(e) => setInput({ sevMean: sanitizeNumber(e.target.value) })}
                 placeholder="e.g. 200,000"
               />
             </Field>
@@ -79,8 +81,9 @@ export default function ExposureRatingSection({ inputs, setInput, result, layerR
             <Field label="Pareto θ" hint="Scale / threshold">
               <input
                 style={styles.input}
-                value={inputs.paretoTheta}
-                onChange={(e) => setInput({ paretoTheta: e.target.value })}
+                inputMode="decimal"
+                value={formatWithCommasDecimal(inputs.paretoTheta)}
+                onChange={(e) => setInput({ paretoTheta: sanitizeNumber(e.target.value) })}
                 placeholder="e.g. 100,000"
               />
             </Field>

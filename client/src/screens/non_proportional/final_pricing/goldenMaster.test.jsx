@@ -277,7 +277,7 @@ describe('NpFinalPricing golden master (quote mode)', () => {
     const expCard = screen.getByText(/Expiring Structure/i).closest('section');
     expect(rowsOf(expCard.querySelector('table'))).toEqual([
       ['#', 'Limit', 'Attachment', 'EGNPI', 'Rate %', 'ROL %', 'Premium', 'MDP', 'Reinst.', 'Geomean', 'x=G/E', 'Risk', 'Cat'],
-      ['1', '[400,000]', '[90,000]', '[800,000]', '[4%]', '8.00%', '32,000', '[5000]', '[1]', '210,000', '0.2625', '[x]', '[ ]'],
+      ['1', '[400,000]', '[90,000]', '[800,000]', '[4%]', '8.00%', '32,000', '[5,000]', '[1]', '210,000', '0.2625', '[x]', '[ ]'],
       ['TOTAL', '400,000', '90,000', '800,000', '4.00%', '8.00%', '32,000', '', '', '', '', '', ''],
     ]);
   });
