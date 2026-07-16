@@ -6,7 +6,7 @@
    surfaces all change.
 ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Midnight (default) — executive dark + mint/blue accents ─────────────── */
+/* ── Midnight — executive dark + mint/blue accents ───────────────────────── */
 html[data-theme="midnight"]{
   --bg0:#08111f;
   --bg1:#111b2d;
@@ -206,7 +206,7 @@ html[data-theme="sunset"]{
   --focus: rgba(251,191,36,.30);
 }
 
-/* ── Daylight — clear light + emerald/blue accents ─────────────────────── */
+/* ── Daylight (default) — clear light + emerald/blue accents ─────────────── */
 html[data-theme="daylight"]{
   --bg0:#f8fafc;
   --bg1:#e6edf5;

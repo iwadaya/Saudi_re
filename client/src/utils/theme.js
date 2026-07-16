@@ -12,7 +12,7 @@ export const THEMES = [
   { key: 'daylight', label: 'Daylight',  hint: 'Light · emerald'       },
 ];
 
-export const DEFAULT_THEME = 'midnight';
+export const DEFAULT_THEME = 'daylight';
 
 export function getTheme() {
   try {

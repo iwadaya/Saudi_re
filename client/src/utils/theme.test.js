@@ -18,7 +18,7 @@ describe('theme utilities', () => {
 
   it('returns the default when localStorage is empty', () => {
     expect(getTheme()).toBe(DEFAULT_THEME);
-    expect(DEFAULT_THEME).toBe('midnight');
+    expect(DEFAULT_THEME).toBe('daylight');
   });
 
   it('returns the persisted theme when valid', () => {
