@@ -155,10 +155,6 @@ export function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function currentYear() {
-  return new Date().getFullYear();
-}
-
 function parseDateLike(v) {
   if (!v) return null;
   const d = v instanceof Date ? v : new Date(v);

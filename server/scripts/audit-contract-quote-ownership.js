@@ -28,7 +28,7 @@
 // rows that are already NULL, so within a run it never adopts a dangling-owner row
 // — those are freed to NULL afterwards and left for claiming. Backfill also never
 // overwrites a valid owner. In the normal data model a re-run is therefore an
-// exact no-op: assignOnCreation sets created_by = assigned_to, so a dangling owner
+// exact no-op: the creation INSERT sets created_by = assigned_to, so a dangling owner
 // means the creator is the SAME deleted user, and a freed dangler then has an
 // invalid creator that backfill skips. The only row a redundant second --apply
 // would touch is one reassigned to a since-deleted user whose ORIGINAL creator is

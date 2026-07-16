@@ -45,7 +45,6 @@ export const INSIGHT_BUTTONS = [
   { key:'COMPARE_TERMS',   label:'Compare Terms',     color:'green'   },
 ];
 
-export const APPROVER_OPTIONS = ['', 'Treaty Manager', 'Treaty Director', 'Chief Underwriter', 'Chief Executive'];
 export const UW_MAX_LIMIT = 50_000_000;
 
 // ── Pure helpers ──
