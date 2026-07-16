@@ -8,6 +8,7 @@ import { api } from '../../api';
 import Topbar from '../../components/Topbar';
 import { Button, Field, Input, Modal } from '../../components/ui';
 import { logger } from '../../utils/logger';
+import { formatWithCommasDecimal, sanitizeNumber } from '../../utils/format';
 import { ApprovalPill } from './ClaimsHomeScreen';
 
 const errMsg = (e, fallback) => {
@@ -358,8 +359,8 @@ export default function ClaimDetailScreen() {
             </select>
           </Field>
           <Field label="Movement date"><Input type="date" value={mv.movement_date} onChange={(e) => setMv((f) => ({ ...f, movement_date: e.target.value }))} /></Field>
-          <Field label="Cumulative paid @100%"><Input inputMode="numeric" value={mv.gross_paid_100} onChange={(e) => setMv((f) => ({ ...f, gross_paid_100: e.target.value }))} /></Field>
-          <Field label="Outstanding reserve @100%"><Input inputMode="numeric" value={mv.gross_os_100} onChange={(e) => setMv((f) => ({ ...f, gross_os_100: e.target.value }))} /></Field>
+          <Field label="Cumulative paid @100%"><Input inputMode="decimal" value={formatWithCommasDecimal(mv.gross_paid_100)} onChange={(e) => setMv((f) => ({ ...f, gross_paid_100: sanitizeNumber(e.target.value) }))} /></Field>
+          <Field label="Outstanding reserve @100%"><Input inputMode="decimal" value={formatWithCommasDecimal(mv.gross_os_100)} onChange={(e) => setMv((f) => ({ ...f, gross_os_100: sanitizeNumber(e.target.value) }))} /></Field>
           <div style={{ gridColumn: '1 / -1' }}>
             <Field label="Comment"><Input value={mv.comment} onChange={(e) => setMv((f) => ({ ...f, comment: e.target.value }))} placeholder="e.g. Interim payment per cedant SOA Q2" /></Field>
           </div>

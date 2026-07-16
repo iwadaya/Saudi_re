@@ -16,15 +16,7 @@ export const numOrNull = v => { const c = String(v ?? '').replace(/,/g,'').trim(
 export const clampPct = v => { const n = numOrNull(v); return n == null ? 0 : Math.max(0, Math.min(100, n)); };
 export const fmtComma = v => { const d = String(v ?? '').replace(/[^\d]/g,''); return d ? Number(d).toLocaleString('en-US') : ''; };
 /** Like fmtComma but preserves a decimal portion. "1234.5" → "1,234.5". */
-export const fmtCommaDecimal = v => {
-  const s = String(v ?? '');
-  if (!s) return '';
-  const [intPart, ...rest] = s.split('.');
-  const cleanInt = intPart.replace(/[^\d]/g, '');
-  const formatted = cleanInt ? Number(cleanInt).toLocaleString('en-US') : '';
-  if (rest.length === 0) return formatted;
-  return `${formatted}.${rest.join('').replace(/[^\d]/g, '')}`;
-};
+export { formatWithCommasDecimal as fmtCommaDecimal } from '../../../utils/format';
 export const stripDigits = v => String(v ?? '').replace(/[^\d]/g,'');
 /** Decimal-preserving variant of stripDigits. Keeps digits and a decimal point. */
 export const stripNonNumeric = v => String(v ?? '').replace(/[^\d.]/g, '');

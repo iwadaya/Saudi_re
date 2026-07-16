@@ -444,9 +444,9 @@ describe('DevFactorsScreen golden master', () => {
     epis.forEach((v, i) => fireEvent.change(epiInputs[i], { target: { value: v } }));
 
     let rows = factorRows('Bornhuetter-Ferguson Projections (Premium)');
-    expect(rows[0]).toEqual(['1,990', '1.0000', '2000', '100.0%', '2,000', '0.0%', '0', '1,990', '99.5%']);
-    expect(rows[3]).toEqual(['1,650', '1.2329', '1800', '100.0%', '1,800', '18.9%', '340', '1,990', '110.6%']);
-    expect(rows[4]).toEqual(['1,300', '1.8388', '2100', '100.0%', '2,100', '45.6%', '958', '2,258', '107.5%']);
+    expect(rows[0]).toEqual(['1,990', '1.0000', '2,000', '100.0%', '2,000', '0.0%', '0', '1,990', '99.5%']);
+    expect(rows[3]).toEqual(['1,650', '1.2329', '1,800', '100.0%', '1,800', '18.9%', '340', '1,990', '110.6%']);
+    expect(rows[4]).toEqual(['1,300', '1.8388', '2,100', '100.0%', '2,100', '45.6%', '958', '2,258', '107.5%']);
 
     // Observed % achieved = mean(current premium ÷ EPI) = 0.8855 → 88.6%.
     const suggestBtn = await screen.findByText('Use observed avg (88.6%)');
@@ -455,7 +455,7 @@ describe('DevFactorsScreen golden master', () => {
     // Applied value is the ROUNDED 0.8855 → 88.5% in the table (the button
     // label shows the unrounded mean, 88.6%).
     rows = factorRows('Bornhuetter-Ferguson Projections (Premium)');
-    expect(rows[4]).toEqual(['1,300', '1.8388', '2100', '88.5%', '1,860', '45.6%', '848', '2,148', '102.3%']);
+    expect(rows[4]).toEqual(['1,300', '1.8388', '2,100', '88.5%', '1,860', '45.6%', '848', '2,148', '102.3%']);
 
     fireEvent.click(screen.getByText(/Save Factors/));
     await waitFor(() => expect(apiMock.savePricingPattern).toHaveBeenCalledTimes(1));

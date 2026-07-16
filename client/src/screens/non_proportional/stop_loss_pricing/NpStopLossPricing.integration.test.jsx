@@ -185,11 +185,11 @@ describe('NpStopLossPricing — render + interaction', () => {
       clipboardData: { getData: () => pasted },
     });
 
-    expect(within(firstRow).getByPlaceholderText('0').value).toBe('8000000');
+    expect(within(firstRow).getByPlaceholderText('0').value).toBe('8,000,000');
     const row2020 = screen.getByText('2020').closest('tr');
-    expect(within(row2020).getByPlaceholderText('0').value).toBe('12500000');
+    expect(within(row2020).getByPlaceholderText('0').value).toBe('12,500,000');
     const row2021 = screen.getByText('2021').closest('tr');
-    expect(within(row2021).getByPlaceholderText('0').value).toBe('14000000');
+    expect(within(row2021).getByPlaceholderText('0').value).toBe('14,000,000');
   });
 
   it('monte carlo toggle: off → no panel, on → percentile panel appears', () => {

@@ -23,6 +23,7 @@ import {
   Line, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
 } from 'recharts';
 import { api } from '../../../../api';
+import { formatWithCommasDecimal } from '../../../../utils/format';
 import { toN } from '../formatters.js';
 import { QUOTE_COMPONENT_SCOPES } from '../fqQuoteMath.js';
 import {
@@ -217,7 +218,7 @@ export default function SeverityFitPanel({ scopeKey, contractId, isQuote, onFitC
               <input
                 type="text" inputMode="decimal" data-testid={`fq-severity-threshold-${scopeKey}`}
                 aria-label={`${scope.label} severity threshold`}
-                value={threshold} onChange={(e) => onThreshold(e.target.value)}
+                value={formatWithCommasDecimal(threshold)} onChange={(e) => onThreshold(e.target.value)}
                 style={{ width: 130, boxSizing: 'border-box', background: 'rgba(5,8,16,0.6)', border: `1px solid ${accent}55`, borderRadius: 6, color: '#e2e8f0', fontSize: 12, fontWeight: 700, padding: '6px 9px', textAlign: 'right', fontFamily: 'inherit' }}
               />
             </div>

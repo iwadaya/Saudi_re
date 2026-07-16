@@ -550,7 +550,7 @@ export default function QuickBenchmark(){
                     <td><PctInput className="bm-cell bm-cell--sm" value={l.rate} onChange={v=>updateExp(i,'rate',v)} placeholder="—%"/></td>
                     <td className="bm-calc bm-calc--hi">{fmtPct2(l._rol)}</td>
                     <td className="bm-calc">{fmt(l._prem)}</td>
-                    <td><input className="bm-cell bm-cell--sm" value={l.mdp} onChange={e=>updateExp(i,'mdp',e.target.value)} placeholder="—"/></td>
+                    <td><NumCell className="bm-cell bm-cell--sm" value={l.mdp} onChange={v=>updateExp(i,'mdp',v)} /></td>
                     <td><input className="bm-cell bm-cell--sm" value={l.reinstatements} onChange={e=>updateExp(i,'reinstatements',e.target.value)} placeholder="—"/></td>
                     <td className="bm-calc bm-calc--dim">{fmt(l._gm)}</td>
                     <td className="bm-calc bm-calc--dim">{l._x>0?l._x.toFixed(4):'—'}</td>
@@ -695,11 +695,10 @@ export default function QuickBenchmark(){
                               <td className="bm-np-td--cob">{cob.name}</td>
                               <td className="bm-np-td--limit">
                                 <div className="bm-np-limit-cell">
-                                  <input
+                                  <NumCell
                                     className="bm-np-limit-input"
                                     value={cob.uwLimit}
-                                    onChange={e=>updateUwLimit(cob.id,e.target.value)}
-                                    placeholder="—"
+                                    onChange={v=>updateUwLimit(cob.id,v)}
                                   />
                                   <span className="bm-np-limit-suffix">
                                     {meta.countryId ? (countries.find(c=>c.id===meta.countryId)?.code||'') : ''}

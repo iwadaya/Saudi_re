@@ -81,6 +81,25 @@ export function formatWithCommas(digitsOrNumber) {
 }
 
 /**
+ * Decimal-preserving variant of formatWithCommas: groups the integer part
+ * with commas and keeps whatever fraction digits were typed, so decimals
+ * survive live re-formatting while the user is mid-entry
+ * ("1234.5" → "1,234.5", "1234." → "1,234."). Use for money entry fields
+ * that accept decimals; pair with an onChange that strips the commas back
+ * out before storing.
+ */
+export function formatWithCommasDecimal(v) {
+  const s = String(v ?? '');
+  if (!s) return '';
+  const sign = s.trimStart().startsWith('-') ? '-' : '';
+  const [intPart, ...rest] = s.split('.');
+  const cleanInt = intPart.replace(/[^\d]/g, '');
+  const formatted = sign + (cleanInt ? Number(cleanInt).toLocaleString('en-US') : '');
+  if (rest.length === 0) return formatted;
+  return `${formatted}.${rest.join('').replace(/[^\d]/g, '')}`;
+}
+
+/**
  * Display-cell variant of formatWithCommas: returns '—' for
  * null/undefined/NaN instead of an empty string. Use this when
  * rendering to a table cell or side-panel row where a visible dash
