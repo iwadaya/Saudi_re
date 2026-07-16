@@ -68,7 +68,7 @@ export async function getEditPermission(req, entityType, entityId) {
 /**
  * Route guard for MUTATING endpoints. Throws 403 READ_ONLY whenever the
  * requester is not the current assignee — regardless of seniority. CREATE
- * endpoints are exempt (the creator becomes the assignee via assignOnCreation),
+ * endpoints are exempt (the creation INSERT sets the creator as assignee),
  * and seniors change ownership through the allocate/reassign endpoints, not by
  * editing directly.
  */
@@ -168,7 +168,7 @@ export async function assertCanAccessDocument(req, documentId, action = 'read') 
 //     • decline                    → statusMachine legal-transition guard
 //
 //   CREATE — bare creates (and renew/amend/bind): there is no prior entity to
-//   edit-lock; the creator becomes the assignee via assignOnCreation.
+//   edit-lock; the creation INSERT sets the creator as assignee.
 
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 

@@ -9,7 +9,6 @@
 // - All changes tracked in contract_assignment_history
 
 import { pool } from '../db/pool.js';
-import { logger } from '../lib/logger.js';
 import { logAudit } from './audit.js';
 import { computeEditPermission } from './permissions.js';
 
@@ -44,15 +43,6 @@ async function logHistory({ entityType, entityId, fromUserId, toUserId, assigned
   } catch {
     await logAudit(pool,{entityType,entityId,eventType:action,actor:{id:assignedBy||toUserId},payload:{fromUserId,toUserId,comment}}).catch(()=>{});
   }
-}
-
-export async function assignOnCreation(client, { entityType, entityId, creatorUserId }) {
-  if (!creatorUserId) return;
-  try {
-    const table=entityTable(entityType); const idCol=entityIdCol(entityType);
-    await client.query(`UPDATE ${table} SET created_by_user_id=$2, assigned_to_user_id=$2 WHERE ${idCol}=$1`,[entityId,creatorUserId]);
-    await logHistory({entityType,entityId,fromUserId:null,toUserId:creatorUserId,assignedBy:creatorUserId,action:'ASSIGNED'});
-  } catch(e) { logger.warn('assignOnCreation skipped', { error: e.message }); }
 }
 
 export async function allocate({ entityType, entityId, requestingUserId, comment }) {
