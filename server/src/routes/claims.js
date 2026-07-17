@@ -7,6 +7,12 @@
 // incurred = paid + OS. Our share applies the share_pct snapshotted per
 // movement (contract signed line at booking time).
 //
+// PLAs (Preliminary Loss Advices, /claims/plas/*) are the pre-claim stage:
+// an early cedant notification with a single estimated gross loss at 100%.
+// PENDING PLAs are editable; they either CONVERT into a claim (the estimate
+// seeds the opening ADVICE movement) or CLOSE without one. Audited under
+// entity_type CLAIM_PLA.
+//
 // Authorization: mounted behind the blanket requireAuth (app.js). Claims are
 // not assignee edit-locked (classifyMutationPath → null) — any authenticated
 // underwriter can book movements; every mutation writes an audit_log row
@@ -31,6 +37,7 @@ import {
 import {
   claimCreateSchema, claimUpdateSchema, movementCreateSchema,
   claimCloseSchema, claimReviewSchema, claimNoteSchema, APPROVAL_STATUSES,
+  plaCreateSchema, plaUpdateSchema, plaConvertSchema, plaCloseSchema, PLA_STATUSES,
 } from '../validation/claims.js';
 
 const router = Router();
@@ -196,6 +203,316 @@ router.get('/claims/eligible-contracts', asyncHandler(async (req, res) => {
      LIMIT 1000`, params);
   res.json(rows);
 }));
+
+// ═══ PLA (Preliminary Loss Advice) section ═══════════════════════════════════
+// Registered before /claims/:id so the literal "plas" segment is never
+// swallowed by the :id parameter.
+
+/** Shared SELECT for PLA lists/detail: header + contract context + our-share estimate. */
+const PLA_SELECT = `
+  SELECT
+    p.pla_id, p.pla_ref, p.contract_id, p.cedant_claim_ref, p.insured_name,
+    p.loss_date, p.advice_date, p.cause_of_loss, p.description,
+    p.loss_type, p.cat_event_ref, p.estimated_gross_loss_100,
+    p.status, p.converted_claim_id, p.converted_at, p.closed_at, p.closed_reason,
+    p.class_of_business_id, p.currency_id, p.created_at, p.updated_at,
+    conv.claim_ref                      AS converted_claim_ref,
+    crt.display_name                    AS created_by_name,
+    ced.company_name                    AS cedant_name,
+    co.country_name                     AS country_name,
+    tt.treaty_type                      AS treaty_type,
+    c.uw_year                           AS uw_year,
+    c.signed_line_pct                   AS contract_signed_line_pct,
+    cob.class_of_business               AS class_of_business,
+    COALESCE(cur.currency_code, ccur.currency_code) AS currency_code,
+    ROUND(p.estimated_gross_loss_100 * COALESCE(c.signed_line_pct, 0) / 100.0, 2) AS estimated_our_share
+  FROM public.preliminary_loss_advice p
+  JOIN public.contract c            ON c.contract_id = p.contract_id
+  LEFT JOIN public.claim conv       ON conv.claim_id = p.converted_claim_id
+  LEFT JOIN public.companies ced    ON ced.company_id = c.cedant_id
+  LEFT JOIN public.country co       ON co.country_id = c.country_id
+  LEFT JOIN public.treaty_type tt   ON tt.treaty_type_id = c.treaty_type_id
+  LEFT JOIN public.class_of_business cob ON cob.class_of_business_id = p.class_of_business_id
+  LEFT JOIN public.currency cur     ON cur.currency_id = p.currency_id
+  LEFT JOIN public.currency ccur    ON ccur.currency_id = c.currency_id
+  LEFT JOIN public.uw_user crt      ON crt.user_id = p.created_by_user_id`;
+
+// ── GET /api/claims/plas ─────────────────────────────────────────────────────
+// List with optional filters: ?status=PENDING&contract_id=…&loss_type=…&q=text
+router.get('/claims/plas', asyncHandler(async (req, res) => {
+  const { status, contract_id: contractId, loss_type: lossType, q } = req.query;
+  const where = [];
+  const params = [];
+  if (status && PLA_STATUSES.includes(String(status).toUpperCase())) {
+    params.push(String(status).toUpperCase());
+    where.push(`p.status = $${params.length}`);
+  }
+  if (contractId && UUID_RE.test(String(contractId))) {
+    params.push(contractId);
+    where.push(`p.contract_id = $${params.length}`);
+  }
+  if (lossType && ['ATTRITIONAL', 'LARGE', 'CAT'].includes(String(lossType).toUpperCase())) {
+    params.push(String(lossType).toUpperCase());
+    where.push(`p.loss_type = $${params.length}`);
+  }
+  if (q && String(q).trim()) {
+    params.push(`%${String(q).trim()}%`);
+    where.push(`(p.pla_ref ILIKE $${params.length} OR p.cedant_claim_ref ILIKE $${params.length}
+                 OR p.insured_name ILIKE $${params.length} OR ced.company_name ILIKE $${params.length})`);
+  }
+  const sql = `${PLA_SELECT}
+    ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+    ORDER BY p.updated_at DESC
+    LIMIT 500`;
+  const { rows } = await pool.query(sql, params);
+  res.json(rows);
+}));
+
+// ── GET /api/claims/plas/summary ─────────────────────────────────────────────
+// Headline KPIs for the PLA section of the claims home screen.
+router.get('/claims/plas/summary', asyncHandler(async (_req, res) => {
+  const { rows } = await pool.query(`
+    SELECT
+      COUNT(*)::int                                          AS total_plas,
+      COUNT(*) FILTER (WHERE p.status = 'PENDING')::int      AS pending_plas,
+      COUNT(*) FILTER (WHERE p.status = 'CONVERTED')::int    AS converted_plas,
+      COUNT(*) FILTER (WHERE p.status = 'CLOSED')::int       AS closed_plas,
+      COALESCE(SUM(p.estimated_gross_loss_100)
+               FILTER (WHERE p.status = 'PENDING'), 0)::numeric(20,2) AS pending_estimated_100,
+      COALESCE(SUM(p.estimated_gross_loss_100 * COALESCE(c.signed_line_pct, 0) / 100.0)
+               FILTER (WHERE p.status = 'PENDING'), 0)::numeric(20,2) AS pending_estimated_our_share
+    FROM public.preliminary_loss_advice p
+    JOIN public.contract c ON c.contract_id = p.contract_id`);
+  res.json(rows[0]);
+}));
+
+// ── POST /api/claims/plas ────────────────────────────────────────────────────
+// Log a PLA against a SIGNED/BOUND treaty (same gate as claims).
+router.post('/claims/plas', validateBody(plaCreateSchema), asyncHandler(async (req, res) => {
+  const b = req.body;
+  const actor = await resolveAuditActor(req);
+
+  const out = await withTransaction(async (client) => {
+    const { rows: cRows } = await client.query(
+      `SELECT contract_id, status, currency_id, primary_class_of_business_id
+         FROM public.contract WHERE contract_id = $1`,
+      [b.contract_id],
+    );
+    if (!cRows.length) { const e = new Error('Contract not found'); e.status = 404; throw e; }
+    const contract = cRows[0];
+    if (!['SIGNED', 'BOUND'].includes(String(contract.status).toUpperCase())) {
+      const e = new Error(`PLAs can only be logged against SIGNED or BOUND treaties (contract is ${contract.status}).`);
+      e.status = 422; e.code = 'CONTRACT_NOT_SIGNED'; throw e;
+    }
+
+    const { rows: refRows } = await client.query(
+      `SELECT 'PLA-' || lpad(nextval('public.pla_ref_seq')::text, 6, '0') AS ref`);
+    const plaRef = refRows[0].ref;
+
+    const { rows: pRows } = await client.query(
+      `INSERT INTO public.preliminary_loss_advice
+         (pla_ref, contract_id, class_of_business_id, currency_id, cedant_claim_ref,
+          insured_name, loss_date, advice_date, cause_of_loss, description,
+          loss_type, cat_event_ref, estimated_gross_loss_100, created_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8, CURRENT_DATE),$9,$10,$11,$12,$13,$14)
+       RETURNING pla_id, pla_ref`,
+      [plaRef, b.contract_id,
+       b.class_of_business_id ?? contract.primary_class_of_business_id ?? null,
+       b.currency_id ?? contract.currency_id ?? null,
+       b.cedant_claim_ref ?? null, b.insured_name ?? null,
+       b.loss_date, b.advice_date ?? null, b.cause_of_loss ?? null,
+       b.description ?? null, b.loss_type, b.cat_event_ref ?? null,
+       b.estimated_gross_loss_100, actor.actorUserId ?? null],
+    );
+    const pla = pRows[0];
+
+    await logAudit(client, {
+      entityType: 'CLAIM_PLA', entityId: pla.pla_id, eventType: 'PLA_CREATED',
+      actor: { id: actor.actorUserId, name: actor.actorName, role: actor.actorRole },
+      payload: { pla_ref: pla.pla_ref, contract_id: b.contract_id,
+                 estimated_gross_loss_100: b.estimated_gross_loss_100 },
+    }, { critical: true });
+
+    return pla;
+  });
+
+  res.status(201).json({ ok: true, ...out });
+}));
+
+// ── GET /api/claims/plas/:id ─────────────────────────────────────────────────
+router.get('/claims/plas/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) return res.status(400).json({ error: 'Invalid PLA id' });
+  const { rows } = await pool.query(`${PLA_SELECT} WHERE p.pla_id = $1`, [id]);
+  if (!rows.length) return res.status(404).json({ error: 'PLA not found' });
+  res.json(rows[0]);
+}));
+
+// ── PUT /api/claims/plas/:id ─────────────────────────────────────────────────
+// Only PENDING advices are editable — CONVERTED/CLOSED are settled history.
+router.put('/claims/plas/:id', validateBody(plaUpdateSchema), asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const b = req.body;
+  const actor = await resolveAuditActor(req);
+
+  const cols = ['loss_date', 'advice_date', 'class_of_business_id', 'currency_id',
+    'cedant_claim_ref', 'insured_name', 'cause_of_loss', 'description',
+    'loss_type', 'cat_event_ref', 'estimated_gross_loss_100'];
+  const sets = [];
+  const params = [id];
+  for (const c of cols) {
+    if (b[c] !== undefined) { params.push(b[c]); sets.push(`${c} = $${params.length}`); }
+  }
+  if (!sets.length) return res.status(400).json({ error: 'No updatable fields supplied' });
+
+  const { rows } = await pool.query(
+    `UPDATE public.preliminary_loss_advice SET ${sets.join(', ')}, updated_at = now()
+      WHERE pla_id = $1 AND status = 'PENDING'
+      RETURNING pla_id, pla_ref`,
+    params,
+  );
+  if (!rows.length) {
+    const { rows: exists } = await pool.query('SELECT status FROM public.preliminary_loss_advice WHERE pla_id=$1', [id]);
+    if (!exists.length) return res.status(404).json({ error: 'PLA not found' });
+    return res.status(422).json({ error: `Cannot edit a ${exists[0].status} PLA — only PENDING advices are editable.` });
+  }
+  await logAudit(null, {
+    entityType: 'CLAIM_PLA', entityId: id, eventType: 'PLA_UPDATED',
+    actor: { id: actor.actorUserId, name: actor.actorName, role: actor.actorRole },
+    payload: { changed: Object.keys(b) },
+  });
+  res.json({ ok: true, ...rows[0] });
+}));
+
+// ── POST /api/claims/plas/:id/convert ────────────────────────────────────────
+// Promote a PENDING PLA into a claim in one transaction: create the claim,
+// book its opening ADVICE movement (defaulting OS to the PLA estimate), and
+// mark the PLA CONVERTED. The treaty must still be SIGNED/BOUND at convert time.
+router.post('/claims/plas/:id/convert', validateBody(plaConvertSchema), asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const b = req.body;
+  const actor = await resolveAuditActor(req);
+
+  const out = await withTransaction(async (client) => {
+    const { rows: pRows } = await client.query(
+      `SELECT p.*, c.status AS contract_status, c.signed_line_pct
+         FROM public.preliminary_loss_advice p
+         JOIN public.contract c ON c.contract_id = p.contract_id
+        WHERE p.pla_id = $1 FOR UPDATE OF p`,
+      [id],
+    );
+    if (!pRows.length) { const e = new Error('PLA not found'); e.status = 404; throw e; }
+    const pla = pRows[0];
+    if (pla.status !== 'PENDING') {
+      const e = new Error(`Cannot convert a ${pla.status} PLA — only PENDING advices convert to claims.`);
+      e.status = 422; e.code = 'PLA_NOT_PENDING'; throw e;
+    }
+    if (!['SIGNED', 'BOUND'].includes(String(pla.contract_status).toUpperCase())) {
+      const e = new Error(`Claims can only be booked against SIGNED or BOUND treaties (contract is ${pla.contract_status}).`);
+      e.status = 422; e.code = 'CONTRACT_NOT_SIGNED'; throw e;
+    }
+
+    const { rows: refRows } = await client.query(
+      `SELECT 'CLM-' || lpad(nextval('public.claim_ref_seq')::text, 6, '0') AS ref`);
+    const claimRef = refRows[0].ref;
+
+    const { rows: clRows } = await client.query(
+      `INSERT INTO public.claim
+         (claim_ref, contract_id, class_of_business_id, currency_id, cedant_claim_ref,
+          insured_name, loss_date, reported_date, cause_of_loss, description,
+          loss_type, cat_event_ref, created_by_user_id, assigned_to_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8, CURRENT_DATE),$9,$10,$11,$12,$13,$13)
+       RETURNING claim_id, claim_ref`,
+      [claimRef, pla.contract_id, pla.class_of_business_id, pla.currency_id,
+       pla.cedant_claim_ref, pla.insured_name, pla.loss_date,
+       b.reported_date ?? pla.advice_date ?? null, pla.cause_of_loss,
+       pla.description, pla.loss_type, pla.cat_event_ref,
+       actor.actorUserId ?? null],
+    );
+    const claim = clRows[0];
+
+    const paid = b.gross_paid_100 ?? 0;
+    const os = b.gross_os_100 ?? Number(pla.estimated_gross_loss_100);
+    await client.query(
+      `INSERT INTO public.claim_movement
+         (claim_id, movement_no, movement_date, movement_type,
+          gross_paid_100, gross_os_100, share_pct, comment, created_by_user_id)
+       VALUES ($1, 1, COALESCE($2, CURRENT_DATE), 'ADVICE', $3, $4, $5, $6, $7)`,
+      [claim.claim_id, b.reported_date ?? null, paid, os,
+       pla.signed_line_pct ?? null,
+       b.comment ?? `Converted from ${pla.pla_ref}`, actor.actorUserId ?? null],
+    );
+
+    await client.query(
+      `UPDATE public.preliminary_loss_advice
+          SET status = 'CONVERTED', converted_claim_id = $2, converted_at = now(), updated_at = now()
+        WHERE pla_id = $1`,
+      [id, claim.claim_id],
+    );
+
+    await logAudit(client, {
+      entityType: 'CLAIM_PLA', entityId: id, eventType: 'PLA_CONVERTED',
+      actor: { id: actor.actorUserId, name: actor.actorName, role: actor.actorRole },
+      payload: { pla_ref: pla.pla_ref, claim_id: claim.claim_id, claim_ref: claim.claim_ref },
+    }, { critical: true });
+    await logAudit(client, {
+      entityType: 'CLAIM', entityId: claim.claim_id, eventType: 'CLAIM_CREATED',
+      actor: { id: actor.actorUserId, name: actor.actorName, role: actor.actorRole },
+      payload: { claim_ref: claim.claim_ref, contract_id: pla.contract_id,
+                 gross_paid_100: paid, gross_os_100: os, from_pla_ref: pla.pla_ref },
+    }, { critical: true });
+
+    return { pla_id: id, status: 'CONVERTED', ...claim };
+  });
+
+  res.status(201).json({ ok: true, ...out });
+}));
+
+/** Shared PLA close/reopen transition. */
+async function transitionPla(req, res, { toStatus, from, eventType }) {
+  const { id } = req.params;
+  const reason = req.body?.reason ?? null;
+  const actor = await resolveAuditActor(req);
+
+  const out = await withTransaction(async (client) => {
+    const { rows: pRows } = await client.query(
+      `SELECT pla_id, pla_ref, status FROM public.preliminary_loss_advice
+        WHERE pla_id = $1 FOR UPDATE`, [id]);
+    if (!pRows.length) { const e = new Error('PLA not found'); e.status = 404; throw e; }
+    const pla = pRows[0];
+    if (!from.includes(pla.status)) {
+      const e = new Error(`Cannot move a ${pla.status} PLA to ${toStatus}.`);
+      e.status = 422; e.code = 'ILLEGAL_PLA_TRANSITION'; throw e;
+    }
+
+    await client.query(
+      `UPDATE public.preliminary_loss_advice
+          SET status = $2,
+              closed_at = CASE WHEN $2 = 'CLOSED' THEN now() ELSE NULL END,
+              closed_reason = CASE WHEN $2 = 'CLOSED' THEN $3 ELSE NULL END,
+              updated_at = now()
+        WHERE pla_id = $1`,
+      [id, toStatus, reason],
+    );
+
+    await logAudit(client, {
+      entityType: 'CLAIM_PLA', entityId: id, eventType,
+      actor: { id: actor.actorUserId, name: actor.actorName, role: actor.actorRole },
+      payload: { pla_ref: pla.pla_ref, from: pla.status, to: toStatus, reason },
+    }, { critical: true });
+
+    return { pla_id: id, status: toStatus };
+  });
+
+  res.json({ ok: true, ...out });
+}
+
+// ── POST /api/claims/plas/:id/close · /reopen ────────────────────────────────
+router.post('/claims/plas/:id/close', validateBody(plaCloseSchema), asyncHandler(
+  (req, res) => transitionPla(req, res, { toStatus: 'CLOSED', from: ['PENDING'], eventType: 'PLA_CLOSED' })));
+
+router.post('/claims/plas/:id/reopen', validateBody(plaCloseSchema), asyncHandler(
+  (req, res) => transitionPla(req, res, { toStatus: 'PENDING', from: ['CLOSED'], eventType: 'PLA_REOPENED' })));
 
 // ── POST /api/claims ─────────────────────────────────────────────────────────
 // Create a claim + its opening ADVICE movement in one transaction.

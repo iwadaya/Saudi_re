@@ -238,6 +238,12 @@ const PATHS = {
   claimDocumentDownload: (docId: string) => `/api/claims/documents/${enc(docId)}/download`,
   claimDocumentView: (docId: string) => `/api/claims/documents/${enc(docId)}/view`,
   claimDocumentDelete: (docId: string) => `/api/claims/documents/${enc(docId)}`,
+  plas: '/api/claims/plas',
+  plasSummary: '/api/claims/plas/summary',
+  pla: (id: string) => `/api/claims/plas/${enc(id)}`,
+  plaConvert: (id: string) => `/api/claims/plas/${enc(id)}/convert`,
+  plaClose: (id: string) => `/api/claims/plas/${enc(id)}/close`,
+  plaReopen: (id: string) => `/api/claims/plas/${enc(id)}/reopen`,
   // Finance module
   financeTreaties: '/api/finance/treaties',
   financeSummary: '/api/finance/summary',
@@ -471,6 +477,24 @@ export const api = {
   deleteClaimDocument(docId: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimDocumentDelete(docId), { ...opts, method: 'DELETE' }); },
   getClaimDocumentDownloadUrl(docId: string): string { return `${API_BASE}${PATHS.claimDocumentDownload(docId)}`; },
   getClaimDocumentViewUrl(docId: string): string { return `${API_BASE}${PATHS.claimDocumentView(docId)}`; },
+
+  // ── Claims module · PLAs (Preliminary Loss Advices) ────────────────────────
+  listPlas(filters: { status?: string; contractId?: string; lossType?: string; q?: string } = {}, opts?: RequestOpts): Promise<unknown> {
+    const params = new URLSearchParams();
+    if (filters.status) params.set('status', filters.status);
+    if (filters.contractId) params.set('contract_id', filters.contractId);
+    if (filters.lossType) params.set('loss_type', filters.lossType);
+    if (filters.q) params.set('q', filters.q);
+    const qs = params.toString();
+    return request(`${PATHS.plas}${qs ? '?' + qs : ''}`, opts);
+  },
+  getPlasSummary(opts?: RequestOpts): Promise<unknown> { return request(PATHS.plasSummary, opts); },
+  getPla(id: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.pla(id), opts); },
+  createPla(body: unknown, opts?: RequestOpts): Promise<unknown> { return request(PATHS.plas, { ...opts, method: 'POST', body }); },
+  updatePla(id: string, body: unknown, opts?: RequestOpts): Promise<unknown> { return request(PATHS.pla(id), { ...opts, method: 'PUT', body }); },
+  convertPla(id: string, body: unknown = {}, opts?: RequestOpts): Promise<unknown> { return request(PATHS.plaConvert(id), { ...opts, method: 'POST', body }); },
+  closePla(id: string, reason?: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.plaClose(id), { ...opts, method: 'POST', body: { reason } }); },
+  reopenPla(id: string, reason?: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.plaReopen(id), { ...opts, method: 'POST', body: { reason } }); },
 
   // ── Finance module ─────────────────────────────────────────────────────────
   listFinanceTreaties(status?: string, opts?: RequestOpts): Promise<unknown> {

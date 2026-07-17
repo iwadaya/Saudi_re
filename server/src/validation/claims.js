@@ -39,6 +39,7 @@ const optionalText = (max) => z.preprocess(
 export const LOSS_TYPES = ['ATTRITIONAL', 'LARGE', 'CAT'];
 export const APPROVAL_STATUSES = ['DRAFT', 'WAITING_APPROVAL', 'REJECTED', 'FINALISED'];
 export const FINANCE_STATUSES = ['PENDING_SETUP', 'ACTIVE', 'SUSPENDED', 'CLOSED'];
+export const PLA_STATUSES = ['PENDING', 'CONVERTED', 'CLOSED'];
 
 // ── POST /api/claims ─────────────────────────────────────────────────────────
 export const claimCreateSchema = z.object({
@@ -95,6 +96,53 @@ export const claimReviewSchema = claimCloseSchema;
 // ── POST /api/claims/:id/notes ───────────────────────────────────────────────
 export const claimNoteSchema = z.object({
   note: trimmedText(4000).pipe(z.string().min(1, 'note required')),
+}).strict();
+
+// ── POST /api/claims/plas ────────────────────────────────────────────────────
+// Preliminary Loss Advice: the cedant's early notification, before a claim.
+export const plaCreateSchema = z.object({
+  contract_id: uuid,
+  loss_date: isoDate,
+  advice_date: optionalIsoDate,
+  class_of_business_id: optionalUuid,
+  currency_id: optionalUuid,
+  cedant_claim_ref: optionalText(120),
+  insured_name: optionalText(300),
+  cause_of_loss: optionalText(300),
+  description: optionalText(4000),
+  loss_type: z.enum(LOSS_TYPES).default('ATTRITIONAL'),
+  cat_event_ref: optionalText(120),
+  estimated_gross_loss_100: money.default(0),
+}).strict();
+
+// ── PUT /api/claims/plas/:id ─────────────────────────────────────────────────
+export const plaUpdateSchema = z.object({
+  loss_date: optionalIsoDate,
+  advice_date: optionalIsoDate,
+  class_of_business_id: optionalUuid,
+  currency_id: optionalUuid,
+  cedant_claim_ref: optionalText(120),
+  insured_name: optionalText(300),
+  cause_of_loss: optionalText(300),
+  description: optionalText(4000),
+  loss_type: z.enum(LOSS_TYPES).optional(),
+  cat_event_ref: optionalText(120),
+  estimated_gross_loss_100: money.optional(),
+}).strict();
+
+// ── POST /api/claims/plas/:id/convert ────────────────────────────────────────
+// Promote the PLA into a claim. The opening position defaults to the PLA's
+// estimate as OS (paid 0) unless the caller restates it here.
+export const plaConvertSchema = z.object({
+  reported_date: optionalIsoDate,
+  gross_paid_100: money.optional(),
+  gross_os_100: money.optional(),
+  comment: optionalText(1000),
+}).strict();
+
+// ── POST /api/claims/plas/:id/close · /reopen ────────────────────────────────
+export const plaCloseSchema = z.object({
+  reason: optionalText(1000),
 }).strict();
 
 // ── POST /api/finance/entries/:id/status ────────────────────────────────────

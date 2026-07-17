@@ -1,7 +1,8 @@
 // src/screens/claims/ClaimsHomeScreen.jsx
-// Claims module home: portfolio KPIs, filterable claims register, and the
+// Claims module home: portfolio KPIs, filterable claims register, the
 // New Claim flow (booked against SIGNED/BOUND treaties only — enforced
-// server-side, mirrored in the contract dropdown here).
+// server-side, mirrored in the contract dropdown here), and the PLA
+// (Preliminary Loss Advice) section for pre-claim notifications.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api';
@@ -9,6 +10,7 @@ import Topbar from '../../components/Topbar';
 import { Button, Field, Input, Modal } from '../../components/ui';
 import { logger } from '../../utils/logger';
 import { formatWithCommasDecimal, sanitizeNumber } from '../../utils/format';
+import PlaSection from './PlaSection';
 
 const errMsg = (e, fallback) => {
   const b = e?.body;
@@ -93,6 +95,8 @@ const treatyLabel = (c) => {
 
 export default function ClaimsHomeScreen() {
   const navigate = useNavigate();
+  const [section, setSection] = useState('claims'); // 'claims' | 'plas'
+  const [plaCreateNonce, setPlaCreateNonce] = useState(0);
   const [summary, setSummary] = useState(null);
   const [claims, setClaims] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -302,16 +306,36 @@ export default function ClaimsHomeScreen() {
         subtitle="Claims dashboard & register"
         actions={(
           <div style={{ display: 'flex', gap: 8 }}>
-            <Button onClick={() => setApprovalFilter('WAITING_APPROVAL')}>
-              Review Claims{summary && Number(summary.waiting_approval_claims) > 0 ? ` (${summary.waiting_approval_claims})` : ''}
-            </Button>
-            <Button variant="primary" onClick={openCreate}>+ New Claim</Button>
+            {section === 'claims' ? (
+              <>
+                <Button onClick={() => setApprovalFilter('WAITING_APPROVAL')}>
+                  Review Claims{summary && Number(summary.waiting_approval_claims) > 0 ? ` (${summary.waiting_approval_claims})` : ''}
+                </Button>
+                <Button variant="primary" onClick={openCreate}>+ New Claim</Button>
+              </>
+            ) : (
+              <Button variant="primary" onClick={() => setPlaCreateNonce((n) => n + 1)}>+ New PLA</Button>
+            )}
           </div>
         )}
       />
 
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 20px' }}>
 
+        {/* Section tabs: formal claims register vs. pre-claim PLAs */}
+        <div role="tablist" aria-label="Claims sections" className="claims-tabs">
+          {[['claims', 'Claims Register'], ['plas', 'Preliminary Loss Advices (PLA)']].map(([key, label]) => (
+            <button key={key} type="button" role="tab" aria-selected={section === key} onClick={() => setSection(key)}
+              className={`claims-tab${section === key ? ' claims-tab--active' : ''}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {section === 'plas' && <PlaSection createNonce={plaCreateNonce} />}
+
+        {section === 'claims' && (
+        <>
         {/* Claim counts */}
         <div style={kpiRowStyle(150)}>
           <KpiCard label="Total Claims" value={summary ? summary.total_claims : '–'} sub={summary ? `${summary.open_claims} open · ${summary.cat_claims} CAT` : ''} />
@@ -394,6 +418,8 @@ export default function ClaimsHomeScreen() {
             </tbody>
           </table>
         </div>
+        </>
+        )}
       </div>
 
       {/* New Claim wizard — full screen, tabbed */}
