@@ -192,7 +192,12 @@ describe.skipIf(shouldSkipDb)('integration: claims + finance modules', () => {
     expect(num(entry.os_our_share)).toBe(0); // reopen left OS at 0
   });
 
-  it('acknowledges once (PENDING_SETUP → ACTIVE) and 422s a second acknowledge', async () => {
+  it('acknowledge is approver-gated, then allows one PENDING_SETUP → ACTIVE transition', async () => {
+    const junior = await harness.fetchApp('POST', `/api/finance/entries/${entryId}/acknowledge`, {
+      headers: { 'x-user-level': '5' },
+    });
+    expect(junior.status).toBe(403);
+
     const ack = await harness.fetchApp('POST', `/api/finance/entries/${entryId}/acknowledge`);
     expect(ack.status).toBe(200);
     expect((await ack.json()).status).toBe('ACTIVE');
