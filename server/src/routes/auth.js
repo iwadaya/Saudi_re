@@ -434,6 +434,11 @@ router.post('/auth/name-login', asyncHandler(async (req, res) => {
   if (!nameAuthEnabled()) {
     return res.status(404).json({ error: 'Name sign-in is not enabled.', code: 'NAME_AUTH_DISABLED' });
   }
+  // SSO posture wins over pilot name-login. If SSO is enabled, this passwordless
+  // route must not mint local sessions that bypass SSO/MFA.
+  if (isSsoEnabled()) {
+    return res.status(403).json({ error: 'Name sign-in is disabled — please sign in with SSO.', code: 'SSO_REQUIRED' });
+  }
   const b = req.body || {};
   const first = String(b.first_name || '').trim().replace(/\s+/g, ' ');
   const last  = String(b.surname || '').trim().replace(/\s+/g, ' ');
