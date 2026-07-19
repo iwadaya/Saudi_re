@@ -538,6 +538,20 @@ describe('POST /auth/name-login — passwordless name sign-in (Saudi Re pilot)',
     expect(res.status).toBe(404);
   });
 
+  it('is blocked by SSO posture even when ALLOW_NAME_AUTH=true', async () => {
+    process.env.ALLOW_NAME_AUTH = 'true';
+    process.env.IDENTITY_SSO_ENABLED = 'true';
+    scenario.nameUser = isheRow();
+    const res = await nameLogin({ first_name: 'Ishe', surname: 'Wadaya' });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('SSO_REQUIRED');
+    // Hard block happens before any DB/session side effects.
+    expect(queryLog.some((q) => q.sql.includes('lower(display_name)'))).toBe(false);
+    expect(queryLog.some((q) => q.sql.includes('INSERT INTO public.uw_user'))).toBe(false);
+    expect(queryLog.some((q) => q.sql.includes('INSERT INTO public.auth_session'))).toBe(false);
+    expect((res.cookies || []).some((c) => c.name === 'auth_token' && !c.cleared)).toBe(false);
+  });
+
   it('signs an EXISTING user in by name — cookie session, no password, no new account', async () => {
     process.env.ALLOW_NAME_AUTH = 'true';
     scenario.nameUser = isheRow();
