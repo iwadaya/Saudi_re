@@ -54,6 +54,20 @@ router.use((req, res, next) => {
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 const DEMO_PASSWORD = 'demo2026';
+// Legacy + migration-132 seeded personas. Their shared bootstrap credential
+// must never authenticate outside explicit demo mode.
+const SEEDED_DEMO_USERNAMES = new Set([
+  'cuo',
+  'underwriter',
+  'edwin.taruvinga',
+  'catho.ba',
+  'chongo.nkalamo',
+  'chief.underwriter',
+  'underwriter1',
+  'underwriter2',
+  'underwriter3',
+  'underwriter4',
+]);
 // The seeded forced-change temp password (migration 123). Forbidden as a real
 // password everywhere so a must-change user can't "change" to the temp and an
 // admin can't (re)create a user holding it.
@@ -309,11 +323,18 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
   //     honoured ONLY when ALLOW_DEMO_AUTH=true (never in production).
   const storedHash = user.password_hash;
   const demoAuthAllowed = process.env.ALLOW_DEMO_AUTH === 'true';
+  const isSeededDemoUser = SEEDED_DEMO_USERNAMES.has(String(user.username || '').trim().toLowerCase());
+  // Security hard-stop: in non-demo deployments, seeded persona accounts may
+  // still carry the shared bootstrap password from migration 132. Refuse that
+  // credential even when the hash matches, while still allowing any rotated
+  // real password for the same account.
+  const blockedSeededDemoPassword = !demoAuthAllowed && isSeededDemoUser && password === DEMO_PASSWORD;
   // verifyPassword is async (off-loop scrypt). Only evaluated for a real
   // scrypt hash; the demo shortcut short-circuits first so the await is skipped.
   const hashMatches = typeof storedHash === 'string' && storedHash.startsWith('scrypt$')
     && await verifyPassword(password, storedHash);
-  const passwordOk = (demoAuthAllowed && password === DEMO_PASSWORD) || hashMatches;
+  const passwordOk = !blockedSeededDemoPassword
+    && ((demoAuthAllowed && password === DEMO_PASSWORD) || hashMatches);
 
   if (!passwordOk) {
     // Increment failed attempts (fire-and-forget)

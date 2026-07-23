@@ -469,6 +469,46 @@ describe('POST /auth/login', () => {
     expect(authCookieOf(ok).value).toMatch(/.+\..+/);       // it lives in the cookie
   });
 
+  it('blocks seeded personas from authenticating with shared demo2026 when ALLOW_DEMO_AUTH is off', async () => {
+    delete process.env.ALLOW_DEMO_AUTH;
+    scenario.loginUser = {
+      ...adaRow(await hashPassword('demo2026')),
+      user_id: 'u-cu',
+      username: 'chief.underwriter',
+      display_name: 'Chief Underwriter',
+      role_code: 'CU',
+      role_name: 'Chief Underwriter',
+      hierarchy_level: 2,
+    };
+    const res = await call(buildApp(), {
+      method: 'POST',
+      path: '/auth/login',
+      body: { username: 'chief.underwriter', password: 'demo2026' },
+    });
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: 'Invalid credentials.' });
+  });
+
+  it('still allows seeded personas once their password is rotated away from demo2026', async () => {
+    delete process.env.ALLOW_DEMO_AUTH;
+    scenario.loginUser = {
+      ...adaRow(await hashPassword('realpass1')),
+      user_id: 'u-cu',
+      username: 'chief.underwriter',
+      display_name: 'Chief Underwriter',
+      role_code: 'CU',
+      role_name: 'Chief Underwriter',
+      hierarchy_level: 2,
+    };
+    const res = await call(buildApp(), {
+      method: 'POST',
+      path: '/auth/login',
+      body: { username: 'chief.underwriter', password: 'realpass1' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.session.username).toBe('chief.underwriter');
+  });
+
   it('sets an httpOnly Secure-capable SameSite auth cookie + a readable CSRF cookie, and never returns the token in the body', async () => {
     scenario.loginUser = adaRow(await hashPassword('realpass1'));
     const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'realpass1' } });
