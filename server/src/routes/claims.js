@@ -37,6 +37,13 @@ const router = Router();
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function claimDocsFrozenError() {
+  const e = new Error('Claim is awaiting approval — attachments are frozen until reviewed.');
+  e.status = 422;
+  e.code = 'CLAIM_UNDER_REVIEW';
+  return e;
+}
+
 /** Shared SELECT for claim lists/detail: header + contract context + latest position. */
 const CLAIM_SELECT = `
   SELECT
@@ -600,8 +607,9 @@ router.post('/claims/:id/documents', upload.single('file'), asyncHandler(async (
   const file = req.file;
   if (!file) return res.status(400).json({ error: 'No file uploaded' });
 
-  const { rows: exists } = await pool.query('SELECT claim_ref FROM public.claim WHERE claim_id=$1', [id]);
+  const { rows: exists } = await pool.query('SELECT claim_ref, approval_status FROM public.claim WHERE claim_id=$1', [id]);
   if (!exists.length) return res.status(404).json({ error: 'Claim not found' });
+  if (exists[0].approval_status === 'WAITING_APPROVAL') throw claimDocsFrozenError();
 
   const actor = await resolveAuditActor(req);
   const safe = await assertUploadSafe(file);
@@ -681,6 +689,13 @@ router.delete('/claims/documents/:docId', asyncHandler(async (req, res) => {
   if (!doc) return res.status(404).json({ error: 'Document not found' });
   const actor = await resolveAuditActor(req);
   await withTransaction(async (client) => {
+    const { rows: claimRows } = await client.query(
+      'SELECT approval_status FROM public.claim WHERE claim_id=$1 FOR UPDATE',
+      [doc.claim_id],
+    );
+    if (!claimRows.length) { const e = new Error('Claim not found'); e.status = 404; throw e; }
+    if (claimRows[0].approval_status === 'WAITING_APPROVAL') throw claimDocsFrozenError();
+
     const { rowCount } = await client.query(
       'DELETE FROM public.claim_document WHERE document_id=$1', [doc.document_id]);
     if (!rowCount) { const e = new Error('Document not found'); e.status = 404; throw e; }

@@ -261,6 +261,43 @@ describe.skipIf(shouldSkipDb)('integration: claims + finance modules', () => {
     expect(again.status).toBe(422);
   });
 
+  it('approval workflow: WAITING_APPROVAL also freezes claim attachments', async () => {
+    const create = await harness.fetchApp('POST', '/api/claims', {
+      body: {
+        contract_id: contractId,
+        loss_date: '2026-04-01',
+        loss_type: 'LARGE',
+        insured_name: 'Freeze Test Insured',
+        cedant_claim_ref: 'FREEZE-DOC-1',
+        gross_paid_100: 0,
+        gross_os_100: 100_000,
+        comment: 'Draft attachment test',
+      },
+    });
+    expect(create.status).toBe(201);
+    const { claim_id: freezeClaimId } = await create.json();
+
+    // Draft claim accepts attachments.
+    const draftDoc = new FormData();
+    draftDoc.append('file', new Blob(['draft evidence'], { type: 'text/plain' }), 'draft-evidence.txt');
+    const upDraft = await harness.fetchApp('POST', `/api/claims/${freezeClaimId}/documents`, { body: draftDoc });
+    expect(upDraft.status).toBe(201);
+    const existingDoc = await upDraft.json();
+
+    // Once submitted for review, attachment mutations are blocked.
+    expect((await harness.fetchApp('POST', `/api/claims/${freezeClaimId}/submit`, { body: {} })).status).toBe(200);
+
+    const waitingDoc = new FormData();
+    waitingDoc.append('file', new Blob(['tamper'], { type: 'text/plain' }), 'tamper.txt');
+    const upWaiting = await harness.fetchApp('POST', `/api/claims/${freezeClaimId}/documents`, { body: waitingDoc });
+    expect(upWaiting.status).toBe(422);
+    expect((await upWaiting.json()).code).toBe('CLAIM_UNDER_REVIEW');
+
+    const delWaiting = await harness.fetchApp('DELETE', `/api/claims/documents/${existingDoc.document_id}`);
+    expect(delWaiting.status).toBe(422);
+    expect((await delWaiting.json()).code).toBe('CLAIM_UNDER_REVIEW');
+  });
+
   it('approval workflow: reject returns it to the handler, resubmit + approve finalises', async () => {
     const reject = await harness.fetchApp('POST', `/api/claims/${claimId}/reject`, { body: { reason: 'Reserve unsupported' } });
     expect(reject.status).toBe(200);
