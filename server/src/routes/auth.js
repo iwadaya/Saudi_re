@@ -193,6 +193,17 @@ const DEMO_USERS_FALLBACK = [
   { user_id:'00000000-0000-0000-0000-000000000002', username:'underwriter1', display_name:'Underwriter 1', email:'underwriter1@universe3.app', role_code:'UW', role_name:'Underwriter', hierarchy_level:4, office:'Riyadh', treaty_limit_usd:25000000, approvals_required:1, is_active:true },
 ];
 
+// Seeded personas must remain password-auth only. Name-login is for pilot
+// tester identities; allowing shared/demo personas here lets anyone with a
+// known display name mint a privileged session without credentials.
+const NAME_LOGIN_PASSWORD_ONLY_USERNAMES = new Set([
+  'chief.underwriter',
+  'underwriter1',
+  'underwriter2',
+  'underwriter3',
+  'underwriter4',
+]);
+
 function buildSession(user) {
   return {
     userId:           user.user_id,
@@ -500,6 +511,26 @@ router.post('/auth/name-login', asyncHandler(async (req, res) => {
   }
 
   const user = rows[0];
+
+  // Passwordless name-login must never authenticate shared/demo personas or
+  // senior authorities. They must use the password flow, where lockouts, break-
+  // glass controls and (when configured) SSO posture checks apply.
+  const normalizedUsername = String(user.username || '').toLowerCase();
+  const hierarchyLevel = Number(user.hierarchy_level);
+  if (
+    NAME_LOGIN_PASSWORD_ONLY_USERNAMES.has(normalizedUsername)
+    || (Number.isFinite(hierarchyLevel) && hierarchyLevel <= 3)
+  ) {
+    await logAudit(pool, {
+      entityType: 'USER', entityId: user.user_id,
+      eventType: 'NAME_LOGIN_BLOCKED', actor: { id: user.user_id, name: user.username || user.email },
+      payload: { reason: 'PASSWORD_LOGIN_REQUIRED', username: user.username, hierarchy_level: user.hierarchy_level ?? null },
+    }).catch(() => {});
+    return res.status(403).json({
+      error: 'This account must sign in with password.',
+      code: 'PASSWORD_LOGIN_REQUIRED',
+    });
+  }
 
   // Honour an account lock the same way password login does (generic 401).
   if (user.locked_until && new Date(user.locked_until) > new Date()) {
