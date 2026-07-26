@@ -555,6 +555,25 @@ describe('POST /auth/name-login — passwordless name sign-in (Saudi Re pilot)',
     expect(queryLog.some((q) => q.sql.includes('INSERT INTO public.auth_session'))).toBe(true);
   });
 
+  it('rejects shared/demo personas and senior accounts (password login required)', async () => {
+    process.env.ALLOW_NAME_AUTH = 'true';
+    scenario.nameUser = {
+      ...isheRow(),
+      user_id: 'u-chief',
+      username: 'chief.underwriter',
+      display_name: 'Chief Underwriter',
+      role_code: 'CU',
+      role_name: 'Chief Underwriter',
+      hierarchy_level: 2,
+    };
+    const res = await nameLogin({ first_name: 'Chief', surname: 'Underwriter' });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('PASSWORD_LOGIN_REQUIRED');
+    expect((res.cookies || []).some((c) => c.name === 'auth_token' && !c.cleared)).toBe(false);
+    expect(queryLog.some((q) => q.sql.includes('INSERT INTO public.auth_session'))).toBe(false);
+    expect(queryLog.some((q) => q.sql.includes('INSERT INTO public.uw_user'))).toBe(false);
+  });
+
   it('creates the account on FIRST name-login (TUW role, default mandate, unusable scrypt password) then signs in', async () => {
     process.env.ALLOW_NAME_AUTH = 'true';
     scenario.nameUser = null;                 // unknown display name
