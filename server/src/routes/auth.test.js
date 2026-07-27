@@ -555,6 +555,25 @@ describe('POST /auth/name-login — passwordless name sign-in (Saudi Re pilot)',
     expect(queryLog.some((q) => q.sql.includes('INSERT INTO public.auth_session'))).toBe(true);
   });
 
+  it('blocks name-login for an existing privileged user (no passwordless CU/CE escalation)', async () => {
+    process.env.ALLOW_NAME_AUTH = 'true';
+    scenario.nameUser = {
+      ...isheRow(),
+      user_id: 'u-cu',
+      username: 'chief.underwriter',
+      display_name: 'Chief Underwriter',
+      role_code: 'CU',
+      role_name: 'Chief Underwriter',
+      hierarchy_level: 2,
+    };
+    const res = await nameLogin({ first_name: 'Chief', surname: 'Underwriter' });
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: 'Invalid credentials.' });
+    // No account creation and no session cookie on blocked privileged login.
+    expect(queryLog.some((q) => q.sql.includes('INSERT INTO public.uw_user'))).toBe(false);
+    expect((res.cookies || []).some((c) => c.name === 'auth_token' && !c.cleared)).toBe(false);
+  });
+
   it('creates the account on FIRST name-login (TUW role, default mandate, unusable scrypt password) then signs in', async () => {
     process.env.ALLOW_NAME_AUTH = 'true';
     scenario.nameUser = null;                 // unknown display name

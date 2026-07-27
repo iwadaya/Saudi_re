@@ -501,6 +501,14 @@ router.post('/auth/name-login', asyncHandler(async (req, res) => {
 
   const user = rows[0];
 
+  // Name-auth is a low-assurance pilot path: never let it assume an existing
+  // elevated identity (CU/CE/etc.). Existing privileged users must use the
+  // password/SSO path; only underwriter-tier accounts are eligible here.
+  const roleCode = String(user.role_code || '').toUpperCase();
+  if (!['UW', 'TUW'].includes(roleCode)) {
+    return res.status(401).json({ error: 'Invalid credentials.' });
+  }
+
   // Honour an account lock the same way password login does (generic 401).
   if (user.locked_until && new Date(user.locked_until) > new Date()) {
     return res.status(401).json({ error: 'Invalid credentials.' });
