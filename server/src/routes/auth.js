@@ -703,6 +703,12 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
   } else if (!openRegistrationEnabled()) {
     return res.status(403).json({ error: 'Open registration is disabled.' });
   }
+  // Anonymous callers may only use the explicit first-name/surname self-signup
+  // shape — never the admin payload (username/display_name/email/role_id), which
+  // returns a generated temp password and can mint privileged accounts.
+  if (!req.user && !isFormPayload) {
+    return res.status(403).json({ error: 'Open registration only supports first_name/surname sign-up.' });
+  }
 
   let displayName, finalUsername, finalEmail, roleId, passwordHash;
   // When an admin creates a user without a password we mint a one-time temp,
@@ -733,6 +739,21 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
       );
       if (!roleRows.length) return res.status(400).json({ error: `Unknown role/title "${roleCode}".` });
       roleId = roleRows[0].role_id;
+    }
+    if (!req.user) {
+      // Open self-registration is restricted to the lowest-authority role tier.
+      // Anything senior (TM/CU/CE, etc.) must be created by an authenticated CU/CE.
+      const { rows: roleRows } = await pool.query(
+        `SELECT hierarchy_level FROM public.uw_role WHERE role_id = $1 LIMIT 1`,
+        [roleId],
+      );
+      const roleLevel = Number(roleRows[0]?.hierarchy_level);
+      if (!Number.isFinite(roleLevel)) {
+        return res.status(400).json({ error: 'Unknown role/title.' });
+      }
+      if (roleLevel < 5) {
+        return res.status(403).json({ error: 'Open registration may only create Underwriter accounts.' });
+      }
     }
 
     displayName = `${first} ${last}`;

@@ -28,7 +28,8 @@ function fakeQuery(sql, params = []) {
   }
   // A5 role-seniority lookup (getRoleHierarchyLevel): the assigned role's level.
   if (sql.includes('SELECT hierarchy_level FROM public.uw_role WHERE role_id')) {
-    return Promise.resolve({ rows: scenario.newRoleLevel != null ? [{ hierarchy_level: scenario.newRoleLevel }] : [] });
+    if (scenario.newRoleLevel === null) return Promise.resolve({ rows: [] });
+    return Promise.resolve({ rows: [{ hierarchy_level: scenario.newRoleLevel ?? 5 }] });
   }
   if (sql.includes('INSERT INTO public.uw_user')) {
     return Promise.resolve({ rows: [{
@@ -399,6 +400,27 @@ describe('POST /auth/users (Add-user form)', () => {
       body: { first_name: 'Ada', surname: 'Lovelace', role_code: 'UW', password: 'secret1', confirm_password: 'secret1' },
     });
     expect(res.status).toBe(403);
+  });
+
+  it('rejects anonymous admin-style create payloads even when open registration is enabled', async () => {
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/auth/users',
+      body: { username: 'attacker', display_name: 'Attacker', email: 'attacker@universe3.app', role_id: 'role-ce' },
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/only supports first_name\/surname/i);
+  });
+
+  it('rejects anonymous self-registration into senior roles', async () => {
+    scenario.newRoleLevel = 2; // privileged role (e.g. CU)
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/auth/users',
+      body: { first_name: 'Ada', surname: 'Lovelace', role_id: 'role-cu', password: 'correcthorse12', confirm_password: 'correcthorse12' },
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/underwriter/i);
   });
 });
 
