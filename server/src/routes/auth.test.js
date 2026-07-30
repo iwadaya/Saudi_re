@@ -211,6 +211,42 @@ describe('privileged auth gates (verified req.user)', () => {
 describe('A5 — privilege-escalation guards on user/mandate admin', () => {
   const cu = { userId: 'u-cu', roleCode: 'CU', hierarchyLevel: 2, displayName: 'CU' };
 
+  it('POST /auth/users (form payload) cannot assign a role senior to the actor (403)', async () => {
+    currentUser = cu;
+    scenario.roleId = 'role-ce';
+    scenario.newRoleLevel = 1; // CE — senior to the CU actor (level 2)
+    const res = await call(buildApp(), {
+      method: 'POST',
+      path: '/auth/users',
+      body: {
+        first_name: 'Grace',
+        surname: 'Hopper',
+        role_code: 'CE',
+        password: 'correcthorse12',
+        confirm_password: 'correcthorse12',
+      },
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/senior/i);
+  });
+
+  it('POST /auth/users (admin payload) cannot assign a role senior to the actor (403)', async () => {
+    currentUser = cu;
+    scenario.newRoleLevel = 1; // CE — senior to the CU actor (level 2)
+    const res = await call(buildApp(), {
+      method: 'POST',
+      path: '/auth/users',
+      body: {
+        username: 'ce.shadow',
+        display_name: 'CE Shadow',
+        email: 'ce.shadow@universe3.app',
+        role_id: 'role-ce',
+      },
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/senior/i);
+  });
+
   it('PATCH /auth/users cannot assign a role senior to the actor (403)', async () => {
     currentUser = cu;
     scenario.newRoleLevel = 1; // CE — senior to the CU actor (level 2)

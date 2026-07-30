@@ -690,6 +690,7 @@ router.get('/auth/roles', asyncHandler(async (req, res) => {
 router.post('/auth/users', asyncHandler(async (req, res) => {
   const b = req.body || {};
   const isFormPayload = b.first_name != null || b.surname != null || b.password != null;
+  const actorLevel = Number(req.user?.hierarchyLevel);
 
   // ── Caller gate ──
   // Authenticated creates require Chief Underwriter / Chief Executive
@@ -757,6 +758,18 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
     tempPassword = generateTempPassword();
     passwordHash = await hashPassword(tempPassword);
     mustChangePassword = true;
+  }
+
+  // A5: same role-seniority fence as PATCH /auth/users — an actor may never
+  // create an account with a role more senior than their own.
+  if (req.user) {
+    const newRoleLevel = await getRoleHierarchyLevel(roleId);
+    if (newRoleLevel != null && newRoleLevel < actorLevel) {
+      return res.status(403).json({
+        error: 'You cannot assign a role more senior than your own.',
+        code: 'FORBIDDEN',
+      });
+    }
   }
 
   const { rows } = await pool.query(
