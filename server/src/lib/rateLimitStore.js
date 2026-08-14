@@ -99,6 +99,9 @@ export class FallbackStore {
   async increment(key) {
     try {
       const r = await this.primary.increment(key);
+      // Keep the local fallback store warm even while Redis is healthy so
+      // a mid-window outage doesn't reset this process's counters to zero.
+      await this.memory.increment(key);
       this._onSuccess();
       return r;
     } catch (err) {
@@ -110,10 +113,13 @@ export class FallbackStore {
   async decrement(key) {
     try {
       await this.primary.decrement(key);
+      this._onSuccess();
     } catch (err) {
       this._onError(err);
-      await this.memory.decrement(key);
     }
+    // Mirror decrements into the local fallback store as well so its counts
+    // stay aligned with the primary while healthy.
+    await this.memory.decrement(key);
   }
 
   async resetKey(key) {
