@@ -161,14 +161,17 @@ function writeThemedSheet(theme, workbook, name, title, aoa) {
   if (lastData >= firstData) zebra(ws, firstData, lastData, ncols);
   if (totalRowIdx > 0) totalRow(ws, totalRowIdx, ncols);
 
-  // Auto-width + light number formatting for genuine numeric cells (percentage
-  // / formatted cells are already strings, so they pass through untouched).
+  // Auto-width + light number formatting for genuine numeric cells. Keep the
+  // integer format for whole-number cells only; forcing decimal cells to
+  // integer display silently rounds factors/ratios in the exported workbook.
   for (let c = 1; c <= ncols; c++) {
     let w = 10;
     for (let rr = hdr; rr <= lastData; rr++) {
       const v = ws.getCell(rr, c).value;
       w = Math.max(w, String(v ?? '').length + 2);
-      if (rr >= firstData && typeof v === 'number') ws.getCell(rr, c).numFmt = UT.fmtInt;
+      if (rr >= firstData && typeof v === 'number' && Number.isFinite(v) && Number.isInteger(v)) {
+        ws.getCell(rr, c).numFmt = UT.fmtInt;
+      }
     }
     ws.getColumn(c).width = Math.min(60, w);
   }
