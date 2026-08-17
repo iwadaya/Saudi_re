@@ -600,8 +600,15 @@ router.post('/claims/:id/documents', upload.single('file'), asyncHandler(async (
   const file = req.file;
   if (!file) return res.status(400).json({ error: 'No file uploaded' });
 
-  const { rows: exists } = await pool.query('SELECT claim_ref FROM public.claim WHERE claim_id=$1', [id]);
+  const { rows: exists } = await pool.query(
+    'SELECT claim_ref, approval_status FROM public.claim WHERE claim_id=$1', [id]);
   if (!exists.length) return res.status(404).json({ error: 'Claim not found' });
+  // The review freeze covers evidence too: the approver must review exactly
+  // the pack that was submitted, so attachments cannot be added (or, below,
+  // removed) while the claim sits in WAITING_APPROVAL.
+  if (exists[0].approval_status === 'WAITING_APPROVAL') {
+    return res.status(422).json({ error: 'Claim is awaiting approval — attachments are frozen until reviewed.' });
+  }
 
   const actor = await resolveAuditActor(req);
   const safe = await assertUploadSafe(file);
@@ -634,8 +641,11 @@ router.post('/claims/:id/documents', upload.single('file'), asyncHandler(async (
 async function loadClaimDoc(docId) {
   if (!UUID_RE.test(docId)) return null;
   const { rows } = await pool.query(
-    `SELECT document_id, claim_id, file_name, mime_type, size_bytes, storage_path
-       FROM public.claim_document WHERE document_id=$1`, [docId]);
+    `SELECT d.document_id, d.claim_id, d.file_name, d.mime_type, d.size_bytes, d.storage_path,
+            c.approval_status
+       FROM public.claim_document d
+       JOIN public.claim c ON c.claim_id = d.claim_id
+      WHERE d.document_id=$1`, [docId]);
   return rows[0] || null;
 }
 
@@ -679,6 +689,9 @@ router.get('/claims/documents/:docId/view', asyncHandler((req, res) => serveClai
 router.delete('/claims/documents/:docId', asyncHandler(async (req, res) => {
   const doc = await loadClaimDoc(req.params.docId);
   if (!doc) return res.status(404).json({ error: 'Document not found' });
+  if (doc.approval_status === 'WAITING_APPROVAL') {
+    return res.status(422).json({ error: 'Claim is awaiting approval — attachments are frozen until reviewed.' });
+  }
   const actor = await resolveAuditActor(req);
   await withTransaction(async (client) => {
     const { rowCount } = await client.query(

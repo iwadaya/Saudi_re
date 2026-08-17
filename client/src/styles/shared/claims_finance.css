@@ -1,0 +1,338 @@
+/* src/styles/shared/claims_finance.css — the Claims and Finance ("ledger")
+   screens: ClaimsHomeScreen, ClaimDetailScreen, FinanceHomeScreen.
+   Lives in shared/ because both feature modules use the same primitives.
+
+   Every colour is a token from tokens.css, so these screens reskin with
+   themes.css — including Daylight, where the hard-coded slate/amber/rose
+   hex these screens originally shipped with rendered washed out on a light
+   surface. Prefix: .cf- (claims/finance). */
+
+/* ── Shell ──────────────────────────────────────────────────────────── */
+.cf-screen {
+  min-height: 100vh;
+  background: var(--bg0);
+  font-family: var(--font-sans);
+}
+.cf-page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px 20px;
+}
+.cf-page--narrow { max-width: 1180px; }
+
+/* Topbar action cluster. */
+.cf-actions { display: flex; gap: 8px; }
+
+/* ── KPI tiles ──────────────────────────────────────────────────────── */
+.cf-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+/* Money tiles need more room than count tiles. */
+.cf-kpi-row--wide {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  margin-bottom: 22px;
+}
+.cf-kpi {
+  min-width: 0;
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid rgba(var(--accent-rgb), .18);
+}
+.cf-kpi__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cf-kpi__value {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.cf-kpi__value--muted  { color: var(--muted); }
+.cf-kpi__value--warn   { color: var(--accent-amber); }
+.cf-kpi__value--danger { color: var(--accent-rose); }
+.cf-kpi__value--ok     { color: var(--accent); }
+.cf-kpi__sub {
+  font-size: 11px;
+  color: var(--text-subtle);
+  margin-top: 6px;
+  min-height: 13px;
+}
+
+/* ── Filter bar ─────────────────────────────────────────────────────── */
+.cf-filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.cf-filters__search { flex: 1; min-width: 220px; }
+
+/* ── Messages ───────────────────────────────────────────────────────── */
+.cf-error {
+  color: var(--accent-rose);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+.cf-error--modal { font-size: 12.5px; margin: 12px 0 0; }
+.cf-loading { color: var(--text-subtle); padding: 24px; }
+.cf-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-subtle);
+}
+
+/* Approval / rejection banner above the claim body. */
+.cf-banner { margin-bottom: 14px; }
+
+/* ── Table helpers (composed on the ui Table primitive) ─────────────── */
+/* Trailing gap when a table is followed by the next section heading. */
+.cf-section-gap { margin-bottom: 26px; }
+.cf-num { text-align: right; }
+.cf-num--strong { font-weight: 700; }
+.cf-cell-title { font-weight: 600; color: var(--text); }
+.cf-cell-sub { font-size: 11px; color: var(--text-subtle); }
+.cf-cell-muted { color: var(--text-subtle); }
+.cf-cell-accent { font-weight: 700; color: var(--accent); }
+/* Free-text comment column: one line, ellipsised, full text on hover. */
+.cf-cell-clip {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-subtle);
+}
+.cf-ccy { color: var(--text-subtle); font-size: 10px; }
+.cf-actions-cell { text-align: right; white-space: nowrap; }
+
+/* ── Links ──────────────────────────────────────────────────────────── */
+.cf-link {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+.cf-link:hover { text-decoration: underline; }
+.cf-link--sm { font-size: 12px; font-weight: 600; margin-right: 12px; }
+/* A real <button> that reads as a link (destructive row action). */
+.cf-linkbtn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-rose);
+  cursor: pointer;
+}
+.cf-linkbtn:hover { text-decoration: underline; }
+.cf-linkbtn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus); border-radius: 4px; }
+
+/* ── Fact grids (claim header, wizard review) ───────────────────────── */
+.cf-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  margin-bottom: 18px;
+  background: var(--surface-2);
+  border: 1px solid rgba(var(--accent-rgb), .14);
+  font-size: 12.5px;
+}
+.cf-facts--review { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.cf-fact__label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  margin-bottom: 3px;
+}
+.cf-fact__value {
+  color: var(--text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* ── Position cards (claim detail) ──────────────────────────────────── */
+.cf-pos-row {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.cf-pos {
+  flex: 1 1 200px;
+  min-width: 200px;
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid rgba(var(--accent-rgb), .18);
+}
+.cf-pos__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  margin-bottom: 8px;
+}
+.cf-pos__value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.cf-pos__unit { font-size: 11px; font-weight: 500; color: var(--text-subtle); }
+.cf-pos__at100 { font-size: 12px; color: var(--text-subtle); margin-top: 4px; }
+
+/* ── Section headings ───────────────────────────────────────────────── */
+.cf-section-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  margin-bottom: 8px;
+}
+/* Same treatment, but as a full-width row inside a form grid. */
+.cf-section-head {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  margin-top: 6px;
+}
+
+/* ── Claim description / prose ──────────────────────────────────────── */
+.cf-desc {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+  margin-bottom: 18px;
+  padding: 0 4px;
+}
+.cf-note-text {
+  font-size: 12.5px;
+  color: var(--text-subtle);
+  line-height: 1.6;
+}
+.cf-note-text--modal { margin-bottom: 12px; line-height: 1.55; }
+.cf-strong { color: var(--text); }
+.cf-hint { font-size: 11.5px; color: var(--text-subtle); margin-top: 4px; }
+
+/* ── Forms ──────────────────────────────────────────────────────────── */
+.cf-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.cf-grid-full { grid-column: 1 / -1; }
+@media (max-width: 720px) {
+  .cf-grid2 { grid-template-columns: 1fr; }
+}
+
+/* ── Attachments ────────────────────────────────────────────────────── */
+.cf-attach {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.cf-attach__input { flex: 1; min-width: 240px; }
+.cf-attach-empty {
+  font-size: 12.5px;
+  color: var(--text-subtle);
+  margin-bottom: 26px;
+}
+
+/* ── Notes ──────────────────────────────────────────────────────────── */
+.cf-notes-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.cf-notes-row__input { flex: 1; }
+.cf-note-item {
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  background: var(--surface-2);
+  border: 1px solid rgba(var(--accent-rgb), .10);
+}
+.cf-note-item__body { color: var(--text); }
+.cf-note-item__meta {
+  color: var(--text-subtle);
+  font-size: 10.5px;
+  margin-top: 4px;
+}
+
+/* ── Wizard (New Claim modal) ───────────────────────────────────────── */
+.cf-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid rgba(var(--accent-rgb), .16);
+  margin-bottom: 20px;
+}
+.cf-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 10px 16px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+.cf-tab:hover { color: var(--text); }
+.cf-tab:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus); }
+.cf-tab[aria-selected="true"] {
+  font-weight: 800;
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.cf-wizard-body { flex: 1; overflow-y: auto; width: 100%; }
+.cf-wizard-inner { max-width: 960px; margin: 0 auto; }
+
+/* Position preview tiles inside the wizard. */
+.cf-mini-grid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.cf-mini {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid rgba(var(--accent-rgb), .14);
+}
+.cf-mini__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  margin-bottom: 6px;
+}
+.cf-mini__value {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}

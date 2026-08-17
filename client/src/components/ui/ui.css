@@ -98,6 +98,34 @@
 .ui-input:disabled { opacity: .55; cursor: not-allowed; }
 .ui-input--number { font-variant-numeric: tabular-nums; text-align: right; }
 
+/* ── Select ─────────────────────────────────────────────────────────── */
+/* Same surface as .ui-input; keeps the native chevron and popup so the
+   control stays accessible without a JS listbox. */
+.ui-select {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--text);
+  background: var(--control-bg);
+  border: 1px solid var(--stroke-soft);
+  border-radius: calc(var(--radius, 14px) - 6px);
+  padding: 8px 12px;
+  min-height: 36px;
+  width: 100%;
+  outline: none;
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.ui-select:focus-visible {
+  border-color: rgba(var(--accent-rgb), .55);
+  box-shadow: 0 0 0 3px var(--focus);
+}
+.ui-select:disabled { opacity: .55; cursor: not-allowed; }
+/* Native option lists inherit the OS surface, not ours — pin them so a
+   light option list can't render white-on-white under a dark theme. */
+.ui-select option { background: var(--surface-solid); color: var(--text); }
+/* Inline filter selects sit in a flex row and must not stretch. */
+.ui-select--auto { width: auto; }
+
 /* ── Field ──────────────────────────────────────────────────────────── */
 .ui-field { display: flex; flex-direction: column; gap: 5px; }
 .ui-field__label {
@@ -107,6 +135,7 @@
   text-transform: uppercase;
   color: var(--muted-2);
 }
+.ui-field__required { color: var(--accent-rose); }
 .ui-field__hint { font-size: 11px; color: var(--text-subtle); }
 .ui-field__error { font-size: 11px; color: var(--accent-rose); }
 

@@ -11,17 +11,39 @@ Counts cover `client/src/screens/**` source files (`*.test.*` excluded),
 measured by `scripts/frontend-budget.mjs`. Update this table at the end of
 every phase. The goal is monotonic improvement — no regression on any row.
 
-| Metric | Plan baseline (2026-06) | Phase 0 | Phase 2 | Phase 3 | Phases 4–6 (final) |
-|---|---|---|---|---|---|
-| Inline `style={{}}` (gated) | 3,256 | 3,293 | 3,292 | 2,821 | **2,821** |
-| Files > 800 LOC (gated) | 15 | 15 | 15 | 15 | **12** |
-| `onClick` on div/span/td/tr (gated) | 86 | 116 | 116 | 104 | **78** |
-| `console.*` (gated) | 82 | 78 | 77 | 77 | **77** |
-| `useState` calls (info) | 715 | 650 | 637 | 637 | **551** |
-| `setLoading` calls (info) | 139 | 80 | 73 | 73 | **68** |
-| jsx-a11y findings | — | — | — | 255 (baseline) | **0 — gated in main lint** |
-| Client tests | 533 | 533 | 577 | 577 | **614** + global coverage gate (45 lines / 35 branches) |
-| Raw `fetch()` in screens | 0 | 0 | 0 | 0 | 0 |
+| Metric | Plan baseline (2026-06) | Phase 0 | Phase 2 | Phase 3 | Phases 4–6 (final) | Claims/Finance port (2026-08) |
+|---|---|---|---|---|---|---|
+| Inline `style={{}}` (gated) | 3,256 | 3,293 | 3,292 | 2,821 | 2,821 | **3,124** |
+| Files > 800 LOC (gated) | 15 | 15 | 15 | 15 | 12 | **0** |
+| `onClick` on div/span/td/tr (gated) | 86 | 116 | 116 | 104 | 78 | **82** |
+| `console.*` (gated) | 82 | 78 | 77 | 77 | 77 | **0** |
+| `useState` calls (info) | 715 | 650 | 637 | 637 | 551 | **645** |
+| `setLoading` calls (info) | 139 | 80 | 73 | 73 | 68 | **78** |
+| jsx-a11y findings | — | — | — | 255 (baseline) | **0 — gated in main lint** | 0 |
+| Client tests | 533 | 533 | 577 | 577 | 614 + global coverage gate (45 lines / 35 branches) | **956** (48 lines / 37 branches) |
+| Raw `fetch()` in screens | 0 | 0 | 0 | 0 | 0 | 0 |
+
+> The Phases-4–6 column is the low-water mark, not today's number: feature
+> work since (Claims, Finance, and the counts/typography passes) added
+> screens, so the absolute totals rose while the ratchet held. The last
+> column is the current committed baseline.
+
+### Claims & Finance port (2026-08)
+
+The Claims and Finance screens shipped bypassing the design system: 162
+inline styles, a `selStyle`/`sectionHead`/`tabStyle` object trio per file,
+hand-rolled status pills with hard-coded hex, and a click-handler on `<tr>`.
+That put the gate at 3,286/83 against a 3,133/82 baseline — `npm run verify`
+was failing on `main`. The screens now compose the `ui` primitives
+(`Table`, `Badge`, `Callout`, `Select`, `Modal`) over
+`styles/shared/claims_finance.css`, which restored the ratchet and made the
+module theme-aware (its hard-coded slate/amber/rose read as washed out under
+Daylight). Two gaps the port closed on the way:
+
+- `ui/Select` did not exist, so every screen needing a `<select>` hand-rolled
+  one. It is now a primitive, exported from the `ui` barrel.
+- `Field`'s `required` prop was accepted and silently dropped — no marker,
+  no `aria-required`. Both now render.
 
 > The plan-baseline column came from one-line greps over all `.jsx` files
 > (tests included). Phase 0 onward uses `scripts/frontend-budget.mjs`, which

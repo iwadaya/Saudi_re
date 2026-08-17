@@ -4,7 +4,7 @@
 
 import { Children, cloneElement, isValidElement, useId } from 'react';
 
-export default function Field({ label, hint, error, children, className = '' }) {
+export default function Field({ label, hint, error, required = false, children, className = '' }) {
   const id = useId();
   const hintId = hint ? `${id}-hint` : null;
   const errorId = error ? `${id}-error` : null;
@@ -16,12 +16,19 @@ export default function Field({ label, hint, error, children, className = '' }) 
         id: only.props.id || id,
         'aria-describedby': only.props['aria-describedby'] || describedBy,
         'aria-invalid': error ? true : only.props['aria-invalid'],
+        // Announce the requirement without setting the native `required`
+        // attribute, which would hand validation to the browser's own
+        // bubble UI and bypass the screens' inline error handling.
+        'aria-required': required || only.props['aria-required'],
       })
     : children;
 
   return (
     <div className={`ui-field ${className}`.trim()}>
-      <label className="ui-field__label" htmlFor={(only && only.props.id) || id}>{label}</label>
+      <label className="ui-field__label" htmlFor={(only && only.props.id) || id}>
+        {label}
+        {required && <span className="ui-field__required" aria-hidden="true"> *</span>}
+      </label>
       {control}
       {hint && <div className="ui-field__hint" id={hintId}>{hint}</div>}
       {error && <div className="ui-field__error" id={errorId} role="alert">{error}</div>}
