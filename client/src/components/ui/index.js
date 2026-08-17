@@ -10,6 +10,7 @@ import './ui.css';
 
 export { default as Button } from './Button.jsx';
 export { Input, NumberInput } from './Input.jsx';
+export { default as Select } from './Select.jsx';
 export { default as Field } from './Field.jsx';
 export { default as Card } from './Card.jsx';
 export { default as Modal } from './Modal.jsx';

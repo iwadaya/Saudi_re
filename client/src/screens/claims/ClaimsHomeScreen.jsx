@@ -3,10 +3,11 @@
 // New Claim flow (booked against SIGNED/BOUND treaties only — enforced
 // server-side, mirrored in the contract dropdown here).
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 import Topbar from '../../components/Topbar';
-import { Button, Field, Input, Modal } from '../../components/ui';
+import { Button, Field, Input, Modal, Select, Table } from '../../components/ui';
+import { ApprovalBadge, ClaimStatusBadge, KpiCard } from '../../components/ledger';
 import { logger } from '../../utils/logger';
 import { formatWithCommasDecimal, sanitizeNumber } from '../../utils/format';
 
@@ -24,64 +25,20 @@ const fmtMoney = (v) => {
 const fmtDate = (v) => (v ? String(v).slice(0, 10) : '–');
 const parseAmt = (v) => Number(String(v ?? '').replace(/,/g, ''));
 
-const STATUS_STYLE = {
-  OPEN:     { bg: 'rgba(96,165,250,0.12)',  text: '#60a5fa' },
-  REOPENED: { bg: 'rgba(251,191,36,0.12)',  text: '#fbbf24' },
-  CLOSED:   { bg: 'rgba(35,209,139,0.10)',  text: '#23d18b' },
-  DECLINED: { bg: 'rgba(248,113,113,0.10)', text: '#f87171' },
-};
-function StatusPill({ status }) {
-  const s = STATUS_STYLE[status] || STATUS_STYLE.OPEN;
-  return (
-    <span style={{
-      fontSize: 10, fontWeight: 800, letterSpacing: '.08em', padding: '3px 10px',
-      borderRadius: 20, background: s.bg, color: s.text, whiteSpace: 'nowrap',
-    }}>{status}</span>
-  );
-}
-
-const APPROVAL_STYLE = {
-  DRAFT:            { bg: 'rgba(148,163,184,0.14)', text: '#94a3b8', label: 'DRAFT' },
-  WAITING_APPROVAL: { bg: 'rgba(251,191,36,0.12)',  text: '#fbbf24', label: 'WAITING APPROVAL' },
-  REJECTED:         { bg: 'rgba(248,113,113,0.10)', text: '#f87171', label: 'REJECTED' },
-  FINALISED:        { bg: 'rgba(35,209,139,0.10)',  text: '#23d18b', label: 'FINALISED' },
-};
-export function ApprovalPill({ status }) {
-  const s = APPROVAL_STYLE[status] || APPROVAL_STYLE.DRAFT;
-  return (
-    <span style={{
-      fontSize: 10, fontWeight: 800, letterSpacing: '.08em', padding: '3px 10px',
-      borderRadius: 20, background: s.bg, color: s.text, whiteSpace: 'nowrap',
-    }}>{s.label}</span>
-  );
-}
-
-function KpiCard({ label, value, sub, accent }) {
-  return (
-    <div style={{
-      padding: '16px 18px', borderRadius: 14, minWidth: 0,
-      background: 'var(--surface-2)', border: '1px solid rgba(var(--accent-rgb),0.18)',
-    }}>
-      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 800, color: accent || 'var(--text)', lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 6, minHeight: 13 }}>{sub || ''}</div>
-    </div>
-  );
-}
-
-const kpiRowStyle = (min) => ({
-  display: 'grid',
-  gridTemplateColumns: `repeat(auto-fit, minmax(${min}px, 1fr))`,
-  gap: 14,
-  marginBottom: 14,
-});
-
 const EMPTY_FORM = {
   contract_id: '', loss_date: '', reported_date: '', insured_name: '',
   cedant_claim_ref: '', cause_of_loss: '', description: '',
   loss_type: 'ATTRITIONAL', cat_event_ref: '', gross_paid_100: '0', gross_os_100: '0', comment: '',
 };
 const EMPTY_PICKER = { country_id: '', cedant_id: '', uw_year: '', search: '' };
+
+const COLUMNS = [
+  { key: 'Claim Ref' }, { key: 'Cedant / Treaty' }, { key: 'Insured' }, { key: 'Loss Date' },
+  { key: 'Type' }, { key: 'Approval' }, { key: 'Status' },
+  { key: 'Incurred 100%', num: true }, { key: 'Incurred (our)', num: true }, { key: 'OS (our)', num: true },
+];
+
+const WIZARD_TABS = ['1 · Details', '2 · Claim Amounts', '3 · Send for Approval'];
 
 /** Short human label for a treaty in the picker. */
 const treatyLabel = (c) => {
@@ -293,15 +250,13 @@ export default function ClaimsHomeScreen() {
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e?.target ? e.target.value : e }));
 
-  const filtered = useMemo(() => claims, [claims]);
-
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg0)', fontFamily: 'var(--font-sans)' }}>
+    <div className="cf-screen">
       <Topbar
         title="Claims"
         subtitle="Claims dashboard & register"
         actions={(
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="cf-actions">
             <Button onClick={() => setApprovalFilter('WAITING_APPROVAL')}>
               Review Claims{summary && Number(summary.waiting_approval_claims) > 0 ? ` (${summary.waiting_approval_claims})` : ''}
             </Button>
@@ -310,90 +265,91 @@ export default function ClaimsHomeScreen() {
         )}
       />
 
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 20px' }}>
+      <div className="cf-page">
 
         {/* Claim counts */}
-        <div style={kpiRowStyle(150)}>
+        <div className="cf-kpi-row">
           <KpiCard label="Total Claims" value={summary ? summary.total_claims : '–'} sub={summary ? `${summary.open_claims} open · ${summary.cat_claims} CAT` : ''} />
-          <KpiCard label="Draft" value={summary ? summary.draft_claims : '–'} accent="#94a3b8" />
-          <KpiCard label="Waiting for Approval" value={summary ? summary.waiting_approval_claims : '–'} accent="#fbbf24" />
-          <KpiCard label="Rejected" value={summary ? summary.rejected_claims : '–'} accent="#f87171" />
-          <KpiCard label="Finalised" value={summary ? summary.finalised_claims : '–'} accent="#23d18b" />
+          <KpiCard label="Draft" value={summary ? summary.draft_claims : '–'} tone="muted" />
+          <KpiCard label="Waiting for Approval" value={summary ? summary.waiting_approval_claims : '–'} tone="warn" />
+          <KpiCard label="Rejected" value={summary ? summary.rejected_claims : '–'} tone="danger" />
+          <KpiCard label="Finalised" value={summary ? summary.finalised_claims : '–'} tone="ok" />
         </div>
 
         {/* Position (our share) */}
-        <div style={{ ...kpiRowStyle(200), marginBottom: 22 }}>
+        <div className="cf-kpi-row cf-kpi-row--wide">
           <KpiCard label="Total Claims Paid to Date" value={summary ? fmtMoney(summary.total_paid_our_share) : '–'} sub="our share, excl. rejected" />
           <KpiCard label="Open Incurred" value={summary ? fmtMoney(summary.open_incurred_our_share) : '–'} sub="our share, open claims" />
           <KpiCard label="Outstanding" value={summary ? fmtMoney(summary.open_os_our_share) : '–'} sub="our share, open claims" />
         </div>
 
         {/* Filters */}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-          <select value={approvalFilter} onChange={(e) => setApprovalFilter(e.target.value)} style={selStyle} aria-label="Filter by approval status">
+        <div className="cf-filters">
+          <Select className="ui-select--auto" value={approvalFilter} aria-label="Filter by approval status"
+            onChange={(e) => setApprovalFilter(e.target.value)}>
             <option value="">All approval states</option>
             {['DRAFT', 'WAITING_APPROVAL', 'REJECTED', 'FINALISED'].map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-          </select>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={selStyle} aria-label="Filter by status">
+          </Select>
+          <Select className="ui-select--auto" value={statusFilter} aria-label="Filter by status"
+            onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">All statuses</option>
             {['OPEN', 'REOPENED', 'CLOSED', 'DECLINED'].map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select value={lossTypeFilter} onChange={(e) => setLossTypeFilter(e.target.value)} style={selStyle} aria-label="Filter by loss type">
+          </Select>
+          <Select className="ui-select--auto" value={lossTypeFilter} aria-label="Filter by loss type"
+            onChange={(e) => setLossTypeFilter(e.target.value)}>
             <option value="">All loss types</option>
             {['ATTRITIONAL', 'LARGE', 'CAT'].map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <Input placeholder="Search ref / insured / cedant…" value={search}
+          </Select>
+          <div className="cf-filters__search">
+            <Input placeholder="Search ref / insured / cedant…" value={search} aria-label="Search claims"
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') load(); }} />
           </div>
           <Button onClick={load}>Refresh</Button>
         </div>
 
-        {error && <div style={{ color: '#f87171', fontSize: 13, marginBottom: 10 }}>{error}</div>}
+        {error && <div className="cf-error" role="alert">{error}</div>}
 
         {/* Register */}
-        <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid rgba(var(--accent-rgb),0.14)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-            <thead>
-              <tr style={{ background: 'var(--surface-2)', textAlign: 'left' }}>
-                {['Claim Ref', 'Cedant / Treaty', 'Insured', 'Loss Date', 'Type', 'Approval', 'Status', 'Incurred 100%', 'Incurred (our)', 'OS (our)'].map((h, i) => (
-                  <th key={h} style={{ padding: '10px 12px', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-subtle)', textAlign: i >= 7 ? 'right' : 'left' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr><td colSpan={10} style={{ padding: 24, textAlign: 'center', color: 'var(--text-subtle)' }}>Loading…</td></tr>
-              )}
-              {!loading && !filtered.length && (
-                <tr><td colSpan={10} style={{ padding: 24, textAlign: 'center', color: 'var(--text-subtle)' }}>No claims found. Book the first one with “+ New Claim”.</td></tr>
-              )}
-              {!loading && filtered.map((c) => (
-                <tr key={c.claim_id}
-                  onClick={() => navigate(`/claims/${c.claim_id}`)}
-                  style={{ cursor: 'pointer', borderTop: '1px solid rgba(var(--accent-rgb),0.08)', background: 'var(--surface-1, transparent)' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(var(--accent-rgb),0.05)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-                >
-                  <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--accent)' }}>{c.claim_ref}</td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--text)' }}>{c.cedant_name || '–'}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-subtle)' }}>{c.treaty_type || ''} · UW {c.uw_year || '–'}</div>
-                  </td>
-                  <td style={{ padding: '10px 12px', color: 'var(--text)' }}>{c.insured_name || '–'}</td>
-                  <td style={{ padding: '10px 12px', color: 'var(--text)' }}>{fmtDate(c.loss_date)}</td>
-                  <td style={{ padding: '10px 12px', color: 'var(--text-subtle)' }}>{c.loss_type}</td>
-                  <td style={{ padding: '10px 12px' }}><ApprovalPill status={c.approval_status} /></td>
-                  <td style={{ padding: '10px 12px' }}><StatusPill status={c.status} /></td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--text)' }}>{fmtMoney(c.gross_incurred_100)} <span style={{ color: 'var(--text-subtle)', fontSize: 10 }}>{c.currency_code || ''}</span></td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--text)' }}>{fmtMoney(c.incurred_our_share)}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--text)' }}>{fmtMoney(c.os_our_share)}</td>
-                </tr>
+        <Table>
+          <thead>
+            <tr>
+              {COLUMNS.map(({ key, num }) => (
+                <th key={key} className={num ? 'cf-num' : undefined}>{key}</th>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr><td colSpan={COLUMNS.length} className="cf-empty">Loading…</td></tr>
+            )}
+            {!loading && !claims.length && (
+              <tr><td colSpan={COLUMNS.length} className="cf-empty">No claims found. Book the first one with “+ New Claim”.</td></tr>
+            )}
+            {!loading && claims.map((c) => (
+              <tr key={c.claim_id}>
+                {/* The ref is the row's link target: a real <a> so it is
+                    keyboard-reachable and middle-clickable, which a
+                    click-handler on the <tr> never was. */}
+                <td>
+                  <Link className="cf-link" to={`/claims/${c.claim_id}`}>{c.claim_ref}</Link>
+                </td>
+                <td>
+                  <div className="cf-cell-title">{c.cedant_name || '–'}</div>
+                  <div className="cf-cell-sub">{c.treaty_type || ''} · UW {c.uw_year || '–'}</div>
+                </td>
+                <td>{c.insured_name || '–'}</td>
+                <td>{fmtDate(c.loss_date)}</td>
+                <td className="cf-cell-muted">{c.loss_type}</td>
+                <td><ApprovalBadge status={c.approval_status} /></td>
+                <td><ClaimStatusBadge status={c.status} /></td>
+                <td className="cf-num">{fmtMoney(c.gross_incurred_100)} <span className="cf-ccy">{c.currency_code || ''}</span></td>
+                <td className="cf-num cf-num--strong">{fmtMoney(c.incurred_our_share)}</td>
+                <td className="cf-num">{fmtMoney(c.os_our_share)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
       </div>
 
       {/* New Claim wizard — full screen, tabbed */}
@@ -414,86 +370,85 @@ export default function ClaimsHomeScreen() {
         )}
       >
         {/* Tab bar */}
-        <div role="tablist" aria-label="New claim steps" style={{ display: 'flex', gap: 4, borderBottom: '1px solid rgba(var(--accent-rgb),0.16)', marginBottom: 20 }}>
-          {['1 · Details', '2 · Claim Amounts', '3 · Send for Approval'].map((t, i) => (
-            <button key={t} type="button" role="tab" aria-selected={i === createTab} onClick={() => goToTab(i)} style={tabStyle(i === createTab)}>
+        <div role="tablist" aria-label="New claim steps" className="cf-tabs">
+          {WIZARD_TABS.map((t, i) => (
+            <button key={t} type="button" role="tab" aria-selected={i === createTab} className="cf-tab" onClick={() => goToTab(i)}>
               {t}
             </button>
           ))}
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', width: '100%' }}>
-          <div style={{ maxWidth: 960, margin: '0 auto' }}>
+        <div className="cf-wizard-body">
+          <div className="cf-wizard-inner">
 
             {/* ── Tab 1 · Details ── */}
             {createTab === 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div style={{ gridColumn: '1 / -1', ...sectionHead }}>Treaty</div>
+              <div className="cf-grid2">
+                <div className="cf-section-head">Treaty</div>
                 <Field label="Country">
-                  <select value={picker.country_id} onChange={setPickerField('country_id')} style={{ ...selStyle, width: '100%' }}>
+                  <Select value={picker.country_id} onChange={setPickerField('country_id')}>
                     <option value="">All countries</option>
                     {countries.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  </Select>
                 </Field>
                 <Field label="Cedant">
-                  <select value={picker.cedant_id} onChange={setPickerField('cedant_id')} style={{ ...selStyle, width: '100%' }}>
+                  <Select value={picker.cedant_id} onChange={setPickerField('cedant_id')}>
                     <option value="">All cedants{picker.country_id ? ' in country' : ''}</option>
                     {cedants.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  </Select>
                 </Field>
                 <Field label="UW year">
-                  <select value={picker.uw_year} onChange={setPickerField('uw_year')} style={{ ...selStyle, width: '100%' }}>
+                  <Select value={picker.uw_year} onChange={setPickerField('uw_year')}>
                     <option value="">All years</option>
                     {uwYears.map((y) => <option key={y} value={y}>{y}</option>)}
-                  </select>
+                  </Select>
                 </Field>
                 <Field label="Search treaties">
                   <Input value={picker.search} onChange={setPickerField('search')} placeholder="Contract ID / description…" />
                 </Field>
-                <div style={{ gridColumn: '1 / -1' }}>
+                <div className="cf-grid-full">
                   <Field label={`Treaty (SIGNED / BOUND only — ${eligibleTreaties.length} match${eligibleTreaties.length === 1 ? '' : 'es'})`} required>
-                    <select value={form.contract_id} onChange={set('contract_id')} style={{ ...selStyle, width: '100%' }}>
+                    <Select value={form.contract_id} onChange={set('contract_id')}>
                       <option value="">Select treaty…</option>
                       {eligibleTreaties.map((c) => (
                         <option key={c.contract_id} value={c.contract_id}>{treatyLabel(c)}</option>
                       ))}
-                    </select>
+                    </Select>
                   </Field>
                   {selectedTreaty?.contract_description && (
-                    <div style={{ fontSize: 11.5, color: 'var(--text-subtle)', marginTop: 4 }}>{selectedTreaty.contract_description}</div>
+                    <div className="cf-hint">{selectedTreaty.contract_description}</div>
                   )}
                 </div>
 
-                <div style={{ gridColumn: '1 / -1', ...sectionHead }}>Loss</div>
+                <div className="cf-section-head">Loss</div>
                 <Field label="Loss date" required><Input type="date" value={form.loss_date} onChange={set('loss_date')} /></Field>
                 <Field label="Reported date"><Input type="date" value={form.reported_date} onChange={set('reported_date')} /></Field>
                 <Field label="Insured"><Input value={form.insured_name} onChange={set('insured_name')} placeholder="Insured name" /></Field>
                 <Field label="Cedant claim ref"><Input value={form.cedant_claim_ref} onChange={set('cedant_claim_ref')} placeholder="Cedant's reference" /></Field>
                 <Field label="Loss type">
-                  <select value={form.loss_type} onChange={set('loss_type')} style={{ ...selStyle, width: '100%' }}>
+                  <Select value={form.loss_type} onChange={set('loss_type')}>
                     {['ATTRITIONAL', 'LARGE', 'CAT'].map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  </Select>
                 </Field>
                 {form.loss_type === 'CAT' && (
                   <Field label="CAT event ref"><Input value={form.cat_event_ref} onChange={set('cat_event_ref')} placeholder="e.g. Jeddah Floods 2026" /></Field>
                 )}
                 <Field label="Cause of loss"><Input value={form.cause_of_loss} onChange={set('cause_of_loss')} placeholder="e.g. Fire" /></Field>
-                <div style={{ gridColumn: '1 / -1' }}>
+                <div className="cf-grid-full">
                   <Field label="Description"><Input value={form.description} onChange={set('description')} placeholder="Advice narrative" /></Field>
                 </div>
 
-                <div style={{ gridColumn: '1 / -1', ...sectionHead }}>Attachments</div>
-                <div style={{ gridColumn: '1 / -1' }}>
+                <div className="cf-section-head">Attachments</div>
+                <div className="cf-grid-full">
                   <Field label="Supporting documents (cedant advice, adjuster report, …)">
-                    <input
+                    <Input
                       type="file" multiple
                       onChange={(e) => setFiles(Array.from(e.target.files || []))}
-                      style={{ ...selStyle, width: '100%', padding: '7px 10px' }}
                       aria-label="Claim attachments"
                     />
                   </Field>
                   {files.length > 0 && (
-                    <div style={{ fontSize: 11.5, color: 'var(--text-subtle)', marginTop: 4 }}>
+                    <div className="cf-hint">
                       {files.length} file{files.length === 1 ? '' : 's'} will be attached: {files.map((f) => f.name).join(', ')}
                     </div>
                   )}
@@ -509,9 +464,9 @@ export default function ClaimsHomeScreen() {
               const ccy = selectedTreaty?.currency_code || '';
               const share = (v) => (line == null ? null : (v * line) / 100);
               return (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div style={{ gridColumn: '1 / -1', ...sectionHead }}>Opening position @ 100% (cumulative)</div>
-                  <div style={{ gridColumn: '1 / -1', fontSize: 12.5, color: 'var(--text-subtle)', lineHeight: 1.55 }}>
+                <div className="cf-grid2">
+                  <div className="cf-section-head">Opening position @ 100% (cumulative)</div>
+                  <div className="cf-grid-full cf-note-text">
                     Enter the cedant-advised position at 100% — it is booked as movement #1 (ADVICE) on the claim ledger.
                   </div>
                   <Field label={`Opening paid @100%${ccy ? ` (${ccy})` : ''}`}>
@@ -520,12 +475,12 @@ export default function ClaimsHomeScreen() {
                   <Field label={`Opening OS reserve @100%${ccy ? ` (${ccy})` : ''}`}>
                     <Input inputMode="decimal" value={formatWithCommasDecimal(form.gross_os_100)} onChange={(e) => set('gross_os_100')(sanitizeNumber(e.target.value))} />
                   </Field>
-                  <div style={{ gridColumn: '1 / -1' }}>
+                  <div className="cf-grid-full">
                     <Field label="Movement comment"><Input value={form.comment} onChange={set('comment')} placeholder="e.g. Initial advice per cedant email" /></Field>
                   </div>
 
-                  <div style={{ gridColumn: '1 / -1', ...sectionHead }}>Position preview</div>
-                  <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                  <div className="cf-section-head">Position preview</div>
+                  <div className="cf-mini-grid">
                     {[
                       ['Incurred @100%', fmtMoney(paid + os)],
                       [`Our line${line != null ? ` (${line}%)` : ''}`, line != null ? `${line}%` : 'select a treaty'],
@@ -533,9 +488,9 @@ export default function ClaimsHomeScreen() {
                       ['OS (our share)', share(os) != null ? fmtMoney(share(os)) : '–'],
                       ['Incurred (our share)', share(paid + os) != null ? fmtMoney(share(paid + os)) : '–'],
                     ].map(([k, v]) => (
-                      <div key={k} style={{ padding: '14px 16px', borderRadius: 12, background: 'var(--surface-2)', border: '1px solid rgba(var(--accent-rgb),0.14)' }}>
-                        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 6 }}>{k}</div>
-                        <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)' }}>{v}</div>
+                      <div key={k} className="cf-mini">
+                        <div className="cf-mini__label">{k}</div>
+                        <div className="cf-mini__value">{v}</div>
                       </div>
                     ))}
                   </div>
@@ -567,50 +522,26 @@ export default function ClaimsHomeScreen() {
               ];
               return (
                 <div>
-                  <div style={sectionHead}>Review &amp; submit</div>
-                  <div style={{
-                    display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12,
-                    padding: '16px 18px', borderRadius: 14, marginBottom: 18,
-                    background: 'var(--surface-2)', border: '1px solid rgba(var(--accent-rgb),0.14)', fontSize: 12.5,
-                  }}>
+                  <div className="cf-section-title">Review &amp; submit</div>
+                  <div className="cf-facts cf-facts--review">
                     {rows.map(([k, v]) => (
                       <div key={k}>
-                        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 3 }}>{k}</div>
-                        <div style={{ color: 'var(--text)', fontWeight: 600, overflowWrap: 'anywhere' }}>{v}</div>
+                        <div className="cf-fact__label">{k}</div>
+                        <div className="cf-fact__value">{v}</div>
                       </div>
                     ))}
                   </div>
-                  <div style={{ fontSize: 12.5, color: 'var(--text-subtle)', lineHeight: 1.6 }}>
-                    <b style={{ color: 'var(--text)' }}>Create Draft</b> books the claim and leaves it in DRAFT so you can keep working on it.<br />
-                    <b style={{ color: 'var(--text)' }}>Create &amp; Send for Approval</b> books the claim and submits it for review immediately — it is then frozen until approved or rejected.
+                  <div className="cf-note-text">
+                    <b className="cf-strong">Create Draft</b> books the claim and leaves it in DRAFT so you can keep working on it.<br />
+                    <b className="cf-strong">Create &amp; Send for Approval</b> books the claim and submits it for review immediately — it is then frozen until approved or rejected.
                   </div>
                 </div>
               );
             })()}
           </div>
         </div>
-        {createError && <div style={{ color: '#f87171', fontSize: 12.5, marginTop: 12 }}>{createError}</div>}
+        {createError && <div className="cf-error cf-error--modal" role="alert">{createError}</div>}
       </Modal>
     </div>
   );
 }
-
-const selStyle = {
-  background: 'var(--surface-2)', color: 'var(--text)',
-  border: '1px solid rgba(var(--accent-rgb),0.25)', borderRadius: 8,
-  padding: '8px 10px', fontSize: 12.5, fontFamily: 'var(--font-sans)',
-};
-
-const sectionHead = {
-  fontSize: 11, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase',
-  color: 'var(--text-subtle)', marginTop: 6,
-};
-
-const tabStyle = (active) => ({
-  background: 'none', border: 'none', cursor: 'pointer',
-  padding: '10px 16px', fontSize: 12.5, fontFamily: 'var(--font-sans)',
-  fontWeight: active ? 800 : 600,
-  color: active ? 'var(--accent)' : 'var(--text-subtle)',
-  borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
-  marginBottom: -1,
-});
