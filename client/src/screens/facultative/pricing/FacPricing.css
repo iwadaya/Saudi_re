@@ -1,0 +1,318 @@
+/* FacPricing.css — co-located styles for the facultative Pricing screen and
+   its panels (frontend-hardening: inline-style migration, docs/css-roadmap.md).
+
+   Every value carries the exact inline value it replaces, so the screen
+   renders identically. Genuinely dynamic values — a category accent colour,
+   the completeness bar width — stay in the JSX as CSS custom properties
+   (--fac-accent, --fac-fill) rather than as full style objects. */
+
+/* ── Page scaffold ──────────────────────────────────────────────────── */
+.facpx-page { max-width: 820px; margin: 0 auto; padding: 8px 0 40px; }
+
+.facpx-sec-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(var(--accent-blue-rgb), 0.75);
+  margin-top: 28px;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* ── Field rows ─────────────────────────────────────────────────────── */
+.facpx-row {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 10px;
+  align-items: center;
+  min-height: 36px;
+}
+.facpx-row-label { font-size: 12px; color: rgba(var(--text-rgb), 0.7); }
+.facpx-row-hint { font-size: 10px; color: rgba(var(--text-rgb), 0.58); margin-top: 1px; }
+.facpx-note { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+.facpx-warn-inline { font-size: 11px; color: var(--accent-amber); margin-top: 4px; }
+.facpx-empty { font-size: 12px; color: rgba(var(--text-rgb), 0.58); padding: 8px 0; }
+
+/* ── Provenance strip ───────────────────────────────────────────────── */
+.facpx-basis {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  align-items: baseline;
+}
+.facpx-basis strong { color: rgba(var(--text-rgb), 0.85); }
+.facpx-basis .facpx-basis-si { color: var(--accent-blue); font-weight: 700; }
+
+/* ── Blocker panel ──────────────────────────────────────────────────── */
+.facpx-blocker {
+  padding: 16px 20px;
+  border-radius: 12px;
+  background: rgba(var(--fac-accent), 0.06);
+  border: 1px solid rgba(var(--fac-accent), 0.28);
+}
+.facpx-blocker-kicker {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(var(--fac-accent), 0.9);
+  margin-bottom: 8px;
+}
+.facpx-blocker-body { font-size: 13px; color: rgba(var(--text-rgb), 0.85); line-height: 1.6; }
+.facpx-blocker-meta { font-size: 11px; color: var(--muted); margin-top: 10px; }
+
+/* ── UW factors panel ───────────────────────────────────────────────── */
+.facpx-uw {
+  margin-bottom: 20px;
+  padding: 14px 18px;
+  background: rgba(var(--accent-blue-rgb), 0.05);
+  border: 1px solid rgba(var(--accent-blue-rgb), 0.28);
+  border-radius: 12px;
+}
+.facpx-uw-head { display: flex; align-items: center; justify-content: space-between; }
+.facpx-uw-head--open { margin-bottom: 12px; }
+.facpx-uw-toggle { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.facpx-uw-caret { font-size: 13px; color: rgba(var(--accent-blue-rgb), 0.80); }
+.facpx-uw-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(var(--accent-blue-rgb), 0.80);
+}
+.facpx-uw-stats { display: flex; align-items: flex-end; gap: 18px; }
+.facpx-uw-stat { text-align: right; }
+.facpx-kicker {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.facpx-uw-scheme {
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(var(--accent-blue-rgb), 0.9);
+  font-variant-numeric: tabular-nums;
+  line-height: 22px;
+}
+.facpx-uw-score {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.facpx-uw-score--provisional { color: var(--accent-amber); }
+.facpx-uw-grade { margin-left: 8px; font-size: 10px; color: rgba(var(--accent-rgb), 0.85); }
+.facpx-uw-grade--provisional { color: var(--accent-amber); }
+
+/* Completeness meter */
+.facpx-meter { margin-bottom: 12px; }
+.facpx-meter-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.facpx-meter-floor { color: var(--accent-amber); }
+.facpx-meter-track { height: 4px; border-radius: 2px; background: var(--hairline); overflow: hidden; }
+.facpx-meter-fill { height: 100%; width: var(--fac-fill); background: var(--accent); }
+.facpx-meter-fill--provisional { background: var(--accent-amber); }
+
+/* Factor grid */
+.facpx-factors-loading { font-size: 12px; color: rgba(var(--text-rgb), 0.7); padding: 8px 0; }
+.facpx-factor-head,
+.facpx-factor-row {
+  display: grid;
+  grid-template-columns: 240px minmax(260px, 560px) 90px 110px;
+  gap: 16px;
+  align-items: center;
+  border-bottom: 1px solid var(--hairline);
+}
+.facpx-factor-head { padding: 0 0 8px; margin-bottom: 8px; }
+.facpx-factor-row { padding: 8px 0; }
+.facpx-col-head {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.facpx-col-head--num { text-align: right; }
+.facpx-factor-name { font-size: 12px; color: rgba(var(--text-rgb), 0.85); }
+.facpx-factor-select { font-size: 12px; width: 100%; }
+.facpx-factor-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(var(--text-rgb), 0.4);
+}
+.facpx-factor-num--scored { color: var(--accent); }
+.facpx-factor-num--unscored { color: var(--accent-amber); }
+.facpx-factor-num--loading { color: var(--accent-amber); }
+.facpx-factor-num--inert { color: rgba(var(--text-rgb), 0.45); }
+.facpx-uw-notes { margin-top: 12px; }
+.facpx-uw-notes textarea { width: 100%; resize: vertical; font-size: 12px; }
+
+/* ── Rate build-up ──────────────────────────────────────────────────── */
+.facpx-wf-empty { font-size: 12px; color: rgba(var(--text-rgb), 0.7); padding: 12px 0; }
+.facpx-wf-error { font-size: 12px; color: var(--accent-rose); padding: 12px 0; }
+.facpx-wf-row {
+  display: grid;
+  grid-template-columns: 1fr 120px;
+  gap: 12px;
+  padding: 7px 0;
+  align-items: baseline;
+}
+.facpx-wf-row--rule { border-top: 1px solid var(--hairline); }
+.facpx-wf-label { font-size: 11.5px; font-weight: 500; color: rgba(var(--text-rgb), 0.72); }
+.facpx-wf-row--rule .facpx-wf-label { font-size: 12px; font-weight: 700; color: rgba(var(--text-rgb), 0.9); }
+.facpx-wf-cell--indent { padding-left: 16px; }
+.facpx-wf-detail { font-size: 10px; color: var(--muted); margin-left: 8px; }
+.facpx-wf-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(var(--text-rgb), 0.85);
+}
+.facpx-wf-row--rule .facpx-wf-value { font-size: 13px; font-weight: 800; color: var(--accent); }
+
+/* ── Warnings ───────────────────────────────────────────────────────── */
+.facpx-warnings {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: rgba(var(--accent-amber-rgb), 0.05);
+  border: 1px solid rgba(var(--accent-amber-rgb), 0.25);
+  border-radius: 8px;
+}
+.facpx-warnings-kicker {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  color: rgba(var(--accent-amber-rgb), 0.85);
+  margin-bottom: 4px;
+}
+.facpx-warning { font-size: 11px; color: rgba(var(--accent-amber-rgb), 0.9); }
+
+/* ── Engine detail ──────────────────────────────────────────────────── */
+.facpx-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.facpx-detail-cell {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--control-bg);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+}
+.facpx-detail-label { font-size: 11px; color: var(--muted); }
+.facpx-detail-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(var(--text-rgb), 0.90);
+  font-variant-numeric: tabular-nums;
+}
+.facpx-unscored { margin-top: 8px; font-size: 10px; color: var(--muted); }
+
+/* ── Extensions ─────────────────────────────────────────────────────── */
+.facpx-ext-group { margin-bottom: 14px; }
+.facpx-ext-cat {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  color: var(--fac-accent);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+.facpx-ext-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.facpx-ext {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid var(--hairline);
+  color: var(--muted);
+  transition: all .15s;
+}
+.facpx-ext--on {
+  background: rgba(168, 85, 247, 0.08);
+  border-color: rgba(168, 85, 247, 0.30);
+  color: rgba(var(--text-rgb), 0.90);
+}
+.facpx-ext input { width: 14px; height: 14px; accent-color: var(--fac-accent); }
+.facpx-ext-name { flex: 1; }
+.facpx-ext-pct {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(var(--text-rgb), 0.45);
+  font-variant-numeric: tabular-nums;
+}
+.facpx-ext--on .facpx-ext-pct { color: var(--fac-accent); }
+
+.facpx-custom { margin-top: 14px; margin-bottom: 8px; }
+.facpx-custom-kicker {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  color: rgba(var(--accent-amber-rgb), 0.8);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+.facpx-custom-item { display: flex; align-items: center; gap: 4px; }
+.facpx-custom-item > div { flex: 1; }
+.facpx-custom-remove {
+  cursor: pointer;
+  color: rgba(var(--accent-rose-rgb), 0.7);
+  font-size: 13px;
+  padding: 0 4px;
+}
+.facpx-add-row {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.facpx-add-row .fi:first-child { flex: 1; min-width: 180px; }
+.facpx-add-btn {
+  appearance: none;
+  border: 1px solid rgba(var(--accent-amber-rgb), 0.35);
+  background: rgba(var(--accent-amber-rgb), 0.08);
+  color: var(--accent-amber);
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.facpx-add-btn:disabled { cursor: not-allowed; opacity: 0.4; }
+
+/* ── Quoted headline ────────────────────────────────────────────────── */
+.facpx-quoted {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(var(--accent-rgb), 0.06);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
+  border-radius: 12px;
+}
+.facpx-quoted-inner { display: flex; justify-content: space-between; align-items: center; }
+.facpx-quoted-col--right { text-align: right; }
+.facpx-quoted-kicker {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(var(--accent-rgb), 0.8);
+}
+.facpx-quoted-val { font-size: 24px; font-weight: 900; color: var(--accent); margin-top: 4px; }

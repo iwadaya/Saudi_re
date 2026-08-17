@@ -113,6 +113,8 @@ const CACHEABLE_PATHS = new Set([
   '/api/fac/reference/bi-indemnity',
   '/api/fac/reference/natcat-rates',
   '/api/fac/reference/clauses',
+  // The rating-family registry is code, not data — it only changes on deploy.
+  '/api/fac/reference/families',
 ]);
 
 const API_BASE = (() => {
@@ -909,6 +911,19 @@ export const api = {
   facCreateRisk(payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request('/api/fac/risks', { method: 'POST', body: payload, ...opts }); },
   facUpdateRisk(id: string, payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}`, { method: 'PUT', body: payload, ...opts }); },
   facDeleteRisk(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}`, { method: 'DELETE', ...opts }); },
+  /** Classes of business on the risk, each with its own sum insured. */
+  facGetSections(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}/sections`, opts); },
+  facSaveSections(id: string, sections?: unknown[], opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/risks/${enc(id)}/sections`, { method: 'PUT', body: { sections }, ...opts });
+  },
+  /**
+   * Server-side price. Returns either the authoritative result or a blocker
+   * explaining why this class cannot be priced yet — both are states the
+   * screen renders, neither is an error.
+   */
+  facPriceRisk(id: string, payload?: unknown, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/risks/${enc(id)}/price`, { method: 'POST', body: payload ?? {}, ...opts });
+  },
   facGetLocations(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}/locations`, opts); },
   facSaveLocations(id: string, locations?: unknown[], opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}/locations`, { method: 'PUT', body: { locations }, ...opts }); },
   facGetCope(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}/cope`, opts); },
@@ -1063,6 +1078,8 @@ export const api = {
   facGetBiIndemnity(opts?: RequestOpts): Promise<unknown>    { return request('/api/fac/reference/bi-indemnity', opts); },
   facGetNatcatRates(opts?: RequestOpts): Promise<unknown>    { return request('/api/fac/reference/natcat-rates', opts); },
   facGetClauses(opts?: RequestOpts): Promise<unknown>        { return request('/api/fac/reference/clauses', opts); },
+  facGetFamilies(opts?: RequestOpts): Promise<unknown>       { return request('/api/fac/reference/families', opts); },
+  facGetRateVersion(opts?: RequestOpts): Promise<unknown>    { return request('/api/fac/reference/rate-version', opts); },
 
   // ── Workbench (Actuarial Formula Workbench) ──────────────────────────────
   workbenchListFormulas(opts?: RequestOpts): Promise<unknown> { return request('/api/workbench/formulas', opts); },

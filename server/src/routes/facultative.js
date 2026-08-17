@@ -20,6 +20,7 @@ import { logger } from '../lib/logger.js';
 import {
   facRiskSaveSchema,
   facLocationsSaveSchema,
+  facSectionsSaveSchema,
   facPricingSaveSchema,
   facCopeSaveSchema,
   facLossesSaveSchema,
@@ -30,6 +31,12 @@ import {
 } from '../validation/facultative.js';
 import { applyRecommendation } from '../lib/facRecommendationApply.js';
 import { assertCanEdit, assertCanReadEntity, getEditPermission } from '../services/permissions.js';
+import {
+  computeFacPricing,
+  verifyFacPricingSave,
+  isFacPricingStrict,
+  getActiveRateTableVersion,
+} from '../services/facPricingService.js';
 
 const router = Router();
 
@@ -42,9 +49,14 @@ router.get('/fac/risks/:id/edit-permission', asyncHandler(async (req, res) => {
 // LOOKUPS — fac classes of business + market rates
 // ═══════════════════════════════════════════════════════════════════════════
 
+// `category` stays the display grouping the UI has always used; segment_code
+// and rating_family (migration 134) are what the pricing pipeline resolves
+// against. Both ship on the same row so a screen can group by one and price
+// by the other without a second round trip.
 router.get('/fac/lookups/classes', asyncHandler(async (_req, res) => {
   const { rows } = await pool.query(
-    `SELECT fac_cob_id, class_name, category, code, is_project
+    `SELECT fac_cob_id, class_name, category, code, is_project,
+            segment_code, rating_family, exposure_basis
      FROM public.fac_class_of_business ORDER BY category, class_name`
   );
   res.json(rows);
@@ -307,6 +319,91 @@ router.put('/fac/risks/:id/locations', validateBody(facLocationsSaveSchema), asy
 
 
 // ═══════════════════════════════════════════════════════════════════════════
+// FAC SECTIONS — classes of business on the risk, each with its own exposure
+//
+// Migration 133. Before it, the Risk Detail screen let an underwriter split a
+// risk into sections, tick several classes per section and enter a sum
+// insured per class — and then persisted only the first class and the summed
+// total, so all of it vanished on reload (finding F6).
+//
+// Replace-all, like locations: the screen owns the whole set and sends it
+// entire. rating_family is denormalised from the class at write time so the
+// pricing pipeline never has to join back to the catalogue mid-compute.
+// ═══════════════════════════════════════════════════════════════════════════
+
+router.get('/fac/risks/:id/sections', asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT s.*, c.class_name, c.category, c.code, c.segment_code,
+            c.exposure_basis, c.is_project
+       FROM public.fac_risk_section s
+       JOIN public.fac_class_of_business c ON c.fac_cob_id = s.fac_cob_id
+      WHERE s.fac_risk_id = $1
+      ORDER BY s.section_no, s.sort_order, c.class_name`,
+    [req.params.id]
+  );
+  res.json(rows);
+}));
+
+router.put('/fac/risks/:id/sections', validateBody(facSectionsSaveSchema), asyncHandler(async (req, res) => {
+  const riskId = req.params.id;
+  await assertCanEdit(req, 'FAC_RISK', riskId);
+  const sections = req.body.sections || [];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await assertExists(client, 'public.fac_risk', 'fac_risk_id', riskId, 'Risk');
+    await assertParentEntityUnchanged(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
+    await client.query(`DELETE FROM public.fac_risk_section WHERE fac_risk_id = $1`, [riskId]);
+    for (let i = 0; i < sections.length; i++) {
+      const s = sections[i];
+      await client.query(`
+        INSERT INTO public.fac_risk_section (
+          fac_risk_id, section_no, fac_cob_id, rating_family,
+          sum_insured, exposure_base, exposure_unit,
+          limit_amount, attachment, deductible, deductible_basis,
+          currency_id, exposure_detail, sort_order
+        )
+        SELECT $1, $2, $3, c.rating_family,
+               $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13
+          FROM public.fac_class_of_business c
+         WHERE c.fac_cob_id = $3
+      `, [
+        riskId, s.section_no, s.fac_cob_id,
+        numOrNull(s.sum_insured), numOrNull(s.exposure_base), s.exposure_unit || null,
+        numOrNull(s.limit_amount), numOrNull(s.attachment),
+        numOrNull(s.deductible), s.deductible_basis || null,
+        s.currency_id || null, JSON.stringify(s.exposure_detail || {}), i,
+      ]);
+    }
+    await touchParentEntity(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId });
+    await writeFacAuditEvent({
+      facRiskId: riskId,
+      eventType: 'FAC_SECTIONS_SAVED',
+      actor: actorLabel(req),
+      payload: { section_count: sections.length },
+      client,
+    });
+    await client.query('COMMIT');
+    const { rows } = await client.query(
+      `SELECT s.*, c.class_name, c.category, c.code, c.segment_code,
+              c.exposure_basis, c.is_project
+         FROM public.fac_risk_section s
+         JOIN public.fac_class_of_business c ON c.fac_cob_id = s.fac_cob_id
+        WHERE s.fac_risk_id = $1
+        ORDER BY s.section_no, s.sort_order, c.class_name`,
+      [riskId]
+    );
+    res.json(rows);
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}));
+
+
+// ═══════════════════════════════════════════════════════════════════════════
 // FAC COPE — Construction, Occupation, Protection, Exposure
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -446,10 +543,57 @@ router.get('/fac/risks/:id/pricing', asyncHandler(async (req, res) => {
   res.json(rows[0] || null);
 }));
 
+// ── Server-side pricing authority ─────────────────────────────────────────
+// The engine used to run only in the browser: it computed every rate and
+// score and POSTed the results, and this file stored whatever arrived
+// (finding F13). This endpoint recomputes from stored state using the same
+// shared/fac math the client runs, so there is a number the server will
+// stand behind.
+//
+// It answers with a blocker rather than an error for the two ordinary
+// states the old path threw on — a class whose engine is not built yet, and
+// a property risk missing its occupancy or NatCat zone — because both are
+// things the screen has to render, not exceptions (finding F1).
+router.post('/fac/risks/:id/price', validateBody(facPricingSaveSchema), asyncHandler(async (req, res) => {
+  const riskId = req.params.id;
+  await assertCanReadEntity(req, 'FAC_RISK', riskId);
+  const priced = await computeFacPricing(riskId, req.body || {});
+  res.json(priced);
+}));
+
 router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHandler(async (req, res) => {
   const riskId = req.params.id;
   await assertCanEdit(req, 'FAC_RISK', riskId);
   const b = req.body;
+
+  // Recompute what the browser sent and record any disagreement. Warn-only
+  // by default — the save completes and the drift is logged and counted, as
+  // with the NP verifier. FAC_PRICING_STRICT=1 turns it into a rejection,
+  // which is only safe once drift has been observed at zero across a full
+  // pricing cycle.
+  const { drifts, computed } = await verifyFacPricingSave(riskId, b, res.locals?.requestId);
+  res.set('X-Fac-Pricing-Drift-Count', String(drifts.length));
+  if (drifts.length > 0 && isFacPricingStrict()) {
+    return res.status(422).json({
+      error: 'Submitted pricing does not match the server-side computation.',
+      code: 'FAC_PRICING_DRIFT',
+      drifts,
+    });
+  }
+
+  // Provenance. rate_table_version answers "which rates produced this
+  // number" when the row is re-opened after a reference revision (F12);
+  // family_code, score_completeness and exposure_basis say which engine ran,
+  // how much of the scoring weight was actually selected, and which sum
+  // insured the premium was computed against.
+  const rateTableVersion = b.rate_table_version
+    || computed?.rate_table_version
+    || await getActiveRateTableVersion();
+  const familyCode = b.family_code || computed?.family || null;
+  const scoreCompleteness = b.score_completeness != null
+    ? numOrNull(b.score_completeness)
+    : numOrNull(computed?.result?.score_completeness);
+  const exposureBasis = b.exposure_basis || computed?.exposure?.basis || null;
   // ui_state is JSONB for UI-only data (selected extensions, custom extensions)
   // that doesn't warrant its own typed columns.
   const uiState = (b.ui_state && typeof b.ui_state === 'object') ? b.ui_state : {};
@@ -478,10 +622,12 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
       max_capacity_pct, max_capacity_sar,
       market_vs_tech_pct, market_vs_tech_band,
       engine_version, engine_warnings,
-      capacity_proposed_pct, accepted_rate_pm, uw_note
+      capacity_proposed_pct, accepted_rate_pm, uw_note,
+      rate_table_version, family_code, score_completeness, exposure_basis
     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
       $22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,
-      $36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47)
+      $36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,
+      $48,$49,$50,$51)
     ON CONFLICT (fac_risk_id) DO UPDATE SET
       market_rate_per_mille = EXCLUDED.market_rate_per_mille,
       market_premium = EXCLUDED.market_premium,
@@ -529,6 +675,10 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
       capacity_proposed_pct = EXCLUDED.capacity_proposed_pct,
       accepted_rate_pm = EXCLUDED.accepted_rate_pm,
       uw_note = EXCLUDED.uw_note,
+      rate_table_version = EXCLUDED.rate_table_version,
+      family_code = EXCLUDED.family_code,
+      score_completeness = EXCLUDED.score_completeness,
+      exposure_basis = EXCLUDED.exposure_basis,
       updated_at = now()
     RETURNING *
   `, [
@@ -559,6 +709,8 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
     b.engine_version || null, JSON.stringify(engineWarnings),
     // Summary-screen edits (migration 084)
     numOrNull(b.capacity_proposed_pct), numOrNull(b.accepted_rate_pm), b.uw_note || null,
+    // Provenance (migration 134)
+    rateTableVersion, familyCode, scoreCompleteness, exposureBasis,
   ]);
     await touchParentEntity(cl, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId });
     await writeFacAuditEvent({ facRiskId: riskId, eventType: 'FAC_PRICING_SAVED', actor: actorLabel(req), payload: { underwriting_score: numOrNull(b.underwriting_score), capacity_grade: b.capacity_grade || null }, client: cl });

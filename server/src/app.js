@@ -25,7 +25,7 @@ import ssoRouter from './routes/sso.js';
 import { registerApiRoutes } from './routes/registerApiRoutes.js';
 
 // Pagination metadata + error codes exposed so browsers can read them.
-const EXPOSED_HEADERS = ['X-Total-Count', 'X-Page', 'X-Page-Size', 'X-Request-Id', 'X-Pricing-Drift-Count'];
+const EXPOSED_HEADERS = ['X-Total-Count', 'X-Page', 'X-Page-Size', 'X-Request-Id', 'X-Pricing-Drift-Count', 'X-Fac-Pricing-Drift-Count'];
 
 // Cache CORS preflight for 24h. Without this every cross-origin XHR
 // pays a synchronous OPTIONS round-trip — on a chatty page that's

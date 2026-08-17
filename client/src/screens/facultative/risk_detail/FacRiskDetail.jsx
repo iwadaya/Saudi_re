@@ -1,12 +1,14 @@
 // src/screens/facultative/risk_detail/FacRiskDetail.jsx
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import api from '../../../api';
+import { logger } from '../../../utils/logger';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import AsyncBoundary from '../../../components/AsyncBoundary';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import { useResource } from '../../../hooks/useResource';
 import { useFacRiskId } from '../../../hooks/useContractId';
+import { useAppState } from '../../../context/AppContext';
 import { FR, SectionTitle } from './FacRiskDetail.parts.jsx';
 import RelatedTreatiesSection from './RelatedTreatiesSection.jsx';
 
@@ -81,6 +83,7 @@ function SectionCobChecklist({ sectionIndex, selected, facClasses, classesByCate
 
 export default function FacRiskDetail() {
   const riskId = useFacRiskId();
+  const { setSlice } = useAppState();
 
   const [f, setF] = useState({
     insured_name: '', insured_address: '', nature_of_business: '',
@@ -102,6 +105,12 @@ export default function FacRiskDetail() {
   const [sectionCobs, setSectionCobs] = useState([new Set()]);
   // Per-COB SI values: keyed by fac_cob_id
   const [cobSiValues, setCobSiValues] = useState({});
+  // Sections are their own entity (fac_risk_section, migration 133) with
+  // their own save. Before that table existed this screen collected the
+  // section split and the per-class sums insured and then discarded all of
+  // it — the risk PUT only carried fac_cob_id and the summed total, so a
+  // reload rebuilt a single section holding everything (finding F6).
+  const sectionsDirty = useRef(false);
 
   // Reference lists (pickers + Summary Sheet additions). Cached in api.ts via
   // CACHEABLE_PATHS so navigating into / out of the wizard doesn't refetch.
@@ -162,6 +171,23 @@ export default function FacRiskDetail() {
     return ordered;
   }, [sectionCobs]);
 
+  // Publish the risk's rating families so the wizard can hide the steps this
+  // risk has no use for — a cyber or PI risk gets no COPE fire survey and no
+  // location schedule. Every fac step shows until this resolves, which is the
+  // behaviour that existed before families did.
+  const ratingFamilies = useMemo(() => {
+    const seen = new Set();
+    for (const { id } of allSelectedCobs) {
+      const cls = facClasses.find(c => c.fac_cob_id === id);
+      if (cls?.rating_family) seen.add(cls.rating_family);
+    }
+    return [...seen];
+  }, [allSelectedCobs, facClasses]);
+
+  useEffect(() => {
+    setSlice('facRiskDetail', { ratingFamilies });
+  }, [ratingFamilies, setSlice]);
+
   // Does any selected COB belong to a property-type category (for PML/MFL)?
   const anyPropertyType = useMemo(() => {
     const propCats = new Set(['PROPERTY', 'ENGINEERING', 'ENERGY', 'MARINE']);
@@ -210,11 +236,38 @@ export default function FacRiskDetail() {
       risk_category: cleanNum(r.risk_category) || '',
       frequency_category: cleanNum(r.frequency_category) || '',
     });
-    if (r.fac_cob_id) {
-      setSectionCobs([new Set([r.fac_cob_id])]);
-      if (r.total_sum_insured) setCobSiValues({ [r.fac_cob_id]: cleanNum(r.total_sum_insured) });
-    }
+    // Sections hydrate from their own table below; the header's fac_cob_id
+    // is only a fallback for a risk that predates it.
   }, []);
+
+  // ── Sections ──────────────────────────────────────────────────────────
+  // Loaded once per risk. Rebuilds the per-section class sets and the
+  // per-class sums insured that the screen edits, so what the underwriter
+  // typed is what comes back.
+  const hydrateSections = useCallback((rows) => {
+    if (!Array.isArray(rows) || rows.length === 0) return;
+    const bySection = new Map();
+    const si = {};
+    for (const row of rows) {
+      const idx = Math.max(1, Number(row.section_no) || 1) - 1;
+      if (!bySection.has(idx)) bySection.set(idx, new Set());
+      bySection.get(idx).add(row.fac_cob_id);
+      if (row.sum_insured != null) si[row.fac_cob_id] = cleanNum(row.sum_insured);
+    }
+    const count = Math.max(...bySection.keys()) + 1;
+    setNumSections(Math.min(Math.max(count, 1), 5));
+    setSectionCobs(Array.from({ length: count }, (_, i) => bySection.get(i) || new Set()));
+    setCobSiValues(si);
+  }, []);
+
+  useEffect(() => {
+    if (!riskId) return;
+    let cancelled = false;
+    api.facGetSections(riskId)
+      .then((rows) => { if (!cancelled) { hydrateSections(rows); sectionsDirty.current = false; } })
+      .catch(logger.error);
+    return () => { cancelled = true; };
+  }, [riskId, hydrateSections]);
 
   const saveRisk = useCallback(
     (id, state) => api.facUpdateRisk(id, {
@@ -244,7 +297,7 @@ export default function FacRiskDetail() {
     [],
   );
 
-  const { save, markDirty, loadedRef: loaded, loading, loadError, refetch } = useScreenSave({
+  const { save: saveRiskHeader, markDirty, loadedRef: loaded, loading, loadError, refetch } = useScreenSave({
     entityId: riskId || '',
     load: api.facGetRisk,
     save: saveRisk,
@@ -252,6 +305,32 @@ export default function FacRiskDetail() {
     onLoaded: hydrate,
     errorLabel: 'Risk detail',
   });
+
+  // Combined save: the header and the sections are separate entities and
+  // both have to land before the wizard advances. Either failure blocks
+  // navigation, so a section split can never be silently dropped again.
+  const save = useCallback(async () => {
+    const headerOk = await saveRiskHeader();
+    if (!riskId || !sectionsDirty.current) return Boolean(headerOk);
+    const payload = [];
+    sectionCobs.forEach((cobs, idx) => {
+      for (const cobId of cobs) {
+        payload.push({
+          section_no: idx + 1,
+          fac_cob_id: cobId,
+          sum_insured: numOrNull(cobSiValues[cobId]),
+        });
+      }
+    });
+    try {
+      await api.facSaveSections(riskId, payload);
+      sectionsDirty.current = false;
+      return Boolean(headerOk);
+    } catch (e) {
+      logger.error('[FacRiskDetail] sections save failed:', e);
+      return false;
+    }
+  }, [riskId, saveRiskHeader, sectionCobs, cobSiValues]);
 
   const set = useCallback((key, val) => {
     setF(prev => ({ ...prev, [key]: val }));
@@ -300,18 +379,24 @@ export default function FacRiskDetail() {
     const num = Math.max(1, Math.min(5, Number(n) || 1));
     setNumSections(num);
     setSectionCobs(prev => { const next = [...prev]; while (next.length < num) next.push(new Set()); return next.slice(0, num); });
+    sectionsDirty.current = true;
     markDirty();
   };
 
   const handleSectionCobChange = (idx, cobIds) => {
     setSectionCobs(prev => { const next = [...prev]; next[idx] = new Set(cobIds); return next; });
+    // fac_cob_id stays on the header as the risk's primary class — it is
+    // what the dashboard, the treaty-link eligibility check and the legacy
+    // reports read. The full set lives in fac_risk_section.
     const first = cobIds[0] || '';
     if (first) set('fac_cob_id', first);
+    sectionsDirty.current = true;
     markDirty();
   };
 
   const handleCobSiChange = (cobId, val) => {
     setCobSiValues(prev => ({ ...prev, [cobId]: val }));
+    sectionsDirty.current = true;
     markDirty();
   };
 

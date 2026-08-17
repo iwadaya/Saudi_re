@@ -361,7 +361,10 @@ export default function FacSummary() {
             <div className="fac-grade-col">
               <div className="fac-kicker">Grade</div>
               <div className="fac-grade-val" style={{ color: gradeColor(grade) }}>
-                {grade || '—'}
+                {/* No grade is issued below the scoring-completeness floor —
+                    an unfinished score is not a declined risk, and must not
+                    render as one. */}
+                {grade || (pricing.uw_action === 'INCOMPLETE' ? 'n/a' : '—')}
               </div>
             </div>
             <div>
@@ -374,7 +377,10 @@ export default function FacSummary() {
               </div>
               <div className="fac-scheme-note">
                 Scheme {pricing.bi_rate_pm ? 'WITH_BI' : 'WITHOUT_BI'} ·
-                {' '}Market vs Tech {fmtPct(pricing.market_vs_tech_pct)} ({pricing.market_vs_tech_band || '—'})
+                {' '}Market vs Tech {fmtPct(pricing.market_vs_tech_pct)} ({pricing.market_vs_tech_band || 'not scored'})
+                {pricing.score_completeness != null && (
+                  <> · Scored on {fmtPct(pricing.score_completeness)} of the weight</>
+                )}
               </div>
             </div>
           </div>
@@ -449,6 +455,19 @@ export default function FacSummary() {
             <Row label="Expiring Reference" value={risk.expiring_reference || '—'} />
             <Row label="Bound Reference"    value={risk.bound_reference || '—'} color={risk.bound_reference ? 'var(--accent)' : 'rgba(var(--text-rgb),0.5)'} />
             <Row label="Status"             value={risk.status} color={risk.status === 'BOUND' ? 'var(--accent)' : risk.status === 'DECLINED' ? 'var(--accent-rose)' : 'var(--accent-blue)'} />
+          </div>
+        </Sec>
+
+        {/* ── 7. Provenance ──
+            Which engine, which reference set and which exposure produced the
+            figures above. Without it, a row re-opened after a rate revision
+            shows numbers nobody can tie back to the rates that made them. */}
+        <Sec title="Provenance">
+          <div className="fac-grid-2">
+            <Row label="Rating Family"   value={pricing.family_code || '—'} />
+            <Row label="Engine Version"  value={pricing.engine_version || '—'} />
+            <Row label="Rate Table"      value={pricing.rate_table_version || '—'} />
+            <Row label="Exposure Basis"  value={pricing.exposure_basis || '—'} />
           </div>
         </Sec>
 

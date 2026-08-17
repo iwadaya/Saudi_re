@@ -15,8 +15,11 @@ export function useWizard(routeKey) {
   const npCatDisabled  = isNpCatFlowDisabled(appState);
   const npRiskDisabled = isNpRiskFlowDisabled(appState);
   const npStopLoss     = isNpStopLossTreaty(appState);
+  // Rating families on the active fac risk, published by FacRiskDetail. When
+  // it is absent (deep link, or no class picked yet) every fac step shows.
+  const facFamilies    = appState.facRiskDetail?.ratingFamilies;
 
-  const nav = getWizardNav(routeKey, { wizardMode, quoteMode, triangulationsEnabled, npCatDisabled, npRiskDisabled, npStopLoss });
+  const nav = getWizardNav(routeKey, { wizardMode, quoteMode, triangulationsEnabled, npCatDisabled, npRiskDisabled, npStopLoss, facFamilies });
 
   const goTo = useCallback((key) => {
     const path = ROUTE_PATHS[key];

@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { asyncHandler } from '../helpers.js';
+import { listFamilies, RATING_BASIS_LABEL, SEGMENT_LABEL } from '../../../shared/fac/index.js';
 
 const router = Router();
 
@@ -127,6 +128,52 @@ router.get('/fac/reference/natcat-rates', asyncHandler(async (_req, res) => {
   `);
   res.set('Cache-Control', CACHE_HEADER);
   res.json({ rates: rows });
+}));
+
+// The rating-family registry. Served from shared/fac rather than the
+// database because a family is code (an engine and its rules), not data —
+// the class → family mapping is the data, and it lives on
+// fac_class_of_business. The screen uses this to tell an underwriter what a
+// class rates on and whether its engine exists yet, instead of running a
+// marine risk into the property engine and rendering the exception.
+router.get('/fac/reference/families', (_req, res) => {
+  res.set('Cache-Control', CACHE_HEADER);
+  res.json({
+    families: listFamilies().map((f) => ({
+      code: f.code,
+      label: f.label,
+      segment: f.segment,
+      segment_label: SEGMENT_LABEL[f.segment] || f.segment,
+      rating_basis: f.ratingBasis,
+      rating_basis_label: RATING_BASIS_LABEL[f.ratingBasis] || f.ratingBasis,
+      period_basis: f.periodBasis,
+      methods: f.methods,
+      requires: f.requires || [],
+      wizard_steps: f.wizardSteps || [],
+      implemented: f.implemented,
+      planned_phase: f.plannedPhase || null,
+      notes: f.notes || null,
+    })),
+  });
+});
+
+// Which reference set is in force. A priced row stores this label so
+// re-opening it after a rate revision can say which rates produced the
+// number, instead of silently recomputing against today's (finding F12).
+router.get('/fac/reference/rate-version', asyncHandler(async (req, res) => {
+  const asOf = typeof req.query.asOf === 'string' && req.query.asOf ? req.query.asOf : null;
+  const { rows } = await pool.query(
+    `SELECT version_label, effective_from, effective_to, notes
+       FROM public.fac_rate_table_version
+      WHERE effective_from <= COALESCE($1::date, CURRENT_DATE)
+        AND (effective_to IS NULL OR effective_to >= COALESCE($1::date, CURRENT_DATE))
+      ORDER BY effective_from DESC
+      LIMIT 1`,
+    [asOf],
+  );
+  // No cache header: the active version is the one thing here that can
+  // change without a deploy.
+  res.json(rows[0] || null);
 }));
 
 router.get('/fac/reference/clauses', asyncHandler(async (_req, res) => {

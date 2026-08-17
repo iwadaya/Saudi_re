@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   computeRatePath,
   computeScoreAndDecision,
+  computePremiums,
   computeFacQuote,
-} from './facPropertyPricing.js';
+  SCORE_COMPLETENESS_MIN,
+} from './scheduleProperty.js';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Hospital example (occupancy 102) — Pricing_TOOL.xlsx Premium Calculator
@@ -268,27 +270,244 @@ describe('computeRatePath — hospital example (Premium Calculator)', () => {
   });
 });
 
-describe('computeScoreAndDecision', () => {
-  it('lands in the F band (65-70) for the hospital case with a lowered UW perception', () => {
-    // Excel Summary Sheet selections produce a score of ~71 (boundary between
-    // E and F bands). Downgrading UW Perception from "Good" to "Low" subtracts
-    // 0.075 × 80 = 6 from the weighted score, settling cleanly inside F.
-    const inputs = hospitalInputs({
-      factor_selections: { UW_PERCEPTION: 'Low' },
-      // Restore the Excel's BI_PLAN selection so this test exercises the same
-      // selections the Summary Sheet shows.
-    });
-    inputs.factor_selections.BI_PLAN = 'No Business Continuity Plan';
+// Selections used by the scoring tests: UW Perception downgraded to "Low"
+// (score 0 instead of 80) and the Excel's own BI_PLAN choice restored.
+function lowPerceptionInputs(overrides = {}) {
+  const inputs = hospitalInputs({
+    factor_selections: { UW_PERCEPTION: 'Low' },
+    ...overrides,
+  });
+  inputs.factor_selections.BI_PLAN = 'No Business Continuity Plan';
+  return inputs;
+}
+
+describe('computeScoreAndDecision — every factor scored', () => {
+  // Weighted sum of the hospital selections, MARKET_VS_TECH included:
+  //   hazard 97×.215 + freq 100×.10 + constr 100×.07 + age 100×.025
+  //   + claim 50×.03 + fire 80×.09 + external 60×.015 + natcat 80×.04
+  //   + mgmt 50×.03 + survey 50×.085 + surveyAge 100×.01 + deduct 80×.025
+  //   + grossRet 100×.01 + topOcc 100×.015 + uwPerc 0×.075
+  //   + client 100×.02 + numLoc 100×.005 + topLoc 100×.01 + biPlan −15×.07
+  //   = 66.855, before the market-vs-tech term.
+  // Market rate 0.16‰ against a 0.1815‰ final net is 88.2% → the top band
+  // (score 100) → +6.00 → 72.855 over the full 1.0 weight.
+  it('uses the plain weighted average when the whole scheme is selected', () => {
+    const inputs = lowPerceptionInputs({ market_rate_pm: 0.16 });
 
     const rate = computeRatePath(inputs, HOSPITAL_REFERENCE_DATA);
     const result = computeScoreAndDecision(inputs, HOSPITAL_REFERENCE_DATA, rate);
 
-    expect(result.underwriting_score).toBeGreaterThanOrEqual(65);
-    expect(result.underwriting_score).toBeLessThan(70);
-    expect(result.capacity_grade).toBe('F');
+    expect(result.market_vs_tech_band).toBe('More than Equal to 80%');
+    expect(result.score_completeness).toBeCloseTo(1.0, 9);
+    expect(result.unscored_factors).toEqual([]);
+    expect(result.underwriting_score).toBeCloseTo(72.855, 6);
+    expect(result.capacity_grade).toBe('E');
     expect(result.factor_weights_scheme).toBe('WITH_BI');
-    expect(result.max_capacity_pct).toBeCloseTo(0.60, 6);
-    expect(result.max_capacity_sar).toBe(Math.min(300_000_000, 50_000_000 * 0.60));
+    expect(result.max_capacity_pct).toBeCloseTo(0.70, 6);
+  });
+});
+
+describe('computeScoreAndDecision — a blank market rate is unscored, not the worst band (F5b)', () => {
+  // Before the fix, no market rate meant the band cascade fell through to
+  // "Less than 40%" — score −30 against a 6% weight. Simply not having typed
+  // a number yet cost 1.8 points and could drop a risk a whole grade.
+  it('drops MARKET_VS_TECH out of the average and renormalises', () => {
+    const inputs = lowPerceptionInputs();          // market_rate_pm: 0
+    const rate = computeRatePath(inputs, HOSPITAL_REFERENCE_DATA);
+    const result = computeScoreAndDecision(inputs, HOSPITAL_REFERENCE_DATA, rate);
+
+    expect(result.market_vs_tech_band).toBeNull();
+    expect(result.market_vs_tech_pct).toBeNull();
+    expect(result.unscored_factors).toEqual(['MARKET_VS_TECH']);
+    expect(result.score_completeness).toBeCloseTo(0.94, 9);
+
+    // 66.855 over the 0.94 of weight actually scored — NOT 65.055 over 1.0,
+    // which is what the phantom −30 used to produce.
+    expect(result.underwriting_score).toBeCloseTo(66.855 / 0.94, 6);
+    expect(result.underwriting_score).toBeGreaterThan(65.055);
+    expect(result.capacity_grade).toBe('E');
+  });
+});
+
+describe('computeScoreAndDecision — completeness gate (F5)', () => {
+  it('withholds the grade and reports INCOMPLETE below the floor', () => {
+    // Two selections out of a 20-factor scheme. The old engine scored the
+    // other eighteen as 0 — mid-scale on a −100..+100 range — landing the
+    // risk on grade K, which reads as DECLINE. An unfinished form is not a
+    // bad risk.
+    const inputs = hospitalInputs();
+    inputs.factor_selections = {
+      CONSTRUCTION: 'Class A - RCC roof and Structure',
+      AGE_OF_RISK: 'Less than 10 Years',
+    };
+
+    const rate = computeRatePath(inputs, HOSPITAL_REFERENCE_DATA);
+    const result = computeScoreAndDecision(inputs, HOSPITAL_REFERENCE_DATA, rate);
+
+    expect(result.score_completeness).toBeLessThan(SCORE_COMPLETENESS_MIN);
+    expect(result.uw_action).toBe('INCOMPLETE');
+    expect(result.capacity_grade).toBeNull();
+    expect(result.capacity_band).toBeNull();
+    expect(result.max_capacity_sar).toBeNull();
+    expect(result.warnings.some((w) => /provisional/i.test(w))).toBe(true);
+    // Hazard and frequency still score — they come from the occupancy, not
+    // from a dropdown the underwriter has yet to touch.
+    expect(result.factor_scores.HAZARD_GRADE).toBe(97);
+    expect(result.unscored_factors).toContain('UW_PERCEPTION');
+  });
+
+  it('issues a grade once enough of the weight is selected', () => {
+    const result = computeScoreAndDecision(
+      lowPerceptionInputs(), HOSPITAL_REFERENCE_DATA,
+      computeRatePath(lowPerceptionInputs(), HOSPITAL_REFERENCE_DATA),
+    );
+    expect(result.score_completeness).toBeGreaterThanOrEqual(SCORE_COMPLETENESS_MIN);
+    expect(result.uw_action).toBe('ACCEPT');
+    expect(result.capacity_grade).toBe('E');
+  });
+});
+
+describe('max_capacity_sar — territorial budget is an absolute cap (F7)', () => {
+  // The two branches used to disagree: with a top location the territorial
+  // figure was compared raw, without one it was multiplied by the grade
+  // percentage. Which answer you got depended on whether a region happened
+  // to be selected.
+  it('takes the lesser of the territorial budget and the graded line', () => {
+    const inputs = lowPerceptionInputs();  // grade E → 70%, top location 50m
+    const result = computeScoreAndDecision(
+      inputs, HOSPITAL_REFERENCE_DATA, computeRatePath(inputs, HOSPITAL_REFERENCE_DATA),
+    );
+    expect(result.max_capacity_sar).toBe(Math.min(300_000_000, 50_000_000 * 0.70));
+  });
+
+  it('uses the graded line alone when no region is set', () => {
+    const inputs = lowPerceptionInputs({ region: null });
+    const result = computeScoreAndDecision(
+      inputs, HOSPITAL_REFERENCE_DATA, computeRatePath(inputs, HOSPITAL_REFERENCE_DATA),
+    );
+    expect(result.max_capacity_sar).toBe(50_000_000 * 0.70);
+  });
+
+  it('uses the territorial budget unscaled when there is no exposure to grade', () => {
+    const inputs = lowPerceptionInputs({ top_location_si_sar: null });
+    const result = computeScoreAndDecision(
+      inputs, HOSPITAL_REFERENCE_DATA, computeRatePath(inputs, HOSPITAL_REFERENCE_DATA),
+    );
+    expect(result.max_capacity_sar).toBe(300_000_000);
+  });
+});
+
+describe('fractions are never silently rescaled (F8)', () => {
+  it('applies an extra-cover loading at face value and warns when it looks like a percentage', () => {
+    // 15 in a fraction field is 1500%, not 15%. The old pct() helper divided
+    // anything above 1 by 100, which also turned a legitimate 150% loading
+    // (1.5) into 1.5%.
+    const inputs = hospitalInputs({
+      extra_cover_loadings: [{ label: 'Terrorism', pct: 15 }],
+    });
+    const result = computeRatePath(inputs, HOSPITAL_REFERENCE_DATA);
+
+    expect(result.extra_cover_loading_total).toBe(15);
+    expect(result.final_net_rate_pm).toBeCloseTo(result.net_rate_pm * 16, 9);
+    expect(result.warnings.some((w) => /Terrorism.*fraction/i.test(w))).toBe(true);
+  });
+
+  it('accepts a loading above 100% without rescaling it', () => {
+    const inputs = hospitalInputs({
+      extra_cover_loadings: [{ label: 'War', pct: 1.5 }],
+    });
+    const result = computeRatePath(inputs, HOSPITAL_REFERENCE_DATA);
+    expect(result.final_net_rate_pm).toBeCloseTo(result.net_rate_pm * 2.5, 9);
+  });
+
+  it('sums bare numbers as well as { label, pct } rows', () => {
+    const inputs = hospitalInputs({ extra_cover_loadings: [0.1, { pct: 0.05 }] });
+    const result = computeRatePath(inputs, HOSPITAL_REFERENCE_DATA);
+    expect(result.extra_cover_loading_total).toBeCloseTo(0.15, 9);
+  });
+});
+
+describe('BI weighting comes from one exposure profile (F10)', () => {
+  it('prices the BI rate into the net rate when the profile carries BI', () => {
+    const inputs = hospitalInputs({
+      pd_si_share_pct: undefined,
+      bi_included: undefined,
+      exposure: {
+        basis: 'LOCATIONS',
+        pd_si: 400_000_000,
+        bi_si: 100_000_000,
+        total_si: 500_000_000,
+        pd_si_share: 0.8,
+        bi_included: true,
+        top_location_si: 360_000_000,
+        warnings: [],
+      },
+    });
+    const result = computeRatePath(inputs, HOSPITAL_REFERENCE_DATA);
+
+    // 0.8 × total + 0.2 × BI — the BI rate actually moves the answer.
+    expect(result.net_rate_pm).toBeCloseTo(0.8 * 0.1815 + 0.2 * 0.226875, 9);
+    expect(result.net_rate_pm).toBeGreaterThan(result.total_rate_pm);
+  });
+
+  it('leaves the net rate at the total rate when the profile has no BI', () => {
+    const inputs = hospitalInputs({
+      pd_si_share_pct: undefined,
+      bi_included: undefined,
+      exposure: {
+        basis: 'RISK_HEADER',
+        pd_si: 500_000_000, bi_si: 0, total_si: 500_000_000,
+        pd_si_share: 1, bi_included: false, top_location_si: 500_000_000, warnings: [],
+      },
+    });
+    const result = computeRatePath(inputs, HOSPITAL_REFERENCE_DATA);
+    expect(result.bi_rate_pm).toBe(0);
+    expect(result.net_rate_pm).toBeCloseTo(result.total_rate_pm, 9);
+  });
+});
+
+describe('computePremiums — one sum insured (F11)', () => {
+  it('computes both premiums against the profile total, whatever its source', () => {
+    const inputs = hospitalInputs();
+    const rate = computeRatePath(inputs, HOSPITAL_REFERENCE_DATA);
+    const exposure = {
+      basis: 'SECTIONS', total_si: 200_000_000,
+      pd_si: 200_000_000, bi_si: 0, pd_si_share: 1, bi_included: false,
+      top_location_si: 200_000_000, warnings: [],
+    };
+    const premiums = computePremiums(rate, exposure);
+
+    expect(premiums.sum_insured).toBe(200_000_000);
+    expect(premiums.exposure_basis).toBe('SECTIONS');
+    expect(premiums.technical).toBeCloseTo(rate.technical_rate_no_natcat_pm * 200_000_000 / 1000, 6);
+    expect(premiums.expected).toBeCloseTo(rate.final_gross_rate_pm * 200_000_000 / 1000, 6);
+  });
+
+  it('returns nulls rather than zero when there is no exposure to price against', () => {
+    const rate = computeRatePath(hospitalInputs(), HOSPITAL_REFERENCE_DATA);
+    expect(computePremiums(rate, { basis: 'NONE', total_si: 0 })).toMatchObject({
+      technical: null, expected: null,
+    });
+  });
+});
+
+describe('capacity band boundaries', () => {
+  it('picks the higher band when two share a boundary score', () => {
+    // Bands are inclusive at both ends, so 95 sits in both "90-95" and
+    // "95-100". The answer must not depend on the order the reference query
+    // returned them in.
+    const shuffled = {
+      ...HOSPITAL_REFERENCE_DATA,
+      capacityBands: [...HOSPITAL_REFERENCE_DATA.capacityBands].reverse(),
+    };
+    const inputs = hospitalInputs({
+      factor_selections: { UW_PERCEPTION: 'Good' },
+      market_rate_pm: 0.16,
+    });
+    const rate = computeRatePath(inputs, shuffled);
+    const a = computeScoreAndDecision(inputs, HOSPITAL_REFERENCE_DATA, rate);
+    const b = computeScoreAndDecision(inputs, shuffled, rate);
+    expect(b.capacity_grade).toBe(a.capacity_grade);
   });
 });
 

@@ -177,6 +177,47 @@ export const facLocationsSaveSchema = z.object({
 
 
 /**
+ * One row in the sections save payload (migration 133).
+ *
+ * A section is a class of business on the risk with its own sum insured.
+ * The Risk Detail screen has always collected these; until migration 133
+ * there was nowhere to put them, so only the first class and the summed
+ * total survived a save (finding F6).
+ *
+ * Only fac_cob_id and section_no are structural. Everything else is the
+ * exposure in whatever units the section's rating family uses, and stays
+ * optional so a draft saves mid-entry.
+ */
+export const facSectionSchema = z.object({
+  section_no:  z.preprocess((v) => {
+    if (v === null || v === undefined || v === '') return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.trunc(n) : undefined;
+  }, z.number().int().min(1).max(20)),
+  fac_cob_id:  z.string().uuid('fac_cob_id must be a UUID'),
+
+  sum_insured:   money,
+  exposure_base: money,
+  exposure_unit: optionalText,
+  limit_amount:  money,
+  attachment:    money,
+  deductible:    money,
+  deductible_basis: optionalText,
+  currency_id:   optionalUuid,
+  exposure_detail: z.record(z.unknown()).optional(),
+}).passthrough();
+
+/**
+ * PUT /api/fac/risks/:id/sections — full replacement, like locations.
+ * Five sections × the class catalogue is the practical ceiling the UI
+ * offers; 100 leaves room without letting a bad payload write unbounded.
+ */
+export const facSectionsSaveSchema = z.object({
+  sections: z.array(facSectionSchema).max(100, 'maximum 100 sections per risk').default([]),
+}).passthrough();
+
+
+/**
  * PUT /api/fac/risks/:id/pricing — accepts:
  *   • The historic dual-engine fields (market / actuarial / blend / final).
  *   • The new engine inputs + outputs from computeFacQuote (migration 082).
@@ -239,6 +280,12 @@ export const facPricingSaveSchema = z.object({
   // Provenance
   engine_version:           optionalText,
   engine_warnings:          z.array(z.unknown()).optional(),
+  // Migration 134 — which reference set and which family produced this row,
+  // and how much of the scoring weight was actually selected.
+  rate_table_version:       optionalText,
+  family_code:              optionalText,
+  score_completeness:       optionalFraction01,
+  exposure_basis:           optionalText,
 
   // UI-only blob — kept passthrough-style for the dual-engine extensions
   // selection state that already lives there.

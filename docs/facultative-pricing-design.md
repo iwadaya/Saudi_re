@@ -1,9 +1,15 @@
 # Facultative Pricing — Multi-Class Design & Redesign Proposal
 
-**Status:** Design proposal for review. No code changed.
+**Status:** Phases 0 and 1 are **implemented** — see [§9 Implementation status](#9-implementation-status).
+Phases 2–5 remain proposals for review.
 **Audience:** Underwriting / actuarial / product / engineering.
 **Scope:** The facultative (`/fac/*`) pricing capability across all classes of
 business, grouped into families that share a rating basis.
+
+> **Decisions taken** (§7): first non-property family is Casualty
+> (`LIABILITY_LIMIT`, Phase 3); the legacy ①②③④ manual block is **retired**;
+> the territorial capacity budget is an **absolute cap**, with the grade
+> percentage applying to the risk's own exposure.
 
 ---
 
@@ -1200,6 +1206,65 @@ These change the shape of the build, so I would rather ask than guess.
   marine, with proper loss-cost methods and a readable build-up) cover the large
   majority of a typical fac book. Phase 4 should be re-justified against actual
   submission volumes before it is built.
+
+---
+
+## 9. Implementation status
+
+Phases 0 and 1 shipped together. Nothing in Phases 2–5 is built.
+
+### What landed
+
+| Area | Change |
+| --- | --- |
+| **Migration 133** | `fac_risk_section` — sections, classes and a sum insured per class, plus the nullable exposure columns the non-property families will need. Backfills one section per existing risk from `fac_risk.fac_cob_id`. |
+| **Migration 134** | `segment_code` / `rating_family` / `exposure_basis` on `fac_class_of_business`, backfilled for all 29 classes; `fac_rate_table_version` with `FAC-REF-2026.1` as the current set; `rate_table_version`, `family_code`, `score_completeness`, `exposure_basis` on `fac_pricing`. |
+| **`shared/fac/`** | New. `registry.js` (ten families, one implemented, nine declared), `families/scheduleProperty.js` (the engine, moved out of `client/src/logic/` so the server can run it), `exposure.js` (one exposure profile), `index.js` (`priceFacRisk`). |
+| **Server** | `GET`/`PUT /api/fac/risks/:id/sections`; `POST /api/fac/risks/:id/price` (the pricing authority); `GET /api/fac/reference/families` and `/rate-version`; `services/facPricingService.js` with reference loading, recompute and drift verification; `X-Fac-Pricing-Drift-Count` on every pricing save. |
+| **Client** | Risk Detail persists sections; Pricing is a single build-up with the legacy block removed; `FacPricing.css` replaces 87 inline styles; wizard steps are family-driven; Summary shows provenance and no longer renders an incomplete score as a grade. |
+| **Tests** | 43 new tests in `shared/fac/`, a rewritten `FacPricing.goldenMaster.test.jsx`, and `facSectionsAndPricing.integration.test.js` (17 DB-backed tests). `npm run verify` passes; the DB suite is 234 tests green. |
+
+### Findings closed
+
+| # | Fix |
+| --- | --- |
+| **F1** | `pricingBlocker` returns a typed state — "Hull & Machinery rates on agreed value; that engine is not built yet (Phase 3)" — instead of the property engine throwing `Unknown occupancy_code` and the screen rendering the exception. |
+| **F5** | Unselected factors are **UNSCORED**, not zero: excluded from both sides of the weighted average, which is renormalised over the weight actually selected. Below 80% completeness no grade is issued and `uw_action` is `INCOMPLETE`. A fully-scored risk prices identically to before. |
+| **F5b** | A blank market rate leaves `MARKET_VS_TECH` unscored rather than dropping it to the worst band (−30 against a 6% weight). |
+| **F6** | Sections and per-class sums insured persist to `fac_risk_section` and rehydrate. |
+| **F7** | One capacity formula: the territorial budget is an absolute cap; the grade percentage applies to the risk's own exposure. |
+| **F8** | The percent-vs-decimal heuristic is gone. Fractions are taken at face value, an out-of-range one warns, and the inputs are `PctInput` so the UI is unambiguous at source. |
+| **F9** | Extensions are the engine's cover loadings. Four loading mechanisms became one build-up, with the UW adjustment as its own visible final line. |
+| **F10** | The BI flag and the PD share come from one exposure profile, so a BI rate can no longer be computed and then weighted at zero. |
+| **F11** | One sum insured drives both the share and the premium, and the screen names which source it used. |
+| **F12** | Every priced row is stamped with the reference-set label in force at the risk's inception date; Summary shows it. |
+| **F13** | The engine is in `shared/`, the server recomputes it, and drift is logged and counted (warn-only; `FAC_PRICING_STRICT=1` enforces). |
+
+### Deliberately not done
+
+- **F14** (accumulation, real benchmarks) — Phase 4 and §4.10; needs the
+  materialised view and enough bound business to be meaningful.
+- **M6 in full** — reference tables still have no per-row effective dating.
+  What shipped is the version *identity* and the provenance stamp, which is
+  what makes a historic quote explainable. The admin UI that edits versions
+  is Phase 5.
+- **M7** — the extension catalogue is still hard-coded in `FacPricing.jsx`.
+  Its numbers now feed the engine, but they are not yet versioned data with
+  an explicit additive/multiplicative flag.
+- **Nine of ten families** — declared with their rating basis, methods and
+  planned phase, so the tool can say what a class needs. No engines.
+
+### Notes for review
+
+- **`ENGINE_VERSION` is now `2.0.0`.** The rate path is arithmetically
+  unchanged, but the score, capacity and loading paths are not — a risk
+  re-opened after this change can show a different grade. Rows priced under
+  `1.0.0` keep their stored figures and are stamped as such.
+- **`npm run budget:frontend` was already red on `main`** at 3286 inline
+  styles against a 3133 baseline. This change reduces it to 3199 and
+  reconciles the baseline, the same way the committed note records the
+  earlier 3065→3133 reconciliation. It did not introduce the breach.
+- **The MBBEFD sign-off in §8 is still open** and still gates Phase 2.
 
 ---
 

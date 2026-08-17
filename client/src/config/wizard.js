@@ -1,4 +1,5 @@
 // src/config/wizard.js — Wizard step definitions, navigation logic
+import { getFamily, wizardStepsForFamilies } from '../../../shared/fac/index.js';
 
 export const PROP_WIZARD_ORDER = [
   'PROP_TREATY_DETAIL',
@@ -216,11 +217,34 @@ export const ROUTE_PATHS = {
   FAC_SUMMARY: '/fac/risk/summary',
 };
 
+// FAC steps that only some rating families need. A COPE fire survey and a
+// location schedule are property/engineering/energy concerns; a cyber or
+// professional-indemnity risk has no use for either. Everything else in the
+// fac wizard applies to every family.
+const FAC_FAMILY_CONDITIONAL_STEPS = new Set(['FAC_LOCATIONS', 'FAC_COPE']);
+
+/**
+ * Is this fac step relevant to the families on the risk?
+ *
+ * Falls open: with no families resolved yet — a deep link straight into the
+ * wizard, or a risk with no class picked — every step shows, which is the
+ * behaviour that existed before families did.
+ *
+ * @param {string} key
+ * @param {string[]|undefined} familyCodes
+ */
+export function facStepVisible(key, familyCodes) {
+  if (!FAC_FAMILY_CONDITIONAL_STEPS.has(key)) return true;
+  const families = (familyCodes || []).map(getFamily).filter(Boolean);
+  if (families.length === 0) return true;
+  return wizardStepsForFamilies(families).has(key);
+}
+
 // Get wizard navigation for a given route key and mode
-export function getWizardNav(routeKey, { quoteMode = false, triangulationsEnabled = true, npCatDisabled = false, npRiskDisabled = false, npStopLoss = false } = {}) {
+export function getWizardNav(routeKey, { quoteMode = false, triangulationsEnabled = true, npCatDisabled = false, npRiskDisabled = false, npStopLoss = false, facFamilies } = {}) {
   let order;
   if (routeKey.startsWith('FAC_')) {
-    order = [...FAC_WIZARD_ORDER];
+    order = FAC_WIZARD_ORDER.filter((k) => facStepVisible(k, facFamilies));
   } else if (routeKey.startsWith('NP_')) {
     order = quoteMode ? [...NP_QUOTE_WIZARD_ORDER] : [...NP_WIZARD_ORDER];
     // Filter disabled flows
