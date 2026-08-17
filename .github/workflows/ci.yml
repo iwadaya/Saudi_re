@@ -150,20 +150,28 @@ jobs:
             echo "Align the root optionalDependencies pin in package.json with rolldown's version." >&2
             exit 1
           fi
-          if ls "$PKG_DIR"/*.node >/dev/null 2>&1; then
-            echo "rolldown linux binding already present — no-op"
-          else
-            mkdir -p "$PKG_DIR"
-            curl -sSL "https://registry.npmjs.org/$PKG/-/binding-linux-x64-gnu-$VERSION.tgz" -o /tmp/rolldown.tgz
-            ACTUAL="sha512-$(openssl dgst -sha512 -binary /tmp/rolldown.tgz | openssl base64 -A)"
-            if [ "$ACTUAL" != "$EXPECTED" ]; then
-              echo "rolldown tarball integrity mismatch! expected=$EXPECTED actual=$ACTUAL" >&2
-              exit 1
-            fi
-            tar -xz --strip-components=1 -C "$PKG_DIR" -f /tmp/rolldown.tgz
-            echo "rolldown linux binding $VERSION planted (integrity verified):"
-            ls -la "$PKG_DIR"
+          # Plant unconditionally rather than skipping when a .node is already
+          # present. npm/cli#4828 makes the extraction non-deterministic: in the
+          # same workflow run the lint job got no binding (so the old code
+          # planted one and passed) while the integration job got a partial
+          # extraction — enough for the "already present" check to skip, not
+          # enough for rolldown to load — and died on the same startup error.
+          # Overwriting costs about a second and removes the nondeterminism.
+          rm -rf "$PKG_DIR"
+          mkdir -p "$PKG_DIR"
+          curl -sSL "https://registry.npmjs.org/$PKG/-/binding-linux-x64-gnu-$VERSION.tgz" -o /tmp/rolldown.tgz
+          ACTUAL="sha512-$(openssl dgst -sha512 -binary /tmp/rolldown.tgz | openssl base64 -A)"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "rolldown tarball integrity mismatch! expected=$EXPECTED actual=$ACTUAL" >&2
+            exit 1
           fi
+          tar -xz --strip-components=1 -C "$PKG_DIR" -f /tmp/rolldown.tgz
+          echo "rolldown linux binding $VERSION planted (integrity verified):"
+          ls -la "$PKG_DIR"
+          # Prove the binding actually loads before handing off to vitest, so a
+          # bad plant fails here with a clear message instead of surfacing later
+          # as an opaque vite config-load error.
+          node -e "require('$PKG_DIR/rolldown-binding.linux-x64-gnu.node'); console.log('rolldown binding loads OK')"
 
       # ── Enterprise gate (mirrors `npm run verify`, package.json) ──
       # Every step below is a hard gate: a non-zero exit fails the job, and the
