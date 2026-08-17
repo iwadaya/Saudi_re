@@ -86,7 +86,11 @@ Resolved advisories (runtime, both workspaces now report 0):
 | GHSA-5375-pq7m-f5r2 / GHSA-99f4-grh7-6pcq (`@grpc/grpc-js`) | high | `@opentelemetry/* → @grpc/grpc-js` | `overrides` pin → `^1.14.4` (server). Patch within OTel's range. |
 | GHSA-w5hq-g745-h8pq (`uuid`) | moderate | `exceljs → uuid` | `overrides` pin `exceljs.uuid` → `^11.1.1` (client + server). exceljs only calls `uuid.v4` via `require('uuid')`, which uuid 11 still ships as CJS — verified a workbook round-trip. (The flaw is in the v3/v5/v6 `buf` path, which exceljs never reaches; the pin removes it regardless.) |
 | GHSA-q8mj-m7cp-5q26 (`qs`) | moderate | `express → qs` | `overrides` pin → `^6.15.2` (server). Patch. |
-| GHSA-2j2x-hqr9-3h42 (`react-router`) | moderate | `react-router-dom` (direct) | direct bump `react-router-dom` → `^6.30.4` (client). Non-major fix. |
+| GHSA-2j2x-hqr9-3h42 (`react-router`) | moderate | `react-router-dom` (direct) | direct bump (client). Since superseded by the v7 line — see GHSA-qwww-vcr4-c8h2 below. |
+| GHSA-qwww-vcr4-c8h2 (`react-router`) | high | `react-router-dom` (direct, v7) | Resolved inside the declared `^7.9.3` range (7.18.1 → 7.18.2). The advisory is an RSC-mode CSRF bypass; this client is a plain SPA and does not use RSC, so it was not reachable — patched regardless. |
+| GHSA-mwp4-54f8-5fhr / GHSA-4xrf-jv44-h6hh / GHSA-22jq-vg5j-6vgg (`ip-address`) | high | `@opentelemetry/* → ip-address` | Resolved in-range. All three are SSRF / trust-boundary bypasses via address-parsing misclassification — relevant because `lib/uploadStorage.js` blocks private ranges on stored-asset fetches. |
+| GHSA-j3f2-48v5-ccww (`protobufjs`) | moderate | `@opentelemetry/* → protobufjs` | Resolved in-range. DoS via infinite loop in `.proto` option parsing (OTLP export path). |
+| GHSA-... (`@opentelemetry/propagator-jaeger`) | high | `@opentelemetry/sdk-node → propagator-jaeger` | `overrides` pin → `^2.9.0` (server), resolving to 2.10.0. `npm audit fix` only offered `--force`, which would have taken `sdk-node` through a major; the propagator is a leaf package and the pin is a minor bump within the SDK's own range. |
 
 Deliberately **dev-only**, excluded from the runtime gate (documented, not silently ignored):
 
