@@ -55,6 +55,7 @@ const apiMock = vi.hoisted(() => ({
   facPriceRisk: vi.fn(),
   // UW factors panel (independent entity + save)
   facGetUwFactors: vi.fn(),
+  facGetAccumulation: vi.fn(),
   facSaveUwFactors: vi.fn(),
 }));
 vi.mock('../../../api', () => ({ __esModule: true, default: apiMock, api: apiMock }));
@@ -250,6 +251,10 @@ beforeEach(() => {
   // no-history / no-curve case and must equal the local engine's own answer.
   apiMock.facPriceRisk.mockResolvedValue(null);
   apiMock.facGetUwFactors.mockResolvedValue({ selections: {}, notes: '' });
+  apiMock.facGetAccumulation.mockResolvedValue({
+    status: 'NO_BUDGET', referral: false, checks: [], reasons: [], unmeasured: [],
+    family: 'SCHEDULE_PROPERTY', line_size: null, line_basis: 'TOTAL_SI', zones: [],
+  });
   apiMock.facSaveUwFactors.mockResolvedValue({ ok: true });
   apiMock.facSavePricing.mockResolvedValue({ ok: true });
   apiMock.facUpdateRisk.mockResolvedValue({ ok: true });
@@ -568,12 +573,15 @@ describe('FacPricing extensions', () => {
 
 describe('FacPricing — a class with no engine is a state, not a crash (F1)', () => {
   it('explains what an unbuilt family rates on instead of rendering an exception', async () => {
+    // Every family the class taxonomy maps to is built as of Phase 4. The
+    // declared-but-unbuilt state is still real — it is how a class gets added
+    // before its maths exists — and this is what an underwriter sees.
     apiMock.facListClasses.mockResolvedValue([{
-      fac_cob_id: 'COB-PLANT', category: 'ENGINEERING', class_name: 'Machinery Breakdown',
-      rating_family: 'PLANT_OPERATIONAL', exposure_basis: 'SUM_INSURED',
+      fac_cob_id: 'COB-AV', category: 'AVIATION', class_name: 'Aviation Hull',
+      rating_family: 'AVIATION_HULL', exposure_basis: 'AGREED_VALUE',
     }]);
     apiMock.facGetRisk.mockResolvedValue({
-      ...RISK, fac_cob_id: 'COB-PLANT', cob_category: 'ENGINEERING',
+      ...RISK, fac_cob_id: 'COB-AV', cob_category: 'AVIATION',
       occupancy_code: null, risk_country_zone: null,
     });
 
@@ -582,8 +590,8 @@ describe('FacPricing — a class with no engine is a state, not a crash (F1)', (
     await waitFor(() => {
       expect(screen.getByText('No engine for this class yet')).toBeInTheDocument();
     }, { timeout: 3000 });
-    expect(screen.getByText(/rates on rate per mille of sum insured/i)).toBeInTheDocument();
-    expect(screen.getByText(/Phase 4/)).toBeInTheDocument();
+    expect(screen.getByText(/rates on rate per mille of agreed value/i)).toBeInTheDocument();
+    expect(screen.getByText(/Phase 5/)).toBeInTheDocument();
     // No red exception message, and no half-rendered engine output.
     expect(screen.queryByText(/Unknown occupancy_code/)).toBeNull();
     expect(screen.queryByText('Rate Build-Up')).toBeNull();

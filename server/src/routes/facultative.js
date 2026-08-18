@@ -40,6 +40,16 @@ import {
   getActiveRateTableVersion,
   persistPricingMethods,
 } from '../services/facPricingService.js';
+import {
+  checkFacCapacity,
+  refreshAccumulation,
+} from '../services/facAccumulationService.js';
+import { facTechnicalAdequacy } from '../../../shared/fac/index.js';
+import {
+  adequacyDistribution,
+  hitRatio,
+  capacityUtilisation,
+} from '../services/facPortfolioService.js';
 
 const router = Router();
 
@@ -784,6 +794,11 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
   const uiState = (b.ui_state && typeof b.ui_state === 'object') ? b.ui_state : {};
   const extraLoadings = Array.isArray(b.extra_cover_loadings) ? b.extra_cover_loadings : [];
   const engineWarnings = Array.isArray(b.engine_warnings) ? b.engine_warnings : [];
+  // The server's own build-up, not the client's: what is recorded as the
+  // technical rate has to be a number the server will stand behind, since the
+  // portfolio view reads it back as fact.
+  const technicalGrossPm = numOrNull(computed?.technical?.technicalGrossPm)
+    ?? numOrNull(b.technical_gross_rate_pm);
   const cl = await pool.connect();
   try {
     await cl.query('BEGIN');
@@ -810,12 +825,14 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
       capacity_proposed_pct, accepted_rate_pm, uw_note,
       rate_table_version, family_code, score_completeness, exposure_basis,
       blended_loss_cost_pm, cat_load_pm, risk_load_pm, internal_expense_pct,
-      blend_weights, blend_override_reason
+      blend_weights, blend_override_reason,
+      technical_gross_rate_pm, technical_adequacy
     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
       $22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,
       $36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,
       $48,$49,$50,$51,
-      $52,$53,$54,$55,$56::jsonb,$57)
+      $52,$53,$54,$55,$56::jsonb,$57,
+      $58,$59)
     ON CONFLICT (fac_risk_id) DO UPDATE SET
       market_rate_per_mille = EXCLUDED.market_rate_per_mille,
       market_premium = EXCLUDED.market_premium,
@@ -873,6 +890,8 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
       internal_expense_pct = EXCLUDED.internal_expense_pct,
       blend_weights = EXCLUDED.blend_weights,
       blend_override_reason = EXCLUDED.blend_override_reason,
+      technical_gross_rate_pm = EXCLUDED.technical_gross_rate_pm,
+      technical_adequacy = EXCLUDED.technical_adequacy,
       updated_at = now()
     RETURNING *
   `, [
@@ -914,13 +933,17 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
     numOrNull(b.internal_expense_pct),
     JSON.stringify(b.blend_weights ?? computed?.technical?.weights ?? {}),
     b.blend_override_reason || computed?.technical?.weightOverrideReason || null,
+    // The build-up's answer, stored so the portfolio view can read whether
+    // the book is priced above or below technical without re-pricing it.
+    technicalGrossPm,
+    facTechnicalAdequacy(numOrNull(b.final_rate_per_mille), technicalGrossPm),
   ]);
     // The per-method audit trail behind this rate. Written from the
     // server's own recomputation, not from the client payload — so what is
     // recorded as "how the price was arrived at" is a figure the server
     // will stand behind.
     if (computed?.technical) {
-      await persistPricingMethods(cl, riskId, computed.technical);
+      await persistPricingMethods(cl, riskId, computed.technical, computed.sections);
     }
     await touchParentEntity(cl, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId });
     await writeFacAuditEvent({ facRiskId: riskId, eventType: 'FAC_PRICING_SAVED', actor: actorLabel(req), payload: { underwriting_score: numOrNull(b.underwriting_score), capacity_grade: b.capacity_grade || null }, client: cl });
@@ -1721,6 +1744,32 @@ router.post(
       });
     }
 
+    // ── The capacity gate ──────────────────────────────────────────
+    // Re-run at bind, not just at quote: the book moves between the two, and
+    // a zone that had headroom on Tuesday may not on Friday. A breach is a
+    // referral, not a refusal — an underwriter with the authority overrides
+    // it, and the override is on the record. `capacity_override` in the body
+    // is that authority being exercised.
+    let capacity = null;
+    try {
+      capacity = await checkFacCapacity(id);
+    } catch (err) {
+      // A capacity check that cannot run must not block a bind. It is logged
+      // and the bind proceeds unchecked, which is the state the module was in
+      // before this existed — no worse, and visible.
+      logger.warn('fac capacity check skipped at bind', {
+        requestId: req.requestId, facRiskId: id, error: err?.message,
+      });
+    }
+    if (capacity?.referral && !req.body?.capacity_override) {
+      return res.status(409).json({
+        error: 'This risk breaches the capacity check. Bind with capacity_override and a '
+          + 'reason once the referral is approved.',
+        code: 'CAPACITY_BREACH',
+        capacity,
+      });
+    }
+
     // Generate FAC-YYYY-NNNNN. Year prefers explicit effective_date,
     // falls back to inception_date, then today.
     const effective = req.body?.effective_date || riskRows[0].inception_date;
@@ -1747,11 +1796,81 @@ router.post(
       facRiskId: id,
       eventType: 'FAC_BOUND',
       actor,
-      payload: { bound_reference: updated[0].bound_reference, effective_date: effective || null },
+      payload: {
+        bound_reference: updated[0].bound_reference,
+        effective_date: effective || null,
+        capacity_status: capacity?.status ?? 'NOT_CHECKED',
+        capacity_override: Boolean(req.body?.capacity_override),
+        capacity_override_reason: req.body?.capacity_override_reason || null,
+        capacity_reasons: capacity?.reasons || [],
+      },
     });
-    res.json({ risk: updated[0], status: 'BOUND', bound_reference: updated[0].bound_reference });
+
+    // This risk is now part of the book, so the next risk's check has to see
+    // it. Awaited rather than fired and forgotten: a quote priced against a
+    // stale accumulation is the failure this whole feature exists to prevent.
+    await refreshAccumulation();
+
+    res.json({
+      risk: updated[0],
+      status: 'BOUND',
+      bound_reference: updated[0].bound_reference,
+      capacity,
+    });
   }),
 );
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FAC PORTFOLIO — how the book is priced, not how one risk is
+//
+// Pricing a risk well and running a book well are different problems. A
+// carrier can be technically right on every quote and still lose money by
+// winning only the ones it priced cheaply, which is what a good technical
+// price plus no feedback loop produces. These three read that back.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const portfolioFilters = (req) => ({
+  uwYear: req.query.uwYear ? Number(req.query.uwYear) : null,
+  family: typeof req.query.family === 'string' && req.query.family ? req.query.family : null,
+  region: typeof req.query.region === 'string' && req.query.region ? req.query.region : null,
+});
+
+router.get('/fac/portfolio/adequacy', asyncHandler(async (req, res) => {
+  res.json(await adequacyDistribution(portfolioFilters(req)));
+}));
+
+router.get('/fac/portfolio/hit-ratio', asyncHandler(async (req, res) => {
+  res.json(await hitRatio(portfolioFilters(req)));
+}));
+
+router.get('/fac/portfolio/capacity', asyncHandler(async (req, res) => {
+  res.json(await capacityUtilisation({
+    uwYear: req.query.uwYear ? Number(req.query.uwYear) : null,
+  }));
+}));
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FAC ACCUMULATION — committed capacity, at three levels (finding F14)
+//
+// The static territorial budget never looked at what had already been
+// written, so ten identical warehouses in one CRESTA zone each passed against
+// the same untouched number. This is the check that measures against the book.
+// ═══════════════════════════════════════════════════════════════════════════
+
+router.get('/fac/risks/:id/accumulation', asyncHandler(async (req, res) => {
+  await assertCanReadEntity(req, 'FAC_RISK', req.params.id);
+  res.json(await checkFacCapacity(req.params.id));
+}));
+
+// Manual refresh, for an operator who has just loaded budgets or corrected a
+// bound risk and does not want to wait for the nightly job.
+router.post('/fac/accumulation/refresh', asyncHandler(async (req, res) => {
+  const out = await refreshAccumulation();
+  logger.info('fac accumulation refreshed', { requestId: req.requestId, ...out });
+  res.json(out);
+}));
 
 
 // ═══════════════════════════════════════════════════════════════════════════

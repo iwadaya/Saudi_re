@@ -30,6 +30,7 @@
 // both ship empty (migration 136).
 
 import { num, numOrNull } from '../num.js';
+import { metaFor } from './meta.js';
 
 export const FAMILY_CODE = 'TRANSIT_VALUES';
 
@@ -355,32 +356,13 @@ export function computeCandidates({ section, rates = {} }) {
 
 /** @type {import('../registry.js').FacFamily} */
 export const transitValues = {
-  code: FAMILY_CODE,
-  label: 'Cargo & Transit',
-  segment: 'MARINE_TRANSIT',
-  ratingBasis: 'TURNOVER',
-  periodBasis: 'ANNUAL',
-  methods: ['TRANSIT_RATE', 'BURNING_COST', 'BENCHMARK'],
-  // Cargo is high-frequency and low-severity, so experience is credible
-  // sooner than anywhere else in the module.
-  credibility: { k: 5, maxZ: 0.80, unit: 'CLAIM_COUNT' },
-  requires: [],
-  wizardSteps: [],
-  implemented: true,
-  exposureFields: [
-    { key: 'segments', label: 'Sendings by commodity / conveyance / route', type: 'grid', required: true },
-    { key: 'max_any_one_conveyance', label: 'Max any one conveyance', type: 'money', required: true },
-    { key: 'max_any_one_location', label: 'Max any one location', type: 'money' },
-    { key: 'storage_values', label: 'Static storage values', type: 'money' },
-    { key: 'storage_months', label: 'Storage duration (months)', type: 'integer' },
-    { key: 'storage_rate_pm', label: 'Storage rate ‰', type: 'rate' },
-    { key: 'war_region', label: 'War region', type: 'text' },
-    { key: 'war_basis', label: 'War basis', type: 'enum', options: ['ANNUAL', 'PER_TRANSIT'] },
-    { key: 'transit_count', label: 'Transits per year', type: 'integer' },
-    { key: 'breach_of_warranty', label: 'Breach of warranty (listed areas)', type: 'boolean' },
-  ],
+  ...metaFor('TRANSIT_VALUES'),
   readExposure,
   computeCandidates,
+  // Annual sendings, not the any-one-conveyance limit.
+  premiumBase: ({ sections }) => (sections || []).reduce(
+    (t, s) => t + readExposure(s).totalTurnover, 0,
+  ),
 };
 
 export default transitValues;

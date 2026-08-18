@@ -10,25 +10,31 @@
 // class → family mapping is data, held on fac_class_of_business
 // (migration 134); the family definitions are here.
 //
-// Five families have engines: SCHEDULE_PROPERTY (the workbook the module was
-// built around), LIABILITY_LIMIT and MARINE_LIABILITY (Phase 3, ILF curves),
-// and HULL_VALUE and TRANSIT_VALUES (Phase 3, Marine). The remaining five are
-// declared rather than implemented, and that is deliberate: before this
-// registry existed, a Marine or Casualty risk reached the property engine,
-// which threw `Unknown occupancy_code`, and the screen rendered the exception
-// as a red line (finding F1). Declaring every family lets the pipeline answer
-// honestly — "Plant & Machinery rates per item on replacement value; that
-// engine is not built yet" — instead of showing an underwriter a crash and a
-// blank rate.
+// ── Metadata here, engines elsewhere ──────────────────────────────────────
+//
+// This module imports families/meta.js — what each family IS — and nothing
+// that prices. Engines attach at runtime through `registerEngine`, which
+// shared/fac/engines.js calls for every family; shared/fac/index.js imports
+// that, so anything using the pipeline gets the full registry.
+//
+// The reason is the browser. A screen that needs to say "Hull & Machinery
+// rates per mille of agreed value and needs no COPE survey" was, before this
+// split, importing eleven rate engines to read one label. The server prices;
+// the client reads labels and runs exactly one engine (the property
+// workbook, which it imports directly).
+//
+// `implemented: false` is a first-class state, and it is why the module
+// stopped rendering stack traces: before the registry existed, a Marine or
+// Casualty risk reached the property engine, which threw
+// `Unknown occupancy_code`, and the screen printed the exception in red
+// (finding F1). A declared family answers "that engine is not built yet"
+// instead.
 //
 // Adding a class is a row in fac_class_of_business pointing at a family.
-// Adding a family is one module plus its entry here; no screen, route,
-// audit or referral code changes.
+// Adding a family is an entry in meta.js, one module, and one line in
+// engines.js; no screen, route, audit or referral code changes.
 
-import { scheduleProperty } from './families/scheduleProperty.js';
-import { liabilityLimit, marineLiability } from './families/liabilityLimit.js';
-import { hullValue } from './families/hullValue.js';
-import { transitValues } from './families/transitValues.js';
+import { FAMILY_META } from './families/meta.js';
 
 /**
  * @typedef {Object} FacFamily
@@ -47,8 +53,10 @@ import { transitValues } from './families/transitValues.js';
  *   there is, because thin-layer experience is never fully credible.
  * @property {string} [plannedPhase]         Where an unimplemented family lands.
  * @property {number} [scoreCompletenessMin]
- * @property {Function} [buildExposureProfile]
- * @property {Function} [computeQuote]
+ * @property {Array<object>} [exposureFields] The exposure form this family needs.
+ * @property {Function} [computeCandidates]  Attached by engines.js.
+ * @property {Function} [computeQuote]       Attached by engines.js, property only.
+ * @property {Function} [premiumBase]        Attached by engines.js.
  */
 
 /** How each rating basis is described to an underwriter. */
@@ -70,99 +78,32 @@ export const SEGMENT_LABEL = {
   MOTOR:                    'Motor',
   FINANCIAL_SPECIALTY:      'Financial & Specialty',
   ACCIDENT_HEALTH:          'Accident & Health',
+  AVIATION_SPACE:           'Aviation & Space',
+  AGRICULTURE:              'Agriculture',
 };
-
-/**
- * Families with no engine yet. `notes` is shown to the underwriter in place
- * of a rate, so it says what the family needs rather than that something
- * went wrong.
- */
-const DECLARED = [
-  {
-    code: 'PROJECT_WORKS',
-    credibility: { k: 12, maxZ: 0.50, unit: 'CLAIM_COUNT' },
-    label: 'Project Works (CAR / EAR)',
-    segment: 'ENGINEERING_CONSTRUCTION',
-    ratingBasis: 'CONTRACT_VALUE',
-    periodBasis: 'PROJECT',
-    methods: ['EXPOSURE_CURVE', 'BENCHMARK'],
-    wizardSteps: ['FAC_LOCATIONS', 'FAC_COPE'],
-    plannedPhase: 'Phase 4',
-    notes: 'Rates on total contract value for the whole project period, with '
-      + 'testing, maintenance and DSU loadings — not an annual rate on sum insured.',
-  },
-  {
-    code: 'PLANT_OPERATIONAL',
-    credibility: { k: 6,  maxZ: 0.80, unit: 'CLAIM_COUNT' },
-    label: 'Plant & Machinery (Operational)',
-    segment: 'ENGINEERING_CONSTRUCTION',
-    ratingBasis: 'SI_PER_MILLE',
-    periodBasis: 'ANNUAL',
-    methods: ['EXPOSURE_CURVE', 'BURNING_COST', 'BENCHMARK'],
-    wizardSteps: ['FAC_LOCATIONS'],
-    plannedPhase: 'Phase 4',
-    notes: 'Rates per item class on replacement value; PML is item-level, not site-level.',
-  },
-  {
-    code: 'ENERGY_ASSET',
-    credibility: { k: 10, maxZ: 0.60, unit: 'CLAIM_COUNT' },
-    label: 'Energy & Power Assets',
-    segment: 'ENERGY_POWER',
-    ratingBasis: 'SI_PER_MILLE',
-    periodBasis: 'ANNUAL',
-    methods: ['EXPOSURE_CURVE', 'BURNING_COST', 'CAT_MODEL'],
-    wizardSteps: ['FAC_LOCATIONS', 'FAC_COPE'],
-    plannedPhase: 'Phase 4',
-    notes: 'Property mechanics plus a process-hazard grade, with Control of Well, '
-      + 'OEE and pollution written as separately-rated sub-limits.',
-  },
-  {
-    code: 'MOTOR_FLEET',
-    credibility: { k: 4,  maxZ: 0.90, unit: 'CLAIM_COUNT' },
-    label: 'Motor Fleet',
-    segment: 'MOTOR',
-    ratingBasis: 'PER_UNIT',
-    periodBasis: 'ANNUAL',
-    methods: ['BURNING_COST', 'FREQ_SEVERITY'],
-    wizardSteps: [],
-    plannedPhase: 'Phase 4',
-    notes: 'Rates per vehicle-year by category, with credible fleet experience.',
-  },
-  {
-    code: 'CYBER_LIMIT',
-    credibility: { k: 12, maxZ: 0.50, unit: 'CLAIM_COUNT' },
-    label: 'Cyber',
-    segment: 'FINANCIAL_SPECIALTY',
-    ratingBasis: 'LIMIT_ILF',
-    periodBasis: 'ANNUAL',
-    methods: ['FREQ_SEVERITY', 'ILF_CURVE', 'BENCHMARK'],
-    wizardSteps: [],
-    plannedPhase: 'Phase 4',
-    notes: 'Rates per unit of limit against revenue and control posture. Requires '
-      + 'a common-vendor accumulation check before bind.',
-  },
-  {
-    code: 'PA_BENEFIT',
-    credibility: { k: 5,  maxZ: 0.85, unit: 'CLAIM_COUNT' },
-    label: 'Personal Accident',
-    segment: 'ACCIDENT_HEALTH',
-    ratingBasis: 'PER_UNIT',
-    periodBasis: 'ANNUAL',
-    methods: ['BURNING_COST', 'BENCHMARK'],
-    wizardSteps: [],
-    plannedPhase: 'Phase 4',
-    notes: 'Rates per benefit unit by occupational class, with a one-event '
-      + 'accumulation limit.',
-  },
-].map((f) => ({ ...f, implemented: false }));
 
 /** @type {Map<string, FacFamily>} */
 const REGISTRY = new Map();
-for (const family of [
-  scheduleProperty, liabilityLimit, marineLiability, hullValue, transitValues,
-  ...DECLARED,
-]) {
-  REGISTRY.set(family.code, family);
+for (const meta of FAMILY_META) {
+  REGISTRY.set(meta.code, { ...meta });
+}
+
+/**
+ * Attach a family's engine to its metadata entry.
+ *
+ * Called by shared/fac/engines.js at import time. Idempotent, and it never
+ * overwrites metadata: a family module spreads its own metadata from meta.js,
+ * so the two cannot disagree, and only the functions move.
+ *
+ * @param {object} family the family module's exported descriptor
+ * @returns {void}
+ */
+export function registerEngine(family) {
+  const entry = REGISTRY.get(family?.code);
+  if (!entry) throw new Error(`Cannot register an engine for unknown family "${family?.code}"`);
+  for (const [key, value] of Object.entries(family)) {
+    if (typeof value === 'function') entry[key] = value;
+  }
 }
 
 /** The family every unmapped class falls back to — which is what the single

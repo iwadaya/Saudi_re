@@ -55,12 +55,17 @@ export {
   totalCover, freeCover, priceTower,
 } from './layers.js';
 
+// Attaching the engines to the registry is a side effect of importing this
+// module, and it has to happen before anything below runs. The browser
+// imports registry.js directly and does not pay for it — see engines.js.
+import './engines.js';
+
 import { buildExposureProfile } from './exposure.js';
-import { familyForClass, pricingBlocker } from './registry.js';
+import { familyForClass, getFamily, pricingBlocker } from './registry.js';
 import { burningCostLossCost } from './methods/burningCost.js';
 import { benchmarkLossCost } from './methods/benchmark.js';
 import { toCandidate, buildTechnicalPremium, technicalAdequacy } from './pipeline.js';
-import { numOrNull } from './num.js';
+import { num, numOrNull } from './num.js';
 
 /**
  * Price one facultative risk end to end: resolve its family, build the
@@ -103,27 +108,52 @@ export function priceFacRisk({ risk, cob, sections, locations, inputs, reference
 }
 
 /**
- * Pick the section this family prices.
+ * Group a risk's sections by the family that prices them.
  *
- * A risk can carry sections in more than one family — a plant with a
- * property section and a liability section is ordinary. Pricing every
- * section and summing them is a larger change than Phase 3 takes on, so
- * this prices the risk's primary section for its own family and says
- * plainly when it has left others out, rather than silently pricing one
- * section and presenting the answer as the whole risk.
+ * A risk with a property section and a liability section is ordinary, and
+ * the two do not rate alike — one is per mille of values, the other is a
+ * loss cost to a limit off turnover. Grouping is how each gets its own
+ * engine, and the groups are ordered by section number so the primary
+ * section leads.
  *
  * @param {Array<object>} sections
- * @param {string} familyCode
- * @returns {{section: object|null, skipped: Array<object>}}
+ * @param {object} defaultFamily  the risk's own family, for sections that
+ *                                do not name one
+ * @returns {Array<{family: object, sections: Array<object>}>}
  */
-function sectionForFamily(sections, familyCode) {
+function sectionGroups(sections, defaultFamily) {
   const list = (sections || []).slice().sort(
     (a, b) => (numOrNull(a.section_no) ?? 0) - (numOrNull(b.section_no) ?? 0),
   );
-  const own = list.filter((sec) => !sec.rating_family || sec.rating_family === familyCode);
-  const section = own[0] || list[0] || null;
-  const skipped = list.filter((sec) => sec !== section);
-  return { section, skipped };
+  if (list.length === 0) return [{ family: defaultFamily, sections: [] }];
+
+  const byCode = new Map();
+  for (const sec of list) {
+    const family = getFamily(sec.rating_family) || defaultFamily;
+    if (!byCode.has(family.code)) byCode.set(family.code, { family, sections: [] });
+    byCode.get(family.code).sections.push(sec);
+  }
+  return [...byCode.values()];
+}
+
+/**
+ * What a family's rate is per mille OF.
+ *
+ * The family decides, because only the family knows: property rates against
+ * values, cargo against annual sendings, casualty against turnover or
+ * payroll, personal accident against the total benefit at risk. Using a sum
+ * insured for all of them was the Phase 3 shortcut and it produces a premium
+ * wrong by whatever ratio the two bases happen to sit in.
+ *
+ * @param {object} family
+ * @param {object} args {exposure, sections, risk}
+ * @returns {number}
+ */
+function premiumBaseFor(family, args) {
+  if (typeof family?.premiumBase === 'function') {
+    return numOrNull(family.premiumBase(args)) ?? 0;
+  }
+  return numOrNull(args.exposure?.total_si) ?? 0;
 }
 
 /**
@@ -158,8 +188,9 @@ export function priceFacRiskFull(args) {
   const {
     risk, sections, inputs = {}, losses, experienceBasis, curveBands, benchmarks,
     benchmarkScope, rates = {}, loads = {}, weightOverride = null, referenceData,
+    locations,
   } = args;
-  const family = familyForClass(args.cob);
+  const riskFamily = familyForClass(args.cob);
   const exposure = base.exposure;
   const engine = base.result;
 
@@ -170,20 +201,20 @@ export function priceFacRiskFull(args) {
   const limit = isNonProportional ? (numOrNull(risk?.np_limit) ?? Infinity) : Infinity;
   const structure = { attachment, limit, isNonProportional };
 
-  const { section, skipped } = sectionForFamily(sections, family.code);
+  const groups = sectionGroups(sections, riskFamily);
+  const priced = groups.map((group) => priceSectionGroup({
+    group, risk, cob: args.cob, structure, inputs, referenceData, engine,
+    locations, riskExposure: exposure, rates, curveBands, losses,
+  }));
 
-  // ── Family candidates ────────────────────────────────────────────
-  const familyCandidates = typeof family.computeCandidates === 'function'
-    ? family.computeCandidates({
-      risk, cob: args.cob, section, sections, structure, exposure, inputs,
-      referenceData, engine, rates: { ...rates, curveBands },
-    })
-    : [];
-  const candidates = familyCandidates.map((c) => toCandidate(c.code, c.result));
+  // ── The experience side ──────────────────────────────────────────
+  // Losses are risk-level unless they name a section. A loss attributed to a
+  // section is priced inside that section's group above; what is left is the
+  // risk's own record and is blended against the sum of the groups.
+  const unattributed = (losses || []).filter((l) => !l.section_id);
 
-  // ── Family-agnostic candidates ───────────────────────────────────
-  candidates.push(toCandidate('BURNING_COST', burningCostLossCost({
-    losses,
+  const experience = burningCostLossCost({
+    losses: unattributed,
     basis: experienceBasis,
     severityTrendPct: numOrNull(risk?.severity_trend_pct) ?? 0,
     asOfYear: numOrNull(risk?.uw_year) ?? undefined,
@@ -191,16 +222,118 @@ export function priceFacRiskFull(args) {
     limit,
     fallbackExposure: exposure.total_si,
     fallbackYears: numOrNull(risk?.experience_years) ?? 0,
-  })));
+  });
 
-  candidates.push(toCandidate('BENCHMARK', benchmarkLossCost({
-    observations: benchmarks, scope: benchmarkScope,
-  })));
+  // ── Single group: the Phase 3 path, unchanged ────────────────────
+  // Most risks are one section in one family, and that case must produce the
+  // identical number it produced before multi-section pricing existed — the
+  // safety invariant depends on it.
+  if (priced.length === 1) {
+    const only = priced[0];
+    const candidates = [
+      ...only.candidates,
+      toCandidate('BURNING_COST', experience),
+      toCandidate('BENCHMARK', benchmarkLossCost({
+        observations: benchmarks, scope: benchmarkScope,
+      })),
+    ];
+    const technical = buildTechnicalPremium({
+      candidates,
+      credibility: only.family.credibility,
+      weightOverride,
+      ...pipelineLoads(loads, inputs),
+      exposureTotal: only.premiumBase,
+    });
+    return {
+      ...base,
+      technical,
+      section: only.sections[0] || null,
+      sections: [sectionSummary(only, technical)],
+    };
+  }
+
+  // ── Several groups: blend at risk level ──────────────────────────
+  // Each group has already blended its own competing exposure views into one
+  // net loss cost, WITHOUT loads or a gross-up. Summing money is the only
+  // sound way to combine them: a cargo rate per mille of turnover and a
+  // property rate per mille of values are not addable as rates.
+  const totalExposureLossCost = priced.reduce((t, g) => t + num(g.lossCost), 0);
+  // A scaling constant, not a meaningful exposure: it is the denominator both
+  // the exposure and experience candidates are expressed against so the blend
+  // compares like with like, and it turns the answer back into money.
+  const commonBase = priced.reduce((t, g) => t + num(g.premiumBase), 0);
+
+  const riskCandidates = [
+    toCandidate('SECTION_TOTAL', commonBase > 0 ? {
+      available: true,
+      lossCost: totalExposureLossCost,
+      ratePm: (totalExposureLossCost / commonBase) * 1000,
+      diagnostics: {
+        section_count: sections?.length ?? 0,
+        group_count: priced.length,
+        groups: priced.map((g) => ({
+          family: g.family.code,
+          loss_cost: g.lossCost,
+          premium_base: g.premiumBase,
+        })),
+      },
+    } : {
+      available: false,
+      unavailableReason: 'None of this risk\'s sections carries a premium base to rate '
+        + 'against, so the section total cannot be expressed as a rate.',
+      diagnostics: {},
+    }),
+    toCandidate('BURNING_COST', commonBase > 0 && experience.available ? {
+      ...experience,
+      // Re-expressed against the same denominator as the exposure candidate.
+      // Its own ‰ is per mille of its own exposure basis, which is a
+      // different quantity and would not blend.
+      ratePm: (num(experience.lossCost) / commonBase) * 1000,
+    } : experience),
+    toCandidate('BENCHMARK', benchmarkLossCost({
+      observations: benchmarks, scope: benchmarkScope,
+    })),
+  ];
+
+  // Credibility comes from the family carrying the most exposure. A risk that
+  // is 90% property and 10% liability should not have its experience credited
+  // on casualty's cap.
+  const dominant = priced.reduce(
+    (best, g) => (num(g.premiumBase) > num(best.premiumBase) ? g : best), priced[0],
+  );
 
   const technical = buildTechnicalPremium({
-    candidates,
-    credibility: family.credibility,
+    candidates: riskCandidates,
+    credibility: dominant.family.credibility,
     weightOverride,
+    ...pipelineLoads(loads, inputs),
+    exposureTotal: commonBase,
+  });
+
+  if (technical?.priced) {
+    technical.multiSection = true;
+    technical.credibilityFamily = dominant.family.code;
+    technical.warnings = [
+      ...(technical.warnings || []),
+      `This risk is priced across ${priced.length} rating families `
+      + `(${priced.map((g) => g.family.code).join(', ')}). The premium is the sum of the `
+      + 'sections; the rate below is per mille of their combined bases, which is a scaling '
+      + 'figure rather than a rate any one section is quoted at.',
+      `Credibility uses ${dominant.family.label}, the family carrying the most exposure.`,
+    ];
+  }
+
+  return {
+    ...base,
+    technical,
+    section: priced[0].sections[0] || null,
+    sections: priced.map((g) => sectionSummary(g, null)),
+  };
+}
+
+/** The load and gross-up arguments, identical in both paths. */
+function pipelineLoads(loads, inputs) {
+  return {
     catLoadPm: numOrNull(loads.catLoadPm) ?? 0,
     riskLoadTheta: numOrNull(loads.riskLoadTheta) ?? undefined,
     riskLoadPct: numOrNull(loads.riskLoadPct) ?? 0,
@@ -209,41 +342,89 @@ export function priceFacRiskFull(args) {
     brokeragePct: numOrNull(inputs.brokerage_pct) ?? 0,
     taxPct: numOrNull(inputs.tax_pct) ?? 0,
     marginPct: (numOrNull(inputs.margin_pct) ?? 0) + (numOrNull(inputs.other_expenses_pct) ?? 0),
-    exposureTotal: exposureTotalFor(family, exposure, section),
-  });
-
-  if (technical && skipped.length > 0) {
-    technical.warnings = [
-      ...(technical.warnings || []),
-      `This risk has ${skipped.length} further section(s) — ${skipped.map(
-        (sec) => sec.rating_family || `section ${sec.section_no}`,
-      ).join(', ')} — which are not in this price. Price them separately.`,
-    ];
-  }
-
-  return { ...base, technical, section: section || null };
+  };
 }
 
 /**
- * What the rate is per mille OF.
+ * Price one family's sections.
  *
- * Property and hull rate against values, so the sum insured turns ‰ into
- * money. Cargo rates against annual turnover and casualty against turnover,
- * payroll or fee income — using a sum insured there would produce a premium
- * that is wrong by whatever ratio the two happen to sit in.
+ * Returns the group's candidates and, where the group needs to be combined
+ * with others, its blended NET loss cost in money — net because the loads and
+ * the gross-up happen once, at risk level, however many groups there are.
  *
- * @param {object} family
- * @param {object} exposure
- * @param {object|null} section
- * @returns {number}
+ * @param {object} args
+ * @returns {object}
  */
-function exposureTotalFor(family, exposure, section) {
-  if (family.ratingBasis === 'TURNOVER' || family.ratingBasis === 'LIMIT_ILF') {
-    return numOrNull(section?.exposure_base)
-      ?? numOrNull(section?.exposure_detail?.exposure_base)
-      ?? 0;
+function priceSectionGroup({
+  group, risk, cob, structure, inputs, referenceData, engine, locations,
+  riskExposure, rates, curveBands, losses,
+}) {
+  const { family, sections } = group;
+  // The group's own exposure profile. A property section inside a two-family
+  // risk is rated on its own values, not on the whole risk's.
+  const exposure = sections.length > 0 && sections !== undefined
+    ? buildExposureProfile({ risk, sections, locations })
+    : riskExposure;
+  const premiumBase = premiumBaseFor(family, { exposure, sections, risk });
+
+  const sectionIds = new Set(sections.map((s) => s.section_id).filter(Boolean));
+  const groupLosses = (losses || []).filter((l) => l.section_id && sectionIds.has(l.section_id));
+
+  const raw = typeof family.computeCandidates === 'function'
+    ? family.computeCandidates({
+      risk, cob, section: sections[0] || null, sections, structure, exposure, inputs,
+      referenceData, engine, rates: { ...rates, curveBands },
+    })
+    : [];
+  const candidates = raw.map((c) => toCandidate(c.code, c.result));
+
+  // Losses attributed to this group's sections are this group's experience.
+  if (groupLosses.length > 0) {
+    candidates.push(toCandidate('BURNING_COST', burningCostLossCost({
+      losses: groupLosses,
+      basis: [],
+      severityTrendPct: numOrNull(risk?.severity_trend_pct) ?? 0,
+      asOfYear: numOrNull(risk?.uw_year) ?? undefined,
+      attachment: structure.attachment,
+      limit: structure.limit,
+      fallbackExposure: premiumBase,
+      fallbackYears: numOrNull(risk?.experience_years) ?? 0,
+    })));
   }
-  return numOrNull(exposure?.total_si) ?? 0;
+
+  // Blend the group's competing views into one loss cost, with no loads and
+  // no gross-up. Those belong to the risk, once.
+  const blended = buildTechnicalPremium({
+    candidates,
+    credibility: family.credibility,
+    exposureTotal: premiumBase,
+  });
+
+  return {
+    family,
+    sections,
+    exposure,
+    premiumBase,
+    candidates,
+    blended,
+    lossCost: blended.priced ? (blended.premiums?.expectedLoss ?? 0) : 0,
+  };
+}
+
+/** What the screen and the audit trail need to see per section group. */
+function sectionSummary(group, technical) {
+  return {
+    family: group.family.code,
+    family_label: group.family.label,
+    rating_basis: group.family.ratingBasis,
+    section_nos: group.sections.map((s) => numOrNull(s.section_no)).filter((n) => n !== null),
+    section_ids: group.sections.map((s) => s.section_id).filter(Boolean),
+    premium_base: group.premiumBase,
+    loss_cost: group.lossCost,
+    rate_pm: group.premiumBase > 0 ? (group.lossCost / group.premiumBase) * 1000 : null,
+    candidates: group.candidates,
+    technical: technical || group.blended,
+  };
 }
 
 export { technicalAdequacy as facTechnicalAdequacy };

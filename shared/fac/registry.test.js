@@ -72,14 +72,18 @@ describe('wizardStepsForFamilies', () => {
 
 describe('pricingBlocker — an unbuilt family is a state, not a crash (F1)', () => {
   it('explains what a declared-but-unimplemented family rates on', () => {
-    const blocker = pricingBlocker(getFamily('PLANT_OPERATIONAL'), {});
+    const blocker = pricingBlocker(getFamily('AVIATION_HULL'), {});
     expect(blocker.reason).toBe('NOT_IMPLEMENTED');
-    expect(blocker.message).toMatch(/per mille of sum insured/i);
-    expect(blocker.message).toMatch(/Phase 4/);
+    expect(blocker.message).toMatch(/per mille of agreed value/i);
+    expect(blocker.message).toMatch(/Phase 5/);
   });
 
-  it('does not block the families Phase 3 built', () => {
-    for (const code of ['LIABILITY_LIMIT', 'MARINE_LIABILITY', 'HULL_VALUE', 'TRANSIT_VALUES']) {
+  it('does not block any family the class taxonomy actually maps to', () => {
+    for (const code of [
+      'LIABILITY_LIMIT', 'MARINE_LIABILITY', 'HULL_VALUE', 'TRANSIT_VALUES',
+      'PROJECT_WORKS', 'PLANT_OPERATIONAL', 'ENERGY_ASSET', 'CYBER_LIMIT',
+      'MOTOR_FLEET', 'PA_BENEFIT',
+    ]) {
       expect(pricingBlocker(getFamily(code), {})).toBeNull();
     }
   });
@@ -115,14 +119,14 @@ describe('priceFacRisk', () => {
     // The old path handed every risk to the property engine, which threw
     // "Unknown occupancy_code", and the screen printed the exception.
     const out = priceFacRisk({
-      risk: { insured_name: 'Example Plant' },
-      cob: { rating_family: 'PLANT_OPERATIONAL' },
+      risk: { insured_name: 'Example Airline' },
+      cob: { rating_family: 'AVIATION_HULL' },
       inputs: {}, referenceData: REFERENCE,
     });
     expect(out.ok).toBe(false);
-    expect(out.family).toBe('PLANT_OPERATIONAL');
+    expect(out.family).toBe('AVIATION_HULL');
     expect(out.blocker.reason).toBe('NOT_IMPLEMENTED');
-    expect(out.blocker.message).toMatch(/sum insured/i);
+    expect(out.blocker.message).toMatch(/agreed value/i);
   });
 
   it('resolves a hull risk to its own family without touching the property engine', () => {
@@ -273,7 +277,7 @@ describe('priceFacRiskFull — the whole pipeline', () => {
   it('still returns the blocker for a family with no engine', async () => {
     const { priceFacRiskFull } = await import('./index.js');
     const out = priceFacRiskFull({
-      risk: { insured_name: 'Example Plant' }, cob: { rating_family: 'PLANT_OPERATIONAL' },
+      risk: { insured_name: 'Example Airline' }, cob: { rating_family: 'AVIATION_HULL' },
       inputs: {}, referenceData: REFERENCE,
     });
     expect(out.ok).toBe(false);
@@ -368,18 +372,118 @@ describe('priceFacRiskFull — the whole pipeline', () => {
     expect(out.technical.premiums.expectedLoss).toBeCloseTo((30_000_000 * 3.5) / 1000, 4);
   });
 
-  it('says so when a multi-section risk has sections it did not price', async () => {
+  // ── Phase 4: a risk is priced across every family its sections use ──
+
+  const LIABILITY_RATES = {
+    liabilityBaseRates: [{
+      territory: 'WORLDWIDE', basis_unit: 'TURNOVER', basis_divisor: 1_000_000,
+      basic_limit: 1_000_000, loss_cost_per_unit: 400,
+    }],
+    ilfCurves: [{
+      curve_code: 'GL-WW', kind: 'POWER', family_code: 'LIABILITY_LIMIT',
+      territory: 'WORLDWIDE', basic_limit: 1_000_000, params: { doubling_loading: 0.20 },
+    }],
+  };
+
+  const twoFamilyRisk = (overrides = {}) => ({
+    risk: { ...RISK, pd_sum_insured: 0, bi_sum_insured: 0 },
+    cob: COB,
+    sections: [
+      {
+        section_no: 1, section_id: 'sec-prop', rating_family: 'SCHEDULE_PROPERTY',
+        sum_insured: 100_000_000,
+      },
+      {
+        section_no: 2, section_id: 'sec-liab', rating_family: 'LIABILITY_LIMIT',
+        exposure_base: 250_000_000, exposure_unit: 'TURNOVER', limit_amount: 5_000_000,
+      },
+    ],
+    inputs: INPUTS, referenceData: REFERENCE, rates: LIABILITY_RATES,
+    ...overrides,
+  });
+
+  it('prices every section group, not just the primary one', async () => {
     const { priceFacRiskFull } = await import('./index.js');
-    const out = priceFacRiskFull({
-      risk: RISK,
-      cob: COB,
-      sections: [
-        { section_no: 1, rating_family: 'SCHEDULE_PROPERTY' },
-        { section_no: 2, rating_family: 'LIABILITY_LIMIT' },
-      ],
-      inputs: INPUTS, referenceData: REFERENCE,
-    });
-    expect(out.section.section_no).toBe(1);
-    expect(out.technical.warnings.join(' ')).toMatch(/LIABILITY_LIMIT/);
+    const out = priceFacRiskFull(twoFamilyRisk());
+    expect(out.sections).toHaveLength(2);
+    expect(out.sections.map((s) => s.family))
+      .toEqual(['SCHEDULE_PROPERTY', 'LIABILITY_LIMIT']);
+    for (const group of out.sections) {
+      expect(group.loss_cost).toBeGreaterThan(0);
+    }
+  });
+
+  it('gives each group its own premium base rather than one sum insured', async () => {
+    const { priceFacRiskFull } = await import('./index.js');
+    const out = priceFacRiskFull(twoFamilyRisk());
+    const [property, liability] = out.sections;
+    // Property rates against values; casualty against turnover. Using the
+    // sum insured for both was the Phase 3 shortcut.
+    expect(property.premium_base).toBe(100_000_000);
+    expect(liability.premium_base).toBe(250_000_000);
+    expect(property.rating_basis).toBe('SI_PER_MILLE');
+    expect(liability.rating_basis).toBe('LIMIT_ILF');
+  });
+
+  it('sums the sections in money, because their rates are not addable', async () => {
+    const { priceFacRiskFull } = await import('./index.js');
+    const out = priceFacRiskFull(twoFamilyRisk());
+    const total = out.sections.reduce((t, s) => t + s.loss_cost, 0);
+    expect(out.technical.premiums.expectedLoss).toBeCloseTo(total, 4);
+    expect(out.technical.multiSection).toBe(true);
+  });
+
+  it('says the blended rate is a scaling figure, not a quoted rate', async () => {
+    const { priceFacRiskFull } = await import('./index.js');
+    const out = priceFacRiskFull(twoFamilyRisk());
+    expect(out.technical.warnings.join(' ')).toMatch(/scaling figure rather than a rate/i);
+    expect(out.technical.warnings.join(' ')).toMatch(/SCHEDULE_PROPERTY, LIABILITY_LIMIT/);
+  });
+
+  it('credits experience on the family carrying the most exposure', async () => {
+    const { priceFacRiskFull } = await import('./index.js');
+    const out = priceFacRiskFull(twoFamilyRisk());
+    // 250m turnover against 100m of values — casualty carries more base.
+    expect(out.technical.credibilityFamily).toBe('LIABILITY_LIMIT');
+  });
+
+  it('sends a loss tagged to a section into that section only', async () => {
+    const { priceFacRiskFull } = await import('./index.js');
+    const losses = [
+      { loss_year: 2025, section_id: 'sec-liab', fgu_incurred: 900_000, is_open: false },
+    ];
+    const out = priceFacRiskFull(twoFamilyRisk({ losses }));
+    const liability = out.sections.find((s) => s.family === 'LIABILITY_LIMIT');
+    const property = out.sections.find((s) => s.family === 'SCHEDULE_PROPERTY');
+    expect(liability.candidates.some((c) => c.code === 'BURNING_COST')).toBe(true);
+    expect(property.candidates.some((c) => c.code === 'BURNING_COST')).toBe(false);
+  });
+
+  it('keeps an untagged loss at risk level, blended against the sections combined', async () => {
+    const { priceFacRiskFull } = await import('./index.js');
+    const losses = Array.from({ length: 5 }, (_, i) => ({
+      loss_year: 2021 + i, fgu_incurred: 400_000, is_open: false,
+    }));
+    const experienceBasis = Array.from({ length: 5 }, (_, i) => ({
+      loss_year: 2021 + i, exposure_base: 350_000_000,
+    }));
+    const out = priceFacRiskFull(twoFamilyRisk({ losses, experienceBasis }));
+    const burn = out.technical.candidates.find((c) => c.code === 'BURNING_COST');
+    const total = out.technical.candidates.find((c) => c.code === 'SECTION_TOTAL');
+    expect(burn.available).toBe(true);
+    // Both are per mille of the same denominator, or the blend would be
+    // averaging numbers measured against different things.
+    expect(out.technical.weights.BURNING_COST).toBeGreaterThan(0);
+    expect(out.technical.weights.SECTION_TOTAL).toBeGreaterThan(0);
+    expect(total.available).toBe(true);
+  });
+
+  it('leaves a single-section risk on exactly its old answer', async () => {
+    const { priceFacRiskFull, priceFacRisk } = await import('./index.js');
+    const before = priceFacRisk({ risk: RISK, cob: COB, inputs: INPUTS, referenceData: REFERENCE });
+    const after = priceFacRiskFull({ risk: RISK, cob: COB, inputs: INPUTS, referenceData: REFERENCE });
+    expect(after.technical.technicalGrossPm).toBeCloseTo(before.result.final_gross_rate_pm, 9);
+    expect(after.technical.multiSection).toBeUndefined();
+    expect(after.sections).toHaveLength(1);
   });
 });

@@ -57,8 +57,15 @@ const RAW_BUDGETS_KB = {
   // change — the gate was one commit from firing on whoever came next. Both
   // numbers below are the measured build plus ~10% headroom, the same
   // convention as the rest of this table.
-  'fac-screens': 205,      // fac screens incl. the excess tower       (186.2)
-  'fac-engine': 45,        // shared/fac — registry, families, methods  (36.5)
+  // 2026-08-18, second pass: shared/fac split its family METADATA from its
+  // family ENGINES (families/meta.js + engines.js). The browser needs to know
+  // that Hull & Machinery rates per mille of agreed value; it does not need
+  // the hull engine, because the server prices hull. fac-engine went from
+  // 67.5 KiB (eleven engines) to 25.1 KiB — smaller than before Phase 4 added
+  // six families, which is the point: a family the browser does not run now
+  // costs it nothing.
+  'fac-screens': 205,      // fac screens incl. tower + capacity panel  (189.6)
+  'fac-engine': 32,        // shared/fac — registry metadata + property  (25.1)
   // exceljs is a lazy-loaded, pay-on-click chunk — generous on purpose.
   exceljs: 1100,
 };

@@ -41,14 +41,27 @@ export const METHOD_ROLE = {
   ILF_CURVE:      'EXPOSURE',
   TRANSIT_RATE:   'EXPOSURE',
   HULL_RATE:      'EXPOSURE',
+  PROJECT_RATE:   'EXPOSURE',
+  PLANT_RATE:     'EXPOSURE',
+  ENERGY_RATE:    'EXPOSURE',
+  CYBER_RATE:     'EXPOSURE',
+  MOTOR_RATE:     'EXPOSURE',
+  PA_RATE:        'EXPOSURE',
   BURNING_COST:   'EXPERIENCE',
   FREQ_SEVERITY:  'EXPERIENCE',
   BENCHMARK:      'REFERENCE',
   CAT_MODEL:      'ADDITIVE',
   // War & strikes is a separately-rated section, not a competing view of the
   // same loss cost. It is added to the blend's result, never averaged with it
-  // — a hull rate and a war rate are answers to different questions.
-  WAR_SECTION:    'ADDITIVE',
+  // — a hull rate and a war rate are answers to different questions. The
+  // energy sub-limits are the same shape: Control of Well is its own exposure
+  // with its own limit, not a percentage of the asset rate.
+  WAR_SECTION:               'ADDITIVE',
+  SUBLIMIT_CONTROL_OF_WELL:  'ADDITIVE',
+  SUBLIMIT_OEE:              'ADDITIVE',
+  SUBLIMIT_SEEPAGE_POLLUTION:'ADDITIVE',
+  SUBLIMIT_REMOVAL_OF_WRECK: 'ADDITIVE',
+  SUBLIMIT_LOPI:             'ADDITIVE',
   MANUAL:         'EXPOSURE',
 };
 
@@ -58,11 +71,22 @@ export const METHOD_LABEL = {
   ILF_CURVE:      'Increased limit factors',
   TRANSIT_RATE:   'Cargo rate',
   HULL_RATE:      'Hull rate',
+  PROJECT_RATE:   'Project rate',
+  PLANT_RATE:     'Plant rate',
+  ENERGY_RATE:    'Energy asset rate',
+  CYBER_RATE:     'Cyber rate',
+  MOTOR_RATE:     'Motor rate',
+  PA_RATE:        'Personal accident rate',
   BURNING_COST:   'Burning cost',
   FREQ_SEVERITY:  'Frequency × severity',
   BENCHMARK:      'Benchmark',
   CAT_MODEL:      'Cat model',
-  WAR_SECTION:    'War & strikes',
+  WAR_SECTION:               'War & strikes',
+  SUBLIMIT_CONTROL_OF_WELL:  'Control of Well',
+  SUBLIMIT_OEE:              'Operators’ Extra Expense',
+  SUBLIMIT_SEEPAGE_POLLUTION:'Seepage & pollution',
+  SUBLIMIT_REMOVAL_OF_WRECK: 'Removal of wreck',
+  SUBLIMIT_LOPI:             'Loss of production income',
   MANUAL:         'Manual',
 };
 

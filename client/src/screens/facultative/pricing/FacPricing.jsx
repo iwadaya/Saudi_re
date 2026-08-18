@@ -33,16 +33,21 @@ import { useResource } from '../../../hooks/useResource';
 import { useGlobalToast } from '../../../hooks/useToast';
 import { isReadOnlyError } from '../../../utils/readOnlyError';
 // Imported from the modules themselves, not the shared/fac barrel: the barrel
-// is the server's entry point and pulls in every loss-cost method and every
-// family engine. The screen needs the exposure profile and the registry.
+// is the server's entry point, and importing it here would attach all eleven
+// rate engines to the registry and ship them to the browser. The registry on
+// its own is metadata — labels, rating bases, what needs a COPE survey.
 import { buildExposureProfile } from '../../../../../shared/fac/exposure.js';
 import { familyForClass, pricingBlocker } from '../../../../../shared/fac/registry.js';
+// The one engine the browser runs. Every other family prices on the server,
+// and this screen shows the server's answer for them.
+import { scheduleProperty } from '../../../../../shared/fac/families/scheduleProperty.js';
 import { logger } from '../../../utils/logger';
 import './FacPricing.css';
 import {
   UwFactorsPanel, EngineReadout, PricingWaterfall, FamilyBlocker, ExposureBasisNote,
   LossCostPanel, TechnicalBuildUp,
 } from './FacPricingPanels';
+import FacCapacityPanel from './FacCapacityPanel';
 
 const ENGINE_VERSION = '2.0.0';
 
@@ -291,11 +296,12 @@ export default function FacPricing() {
     [family, risk],
   );
   // Only SCHEDULE_PROPERTY has a workbook — a rate build-up, a score and a
-  // decision computed in the browser. The Phase 3 families rate off loaded
+  // decision computed in the browser. Every other family rates off loaded
   // tables through the server pipeline, so the workbook sections below are
   // hidden for them rather than rendered empty. "Implemented" is not the
   // test: a family can be fully implemented and have no workbook.
-  const hasWorkbook = typeof family?.computeQuote === 'function';
+  const workbook = family?.code === scheduleProperty.code ? scheduleProperty : null;
+  const hasWorkbook = Boolean(workbook);
 
   // ── The one exposure profile ─────────────────────────────────────
   // PD/BI share, the BI-included flag, the top-location figure and the
@@ -374,7 +380,7 @@ export default function FacPricing() {
     }
     const handle = setTimeout(() => {
       try {
-        const out = family.computeQuote({
+        const out = workbook.computeQuote({
           occupancy_code: risk.occupancy_code,
           country_zone:   risk.risk_country_zone,
           region:         risk.cedant_region,
@@ -402,7 +408,7 @@ export default function FacPricing() {
     }, 150);
     return () => clearTimeout(handle);
   }, [
-    risk, blocker, family, hasWorkbook, occupancies, factors, factorWeights, scoringTables,
+    risk, blocker, workbook, hasWorkbook, occupancies, factors, factorWeights, scoringTables,
     biIndemnity, natcatRates, uwSelections, eng, exposure, coverLoadings,
   ]);
 
@@ -663,6 +669,11 @@ export default function FacPricing() {
 
             <Sec title="Loss Cost">
               <LossCostPanel technical={technical} quotedRatePm={quoted.rate} />
+            </Sec>
+
+            {/* The committed book, not a static territorial budget (F14). */}
+            <Sec title="Capacity Check">
+              <FacCapacityPanel riskId={riskId} />
             </Sec>
 
             <Sec title="Technical Build-Up">

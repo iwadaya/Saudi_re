@@ -53,6 +53,7 @@
 import { buildExposureProfile } from '../exposure.js';
 import { exposureCurveLossCost } from '../methods/exposureCurve.js';
 import { numOrNull } from '../num.js';
+import { metaFor } from './meta.js';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Excel formula constants (Premium Calculator G24 / H24 / SUM(E16:E24))
@@ -698,29 +699,16 @@ function buildCurveBands({ exposure, curveBands, engine }) {
 
 /** @type {import('../registry.js').FacFamily} */
 export const scheduleProperty = {
-  code: FAMILY_CODE,
-  label: 'Schedule Property',
-  segment: 'NON_MARINE_PROPERTY',
-  ratingBasis: 'SI_PER_MILLE',
-  periodBasis: 'ANNUAL',
-  // Only the workbook's own rate build-up is implemented today. The other
-  // methods in the design are declared where they land so the pipeline can
-  // report what a family is capable of before it is capable of it.
-  methods: ['WORKBOOK_RATE', 'BURNING_COST', 'EXPOSURE_CURVE', 'BENCHMARK'],
-  // Property attritional experience develops fast and is comparatively
-  // stable, so it can carry most of the weight once there are enough
-  // claims — half weight at 6, capped at 80%.
-  credibility: { k: 6, maxZ: 0.80, unit: 'CLAIM_COUNT' },
-  scoreCompletenessMin: SCORE_COMPLETENESS_MIN,
-  requires: ['occupancy_code', 'risk_country_zone'],
-  wizardSteps: ['FAC_LOCATIONS', 'FAC_COPE'],
-  implemented: true,
+  ...metaFor('SCHEDULE_PROPERTY'),
   buildExposureProfile,
   computeRatePath,
   computeScoreAndDecision,
   computePremiums,
   computeQuote: computeFacQuote,
   computeCandidates,
+  // What this family's rate is per mille OF. Property rates against values,
+  // so the exposure profile's total sum insured is the premium base.
+  premiumBase: ({ exposure }) => numOrNull(exposure?.total_si) ?? 0,
 };
 
 export default scheduleProperty;

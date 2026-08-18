@@ -181,8 +181,15 @@ const WORKFLOW_SUFFIXES = [
 // Create-style actions: the creator becomes the assignee (or the route is disabled).
 const CREATE_SUFFIXES = ['/renew', '/amend', '/bind'];
 
+// Operational routes that belong to no entity and so cannot take an
+// entity-scoped edit lock — recomputing a book-wide materialised view is not
+// an edit to anyone's risk. They still sit behind the router's own auth.
+const OPERATIONAL_PATHS = new Set([
+  '/fac/accumulation/refresh',
+]);
+
 function isWorkflowMutation(path) {
-  return WORKFLOW_SUFFIXES.some((s) => path.endsWith(s));
+  return OPERATIONAL_PATHS.has(path) || WORKFLOW_SUFFIXES.some((s) => path.endsWith(s));
 }
 function isCreateMutation(path) {
   return CREATE_SUFFIXES.some((s) => path.endsWith(s));

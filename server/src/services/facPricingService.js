@@ -167,8 +167,35 @@ export async function loadFamilyRates(familyCode, asOf = null) {
   const effective = `effective_from <= COALESCE($1::date, CURRENT_DATE)
         AND (effective_to IS NULL OR effective_to >= COALESCE($1::date, CURRENT_DATE))`;
 
-  if (familyCode === 'LIABILITY_LIMIT' || familyCode === 'MARINE_LIABILITY'
-      || familyCode === 'CYBER_LIMIT') {
+  if (familyCode === 'CYBER_LIMIT') {
+    const [ratesRes, controlRes, curvesRes] = await Promise.all([
+      pool.query(
+        `SELECT rate_id, industry_code, revenue_min, revenue_max, territory,
+                basic_limit, rate_per_million, source
+           FROM public.fac_cyber_base_rate
+          WHERE active = true AND ${effective}`,
+        [asOf || null],
+      ),
+      pool.query(
+        `SELECT control_key, posture, factor, source
+           FROM public.fac_cyber_control_factor WHERE active = true`,
+      ),
+      pool.query(
+        `SELECT curve_id, curve_code, curve_name, family_code, territory, kind,
+                basic_limit, params, source
+           FROM public.fac_ilf_curve
+          WHERE active = true AND ${effective}`,
+        [asOf || null],
+      ),
+    ]);
+    return {
+      cyberBaseRates: ratesRes.rows,
+      cyberControlFactors: controlRes.rows,
+      ilfCurves: curvesRes.rows.map((c) => ({ ...c, params: c.params || {} })),
+    };
+  }
+
+  if (familyCode === 'LIABILITY_LIMIT' || familyCode === 'MARINE_LIABILITY') {
     const [ratesRes, curvesRes] = await Promise.all([
       pool.query(
         `SELECT rate_id, fac_cob_id, territory, basis_unit, basis_divisor, basic_limit,
@@ -204,6 +231,97 @@ export async function loadFamilyRates(familyCode, asOf = null) {
         ...c, params: c.params || {}, points: pointsByCurve.get(c.curve_id) || [],
       })),
     };
+  }
+
+  if (familyCode === 'PROJECT_WORKS') {
+    const [ratesRes, factorRes, loadRes] = await Promise.all([
+      pool.query(
+        `SELECT rate_id, project_type, territory, contract_value_min, contract_value_max,
+                rate_pm, period_factor_per_month, period_baseline_months, source
+           FROM public.fac_project_base_rate
+          WHERE active = true AND ${effective}`,
+        [asOf || null],
+      ),
+      pool.query(
+        `SELECT factor_kind, factor_key, loading, source
+           FROM public.fac_project_factor WHERE active = true`,
+      ),
+      pool.query(
+        `SELECT load_kind, load_key, rate_pm, per_unit, source
+           FROM public.fac_project_load_rate WHERE active = true`,
+      ),
+    ]);
+    return {
+      projectBaseRates: ratesRes.rows,
+      projectFactors: factorRes.rows,
+      projectLoadRates: loadRes.rows,
+    };
+  }
+
+  if (familyCode === 'PLANT_OPERATIONAL') {
+    const [ratesRes, factorRes] = await Promise.all([
+      pool.query(
+        `SELECT rate_id, machine_type, territory, rate_pm, source
+           FROM public.fac_plant_base_rate
+          WHERE active = true AND ${effective}`,
+        [asOf || null],
+      ),
+      pool.query(
+        `SELECT factor_kind, factor_key, factor, source
+           FROM public.fac_plant_factor WHERE active = true`,
+      ),
+    ]);
+    return { plantBaseRates: ratesRes.rows, plantFactors: factorRes.rows };
+  }
+
+  if (familyCode === 'ENERGY_ASSET') {
+    const [ratesRes, subRes] = await Promise.all([
+      pool.query(
+        `SELECT rate_id, asset_type, process_hazard_band, territory, rate_pm,
+                windstorm_season_load_pm, source
+           FROM public.fac_energy_base_rate
+          WHERE active = true AND ${effective}`,
+        [asOf || null],
+      ),
+      pool.query(
+        `SELECT sublimit_kind, sublimit_key, rate_pm, source
+           FROM public.fac_energy_sublimit_rate WHERE active = true`,
+      ),
+    ]);
+    return { energyBaseRates: ratesRes.rows, energySublimitRates: subRes.rows };
+  }
+
+  if (familyCode === 'MOTOR_FLEET') {
+    const [ratesRes, curvesRes] = await Promise.all([
+      pool.query(
+        `SELECT rate_id, vehicle_category, territory, od_cost_per_vehicle_year,
+                tpl_cost_per_vehicle_year, tpl_basic_limit, source
+           FROM public.fac_motor_base_rate
+          WHERE active = true AND ${effective}`,
+        [asOf || null],
+      ),
+      pool.query(
+        `SELECT curve_id, curve_code, curve_name, family_code, territory, kind,
+                basic_limit, params, source
+           FROM public.fac_ilf_curve
+          WHERE active = true AND ${effective}`,
+        [asOf || null],
+      ),
+    ]);
+    return {
+      motorBaseRates: ratesRes.rows,
+      ilfCurves: curvesRes.rows.map((c) => ({ ...c, params: c.params || {} })),
+    };
+  }
+
+  if (familyCode === 'PA_BENEFIT') {
+    const { rows } = await pool.query(
+      `SELECT rate_id, occupational_class, cover_basis, territory, rate_per_unit, source
+         FROM public.fac_pa_base_rate
+        WHERE active = true AND ${effective}`,
+      [asOf || null],
+    );
+    return { paBaseRates: rows };
   }
 
   if (familyCode === 'TRANSIT_VALUES') {
@@ -350,9 +468,11 @@ export async function computeFacPricing(riskId, overrides = {}) {
       [riskId],
     ),
     pool.query(
+      // section_id matters from Phase 4: a loss attributed to a section is
+      // that section's experience, and an untagged one is the risk's.
       `SELECT loss_year, loss_date, fgu_paid, fgu_outstanding, fgu_incurred, is_open,
               indexed_incurred, as_if_incurred, development_factor,
-              exclude_from_rating, exclusion_reason
+              exclude_from_rating, exclusion_reason, section_id
          FROM public.fac_loss_history WHERE fac_risk_id = $1 ORDER BY loss_year`,
       [riskId],
     ),
@@ -544,32 +664,55 @@ export async function verifyFacPricingSave(riskId, posted, requestId) {
  * @param {string} riskId
  * @param {object|null} technical  buildTechnicalPremium output
  */
-export async function persistPricingMethods(client, riskId, technical) {
+export async function persistPricingMethods(client, riskId, technical, sectionGroups = null) {
   await client.query('DELETE FROM public.fac_pricing_method WHERE fac_risk_id = $1', [riskId]);
-  if (!technical?.candidates?.length) return;
 
-  const z = technical.credibility?.z ?? null;
-  for (const c of technical.candidates) {
-    const weight = technical.weights?.[c.code] ?? null;
+  const writeCandidate = async (candidate, sectionId, weights, weightSource, z, overrideReason) => {
+    const weight = weights?.[candidate.code] ?? null;
     await client.query(
       `INSERT INTO public.fac_pricing_method
-         (fac_risk_id, method_code, available, unavailable_reason,
+         (fac_risk_id, section_id, method_code, available, unavailable_reason,
           loss_cost, rate_pm, weight, weight_source, override_reason_code,
           credibility_z, diagnostics)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)`,
       [
         riskId,
-        c.code,
-        Boolean(c.available),
-        c.unavailableReason || null,
-        c.lossCost ?? null,
-        c.ratePm ?? null,
+        sectionId,
+        candidate.code,
+        Boolean(candidate.available),
+        candidate.unavailableReason || null,
+        candidate.lossCost ?? null,
+        candidate.ratePm ?? null,
         weight,
-        weight == null ? 'EXCLUDED' : technical.weightSource || 'MECHANICAL',
-        technical.weightOverrideReason || null,
-        c.role === 'EXPERIENCE' ? z : null,
-        JSON.stringify(c.diagnostics || {}),
+        weight == null ? 'EXCLUDED' : weightSource || 'MECHANICAL',
+        overrideReason || null,
+        candidate.role === 'EXPERIENCE' ? z : null,
+        JSON.stringify(candidate.diagnostics || {}),
       ],
+    );
+  };
+
+  // A multi-section risk records each section group's own candidates against
+  // that section, then the risk-level blend against no section. Without the
+  // split, six families' methods would collide on one method_code.
+  if (Array.isArray(sectionGroups) && sectionGroups.length > 1) {
+    for (const group of sectionGroups) {
+      const sectionId = group.section_ids?.[0] ?? null;
+      for (const candidate of group.candidates || []) {
+        await writeCandidate(
+          candidate, sectionId, group.technical?.weights,
+          group.technical?.weightSource, group.technical?.credibility?.z ?? null,
+          group.technical?.weightOverrideReason,
+        );
+      }
+    }
+  }
+
+  if (!technical?.candidates?.length) return;
+  const z = technical.credibility?.z ?? null;
+  for (const c of technical.candidates) {
+    await writeCandidate(
+      c, null, technical.weights, technical.weightSource, z, technical.weightOverrideReason,
     );
   }
 }

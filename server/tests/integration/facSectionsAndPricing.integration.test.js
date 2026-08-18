@@ -75,11 +75,13 @@ describe.skipIf(shouldSkipDb)('integration: fac sections, taxonomy and server-si
       const { families } = await harness.fetchApp('GET', '/api/fac/reference/families').then((r) => r.json());
       const byCode = Object.fromEntries(families.map((f) => [f.code, f]));
       expect(byCode.SCHEDULE_PROPERTY.implemented).toBe(true);
-      // Phase 3 built these four; the rest are still declared, with the
-      // phase they land in on the record.
+      // As of Phase 4 every family the class taxonomy maps to has an engine.
+      // The two that do not are declared with the phase they land in — which
+      // is the state that stops an unmapped class being priced as property.
       expect(byCode.LIABILITY_LIMIT.implemented).toBe(true);
-      expect(byCode.PLANT_OPERATIONAL.implemented).toBe(false);
-      expect(byCode.PLANT_OPERATIONAL.planned_phase).toBe('Phase 4');
+      expect(byCode.PLANT_OPERATIONAL.implemented).toBe(true);
+      expect(byCode.AVIATION_HULL.implemented).toBe(false);
+      expect(byCode.AVIATION_HULL.planned_phase).toBe('Phase 5');
       expect(byCode.LIABILITY_LIMIT.rating_basis).toBe('LIMIT_ILF');
       expect(byCode.TRANSIT_VALUES.rating_basis).toBe('TURNOVER');
       expect(byCode.PROJECT_WORKS.period_basis).toBe('PROJECT');

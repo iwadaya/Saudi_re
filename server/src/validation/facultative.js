@@ -454,7 +454,18 @@ export const facSubmitForApprovalSchema = z.object({
 /** POST /bind — effective_date optional, in ISO YYYY-MM-DD form. */
 export const facBindSchema = z.object({
   effective_date: isoDate,
-}).passthrough();
+  // Overriding the capacity check is an act of underwriting authority, so it
+  // is explicit and it carries a reason. Both go into the audit event.
+  capacity_override:        z.boolean().optional(),
+  capacity_override_reason: optionalText,
+}).passthrough()
+  .refine(
+    (b) => !b.capacity_override || String(b.capacity_override_reason || '').trim().length >= 5,
+    {
+      path: ['capacity_override_reason'],
+      message: 'A capacity override needs a reason of at least 5 characters',
+    },
+  );
 
 /** POST /risks/:id/treaty-links — body schema. */
 export const facTreatyLinkCreateSchema = z.object({

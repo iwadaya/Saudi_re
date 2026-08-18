@@ -29,6 +29,7 @@
 
 import { ilfLossCost } from '../methods/ilfCurve.js';
 import { num, numOrNull } from '../num.js';
+import { metaFor } from './meta.js';
 
 export const FAMILY_CODE = 'LIABILITY_LIMIT';
 
@@ -197,32 +198,17 @@ export function computeCandidates({ risk, section, structure = {}, rates = {}, f
 
 /** @type {import('../registry.js').FacFamily} */
 export const liabilityLimit = {
-  code: FAMILY_CODE,
-  label: 'Casualty & Liability',
-  segment: 'CASUALTY_LIABILITY',
-  ratingBasis: 'LIMIT_ILF',
-  periodBasis: 'ANNUAL',
-  methods: ['ILF_CURVE', 'BURNING_COST', 'BENCHMARK'],
-  // Layer experience on an excess casualty placement is rarely credible
-  // however many claims there are — the ones that matter have not developed
-  // yet. Half weight at 12 claims, capped at 60%.
-  credibility: { k: 12, maxZ: 0.60, unit: 'CLAIM_COUNT' },
-  requires: [],
-  wizardSteps: [],
-  implemented: true,
-  exposureFields: [
-    { key: 'exposure_base', label: 'Exposure base', type: 'money', required: true },
-    { key: 'basis_unit', label: 'Basis', type: 'enum', options: BASIS_UNITS, required: true },
-    { key: 'territory', label: 'Territory', type: 'text' },
-    { key: 'limit', label: 'Limit', type: 'money', required: true },
-    { key: 'attachment', label: 'Attachment', type: 'money' },
-    { key: 'aggregate_limit', label: 'Aggregate limit', type: 'money' },
-    { key: 'claims_made', label: 'Claims made', type: 'boolean' },
-    { key: 'retro_years', label: 'Retroactive years', type: 'integer' },
-    { key: 'defence_costs_in_addition', label: 'Defence costs in addition', type: 'boolean' },
-  ],
+  ...metaFor('LIABILITY_LIMIT'),
   readExposure,
   computeCandidates,
+  // Casualty has no sum insured. The premium base is the exposure unit the
+  // rate was quoted against — turnover, payroll, fee income or units — and
+  // using a sum insured here would produce a premium wrong by whatever ratio
+  // the two happen to sit in.
+  premiumBase: ({ sections }) => (sections || []).reduce(
+    (t, s) => t + (numOrNull(s?.exposure_base) ?? numOrNull(s?.exposure_detail?.exposure_base) ?? 0),
+    0,
+  ),
 };
 
 /**

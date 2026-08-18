@@ -925,6 +925,10 @@ export const api = {
   facSaveSections(id: string, sections?: unknown[], opts?: RequestOpts): Promise<unknown> {
     return request(`/api/fac/risks/${enc(id)}/sections`, { method: 'PUT', body: { sections }, ...opts });
   },
+  /** Committed capacity in this risk's zones, plus the systemic checks. */
+  facGetAccumulation(id: string, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/risks/${enc(id)}/accumulation`, opts);
+  },
   /** The excess tower: one row per layer, with its own share and price. */
   facGetLayers(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}/layers`, opts); },
   facSaveLayers(id: string, layers?: unknown[], opts?: RequestOpts): Promise<unknown> {
@@ -1096,6 +1100,16 @@ export const api = {
   facGetRateVersion(opts?: RequestOpts): Promise<unknown>    { return request('/api/fac/reference/rate-version', opts); },
   facGetCurves(family?: string, opts?: RequestOpts): Promise<unknown> {
     return request(`/api/fac/reference/curves${family ? `?family=${enc(family)}` : ''}`, opts);
+  },
+  /** How the book is priced, not how one risk is. */
+  facGetPortfolioAdequacy(query?: Record<string, string | number | undefined>, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/portfolio/adequacy${toQuery(query) ? `?${toQuery(query)}` : ''}`, opts);
+  },
+  facGetPortfolioHitRatio(query?: Record<string, string | number | undefined>, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/portfolio/hit-ratio${toQuery(query) ? `?${toQuery(query)}` : ''}`, opts);
+  },
+  facGetPortfolioCapacity(query?: Record<string, string | number | undefined>, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/portfolio/capacity${toQuery(query) ? `?${toQuery(query)}` : ''}`, opts);
   },
   /** ILF curves and the base-rate tables the Phase 3 families rate off. */
   facGetRateTables(family?: string, opts?: RequestOpts): Promise<unknown> {

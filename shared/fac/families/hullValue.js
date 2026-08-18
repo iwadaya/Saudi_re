@@ -27,6 +27,7 @@
 
 import { num, numOrNull } from '../num.js';
 import { selectWarRate, warSectionLossCost } from './transitValues.js';
+import { metaFor } from './meta.js';
 
 export const FAMILY_CODE = 'HULL_VALUE';
 
@@ -323,37 +324,12 @@ export function computeCandidates({ risk, section, rates = {} }) {
 
 /** @type {import('../registry.js').FacFamily} */
 export const hullValue = {
-  code: FAMILY_CODE,
-  label: 'Hull & Marine Assets',
-  segment: 'MARINE_TRANSIT',
-  ratingBasis: 'AGREED_VALUE',
-  periodBasis: 'ANNUAL',
-  methods: ['HULL_RATE', 'BURNING_COST', 'BENCHMARK'],
-  // A single vessel's own record is thin; a fleet's is not. k sits between
-  // property and casualty and the cap is the property cap.
-  credibility: { k: 8, maxZ: 0.70, unit: 'CLAIM_COUNT' },
-  requires: [],
-  wizardSteps: [],
-  implemented: true,
-  exposureFields: [
-    { key: 'agreed_value', label: 'Agreed value', type: 'money', required: true },
-    { key: 'vessel_type', label: 'Vessel type', type: 'text', required: true },
-    { key: 'tonnage', label: 'Tonnage (GT)', type: 'number', required: true },
-    { key: 'build_year', label: 'Year built', type: 'integer' },
-    { key: 'class_society', label: 'Classification society', type: 'text' },
-    { key: 'flag', label: 'Flag', type: 'text' },
-    { key: 'trading_area', label: 'Trading area', type: 'text' },
-    { key: 'management', label: 'Management (ISM/DOC)', type: 'text' },
-    { key: 'claims_band', label: 'Claims record band', type: 'text' },
-    { key: 'increased_value', label: 'Increased value / disbursements', type: 'money' },
-    { key: 'increased_value_rate_pm', label: 'IV rate ‰', type: 'rate' },
-    { key: 'laid_up_days', label: 'Laid-up days', type: 'integer' },
-    { key: 'laid_up_return_pct', label: 'Laid-up return', type: 'percent' },
-    { key: 'war_region', label: 'War region', type: 'text' },
-    { key: 'breach_of_warranty', label: 'Breach of warranty (listed areas)', type: 'boolean' },
-  ],
+  ...metaFor('HULL_VALUE'),
   readExposure,
   computeCandidates,
+  premiumBase: ({ sections }) => (sections || []).reduce(
+    (t, s) => t + (readExposure(s).agreedValue ?? 0), 0,
+  ),
 };
 
 export default hullValue;

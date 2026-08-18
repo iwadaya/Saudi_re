@@ -1,6 +1,6 @@
 # Facultative Pricing — Multi-Class Design & Redesign Proposal
 
-**Status:** Phases 0, 1, 2 and 3 are **implemented** — see [§9 Implementation status](#9-implementation-status).
+**Status:** Phases 0–4 are **implemented** — see [§9 Implementation status](#9-implementation-status).
 Phases 3–5 remain proposals for review.
 **Audience:** Underwriting / actuarial / product / engineering.
 **Scope:** The facultative (`/fac/*`) pricing capability across all classes of
@@ -1131,15 +1131,19 @@ place and reproducibility is fixed.
     section and a `fac_war_rate` table.
 18. M4 layered fac + reinstatements + ROL/payback, which all three families need.
 
-### Phase 4 — Remaining families and portfolio (≈ 3 sprints)
+### Phase 4 — Remaining families and portfolio (≈ 3 sprints) — **built**
 
 19. `PROJECT_WORKS` (period-based rating, earning pattern), `ENERGY_ASSET`,
     `PLANT_OPERATIONAL`.
 20. `CYBER_LIMIT` with the mandatory aggregation gate; `MOTOR_FLEET`,
-    `PA_BENEFIT`, `AVIATION`, `AGRI_YIELD` as capacity allows.
+    `PA_BENEFIT`, `AVIATION`, `AGRI_YIELD` as capacity allows. Aviation and
+    agriculture are **declared, not built** — no class in the taxonomy maps to
+    either, and declaring them is what stops one being silently priced as
+    property the day somebody adds one.
 21. M8 accumulation + capacity gate at bind.
 22. Portfolio analytics: technical adequacy distribution, hit ratio, capacity
     utilisation.
+23. Multi-section pricing, which Phase 3 deferred.
 
 ### Phase 5 — Hardening
 
@@ -1212,7 +1216,7 @@ These change the shape of the build, so I would rather ask than guess.
 
 ## 9. Implementation status
 
-Phases 0, 1, 2 and 3 are built. Nothing in Phases 4–5 is.
+Phases 0 through 4 are built. Phase 5 (strict drift enforcement, per-family golden masters) is not.
 
 ### What landed
 
@@ -1240,6 +1244,7 @@ Phases 0, 1, 2 and 3 are built. Nothing in Phases 4–5 is.
 | **F11** | One sum insured drives both the share and the premium, and the screen names which source it used. |
 | **F12** | Every priced row is stamped with the reference-set label in force at the risk's inception date; Summary shows it. |
 | **F13** | The engine is in `shared/`, the server recomputes it, and drift is logged and counted (warn-only; `FAC_PRICING_STRICT=1` enforces). |
+| **F14** | *(Phase 4)* The capacity check measures a risk against committed exposure — bound facultative risks at the carrier's share plus inforce treaty CRESTA aggregates — at three levels, re-runs at bind, and refers rather than refuses. `fac_market_rate` was replaced by benchmarks derived from bound business in Phase 2. |
 
 ### Phase 2 — loss-cost methods and the blend
 
@@ -1296,6 +1301,42 @@ priced on its primary section, and the build-up says so and names the sections
 it left out. Pricing every section and summing them is Phase 4 work; presenting
 one section's answer as the whole risk silently would not be.
 
+### Phase 4 — the last five families, the capacity check, and the book
+
+Every family the class taxonomy maps to now has an engine, a risk is priced
+across all its sections rather than just the first, and the capacity check
+finally measures against what has been written rather than against a number
+nobody has touched.
+
+| Area | Change |
+| --- | --- |
+| **Migration 137** | `fac_project_base_rate` / `_factor` / `_load_rate`, `fac_plant_base_rate` / `_factor`, `fac_energy_base_rate` / `_sublimit_rate`, `fac_cyber_base_rate` / `_control_factor`, `fac_motor_base_rate`, `fac_pa_base_rate`; `fac_cyber_dependency` (the tagging the gate reads); `fac_zone_budget` and `mv_fac_accumulation`; `earning_pattern` on `fac_risk`; `technical_gross_rate_pm` and `technical_adequacy` on `fac_pricing`. Every rate table ships **empty**, for the third phase running. |
+| **`PROJECT_WORKS`** | The one family that is not an annual policy: a whole project period on total contract value, with an additive factor build-up (which is how a construction slip is negotiated), a per-month period loading beyond a baseline, and testing, maintenance and DSU as separately-rated covers rather than percentages of the works rate. `shared/fac/period.js` carries the period factor and both earning patterns — straight-line and the S-curve that matches how values actually rise on a site. |
+| **`PLANT_OPERATIONAL`** | Item-level rating with an item-level PML, which is what makes it its own family: a property PML is a site question, a machinery-breakdown PML is a turbine question. Multiplicative factors, unlike the project family's additive ones. |
+| **`ENERGY_ASSET`** | Asset values at a rate keyed on the **process hazard band**, which is never relaxed to find a rate — a standard-band rate on a severe-band plant is the mistake the family exists to prevent. Control of Well, OEE, seepage & pollution, removal of wreck and LOPI are separately-rated sub-limits with their own `ADDITIVE` candidates, the same treatment war gets in Marine. |
+| **`CYBER_LIMIT`** | Rate per million of the basic limit against a revenue band and a controls posture, stepped by a cyber ILF curve that is never borrowed from general liability. **Dependency tagging is a hard gate**: an untagged risk does not price at all, checked before any arithmetic, because a cyber price with no vendor tag looks complete and hides the only number that matters at portfolio level. |
+| **`MOTOR_FLEET`** | Per vehicle-year by category, with third-party liability stepped through a motor ILF curve and the fleet-rating adjustment applied last and kept visible as the negotiated number it is. |
+| **`PA_BENEFIT`** | Benefit units per member by occupational class, with 24-hour and occupational-only treated as different covers rather than variants of one. Carries the one-event exposure into the capacity check, because that — not the annual rate — is what limits a PA line. |
+| **`FREQ_SEVERITY`** | Frequency per exposure unit × severity, so a fleet that grew from 200 to 800 vehicles rates on its old frequency and its new count. Frequency uses the declared claim count and severity uses the loss listing, and it says so — a large-loss listing understates the count and overstates the average, and dividing one by the other would be wrong by an order of magnitude. |
+| **Multi-section** | A risk is priced through every family its sections use. Each group blends its own competing views into a net loss cost with no loads and no gross-up; the money is summed at risk level and grossed up **once**. Each family declares what its rate is per mille OF (`premiumBase`), so a cargo section rates against turnover and a property section against values in the same risk. Losses tagged to a section are that section's experience; untagged losses stay at risk level and blend against the sections combined. |
+| **Accumulation (F14)** | Three levels: the per-risk line on the family's own basis (top location for property, limit for casualty, any-one-conveyance for cargo); zone accumulation against `mv_fac_accumulation`, which sums bound facultative risks at the carrier's share and the CRESTA aggregates on inforce treaties; and the systemic checks no zone budget can see — cyber common vendor, cargo conveyance, marine war region, PA one-event group. Re-run at bind, where a breach is a **referral** returning 409 with the reasons, overridable with a recorded justification that lands in the audit event. The view refreshes on every bind and nightly. |
+| **Portfolio** | Technical adequacy distribution (with the risks priced before the build-up existed counted, not silently dropped), hit ratio by family with a **selection gap** — mean adequacy of what was won minus what was lost, which is adverse selection with a number on it — and capacity utilisation by zone. |
+| **Bundle** | `shared/fac` split its family metadata (`families/meta.js`) from its family engines (`engines.js`). The browser needs to know that Hull & Machinery rates per mille of agreed value; it does not need the hull engine. The shared chunk went from 67.5 KiB with eleven engines to 25.1 KiB — smaller than before Phase 4 added six families. |
+| **Tests** | 190 new tests in `shared/fac`, 23 new DB-backed integration tests, 5 for the capacity panel. |
+
+**What "no budget set" means.** `fac_zone_budget` ships empty like every other
+table here, and the zone check has three outcomes rather than two: pass,
+breach, and *no budget set*. The third reports the committed exposure and says
+there is nothing to measure it against. A budget is an appetite decision;
+inventing one would make the gate look like it was working when it was only
+guessing, which is finding F14 again in a nicer colour.
+
+**What is deliberately still missing.** Aviation and agriculture are declared
+and not built — no class maps to either, and the phase plan listed both as "as
+capacity allows". A severity distribution behind `FREQ_SEVERITY` (rather than
+an observed mean) is the honest gap in excess motor and PA; the module reports
+the layer as unpierced rather than pretending the zero is a price.
+
 ### A constraint we kept: curves are loaded, not invented
 
 The plan called for exposure rating "via the existing MBBEFD". The
@@ -1334,8 +1375,14 @@ only the *convenience* of picking a curve by number.
 
 ### Deliberately not done
 
-- **F14** (accumulation, real benchmarks) — Phase 4 and §4.10; needs the
-  materialised view and enough bound business to be meaningful.
+- **F14 is closed.** The capacity check measures against `mv_fac_accumulation`
+  at three levels and re-runs at bind (Phase 4). What it still needs is data:
+  `fac_zone_budget` ships empty, so the zone level reports committed exposure
+  and says no budget is set until somebody loads one. Benchmarks come from
+  bound business and become meaningful as the book grows.
+- **AVIATION_HULL and AGRI_YIELD** are declared and not built. No class in the
+  taxonomy maps to either; declaring them is what stops the first one added
+  being priced as schedule property.
 - **M6 in full** — reference tables still have no per-row effective dating.
   What shipped is the version *identity* and the provenance stamp, which is
   what makes a historic quote explainable. The admin UI that edits versions
