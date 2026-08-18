@@ -188,8 +188,16 @@ const OPERATIONAL_PATHS = new Set([
   '/fac/accumulation/refresh',
 ]);
 
+// Reference-data administration. These mutate rate tables, not risks, so the
+// assignee edit-lock has nothing to bite on. Their control is the four-eyes
+// approval in facReferenceAdminService.js: the approver must not be the
+// submitter, enforced there and by a CHECK constraint.
+const OPERATIONAL_PREFIXES = ['/fac/admin/'];
+
 function isWorkflowMutation(path) {
-  return OPERATIONAL_PATHS.has(path) || WORKFLOW_SUFFIXES.some((s) => path.endsWith(s));
+  return OPERATIONAL_PATHS.has(path)
+    || OPERATIONAL_PREFIXES.some((p) => path.startsWith(p))
+    || WORKFLOW_SUFFIXES.some((s) => path.endsWith(s));
 }
 function isCreateMutation(path) {
   return CREATE_SUFFIXES.some((s) => path.endsWith(s));

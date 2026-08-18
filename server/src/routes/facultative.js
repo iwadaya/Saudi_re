@@ -22,6 +22,9 @@ import {
   facLocationsSaveSchema,
   facSectionsSaveSchema,
   facLayersSaveSchema,
+  facRateVersionCreateSchema,
+  facRateStageSchema,
+  facRateRejectSchema,
   facExperienceSaveSchema,
   facPricingSaveSchema,
   facCopeSaveSchema,
@@ -49,7 +52,20 @@ import {
   adequacyDistribution,
   hitRatio,
   capacityUtilisation,
+  driftRate,
+  renewalDifference,
 } from '../services/facPortfolioService.js';
+import {
+  createDraftVersion,
+  stageRows,
+  submitForApproval,
+  approveVersion,
+  rejectVersion,
+  publishVersion,
+  versionDetail,
+  listVersions,
+  stageableTables,
+} from '../services/facReferenceAdminService.js';
 
 const router = Router();
 
@@ -1822,6 +1838,100 @@ router.post(
 
 
 // ═══════════════════════════════════════════════════════════════════════════
+// FAC RATE REVISIONS — how rates get loaded, and who is on the hook
+//
+// Every rate table ships empty because a rate nobody can attribute is a rate
+// nobody can defend. That is only honest if there is a real way to put real
+// numbers in, with a name against them — this is it. Draft, stage, submit,
+// approve (by somebody else), publish in one transaction.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const actorId = (req) => req.user?.userId || null;
+
+router.get('/fac/admin/rate-versions', asyncHandler(async (_req, res) => {
+  res.json({ versions: await listVersions() });
+}));
+
+// What a revision is allowed to touch, for the admin screen to render its
+// forms from rather than hard-coding a second copy of the allow-list.
+router.get('/fac/admin/rate-versions/stageable', asyncHandler(async (_req, res) => {
+  res.json({ tables: stageableTables() });
+}));
+
+router.get('/fac/admin/rate-versions/:versionId', asyncHandler(async (req, res) => {
+  res.json(await versionDetail(req.params.versionId));
+}));
+
+router.post(
+  '/fac/admin/rate-versions',
+  validateBody(facRateVersionCreateSchema),
+  asyncHandler(async (req, res) => {
+    const version = await createDraftVersion({
+      versionLabel: req.body.version_label,
+      effectiveFrom: req.body.effective_from,
+      notes: req.body.notes,
+      ownerNote: req.body.owner_note,
+      actorId: actorId(req),
+      actorLabel: actorLabel(req),
+    });
+    res.status(201).json(version);
+  }),
+);
+
+router.post(
+  '/fac/admin/rate-versions/:versionId/stage',
+  validateBody(facRateStageSchema),
+  asyncHandler(async (req, res) => {
+    res.json(await stageRows({
+      versionId: req.params.versionId,
+      rows: req.body.rows,
+      actorId: actorId(req),
+      actorLabel: actorLabel(req),
+    }));
+  }),
+);
+
+router.post('/fac/admin/rate-versions/:versionId/submit', asyncHandler(async (req, res) => {
+  res.json(await submitForApproval({
+    versionId: req.params.versionId,
+    actorId: actorId(req),
+    actorLabel: actorLabel(req),
+  }));
+}));
+
+// Four eyes: the service refuses an approval by the submitter, and a CHECK
+// constraint refuses it again if the service ever stops.
+router.post('/fac/admin/rate-versions/:versionId/approve', asyncHandler(async (req, res) => {
+  res.json(await approveVersion({
+    versionId: req.params.versionId,
+    actorId: actorId(req),
+    actorLabel: actorLabel(req),
+  }));
+}));
+
+router.post(
+  '/fac/admin/rate-versions/:versionId/reject',
+  validateBody(facRateRejectSchema),
+  asyncHandler(async (req, res) => {
+    res.json(await rejectVersion({
+      versionId: req.params.versionId,
+      reason: req.body.reason,
+      actorId: actorId(req),
+      actorLabel: actorLabel(req),
+    }));
+  }),
+);
+
+router.post('/fac/admin/rate-versions/:versionId/publish', asyncHandler(async (req, res) => {
+  res.json(await publishVersion({
+    versionId: req.params.versionId,
+    actorId: actorId(req),
+    actorLabel: actorLabel(req),
+  }));
+}));
+
+
+// ═══════════════════════════════════════════════════════════════════════════
 // FAC PORTFOLIO — how the book is priced, not how one risk is
 //
 // Pricing a risk well and running a book well are different problems. A
@@ -1844,12 +1954,29 @@ router.get('/fac/portfolio/hit-ratio', asyncHandler(async (req, res) => {
   res.json(await hitRatio(portfolioFilters(req)));
 }));
 
+// Is it safe to turn FAC_PRICING_STRICT on? Every verification is recorded,
+// agreeing or not, so the question has a denominator and therefore an answer.
+router.get('/fac/portfolio/drift', asyncHandler(async (req, res) => {
+  res.json(await driftRate({
+    days: req.query.days ? Number(req.query.days) : 90,
+    minObservations: req.query.minObservations ? Number(req.query.minObservations) : 100,
+  }));
+}));
+
 router.get('/fac/portfolio/capacity', asyncHandler(async (req, res) => {
   res.json(await capacityUtilisation({
     uwYear: req.query.uwYear ? Number(req.query.uwYear) : null,
   }));
 }));
 
+
+// Why the price moved. A renewal that says "last year 2.10‰, this year 2.45‰"
+// has told an underwriter almost nothing — the risk got bigger, the rate went
+// up, or the cover changed, and those are three different conversations.
+router.get('/fac/risks/:id/renewal-difference', asyncHandler(async (req, res) => {
+  await assertCanReadEntity(req, 'FAC_RISK', req.params.id);
+  res.json(await renewalDifference(req.params.id));
+}));
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FAC ACCUMULATION — committed capacity, at three levels (finding F14)

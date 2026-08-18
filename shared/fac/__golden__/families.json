@@ -1,0 +1,579 @@
+{
+  "note": "Golden masters for the facultative rating families. Regenerate with scripts/update-fac-golden-master.mjs, and only when the change was intended — read the diff before committing it.",
+  "families": {
+    "SCHEDULE_PROPERTY": {
+      "why": "The workbook build-up, and the invariant that it survives the pipeline untouched.",
+      "expected": {
+        "ok": true,
+        "family": "SCHEDULE_PROPERTY",
+        "exposure_basis": "RISK_HEADER",
+        "engine_final_gross_rate_pm": 1.42666667,
+        "candidates": [
+          {
+            "code": "WORKBOOK_RATE",
+            "role": "EXPOSURE",
+            "available": true,
+            "rate_pm": 1.07,
+            "loss_cost": null,
+            "weight": 1
+          },
+          {
+            "code": "EXPOSURE_CURVE",
+            "role": "EXPOSURE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          },
+          {
+            "code": "BURNING_COST",
+            "role": "EXPERIENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          },
+          {
+            "code": "BENCHMARK",
+            "role": "REFERENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          }
+        ],
+        "blended_loss_cost_pm": 1.07,
+        "additive_load_pm": 0,
+        "expected_loss_pm": 1.07,
+        "risk_load_pm": 0,
+        "technical_net_pm": 1.07,
+        "gross_up_denominator": 0.75,
+        "technical_gross_pm": 1.42666667,
+        "premiums": {
+          "expected_loss": 107000,
+          "technical_net": 107000,
+          "technical_gross": 142666.6667
+        },
+        "sections": [
+          {
+            "family": "SCHEDULE_PROPERTY",
+            "premium_base": 100000000,
+            "loss_cost": 107000,
+            "rate_pm": 1.07
+          }
+        ]
+      }
+    },
+    "LIABILITY_LIMIT": {
+      "why": "The basic-limit loss cost and the Riebesell step from it to the policy limit.",
+      "expected": {
+        "ok": true,
+        "family": "LIABILITY_LIMIT",
+        "exposure_basis": "NONE",
+        "engine_final_gross_rate_pm": null,
+        "candidates": [
+          {
+            "code": "ILF_CURVE",
+            "role": "EXPOSURE",
+            "available": true,
+            "rate_pm": 0.61081986,
+            "loss_cost": 152704.9657,
+            "weight": 1
+          },
+          {
+            "code": "BURNING_COST",
+            "role": "EXPERIENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          },
+          {
+            "code": "BENCHMARK",
+            "role": "REFERENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          }
+        ],
+        "blended_loss_cost_pm": 0.61081986,
+        "additive_load_pm": 0,
+        "expected_loss_pm": 0.61081986,
+        "risk_load_pm": 0,
+        "technical_net_pm": 0.61081986,
+        "gross_up_denominator": 0.75,
+        "technical_gross_pm": 0.81442648,
+        "premiums": {
+          "expected_loss": 152704.9657,
+          "technical_net": 152704.9657,
+          "technical_gross": 203606.6209
+        },
+        "sections": [
+          {
+            "family": "LIABILITY_LIMIT",
+            "premium_base": 250000000,
+            "loss_cost": 152704.9657,
+            "rate_pm": 0.61081986
+          }
+        ]
+      }
+    },
+    "HULL_VALUE": {
+      "why": "The tonnage band, the multiplicative factor chain, and war as its own section.",
+      "expected": {
+        "ok": true,
+        "family": "HULL_VALUE",
+        "exposure_basis": "SECTIONS",
+        "engine_final_gross_rate_pm": null,
+        "candidates": [
+          {
+            "code": "HULL_RATE",
+            "role": "EXPOSURE",
+            "available": true,
+            "rate_pm": 3.5,
+            "loss_cost": 105000,
+            "weight": 1
+          },
+          {
+            "code": "WAR_SECTION",
+            "role": "ADDITIVE",
+            "available": true,
+            "rate_pm": 0.75,
+            "loss_cost": 22500,
+            "weight": null
+          },
+          {
+            "code": "BURNING_COST",
+            "role": "EXPERIENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          },
+          {
+            "code": "BENCHMARK",
+            "role": "REFERENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          }
+        ],
+        "blended_loss_cost_pm": 3.5,
+        "additive_load_pm": 0.75,
+        "expected_loss_pm": 4.25,
+        "risk_load_pm": 0,
+        "technical_net_pm": 4.25,
+        "gross_up_denominator": 0.75,
+        "technical_gross_pm": 5.66666667,
+        "premiums": {
+          "expected_loss": 127500,
+          "technical_net": 127500,
+          "technical_gross": 170000
+        },
+        "sections": [
+          {
+            "family": "HULL_VALUE",
+            "premium_base": 30000000,
+            "loss_cost": 127500,
+            "rate_pm": 4.25
+          }
+        ]
+      }
+    },
+    "TRANSIT_VALUES": {
+      "why": "The turnover-weighted blend across segments, and that cargo rates on sendings.",
+      "expected": {
+        "ok": true,
+        "family": "TRANSIT_VALUES",
+        "exposure_basis": "NONE",
+        "engine_final_gross_rate_pm": null,
+        "candidates": [
+          {
+            "code": "TRANSIT_RATE",
+            "role": "EXPOSURE",
+            "available": true,
+            "rate_pm": 0.47,
+            "loss_cost": 47000,
+            "weight": 1
+          },
+          {
+            "code": "BURNING_COST",
+            "role": "EXPERIENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          },
+          {
+            "code": "BENCHMARK",
+            "role": "REFERENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          }
+        ],
+        "blended_loss_cost_pm": 0.47,
+        "additive_load_pm": 0,
+        "expected_loss_pm": 0.47,
+        "risk_load_pm": 0,
+        "technical_net_pm": 0.47,
+        "gross_up_denominator": 0.75,
+        "technical_gross_pm": 0.62666667,
+        "premiums": {
+          "expected_loss": 47000,
+          "technical_net": 47000,
+          "technical_gross": 62666.6667
+        },
+        "sections": [
+          {
+            "family": "TRANSIT_VALUES",
+            "premium_base": 100000000,
+            "loss_cost": 47000,
+            "rate_pm": 0.47
+          }
+        ]
+      }
+    },
+    "PROJECT_WORKS": {
+      "why": "The period factor over a 24-month project, and the separately-rated covers.",
+      "expected": {
+        "ok": true,
+        "family": "PROJECT_WORKS",
+        "exposure_basis": "SECTIONS",
+        "engine_final_gross_rate_pm": null,
+        "candidates": [
+          {
+            "code": "PROJECT_RATE",
+            "role": "EXPOSURE",
+            "available": true,
+            "rate_pm": 5.88,
+            "loss_cost": 1176000,
+            "weight": 1
+          },
+          {
+            "code": "BURNING_COST",
+            "role": "EXPERIENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          },
+          {
+            "code": "BENCHMARK",
+            "role": "REFERENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          }
+        ],
+        "blended_loss_cost_pm": 5.88,
+        "additive_load_pm": 0,
+        "expected_loss_pm": 5.88,
+        "risk_load_pm": 0,
+        "technical_net_pm": 5.88,
+        "gross_up_denominator": 0.75,
+        "technical_gross_pm": 7.84,
+        "premiums": {
+          "expected_loss": 1176000,
+          "technical_net": 1176000,
+          "technical_gross": 1568000
+        },
+        "sections": [
+          {
+            "family": "PROJECT_WORKS",
+            "premium_base": 200000000,
+            "loss_cost": 1176000,
+            "rate_pm": 5.88
+          }
+        ]
+      }
+    },
+    "PLANT_OPERATIONAL": {
+      "why": "Item-level rating with an item-level PML, which is why this family exists.",
+      "expected": {
+        "ok": true,
+        "family": "PLANT_OPERATIONAL",
+        "exposure_basis": "SECTIONS",
+        "engine_final_gross_rate_pm": null,
+        "candidates": [
+          {
+            "code": "PLANT_RATE",
+            "role": "EXPOSURE",
+            "available": true,
+            "rate_pm": 1.88,
+            "loss_cost": 94000,
+            "weight": 1
+          },
+          {
+            "code": "BURNING_COST",
+            "role": "EXPERIENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          },
+          {
+            "code": "BENCHMARK",
+            "role": "REFERENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          }
+        ],
+        "blended_loss_cost_pm": 1.88,
+        "additive_load_pm": 0,
+        "expected_loss_pm": 1.88,
+        "risk_load_pm": 0,
+        "technical_net_pm": 1.88,
+        "gross_up_denominator": 0.75,
+        "technical_gross_pm": 2.50666667,
+        "premiums": {
+          "expected_loss": 94000,
+          "technical_net": 94000,
+          "technical_gross": 125333.3333
+        },
+        "sections": [
+          {
+            "family": "PLANT_OPERATIONAL",
+            "premium_base": 50000000,
+            "loss_cost": 94000,
+            "rate_pm": 1.88
+          }
+        ]
+      }
+    },
+    "ENERGY_ASSET": {
+      "why": "The hazard-band key, the windstorm load, and sub-limits sitting beside the rate.",
+      "expected": {
+        "ok": true,
+        "family": "ENERGY_ASSET",
+        "exposure_basis": "SECTIONS",
+        "engine_final_gross_rate_pm": null,
+        "candidates": [
+          {
+            "code": "ENERGY_RATE",
+            "role": "EXPOSURE",
+            "available": true,
+            "rate_pm": 7.5,
+            "loss_cost": 6000000,
+            "weight": 1
+          },
+          {
+            "code": "SUBLIMIT_CONTROL_OF_WELL",
+            "role": "ADDITIVE",
+            "available": true,
+            "rate_pm": 6,
+            "loss_cost": 900000,
+            "weight": null
+          },
+          {
+            "code": "BURNING_COST",
+            "role": "EXPERIENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          },
+          {
+            "code": "BENCHMARK",
+            "role": "REFERENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          }
+        ],
+        "blended_loss_cost_pm": 7.5,
+        "additive_load_pm": 1.125,
+        "expected_loss_pm": 8.625,
+        "risk_load_pm": 0,
+        "technical_net_pm": 8.625,
+        "gross_up_denominator": 0.75,
+        "technical_gross_pm": 11.5,
+        "premiums": {
+          "expected_loss": 6900000,
+          "technical_net": 6900000,
+          "technical_gross": 9200000
+        },
+        "sections": [
+          {
+            "family": "ENERGY_ASSET",
+            "premium_base": 800000000,
+            "loss_cost": 6900000,
+            "rate_pm": 8.625
+          }
+        ]
+      }
+    },
+    "CYBER_LIMIT": {
+      "why": "The controls factor, the cyber-specific curve, and that the tag gate is passed.",
+      "expected": {
+        "ok": true,
+        "family": "CYBER_LIMIT",
+        "exposure_basis": "NONE",
+        "engine_final_gross_rate_pm": null,
+        "candidates": [
+          {
+            "code": "CYBER_RATE",
+            "role": "EXPOSURE",
+            "available": true,
+            "rate_pm": 0.1305,
+            "loss_cost": 52200,
+            "weight": 1
+          },
+          {
+            "code": "BURNING_COST",
+            "role": "EXPERIENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          },
+          {
+            "code": "BENCHMARK",
+            "role": "REFERENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          }
+        ],
+        "blended_loss_cost_pm": 0.1305,
+        "additive_load_pm": 0,
+        "expected_loss_pm": 0.1305,
+        "risk_load_pm": 0,
+        "technical_net_pm": 0.1305,
+        "gross_up_denominator": 0.75,
+        "technical_gross_pm": 0.174,
+        "premiums": {
+          "expected_loss": 52200,
+          "technical_net": 52200,
+          "technical_gross": 69600
+        },
+        "sections": [
+          {
+            "family": "CYBER_LIMIT",
+            "premium_base": 400000000,
+            "loss_cost": 52200,
+            "rate_pm": 0.1305
+          }
+        ]
+      }
+    },
+    "MOTOR_FLEET": {
+      "why": "Per vehicle-year costing and the TPL step through the motor curve.",
+      "expected": {
+        "ok": true,
+        "family": "MOTOR_FLEET",
+        "exposure_basis": "SECTIONS",
+        "engine_final_gross_rate_pm": null,
+        "candidates": [
+          {
+            "code": "MOTOR_RATE",
+            "role": "EXPOSURE",
+            "available": true,
+            "rate_pm": 19.82208333,
+            "loss_cost": 1189325,
+            "weight": 1
+          },
+          {
+            "code": "BURNING_COST",
+            "role": "EXPERIENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          },
+          {
+            "code": "BENCHMARK",
+            "role": "REFERENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          }
+        ],
+        "blended_loss_cost_pm": 19.82208333,
+        "additive_load_pm": 0,
+        "expected_loss_pm": 19.82208333,
+        "risk_load_pm": 0,
+        "technical_net_pm": 19.82208333,
+        "gross_up_denominator": 0.75,
+        "technical_gross_pm": 26.42944444,
+        "premiums": {
+          "expected_loss": 1189325,
+          "technical_net": 1189325,
+          "technical_gross": 1585766.6667
+        },
+        "sections": [
+          {
+            "family": "MOTOR_FLEET",
+            "premium_base": 60000000,
+            "loss_cost": 1189325,
+            "rate_pm": 19.82208333
+          }
+        ]
+      }
+    },
+    "PA_BENEFIT": {
+      "why": "Benefit units by occupational class, and that 24-hour cover is its own rate.",
+      "expected": {
+        "ok": true,
+        "family": "PA_BENEFIT",
+        "exposure_basis": "NONE",
+        "engine_final_gross_rate_pm": null,
+        "candidates": [
+          {
+            "code": "PA_RATE",
+            "role": "EXPOSURE",
+            "available": true,
+            "rate_pm": 2.08333333,
+            "loss_cost": 187500,
+            "weight": 1
+          },
+          {
+            "code": "BURNING_COST",
+            "role": "EXPERIENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          },
+          {
+            "code": "BENCHMARK",
+            "role": "REFERENCE",
+            "available": false,
+            "rate_pm": null,
+            "loss_cost": null,
+            "weight": null
+          }
+        ],
+        "blended_loss_cost_pm": 2.08333333,
+        "additive_load_pm": 0,
+        "expected_loss_pm": 2.08333333,
+        "risk_load_pm": 0,
+        "technical_net_pm": 2.08333333,
+        "gross_up_denominator": 0.75,
+        "technical_gross_pm": 2.77777778,
+        "premiums": {
+          "expected_loss": 187500,
+          "technical_net": 187500,
+          "technical_gross": 250000
+        },
+        "sections": [
+          {
+            "family": "PA_BENEFIT",
+            "premium_base": 90000000,
+            "loss_cost": 187500,
+            "rate_pm": 2.08333333
+          }
+        ]
+      }
+    }
+  }
+}

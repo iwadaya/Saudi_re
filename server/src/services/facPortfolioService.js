@@ -22,6 +22,9 @@
 //     from the same view the bind gate reads.
 
 import { pool } from '../db/pool.js';
+import { isFacPricingStrict } from './facPricingService.js';
+import { buildExposureProfile } from '../../../shared/fac/index.js';
+import { renewalSnapshot, renewalComparison } from '../../../shared/fac/renewal.js';
 
 /** The adequacy bands the distribution and the hit ratio share. */
 export const ADEQUACY_BANDS = [
@@ -240,5 +243,186 @@ export async function capacityUtilisation({ uwYear = null } = {}) {
     zones,
     zones_without_budget: zones.filter((z) => z.budget === null).length,
     over_budget: zones.filter((z) => z.utilisation !== null && z.utilisation > 1).length,
+  };
+}
+
+/**
+ * The drift rate: how often the client's price and the server's disagree.
+ *
+ * This exists to answer one question with data instead of nerve — is it safe
+ * to turn FAC_PRICING_STRICT on? The design's condition is a drift rate
+ * observed at zero for a full pricing cycle, and until Phase 5 the
+ * disagreements were logged and the agreements were not, so the rate had no
+ * denominator and the question had no answer.
+ *
+ * `readyForStrict` is a reading of the evidence, not a recommendation to act
+ * on it: a clean window on ten saves is not the same as a clean window on a
+ * quarter's business, and the caller can see both numbers.
+ *
+ * @param {object} args {days, minObservations}
+ * @returns {Promise<object>}
+ */
+export async function driftRate({ days = 90, minObservations = 100 } = {}) {
+  const [totals, byFamily, recent] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*)::int AS observations,
+              COUNT(*) FILTER (WHERE drift_count > 0)::int AS with_drift,
+              MAX(max_abs_diff) AS worst_diff,
+              MIN(observed_at) AS first_seen,
+              MAX(observed_at) AS last_seen,
+              MAX(observed_at) FILTER (WHERE drift_count > 0) AS last_drift_at
+         FROM public.fac_pricing_drift
+        WHERE observed_at >= now() - ($1 || ' days')::interval`,
+      [String(days)],
+    ),
+    pool.query(
+      `SELECT COALESCE(family_code, 'UNMAPPED') AS family,
+              COUNT(*)::int AS observations,
+              COUNT(*) FILTER (WHERE drift_count > 0)::int AS with_drift,
+              MAX(max_abs_diff) AS worst_diff
+         FROM public.fac_pricing_drift
+        WHERE observed_at >= now() - ($1 || ' days')::interval
+        GROUP BY 1
+        ORDER BY 3 DESC, 2 DESC`,
+      [String(days)],
+    ),
+    pool.query(
+      `SELECT fac_risk_id, observed_at, family_code, drift_count, max_abs_diff,
+              fields, request_id
+         FROM public.fac_pricing_drift
+        WHERE drift_count > 0
+          AND observed_at >= now() - ($1 || ' days')::interval
+        ORDER BY observed_at DESC
+        LIMIT 20`,
+      [String(days)],
+    ),
+  ]);
+
+  const t = totals.rows[0] || {};
+  const observations = Number(t.observations) || 0;
+  const withDrift = Number(t.with_drift) || 0;
+  const rate = observations > 0 ? withDrift / observations : null;
+
+  return {
+    window_days: days,
+    observations,
+    with_drift: withDrift,
+    drift_rate: rate,
+    worst_diff: t.worst_diff === null || t.worst_diff === undefined
+      ? null : Number(t.worst_diff),
+    first_seen: t.first_seen || null,
+    last_seen: t.last_seen || null,
+    last_drift_at: t.last_drift_at || null,
+    strict_mode: isFacPricingStrict(),
+    // Both conditions, reported separately, because "no drift" over too few
+    // saves is not evidence of anything.
+    ready_for_strict: rate === 0 && observations >= minObservations,
+    min_observations: minObservations,
+    verdict: observations === 0
+      ? 'No verifications recorded in this window — the drift rate is unknown, not zero.'
+      : rate === 0 && observations >= minObservations
+        ? `${observations} verifications, none disagreeing. The evidence supports enabling `
+          + 'FAC_PRICING_STRICT.'
+        : rate === 0
+          ? `${observations} verifications, none disagreeing — but that is under the `
+            + `${minObservations} this window asks for before calling it a pattern.`
+          : `${withDrift} of ${observations} verifications disagreed. Fix the divergence `
+            + 'before enabling strict mode, or every stale browser tab becomes a failed save.',
+    families: byFamily.rows.map((r) => ({
+      family: r.family,
+      observations: Number(r.observations),
+      with_drift: Number(r.with_drift),
+      drift_rate: Number(r.observations) > 0 ? Number(r.with_drift) / Number(r.observations) : null,
+      worst_diff: r.worst_diff === null ? null : Number(r.worst_diff),
+    })),
+    recent_drifts: recent.rows.map((r) => ({
+      fac_risk_id: r.fac_risk_id,
+      observed_at: r.observed_at,
+      family: r.family_code,
+      drift_count: r.drift_count,
+      max_abs_diff: r.max_abs_diff === null ? null : Number(r.max_abs_diff),
+      fields: r.fields,
+      request_id: r.request_id,
+    })),
+  };
+}
+
+/**
+ * The expiring risk behind a renewal, and why the price moved.
+ *
+ * The link is `expiring_reference`, which the underwriter sets when the
+ * renewal is created. It is matched against `bound_reference` first — the
+ * reference a bound risk actually carries — and against `fac_ref` second, so
+ * a renewal referencing a quote that was never bound still finds its
+ * predecessor.
+ *
+ * @param {string} riskId
+ * @returns {Promise<object>}
+ */
+export async function renewalDifference(riskId) {
+  const load = async (id) => {
+    const [riskRes, pricingRes, sectionsRes, locationsRes] = await Promise.all([
+      pool.query('SELECT * FROM public.fac_risk WHERE fac_risk_id = $1', [id]),
+      pool.query('SELECT * FROM public.fac_pricing WHERE fac_risk_id = $1', [id]),
+      pool.query(
+        'SELECT * FROM public.fac_risk_section WHERE fac_risk_id = $1 ORDER BY section_no', [id],
+      ),
+      pool.query('SELECT pd_si, bi_si FROM public.fac_location WHERE fac_risk_id = $1', [id]),
+    ]);
+    const risk = riskRes.rows[0];
+    if (!risk) return null;
+    const exposure = buildExposureProfile({
+      risk, sections: sectionsRes.rows, locations: locationsRes.rows,
+    });
+    return renewalSnapshot(risk, pricingRes.rows[0] || null, exposure);
+  };
+
+  const renewing = await load(riskId);
+  if (!renewing) {
+    const err = new Error('Risk not found');
+    err.status = 404;
+    err.code = 'NOT_FOUND';
+    throw err;
+  }
+
+  const { rows: riskRows } = await pool.query(
+    'SELECT expiring_reference, renewal_or_new FROM public.fac_risk WHERE fac_risk_id = $1',
+    [riskId],
+  );
+  const reference = String(riskRows[0]?.expiring_reference || '').trim();
+
+  if (!reference) {
+    return {
+      ...renewalComparison({ expiring: null, renewing }),
+      expiring_reference: null,
+      renewal_or_new: riskRows[0]?.renewal_or_new || null,
+      note: riskRows[0]?.renewal_or_new === 'RENEWAL'
+        ? 'This is marked as a renewal but carries no expiring reference, so there is nothing '
+          + 'to compare it against. Set the expiring reference on the Risk Detail screen.'
+        : 'This is not a renewal.',
+    };
+  }
+
+  // The bound reference is what a bound risk carries; fac_ref catches a
+  // renewal that references a predecessor which never bound.
+  const { rows: priorRows } = await pool.query(
+    `SELECT fac_risk_id FROM public.fac_risk
+      WHERE fac_risk_id <> $1
+        AND (bound_reference = $2 OR fac_ref = $2)
+      ORDER BY (bound_reference = $2) DESC, uw_year DESC NULLS LAST
+      LIMIT 1`,
+    [riskId, reference],
+  );
+
+  const expiring = priorRows[0] ? await load(priorRows[0].fac_risk_id) : null;
+
+  return {
+    ...renewalComparison({ expiring, renewing }),
+    expiring_reference: reference,
+    renewal_or_new: riskRows[0]?.renewal_or_new || null,
+    note: expiring
+      ? null
+      : `No risk in the book carries the reference "${reference}". The comparison is empty `
+        + 'because the predecessor is not here, not because nothing changed.',
   };
 }

@@ -642,12 +642,60 @@ export async function verifyFacPricingSave(riskId, posted, requestId) {
         fields: drifts.map((d) => d.field),
       });
     }
+    await recordDriftObservation(riskId, computed, drifts, requestId);
     return { drifts, computed };
   } catch (err) {
     logger.warn('fac pricing verification skipped', {
       requestId, facRiskId: riskId, error: err?.message,
     });
     return { drifts: [], computed: null };
+  }
+}
+
+/**
+ * Record one verification — agreeing or not.
+ *
+ * Every observation, not only the disagreements, because a drift RATE needs a
+ * denominator. A table of only the failures cannot tell a quiet week from a
+ * broken verifier, and the design makes flipping FAC_PRICING_STRICT
+ * conditional on an observed zero rate over a full pricing cycle.
+ *
+ * Never throws: a verification is an observation of a save, and an observation
+ * that could fail the save it is observing would be worse than no observation.
+ *
+ * @param {string} riskId
+ * @param {object|null} computed
+ * @param {Array<object>} drifts
+ * @param {string} [requestId]
+ * @returns {Promise<void>}
+ */
+export async function recordDriftObservation(riskId, computed, drifts, requestId) {
+  try {
+    // Only comparisons that actually happened are observations. A family with
+    // no workbook produces no comparable fields, and counting it as agreement
+    // would flatter the rate with rows that were never checked.
+    if (!computed?.ok || !computed.result) return;
+    await pool.query(
+      `INSERT INTO public.fac_pricing_drift
+         (fac_risk_id, family_code, drift_count, max_abs_diff, fields, detail,
+          request_id, strict_mode, rate_table_version)
+       VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9)`,
+      [
+        riskId,
+        computed.family || null,
+        drifts.length,
+        drifts.length > 0 ? Math.max(...drifts.map((d) => d.diff)) : null,
+        JSON.stringify(drifts.map((d) => d.field)),
+        JSON.stringify(drifts),
+        requestId || null,
+        isFacPricingStrict(),
+        computed.rate_table_version || null,
+      ],
+    );
+  } catch (err) {
+    logger.warn('fac drift observation not recorded', {
+      requestId, facRiskId: riskId, error: err?.message,
+    });
   }
 }
 

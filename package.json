@@ -17,6 +17,7 @@
     "lint:screens": "eslint client/src/screens --max-warnings=0",
     "typecheck": "npm run typecheck --prefix client",
     "budget:frontend": "node scripts/frontend-budget.mjs",
+    "golden:fac": "node scripts/update-fac-golden-master.mjs",
     "test": "npm run test:server && npm run test:client",
     "test:server": "vitest run --config server/vitest.config.js",
     "test:server:coverage": "vitest run --config server/vitest.config.js --coverage",
