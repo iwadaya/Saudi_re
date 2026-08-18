@@ -913,6 +913,15 @@ export const api = {
   facDeleteRisk(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}`, { method: 'DELETE', ...opts }); },
   /** Classes of business on the risk, each with its own sum insured. */
   facGetSections(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}/sections`, opts); },
+  /** The per-year exposure a burning cost divides by. */
+  facGetExperience(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}/experience`, opts); },
+  facSaveExperience(id: string, payload?: unknown, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/risks/${enc(id)}/experience`, { method: 'PUT', body: payload, ...opts });
+  },
+  /** The per-method audit trail behind the last priced row. */
+  facGetPricingMethods(id: string, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/risks/${enc(id)}/pricing-methods`, opts);
+  },
   facSaveSections(id: string, sections?: unknown[], opts?: RequestOpts): Promise<unknown> {
     return request(`/api/fac/risks/${enc(id)}/sections`, { method: 'PUT', body: { sections }, ...opts });
   },
@@ -1080,6 +1089,9 @@ export const api = {
   facGetClauses(opts?: RequestOpts): Promise<unknown>        { return request('/api/fac/reference/clauses', opts); },
   facGetFamilies(opts?: RequestOpts): Promise<unknown>       { return request('/api/fac/reference/families', opts); },
   facGetRateVersion(opts?: RequestOpts): Promise<unknown>    { return request('/api/fac/reference/rate-version', opts); },
+  facGetCurves(family?: string, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/reference/curves${family ? `?family=${enc(family)}` : ''}`, opts);
+  },
 
   // ── Workbench (Actuarial Formula Workbench) ──────────────────────────────
   workbenchListFormulas(opts?: RequestOpts): Promise<unknown> { return request('/api/workbench/formulas', opts); },

@@ -638,7 +638,11 @@ export const scheduleProperty = {
   // Only the workbook's own rate build-up is implemented today. The other
   // methods in the design are declared where they land so the pipeline can
   // report what a family is capable of before it is capable of it.
-  methods: ['WORKBOOK_RATE'],
+  methods: ['WORKBOOK_RATE', 'BURNING_COST', 'EXPOSURE_CURVE', 'BENCHMARK'],
+  // Property attritional experience develops fast and is comparatively
+  // stable, so it can carry most of the weight once there are enough
+  // claims — half weight at 6, capped at 80%.
+  credibility: { k: 6, maxZ: 0.80, unit: 'CLAIM_COUNT' },
   scoreCompletenessMin: SCORE_COMPLETENESS_MIN,
   requires: ['occupancy_code', 'risk_country_zone'],
   wizardSteps: ['FAC_LOCATIONS', 'FAC_COPE'],

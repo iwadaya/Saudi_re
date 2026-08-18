@@ -21,6 +21,7 @@ import {
   facRiskSaveSchema,
   facLocationsSaveSchema,
   facSectionsSaveSchema,
+  facExperienceSaveSchema,
   facPricingSaveSchema,
   facCopeSaveSchema,
   facLossesSaveSchema,
@@ -36,6 +37,7 @@ import {
   verifyFacPricingSave,
   isFacPricingStrict,
   getActiveRateTableVersion,
+  persistPricingMethods,
 } from '../services/facPricingService.js';
 
 const router = Router();
@@ -507,13 +509,21 @@ router.put('/fac/risks/:id/losses', validateBody(facLossesSaveSchema), asyncHand
       await client.query(`
         INSERT INTO public.fac_loss_history (fac_risk_id, loss_year, loss_date, loss_description,
           cause_of_loss, fgu_paid, fgu_outstanding, ri_paid, ri_outstanding,
-          mitigation_measures, is_open)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          mitigation_measures, is_open,
+          indexed_incurred, as_if_incurred, development_factor,
+          exclude_from_rating, exclusion_reason)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
       `, [
         riskId, numOrNull(l.loss_year), dateOrNull(l.loss_date), l.loss_description || null,
         l.cause_of_loss || null, numOrNull(l.fgu_paid), numOrNull(l.fgu_outstanding),
         numOrNull(l.ri_paid), numOrNull(l.ri_outstanding),
         l.mitigation_measures || null, l.is_open ?? true,
+        // Migration 135 — the underwriter's own restatement of a claim, and
+        // the flag that keeps a one-off out of the burn rate while leaving
+        // it in the history.
+        numOrNull(l.indexed_incurred), numOrNull(l.as_if_incurred),
+        numOrNull(l.development_factor),
+        l.exclude_from_rating ?? false, l.exclusion_reason || null,
       ]);
     }
     await touchParentEntity(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId });
@@ -535,6 +545,103 @@ router.put('/fac/risks/:id/losses', validateBody(facLossesSaveSchema), asyncHand
 // ═══════════════════════════════════════════════════════════════════════════
 // FAC PRICING — dual engine save/load
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FAC EXPERIENCE BASIS — what was on risk each year
+//
+// The denominator a burning cost divides by (migration 135). Loss history
+// on its own gives a total, not a rate, and the years with no claims are
+// exactly the ones that must not be dropped — leaving them out is the
+// commonest way a burn rate comes out too high.
+// ═══════════════════════════════════════════════════════════════════════════
+
+router.get('/fac/risks/:id/experience', asyncHandler(async (req, res) => {
+  const [basis, risk] = await Promise.all([
+    pool.query(
+      `SELECT loss_year, exposure_base, exposure_unit, premium, rate_change_pct,
+              claim_count, notes
+         FROM public.fac_experience_basis WHERE fac_risk_id = $1 ORDER BY loss_year`,
+      [req.params.id],
+    ),
+    pool.query(
+      `SELECT severity_trend_pct, experience_years, experience_notes
+         FROM public.fac_risk WHERE fac_risk_id = $1`,
+      [req.params.id],
+    ),
+  ]);
+  res.json({
+    basis: basis.rows,
+    severity_trend_pct: risk.rows[0]?.severity_trend_pct ?? null,
+    experience_years:   risk.rows[0]?.experience_years ?? null,
+    experience_notes:   risk.rows[0]?.experience_notes ?? null,
+  });
+}));
+
+router.put('/fac/risks/:id/experience', validateBody(facExperienceSaveSchema), asyncHandler(async (req, res) => {
+  const riskId = req.params.id;
+  await assertCanEdit(req, 'FAC_RISK', riskId);
+  const rows = req.body.basis || [];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await assertExists(client, 'public.fac_risk', 'fac_risk_id', riskId, 'Risk');
+    await assertParentEntityUnchanged(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
+    await client.query(`DELETE FROM public.fac_experience_basis WHERE fac_risk_id = $1`, [riskId]);
+    for (const r of rows) {
+      await client.query(
+        `INSERT INTO public.fac_experience_basis
+           (fac_risk_id, loss_year, exposure_base, exposure_unit, premium,
+            rate_change_pct, claim_count, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [
+          riskId, r.loss_year, numOrNull(r.exposure_base), r.exposure_unit || null,
+          numOrNull(r.premium), numOrNull(r.rate_change_pct),
+          numOrNull(r.claim_count), r.notes || null,
+        ],
+      );
+    }
+    await client.query(
+      `UPDATE public.fac_risk
+          SET severity_trend_pct = $2, experience_years = $3, experience_notes = $4
+        WHERE fac_risk_id = $1`,
+      [
+        riskId, numOrNull(req.body.severity_trend_pct),
+        numOrNull(req.body.experience_years), req.body.experience_notes || null,
+      ],
+    );
+    await touchParentEntity(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId });
+    await writeFacAuditEvent({
+      facRiskId: riskId, eventType: 'FAC_EXPERIENCE_SAVED', actor: actorLabel(req),
+      payload: { year_count: rows.length }, client,
+    });
+    await client.query('COMMIT');
+    const { rows: saved } = await client.query(
+      `SELECT loss_year, exposure_base, exposure_unit, premium, rate_change_pct,
+              claim_count, notes
+         FROM public.fac_experience_basis WHERE fac_risk_id = $1 ORDER BY loss_year`,
+      [riskId],
+    );
+    res.json({ basis: saved });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}));
+
+/** The per-method results behind the last priced row — the audit trail. */
+router.get('/fac/risks/:id/pricing-methods', asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT method_code, available, unavailable_reason, loss_cost, rate_pm,
+            weight, weight_source, override_reason_code, credibility_z, diagnostics
+       FROM public.fac_pricing_method WHERE fac_risk_id = $1
+      ORDER BY method_code`,
+    [req.params.id],
+  );
+  res.json({ methods: rows });
+}));
+
 
 router.get('/fac/risks/:id/pricing', asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
@@ -623,11 +730,14 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
       market_vs_tech_pct, market_vs_tech_band,
       engine_version, engine_warnings,
       capacity_proposed_pct, accepted_rate_pm, uw_note,
-      rate_table_version, family_code, score_completeness, exposure_basis
+      rate_table_version, family_code, score_completeness, exposure_basis,
+      blended_loss_cost_pm, cat_load_pm, risk_load_pm, internal_expense_pct,
+      blend_weights, blend_override_reason
     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
       $22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,
       $36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,
-      $48,$49,$50,$51)
+      $48,$49,$50,$51,
+      $52,$53,$54,$55,$56::jsonb,$57)
     ON CONFLICT (fac_risk_id) DO UPDATE SET
       market_rate_per_mille = EXCLUDED.market_rate_per_mille,
       market_premium = EXCLUDED.market_premium,
@@ -679,6 +789,12 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
       family_code = EXCLUDED.family_code,
       score_completeness = EXCLUDED.score_completeness,
       exposure_basis = EXCLUDED.exposure_basis,
+      blended_loss_cost_pm = EXCLUDED.blended_loss_cost_pm,
+      cat_load_pm = EXCLUDED.cat_load_pm,
+      risk_load_pm = EXCLUDED.risk_load_pm,
+      internal_expense_pct = EXCLUDED.internal_expense_pct,
+      blend_weights = EXCLUDED.blend_weights,
+      blend_override_reason = EXCLUDED.blend_override_reason,
       updated_at = now()
     RETURNING *
   `, [
@@ -711,7 +827,23 @@ router.put('/fac/risks/:id/pricing', validateBody(facPricingSaveSchema), asyncHa
     numOrNull(b.capacity_proposed_pct), numOrNull(b.accepted_rate_pm), b.uw_note || null,
     // Provenance (migration 134)
     rateTableVersion, familyCode, scoreCompleteness, exposureBasis,
+    // Technical build-up (migration 135). Preferring the server's own
+    // recomputation over the client payload keeps the recorded build-up
+    // consistent with the recorded methods.
+    numOrNull(b.blended_loss_cost_pm) ?? numOrNull(computed?.technical?.blendedLossCostPm),
+    numOrNull(b.cat_load_pm) ?? numOrNull(computed?.technical?.catLoadPm),
+    numOrNull(b.risk_load_pm) ?? numOrNull(computed?.technical?.riskLoadPm),
+    numOrNull(b.internal_expense_pct),
+    JSON.stringify(b.blend_weights ?? computed?.technical?.weights ?? {}),
+    b.blend_override_reason || computed?.technical?.weightOverrideReason || null,
   ]);
+    // The per-method audit trail behind this rate. Written from the
+    // server's own recomputation, not from the client payload — so what is
+    // recorded as "how the price was arrived at" is a figure the server
+    // will stand behind.
+    if (computed?.technical) {
+      await persistPricingMethods(cl, riskId, computed.technical);
+    }
     await touchParentEntity(cl, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId });
     await writeFacAuditEvent({ facRiskId: riskId, eventType: 'FAC_PRICING_SAVED', actor: actorLabel(req), payload: { underwriting_score: numOrNull(b.underwriting_score), capacity_grade: b.capacity_grade || null }, client: cl });
     await cl.query('COMMIT');

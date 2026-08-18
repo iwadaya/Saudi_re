@@ -6,7 +6,10 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../../api';
 import { useScreenSave } from '../../../hooks/useScreenSave';
-import { computeScoreAndDecision, SCORE_COMPLETENESS_MIN, RATING_BASIS_LABEL } from '../../../../../shared/fac/index.js';
+import {
+  computeScoreAndDecision, SCORE_COMPLETENESS_MIN, RATING_BASIS_LABEL,
+  METHOD_LABEL, benchmarkPosition,
+} from '../../../../../shared/fac/index.js';
 import { logger } from '../../../utils/logger';
 import './FacPricing.css';
 
@@ -451,5 +454,164 @@ export function EngineReadout({ output, exposure }) {
         </div>
       )}
     </div>
+  );
+}
+
+
+// ───────────────────────────────────────────────────────────────────────────
+// Loss cost — the independent estimates, and the weight each one carries.
+//
+// This is the part of the build-up that was missing entirely. The workbook
+// rate was the only view of the loss cost the tool held, the risk's own loss
+// history never reached a price (F4), and there was no exposure rating at
+// all (F3). Showing the candidates side by side, each with its weight and
+// its reason for carrying that weight, is what lets an underwriter defend
+// the number rather than just report it.
+//
+// A method with no data says so, in its own words, and takes no weight.
+// That is deliberately different from a method that priced at zero.
+// ───────────────────────────────────────────────────────────────────────────
+const METHOD_ROLE_LABEL = {
+  EXPERIENCE: 'experience',
+  EXPOSURE: 'exposure',
+  REFERENCE: 'reference only',
+};
+
+function MethodRow({ candidate, weight }) {
+  const pct = weight == null ? null : `${(weight * 100).toFixed(0)}%`;
+  const d = candidate.diagnostics || {};
+  const detail = candidate.code === 'BURNING_COST' && candidate.available
+    ? `${d.exposure_years ?? '—'} yrs · ${candidate.claimCount ?? 0} claim${candidate.claimCount === 1 ? '' : 's'} in layer`
+    : candidate.code === 'BENCHMARK' && candidate.available
+      ? `${d.n} bound · ${String(d.confidence || '').toLowerCase()} confidence`
+      : candidate.code === 'EXPOSURE_CURVE' && candidate.available
+        ? (d.bands?.[0]?.curve ? `curve ${d.bands[0].curve}` : 'curve applied')
+        : METHOD_ROLE_LABEL[candidate.role] || '';
+
+  return (
+    <div className="facpx-method">
+      <div>
+        <span className="facpx-method-name">{candidate.label || METHOD_LABEL[candidate.code] || candidate.code}</span>
+        {detail && <span className="facpx-method-detail">{detail}</span>}
+        {!candidate.available && (
+          <div className="facpx-method-unavailable">{candidate.unavailableReason}</div>
+        )}
+      </div>
+      <div className="facpx-method-rate">{candidate.available ? pm(candidate.ratePm) : '—'}</div>
+      <div className={`facpx-method-weight${pct ? '' : ' facpx-method-weight--none'}`}>
+        {pct || (candidate.role === 'REFERENCE' ? 'reference' : '—')}
+      </div>
+    </div>
+  );
+}
+
+export function LossCostPanel({ technical, quotedRatePm }) {
+  if (!technical) {
+    return (
+      <div className="facpx-wf-empty">
+        Loss-cost methods run on the server — they need the loss experience and the
+        curve library. Waiting for the first price…
+      </div>
+    );
+  }
+  if (!technical.priced) {
+    return (
+      <div className="facpx-wf-error">
+        {technical.reason || 'No loss-cost method produced a rate.'}
+      </div>
+    );
+  }
+
+  const z = technical.credibility?.z;
+  const benchmark = (technical.candidates || []).find((c) => c.code === 'BENCHMARK');
+  const position = benchmark?.available
+    ? benchmarkPosition(quotedRatePm, benchmark.diagnostics) : null;
+
+  return (
+    <section aria-label="Loss cost methods">
+      <div className="facpx-method facpx-method--head">
+        <div className="facpx-col-head">Method</div>
+        <div className="facpx-col-head facpx-col-head--num">Rate ‰</div>
+        <div className="facpx-col-head facpx-col-head--num">Weight</div>
+      </div>
+      {(technical.candidates || []).map((c) => (
+        <MethodRow key={c.code} candidate={c} weight={technical.weights?.[c.code] ?? null} />
+      ))}
+
+      <div className="facpx-method facpx-method--total">
+        <div>
+          <span className="facpx-method-name">Blended loss cost</span>
+          {z != null && (
+            <span className="facpx-method-detail">
+              credibility Z = {(z * 100).toFixed(0)}%
+              {technical.credibility?.capped ? ' (capped)' : ''}
+              {technical.weightSource === 'OVERRIDE' ? ' · weights overridden' : ''}
+            </span>
+          )}
+        </div>
+        <div className="facpx-method-rate">{pm(technical.blendedLossCostPm)}</div>
+        <div className="facpx-method-weight" />
+      </div>
+
+      {technical.weightSource === 'OVERRIDE' && technical.weightOverrideReason && (
+        <div className="facpx-method-override">
+          Weights overridden — {technical.weightOverrideReason.replace(/_/g, ' ').toLowerCase()}
+        </div>
+      )}
+
+      {position && (
+        <div className="facpx-method-benchmark">
+          Quoted rate sits {position.position.replace(/_/g, ' ').toLowerCase()} of the bound book
+          {position.ratio != null && <> — {position.ratio.toFixed(2)}× the median</>}.
+        </div>
+      )}
+
+      {(technical.warnings || []).length > 0 && (
+        <div className="facpx-warnings">
+          <div className="facpx-warnings-kicker">METHOD NOTES</div>
+          {technical.warnings.map((w, i) => (
+            <div key={i} className="facpx-warning">{w}</div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * The technical build-up that sits between the blended loss cost and the
+ * quoted rate. Shown only when the server priced it — the local engine
+ * cannot see the loss history or the curves.
+ */
+export function TechnicalBuildUp({ technical }) {
+  if (!technical?.priced) return null;
+  const basis = technical.riskLoadBasis || {};
+  return (
+    <section aria-label="Technical build-up">
+      <WaterfallRow label="Blended loss cost" value={pm(technical.blendedLossCostPm)} emphasis />
+      {technical.catLoadPm > 0 && (
+        <WaterfallRow label="+ Cat load" detail="modelled AAL" value={pm(technical.catLoadPm)} />
+      )}
+      <WaterfallRow label="= Expected loss" value={pm(technical.expectedLossPm)} emphasis />
+      {technical.riskLoadPm > 0 && (
+        <WaterfallRow
+          label="+ Risk load"
+          detail={basis.kind === 'THETA_SIGMA'
+            ? `θ ${basis.theta} × σ over ${basis.years} yrs`
+            : `${((basis.pct || 0) * 100).toFixed(1)}% of expected loss`}
+          value={pm(technical.riskLoadPm)}
+        />
+      )}
+      {technical.internalExpensePm > 0 && (
+        <WaterfallRow label="+ Internal expense" value={pm(technical.internalExpensePm)} />
+      )}
+      <WaterfallRow label="= Technical net" value={pm(technical.technicalNetPm)} emphasis />
+      <WaterfallRow
+        label="÷ (1 − commission − brokerage − tax − margin)"
+        detail={`gross-up ×${(1 / (technical.grossUpDenominator || 1)).toFixed(3)}`}
+        value={pm(technical.technicalGrossPm)}
+      />
+      <WaterfallRow label="= TECHNICAL GROSS" value={pm(technical.technicalGrossPm)} emphasis />
+    </section>
   );
 }

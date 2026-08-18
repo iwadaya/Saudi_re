@@ -39,6 +39,7 @@ import { logger } from '../../../utils/logger';
 import './FacPricing.css';
 import {
   UwFactorsPanel, EngineReadout, PricingWaterfall, FamilyBlocker, ExposureBasisNote,
+  LossCostPanel, TechnicalBuildUp,
 } from './FacPricingPanels';
 
 const ENGINE_VERSION = '2.0.0';
@@ -201,6 +202,11 @@ export default function FacPricing() {
   const [locations, setLocations] = useState([]);
   const [sections, setSections] = useState([]);
   const [engineOutput, setEngineOutput] = useState(null);
+  // The server's full pricing run: every loss-cost method, the credibility
+  // blend and the technical build-up. The local engine cannot produce this —
+  // it has no sight of the loss experience, the curve library or the bound
+  // book — so this is fetched rather than computed.
+  const [technical, setTechnical] = useState(null);
 
   useEffect(() => {
     Promise.all([
@@ -392,19 +398,51 @@ export default function FacPricing() {
     biIndemnity, natcatRates, uwSelections, eng, exposure, coverLoadings,
   ]);
 
-  // ── Quoted rate = engine final gross × (1 + UW adjustment) ────────
+  // ── Server-side price (debounced) ────────────────────────────────
+  // Slower than the local engine on purpose: it is a round trip, and it is
+  // the number that gets quoted. The local engine keeps the rate readout
+  // instant while this settles.
+  useEffect(() => {
+    if (!riskId || blocker || !family?.implemented) { setTechnical(null); return undefined; }
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      api.facPriceRisk(riskId, {
+        indemnity_months:   numOrNull(eng.indemnity_months),
+        commission_pct:     numOrNull(eng.commission_pct),
+        margin_pct:         numOrNull(eng.margin_pct),
+        other_expenses_pct: numOrNull(eng.other_expenses_pct),
+        market_rate_pm:     numOrNull(eng.market_rate_pm),
+        extra_cover_loadings: coverLoadings,
+        factor_selections: uwSelections,
+      })
+        .then((out) => { if (!cancelled) setTechnical(out?.technical ?? null); })
+        .catch((err) => { if (!cancelled) { logger.error('[FacPricing] price failed:', err); setTechnical(null); } });
+    }, 400);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [riskId, blocker, family, eng, uwSelections, coverLoadings]);
+
+  // ── Quoted rate = technical gross × (1 + UW adjustment) ───────────
   // The adjustment is the underwriter's last word on the price and stays
   // visible as its own line in the build-up rather than being folded into
   // an upstream number.
+  // The blend is authoritative once the server has priced it. Until then —
+  // and whenever no Phase 2 data exists — it equals the local engine's own
+  // gross rate, so the number never jumps when the round trip lands.
   const quoted = useMemo(() => {
-    if (!engineOutput || engineOutput._error) return { rate: null, premium: null, adj: 0 };
     const adj = numOrNull(eng.uw_adjustment_pct) || 0;
-    const gross = engineOutput.final_gross_rate_pm;
-    if (gross == null) return { rate: null, premium: null, adj };
+    const gross = technical?.priced
+      ? technical.technicalGrossPm
+      : (engineOutput && !engineOutput._error ? engineOutput.final_gross_rate_pm : null);
+    if (gross == null) return { rate: null, premium: null, adj, source: null };
     const rate = gross * (1 + adj);
     const si = exposure.total_si;
-    return { rate, premium: si > 0 ? (rate * si) / 1000 : null, adj };
-  }, [engineOutput, eng.uw_adjustment_pct, exposure]);
+    return {
+      rate,
+      premium: si > 0 ? (rate * si) / 1000 : null,
+      adj,
+      source: technical?.priced ? 'BLEND' : 'ENGINE',
+    };
+  }, [technical, engineOutput, eng.uw_adjustment_pct, exposure]);
 
   const save = useCallback(async () => {
     if (readOnly) return true;
@@ -457,6 +495,15 @@ export default function FacPricing() {
       payload.market_vs_tech_pct  = engineOutput.market_vs_tech_pct ?? null;
       payload.market_vs_tech_band = engineOutput.market_vs_tech_band ?? null;
       payload.engine_warnings     = engineOutput.warnings || [];
+    }
+    if (technical?.priced) {
+      payload.blended_loss_cost_pm = technical.blendedLossCostPm ?? null;
+      payload.cat_load_pm          = technical.catLoadPm ?? null;
+      payload.risk_load_pm         = technical.riskLoadPm ?? null;
+      payload.blend_weights        = technical.weights || {};
+      payload.blend_override_reason = technical.weightOverrideReason || null;
+    }
+    if (engineOutput && !engineOutput._error) {
       // The quoted figures land in the columns the manual block used to
       // own, so the Summary screen and every existing report keep working.
       payload.final_rate_per_mille = quoted.rate;
@@ -483,7 +530,7 @@ export default function FacPricing() {
     }
   }, [
     riskId, readOnly, markReadOnly, selectedExtensions, customExtensions, eng,
-    coverLoadings, engineOutput, quoted, family, rateVersion, exposure, showToast,
+    coverLoadings, engineOutput, technical, quoted, family, rateVersion, exposure, showToast,
   ]);
 
   const extCheckbox = (ext, catColor) => {
@@ -606,7 +653,20 @@ export default function FacPricing() {
               )}
             </Sec>
 
-            <Sec title="Rate Build-Up">
+            <Sec title="Loss Cost">
+              <LossCostPanel technical={technical} quotedRatePm={quoted.rate} />
+            </Sec>
+
+            <Sec title="Technical Build-Up">
+              <TechnicalBuildUp technical={technical} />
+              {!technical?.priced && (
+                <div className="facpx-note">
+                  The technical build-up appears once the server has priced the risk.
+                </div>
+              )}
+            </Sec>
+
+            <Sec title="Workbook Rate Build-Up">
               <PricingWaterfall
                 output={engineOutput}
                 exposure={exposure}
@@ -627,7 +687,9 @@ export default function FacPricing() {
               <div className="facpx-quoted">
                 <div className="facpx-quoted-inner">
                   <div>
-                    <div className="facpx-quoted-kicker">Quoted Rate (‰)</div>
+                    <div className="facpx-quoted-kicker">
+                      Quoted Rate (‰){quoted.source === 'ENGINE' ? ' · workbook only' : ''}
+                    </div>
                     <div className="facpx-quoted-val">{quoted.rate.toFixed(4)}</div>
                   </div>
                   <div className="facpx-quoted-col--right">

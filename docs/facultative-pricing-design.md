@@ -1,7 +1,7 @@
 # Facultative Pricing — Multi-Class Design & Redesign Proposal
 
-**Status:** Phases 0 and 1 are **implemented** — see [§9 Implementation status](#9-implementation-status).
-Phases 2–5 remain proposals for review.
+**Status:** Phases 0, 1 and 2 are **implemented** — see [§9 Implementation status](#9-implementation-status).
+Phases 3–5 remain proposals for review.
 **Audience:** Underwriting / actuarial / product / engineering.
 **Scope:** The facultative (`/fac/*`) pricing capability across all classes of
 business, grouped into families that share a rating basis.
@@ -1211,7 +1211,7 @@ These change the shape of the build, so I would rather ask than guess.
 
 ## 9. Implementation status
 
-Phases 0 and 1 shipped together. Nothing in Phases 2–5 is built.
+Phases 0, 1 and 2 are built. Nothing in Phases 3–5 is.
 
 ### What landed
 
@@ -1240,6 +1240,64 @@ Phases 0 and 1 shipped together. Nothing in Phases 2–5 is built.
 | **F12** | Every priced row is stamped with the reference-set label in force at the risk's inception date; Summary shows it. |
 | **F13** | The engine is in `shared/`, the server recomputes it, and drift is logged and counted (warn-only; `FAC_PRICING_STRICT=1` enforces). |
 
+### Phase 2 — loss-cost methods and the blend
+
+An underwriter can now see where a rate came from, and the risk's own loss
+history finally moves it.
+
+| Area | Change |
+| --- | --- |
+| **Migration 135** | Restatement columns on `fac_loss_history` (indexed, as-if, development factor, exclude-with-reason); `fac_experience_basis` — the per-year exposure a burn rate divides by; `fac_pricing_method` — every candidate with its weight and where that weight came from; `fac_exposure_curve` / `_point` / `fac_curve_band` — the curve library; the technical build-up columns on `fac_pricing`. |
+| **`BURNING_COST`** | Index to current values, develop open claims, restate as-if the structure being quoted, apply the layer, divide by every exposure year — including the clean ones. Per-loss overrides beat the derived chain. Reports an on-levelled loss ratio as a cross-check using the treaty side's own `shared/onLevel.js`. |
+| **`EXPOSURE_CURVE`** | Layer and deductible allocation off a curve, with monotone interpolation of tabulated curves and a verified two-parameter Bernegger MBBEFD generator. Curves are reference data selected per size band. |
+| **`BENCHMARK`** | The median rate the book has actually bound for the same family and region, with quartiles and a confidence grade. Shown beside the priced methods and never weighted — it records what was charged, not what the losses will be. Replaces the synthetic `fac_market_rate` seed nothing read. |
+| **Credibility** | Bühlmann–Straub `Z = n/(n+k)`, with `k` and a cap per family — property attritional experience can carry 80%, casualty excess 60%, cyber 50%. Weight overrides require a reason code from a closed list. |
+| **Pipeline** | Blend → cat load → risk load (θ×σ measured from the risk's own annual dispersion where there are three or more years, a flat percentage otherwise) → internal expense → gross up **once**. |
+| **UI** | A Loss Cost panel showing every method, its rate and its weight; a Technical Build-Up beneath it; the Loss Experience screen gained the per-year exposure grid, the claims-inflation assumption and a working claim-ratio column. |
+| **Tests** | 135 new tests in `shared/fac`, 15 new DB-backed integration tests, and the golden master extended. |
+
+**The invariant that made this safe.** With the workbook rate as the only
+candidate and no loads configured, the pipeline's technical gross rate equals
+the engine's own final gross rate exactly. A risk with no loss history and no
+curve prices today as it did before Phase 2. There is a unit test and an
+integration test that each assert it.
+
+### A constraint we kept: curves are loaded, not invented
+
+The plan called for exposure rating "via the existing MBBEFD". The
+implementation deliberately does not use it.
+
+`client/src/utils/npPricingEngine.js` carries a one-parameter log curve
+labelled MBBEFD, with Swiss Re Y-curve constants — and
+`docs/pricing-signoff-required.md` records both as an open **HIGH** finding
+marked "do not auto-fix". Reproducing that mapping in the facultative path
+would have put an unverified parameterisation into a price.
+
+What shipped instead:
+
+- The **allocation arithmetic**, which is the definition of an exposure curve
+  and needs no calibration:
+  `E[layer] = MPL × [G(min((D+L)/MPL,1)) − G(min(D/MPL,1))]`.
+- Bernegger's **two-parameter** curve `G(x)` in full, all four parameter
+  cases, with the ASTIN citation. Its branch continuity is unit-tested —
+  the general case converging on the `b = 1` and `bg = 1` special cases —
+  which is what makes the transcription checkable rather than trusted.
+- **No `c → (b, g)` mapping.** Two sources disagreed on the exponent in the
+  Swiss Re one-parameter subfamily and the primary references were
+  unreachable from this environment. Parameters are supplied by whoever owns
+  the curve set, not guessed here.
+- **One curve ships as data**: `G(x) = x`, the uniform destruction rate. It
+  is the definitional baseline and asserts nothing about severity. Every
+  other curve encodes a view of severity that belongs to whoever holds the
+  data behind it, so curve sets are loaded. `fac_exposure_curve.source` is
+  `NOT NULL` — a curve nobody can attribute is a rate nobody can defend.
+
+The practical consequence: until a curve set is loaded, `EXPOSURE_CURVE`
+reports itself unavailable with a reason, takes no weight, and the blend
+carries on with the methods that do have data. That is a working state, not
+a broken one — and it means the MBBEFD sign-off no longer blocks Phase 2,
+only the *convenience* of picking a curve by number.
+
 ### Deliberately not done
 
 - **F14** (accumulation, real benchmarks) — Phase 4 and §4.10; needs the
@@ -1251,8 +1309,17 @@ Phases 0 and 1 shipped together. Nothing in Phases 2–5 is built.
 - **M7** — the extension catalogue is still hard-coded in `FacPricing.jsx`.
   Its numbers now feed the engine, but they are not yet versioned data with
   an explicit additive/multiplicative flag.
-- **Nine of ten families** — declared with their rating basis, methods and
-  planned phase, so the tool can say what a class needs. No engines.
+- **Nine of ten families** — declared with their rating basis, methods,
+  credibility parameters and planned phase, so the tool can say what a class
+  needs. No engines.
+- **`FREQ_SEVERITY` and `CAT_MODEL`** — declared in the method registry and
+  wired through the blend as roles, but not implemented. The cat load is an
+  input the pipeline adds; nothing computes it yet.
+- **Curve admin UI** — curves and bands are loaded by SQL. The screen reads
+  them; nothing in the UI edits them.
+- **Per-section pricing** — `fac_pricing_method` carries a `section_id` and
+  the pipeline runs once per risk. A multi-family risk still prices through
+  its primary class.
 
 ### Notes for review
 
@@ -1264,7 +1331,14 @@ Phases 0 and 1 shipped together. Nothing in Phases 2–5 is built.
   styles against a 3133 baseline. This change reduces it to 3199 and
   reconciles the baseline, the same way the committed note records the
   earlier 3065→3133 reconciliation. It did not introduce the breach.
-- **The MBBEFD sign-off in §8 is still open** and still gates Phase 2.
+- **The MBBEFD sign-off in §8 is still open.** It no longer gates exposure
+  rating — see "curves are loaded, not invented" above — but the treaty
+  engine's own curve remains unresolved, and any future `c → (b, g)`
+  convenience mapping depends on it.
+- **The blend can move an existing rate.** A risk that has loss history
+  entered will now price off a credibility-weighted blend rather than the
+  workbook rate alone. That is the point of Phase 2, but it means the first
+  save after loading experience data can change a quoted number.
 
 ---
 

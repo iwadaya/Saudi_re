@@ -316,3 +316,43 @@
   color: rgba(var(--accent-rgb), 0.8);
 }
 .facpx-quoted-val { font-size: 24px; font-weight: 900; color: var(--accent); margin-top: 4px; }
+
+/* ── Loss-cost methods ──────────────────────────────────────────────── */
+.facpx-method {
+  display: grid;
+  grid-template-columns: 1fr 110px 90px;
+  gap: 12px;
+  padding: 8px 0;
+  align-items: baseline;
+  border-bottom: 1px solid var(--hairline);
+}
+.facpx-method--head { padding: 0 0 8px; border-bottom: 1px solid var(--rule-strong, var(--hairline)); }
+.facpx-method--total { border-bottom: 0; border-top: 1px solid var(--hairline); }
+.facpx-method-name { font-size: 12px; font-weight: 600; color: rgba(var(--text-rgb), 0.85); }
+.facpx-method--total .facpx-method-name { font-weight: 800; color: var(--accent); }
+.facpx-method-detail { font-size: 10px; color: var(--muted); margin-left: 8px; }
+.facpx-method-unavailable {
+  font-size: 10.5px;
+  color: rgba(var(--text-rgb), 0.55);
+  margin-top: 3px;
+  max-width: 60ch;
+  line-height: 1.45;
+}
+.facpx-method-rate,
+.facpx-method-weight {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(var(--text-rgb), 0.85);
+}
+.facpx-method--total .facpx-method-rate { color: var(--accent); font-weight: 800; }
+.facpx-method-weight { color: var(--accent-blue); }
+.facpx-method-weight--none { color: rgba(var(--text-rgb), 0.4); font-weight: 500; }
+.facpx-method-override,
+.facpx-method-benchmark {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 10px;
+}
+.facpx-method-override { color: var(--accent-amber); }

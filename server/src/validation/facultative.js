@@ -218,6 +218,35 @@ export const facSectionsSaveSchema = z.object({
 
 
 /**
+ * One year of exposure history (migration 135).
+ *
+ * This is the denominator a burning cost divides by. A year with no losses
+ * still needs a row — dropping the clean years is the commonest way a burn
+ * rate comes out too high.
+ */
+export const facExperienceBasisRowSchema = z.object({
+  loss_year:       z.preprocess((v) => {
+    if (v === null || v === undefined || v === '') return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.trunc(n) : undefined;
+  }, z.number().int().min(1900).max(2200)),
+  exposure_base:   money,
+  exposure_unit:   optionalText,
+  premium:         money,
+  rate_change_pct: optionalNumber,
+  claim_count:     optionalInt,
+  notes:           optionalText,
+}).passthrough();
+
+/** PUT /api/fac/risks/:id/experience — the basis rows plus the risk-level assumptions. */
+export const facExperienceSaveSchema = z.object({
+  basis:              z.array(facExperienceBasisRowSchema).max(40, 'maximum 40 experience years').default([]),
+  severity_trend_pct: optionalNumber,
+  experience_years:   optionalInt,
+  experience_notes:   optionalText,
+}).passthrough();
+
+/**
  * PUT /api/fac/risks/:id/pricing — accepts:
  *   • The historic dual-engine fields (market / actuarial / blend / final).
  *   • The new engine inputs + outputs from computeFacQuote (migration 082).
@@ -284,6 +313,13 @@ export const facPricingSaveSchema = z.object({
   // and how much of the scoring weight was actually selected.
   rate_table_version:       optionalText,
   family_code:              optionalText,
+  // Migration 135 — the technical build-up behind the signed rate.
+  blended_loss_cost_pm:     optionalNumber,
+  cat_load_pm:              optionalNumber,
+  risk_load_pm:             optionalNumber,
+  internal_expense_pct:     optionalFraction01,
+  blend_weights:            z.record(z.unknown()).optional(),
+  blend_override_reason:    optionalText,
   score_completeness:       optionalFraction01,
   exposure_basis:           optionalText,
 
@@ -346,6 +382,13 @@ const facLossRowSchema = z.object({
   ri_outstanding:      money,
   mitigation_measures: optionalText,
   is_open:             boolish,
+  // Migration 135 — the underwriter's own restatement of a claim, which
+  // overrides the derived index / development / as-if chain.
+  indexed_incurred:    money,
+  as_if_incurred:      money,
+  development_factor:  optionalNumber,
+  exclude_from_rating: boolish,
+  exclusion_reason:    optionalText,
 }).passthrough();
 
 /** PUT /api/fac/risks/:id/losses — full loss-history replacement. */

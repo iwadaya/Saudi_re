@@ -176,6 +176,37 @@ router.get('/fac/reference/rate-version', asyncHandler(async (req, res) => {
   res.json(rows[0] || null);
 }));
 
+// The exposure-curve library and the size bands each family rates through.
+//
+// One curve ships as data — G(x) = x, the uniform destruction rate, which
+// asserts nothing about severity. Every other curve encodes a view of how
+// severe losses are for a kind of risk, and that view belongs to whoever
+// holds the data behind it, so curve sets are loaded rather than invented
+// here. See docs/facultative-pricing-design.md §8.
+router.get('/fac/reference/curves', asyncHandler(async (req, res) => {
+  const family = typeof req.query.family === 'string' ? req.query.family : null;
+  const [curves, bands] = await Promise.all([
+    pool.query(
+      `SELECT curve_id, curve_code, curve_name, curve_set, source, kind, params,
+              effective_from, effective_to, active, notes
+         FROM public.fac_exposure_curve
+        WHERE active = true
+        ORDER BY curve_set NULLS LAST, curve_code`,
+    ),
+    pool.query(
+      `SELECT b.band_id, b.family_code, b.min_exposure, b.max_exposure,
+              c.curve_code, c.curve_name
+         FROM public.fac_curve_band b
+         JOIN public.fac_exposure_curve c ON c.curve_id = b.curve_id
+        WHERE ($1::text IS NULL OR b.family_code = $1)
+        ORDER BY b.family_code, b.min_exposure`,
+      [family],
+    ),
+  ]);
+  res.set('Cache-Control', CACHE_HEADER);
+  res.json({ curves: curves.rows, bands: bands.rows });
+}));
+
 router.get('/fac/reference/clauses', asyncHandler(async (_req, res) => {
   const { rows } = await pool.query(`
     SELECT clause_code, clause_name, clause_category, is_mandatory, sort_order

@@ -51,6 +51,8 @@ const apiMock = vi.hoisted(() => ({
   facGetBiIndemnity: vi.fn(),
   facGetNatcatRates: vi.fn(),
   facGetRateVersion: vi.fn(),
+  // Phase 2: the loss-cost methods and the blend run on the server.
+  facPriceRisk: vi.fn(),
   // UW factors panel (independent entity + save)
   facGetUwFactors: vi.fn(),
   facSaveUwFactors: vi.fn(),
@@ -244,6 +246,9 @@ beforeEach(() => {
   apiMock.facGetBiIndemnity.mockResolvedValue(BI_INDEMNITY);
   apiMock.facGetNatcatRates.mockResolvedValue(NATCAT);
   apiMock.facGetRateVersion.mockResolvedValue(RATE_VERSION);
+  // Default: the server priced it with the workbook rate alone, which is the
+  // no-history / no-curve case and must equal the local engine's own answer.
+  apiMock.facPriceRisk.mockResolvedValue(null);
   apiMock.facGetUwFactors.mockResolvedValue({ selections: {}, notes: '' });
   apiMock.facSaveUwFactors.mockResolvedValue({ ok: true });
   apiMock.facSavePricing.mockResolvedValue({ ok: true });
@@ -614,5 +619,132 @@ describe('FacPricing error path', () => {
     await waitFor(() => {
       expect(screen.getByText('Engine Inputs')).toBeInTheDocument();
     });
+  });
+});
+
+
+describe('FacPricing — loss-cost methods and the blend (Phase 2)', () => {
+  const priced = (over = {}) => ({
+    ok: true,
+    technical: {
+      priced: true,
+      candidates: [
+        { code: 'WORKBOOK_RATE', label: 'Workbook rate', role: 'EXPOSURE', available: true, ratePm: 1.0615, diagnostics: {} },
+        {
+          code: 'BURNING_COST', label: 'Burning cost', role: 'EXPERIENCE', available: true,
+          ratePm: 2.0, claimCount: 6, diagnostics: { exposure_years: 5 },
+        },
+        {
+          code: 'EXPOSURE_CURVE', label: 'Exposure curve', role: 'EXPOSURE', available: false,
+          ratePm: null, unavailableReason: 'No exposure curve is configured for this family and size band.',
+          diagnostics: {},
+        },
+        {
+          code: 'BENCHMARK', label: 'Benchmark', role: 'REFERENCE', available: true,
+          ratePm: 1.5, diagnostics: { n: 7, confidence: 'MEDIUM', p25: 1.2, p50: 1.5, p75: 1.9 },
+        },
+      ],
+      weights: { WORKBOOK_RATE: 0.5, BURNING_COST: 0.5 },
+      weightSource: 'MECHANICAL',
+      weightOverrideReason: null,
+      credibility: { z: 0.5, capped: false },
+      blendedLossCostPm: 1.53075,
+      catLoadPm: 0,
+      expectedLossPm: 1.53075,
+      riskLoadPm: 0,
+      riskLoadBasis: { kind: 'PERCENTAGE', pct: 0 },
+      internalExpensePm: 0,
+      technicalNetPm: 1.53075,
+      grossUpDenominator: 0.745,
+      technicalGrossPm: 2.0547,
+      warnings: [],
+      ...over,
+    },
+  });
+
+  it('shows each method, its rate and the weight it carries', async () => {
+    apiMock.facPriceRisk.mockResolvedValue(priced());
+    render(<FacPricing />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('region', { name: 'Loss cost methods' })).toBeInTheDocument();
+    }, { timeout: 3000 });
+
+    const panel = within(screen.getByRole('region', { name: 'Loss cost methods' }));
+    expect(panel.getByText('Workbook rate')).toBeInTheDocument();
+    expect(panel.getByText('1.0615')).toBeInTheDocument();
+    expect(panel.getByText('Burning cost')).toBeInTheDocument();
+    expect(panel.getByText('2.0000')).toBeInTheDocument();
+    expect(panel.getByText('5 yrs · 6 claims in layer')).toBeInTheDocument();
+    expect(panel.getAllByText('50%')).toHaveLength(2);
+    expect(panel.getByText('Blended loss cost')).toBeInTheDocument();
+    expect(panel.getByText('1.5308')).toBeInTheDocument();
+    expect(panel.getByText('credibility Z = 50%')).toBeInTheDocument();
+  });
+
+  it('says why a method is unavailable instead of pricing it at zero', async () => {
+    apiMock.facPriceRisk.mockResolvedValue(priced());
+    render(<FacPricing />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/No exposure curve is configured/)).toBeInTheDocument();
+    }, { timeout: 3000 });
+
+    const panel = within(screen.getByRole('region', { name: 'Loss cost methods' }));
+    // Unavailable: no rate, no weight — and visibly different from a zero.
+    expect(panel.getByText('Exposure curve')).toBeInTheDocument();
+    expect(panel.getByText('reference')).toBeInTheDocument();   // the benchmark
+  });
+
+  it('drives the quoted rate off the blend once the server has priced it', async () => {
+    apiMock.facPriceRisk.mockResolvedValue(priced());
+    render(<FacPricing />);
+
+    // technical gross 2.0547 — the blend, not the workbook rate's 1.9128.
+    await waitFor(() => {
+      expect(screen.getAllByText('2.0547').length).toBeGreaterThan(0);
+    }, { timeout: 3000 });
+    expect(waterfallValue('= TECHNICAL GROSS')).toBe('1.9128');   // workbook build-up, unchanged
+    expect(screen.queryByText(/workbook only/)).toBeNull();
+  });
+
+  it('falls back to the workbook rate, and says so, when the server cannot price', async () => {
+    apiMock.facPriceRisk.mockResolvedValue({ ok: true, technical: { priced: false, reason: 'No loss-cost method produced a rate.' } });
+    render(<FacPricing />);
+
+    // The screen shows the workbook rate immediately and keeps it — the
+    // server round trip lands with nothing better, so nothing jumps.
+    await waitFor(() => {
+      expect(screen.getByText('No loss-cost method produced a rate.')).toBeInTheDocument();
+    }, { timeout: 3000 });
+    expect(screen.getByText(/workbook only/)).toBeInTheDocument();
+  });
+
+  it('flags an overridden blend with its reason', async () => {
+    apiMock.facPriceRisk.mockResolvedValue(priced({
+      weightSource: 'OVERRIDE', weightOverrideReason: 'LARGE_LOSS_DISTORTION',
+      weights: { WORKBOOK_RATE: 1 },
+    }));
+    render(<FacPricing />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Weights overridden — large loss distortion/)).toBeInTheDocument();
+    }, { timeout: 3000 });
+  });
+
+  it('persists the blend alongside the engine snapshot', async () => {
+    apiMock.facPriceRisk.mockResolvedValue(priced());
+    render(<FacPricing />);
+    await waitFor(() => {
+      expect(screen.getByRole('region', { name: 'Loss cost methods' })).toBeInTheDocument();
+    }, { timeout: 3000 });
+
+    fireEvent.change(screen.getByDisplayValue('20%'), { target: { value: '25' } });
+    fireEvent.click(screen.getByRole('button', { name: 'WIZ-NEXT' }));
+    await waitFor(() => expect(wiz.next).toBe(true));
+
+    const payload = apiMock.facSavePricing.mock.calls[0][1];
+    expect(payload.blended_loss_cost_pm).toBeCloseTo(1.53075, 6);
+    expect(payload.blend_weights).toEqual({ WORKBOOK_RATE: 0.5, BURNING_COST: 0.5 });
   });
 });

@@ -20,7 +20,7 @@
 
 import { pool } from '../db/pool.js';
 import { logger } from '../lib/logger.js';
-import { priceFacRisk } from '../../../shared/fac/index.js';
+import { priceFacRiskFull } from '../../../shared/fac/index.js';
 
 const REFERENCE_TTL_MS = 5 * 60 * 1000;
 
@@ -94,6 +94,92 @@ export async function loadFacReferenceData({ force = false } = {}) {
 }
 
 /**
+ * Exposure curves configured for a family, with their tabulated points.
+ *
+ * Returned as bands: which curve applies to which size of risk. A family
+ * with no bands configured cannot be exposure-rated, and the method says so
+ * rather than falling back to a curve nobody chose.
+ *
+ * @param {string} familyCode
+ * @param {Date|string|null} [asOf]
+ */
+export async function loadCurveBands(familyCode, asOf = null) {
+  if (!familyCode) return [];
+  const { rows } = await pool.query(
+    `SELECT b.min_exposure, b.max_exposure,
+            c.curve_id, c.curve_code, c.curve_name, c.kind, c.params, c.source
+       FROM public.fac_curve_band b
+       JOIN public.fac_exposure_curve c ON c.curve_id = b.curve_id
+      WHERE b.family_code = $1
+        AND c.active = true
+        AND c.effective_from <= COALESCE($2::date, CURRENT_DATE)
+        AND (c.effective_to IS NULL OR c.effective_to >= COALESCE($2::date, CURRENT_DATE))
+      ORDER BY b.min_exposure`,
+    [familyCode, asOf || null],
+  );
+  if (rows.length === 0) return [];
+
+  const tabulated = rows.filter((r) => r.kind === 'TABULATED').map((r) => r.curve_id);
+  const pointsByCurve = new Map();
+  if (tabulated.length > 0) {
+    const { rows: pts } = await pool.query(
+      `SELECT curve_id, x, y FROM public.fac_exposure_curve_point
+        WHERE curve_id = ANY($1::uuid[]) ORDER BY curve_id, x`,
+      [tabulated],
+    );
+    for (const p of pts) {
+      if (!pointsByCurve.has(p.curve_id)) pointsByCurve.set(p.curve_id, []);
+      pointsByCurve.get(p.curve_id).push({ x: p.x, y: p.y });
+    }
+  }
+
+  return rows.map((r) => ({
+    min_exposure: r.min_exposure,
+    max_exposure: r.max_exposure,
+    curve: {
+      curve_id: r.curve_id,
+      curve_code: r.curve_code,
+      curve_name: r.curve_name,
+      kind: r.kind,
+      params: r.params || {},
+      source: r.source,
+      points: pointsByCurve.get(r.curve_id) || [],
+    },
+  }));
+}
+
+/**
+ * Bound comparables for the benchmark: what this book charged for risks of
+ * the same family in the same region.
+ *
+ * Only BOUND risks count — a quote that was never taken up says what the
+ * carrier was willing to charge, not what the market paid. The current risk
+ * is excluded so a renewal cannot benchmark against itself.
+ *
+ * @param {object} risk fac_risk row (needs rating_family, cedant_region)
+ * @returns {Promise<{observations: Array, scope: string}>}
+ */
+export async function loadBenchmarkObservations(risk) {
+  if (!risk?.rating_family) return { observations: [], scope: null };
+  const { rows } = await pool.query(
+    `SELECT p.final_rate_per_mille AS rate_pm, r.uw_year
+       FROM public.fac_risk r
+       JOIN public.fac_pricing p ON p.fac_risk_id = r.fac_risk_id
+       LEFT JOIN public.fac_class_of_business c ON c.fac_cob_id = r.fac_cob_id
+      WHERE r.status = 'BOUND'
+        AND r.fac_risk_id <> $1
+        AND c.rating_family = $2
+        AND ($3::text IS NULL OR r.cedant_region = $3)
+        AND p.final_rate_per_mille > 0
+      ORDER BY r.uw_year DESC
+      LIMIT 500`,
+    [risk.fac_risk_id, risk.rating_family, risk.cedant_region || null],
+  );
+  const scope = [risk.rating_family, risk.cedant_region].filter(Boolean).join(' · ');
+  return { observations: rows, scope: scope || null };
+}
+
+/**
  * The reference set in force on a given date — the label a priced row is
  * stamped with so re-opening it later can say which rates produced it
  * (finding F12).
@@ -127,7 +213,7 @@ export async function getActiveRateTableVersion(asOf = null) {
  * @returns {Promise<object>} the priceFacRisk result plus provenance
  */
 export async function computeFacPricing(riskId, overrides = {}) {
-  const [riskRes, sectionsRes, locationsRes, factorsRes, pricingRes] = await Promise.all([
+  const [riskRes, sectionsRes, locationsRes, factorsRes, pricingRes, lossesRes, basisRes] = await Promise.all([
     pool.query(
       `SELECT r.*, c.rating_family, c.segment_code, c.exposure_basis, c.category
          FROM public.fac_risk r
@@ -152,8 +238,22 @@ export async function computeFacPricing(riskId, overrides = {}) {
     ),
     pool.query(
       `SELECT indemnity_months, commission_pct, margin_pct, other_expenses_pct,
-              market_rate_pm, extra_cover_loadings
+              market_rate_pm, extra_cover_loadings,
+              cat_load_pm, risk_load_pm, internal_expense_pct, blend_weights,
+              blend_override_reason
          FROM public.fac_pricing WHERE fac_risk_id = $1`,
+      [riskId],
+    ),
+    pool.query(
+      `SELECT loss_year, loss_date, fgu_paid, fgu_outstanding, fgu_incurred, is_open,
+              indexed_incurred, as_if_incurred, development_factor,
+              exclude_from_rating, exclusion_reason
+         FROM public.fac_loss_history WHERE fac_risk_id = $1 ORDER BY loss_year`,
+      [riskId],
+    ),
+    pool.query(
+      `SELECT loss_year, exposure_base, exposure_unit, premium, rate_change_pct, claim_count
+         FROM public.fac_experience_basis WHERE fac_risk_id = $1 ORDER BY loss_year`,
       [riskId],
     ),
   ]);
@@ -191,13 +291,38 @@ export async function computeFacPricing(riskId, overrides = {}) {
     extra_cover_loadings: pick('extra_cover_loadings', []) || [],
   };
 
-  const priced = priceFacRisk({
+  // Phase 2 inputs. Each is optional — a method with no data reports itself
+  // unavailable and the blend carries on with the ones that do have data.
+  const [curveBands, benchmark] = await Promise.all([
+    loadCurveBands(risk.rating_family, risk.inception_date),
+    loadBenchmarkObservations(risk),
+  ]);
+
+  const storedWeights = stored.blend_weights && typeof stored.blend_weights === 'object'
+    ? stored.blend_weights : null;
+  const weightOverride = overrides.weight_override
+    ?? (storedWeights && Object.keys(storedWeights).length > 0
+      ? { weights: storedWeights, reasonCode: stored.blend_override_reason }
+      : null);
+
+  const priced = priceFacRiskFull({
     risk,
     cob: { rating_family: risk.rating_family },
     sections: sectionsRes.rows,
     locations: locationsRes.rows,
     inputs,
     referenceData,
+    losses: lossesRes.rows,
+    experienceBasis: basisRes.rows,
+    curveBands,
+    benchmarks: benchmark.observations,
+    benchmarkScope: benchmark.scope,
+    loads: {
+      catLoadPm: num(pick('cat_load_pm')),
+      riskLoadPct: num(pick('risk_load_pct')),
+      internalExpensePct: num(pick('internal_expense_pct')),
+    },
+    weightOverride,
   });
 
   return {
@@ -296,5 +421,48 @@ export async function verifyFacPricingSave(riskId, posted, requestId) {
       requestId, facRiskId: riskId, error: err?.message,
     });
     return { drifts: [], computed: null };
+  }
+}
+
+
+/**
+ * Persist the per-method results behind a priced row.
+ *
+ * fac_pricing keeps the signed-off answer; this keeps how it was arrived
+ * at — every candidate, what it said, the weight it was given and whether
+ * a human chose that weight. Replace-all per risk, so a method that stops
+ * being available stops being recorded.
+ *
+ * @param {import('pg').PoolClient} client  inside the save transaction
+ * @param {string} riskId
+ * @param {object|null} technical  buildTechnicalPremium output
+ */
+export async function persistPricingMethods(client, riskId, technical) {
+  await client.query('DELETE FROM public.fac_pricing_method WHERE fac_risk_id = $1', [riskId]);
+  if (!technical?.candidates?.length) return;
+
+  const z = technical.credibility?.z ?? null;
+  for (const c of technical.candidates) {
+    const weight = technical.weights?.[c.code] ?? null;
+    await client.query(
+      `INSERT INTO public.fac_pricing_method
+         (fac_risk_id, method_code, available, unavailable_reason,
+          loss_cost, rate_pm, weight, weight_source, override_reason_code,
+          credibility_z, diagnostics)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)`,
+      [
+        riskId,
+        c.code,
+        Boolean(c.available),
+        c.unavailableReason || null,
+        c.lossCost ?? null,
+        c.ratePm ?? null,
+        weight,
+        weight == null ? 'EXCLUDED' : technical.weightSource || 'MECHANICAL',
+        technical.weightOverrideReason || null,
+        c.role === 'EXPERIENCE' ? z : null,
+        JSON.stringify(c.diagnostics || {}),
+      ],
+    );
   }
 }

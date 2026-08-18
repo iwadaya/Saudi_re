@@ -36,6 +36,10 @@ import { scheduleProperty } from './families/scheduleProperty.js';
  * @property {string[]} [requires]           Risk fields the engine cannot run without.
  * @property {string[]} [wizardSteps]        Extra wizard steps this family needs.
  * @property {boolean} implemented           Whether an engine exists yet.
+ * @property {{k: number, maxZ: number, unit: string}} [credibility]
+ *   Buhlmann-Straub parameters. k is the claim count at which the risk's own
+ *   experience earns half the weight; maxZ caps it however much experience
+ *   there is, because thin-layer experience is never fully credible.
  * @property {string} [plannedPhase]         Where an unimplemented family lands.
  * @property {number} [scoreCompletenessMin]
  * @property {Function} [buildExposureProfile]
@@ -71,6 +75,7 @@ export const SEGMENT_LABEL = {
 const DECLARED = [
   {
     code: 'PROJECT_WORKS',
+    credibility: { k: 12, maxZ: 0.50, unit: 'CLAIM_COUNT' },
     label: 'Project Works (CAR / EAR)',
     segment: 'ENGINEERING_CONSTRUCTION',
     ratingBasis: 'CONTRACT_VALUE',
@@ -83,6 +88,7 @@ const DECLARED = [
   },
   {
     code: 'PLANT_OPERATIONAL',
+    credibility: { k: 6,  maxZ: 0.80, unit: 'CLAIM_COUNT' },
     label: 'Plant & Machinery (Operational)',
     segment: 'ENGINEERING_CONSTRUCTION',
     ratingBasis: 'SI_PER_MILLE',
@@ -94,6 +100,7 @@ const DECLARED = [
   },
   {
     code: 'HULL_VALUE',
+    credibility: { k: 6,  maxZ: 0.80, unit: 'CLAIM_COUNT' },
     label: 'Marine Hull',
     segment: 'MARINE_TRANSIT',
     ratingBasis: 'AGREED_VALUE',
@@ -106,6 +113,7 @@ const DECLARED = [
   },
   {
     code: 'TRANSIT_VALUES',
+    credibility: { k: 5,  maxZ: 0.80, unit: 'CLAIM_COUNT' },
     label: 'Cargo & Transit',
     segment: 'MARINE_TRANSIT',
     ratingBasis: 'TURNOVER',
@@ -118,6 +126,7 @@ const DECLARED = [
   },
   {
     code: 'MARINE_LIABILITY',
+    credibility: { k: 10, maxZ: 0.60, unit: 'CLAIM_COUNT' },
     label: 'Marine Liability',
     segment: 'MARINE_TRANSIT',
     ratingBasis: 'LIMIT_ILF',
@@ -129,6 +138,7 @@ const DECLARED = [
   },
   {
     code: 'ENERGY_ASSET',
+    credibility: { k: 10, maxZ: 0.60, unit: 'CLAIM_COUNT' },
     label: 'Energy & Power Assets',
     segment: 'ENERGY_POWER',
     ratingBasis: 'SI_PER_MILLE',
@@ -141,6 +151,7 @@ const DECLARED = [
   },
   {
     code: 'LIABILITY_LIMIT',
+    credibility: { k: 12, maxZ: 0.60, unit: 'CLAIM_COUNT' },
     label: 'Casualty & Liability',
     segment: 'CASUALTY_LIABILITY',
     ratingBasis: 'LIMIT_ILF',
@@ -153,6 +164,7 @@ const DECLARED = [
   },
   {
     code: 'MOTOR_FLEET',
+    credibility: { k: 4,  maxZ: 0.90, unit: 'CLAIM_COUNT' },
     label: 'Motor Fleet',
     segment: 'MOTOR',
     ratingBasis: 'PER_UNIT',
@@ -164,6 +176,7 @@ const DECLARED = [
   },
   {
     code: 'CYBER_LIMIT',
+    credibility: { k: 12, maxZ: 0.50, unit: 'CLAIM_COUNT' },
     label: 'Cyber',
     segment: 'FINANCIAL_SPECIALTY',
     ratingBasis: 'LIMIT_ILF',
@@ -176,6 +189,7 @@ const DECLARED = [
   },
   {
     code: 'PA_BENEFIT',
+    credibility: { k: 5,  maxZ: 0.85, unit: 'CLAIM_COUNT' },
     label: 'Personal Accident',
     segment: 'ACCIDENT_HEALTH',
     ratingBasis: 'PER_UNIT',
