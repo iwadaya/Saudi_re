@@ -1,6 +1,6 @@
 # Facultative Pricing — Multi-Class Design & Redesign Proposal
 
-**Status:** Phases 0–4 are **implemented** — see [§9 Implementation status](#9-implementation-status).
+**Status:** Phases 0–5 are **implemented** — see [§9 Implementation status](#9-implementation-status).
 Phases 3–5 remain proposals for review.
 **Audience:** Underwriting / actuarial / product / engineering.
 **Scope:** The facultative (`/fac/*`) pricing capability across all classes of
@@ -1145,10 +1145,16 @@ place and reproducibility is fixed.
     utilisation.
 23. Multi-section pricing, which Phase 3 deferred.
 
-### Phase 5 — Hardening
+### Phase 5 — Hardening — **built**
 
-23. `FAC_PRICING_STRICT` enforced; golden masters per family.
-24. Reference-data admin UI with version control and four-eyes approval.
+23. Golden masters per family, and the drift **evidence** `FAC_PRICING_STRICT`
+    should be flipped on. The flag itself is deliberately not flipped here:
+    the condition is an observed zero drift rate, and until Phase 5 the
+    disagreements were logged while the agreements were not, so the rate had
+    no denominator.
+24. Reference-data versioning with a draft → approve → publish lifecycle and
+    four-eyes approval. The admin *screen* is not built; the API and the
+    controls behind it are.
 25. Renewal differencing: last year's terms, rate change decomposition
     (exposure change vs rate change vs structure change).
 
@@ -1216,7 +1222,7 @@ These change the shape of the build, so I would rather ask than guess.
 
 ## 9. Implementation status
 
-Phases 0 through 4 are built. Phase 5 (strict drift enforcement, per-family golden masters) is not.
+Phases 0 through 5 are built. What remains is data and a decision, not code — see “What is left” at the end of this section.
 
 ### What landed
 
@@ -1337,6 +1343,54 @@ capacity allows". A severity distribution behind `FREQ_SEVERITY` (rather than
 an observed mean) is the honest gap in excess motor and PA; the module reports
 the layer as unpierced rather than pretending the zero is a price.
 
+### Phase 5 — hardening
+
+Four things, all of which exist because the earlier phases created an
+obligation and did not discharge it.
+
+| Area | Change |
+| --- | --- |
+| **Golden masters** | A frozen fixture and expected output per implemented family (`shared/fac/__golden__/families.json`), regenerated with `npm run golden:fac`. The unit tests beside each family check that its arithmetic is right; this checks that it has not *changed*. Eleven families share a pipeline, a blend and a gross-up, so a change to any of them moves numbers in the others — and the change that matters is the one nobody meant to make. The property invariant is pinned in the data: `technical_gross_pm` equals `engine_final_gross_rate_pm` exactly. |
+| **Drift evidence** | `fac_pricing_drift` records **every** server-side verification, agreeing or not, because a drift rate needs a denominator and a table of only the failures has none. `GET /api/fac/portfolio/drift` reports the rate, the worst disagreement, a per-family breakdown and a verdict — including "no verifications recorded in this window, so the drift rate is unknown, not zero". |
+| **Reference-data governance** | The path that lets rates be loaded with a name against them. A revision is DRAFT → PENDING_APPROVAL → APPROVED → published, rows are staged and applied to the live tables only on publish, in one transaction. Four eyes: the approver must not be the submitter, enforced in the service and again by a CHECK constraint. The set of tables a revision may touch is an allow-list, and column names are matched against it before any SQL is built — a crafted table name is rejected, never escaped. Publishing supersedes the version it replaces, closing it off the day before, so a historic quote still resolves to the rates that priced it. |
+| **Renewal differencing** | `GET /api/fac/risks/:id/renewal-difference`. A renewal that says "last year 2.10‰, this year 2.45‰" has told an underwriter almost nothing: the risk got bigger, the rate went up, or the cover changed, and those are three different conversations. The premium change factorises exactly — `P₁/P₀ = (R₁/R₀) × (E₁/E₀)` — and is reported multiplicatively so the parts multiply to the whole with no interaction term buried in whichever was measured second. |
+| **Operations** | The nightly `refresh:fac-accumulation` job, wired into `scheduled-jobs.yml` at 01:30 UTC. It also refreshes on every bind; the cron is the safety net for what a bind cannot see. |
+| **Tests** | 53 new tests: golden masters across ten families, 13 DB-backed governance tests, 16 renewal-differencing unit tests and 7 integration tests. |
+
+**Why the structure change is not a third factor.** A higher deductible moves
+the rate legitimately, so attributing part of the movement to it numerically
+would need an exposure curve for that specific structure change. There is no
+such curve loaded, and inventing one to make the decomposition look complete
+would be the same error this module has refused in every other phase. Instead
+the rate change carries a flag saying part of it was *bought* rather than
+imposed, and names what changed.
+
+**Why `FAC_PRICING_STRICT` is still off.** The design's own condition is a
+drift rate observed at zero for a full pricing cycle. That is now measurable
+for the first time. Flipping the flag before the evidence exists would turn
+every stale browser tab into a failed save, which is precisely the failure the
+condition was written to avoid. The endpoint reports `ready_for_strict` and
+the verdict behind it; the decision stays with whoever runs the book.
+
+### What is left
+
+Nothing in the design's plan is unbuilt. What remains is not code:
+
+- **The rate tables are still empty**, by design and now by choice rather than
+  necessity — the governance path exists, so loading them is an act somebody
+  can take and be recorded taking. §7.2's question of who owns which table is
+  now answered per revision, in `owner_note`, rather than needing one answer
+  for all of them.
+- **`fac_zone_budget` is empty**, so the zone check reports committed exposure
+  and says no budget is set.
+- **The reference-data admin screen** is not built. The API, the lifecycle and
+  the four-eyes control are; the UI on top is a smaller job than the controls
+  underneath it, and deliberately second.
+- **`AVIATION_HULL` and `AGRI_YIELD`** are declared and not built.
+- **The MBBEFD sign-off** in `docs/pricing-signoff-required.md` is still open,
+  and still blocks nothing — it is the *convenience* of picking a curve by
+  number that is unavailable, not exposure rating itself.
+
 ### A constraint we kept: curves are loaded, not invented
 
 The plan called for exposure rating "via the existing MBBEFD". The
@@ -1384,9 +1438,10 @@ only the *convenience* of picking a curve by number.
   taxonomy maps to either; declaring them is what stops the first one added
   being priced as schedule property.
 - **M6 in full** — reference tables still have no per-row effective dating.
-  What shipped is the version *identity* and the provenance stamp, which is
-  what makes a historic quote explainable. The admin UI that edits versions
-  is Phase 5.
+  What shipped is the version *identity*, the provenance stamp, and (Phase 5)
+  the draft → approve → publish lifecycle with four-eyes approval that lets a
+  revision be loaded with a name against it. The admin *screen* on top of that
+  API is still to build.
 - **M7** — the extension catalogue is still hard-coded in `FacPricing.jsx`.
   Its numbers now feed the engine, but they are not yet versioned data with
   an explicit additive/multiplicative flag.

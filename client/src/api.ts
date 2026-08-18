@@ -925,6 +925,10 @@ export const api = {
   facSaveSections(id: string, sections?: unknown[], opts?: RequestOpts): Promise<unknown> {
     return request(`/api/fac/risks/${enc(id)}/sections`, { method: 'PUT', body: { sections }, ...opts });
   },
+  /** Last year's terms beside this year's, and why the price moved. */
+  facGetRenewalDifference(id: string, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/risks/${enc(id)}/renewal-difference`, opts);
+  },
   /** Committed capacity in this risk's zones, plus the systemic checks. */
   facGetAccumulation(id: string, opts?: RequestOpts): Promise<unknown> {
     return request(`/api/fac/risks/${enc(id)}/accumulation`, opts);
@@ -1110,6 +1114,10 @@ export const api = {
   },
   facGetPortfolioCapacity(query?: Record<string, string | number | undefined>, opts?: RequestOpts): Promise<unknown> {
     return request(`/api/fac/portfolio/capacity${toQuery(query) ? `?${toQuery(query)}` : ''}`, opts);
+  },
+  /** Client-vs-server pricing agreement, and whether strict mode is safe yet. */
+  facGetPortfolioDrift(query?: Record<string, string | number | undefined>, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/portfolio/drift${toQuery(query) ? `?${toQuery(query)}` : ''}`, opts);
   },
   /** ILF curves and the base-rate tables the Phase 3 families rate off. */
   facGetRateTables(family?: string, opts?: RequestOpts): Promise<unknown> {

@@ -467,6 +467,38 @@ export const facBindSchema = z.object({
     },
   );
 
+/**
+ * Rate-revision admin (migration 139).
+ *
+ * The target table and every column name are checked against the service's
+ * allow-list before any SQL is built, so these schemas only need to police
+ * shape. They deliberately do NOT constrain the payload's own keys — that
+ * check belongs where the allow-list is, and duplicating it here would give
+ * two places to forget.
+ */
+export const facRateVersionCreateSchema = z.object({
+  version_label:  z.string().min(1, 'a rate revision needs a version label').max(80),
+  effective_from: isoDate,
+  notes:          optionalText,
+  owner_note:     optionalText,
+}).passthrough();
+
+export const facRateStageRowSchema = z.object({
+  target_table: z.string().min(1).max(63),
+  operation:    z.enum(['INSERT', 'UPDATE', 'DELETE']).default('INSERT'),
+  row_key:      z.record(z.unknown()).optional(),
+  payload:      z.record(z.unknown()).default({}),
+  note:         optionalText,
+}).passthrough();
+
+export const facRateStageSchema = z.object({
+  rows: z.array(facRateStageRowSchema).min(1, 'stage at least one row').max(1000),
+}).passthrough();
+
+export const facRateRejectSchema = z.object({
+  reason: z.string().min(5, 'a rejection needs a reason of at least 5 characters'),
+}).passthrough();
+
 /** POST /risks/:id/treaty-links — body schema. */
 export const facTreatyLinkCreateSchema = z.object({
   contract_id:   z.string().uuid('contract_id must be a UUID'),
