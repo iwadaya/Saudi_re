@@ -7,9 +7,11 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../../api';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import {
-  computeScoreAndDecision, SCORE_COMPLETENESS_MIN, RATING_BASIS_LABEL,
-  METHOD_LABEL, benchmarkPosition,
-} from '../../../../../shared/fac/index.js';
+  computeScoreAndDecision, SCORE_COMPLETENESS_MIN,
+} from '../../../../../shared/fac/families/scheduleProperty.js';
+import { RATING_BASIS_LABEL } from '../../../../../shared/fac/registry.js';
+import { METHOD_LABEL } from '../../../../../shared/fac/pipeline.js';
+import { benchmarkPosition } from '../../../../../shared/fac/methods/benchmark.js';
 import { logger } from '../../../utils/logger';
 import './FacPricing.css';
 
@@ -592,6 +594,18 @@ export function TechnicalBuildUp({ technical }) {
       {technical.catLoadPm > 0 && (
         <WaterfallRow label="+ Cat load" detail="modelled AAL" value={pm(technical.catLoadPm)} />
       )}
+      {/* Separately-rated sections — war & strikes above all — are added
+          here, never blended. A hull rate and a war rate answer different
+          questions, and a war rate that moved this week has to be visible
+          as its own line or nobody sees it move. */}
+      {(technical.additiveSections || []).map((sec) => (
+        <WaterfallRow
+          key={sec.code}
+          label={`+ ${sec.label}`}
+          detail="separately rated"
+          value={pm(sec.ratePm)}
+        />
+      ))}
       <WaterfallRow label="= Expected loss" value={pm(technical.expectedLossPm)} emphasis />
       {technical.riskLoadPm > 0 && (
         <WaterfallRow

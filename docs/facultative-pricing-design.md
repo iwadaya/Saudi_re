@@ -1,6 +1,6 @@
 # Facultative Pricing — Multi-Class Design & Redesign Proposal
 
-**Status:** Phases 0, 1 and 2 are **implemented** — see [§9 Implementation status](#9-implementation-status).
+**Status:** Phases 0, 1, 2 and 3 are **implemented** — see [§9 Implementation status](#9-implementation-status).
 Phases 3–5 remain proposals for review.
 **Audience:** Underwriting / actuarial / product / engineering.
 **Scope:** The facultative (`/fac/*`) pricing capability across all classes of
@@ -1121,11 +1121,12 @@ place and reproducibility is fixed.
     an underwriter first sees a defensible number.
 15. `BENCHMARK` from real bound business (§4.10).
 
-### Phase 3 — Second and third families (≈ 3 sprints)
+### Phase 3 — Second and third families (≈ 3 sprints) — **built**
 
 16. `LIABILITY_LIMIT` — ILF curves, turnover/limit exposure, claims-made
     handling. Highest business value after property: it unlocks the entire
-    Casualty segment, which today has no engine at all.
+    Casualty segment, which today has no engine at all. `MARINE_LIABILITY`
+    shares the engine on a marine curve, which came free.
 17. `TRANSIT_VALUES` and `HULL_VALUE` — unlocks Marine, with war as a separate
     section and a `fac_war_rate` table.
 18. M4 layered fac + reinstatements + ROL/payback, which all three families need.
@@ -1211,7 +1212,7 @@ These change the shape of the build, so I would rather ask than guess.
 
 ## 9. Implementation status
 
-Phases 0, 1 and 2 are built. Nothing in Phases 3–5 is.
+Phases 0, 1, 2 and 3 are built. Nothing in Phases 4–5 is.
 
 ### What landed
 
@@ -1261,6 +1262,39 @@ candidate and no loads configured, the pipeline's technical gross rate equals
 the engine's own final gross rate exactly. A risk with no loss history and no
 curve prices today as it did before Phase 2. There is a unit test and an
 integration test that each assert it.
+
+### Phase 3 — Casualty, Marine, and the excess tower
+
+Five of the ten families now have engines. The Casualty segment, which had
+none at all, prices; Marine splits into the three things it actually is; and an
+excess placement is a tower rather than a single band.
+
+| Area | Change |
+| --- | --- |
+| **Migration 136** | `fac_layer` — the excess tower, with per-layer share, reinstatements (and their terms), aggregate limit and price; existing non-proportional placements backfilled as layer 1. `fac_ilf_curve` / `_point`. `fac_liability_base_rate`, `fac_transit_base_rate`, `fac_hull_base_rate`, `fac_hull_factor`, `fac_war_rate`. Every rate table ships **empty**. |
+| **`ILF_CURVE`** | Riebesell power curves — `ILF(L) = (L/B)^α` with `α = log₂(1 + r)` from the doubling loading — and tabulated curves with monotone interpolation, flat above the table and proportional below it. Claims-made step factors, defence costs in addition, and aggregate reinstatements each apply only where the curve or the slip states them. |
+| **`LIABILITY_LIMIT`** | `basicLimitLossCost = exposureBase ÷ divisor × lossCostPerUnit`, stepped to the limit by `ILF(D+L) − ILF(D)`. Rates against turnover, payroll, fee income or units — and **refuses to price** when the section's unit and the loaded rate's unit disagree, naming the units it does hold. Territory is a hard preference with a flagged worldwide fallback, because a worldwide rate on US-exposed liability is the classic way to underprice one. |
+| **`MARINE_LIABILITY`** | The same engine on a marine curve. Curves carry a `family_code`, and a curve another family owns is never handed to this one. |
+| **`TRANSIT_VALUES`** | Turnover-weighted blend across commodity × conveyance × route segments, with packing and temperature factors and a separately-stated storage load. Prices what it can rate and reports what share of the turnover it could not. The any-one-conveyance limit is carried as the accumulation control, never as a rating base. |
+| **`HULL_VALUE`** | Base rate by vessel type and half-open tonnage band, moved by age, class, flag, trading area, management and claims factors — each loaded, each reported when it is not. Increased value and laid-up returns are priced only when their own rate is set. |
+| **War & strikes** | A separate section with its own candidate and its own `ADDITIVE` role in the pipeline: added to the blend's result, never averaged into it. Rated per region off `fac_war_rate`, newest effective row first, with the breach-of-warranty AP. Its contribution is converted through money rather than rate, because a per-transit war rate and an annual cargo rate are per mille of different things. |
+| **Layers** | ROL, payback, total cover, free cover, reinstatement premium (pro rata as to time and amount **only where the slip says so**) and whole-tower pricing. The Placement Structure screen gained the tower grid, with ROL and payback derived rather than typed so they cannot disagree with the premium beside them. |
+| **The dispatch** | `priceFacRiskFull` no longer knows which family it is holding: every family contributes candidates through `family.computeCandidates`, and burning cost and benchmark are added generically. Adding a family is a module and a registry entry. The premium base follows the family's rating basis — turnover for cargo and casualty, values for property and hull. |
+| **Server & client** | `GET`/`PUT /api/fac/risks/:id/layers`; `GET /api/fac/reference/rate-tables`; `loadFamilyRates` in the pricing service; the war section as its own line in the technical build-up; the workbook-only sections hidden for families that have no workbook. |
+| **Tests** | 110 new tests in `shared/fac`, 14 new DB-backed integration tests, 10 for the tower grid. |
+
+**What a family with no rates loaded does.** It reports itself unavailable
+with a reason naming the table to load — "No ILF curve is loaded for this
+class and territory", "No hull base rate is loaded for BULK_CARRIER at 45,000
+tons" — takes no weight, and lets the blend carry on with the methods that do
+have data. This is the same discipline as the exposure curves, applied to five
+more tables. A plausible default would be worse than a refusal, because nobody
+goes looking for a number that looks right.
+
+**Multi-section risks.** A risk whose sections span more than one family is
+priced on its primary section, and the build-up says so and names the sections
+it left out. Pricing every section and summing them is Phase 4 work; presenting
+one section's answer as the whole risk silently would not be.
 
 ### A constraint we kept: curves are loaded, not invented
 

@@ -32,9 +32,11 @@ import EditLockBanner, { ReadOnlyWrap } from '../../../components/EditLockBanner
 import { useResource } from '../../../hooks/useResource';
 import { useGlobalToast } from '../../../hooks/useToast';
 import { isReadOnlyError } from '../../../utils/readOnlyError';
-import {
-  buildExposureProfile, familyForClass, pricingBlocker,
-} from '../../../../../shared/fac/index.js';
+// Imported from the modules themselves, not the shared/fac barrel: the barrel
+// is the server's entry point and pulls in every loss-cost method and every
+// family engine. The screen needs the exposure profile and the registry.
+import { buildExposureProfile } from '../../../../../shared/fac/exposure.js';
+import { familyForClass, pricingBlocker } from '../../../../../shared/fac/registry.js';
 import { logger } from '../../../utils/logger';
 import './FacPricing.css';
 import {
@@ -288,6 +290,12 @@ export default function FacPricing() {
     () => (risk ? pricingBlocker(family, risk) : null),
     [family, risk],
   );
+  // Only SCHEDULE_PROPERTY has a workbook — a rate build-up, a score and a
+  // decision computed in the browser. The Phase 3 families rate off loaded
+  // tables through the server pipeline, so the workbook sections below are
+  // hidden for them rather than rendered empty. "Implemented" is not the
+  // test: a family can be fully implemented and have no workbook.
+  const hasWorkbook = typeof family?.computeQuote === 'function';
 
   // ── The one exposure profile ─────────────────────────────────────
   // PD/BI share, the BI-included flag, the top-location figure and the
@@ -359,7 +367,7 @@ export default function FacPricing() {
   // ── Debounced engine recompute (150ms) ───────────────────────────
   // Pure JS, no network behind it — the debounce only smooths fast typing.
   useEffect(() => {
-    if (!risk || blocker || !family?.implemented
+    if (!risk || blocker || !hasWorkbook
         || !occupancies.length || !factors.length || !factorWeights || !scoringTables) {
       setEngineOutput(null);
       return undefined;
@@ -394,7 +402,7 @@ export default function FacPricing() {
     }, 150);
     return () => clearTimeout(handle);
   }, [
-    risk, blocker, family, occupancies, factors, factorWeights, scoringTables,
+    risk, blocker, family, hasWorkbook, occupancies, factors, factorWeights, scoringTables,
     biIndemnity, natcatRates, uwSelections, eng, exposure, coverLoadings,
   ]);
 
@@ -666,22 +674,26 @@ export default function FacPricing() {
               )}
             </Sec>
 
-            <Sec title="Workbook Rate Build-Up">
-              <PricingWaterfall
-                output={engineOutput}
-                exposure={exposure}
-                extensionsLoadingPct={extensionsLoadingPct}
-                coverLoadings={coverLoadings}
-                adjustmentPct={quoted.adj}
-                adjustmentReason={eng.uw_adjustment_reason}
-                quotedRate={quoted.rate}
-                quotedPremium={quoted.premium}
-              />
-            </Sec>
+            {hasWorkbook && (
+              <Sec title="Workbook Rate Build-Up">
+                <PricingWaterfall
+                  output={engineOutput}
+                  exposure={exposure}
+                  extensionsLoadingPct={extensionsLoadingPct}
+                  coverLoadings={coverLoadings}
+                  adjustmentPct={quoted.adj}
+                  adjustmentReason={eng.uw_adjustment_reason}
+                  quotedRate={quoted.rate}
+                  quotedPremium={quoted.premium}
+                />
+              </Sec>
+            )}
 
-            <Sec title="Engine Detail">
-              <EngineReadout output={engineOutput} exposure={exposure} />
-            </Sec>
+            {hasWorkbook && (
+              <Sec title="Engine Detail">
+                <EngineReadout output={engineOutput} exposure={exposure} />
+              </Sec>
+            )}
 
             {quoted.rate != null && (
               <div className="facpx-quoted">

@@ -149,6 +149,111 @@ export async function loadCurveBands(familyCode, asOf = null) {
 }
 
 /**
+ * The rate tables a Phase 3 family needs.
+ *
+ * All of these ship EMPTY (migration 136). A family with nothing loaded
+ * reports itself unavailable with a reason naming the table to load, which
+ * is the whole point: a rate nobody can attribute is the problem this
+ * redesign exists to fix, and a plausible default is worse than a refusal
+ * because nobody goes looking for it.
+ *
+ * Loaded per family so a property risk does not pay for a hull query.
+ *
+ * @param {string|null} familyCode
+ * @param {Date|string|null} [asOf]
+ * @returns {Promise<object>} the `rates` bag priceFacRiskFull passes to the family
+ */
+export async function loadFamilyRates(familyCode, asOf = null) {
+  const effective = `effective_from <= COALESCE($1::date, CURRENT_DATE)
+        AND (effective_to IS NULL OR effective_to >= COALESCE($1::date, CURRENT_DATE))`;
+
+  if (familyCode === 'LIABILITY_LIMIT' || familyCode === 'MARINE_LIABILITY'
+      || familyCode === 'CYBER_LIMIT') {
+    const [ratesRes, curvesRes] = await Promise.all([
+      pool.query(
+        `SELECT rate_id, fac_cob_id, territory, basis_unit, basis_divisor, basic_limit,
+                loss_cost_per_unit, hazard_band, source
+           FROM public.fac_liability_base_rate
+          WHERE active = true AND ${effective}`,
+        [asOf || null],
+      ),
+      pool.query(
+        `SELECT curve_id, curve_code, curve_name, family_code, territory, kind,
+                basic_limit, params, source
+           FROM public.fac_ilf_curve
+          WHERE active = true AND ${effective}`,
+        [asOf || null],
+      ),
+    ]);
+    const tabulated = curvesRes.rows.filter((c) => c.kind === 'TABULATED').map((c) => c.curve_id);
+    const pointsByCurve = new Map();
+    if (tabulated.length > 0) {
+      const { rows: pts } = await pool.query(
+        `SELECT curve_id, limit_amount, ilf FROM public.fac_ilf_point
+          WHERE curve_id = ANY($1::uuid[]) ORDER BY curve_id, limit_amount`,
+        [tabulated],
+      );
+      for (const pt of pts) {
+        if (!pointsByCurve.has(pt.curve_id)) pointsByCurve.set(pt.curve_id, []);
+        pointsByCurve.get(pt.curve_id).push({ limit_amount: pt.limit_amount, ilf: pt.ilf });
+      }
+    }
+    return {
+      liabilityBaseRates: ratesRes.rows,
+      ilfCurves: curvesRes.rows.map((c) => ({
+        ...c, params: c.params || {}, points: pointsByCurve.get(c.curve_id) || [],
+      })),
+    };
+  }
+
+  if (familyCode === 'TRANSIT_VALUES') {
+    const [transitRes, warRes] = await Promise.all([
+      pool.query(
+        `SELECT commodity, conveyance, route_region, rate_pm, packing_factor, source
+           FROM public.fac_transit_base_rate
+          WHERE active = true AND ${effective}`,
+        [asOf || null],
+      ),
+      pool.query(
+        `SELECT region, basis, rate_pm, breach_ap_pm, source, effective_from
+           FROM public.fac_war_rate
+          WHERE active = true AND ${effective}
+          ORDER BY effective_from DESC`,
+        [asOf || null],
+      ),
+    ]);
+    return { transitRates: transitRes.rows, warRates: warRes.rows };
+  }
+
+  if (familyCode === 'HULL_VALUE') {
+    const [hullRes, factorRes, warRes] = await Promise.all([
+      pool.query(
+        `SELECT vessel_type, tonnage_min, tonnage_max, rate_pm, source
+           FROM public.fac_hull_base_rate
+          WHERE active = true AND ${effective}`,
+        [asOf || null],
+      ),
+      pool.query(
+        `SELECT factor_kind, factor_key, factor, source
+           FROM public.fac_hull_factor WHERE active = true`,
+      ),
+      pool.query(
+        `SELECT region, basis, rate_pm, breach_ap_pm, source, effective_from
+           FROM public.fac_war_rate
+          WHERE active = true AND ${effective}
+          ORDER BY effective_from DESC`,
+        [asOf || null],
+      ),
+    ]);
+    return {
+      hullRates: hullRes.rows, hullFactors: factorRes.rows, warRates: warRes.rows,
+    };
+  }
+
+  return {};
+}
+
+/**
  * Bound comparables for the benchmark: what this book charged for risks of
  * the same family in the same region.
  *
@@ -293,9 +398,10 @@ export async function computeFacPricing(riskId, overrides = {}) {
 
   // Phase 2 inputs. Each is optional — a method with no data reports itself
   // unavailable and the blend carries on with the ones that do have data.
-  const [curveBands, benchmark] = await Promise.all([
+  const [curveBands, benchmark, rates] = await Promise.all([
     loadCurveBands(risk.rating_family, risk.inception_date),
     loadBenchmarkObservations(risk),
+    loadFamilyRates(risk.rating_family, risk.inception_date),
   ]);
 
   const storedWeights = stored.blend_weights && typeof stored.blend_weights === 'object'
@@ -315,6 +421,7 @@ export async function computeFacPricing(riskId, overrides = {}) {
     losses: lossesRes.rows,
     experienceBasis: basisRes.rows,
     curveBands,
+    rates,
     benchmarks: benchmark.observations,
     benchmarkScope: benchmark.scope,
     loads: {

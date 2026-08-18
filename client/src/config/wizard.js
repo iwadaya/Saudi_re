@@ -1,5 +1,5 @@
 // src/config/wizard.js — Wizard step definitions, navigation logic
-import { getFamily, wizardStepsForFamilies } from '../../../shared/fac/index.js';
+import { getFamily, wizardStepsForFamilies } from '../../../shared/fac/registry.js';
 
 export const PROP_WIZARD_ORDER = [
   'PROP_TREATY_DETAIL',

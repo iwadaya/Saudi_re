@@ -10,20 +10,25 @@
 // class → family mapping is data, held on fac_class_of_business
 // (migration 134); the family definitions are here.
 //
-// Only SCHEDULE_PROPERTY has an engine today — it is the workbook the whole
-// module was built around. The other nine are declared rather than
-// implemented, and that is deliberate: before this registry existed, a
-// Marine or Casualty risk reached the property engine, which threw
-// `Unknown occupancy_code`, and the screen rendered the exception as a red
-// line (finding F1). Declaring every family lets the pipeline answer
-// honestly — "Hull & Machinery rates on agreed value; that engine is not
-// built yet" — instead of showing an underwriter a crash and a blank rate.
+// Five families have engines: SCHEDULE_PROPERTY (the workbook the module was
+// built around), LIABILITY_LIMIT and MARINE_LIABILITY (Phase 3, ILF curves),
+// and HULL_VALUE and TRANSIT_VALUES (Phase 3, Marine). The remaining five are
+// declared rather than implemented, and that is deliberate: before this
+// registry existed, a Marine or Casualty risk reached the property engine,
+// which threw `Unknown occupancy_code`, and the screen rendered the exception
+// as a red line (finding F1). Declaring every family lets the pipeline answer
+// honestly — "Plant & Machinery rates per item on replacement value; that
+// engine is not built yet" — instead of showing an underwriter a crash and a
+// blank rate.
 //
 // Adding a class is a row in fac_class_of_business pointing at a family.
 // Adding a family is one module plus its entry here; no screen, route,
 // audit or referral code changes.
 
 import { scheduleProperty } from './families/scheduleProperty.js';
+import { liabilityLimit, marineLiability } from './families/liabilityLimit.js';
+import { hullValue } from './families/hullValue.js';
+import { transitValues } from './families/transitValues.js';
 
 /**
  * @typedef {Object} FacFamily
@@ -99,44 +104,6 @@ const DECLARED = [
     notes: 'Rates per item class on replacement value; PML is item-level, not site-level.',
   },
   {
-    code: 'HULL_VALUE',
-    credibility: { k: 6,  maxZ: 0.80, unit: 'CLAIM_COUNT' },
-    label: 'Marine Hull',
-    segment: 'MARINE_TRANSIT',
-    ratingBasis: 'AGREED_VALUE',
-    periodBasis: 'ANNUAL',
-    methods: ['BURNING_COST', 'BENCHMARK'],
-    wizardSteps: [],
-    plannedPhase: 'Phase 3',
-    notes: 'Rates on agreed value by vessel type, tonnage, age, class and trading '
-      + 'area, with laid-up returns. War & strikes is a separate section, never a loading.',
-  },
-  {
-    code: 'TRANSIT_VALUES',
-    credibility: { k: 5,  maxZ: 0.80, unit: 'CLAIM_COUNT' },
-    label: 'Cargo & Transit',
-    segment: 'MARINE_TRANSIT',
-    ratingBasis: 'TURNOVER',
-    periodBasis: 'ANNUAL',
-    methods: ['BURNING_COST', 'FREQ_SEVERITY', 'BENCHMARK'],
-    wizardSteps: [],
-    plannedPhase: 'Phase 3',
-    notes: 'Rates on annual turnover or sendings, capped by the maximum any-one-'
-      + 'conveyance limit — which is the real exposure control, not the annual rate.',
-  },
-  {
-    code: 'MARINE_LIABILITY',
-    credibility: { k: 10, maxZ: 0.60, unit: 'CLAIM_COUNT' },
-    label: 'Marine Liability',
-    segment: 'MARINE_TRANSIT',
-    ratingBasis: 'LIMIT_ILF',
-    periodBasis: 'ANNUAL',
-    methods: ['ILF_CURVE', 'BURNING_COST'],
-    wizardSteps: [],
-    plannedPhase: 'Phase 3',
-    notes: 'Liability-limit mechanics with a marine ILF curve.',
-  },
-  {
     code: 'ENERGY_ASSET',
     credibility: { k: 10, maxZ: 0.60, unit: 'CLAIM_COUNT' },
     label: 'Energy & Power Assets',
@@ -148,19 +115,6 @@ const DECLARED = [
     plannedPhase: 'Phase 4',
     notes: 'Property mechanics plus a process-hazard grade, with Control of Well, '
       + 'OEE and pollution written as separately-rated sub-limits.',
-  },
-  {
-    code: 'LIABILITY_LIMIT',
-    credibility: { k: 12, maxZ: 0.60, unit: 'CLAIM_COUNT' },
-    label: 'Casualty & Liability',
-    segment: 'CASUALTY_LIABILITY',
-    ratingBasis: 'LIMIT_ILF',
-    periodBasis: 'ANNUAL',
-    methods: ['ILF_CURVE', 'BURNING_COST', 'FREQ_SEVERITY', 'BENCHMARK'],
-    wizardSteps: [],
-    plannedPhase: 'Phase 3',
-    notes: 'There is no sum insured. Rates a basic-limit loss cost off turnover, '
-      + 'payroll or fee income and steps it to the policy limit with an ILF curve.',
   },
   {
     code: 'MOTOR_FLEET',
@@ -204,7 +158,10 @@ const DECLARED = [
 
 /** @type {Map<string, FacFamily>} */
 const REGISTRY = new Map();
-for (const family of [scheduleProperty, ...DECLARED]) {
+for (const family of [
+  scheduleProperty, liabilityLimit, marineLiability, hullValue, transitValues,
+  ...DECLARED,
+]) {
   REGISTRY.set(family.code, family);
 }
 

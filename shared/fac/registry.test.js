@@ -72,10 +72,16 @@ describe('wizardStepsForFamilies', () => {
 
 describe('pricingBlocker — an unbuilt family is a state, not a crash (F1)', () => {
   it('explains what a declared-but-unimplemented family rates on', () => {
-    const blocker = pricingBlocker(getFamily('LIABILITY_LIMIT'), {});
+    const blocker = pricingBlocker(getFamily('PLANT_OPERATIONAL'), {});
     expect(blocker.reason).toBe('NOT_IMPLEMENTED');
-    expect(blocker.message).toMatch(/increased limit factors/i);
-    expect(blocker.message).toMatch(/Phase 3/);
+    expect(blocker.message).toMatch(/per mille of sum insured/i);
+    expect(blocker.message).toMatch(/Phase 4/);
+  });
+
+  it('does not block the families Phase 3 built', () => {
+    for (const code of ['LIABILITY_LIMIT', 'MARINE_LIABILITY', 'HULL_VALUE', 'TRANSIT_VALUES']) {
+      expect(pricingBlocker(getFamily(code), {})).toBeNull();
+    }
   });
 
   it('names the missing inputs an implemented family needs', () => {
@@ -105,18 +111,30 @@ describe('priceFacRisk', () => {
     natcatRates: [{ country_zone: 'Z1', flood_storm_rate: 0.03, earthquake_rate: 0.015 }],
   };
 
-  it('returns a blocker instead of throwing for a marine risk', () => {
-    // The old path handed a hull risk to the property engine, which threw
+  it('returns a blocker instead of throwing for a family with no engine', () => {
+    // The old path handed every risk to the property engine, which threw
     // "Unknown occupancy_code", and the screen printed the exception.
+    const out = priceFacRisk({
+      risk: { insured_name: 'Example Plant' },
+      cob: { rating_family: 'PLANT_OPERATIONAL' },
+      inputs: {}, referenceData: REFERENCE,
+    });
+    expect(out.ok).toBe(false);
+    expect(out.family).toBe('PLANT_OPERATIONAL');
+    expect(out.blocker.reason).toBe('NOT_IMPLEMENTED');
+    expect(out.blocker.message).toMatch(/sum insured/i);
+  });
+
+  it('resolves a hull risk to its own family without touching the property engine', () => {
     const out = priceFacRisk({
       risk: { insured_name: 'MV Example' },
       cob: { rating_family: 'HULL_VALUE' },
       inputs: {}, referenceData: REFERENCE,
     });
-    expect(out.ok).toBe(false);
+    expect(out.ok).toBe(true);
     expect(out.family).toBe('HULL_VALUE');
-    expect(out.blocker.reason).toBe('NOT_IMPLEMENTED');
-    expect(out.blocker.message).toMatch(/agreed value/i);
+    // A family that rates off loaded tables has no workbook-style quote.
+    expect(out.result).toBeNull();
   });
 
   it('returns a blocker for a property risk missing its NatCat zone', () => {
@@ -255,11 +273,113 @@ describe('priceFacRiskFull — the whole pipeline', () => {
   it('still returns the blocker for a family with no engine', async () => {
     const { priceFacRiskFull } = await import('./index.js');
     const out = priceFacRiskFull({
-      risk: { insured_name: 'MV Example' }, cob: { rating_family: 'HULL_VALUE' },
+      risk: { insured_name: 'Example Plant' }, cob: { rating_family: 'PLANT_OPERATIONAL' },
       inputs: {}, referenceData: REFERENCE,
     });
     expect(out.ok).toBe(false);
     expect(out.technical).toBeNull();
     expect(out.blocker.reason).toBe('NOT_IMPLEMENTED');
+  });
+
+  // ── Phase 3: the pipeline no longer knows which family it is holding ──
+
+  it('prices a casualty risk off its own family, against turnover not sum insured', async () => {
+    const { priceFacRiskFull } = await import('./index.js');
+    const out = priceFacRiskFull({
+      risk: { insured_name: 'Example Manufacturing', pd_sum_insured: 0 },
+      cob: { rating_family: 'LIABILITY_LIMIT', fac_cob_id: 41 },
+      sections: [{
+        section_no: 1, fac_cob_id: 41, rating_family: 'LIABILITY_LIMIT',
+        exposure_base: 250_000_000, exposure_unit: 'TURNOVER', limit_amount: 5_000_000,
+        attachment: 0, exposure_detail: {},
+      }],
+      inputs: {}, referenceData: REFERENCE,
+      rates: {
+        liabilityBaseRates: [{
+          fac_cob_id: 41, territory: 'WORLDWIDE', basis_unit: 'TURNOVER',
+          basis_divisor: 1_000_000, basic_limit: 1_000_000, loss_cost_per_unit: 400,
+        }],
+        ilfCurves: [{
+          curve_code: 'GL-WW', kind: 'POWER', territory: 'WORLDWIDE',
+          basic_limit: 1_000_000, params: { doubling_loading: 0.20 },
+        }],
+      },
+    });
+    expect(out.ok).toBe(true);
+    const ilf = out.technical.candidates.find((c) => c.code === 'ILF_CURVE');
+    expect(ilf.available).toBe(true);
+    // The premium base is the turnover, not a sum insured of zero.
+    expect(out.technical.premiums.expectedLoss).toBeCloseTo(100_000 * 5 ** Math.log2(1.2), 4);
+  });
+
+  it('prices a cargo risk and keeps war beside the blend, not inside it', async () => {
+    const { priceFacRiskFull } = await import('./index.js');
+    const args = (warRegion) => ({
+      risk: { insured_name: 'Example Shipper' },
+      cob: { rating_family: 'TRANSIT_VALUES' },
+      sections: [{
+        section_no: 1, rating_family: 'TRANSIT_VALUES', exposure_base: 100_000_000,
+        limit_amount: 5_000_000,
+        exposure_detail: {
+          commodity: 'MACHINERY', conveyance: 'SEA', route_region: 'WORLDWIDE',
+          ...(warRegion ? { war_region: warRegion } : {}),
+        },
+      }],
+      inputs: {}, referenceData: REFERENCE,
+      rates: {
+        transitRates: [{
+          commodity: 'MACHINERY', conveyance: 'SEA', route_region: 'WORLDWIDE', rate_pm: 0.6,
+        }],
+        warRates: [{
+          region: 'ARABIAN_GULF', basis: 'ANNUAL', rate_pm: 0.75, effective_from: '2026-06-01',
+        }],
+      },
+    });
+    const plain = priceFacRiskFull(args(null));
+    const withWar = priceFacRiskFull(args('ARABIAN_GULF'));
+
+    expect(plain.technical.blendedLossCostPm).toBeCloseTo(0.6, 9);
+    // The blend is unchanged by the war section; the war rate is added on top.
+    expect(withWar.technical.blendedLossCostPm).toBeCloseTo(0.6, 9);
+    expect(withWar.technical.additiveLoadPm).toBeCloseTo(0.75, 9);
+    expect(withWar.technical.expectedLossPm).toBeCloseTo(1.35, 9);
+    expect(withWar.technical.additiveSections[0].code).toBe('WAR_SECTION');
+  });
+
+  it('prices a hull risk per mille of the agreed value', async () => {
+    const { priceFacRiskFull } = await import('./index.js');
+    const out = priceFacRiskFull({
+      risk: { insured_name: 'MV Example', period_from: '2026-01-01' },
+      cob: { rating_family: 'HULL_VALUE' },
+      sections: [{
+        section_no: 1, rating_family: 'HULL_VALUE', sum_insured: 30_000_000,
+        exposure_detail: { vessel_type: 'BULK_CARRIER', tonnage: 45_000 },
+      }],
+      inputs: {}, referenceData: REFERENCE,
+      rates: {
+        hullRates: [{
+          vessel_type: 'BULK_CARRIER', tonnage_min: 20_000, tonnage_max: 80_000, rate_pm: 3.5,
+        }],
+        hullFactors: [],
+      },
+    });
+    expect(out.ok).toBe(true);
+    expect(out.technical.blendedLossCostPm).toBeCloseTo(3.5, 9);
+    expect(out.technical.premiums.expectedLoss).toBeCloseTo((30_000_000 * 3.5) / 1000, 4);
+  });
+
+  it('says so when a multi-section risk has sections it did not price', async () => {
+    const { priceFacRiskFull } = await import('./index.js');
+    const out = priceFacRiskFull({
+      risk: RISK,
+      cob: COB,
+      sections: [
+        { section_no: 1, rating_family: 'SCHEDULE_PROPERTY' },
+        { section_no: 2, rating_family: 'LIABILITY_LIMIT' },
+      ],
+      inputs: INPUTS, referenceData: REFERENCE,
+    });
+    expect(out.section.section_no).toBe(1);
+    expect(out.technical.warnings.join(' ')).toMatch(/LIABILITY_LIMIT/);
   });
 });

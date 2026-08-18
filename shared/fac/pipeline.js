@@ -39,10 +39,16 @@ export const METHOD_ROLE = {
   WORKBOOK_RATE:  'EXPOSURE',
   EXPOSURE_CURVE: 'EXPOSURE',
   ILF_CURVE:      'EXPOSURE',
+  TRANSIT_RATE:   'EXPOSURE',
+  HULL_RATE:      'EXPOSURE',
   BURNING_COST:   'EXPERIENCE',
   FREQ_SEVERITY:  'EXPERIENCE',
   BENCHMARK:      'REFERENCE',
   CAT_MODEL:      'ADDITIVE',
+  // War & strikes is a separately-rated section, not a competing view of the
+  // same loss cost. It is added to the blend's result, never averaged with it
+  // — a hull rate and a war rate are answers to different questions.
+  WAR_SECTION:    'ADDITIVE',
   MANUAL:         'EXPOSURE',
 };
 
@@ -50,10 +56,13 @@ export const METHOD_LABEL = {
   WORKBOOK_RATE:  'Workbook rate',
   EXPOSURE_CURVE: 'Exposure curve',
   ILF_CURVE:      'Increased limit factors',
+  TRANSIT_RATE:   'Cargo rate',
+  HULL_RATE:      'Hull rate',
   BURNING_COST:   'Burning cost',
   FREQ_SEVERITY:  'Frequency × severity',
   BENCHMARK:      'Benchmark',
   CAT_MODEL:      'Cat model',
+  WAR_SECTION:    'War & strikes',
   MANUAL:         'Manual',
 };
 
@@ -142,8 +151,31 @@ export function buildTechnicalPremium({
     };
   }
 
+  // ── Additive sections ────────────────────────────────────────────
+  // A separately-rated section — war & strikes, a cat model's own output —
+  // sits beside the blend, not inside it. Its rate is expressed per mille of
+  // its OWN insured value, which on a per-transit war slip is not the same
+  // base as the cargo turnover, so it is converted through money: the one
+  // quantity both bases agree on.
+  const additive = list.filter((c) => c.role === 'ADDITIVE' && c.available);
+  let additiveLoadPm = 0;
+  const additiveDetail = [];
+  const si = num(exposureTotal);
+  for (const c of additive) {
+    const lossCost = numOrNull(c.lossCost);
+    let pm = null;
+    if (lossCost !== null && si > 0) pm = (lossCost / si) * 1000;
+    else if (numOrNull(c.ratePm) !== null) pm = num(c.ratePm);
+    if (pm === null) {
+      warnings.push(`${c.label} produced no rate and no loss cost, so it is not in the price.`);
+      continue;
+    }
+    additiveLoadPm += pm;
+    additiveDetail.push({ code: c.code, label: c.label, ratePm: pm, lossCost });
+  }
+
   // ── Loads ────────────────────────────────────────────────────────
-  const expectedLossPm = blendedLossCostPm + num(catLoadPm);
+  const expectedLossPm = blendedLossCostPm + num(catLoadPm) + additiveLoadPm;
 
   // Risk load. Where the experience gives at least three years of annual
   // layer loss we load on the dispersion those years actually show;
@@ -187,7 +219,6 @@ export function buildTechnicalPremium({
     technicalGrossPm = technicalNetPm / denom;
   }
 
-  const si = num(exposureTotal);
   const premium = (pm) => (si > 0 && pm != null ? (pm * si) / 1000 : null);
 
   return {
@@ -199,6 +230,8 @@ export function buildTechnicalPremium({
     credibility: { z: mech.z, ...mech.detail },
     blendedLossCostPm,
     catLoadPm: num(catLoadPm),
+    additiveLoadPm,
+    additiveSections: additiveDetail,
     expectedLossPm,
     riskLoadPm,
     riskLoadBasis,

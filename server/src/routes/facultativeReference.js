@@ -207,6 +207,82 @@ router.get('/fac/reference/curves', asyncHandler(async (req, res) => {
   res.json({ curves: curves.rows, bands: bands.rows });
 }));
 
+// The Phase 3 rate tables: ILF curves, and the base rates each new family
+// rates off. Every one of these tables ships EMPTY (migration 136), so this
+// endpoint's honest answer on a fresh install is "nothing loaded" — and the
+// screen says exactly that, naming the table, instead of showing a price
+// derived from a default nobody chose. See docs/facultative-pricing-design.md §8.
+router.get('/fac/reference/rate-tables', asyncHandler(async (req, res) => {
+  const family = typeof req.query.family === 'string' ? req.query.family : null;
+  const [ilf, ilfPoints, liability, transit, hull, hullFactors, war] = await Promise.all([
+    pool.query(
+      `SELECT curve_id, curve_code, curve_name, family_code, territory, kind,
+              basic_limit, params, source, effective_from, effective_to
+         FROM public.fac_ilf_curve
+        WHERE active = true AND ($1::text IS NULL OR family_code IS NULL OR family_code = $1)
+        ORDER BY family_code NULLS FIRST, territory NULLS FIRST, curve_code`,
+      [family],
+    ),
+    pool.query(
+      `SELECT curve_id, limit_amount, ilf FROM public.fac_ilf_point
+        ORDER BY curve_id, limit_amount`,
+    ),
+    pool.query(
+      `SELECT r.rate_id, r.fac_cob_id, c.class_name, r.territory, r.basis_unit,
+              r.basis_divisor, r.basic_limit, r.loss_cost_per_unit, r.hazard_band,
+              r.source, r.effective_from, r.effective_to
+         FROM public.fac_liability_base_rate r
+         LEFT JOIN public.fac_class_of_business c ON c.fac_cob_id = r.fac_cob_id
+        WHERE r.active = true
+        ORDER BY c.class_name NULLS FIRST, r.territory, r.basis_unit`,
+    ),
+    pool.query(
+      `SELECT rate_id, commodity, conveyance, route_region, rate_pm, packing_factor,
+              source, effective_from, effective_to
+         FROM public.fac_transit_base_rate
+        WHERE active = true
+        ORDER BY commodity, conveyance, route_region`,
+    ),
+    pool.query(
+      `SELECT rate_id, vessel_type, tonnage_min, tonnage_max, rate_pm, source,
+              effective_from, effective_to
+         FROM public.fac_hull_base_rate
+        WHERE active = true
+        ORDER BY vessel_type, tonnage_min`,
+    ),
+    pool.query(
+      `SELECT factor_id, factor_kind, factor_key, factor, source
+         FROM public.fac_hull_factor
+        WHERE active = true
+        ORDER BY factor_kind, factor_key`,
+    ),
+    pool.query(
+      `SELECT war_rate_id, region, basis, rate_pm, breach_ap_pm, source,
+              effective_from, effective_to, notes
+         FROM public.fac_war_rate
+        WHERE active = true
+        ORDER BY region, effective_from DESC`,
+    ),
+  ]);
+
+  const pointsByCurve = new Map();
+  for (const pt of ilfPoints.rows) {
+    if (!pointsByCurve.has(pt.curve_id)) pointsByCurve.set(pt.curve_id, []);
+    pointsByCurve.get(pt.curve_id).push({ limit_amount: pt.limit_amount, ilf: pt.ilf });
+  }
+
+  // War rates move weekly and by hundreds of percent when a corridor closes,
+  // so they are never cached alongside the rest.
+  res.json({
+    ilf_curves: ilf.rows.map((c) => ({ ...c, points: pointsByCurve.get(c.curve_id) || [] })),
+    liability_base_rates: liability.rows,
+    transit_base_rates: transit.rows,
+    hull_base_rates: hull.rows,
+    hull_factors: hullFactors.rows,
+    war_rates: war.rows,
+  });
+}));
+
 router.get('/fac/reference/clauses', asyncHandler(async (_req, res) => {
   const { rows } = await pool.query(`
     SELECT clause_code, clause_name, clause_category, is_mandatory, sort_order

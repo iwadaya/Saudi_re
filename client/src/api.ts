@@ -925,6 +925,11 @@ export const api = {
   facSaveSections(id: string, sections?: unknown[], opts?: RequestOpts): Promise<unknown> {
     return request(`/api/fac/risks/${enc(id)}/sections`, { method: 'PUT', body: { sections }, ...opts });
   },
+  /** The excess tower: one row per layer, with its own share and price. */
+  facGetLayers(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}/layers`, opts); },
+  facSaveLayers(id: string, layers?: unknown[], opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/risks/${enc(id)}/layers`, { method: 'PUT', body: { layers }, ...opts });
+  },
   /**
    * Server-side price. Returns either the authoritative result or a blocker
    * explaining why this class cannot be priced yet — both are states the
@@ -1091,6 +1096,10 @@ export const api = {
   facGetRateVersion(opts?: RequestOpts): Promise<unknown>    { return request('/api/fac/reference/rate-version', opts); },
   facGetCurves(family?: string, opts?: RequestOpts): Promise<unknown> {
     return request(`/api/fac/reference/curves${family ? `?family=${enc(family)}` : ''}`, opts);
+  },
+  /** ILF curves and the base-rate tables the Phase 3 families rate off. */
+  facGetRateTables(family?: string, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/reference/rate-tables${family ? `?family=${enc(family)}` : ''}`, opts);
   },
 
   // ── Workbench (Actuarial Formula Workbench) ──────────────────────────────

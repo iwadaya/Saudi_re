@@ -51,6 +51,8 @@
 //       out-of-range one is warned about, never silently transformed.
 
 import { buildExposureProfile } from '../exposure.js';
+import { exposureCurveLossCost } from '../methods/exposureCurve.js';
+import { numOrNull } from '../num.js';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Excel formula constants (Premium Calculator G24 / H24 / SUM(E16:E24))
@@ -628,6 +630,72 @@ export function computeFacQuote(inputs, referenceData) {
 // 5. Family descriptor
 // ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * This family's loss-cost candidates.
+ *
+ * Property is the one family whose exposure view comes out of an engine
+ * rather than a rate table: the workbook's own build-up, which the pipeline
+ * takes as a NET rate and grosses up once. The exposure-curve candidate is
+ * the same ground-up rate re-cut across the tower, so it only has anything
+ * to say when a curve is banded for this risk's size.
+ *
+ * Every family exposes this shape, so `priceFacRiskFull` never asks which
+ * family it is holding.
+ *
+ * @param {object} args
+ * @param {object} args.engine        the computeQuote result
+ * @param {object} args.exposure      buildExposureProfile output
+ * @param {object} args.structure     {attachment, limit, isNonProportional}
+ * @param {object} args.rates         {curveBands}
+ * @returns {Array<{code: string, result: object}>}
+ */
+export function computeCandidates({ engine, exposure, structure = {}, rates = {} }) {
+  const candidates = [{
+    code: 'WORKBOOK_RATE',
+    result: { available: true, ratePm: engine?.final_net_rate_pm ?? null },
+  }];
+
+  candidates.push({
+    code: 'EXPOSURE_CURVE',
+    result: exposureCurveLossCost({
+      bands: buildCurveBands({ exposure, curveBands: rates.curveBands, engine }),
+      attachment: structure.attachment ?? 0,
+      limit: structure.limit ?? Infinity,
+      exposureTotal: exposure?.total_si,
+    }),
+  });
+
+  return candidates;
+}
+
+/**
+ * Match each exposure band to the curve configured for its size, and give
+ * it the ground-up burn rate the engine derived.
+ *
+ * Bands come from the location schedule when there is one — that is what
+ * "band the schedule by size" means — and from the whole risk otherwise.
+ */
+function buildCurveBands({ exposure, curveBands, engine }) {
+  if (!Array.isArray(curveBands) || curveBands.length === 0) return [];
+  const pick = (amount) => curveBands.find(
+    (b) => amount >= (numOrNull(b.min_exposure) ?? 0)
+      && (b.max_exposure == null || amount < numOrNull(b.max_exposure)),
+  );
+  // The engine's technical rate is the ground-up burn rate for the risk;
+  // exposure rating says how it splits across the tower, not how big it is.
+  const groundUpRatePm = numOrNull(engine?.technical_rate_no_natcat_pm) ?? 0;
+  const total = numOrNull(exposure?.total_si) ?? 0;
+  if (!(total > 0)) return [];
+  const band = pick(total);
+  if (!band?.curve) return [];
+  return [{
+    exposure: total,
+    pmlPct: numOrNull(exposure.pml_pct) ?? 1,
+    groundUpRatePm,
+    curve: band.curve,
+  }];
+}
+
 /** @type {import('../registry.js').FacFamily} */
 export const scheduleProperty = {
   code: FAMILY_CODE,
@@ -652,6 +720,7 @@ export const scheduleProperty = {
   computeScoreAndDecision,
   computePremiums,
   computeQuote: computeFacQuote,
+  computeCandidates,
 };
 
 export default scheduleProperty;

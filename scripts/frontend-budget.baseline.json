@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-08-17",
-  "note": "Ratchet baseline for scripts/frontend-budget.mjs — see docs/frontend-hardening.md. inlineStyles reconciled 3133→3199: main had drifted to 3286 (feature PRs again moved the count without re-baselining, same as the 3065→3133 reconciliation); the facultative pricing redesign then net-reduced it by 87 by migrating FacPricing + FacPricingPanels to FacPricing.css. useStateCalls / setLoadingCalls are informational and follow main's drift.",
+  "generatedAt": "2026-08-18",
+  "note": "Ratchet baseline for scripts/frontend-budget.mjs — see docs/frontend-hardening.md",
   "metrics": {
-    "inlineStyles": 3199,
+    "inlineStyles": 3197,
     "filesOver800Loc": 0,
     "onClickNonInteractive": 82,
     "consoleCalls": 0,
-    "useStateCalls": 646,
+    "useStateCalls": 650,
     "setLoadingCalls": 78
   }
 }

@@ -218,6 +218,42 @@ export const facSectionsSaveSchema = z.object({
 
 
 /**
+ * One layer of an excess tower (migration 136).
+ *
+ * A facultative excess placement is a tower of layers, each with its own
+ * attachment, limit, share, reinstatements and price. Before migration 136
+ * `fac_risk` carried a single `np_retention`/`np_limit` pair, so a two-layer
+ * placement could only be recorded as one of its layers.
+ *
+ * `limit_amount` NULL means an unlimited top layer; `reinstatements` NULL
+ * means unlimited free reinstatements. Those are different from zero and
+ * the difference is the price, so neither is defaulted.
+ */
+export const facLayerSchema = z.object({
+  layer_no: z.preprocess((v) => {
+    if (v === null || v === undefined || v === '') return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.trunc(n) : undefined;
+  }, z.number().int().min(1).max(50)),
+  section_id:      optionalUuid,
+  attachment:      money,
+  limit_amount:    money,
+  our_share_pct:   optionalNumber,
+  reinstatements:  optionalInt,
+  reinstatement_terms: z.array(z.record(z.unknown())).max(50).optional(),
+  aggregate_limit: money,
+  loss_cost:       money,
+  rol_pct:         optionalNumber,
+  premium:         money,
+  notes:           optionalText,
+}).passthrough();
+
+/** PUT /api/fac/risks/:id/layers — full replacement, like sections. */
+export const facLayersSaveSchema = z.object({
+  layers: z.array(facLayerSchema).max(50, 'maximum 50 layers per risk').default([]),
+}).passthrough();
+
+/**
  * One year of exposure history (migration 135).
  *
  * This is the denominator a burning cost divides by. A year with no losses

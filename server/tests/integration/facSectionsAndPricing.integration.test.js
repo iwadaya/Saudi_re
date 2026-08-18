@@ -75,7 +75,11 @@ describe.skipIf(shouldSkipDb)('integration: fac sections, taxonomy and server-si
       const { families } = await harness.fetchApp('GET', '/api/fac/reference/families').then((r) => r.json());
       const byCode = Object.fromEntries(families.map((f) => [f.code, f]));
       expect(byCode.SCHEDULE_PROPERTY.implemented).toBe(true);
-      expect(byCode.LIABILITY_LIMIT.implemented).toBe(false);
+      // Phase 3 built these four; the rest are still declared, with the
+      // phase they land in on the record.
+      expect(byCode.LIABILITY_LIMIT.implemented).toBe(true);
+      expect(byCode.PLANT_OPERATIONAL.implemented).toBe(false);
+      expect(byCode.PLANT_OPERATIONAL.planned_phase).toBe('Phase 4');
       expect(byCode.LIABILITY_LIMIT.rating_basis).toBe('LIMIT_ILF');
       expect(byCode.TRANSIT_VALUES.rating_basis).toBe('TURNOVER');
       expect(byCode.PROJECT_WORKS.period_basis).toBe('PROJECT');
@@ -175,17 +179,20 @@ describe.skipIf(shouldSkipDb)('integration: fac sections, taxonomy and server-si
 
   // ── Server-side pricing ──────────────────────────────────────────────
   describe('POST /price — the server as pricing authority', () => {
-    it('answers with a blocker, not an error, for a class with no engine', async () => {
+    it('sends a marine risk to its own family, not to the property engine', async () => {
       // The old path handed every class to the property engine, which threw
       // `Unknown occupancy_code`, and the screen rendered the exception (F1).
       const id = await newRisk({ fac_cob_id: hullCob.fac_cob_id, insured_name: 'MV Integration' });
       const res = await harness.fetchApp('POST', `/api/fac/risks/${id}/price`, { body: {} });
       expect(res.status).toBe(200);
       const out = await res.json();
-      expect(out.ok).toBe(false);
+      expect(out.ok).toBe(true);
       expect(out.family).toBe('HULL_VALUE');
-      expect(out.blocker.reason).toBe('NOT_IMPLEMENTED');
-      expect(out.blocker.message).toMatch(/agreed value/i);
+      // Nothing is loaded and nothing is entered, so the hull method reports
+      // itself unavailable with a reason — not a rate, and not a stack trace.
+      const hullRate = out.technical.candidates.find((c) => c.code === 'HULL_RATE');
+      expect(hullRate.available).toBe(false);
+      expect(hullRate.unavailableReason).toMatch(/agreed value/i);
     });
 
     it('names the missing input for a property risk that cannot be rated yet', async () => {

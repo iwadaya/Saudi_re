@@ -21,6 +21,7 @@ import {
   facRiskSaveSchema,
   facLocationsSaveSchema,
   facSectionsSaveSchema,
+  facLayersSaveSchema,
   facExperienceSaveSchema,
   facPricingSaveSchema,
   facCopeSaveSchema,
@@ -394,6 +395,83 @@ router.put('/fac/risks/:id/sections', validateBody(facSectionsSaveSchema), async
         WHERE s.fac_risk_id = $1
         ORDER BY s.section_no, s.sort_order, c.class_name`,
       [riskId]
+    );
+    res.json(rows);
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}));
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FAC LAYERS — the excess tower (migration 136)
+//
+// A facultative excess placement is a tower, not a single band. `fac_risk`
+// still carries np_retention/np_limit for the primary layer so existing
+// reports keep working; this is where the rest of the tower lives, priced
+// layer by layer with its own ROL and payback.
+// ═══════════════════════════════════════════════════════════════════════════
+
+router.get('/fac/risks/:id/layers', asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT l.*, s.section_no
+       FROM public.fac_layer l
+       LEFT JOIN public.fac_risk_section s ON s.section_id = l.section_id
+      WHERE l.fac_risk_id = $1
+      ORDER BY l.layer_no`,
+    [req.params.id],
+  );
+  res.json(rows);
+}));
+
+router.put('/fac/risks/:id/layers', validateBody(facLayersSaveSchema), asyncHandler(async (req, res) => {
+  const riskId = req.params.id;
+  await assertCanEdit(req, 'FAC_RISK', riskId);
+  const layers = req.body.layers || [];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await assertExists(client, 'public.fac_risk', 'fac_risk_id', riskId, 'Risk');
+    await assertParentEntityUnchanged(client, {
+      parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId,
+      ifUnmodifiedSince: req.headers['if-unmodified-since'],
+    });
+    await client.query('DELETE FROM public.fac_layer WHERE fac_risk_id = $1', [riskId]);
+    for (const l of layers) {
+      await client.query(`
+        INSERT INTO public.fac_layer (
+          fac_risk_id, section_id, layer_no, attachment, limit_amount,
+          our_share_pct, reinstatements, reinstatement_terms, aggregate_limit,
+          loss_cost, rol_pct, premium, notes
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13)
+      `, [
+        riskId, l.section_id || null, l.layer_no,
+        numOrNull(l.attachment) ?? 0, numOrNull(l.limit_amount),
+        numOrNull(l.our_share_pct), numOrNull(l.reinstatements),
+        JSON.stringify(l.reinstatement_terms || []),
+        numOrNull(l.aggregate_limit), numOrNull(l.loss_cost),
+        numOrNull(l.rol_pct), numOrNull(l.premium), l.notes || null,
+      ]);
+    }
+    await touchParentEntity(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId });
+    await writeFacAuditEvent({
+      facRiskId: riskId,
+      eventType: 'FAC_LAYERS_SAVED',
+      actor: actorLabel(req),
+      payload: { layer_count: layers.length },
+      client,
+    });
+    await client.query('COMMIT');
+    const { rows } = await client.query(
+      `SELECT l.*, s.section_no
+         FROM public.fac_layer l
+         LEFT JOIN public.fac_risk_section s ON s.section_id = l.section_id
+        WHERE l.fac_risk_id = $1
+        ORDER BY l.layer_no`,
+      [riskId],
     );
     res.json(rows);
   } catch (e) {

@@ -567,7 +567,33 @@ describe('FacPricing extensions', () => {
 });
 
 describe('FacPricing — a class with no engine is a state, not a crash (F1)', () => {
-  it('explains what a marine risk rates on instead of rendering an exception', async () => {
+  it('explains what an unbuilt family rates on instead of rendering an exception', async () => {
+    apiMock.facListClasses.mockResolvedValue([{
+      fac_cob_id: 'COB-PLANT', category: 'ENGINEERING', class_name: 'Machinery Breakdown',
+      rating_family: 'PLANT_OPERATIONAL', exposure_basis: 'SUM_INSURED',
+    }]);
+    apiMock.facGetRisk.mockResolvedValue({
+      ...RISK, fac_cob_id: 'COB-PLANT', cob_category: 'ENGINEERING',
+      occupancy_code: null, risk_country_zone: null,
+    });
+
+    render(<FacPricing />);
+
+    await waitFor(() => {
+      expect(screen.getByText('No engine for this class yet')).toBeInTheDocument();
+    }, { timeout: 3000 });
+    expect(screen.getByText(/rates on rate per mille of sum insured/i)).toBeInTheDocument();
+    expect(screen.getByText(/Phase 4/)).toBeInTheDocument();
+    // No red exception message, and no half-rendered engine output.
+    expect(screen.queryByText(/Unknown occupancy_code/)).toBeNull();
+    expect(screen.queryByText('Rate Build-Up')).toBeNull();
+  });
+
+  it('hides the workbook sections for a family that has no workbook', async () => {
+    // Phase 3 built HULL_VALUE, so it is no longer blocked — but it rates off
+    // loaded tables through the server, not off a browser-side workbook. The
+    // property-only sections must not render empty, and the property engine
+    // must not be handed a hull risk.
     apiMock.facListClasses.mockResolvedValue([{
       fac_cob_id: 'COB-HULL', category: 'MARINE', class_name: 'Hull & Machinery',
       rating_family: 'HULL_VALUE', exposure_basis: 'AGREED_VALUE',
@@ -580,13 +606,12 @@ describe('FacPricing — a class with no engine is a state, not a crash (F1)', (
     render(<FacPricing />);
 
     await waitFor(() => {
-      expect(screen.getByText('No engine for this class yet')).toBeInTheDocument();
+      expect(screen.getByText('Loss Cost')).toBeInTheDocument();
     }, { timeout: 3000 });
-    expect(screen.getByText(/rates on rate per mille of agreed value/i)).toBeInTheDocument();
-    expect(screen.getByText(/Phase 3/)).toBeInTheDocument();
-    // No red exception message, and no half-rendered engine output.
+    expect(screen.queryByText('No engine for this class yet')).toBeNull();
+    expect(screen.queryByText('Workbook Rate Build-Up')).toBeNull();
+    expect(screen.queryByText('Engine Detail')).toBeNull();
     expect(screen.queryByText(/Unknown occupancy_code/)).toBeNull();
-    expect(screen.queryByText('Rate Build-Up')).toBeNull();
   });
 
   it('names the missing input when a property risk has no NatCat zone', async () => {
