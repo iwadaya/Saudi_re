@@ -55,6 +55,17 @@ export default defineConfig({
           // first keeps each screen — subfolders and all — in one chunk, so
           // only genuinely top-level shared code falls through to app-core.
 
+          // The facultative pricing engine (shared/fac) is pure math shared
+          // across chunk boundaries: config/wizard.js reads the family
+          // registry, and the fac screens read the registry, the exposure
+          // profile and the property workbook. Left unassigned it lands in
+          // whichever chunk happens to reach it first, which is how it ended
+          // up inside fac-screens and pushed that chunk over budget. Its own
+          // chunk keeps it out of both and puts its growth under its own gate.
+          if (id.includes('/shared/fac/')) {
+            return 'fac-engine';
+          }
+
           // Shared FQ math helpers live under final_pricing/ for historical
           // reasons but are pure logic (their only deps are utils/format +
           // shared/pricingMath) and are imported across chunk boundaries —

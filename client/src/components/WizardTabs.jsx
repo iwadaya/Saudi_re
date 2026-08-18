@@ -1,7 +1,7 @@
 // src/components/WizardTabs.jsx — Sidebar tabs for wizard navigation
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../context/AppContext';
-import { PROP_TAB_GROUPS, NP_TAB_GROUPS, FAC_TAB_GROUPS, STEP_LABELS, ROUTE_PATHS } from '../config/wizard';
+import { PROP_TAB_GROUPS, NP_TAB_GROUPS, FAC_TAB_GROUPS, STEP_LABELS, ROUTE_PATHS, facStepVisible } from '../config/wizard';
 import { isNpCatFlowDisabled, isNpRiskFlowDisabled, isNpStopLossTreaty } from '../utils/npTreatyType';
 
 export default function WizardTabs({ activeKey }) {
@@ -15,6 +15,9 @@ export default function WizardTabs({ activeKey }) {
   const npStopLoss     = mode === 'NP' && isNpStopLossTreaty(state);    // Stop Loss / Agg XL only
 
   function shouldShow(key) {
+    // Sidebar visibility and Next/Back navigation must agree — this mirrors
+    // the same filter getWizardNav applies to FAC_WIZARD_ORDER.
+    if (mode === 'FAC' && !facStepVisible(key, state.facRiskDetail?.ratingFamilies)) return false;
     if (mode === 'PROP') {
       if (!triEnabled && (key.includes('TRIANGLES') || key.includes('DEV_FACTORS') || key === 'PROP_PROJECTED_SUMMARY')) return false;
       if (triEnabled && key === 'PROP_NO_TRIANGULATION') return false;

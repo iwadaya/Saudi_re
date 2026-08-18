@@ -10,6 +10,9 @@ const apiMock = vi.hoisted(() => ({
   // Primary risk load + save
   facGetRisk: vi.fn(),
   facUpdateRisk: vi.fn(),
+  // Sections — their own entity (migration 133) with their own save.
+  facGetSections: vi.fn(),
+  facSaveSections: vi.fn(),
   // Reference lists (single useResource over Promise.all)
   listCedants: vi.fn(),
   listBrokers: vi.fn(),
@@ -34,7 +37,13 @@ vi.mock('../../../components/WizardLayout', () => ({
   },
 }));
 
+import { AppProvider } from '../../../context/AppContext';
 import FacRiskDetail from './FacRiskDetail';
+
+// The screen publishes the risk's rating families into app state so the
+// wizard can hide the steps this risk has no use for, so it needs the
+// provider the app always mounts it inside.
+const renderScreen = () => render(<AppProvider><FacRiskDetail /></AppProvider>);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -47,6 +56,8 @@ beforeEach(() => {
   apiMock.facGetOccupancies.mockResolvedValue({ occupancies: [] });
   apiMock.facGetNatcatRates.mockResolvedValue({ rates: [] });
   apiMock.facGetScoringTables.mockResolvedValue({ territorial_capacity: [] });
+  apiMock.facGetSections.mockResolvedValue([]);
+  apiMock.facSaveSections.mockResolvedValue([]);
   apiMock.facGetEligibleTreaties.mockResolvedValue({ treaties: [] });
   apiMock.facGetTreatyLinks.mockResolvedValue({ links: [] });
 });
@@ -58,7 +69,7 @@ describe('FacRiskDetail', () => {
       new Promise((resolve) => { resolveLoad = resolve; }),
     );
 
-    render(<FacRiskDetail />);
+    renderScreen();
 
     // boundary shows while the risk fetch is in flight
     expect(screen.getByRole('status')).toHaveTextContent(/loading risk detail/i);
@@ -81,7 +92,7 @@ describe('FacRiskDetail', () => {
       .mockRejectedValueOnce(Object.assign(new Error('API GET → 500: down'), { status: 500 }))
       .mockResolvedValueOnce({ insured_name: 'Recovered Insured' });
 
-    render(<FacRiskDetail />);
+    renderScreen();
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/could not load/i);
@@ -98,7 +109,7 @@ describe('FacRiskDetail', () => {
     apiMock.listCedants.mockRejectedValue(Object.assign(new Error('lookups down'), { status: 500 }));
     apiMock.facGetRisk.mockResolvedValue({ insured_name: 'Still Editable Co' });
 
-    render(<FacRiskDetail />);
+    renderScreen();
 
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
     // No error boundary for reference data — the form still hydrates,

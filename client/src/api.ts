@@ -113,6 +113,8 @@ const CACHEABLE_PATHS = new Set([
   '/api/fac/reference/bi-indemnity',
   '/api/fac/reference/natcat-rates',
   '/api/fac/reference/clauses',
+  // The rating-family registry is code, not data — it only changes on deploy.
+  '/api/fac/reference/families',
 ]);
 
 const API_BASE = (() => {
@@ -909,6 +911,37 @@ export const api = {
   facCreateRisk(payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request('/api/fac/risks', { method: 'POST', body: payload, ...opts }); },
   facUpdateRisk(id: string, payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}`, { method: 'PUT', body: payload, ...opts }); },
   facDeleteRisk(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}`, { method: 'DELETE', ...opts }); },
+  /** Classes of business on the risk, each with its own sum insured. */
+  facGetSections(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}/sections`, opts); },
+  /** The per-year exposure a burning cost divides by. */
+  facGetExperience(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}/experience`, opts); },
+  facSaveExperience(id: string, payload?: unknown, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/risks/${enc(id)}/experience`, { method: 'PUT', body: payload, ...opts });
+  },
+  /** The per-method audit trail behind the last priced row. */
+  facGetPricingMethods(id: string, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/risks/${enc(id)}/pricing-methods`, opts);
+  },
+  facSaveSections(id: string, sections?: unknown[], opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/risks/${enc(id)}/sections`, { method: 'PUT', body: { sections }, ...opts });
+  },
+  /** Committed capacity in this risk's zones, plus the systemic checks. */
+  facGetAccumulation(id: string, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/risks/${enc(id)}/accumulation`, opts);
+  },
+  /** The excess tower: one row per layer, with its own share and price. */
+  facGetLayers(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}/layers`, opts); },
+  facSaveLayers(id: string, layers?: unknown[], opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/risks/${enc(id)}/layers`, { method: 'PUT', body: { layers }, ...opts });
+  },
+  /**
+   * Server-side price. Returns either the authoritative result or a blocker
+   * explaining why this class cannot be priced yet — both are states the
+   * screen renders, neither is an error.
+   */
+  facPriceRisk(id: string, payload?: unknown, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/risks/${enc(id)}/price`, { method: 'POST', body: payload ?? {}, ...opts });
+  },
   facGetLocations(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}/locations`, opts); },
   facSaveLocations(id: string, locations?: unknown[], opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}/locations`, { method: 'PUT', body: { locations }, ...opts }); },
   facGetCope(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}/cope`, opts); },
@@ -1063,6 +1096,25 @@ export const api = {
   facGetBiIndemnity(opts?: RequestOpts): Promise<unknown>    { return request('/api/fac/reference/bi-indemnity', opts); },
   facGetNatcatRates(opts?: RequestOpts): Promise<unknown>    { return request('/api/fac/reference/natcat-rates', opts); },
   facGetClauses(opts?: RequestOpts): Promise<unknown>        { return request('/api/fac/reference/clauses', opts); },
+  facGetFamilies(opts?: RequestOpts): Promise<unknown>       { return request('/api/fac/reference/families', opts); },
+  facGetRateVersion(opts?: RequestOpts): Promise<unknown>    { return request('/api/fac/reference/rate-version', opts); },
+  facGetCurves(family?: string, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/reference/curves${family ? `?family=${enc(family)}` : ''}`, opts);
+  },
+  /** How the book is priced, not how one risk is. */
+  facGetPortfolioAdequacy(query?: Record<string, string | number | undefined>, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/portfolio/adequacy${toQuery(query) ? `?${toQuery(query)}` : ''}`, opts);
+  },
+  facGetPortfolioHitRatio(query?: Record<string, string | number | undefined>, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/portfolio/hit-ratio${toQuery(query) ? `?${toQuery(query)}` : ''}`, opts);
+  },
+  facGetPortfolioCapacity(query?: Record<string, string | number | undefined>, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/portfolio/capacity${toQuery(query) ? `?${toQuery(query)}` : ''}`, opts);
+  },
+  /** ILF curves and the base-rate tables the Phase 3 families rate off. */
+  facGetRateTables(family?: string, opts?: RequestOpts): Promise<unknown> {
+    return request(`/api/fac/reference/rate-tables${family ? `?family=${enc(family)}` : ''}`, opts);
+  },
 
   // ── Workbench (Actuarial Formula Workbench) ──────────────────────────────
   workbenchListFormulas(opts?: RequestOpts): Promise<unknown> { return request('/api/workbench/formulas', opts); },

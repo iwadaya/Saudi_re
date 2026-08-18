@@ -2,8 +2,10 @@
 import { useCallback, useMemo, useState } from 'react';
 import api from '../../../api';
 import WizardLayout from '../../../components/WizardLayout';
+import PctInput from '../../../components/PctInput';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import { useFacRiskId } from '../../../hooks/useContractId';
+import './FacLossHistory.css';
 
 const ROUTE_KEY = 'FAC_LOSS_HISTORY';
 const numOrNull = v => { const c = String(v ?? '').replace(/,/g,'').trim(); if (!c) return null; const n = Number(c); return Number.isFinite(n) ? n : null; };
@@ -16,6 +18,14 @@ const BLANK = () => ({ loss_year: new Date().getFullYear(), loss_date: '', loss_
 export default function FacLossHistory() {
   const riskId = useFacRiskId();
   const [rows, setRows] = useState([]);
+  // ── Exposure basis ────────────────────────────────────────────────────
+  // The denominator a burning cost divides by (migration 135). Loss history
+  // on its own gives a total, not a rate — and the years with no claims are
+  // exactly the ones that must not be dropped, because leaving them out is
+  // the commonest way a burn rate comes out too high. Keyed by year so a
+  // clean year still carries an exposure.
+  const [basis, setBasis] = useState({});      // { [year]: {exposure_base, premium, rate_change_pct} }
+  const [assumptions, setAssumptions] = useState({ severity_trend_pct: '', experience_years: '' });
 
   const hydrate = useCallback((data) => {
     setRows((data || []).map(r => ({
@@ -41,7 +51,7 @@ export default function FacLossHistory() {
     [],
   );
 
-  const { save, markDirty } = useScreenSave({
+  const { save: saveLossRows, markDirty } = useScreenSave({
     entityId: riskId || '',
     load: api.facGetLosses,
     save: saveLosses,
@@ -49,6 +59,60 @@ export default function FacLossHistory() {
     onLoaded: hydrate,
     errorLabel: 'Loss history',
   });
+
+  const hydrateBasis = useCallback((data) => {
+    const next = {};
+    for (const b of data?.basis || []) {
+      next[b.loss_year] = {
+        exposure_base: cleanNum(b.exposure_base) || '',
+        premium: cleanNum(b.premium) || '',
+        rate_change_pct: cleanNum(b.rate_change_pct) || '',
+      };
+    }
+    setBasis(next);
+    setAssumptions({
+      severity_trend_pct: cleanNum(data?.severity_trend_pct) || '',
+      experience_years: cleanNum(data?.experience_years) || '',
+    });
+  }, []);
+
+  const saveBasis = useCallback((id, state) => api.facSaveExperience(id, {
+    basis: Object.entries(state.basis)
+      .filter(([, v]) => numOrNull(v.exposure_base) != null || numOrNull(v.premium) != null)
+      .map(([year, v]) => ({
+        loss_year: Number(year),
+        exposure_base: numOrNull(v.exposure_base),
+        premium: numOrNull(v.premium),
+        rate_change_pct: numOrNull(v.rate_change_pct),
+      })),
+    severity_trend_pct: numOrNull(state.assumptions.severity_trend_pct),
+    experience_years: numOrNull(state.assumptions.experience_years),
+  }), []);
+
+  const { save: saveBasisRows, markDirty: markBasisDirty } = useScreenSave({
+    entityId: riskId || '',
+    load: api.facGetExperience,
+    save: saveBasis,
+    currentState: () => ({ basis, assumptions }),
+    onLoaded: hydrateBasis,
+    errorLabel: 'Experience basis',
+  });
+
+  // Both entities have to land before the wizard advances.
+  const save = useCallback(async () => {
+    const a = await saveLossRows();
+    const b = await saveBasisRows();
+    return Boolean(a) && Boolean(b);
+  }, [saveLossRows, saveBasisRows]);
+
+  const setBasisCell = (year, key, value) => {
+    setBasis((prev) => ({ ...prev, [year]: { ...(prev[year] || {}), [key]: value } }));
+    markBasisDirty();
+  };
+  const setAssumption = (key, value) => {
+    setAssumptions((prev) => ({ ...prev, [key]: value }));
+    markBasisDirty();
+  };
 
   const setRow = (i, k, v) => { setRows(prev => prev.map((r, j) => j === i ? { ...r, [k]: v } : r)); markDirty(); };
   const addRow = () => { setRows(prev => [...prev, BLANK()]); markDirty(); };
@@ -86,8 +150,11 @@ export default function FacLossHistory() {
       b.fguIncurred += paid + os;
       b.riIncurred += riPaid + riOs;
     }
-    return Array.from(buckets.values());
-  }, [rows]);
+    return Array.from(buckets.values()).map((b) => {
+      const premium = numOrNull(basis[b.year]?.premium);
+      return { ...b, claimRatio: premium && premium > 0 ? b.fguIncurred / premium : null };
+    });
+  }, [rows, basis]);
   const fmt0 = (n) => (Number.isFinite(n) && n !== 0 ? Math.round(n).toLocaleString('en-US') : '—');
 
   return (
@@ -108,7 +175,7 @@ export default function FacLossHistory() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
             <thead>
               <tr style={{ background: 'var(--table-head-bg)' }}>
-                {['Year', 'Claims', 'FGU Paid', 'FGU O/S', 'FGU Incurred', 'RI Incurred', 'As-if Claim Ratio'].map((h) => (
+                {['Year', 'Claims', 'FGU Paid', 'FGU O/S', 'FGU Incurred', 'Exposure (SI)', 'Premium', 'Claim Ratio'].map((h) => (
                   <th key={h} style={{ padding: '8px 10px',
                                        textAlign: h === 'Year' ? 'left' : 'right',
                                        fontSize: 9, fontWeight: 800, letterSpacing: '.10em',
@@ -144,19 +211,46 @@ export default function FacLossHistory() {
                                 color: m.fguIncurred ? 'var(--accent)' : 'rgba(var(--text-rgb),0.4)' }}>
                     {fmt0(m.fguIncurred)}
                   </td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right',
-                                fontVariantNumeric: 'tabular-nums',
-                                color: m.riIncurred ? 'rgba(var(--text-rgb),0.85)' : 'rgba(var(--text-rgb),0.4)' }}>
-                    {fmt0(m.riIncurred)}
+                  <td className="facexp-cell">
+                    <input className="fi facexp-input" inputMode="numeric" aria-label={`Exposure ${m.year}`}
+                           value={fmtComma(basis[m.year]?.exposure_base)}
+                           onChange={(e) => setBasisCell(m.year, 'exposure_base', stripDigits(e.target.value))} />
                   </td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right',
-                                color: 'rgba(var(--text-rgb),0.58)' }}>—</td>
+                  <td className="facexp-cell">
+                    <input className="fi facexp-input--narrow" inputMode="numeric" aria-label={`Premium ${m.year}`}
+                           value={fmtComma(basis[m.year]?.premium)}
+                           onChange={(e) => setBasisCell(m.year, 'premium', stripDigits(e.target.value))} />
+                  </td>
+                  <td className={`facexp-ratio${m.claimRatio == null ? ''
+                    : m.claimRatio > 1 ? ' facexp-ratio--over' : ' facexp-ratio--set'}`}>
+                    {m.claimRatio == null ? '—' : `${(m.claimRatio * 100).toFixed(0)}%`}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
           <div style={{ marginTop: 6, fontSize: 10, color: 'rgba(var(--text-rgb),0.7)' }}>
-            As-if claim ratio shows &lsquo;—&rsquo; until premium-per-year is captured against this risk.
+            Exposure and premium are the denominator the burning cost divides by. Enter a row for
+            every year on risk — including the clean ones, which are what stop the burn rate
+            coming out too high.
+          </div>
+
+          <div className="facexp-assumptions">
+            <label htmlFor="fac-severity-trend" className="facexp-assumption">
+              Claims inflation % p.a.
+              <PctInput id="fac-severity-trend" className="fi facexp-years"
+                        value={assumptions.severity_trend_pct}
+                        onChange={(v) => setAssumption('severity_trend_pct', v)} />
+            </label>
+            <label className="facexp-assumption">
+              Experience years
+              <input className="fi facexp-years" type="number" min={0} max={20}
+                     value={assumptions.experience_years}
+                     onChange={(e) => setAssumption('experience_years', e.target.value)} />
+            </label>
+            <span className="facexp-hint">
+              Losses are trended from their year to the current one before they are rated.
+            </span>
           </div>
         </div>
 

@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-08-17",
-  "note": "Ratchet baseline for scripts/frontend-budget.mjs — see docs/frontend-hardening.md. The Claims & Finance screens shipped with 162 inline styles and a clickable <tr> (3286/83 vs the 3133/82 baseline, breaking the gate); porting them onto the ui primitives (Table/Badge/Callout/Select) brought inlineStyles to 3124 and onClickNonInteractive back to 82.",
+  "generatedAt": "2026-08-18",
+  "note": "Ratchet baseline for scripts/frontend-budget.mjs — see docs/frontend-hardening.md. Re-measured on the merge of the facultative pricing work into the Claims & Finance design-system port: the two improved different screens, and the combined tree is 3035/81 against main's 3124/82.",
   "metrics": {
-    "inlineStyles": 3124,
+    "inlineStyles": 3035,
     "filesOver800Loc": 0,
-    "onClickNonInteractive": 82,
+    "onClickNonInteractive": 81,
     "consoleCalls": 0,
-    "useStateCalls": 645,
+    "useStateCalls": 652,
     "setLoadingCalls": 78
   }
 }

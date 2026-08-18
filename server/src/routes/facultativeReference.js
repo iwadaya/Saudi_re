@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { asyncHandler } from '../helpers.js';
+import { listFamilies, RATING_BASIS_LABEL, SEGMENT_LABEL } from '../../../shared/fac/index.js';
 
 const router = Router();
 
@@ -127,6 +128,159 @@ router.get('/fac/reference/natcat-rates', asyncHandler(async (_req, res) => {
   `);
   res.set('Cache-Control', CACHE_HEADER);
   res.json({ rates: rows });
+}));
+
+// The rating-family registry. Served from shared/fac rather than the
+// database because a family is code (an engine and its rules), not data —
+// the class → family mapping is the data, and it lives on
+// fac_class_of_business. The screen uses this to tell an underwriter what a
+// class rates on and whether its engine exists yet, instead of running a
+// marine risk into the property engine and rendering the exception.
+router.get('/fac/reference/families', (_req, res) => {
+  res.set('Cache-Control', CACHE_HEADER);
+  res.json({
+    families: listFamilies().map((f) => ({
+      code: f.code,
+      label: f.label,
+      segment: f.segment,
+      segment_label: SEGMENT_LABEL[f.segment] || f.segment,
+      rating_basis: f.ratingBasis,
+      rating_basis_label: RATING_BASIS_LABEL[f.ratingBasis] || f.ratingBasis,
+      period_basis: f.periodBasis,
+      methods: f.methods,
+      requires: f.requires || [],
+      wizard_steps: f.wizardSteps || [],
+      implemented: f.implemented,
+      planned_phase: f.plannedPhase || null,
+      notes: f.notes || null,
+    })),
+  });
+});
+
+// Which reference set is in force. A priced row stores this label so
+// re-opening it after a rate revision can say which rates produced the
+// number, instead of silently recomputing against today's (finding F12).
+router.get('/fac/reference/rate-version', asyncHandler(async (req, res) => {
+  const asOf = typeof req.query.asOf === 'string' && req.query.asOf ? req.query.asOf : null;
+  const { rows } = await pool.query(
+    `SELECT version_label, effective_from, effective_to, notes
+       FROM public.fac_rate_table_version
+      WHERE effective_from <= COALESCE($1::date, CURRENT_DATE)
+        AND (effective_to IS NULL OR effective_to >= COALESCE($1::date, CURRENT_DATE))
+      ORDER BY effective_from DESC
+      LIMIT 1`,
+    [asOf],
+  );
+  // No cache header: the active version is the one thing here that can
+  // change without a deploy.
+  res.json(rows[0] || null);
+}));
+
+// The exposure-curve library and the size bands each family rates through.
+//
+// One curve ships as data — G(x) = x, the uniform destruction rate, which
+// asserts nothing about severity. Every other curve encodes a view of how
+// severe losses are for a kind of risk, and that view belongs to whoever
+// holds the data behind it, so curve sets are loaded rather than invented
+// here. See docs/facultative-pricing-design.md §8.
+router.get('/fac/reference/curves', asyncHandler(async (req, res) => {
+  const family = typeof req.query.family === 'string' ? req.query.family : null;
+  const [curves, bands] = await Promise.all([
+    pool.query(
+      `SELECT curve_id, curve_code, curve_name, curve_set, source, kind, params,
+              effective_from, effective_to, active, notes
+         FROM public.fac_exposure_curve
+        WHERE active = true
+        ORDER BY curve_set NULLS LAST, curve_code`,
+    ),
+    pool.query(
+      `SELECT b.band_id, b.family_code, b.min_exposure, b.max_exposure,
+              c.curve_code, c.curve_name
+         FROM public.fac_curve_band b
+         JOIN public.fac_exposure_curve c ON c.curve_id = b.curve_id
+        WHERE ($1::text IS NULL OR b.family_code = $1)
+        ORDER BY b.family_code, b.min_exposure`,
+      [family],
+    ),
+  ]);
+  res.set('Cache-Control', CACHE_HEADER);
+  res.json({ curves: curves.rows, bands: bands.rows });
+}));
+
+// The Phase 3 rate tables: ILF curves, and the base rates each new family
+// rates off. Every one of these tables ships EMPTY (migration 136), so this
+// endpoint's honest answer on a fresh install is "nothing loaded" — and the
+// screen says exactly that, naming the table, instead of showing a price
+// derived from a default nobody chose. See docs/facultative-pricing-design.md §8.
+router.get('/fac/reference/rate-tables', asyncHandler(async (req, res) => {
+  const family = typeof req.query.family === 'string' ? req.query.family : null;
+  const [ilf, ilfPoints, liability, transit, hull, hullFactors, war] = await Promise.all([
+    pool.query(
+      `SELECT curve_id, curve_code, curve_name, family_code, territory, kind,
+              basic_limit, params, source, effective_from, effective_to
+         FROM public.fac_ilf_curve
+        WHERE active = true AND ($1::text IS NULL OR family_code IS NULL OR family_code = $1)
+        ORDER BY family_code NULLS FIRST, territory NULLS FIRST, curve_code`,
+      [family],
+    ),
+    pool.query(
+      `SELECT curve_id, limit_amount, ilf FROM public.fac_ilf_point
+        ORDER BY curve_id, limit_amount`,
+    ),
+    pool.query(
+      `SELECT r.rate_id, r.fac_cob_id, c.class_name, r.territory, r.basis_unit,
+              r.basis_divisor, r.basic_limit, r.loss_cost_per_unit, r.hazard_band,
+              r.source, r.effective_from, r.effective_to
+         FROM public.fac_liability_base_rate r
+         LEFT JOIN public.fac_class_of_business c ON c.fac_cob_id = r.fac_cob_id
+        WHERE r.active = true
+        ORDER BY c.class_name NULLS FIRST, r.territory, r.basis_unit`,
+    ),
+    pool.query(
+      `SELECT rate_id, commodity, conveyance, route_region, rate_pm, packing_factor,
+              source, effective_from, effective_to
+         FROM public.fac_transit_base_rate
+        WHERE active = true
+        ORDER BY commodity, conveyance, route_region`,
+    ),
+    pool.query(
+      `SELECT rate_id, vessel_type, tonnage_min, tonnage_max, rate_pm, source,
+              effective_from, effective_to
+         FROM public.fac_hull_base_rate
+        WHERE active = true
+        ORDER BY vessel_type, tonnage_min`,
+    ),
+    pool.query(
+      `SELECT factor_id, factor_kind, factor_key, factor, source
+         FROM public.fac_hull_factor
+        WHERE active = true
+        ORDER BY factor_kind, factor_key`,
+    ),
+    pool.query(
+      `SELECT war_rate_id, region, basis, rate_pm, breach_ap_pm, source,
+              effective_from, effective_to, notes
+         FROM public.fac_war_rate
+        WHERE active = true
+        ORDER BY region, effective_from DESC`,
+    ),
+  ]);
+
+  const pointsByCurve = new Map();
+  for (const pt of ilfPoints.rows) {
+    if (!pointsByCurve.has(pt.curve_id)) pointsByCurve.set(pt.curve_id, []);
+    pointsByCurve.get(pt.curve_id).push({ limit_amount: pt.limit_amount, ilf: pt.ilf });
+  }
+
+  // War rates move weekly and by hundreds of percent when a corridor closes,
+  // so they are never cached alongside the rest.
+  res.json({
+    ilf_curves: ilf.rows.map((c) => ({ ...c, points: pointsByCurve.get(c.curve_id) || [] })),
+    liability_base_rates: liability.rows,
+    transit_base_rates: transit.rows,
+    hull_base_rates: hull.rows,
+    hull_factors: hullFactors.rows,
+    war_rates: war.rows,
+  });
 }));
 
 router.get('/fac/reference/clauses', asyncHandler(async (_req, res) => {

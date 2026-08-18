@@ -177,6 +177,112 @@ export const facLocationsSaveSchema = z.object({
 
 
 /**
+ * One row in the sections save payload (migration 133).
+ *
+ * A section is a class of business on the risk with its own sum insured.
+ * The Risk Detail screen has always collected these; until migration 133
+ * there was nowhere to put them, so only the first class and the summed
+ * total survived a save (finding F6).
+ *
+ * Only fac_cob_id and section_no are structural. Everything else is the
+ * exposure in whatever units the section's rating family uses, and stays
+ * optional so a draft saves mid-entry.
+ */
+export const facSectionSchema = z.object({
+  section_no:  z.preprocess((v) => {
+    if (v === null || v === undefined || v === '') return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.trunc(n) : undefined;
+  }, z.number().int().min(1).max(20)),
+  fac_cob_id:  z.string().uuid('fac_cob_id must be a UUID'),
+
+  sum_insured:   money,
+  exposure_base: money,
+  exposure_unit: optionalText,
+  limit_amount:  money,
+  attachment:    money,
+  deductible:    money,
+  deductible_basis: optionalText,
+  currency_id:   optionalUuid,
+  exposure_detail: z.record(z.unknown()).optional(),
+}).passthrough();
+
+/**
+ * PUT /api/fac/risks/:id/sections — full replacement, like locations.
+ * Five sections × the class catalogue is the practical ceiling the UI
+ * offers; 100 leaves room without letting a bad payload write unbounded.
+ */
+export const facSectionsSaveSchema = z.object({
+  sections: z.array(facSectionSchema).max(100, 'maximum 100 sections per risk').default([]),
+}).passthrough();
+
+
+/**
+ * One layer of an excess tower (migration 136).
+ *
+ * A facultative excess placement is a tower of layers, each with its own
+ * attachment, limit, share, reinstatements and price. Before migration 136
+ * `fac_risk` carried a single `np_retention`/`np_limit` pair, so a two-layer
+ * placement could only be recorded as one of its layers.
+ *
+ * `limit_amount` NULL means an unlimited top layer; `reinstatements` NULL
+ * means unlimited free reinstatements. Those are different from zero and
+ * the difference is the price, so neither is defaulted.
+ */
+export const facLayerSchema = z.object({
+  layer_no: z.preprocess((v) => {
+    if (v === null || v === undefined || v === '') return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.trunc(n) : undefined;
+  }, z.number().int().min(1).max(50)),
+  section_id:      optionalUuid,
+  attachment:      money,
+  limit_amount:    money,
+  our_share_pct:   optionalNumber,
+  reinstatements:  optionalInt,
+  reinstatement_terms: z.array(z.record(z.unknown())).max(50).optional(),
+  aggregate_limit: money,
+  loss_cost:       money,
+  rol_pct:         optionalNumber,
+  premium:         money,
+  notes:           optionalText,
+}).passthrough();
+
+/** PUT /api/fac/risks/:id/layers — full replacement, like sections. */
+export const facLayersSaveSchema = z.object({
+  layers: z.array(facLayerSchema).max(50, 'maximum 50 layers per risk').default([]),
+}).passthrough();
+
+/**
+ * One year of exposure history (migration 135).
+ *
+ * This is the denominator a burning cost divides by. A year with no losses
+ * still needs a row — dropping the clean years is the commonest way a burn
+ * rate comes out too high.
+ */
+export const facExperienceBasisRowSchema = z.object({
+  loss_year:       z.preprocess((v) => {
+    if (v === null || v === undefined || v === '') return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.trunc(n) : undefined;
+  }, z.number().int().min(1900).max(2200)),
+  exposure_base:   money,
+  exposure_unit:   optionalText,
+  premium:         money,
+  rate_change_pct: optionalNumber,
+  claim_count:     optionalInt,
+  notes:           optionalText,
+}).passthrough();
+
+/** PUT /api/fac/risks/:id/experience — the basis rows plus the risk-level assumptions. */
+export const facExperienceSaveSchema = z.object({
+  basis:              z.array(facExperienceBasisRowSchema).max(40, 'maximum 40 experience years').default([]),
+  severity_trend_pct: optionalNumber,
+  experience_years:   optionalInt,
+  experience_notes:   optionalText,
+}).passthrough();
+
+/**
  * PUT /api/fac/risks/:id/pricing — accepts:
  *   • The historic dual-engine fields (market / actuarial / blend / final).
  *   • The new engine inputs + outputs from computeFacQuote (migration 082).
@@ -239,6 +345,19 @@ export const facPricingSaveSchema = z.object({
   // Provenance
   engine_version:           optionalText,
   engine_warnings:          z.array(z.unknown()).optional(),
+  // Migration 134 — which reference set and which family produced this row,
+  // and how much of the scoring weight was actually selected.
+  rate_table_version:       optionalText,
+  family_code:              optionalText,
+  // Migration 135 — the technical build-up behind the signed rate.
+  blended_loss_cost_pm:     optionalNumber,
+  cat_load_pm:              optionalNumber,
+  risk_load_pm:             optionalNumber,
+  internal_expense_pct:     optionalFraction01,
+  blend_weights:            z.record(z.unknown()).optional(),
+  blend_override_reason:    optionalText,
+  score_completeness:       optionalFraction01,
+  exposure_basis:           optionalText,
 
   // UI-only blob — kept passthrough-style for the dual-engine extensions
   // selection state that already lives there.
@@ -299,6 +418,13 @@ const facLossRowSchema = z.object({
   ri_outstanding:      money,
   mitigation_measures: optionalText,
   is_open:             boolish,
+  // Migration 135 — the underwriter's own restatement of a claim, which
+  // overrides the derived index / development / as-if chain.
+  indexed_incurred:    money,
+  as_if_incurred:      money,
+  development_factor:  optionalNumber,
+  exclude_from_rating: boolish,
+  exclusion_reason:    optionalText,
 }).passthrough();
 
 /** PUT /api/fac/risks/:id/losses — full loss-history replacement. */
@@ -328,7 +454,18 @@ export const facSubmitForApprovalSchema = z.object({
 /** POST /bind — effective_date optional, in ISO YYYY-MM-DD form. */
 export const facBindSchema = z.object({
   effective_date: isoDate,
-}).passthrough();
+  // Overriding the capacity check is an act of underwriting authority, so it
+  // is explicit and it carries a reason. Both go into the audit event.
+  capacity_override:        z.boolean().optional(),
+  capacity_override_reason: optionalText,
+}).passthrough()
+  .refine(
+    (b) => !b.capacity_override || String(b.capacity_override_reason || '').trim().length >= 5,
+    {
+      path: ['capacity_override_reason'],
+      message: 'A capacity override needs a reason of at least 5 characters',
+    },
+  );
 
 /** POST /risks/:id/treaty-links — body schema. */
 export const facTreatyLinkCreateSchema = z.object({

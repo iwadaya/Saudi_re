@@ -1,10 +1,11 @@
 // src/screens/facultative/coverage_structure/FacCoverageStructure.jsx
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../../../api';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import { useFacRiskId } from '../../../hooks/useContractId';
+import FacLayerTower from './FacLayerTower';
 
 const ROUTE_KEY = 'FAC_COVERAGE_STRUCTURE';
 const numOrNull = v => { const c = String(v ?? '').replace(/,/g,'').trim(); if (!c) return null; const n = Number(c); return Number.isFinite(n) ? n : null; };
@@ -38,6 +39,11 @@ const INITIAL = {
 export default function FacCoverageStructure() {
   const riskId = useFacRiskId();
   const [f, setF] = useState(INITIAL);
+  // The tower saves alongside the risk header rather than on its own button:
+  // a layer without the placement it belongs to is not a state worth having.
+  const [layers, setLayers] = useState([]);
+  const layersRef = useRef([]);
+  layersRef.current = layers;
 
   const hydrate = useCallback((r) => {
     setF({
@@ -57,21 +63,39 @@ export default function FacCoverageStructure() {
     });
   }, []);
 
-  const persist = useCallback((id, state) => api.facUpdateRisk(id, {
-    placement_type: state.placement_type,
-    cedant_retention_pct: numOrNull(state.cedant_retention_pct),
-    ri_share_pct: numOrNull(state.ri_share_pct),
-    our_share_pct: numOrNull(state.our_share_pct),
-    np_retention: numOrNull(state.np_retention),
-    np_limit: numOrNull(state.np_limit),
-    np_our_share_pct: numOrNull(state.np_our_share_pct),
-    commission_pct: numOrNull(state.commission_pct),
-    brokerage_pct: numOrNull(state.brokerage_pct),
-    taxes_pct: numOrNull(state.taxes_pct),
-    original_premium: numOrNull(state.original_premium),
-    ri_premium: numOrNull(state.ri_premium),
-    original_rate: numOrNull(state.original_rate),
-  }), []);
+  const persist = useCallback(async (id, state) => {
+    const saved = await api.facUpdateRisk(id, {
+      placement_type: state.placement_type,
+      cedant_retention_pct: numOrNull(state.cedant_retention_pct),
+      ri_share_pct: numOrNull(state.ri_share_pct),
+      our_share_pct: numOrNull(state.our_share_pct),
+      np_retention: numOrNull(state.np_retention),
+      np_limit: numOrNull(state.np_limit),
+      np_our_share_pct: numOrNull(state.np_our_share_pct),
+      commission_pct: numOrNull(state.commission_pct),
+      brokerage_pct: numOrNull(state.brokerage_pct),
+      taxes_pct: numOrNull(state.taxes_pct),
+      original_premium: numOrNull(state.original_premium),
+      ri_premium: numOrNull(state.ri_premium),
+      original_rate: numOrNull(state.original_rate),
+    });
+    // Layers after the header they belong to. The response carries the
+    // persisted rows back so the grid's keys follow the database, not the
+    // order they happened to be typed in.
+    const rows = await api.facSaveLayers(id, layersRef.current.map((l, i) => ({
+      layer_no: i + 1,
+      attachment: numOrNull(l.attachment) ?? 0,
+      limit_amount: numOrNull(l.limit_amount),
+      our_share_pct: numOrNull(l.our_share_pct),
+      reinstatements: numOrNull(l.reinstatements),
+      aggregate_limit: numOrNull(l.aggregate_limit),
+      loss_cost: numOrNull(l.loss_cost),
+      premium: numOrNull(l.premium),
+      notes: l.notes || null,
+    })));
+    if (Array.isArray(rows)) setLayers(rows);
+    return saved;
+  }, []);
 
   const { save, markDirty } = useScreenSave({
     entityId: riskId || '',
@@ -84,6 +108,19 @@ export default function FacCoverageStructure() {
 
   const set = useCallback((k, v) => { setF(prev => ({ ...prev, [k]: v })); markDirty(); }, [markDirty]);
   const isProp = f.placement_type === 'PROPORTIONAL';
+
+  useEffect(() => {
+    if (!riskId) return undefined;
+    let live = true;
+    api.facGetLayers(riskId)
+      .then((rows) => { if (live) setLayers(Array.isArray(rows) ? rows : []); })
+      // A tower that will not load must not take the placement screen with
+      // it — the retention and limit above are still editable.
+      .catch(() => { if (live) setLayers([]); });
+    return () => { live = false; };
+  }, [riskId]);
+
+  const onLayersChange = useCallback((next) => { setLayers(next); markDirty(); }, [markDirty]);
 
   // Auto-calc RI share = 100 − retention
   useEffect(() => {
@@ -121,6 +158,12 @@ export default function FacCoverageStructure() {
             <FR label="Retention / Priority"><input className="fi" type="text" inputMode="numeric" value={fmtComma(f.np_retention)} onChange={e => set('np_retention', stripDigits(e.target.value))} /></FR>
             <FR label="Limit (xs Retention)"><input className="fi" type="text" inputMode="numeric" value={fmtComma(f.np_limit)} onChange={e => set('np_limit', stripDigits(e.target.value))} /></FR>
             <FR label="Our Share %"><PctInput value={f.np_our_share_pct} onChange={v => set('np_our_share_pct', v)} style={{ width: 100 }} /></FR>
+          </Sec>
+        )}
+
+        {!isProp && (
+          <Sec title="Excess Tower">
+            <FacLayerTower layers={layers} onChange={onLayersChange} />
           </Sec>
         )}
 

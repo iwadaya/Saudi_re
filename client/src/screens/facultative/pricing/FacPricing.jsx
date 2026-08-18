@@ -1,4 +1,26 @@
 // src/screens/facultative/pricing/FacPricing.jsx
+//
+// One rate, one build-up.
+//
+// This screen used to run three unreconciled pricing mechanisms side by
+// side: the engine, an Extensions checklist whose loadings fed nothing but
+// the legacy blend, and a manual ①②③④ market / actuarial / 50-50 blend /
+// final block — and it was the manual block, not the engine, that wrote
+// back to fac_risk.ri_premium and that the Summary screen showed as
+// accepted. A fourth loading list ("extra cover loadings") sat inside the
+// engine inputs with no relationship to the Extensions ticks above it
+// (findings F9, and the design doc §1.3).
+//
+// The manual block is gone. The market rate it collected is now the
+// engine's own Benchmark input — it was always the thing that drove the
+// market-vs-technical band — and the Extensions ticks feed the engine's
+// cover loadings, so there is a single path from reference data to a
+// quoted rate and every step of it is on screen in order.
+//
+// The legacy fac_pricing columns are still written (final_rate_per_mille,
+// final_premium and friends) so historic rows keep rendering and the
+// Summary screen, the risk header premium and the reports that read them
+// keep working. They now carry the engine's answer rather than a typed one.
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import api from '../../../api';
 import WizardLayout from '../../../components/WizardLayout';
@@ -10,45 +32,44 @@ import EditLockBanner, { ReadOnlyWrap } from '../../../components/EditLockBanner
 import { useResource } from '../../../hooks/useResource';
 import { useGlobalToast } from '../../../hooks/useToast';
 import { isReadOnlyError } from '../../../utils/readOnlyError';
-import { computeFacQuote } from '../../../logic/facPropertyPricing';
+// Imported from the modules themselves, not the shared/fac barrel: the barrel
+// is the server's entry point, and importing it here would attach all eleven
+// rate engines to the registry and ship them to the browser. The registry on
+// its own is metadata — labels, rating bases, what needs a COPE survey.
+import { buildExposureProfile } from '../../../../../shared/fac/exposure.js';
+import { familyForClass, pricingBlocker } from '../../../../../shared/fac/registry.js';
+// The one engine the browser runs. Every other family prices on the server,
+// and this screen shows the server's answer for them.
+import { scheduleProperty } from '../../../../../shared/fac/families/scheduleProperty.js';
 import { logger } from '../../../utils/logger';
-import { UwFactorsPanel, EngineReadout } from './FacPricingPanels';
+import './FacPricing.css';
+import {
+  UwFactorsPanel, EngineReadout, PricingWaterfall, FamilyBlocker, ExposureBasisNote,
+  LossCostPanel, TechnicalBuildUp,
+} from './FacPricingPanels';
+import FacCapacityPanel from './FacCapacityPanel';
 
-const ENGINE_VERSION = '1.0.0';
+const ENGINE_VERSION = '2.0.0';
 
 const ROUTE_KEY = 'FAC_PRICING';
 
-// Canonical shape of the manual dual-engine pricing fields. Hydration
-// merges the persisted row over THESE defaults (never over live state),
-// so loading is a one-shot per risk and user edits can't re-trigger it.
-const F_DEFAULTS = {
-  market_rate_per_mille: '', market_premium: '', market_source: '',
-  actuarial_method: '', actuarial_rate_per_mille: '', actuarial_premium: '',
-  expected_loss_ratio: '', loss_cost: '', loading_pct: '',
-  market_weight_pct: '50', actuarial_weight_pct: '50',
-  blended_rate_per_mille: '', blended_premium: '',
-  final_rate_per_mille: '', final_premium: '',
-  uw_adjustment_pct: '0', uw_adjustment_reason: '',
-  burning_cost_ratio: '', avg_loss_years: '5',
-};
 const numOrNull = v => { const c = String(v ?? '').replace(/,/g,'').trim(); if (!c) return null; const n = Number(c); return Number.isFinite(n) ? n : null; };
-const cleanNum = v => { if (v == null || v === '') return ''; const n = Number(v); if (!Number.isFinite(n)) return String(v); return n === Math.floor(n) ? String(Math.floor(n)) : String(n); };
 const fmtN = v => { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—'; };
 
 function FR({ label, children, hint }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 10, alignItems: 'center', minHeight: 36 }}>
+    <div className="facpx-row">
       <div>
-        <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)' }}>{label}</div>
-        {hint && <div style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.58)', marginTop: 1 }}>{hint}</div>}
+        <div className="facpx-row-label">{label}</div>
+        {hint && <div className="facpx-row-hint">{hint}</div>}
       </div>
       <div>{children}</div>
     </div>
   );
 }
-function Sec({ title, color, children }) {
+function Sec({ title, children }) {
   return <>
-    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: color || 'rgba(var(--accent-blue-rgb),0.75)', marginTop: 28, marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid var(--hairline)' }}>{title}</div>
+    <div className="facpx-sec-title">{title}</div>
     {children}
   </>;
 }
@@ -59,6 +80,10 @@ const CATEGORY_COLORS = {
 };
 
 // ── Extensions library by category ──
+// Still hard-coded here. Moving it into a versioned fac_extension_catalogue
+// (design doc §4.5 M7) with an explicit ADDITIVE / MULTIPLICATIVE flag is a
+// later phase; what changed now is where these numbers GO — they are the
+// engine's cover loadings rather than a parallel calculation.
 const EXTENSIONS_BY_CATEGORY = {
   PROPERTY: [
     { id: 'natcat_eq',    label: 'Earthquake',                   loadingPct: 15 },
@@ -125,13 +150,6 @@ const EXTENSIONS_BY_CATEGORY = {
   ],
 };
 
-// ───────────────────────────────────────────────────────────────────────────
-// Underwriting factors panel — independent entity (fac_underwriting_factors),
-// independent save. Lives at the top of the pricing screen because the
-// 18 selections drive both the rate adjustment and the underwriting score
-// the rest of the screen reasons about.
-// ───────────────────────────────────────────────────────────────────────────
-
 export default function FacPricing() {
   const riskId = useFacRiskId();
   const { readOnly, assignedToName: lockAssignedToName, refresh: refreshLock, markReadOnly } = useEditLock({ facRiskId: riskId });
@@ -145,31 +163,36 @@ export default function FacPricing() {
   const [newExtLabel, setNewExtLabel] = useState('');
   const [newExtLoading, setNewExtLoading] = useState('');
 
-  const [f, setF] = useState(F_DEFAULTS);
-
-  // ── Engine inputs (computeFacQuote) ──────────────────────────────
-  // The five user-controlled fields below feed straight into the engine
-  // along with the UW factor selections (panel) and the locations'
-  // SI / FX figures. Fractions are stored as 0..1 to match the column
-  // conventions; the UI converts on display.
+  // ── Engine inputs ────────────────────────────────────────────────
+  // Percentages are stored as fractions (0.20 = 20%) and entered through
+  // PctInput, which takes and shows whole percents. The old number inputs
+  // asked for "0..1" in a hint and let anything through, which is how a
+  // percent-vs-fraction guess ended up in the engine (finding F8).
   const [eng, setEng] = useState({
     indemnity_months: '12',
     commission_pct: '0.20',
     margin_pct: '0.05',
     other_expenses_pct: '0.005',
     market_rate_pm: '',
-    extra_cover_loadings: [],
-    _newLabel: '',
-    _newPct: '',
+    market_source: '',
+    uw_adjustment_pct: '0',
+    uw_adjustment_reason: '',
   });
   const setEngField = useCallback((key, val) => {
     setEng((prev) => ({ ...prev, [key]: val }));
     dirty.current = true;
   }, []);
-  const removeExtraCover = (i) => {
-    const next = [...eng.extra_cover_loadings];
-    next.splice(i, 1);
-    setEngField('extra_cover_loadings', next);
+  // PctInput speaks whole percents; the engine and the DB columns speak
+  // fractions. Convert at this single boundary. Round on the way out —
+  // 0.07 × 100 is 7.000000000000001 in binary floating point, and that is
+  // not something to show an underwriter.
+  const pctField = (key) => {
+    const n = numOrNull(eng[key]);
+    return n == null ? '' : String(Number((n * 100).toFixed(10)));
+  };
+  const setPctField = (key, whole) => {
+    const n = numOrNull(whole);
+    setEngField(key, n == null ? '' : String(n / 100));
   };
 
   // Reference catalogues — every engine input flows through these.
@@ -179,15 +202,19 @@ export default function FacPricing() {
   const [scoringTables, setScoringTables] = useState(null);
   const [biIndemnity, setBiIndemnity]     = useState({});
   const [natcatRates, setNatcatRates]     = useState([]);
+  const [rateVersion, setRateVersion]     = useState(null);
   // UW factor selections mirrored up from UwFactorsPanel so the engine
   // recomputes the second a dropdown changes — no API round-trip.
   const [uwSelections, setUwSelections] = useState({});
-  // Locations drive pd_si_share, total SAR, top-location SAR.
   const [locations, setLocations] = useState([]);
+  const [sections, setSections] = useState([]);
   const [engineOutput, setEngineOutput] = useState(null);
+  // The server's full pricing run: every loss-cost method, the credibility
+  // blend and the technical build-up. The local engine cannot produce this —
+  // it has no sight of the loss experience, the curve library or the bound
+  // book — so this is fetched rather than computed.
+  const [technical, setTechnical] = useState(null);
 
-  // Single-fetch reference loaders. CACHEABLE_PATHS in api.js dedupes
-  // these across the wizard, so navigating away and back is free.
   useEffect(() => {
     Promise.all([
       api.facGetOccupancies(),
@@ -196,28 +223,30 @@ export default function FacPricing() {
       api.facGetScoringTables(),
       api.facGetBiIndemnity(),
       api.facGetNatcatRates(),
-    ]).then(([occ, fac, fw, st, bi, nc]) => {
+      api.facGetRateVersion().catch(() => null),
+    ]).then(([occ, fac, fw, st, bi, nc, rv]) => {
       setOccupancies(occ?.occupancies || []);
       setFactors(fac?.factors || []);
       setFactorWeights(fw?.schemes || null);
       setScoringTables(st || null);
       setBiIndemnity(bi?.loadings || {});
       setNatcatRates(nc?.rates || []);
+      setRateVersion(rv?.version_label || null);
     }).catch(logger.error);
   }, []);
 
-  // Locations — used for pd_si_share / top-location lookups.
+  // Locations and sections both feed the one exposure profile.
   useEffect(() => {
     if (!riskId) return;
-    api.facGetLocations(riskId).then((rows) => setLocations(rows || [])).catch(logger.error);
+    Promise.all([
+      api.facGetLocations(riskId).catch(() => []),
+      api.facGetSections(riskId).catch(() => []),
+    ]).then(([locs, secs]) => {
+      setLocations(locs || []);
+      setSections(secs || []);
+    }).catch(logger.error);
   }, [riskId]);
 
-  // Load risk + pricing + fac classes — one shot per risk. Hydration runs
-  // inside the fetcher (useResource owns loading/error/abort), merging the
-  // persisted row over F_DEFAULTS so a user edit can never re-trigger the
-  // load (the old [f, riskId] dependency silently wiped the dirty flag on
-  // every edit and refetch-looped on persisted rows — see
-  // docs/frontend-hardening.md, FacPricing findings).
   const pricingLoad = useResource(
     async (signal) => {
       loaded.current = false;
@@ -230,22 +259,23 @@ export default function FacPricing() {
       setRisk(r);
       setFacClasses(fc || []);
       if (p) {
-        const o = {};
-        for (const k of Object.keys(F_DEFAULTS)) o[k] = cleanNum(p[k]) || (typeof F_DEFAULTS[k] === 'string' ? (p[k] || '') : F_DEFAULTS[k]);
-        setF(o);
-        // Rehydrate extension selections from ui_state JSONB
         const ui = p.ui_state || {};
         if (Array.isArray(ui.selectedExtensions)) setSelectedExtensions(new Set(ui.selectedExtensions));
         if (Array.isArray(ui.customExtensions))   setCustomExtensions(ui.customExtensions);
-        // Rehydrate engine inputs from the persisted pricing row.
         setEng((prev) => ({
           ...prev,
           indemnity_months:   p.indemnity_months   != null ? String(p.indemnity_months)   : prev.indemnity_months,
           commission_pct:     p.commission_pct     != null ? String(p.commission_pct)     : prev.commission_pct,
           margin_pct:         p.margin_pct         != null ? String(p.margin_pct)         : prev.margin_pct,
           other_expenses_pct: p.other_expenses_pct != null ? String(p.other_expenses_pct) : prev.other_expenses_pct,
-          market_rate_pm:     p.market_rate_pm     != null ? String(p.market_rate_pm)     : prev.market_rate_pm,
-          extra_cover_loadings: Array.isArray(p.extra_cover_loadings) ? p.extra_cover_loadings : prev.extra_cover_loadings,
+          // market_rate_pm is the engine's own field; market_rate_per_mille is
+          // the retired manual one. Fall back to it so a risk quoted before
+          // the manual block was removed keeps its benchmark.
+          market_rate_pm:     p.market_rate_pm != null ? String(p.market_rate_pm)
+            : (p.market_rate_per_mille != null ? String(p.market_rate_per_mille) : prev.market_rate_pm),
+          market_source:      p.market_source || prev.market_source,
+          uw_adjustment_pct:  p.uw_adjustment_pct != null ? String(Number(p.uw_adjustment_pct) / 100) : prev.uw_adjustment_pct,
+          uw_adjustment_reason: p.uw_adjustment_reason || prev.uw_adjustment_reason,
         }));
       }
       loaded.current = true; dirty.current = false;
@@ -255,115 +285,41 @@ export default function FacPricing() {
     { enabled: !!riskId, reportLabel: 'fac pricing' },
   );
 
-  const set = (k, v) => { setF(prev => ({ ...prev, [k]: v })); dirty.current = true; };
-  const tsi = numOrNull(risk?.total_sum_insured) || 0;
+  // ── Rating family + whether it can price this risk ────────────────
+  const primaryCob = useMemo(
+    () => facClasses.find((c) => c.fac_cob_id === risk?.fac_cob_id) || null,
+    [facClasses, risk],
+  );
+  const family = useMemo(() => familyForClass(primaryCob), [primaryCob]);
+  const blocker = useMemo(
+    () => (risk ? pricingBlocker(family, risk) : null),
+    [family, risk],
+  );
+  // Only SCHEDULE_PROPERTY has a workbook — a rate build-up, a score and a
+  // decision computed in the browser. Every other family rates off loaded
+  // tables through the server pipeline, so the workbook sections below are
+  // hidden for them rather than rendered empty. "Implemented" is not the
+  // test: a family can be fully implemented and have no workbook.
+  const workbook = family?.code === scheduleProperty.code ? scheduleProperty : null;
+  const hasWorkbook = Boolean(workbook);
 
-  // ── Derived inputs the engine needs but the user doesn't type ────────
-  // pd_si_share: share of total SAR SI sitting in Material Damage.
-  // bi_included: any positive BI exposure on the risk or its locations.
-  // top_location_si_sar: largest single-location combined SAR SI.
-  const { pdSiShare, biIncludedGlobal, topLocationSiSar, totalLocSar } = useMemo(() => {
-    let pdSar = 0, biSar = 0, topSar = 0;
-    for (const l of locations) {
-      const pd = Number(l.pd_si) || 0;
-      const bi = Number(l.bi_si) || 0;
-      pdSar += pd; biSar += bi;
-      if (pd + bi > topSar) topSar = pd + bi;
-    }
-    const total = pdSar + biSar;
-    const share = total > 0 ? pdSar / total : 1;
-    const biFromRisk = Number(risk?.bi_sum_insured) || 0;
-    return {
-      pdSiShare: share,
-      biIncludedGlobal: biSar > 0 || biFromRisk > 0,
-      topLocationSiSar: topSar,
-      totalLocSar: total,
-    };
-  }, [locations, risk]);
+  // ── The one exposure profile ─────────────────────────────────────
+  // PD/BI share, the BI-included flag, the top-location figure and the
+  // premium basis all come from here, so they cannot disagree (F10, F11).
+  const exposure = useMemo(
+    () => buildExposureProfile({ risk, sections, locations }),
+    [risk, sections, locations],
+  );
 
-  // ── Debounced engine recompute (150ms) ───────────────────────────
-  // The engine is pure JS — debouncing only smooths a fast-typing user;
-  // there is no network round-trip behind it. Recompute fires whenever
-  // any of the engine inputs change.
-  useEffect(() => {
-    if (!risk || !occupancies.length || !factors.length || !factorWeights || !scoringTables) {
-      setEngineOutput(null);
-      return undefined;
-    }
-    const handle = setTimeout(() => {
-      try {
-        const inputs = {
-          occupancy_code: risk.occupancy_code,
-          country_zone:   risk.risk_country_zone,
-          region:         risk.cedant_region,
-          factor_selections: uwSelections,
-          pd_si_share_pct: pdSiShare,
-          indemnity_months: numOrNull(eng.indemnity_months) || 12,
-          commission_pct:   numOrNull(eng.commission_pct),
-          margin_pct:       numOrNull(eng.margin_pct),
-          other_expenses_pct: numOrNull(eng.other_expenses_pct),
-          extra_cover_loadings: (eng.extra_cover_loadings || [])
-            .map((x) => Number(x.pct))
-            .filter((n) => Number.isFinite(n)),
-          bi_included: biIncludedGlobal,
-          market_rate_pm: numOrNull(eng.market_rate_pm),
-          top_location_si_sar: topLocationSiSar || tsi || null,
-        };
-        const refData = {
-          occupancies, factors,
-          factorWeights,
-          hazardGradeScore:     scoringTables.hazard_grade,
-          frequencyScore:       scoringTables.frequency,
-          capacityBands:        scoringTables.capacity_bands,
-          territorialCapacity:  scoringTables.territorial_capacity,
-          biIndemnity, natcatRates,
-        };
-        const out = computeFacQuote(inputs, refData);
-        setEngineOutput(out);
-      } catch (err) {
-        // Surface the problem in-panel rather than swallowing it; the
-        // most common cause is a missing risk_country_zone before the
-        // underwriter has filled out the Risk Detail screen.
-        setEngineOutput({ _error: true, warnings: [String(err?.message || err)] });
-      }
-    }, 150);
-    return () => clearTimeout(handle);
-  }, [
-    risk, occupancies, factors, factorWeights, scoringTables, biIndemnity, natcatRates,
-    uwSelections, eng, pdSiShare, biIncludedGlobal, topLocationSiSar, tsi,
-  ]);
-
-  // ── Engine premiums (derived from engine output + total SI) ─────────
-  // We can't ask the engine for premiums directly — it returns rates
-  // per mille. Multiply by SAR SI here so the persisted snapshot
-  // contains the SAR figures the underwriter actually quoted.
-  const enginePremiums = useMemo(() => {
-    if (!engineOutput || engineOutput._error) return { technical: null, expected: null };
-    const siSar = totalLocSar || tsi || 0;
-    const tech = engineOutput.technical_rate_no_natcat_pm != null
-      ? (engineOutput.technical_rate_no_natcat_pm * siSar) / 1000 : null;
-    const exp = engineOutput.final_gross_rate_pm != null
-      ? (engineOutput.final_gross_rate_pm * siSar) / 1000 : null;
-    return { technical: tech, expected: exp };
-  }, [engineOutput, totalLocSar, tsi]);
-
-  // Determine which categories are active from the risk's selected COBs
-  // The risk stores fac_cob_id (primary) and cob_category, but we need all selected categories
-  // Read from the risk's cob_category + check if there are multiple via the fac_cob_id
+  // ── Extensions → engine cover loadings ───────────────────────────
   const activeCategories = useMemo(() => {
     if (!risk) return new Set();
     const cats = new Set();
-    // Primary COB category from risk
     if (risk.cob_category) cats.add(risk.cob_category);
-    // Also derive from fac_cob_id
-    if (risk.fac_cob_id && facClasses.length) {
-      const cls = facClasses.find(c => c.fac_cob_id === risk.fac_cob_id);
-      if (cls) cats.add(cls.category);
-    }
+    if (primaryCob?.category) cats.add(primaryCob.category);
     return cats;
-  }, [risk, facClasses]);
+  }, [risk, primaryCob]);
 
-  // Build filtered extensions list: only categories matching selected COBs
   const relevantExtensions = useMemo(() => {
     const result = [];
     for (const cat of activeCategories) {
@@ -373,7 +329,6 @@ export default function FacPricing() {
     return result;
   }, [activeCategories]);
 
-  // All extensions (relevant + custom) for loading calc
   const allExtensions = useMemo(() => {
     const list = [];
     relevantExtensions.forEach(g => g.extensions.forEach(e => list.push(e)));
@@ -381,28 +336,30 @@ export default function FacPricing() {
     return list;
   }, [relevantExtensions, customExtensions]);
 
-  // Total loading %
-  const extensionsLoadingPct = useMemo(() => {
-    let total = 0;
-    for (const ext of allExtensions) {
-      if (selectedExtensions.has(ext.id)) total += ext.loadingPct;
-    }
-    return total;
-  }, [selectedExtensions, allExtensions]);
+  // The engine takes fractions; the catalogue is authored in whole percent.
+  const coverLoadings = useMemo(
+    () => allExtensions
+      .filter((e) => selectedExtensions.has(e.id))
+      .map((e) => ({ label: e.label, pct: Number(e.loadingPct) / 100 })),
+    [allExtensions, selectedExtensions],
+  );
+  const extensionsLoadingPct = useMemo(
+    () => coverLoadings.reduce((acc, e) => acc + e.pct * 100, 0),
+    [coverLoadings],
+  );
 
   const toggleExtension = (id) => {
     setSelectedExtensions(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
     dirty.current = true;
   };
 
-  // Add custom extension
   const addCustomExtension = () => {
     const label = newExtLabel.trim();
     const loading = numOrNull(newExtLoading);
     if (!label || loading == null) return;
     const id = 'custom_' + Date.now();
     setCustomExtensions(prev => [...prev, { id, label, loadingPct: loading }]);
-    setSelectedExtensions(prev => new Set([...prev, id])); // auto-check it
+    setSelectedExtensions(prev => new Set([...prev, id]));
     setNewExtLabel(''); setNewExtLoading('');
     dirty.current = true;
   };
@@ -413,72 +370,127 @@ export default function FacPricing() {
     dirty.current = true;
   };
 
-  // Auto-calc market premium
+  // ── Debounced engine recompute (150ms) ───────────────────────────
+  // Pure JS, no network behind it — the debounce only smooths fast typing.
   useEffect(() => {
-    const rate = numOrNull(f.market_rate_per_mille);
-    if (rate != null && tsi) set('market_premium', String(Math.round(tsi * rate / 1000)));
-  }, [f.market_rate_per_mille, tsi]);
-
-  // Auto-calc actuarial premium
-  useEffect(() => {
-    const rate = numOrNull(f.actuarial_rate_per_mille);
-    if (rate != null && tsi) set('actuarial_premium', String(Math.round(tsi * rate / 1000)));
-  }, [f.actuarial_rate_per_mille, tsi]);
-
-  // Auto-calc blend
-  useEffect(() => {
-    const mw = (numOrNull(f.market_weight_pct) || 0) / 100;
-    const aw = (numOrNull(f.actuarial_weight_pct) || 0) / 100;
-    const mr = numOrNull(f.market_rate_per_mille) || 0;
-    const ar = numOrNull(f.actuarial_rate_per_mille) || 0;
-    if (mr || ar) {
-      const blended = mr * mw + ar * aw;
-      setF(prev => ({ ...prev, blended_rate_per_mille: blended.toFixed(4), blended_premium: tsi ? String(Math.round(tsi * blended / 1000)) : '' }));
+    if (!risk || blocker || !hasWorkbook
+        || !occupancies.length || !factors.length || !factorWeights || !scoringTables) {
+      setEngineOutput(null);
+      return undefined;
     }
-  }, [f.market_rate_per_mille, f.actuarial_rate_per_mille, f.market_weight_pct, f.actuarial_weight_pct, tsi]);
+    const handle = setTimeout(() => {
+      try {
+        const out = workbook.computeQuote({
+          occupancy_code: risk.occupancy_code,
+          country_zone:   risk.risk_country_zone,
+          region:         risk.cedant_region,
+          factor_selections: uwSelections,
+          exposure,
+          indemnity_months: numOrNull(eng.indemnity_months) || 12,
+          commission_pct:   numOrNull(eng.commission_pct),
+          margin_pct:       numOrNull(eng.margin_pct),
+          other_expenses_pct: numOrNull(eng.other_expenses_pct),
+          extra_cover_loadings: coverLoadings,
+          market_rate_pm: numOrNull(eng.market_rate_pm),
+        }, {
+          occupancies, factors,
+          factorWeights,
+          hazardGradeScore:     scoringTables.hazard_grade,
+          frequencyScore:       scoringTables.frequency,
+          capacityBands:        scoringTables.capacity_bands,
+          territorialCapacity:  scoringTables.territorial_capacity,
+          biIndemnity, natcatRates,
+        });
+        setEngineOutput(out);
+      } catch (err) {
+        setEngineOutput({ _error: true, warnings: [String(err?.message || err)] });
+      }
+    }, 150);
+    return () => clearTimeout(handle);
+  }, [
+    risk, blocker, workbook, hasWorkbook, occupancies, factors, factorWeights, scoringTables,
+    biIndemnity, natcatRates, uwSelections, eng, exposure, coverLoadings,
+  ]);
 
-  // Auto-calc final = blended × (1 + UW adj%) × (1 + extensions loading%)
+  // ── Server-side price (debounced) ────────────────────────────────
+  // Slower than the local engine on purpose: it is a round trip, and it is
+  // the number that gets quoted. The local engine keeps the rate readout
+  // instant while this settles.
   useEffect(() => {
-    const blended = numOrNull(f.blended_rate_per_mille) || 0;
-    const adj = (numOrNull(f.uw_adjustment_pct) || 0) / 100;
-    const extLoad = extensionsLoadingPct / 100;
-    if (blended) {
-      const final_rate = blended * (1 + adj) * (1 + extLoad);
-      setF(prev => ({ ...prev, final_rate_per_mille: final_rate.toFixed(4), final_premium: tsi ? String(Math.round(tsi * final_rate / 1000)) : '' }));
-    }
-  }, [f.blended_rate_per_mille, f.uw_adjustment_pct, extensionsLoadingPct, tsi]);
+    if (!riskId || blocker || !family?.implemented) { setTechnical(null); return undefined; }
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      api.facPriceRisk(riskId, {
+        indemnity_months:   numOrNull(eng.indemnity_months),
+        commission_pct:     numOrNull(eng.commission_pct),
+        margin_pct:         numOrNull(eng.margin_pct),
+        other_expenses_pct: numOrNull(eng.other_expenses_pct),
+        market_rate_pm:     numOrNull(eng.market_rate_pm),
+        extra_cover_loadings: coverLoadings,
+        factor_selections: uwSelections,
+      })
+        .then((out) => { if (!cancelled) setTechnical(out?.technical ?? null); })
+        .catch((err) => { if (!cancelled) { logger.error('[FacPricing] price failed:', err); setTechnical(null); } });
+    }, 400);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [riskId, blocker, family, eng, uwSelections, coverLoadings]);
+
+  // ── Quoted rate = technical gross × (1 + UW adjustment) ───────────
+  // The adjustment is the underwriter's last word on the price and stays
+  // visible as its own line in the build-up rather than being folded into
+  // an upstream number.
+  // The blend is authoritative once the server has priced it. Until then —
+  // and whenever no Phase 2 data exists — it equals the local engine's own
+  // gross rate, so the number never jumps when the round trip lands.
+  const quoted = useMemo(() => {
+    const adj = numOrNull(eng.uw_adjustment_pct) || 0;
+    const gross = technical?.priced
+      ? technical.technicalGrossPm
+      : (engineOutput && !engineOutput._error ? engineOutput.final_gross_rate_pm : null);
+    if (gross == null) return { rate: null, premium: null, adj, source: null };
+    const rate = gross * (1 + adj);
+    const si = exposure.total_si;
+    return {
+      rate,
+      premium: si > 0 ? (rate * si) / 1000 : null,
+      adj,
+      source: technical?.priced ? 'BLEND' : 'ENGINE',
+    };
+  }, [technical, engineOutput, eng.uw_adjustment_pct, exposure]);
 
   const save = useCallback(async () => {
-    // Read-only (not the assignee): never POST — not the pricing record nor the
-    // panel-owned UW factors. Returning true is a no-op that lets wizard
-    // navigation proceed; manual edits are already blocked by the inert wrap.
     if (readOnly) return true;
-    // Two independent saves: the pricing record (this screen's local
-    // state) and the UW-factor selections (panel-owned). Both have to
-    // succeed before WizardLayout advances.
     const uwSave = typeof window !== 'undefined' ? window.__facUwFactorsSave : null;
     let uwOk = true;
     if (typeof uwSave === 'function') {
       try { uwOk = await uwSave(); } catch { uwOk = false; }
     }
     if (!riskId || !loaded.current || !dirty.current) return uwOk;
-    const payload = {};
-    for (const k of Object.keys(f)) payload[k] = numOrNull(f[k]) ?? f[k];
-    // Persist extension selections so they rehydrate on reload/navigation.
-    payload.ui_state = {
-      selectedExtensions: Array.from(selectedExtensions),
-      customExtensions,
+
+    const payload = {
+      ui_state: {
+        selectedExtensions: Array.from(selectedExtensions),
+        customExtensions,
+      },
+      // Engine inputs.
+      indemnity_months:   numOrNull(eng.indemnity_months),
+      commission_pct:     numOrNull(eng.commission_pct),
+      margin_pct:         numOrNull(eng.margin_pct),
+      other_expenses_pct: numOrNull(eng.other_expenses_pct),
+      market_rate_pm:     numOrNull(eng.market_rate_pm),
+      market_source:      eng.market_source || null,
+      extra_cover_loadings: coverLoadings,
+      // uw_adjustment_pct stays in whole percent for backward compatibility
+      // with the rows the manual block wrote.
+      uw_adjustment_pct:  (numOrNull(eng.uw_adjustment_pct) || 0) * 100,
+      uw_adjustment_reason: eng.uw_adjustment_reason || null,
+      // Provenance.
+      engine_version: ENGINE_VERSION,
+      family_code: family?.code || null,
+      rate_table_version: rateVersion,
+      exposure_basis: exposure.basis,
     };
-    // Engine inputs (the five fields the underwriter types).
-    payload.indemnity_months   = numOrNull(eng.indemnity_months);
-    payload.commission_pct     = numOrNull(eng.commission_pct);
-    payload.margin_pct         = numOrNull(eng.margin_pct);
-    payload.other_expenses_pct = numOrNull(eng.other_expenses_pct);
-    payload.market_rate_pm     = numOrNull(eng.market_rate_pm);
-    payload.extra_cover_loadings = eng.extra_cover_loadings || [];
-    // Engine outputs — snapshot of what the screen showed. Persisting
-    // here means the DB always has the exact figures the underwriter
-    // signed off on, even if the engine is updated later.
+
     if (engineOutput && !engineOutput._error) {
       payload.technical_rate_pm   = engineOutput.technical_rate_no_natcat_pm ?? null;
       payload.total_rate_pm       = engineOutput.total_rate_pm ?? null;
@@ -486,9 +498,10 @@ export default function FacPricing() {
       payload.net_rate_pm         = engineOutput.net_rate_pm ?? null;
       payload.final_net_rate_pm   = engineOutput.final_net_rate_pm ?? null;
       payload.final_gross_rate_pm = engineOutput.final_gross_rate_pm ?? null;
-      payload.technical_premium   = enginePremiums.technical;
-      payload.expected_premium    = enginePremiums.expected;
+      payload.technical_premium   = engineOutput.premiums?.technical ?? null;
+      payload.expected_premium    = engineOutput.premiums?.expected ?? null;
       payload.underwriting_score  = engineOutput.underwriting_score ?? null;
+      payload.score_completeness  = engineOutput.score_completeness ?? null;
       payload.capacity_grade      = engineOutput.capacity_grade ?? null;
       payload.uw_action           = engineOutput.uw_action ?? null;
       payload.max_capacity_pct    = engineOutput.max_capacity_pct ?? null;
@@ -496,43 +509,53 @@ export default function FacPricing() {
       payload.market_vs_tech_pct  = engineOutput.market_vs_tech_pct ?? null;
       payload.market_vs_tech_band = engineOutput.market_vs_tech_band ?? null;
       payload.engine_warnings     = engineOutput.warnings || [];
-      payload.engine_version      = ENGINE_VERSION;
     }
+    if (technical?.priced) {
+      payload.blended_loss_cost_pm = technical.blendedLossCostPm ?? null;
+      payload.cat_load_pm          = technical.catLoadPm ?? null;
+      payload.risk_load_pm         = technical.riskLoadPm ?? null;
+      payload.blend_weights        = technical.weights || {};
+      payload.blend_override_reason = technical.weightOverrideReason || null;
+    }
+    if (engineOutput && !engineOutput._error) {
+      // The quoted figures land in the columns the manual block used to
+      // own, so the Summary screen and every existing report keep working.
+      payload.final_rate_per_mille = quoted.rate;
+      payload.final_premium        = quoted.premium;
+      payload.market_rate_per_mille = numOrNull(eng.market_rate_pm);
+    }
+
     try {
       await api.facSavePricing(riskId, payload);
-      const fp = numOrNull(f.final_premium);
-      if (fp) await api.facUpdateRisk(riskId, { ri_premium: fp, original_rate: numOrNull(f.final_rate_per_mille) });
+      if (quoted.premium != null) {
+        await api.facUpdateRisk(riskId, { ri_premium: quoted.premium, original_rate: quoted.rate });
+      }
       dirty.current = false;
       return uwOk;
     } catch (e) {
       logger.error('[FacPricing] save failed:', e);
-      // Not the assignee: the lock raced this write (or failed open). Flip the
-      // editor read-only and surface it once — never retry an authz verdict.
-      // "Allocate to me" on the banner is the path back to editing.
       if (isReadOnlyError(e)) {
         markReadOnly();
         showToast('Read-only — this risk is assigned to someone else. Claim it (if unassigned) or have it allocated to you to edit.');
-        return true; // no-op for nav: don't block, don't retry
+        return true;
       }
       showToast('Pricing save failed: ' + (e?.message || 'Server error'));
       return false;
     }
-  }, [riskId, readOnly, markReadOnly, f, selectedExtensions, customExtensions, eng, engineOutput, enginePremiums, showToast]);
+  }, [
+    riskId, readOnly, markReadOnly, selectedExtensions, customExtensions, eng,
+    coverLoadings, engineOutput, technical, quoted, family, rateVersion, exposure, showToast,
+  ]);
 
   const extCheckbox = (ext, catColor) => {
     const checked = selectedExtensions.has(ext.id);
     return (
-      <label key={ext.id} style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px',
-        borderRadius: 8, cursor: 'pointer', fontSize: 12,
-        background: checked ? 'rgba(168,85,247,0.08)' : 'transparent',
-        border: checked ? '1px solid rgba(168,85,247,0.30)' : '1px solid var(--hairline)',
-        color: checked ? 'rgba(var(--text-rgb),0.90)' : 'var(--muted)',
-        transition: 'all .15s',
-      }}>
-        <input type="checkbox" checked={checked} onChange={() => toggleExtension(ext.id)} style={{ width: 14, height: 14, accentColor: catColor || '#a855f7' }} />
-        <span style={{ flex: 1 }}>{ext.label}</span>
-        <span style={{ fontSize: 10, fontWeight: 700, color: checked ? (catColor || '#a855f7') : 'rgba(var(--text-rgb),0.45)', fontVariantNumeric: 'tabular-nums' }}>+{ext.loadingPct}%</span>
+      <label key={ext.id}
+             className={`facpx-ext${checked ? ' facpx-ext--on' : ''}`}
+             style={{ '--fac-accent': catColor || '#a855f7' }}>
+        <input type="checkbox" checked={checked} onChange={() => toggleExtension(ext.id)} />
+        <span className="facpx-ext-name">{ext.label}</span>
+        <span className="facpx-ext-pct">+{ext.loadingPct}%</span>
       </label>
     );
   };
@@ -540,222 +563,167 @@ export default function FacPricing() {
   return (
     <WizardLayout routeKey={ROUTE_KEY} title="Pricing" headerPill="FACULTATIVE" onBeforeNext={save} onBeforeBack={save}>
       <AsyncBoundary loading={pricingLoad.loading} error={pricingLoad.error} onRetry={pricingLoad.refetch} label="fac pricing">
-      <div style={{ maxWidth: 800, margin: '0 auto', padding: '8px 0 40px' }}>
+      <div className="facpx-page">
         {readOnly && <EditLockBanner facRiskId={riskId} assignedToName={lockAssignedToName} onAllocated={refreshLock} />}
         <ReadOnlyWrap readOnly={readOnly}>
-        {tsi > 0 && (
-          <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
-            Total Sum Insured: <span style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{tsi.toLocaleString('en-US')}</span>
-          </div>
-        )}
 
-        <UwFactorsPanel riskId={riskId} risk={risk} onSelectionsChange={setUwSelections} />
+        <ExposureBasisNote exposure={exposure} rateVersion={rateVersion} family={family} />
 
-        {/* ── Engine inputs ── */}
-        <Sec title="Engine Inputs">
-          <FR label="Indemnity Period (months)" hint="Drives the BI rate multiplier (1–60)">
-            <input className="fi" type="number" min={1} max={60} value={eng.indemnity_months}
-                   onChange={(e) => setEngField('indemnity_months', e.target.value)} style={{ width: 100 }} />
-          </FR>
-          <FR label="Market Rate (‰)" hint="Used for the market-vs-tech band">
-            <input className="fi" type="number" min={0} step={0.0001} value={eng.market_rate_pm}
-                   onChange={(e) => setEngField('market_rate_pm', e.target.value)} style={{ width: 120 }} />
-          </FR>
-          <FR label="Commission %" hint="Stored as 0..1 (e.g. 0.20 = 20%)">
-            <input className="fi" type="number" min={0} max={1} step={0.0001} value={eng.commission_pct}
-                   onChange={(e) => setEngField('commission_pct', e.target.value)} style={{ width: 110 }} />
-          </FR>
-          <FR label="Margin %">
-            <input className="fi" type="number" min={0} max={1} step={0.0001} value={eng.margin_pct}
-                   onChange={(e) => setEngField('margin_pct', e.target.value)} style={{ width: 110 }} />
-          </FR>
-          <FR label="Other Expenses %">
-            <input className="fi" type="number" min={0} max={1} step={0.0001} value={eng.other_expenses_pct}
-                   onChange={(e) => setEngField('other_expenses_pct', e.target.value)} style={{ width: 110 }} />
-          </FR>
-          <FR label="Extra Cover Loadings" hint="Per-cover additive loading; sum applied to net rate">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {(eng.extra_cover_loadings || []).map((ext, i) => (
-                <div key={`${ext.label}-${i}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <input className="fi" value={ext.label || ''} placeholder="Cover label"
-                         onChange={(e) => {
-                           const next = [...eng.extra_cover_loadings];
-                           next[i] = { ...next[i], label: e.target.value };
-                           setEngField('extra_cover_loadings', next);
-                         }}
-                         style={{ flex: 1, fontSize: 12 }} />
-                  <input className="fi" type="number" min={0} step={0.0001} value={ext.pct ?? ''}
-                         onChange={(e) => {
-                           const next = [...eng.extra_cover_loadings];
-                           next[i] = { ...next[i], pct: e.target.value === '' ? null : Number(e.target.value) };
-                           setEngField('extra_cover_loadings', next);
-                         }}
-                         placeholder="0..1" style={{ width: 100, fontSize: 12, textAlign: 'right' }} />
-                  <span role="button" tabIndex={0} aria-label={`Remove cover loading ${ext.label || i + 1}`}
-                        style={{ cursor: 'pointer', color: 'var(--accent-rose)', fontSize: 14 }}
-                        onClick={() => removeExtraCover(i)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); removeExtraCover(i); }
-                        }}>×</span>
-                </div>
-              ))}
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <input className="fi" value={eng._newLabel} placeholder="New cover label"
-                       onChange={(e) => setEngField('_newLabel', e.target.value)}
-                       style={{ flex: 1, fontSize: 12 }} />
-                <input className="fi" type="number" min={0} step={0.0001} value={eng._newPct}
-                       onChange={(e) => setEngField('_newPct', e.target.value)}
-                       placeholder="0..1" style={{ width: 100, fontSize: 12, textAlign: 'right' }} />
-                <button type="button" onClick={() => {
-                  const label = (eng._newLabel || '').trim();
-                  const pct = numOrNull(eng._newPct);
-                  if (!label || pct == null) return;
-                  setEng((prev) => ({
-                    ...prev,
-                    extra_cover_loadings: [...(prev.extra_cover_loadings || []), { label, pct }],
-                    _newLabel: '', _newPct: '',
-                  }));
-                  dirty.current = true;
-                }} style={{ appearance: 'none', border: '1px solid rgba(var(--accent-blue-rgb),0.30)',
-                            background: 'rgba(var(--accent-blue-rgb),0.08)', color: 'var(--accent-blue)', borderRadius: 6,
-                            padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>+ Add</button>
+        {blocker && <FamilyBlocker blocker={blocker} family={family} />}
+
+        {!blocker && (
+          <>
+            <UwFactorsPanel riskId={riskId} risk={risk} exposure={exposure} onSelectionsChange={setUwSelections} />
+
+            <Sec title="Engine Inputs">
+              <FR label="Indemnity Period (months)" hint="Drives the BI rate multiplier (1–60)">
+                <input className="fi" type="number" min={1} max={60} value={eng.indemnity_months}
+                       onChange={(e) => setEngField('indemnity_months', e.target.value)} style={{ width: 100 }} />
+              </FR>
+              <FR label="Benchmark Market Rate (‰)" hint="Sets the market-vs-technical band in the score">
+                <input className="fi" type="number" min={0} step={0.0001} value={eng.market_rate_pm}
+                       onChange={(e) => setEngField('market_rate_pm', e.target.value)} style={{ width: 120 }} />
+              </FR>
+              <FR label="Benchmark Source">
+                <input className="fi" value={eng.market_source}
+                       onChange={(e) => setEngField('market_source', e.target.value)}
+                       placeholder="e.g. Market benchmark 2026, broker indication" />
+              </FR>
+              <FR label="Commission %">
+                <PctInput value={pctField('commission_pct')} onChange={(v) => setPctField('commission_pct', v)} style={{ width: 110 }} />
+              </FR>
+              <FR label="Margin %">
+                <PctInput value={pctField('margin_pct')} onChange={(v) => setPctField('margin_pct', v)} style={{ width: 110 }} />
+              </FR>
+              <FR label="Other Expenses %">
+                <PctInput value={pctField('other_expenses_pct')} onChange={(v) => setPctField('other_expenses_pct', v)} style={{ width: 110 }} />
+              </FR>
+            </Sec>
+
+            <Sec title="Extensions">
+              <div className="facpx-note">
+                Filtered by the classes selected on Risk Detail. Each ticked extension is a cover
+                loading on the engine&apos;s net rate — there is no second calculation behind them.
               </div>
-            </div>
-          </FR>
-        </Sec>
 
-        {/* ── Engine output (read-only) ── */}
-        <Sec title="Engine Output">
-          <EngineReadout output={engineOutput} premiums={enginePremiums} totalLocSar={totalLocSar} />
-        </Sec>
+              {relevantExtensions.length === 0 && (
+                <div className="facpx-empty">No classes selected on Risk Detail — select classes to see relevant extensions</div>
+              )}
 
-        {/* ── Extensions — filtered by selected COB categories ── */}
-        <Sec title="Extensions">
-          <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 12 }}>
-            Extensions shown are based on classes selected on the Risk Detail page. Check applicable extensions — each adds a loading to the base rate.
-          </div>
-
-          {relevantExtensions.length === 0 && (
-            <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.58)', padding: '8px 0' }}>No classes selected on Risk Detail — select classes to see relevant extensions</div>
-          )}
-
-          {relevantExtensions.map(({ category, extensions: exts }) => {
-            const catColor = CATEGORY_COLORS[category] || '#a855f7';
-            return (
-              <div key={category} style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em', color: catColor, marginBottom: 6, textTransform: 'uppercase' }}>{category}</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-                  {exts.map(ext => extCheckbox(ext, catColor))}
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Custom extensions */}
-          {customExtensions.length > 0 && (
-            <div style={{ marginTop: 14, marginBottom: 8 }}>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em', color: 'rgba(var(--accent-amber-rgb),0.8)', marginBottom: 6, textTransform: 'uppercase' }}>CUSTOM EXTENSIONS</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-                {customExtensions.map(ext => (
-                  <div key={ext.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <div style={{ flex: 1 }}>{extCheckbox(ext, '#fbbf24')}</div>
-                    <span role="button" tabIndex={0} aria-label={`Remove ${ext.label || 'custom extension'}`}
-                      onClick={() => removeCustomExtension(ext.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); removeCustomExtension(ext.id); }
-                      }}
-                      style={{ cursor: 'pointer', color: 'rgba(var(--accent-rose-rgb),0.7)', fontSize: 13, padding: '0 4px' }} title="Remove">✕</span>
+              {relevantExtensions.map(({ category, extensions: exts }) => {
+                const catColor = CATEGORY_COLORS[category] || '#a855f7';
+                return (
+                  <div key={category} className="facpx-ext-group" style={{ '--fac-accent': catColor }}>
+                    <div className="facpx-ext-cat">{category}</div>
+                    <div className="facpx-ext-grid">
+                      {exts.map(ext => extCheckbox(ext, catColor))}
+                    </div>
                   </div>
-                ))}
+                );
+              })}
+
+              {customExtensions.length > 0 && (
+                <div className="facpx-custom">
+                  <div className="facpx-custom-kicker">CUSTOM EXTENSIONS</div>
+                  <div className="facpx-ext-grid">
+                    {customExtensions.map(ext => (
+                      <div key={ext.id} className="facpx-custom-item">
+                        <div>{extCheckbox(ext, '#fbbf24')}</div>
+                        <span role="button" tabIndex={0} aria-label={`Remove ${ext.label || 'custom extension'}`}
+                          onClick={() => removeCustomExtension(ext.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); removeCustomExtension(ext.id); }
+                          }}
+                          className="facpx-custom-remove" title="Remove">✕</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="facpx-add-row">
+                <input className="fi" value={newExtLabel} onChange={e => setNewExtLabel(e.target.value)}
+                  placeholder="Custom extension name" />
+                <PctInput value={newExtLoading} onChange={v => setNewExtLoading(v)}
+                  placeholder="Loading %" style={{ width: 90 }} />
+                <button className="facpx-add-btn" onClick={addCustomExtension}
+                  disabled={!newExtLabel.trim() || !numOrNull(newExtLoading)}>+ Add</button>
               </div>
-            </div>
-          )}
+            </Sec>
 
-          {/* Add custom extension */}
-          <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input className="fi" value={newExtLabel} onChange={e => setNewExtLabel(e.target.value)}
-              placeholder="Custom extension name" style={{ flex: 1, minWidth: 180 }} />
-            <PctInput value={newExtLoading} onChange={v => setNewExtLoading(v)}
-              placeholder="Loading %" style={{ width: 90 }} />
-            <button onClick={addCustomExtension} disabled={!newExtLabel.trim() || !numOrNull(newExtLoading)} style={{
-              appearance: 'none', border: '1px solid rgba(var(--accent-amber-rgb),0.35)', background: 'rgba(var(--accent-amber-rgb),0.08)',
-              color: 'var(--accent-amber)', borderRadius: 8, padding: '7px 14px', fontSize: 11, fontWeight: 700,
-              cursor: newExtLabel.trim() && numOrNull(newExtLoading) ? 'pointer' : 'not-allowed',
-              opacity: newExtLabel.trim() && numOrNull(newExtLoading) ? 1 : 0.4,
-            }}>+ Add</button>
-          </div>
+            <Sec title="Underwriter Adjustment">
+              <FR label="UW Adjustment %" hint="+ surcharge / − discount, applied to the technical gross rate">
+                <PctInput value={pctField('uw_adjustment_pct')} onChange={(v) => setPctField('uw_adjustment_pct', v)} style={{ width: 110 }} />
+              </FR>
+              <FR label="Reason" hint="Required whenever the adjustment is not zero">
+                <input className="fi" value={eng.uw_adjustment_reason}
+                       onChange={(e) => setEngField('uw_adjustment_reason', e.target.value)}
+                       placeholder="e.g. Long-standing client, clean 5-year record" />
+              </FR>
+              {quoted.adj !== 0 && !eng.uw_adjustment_reason.trim() && (
+                <div className="facpx-warn-inline">
+                  An adjustment without a reason cannot be explained at review — add one.
+                </div>
+              )}
+            </Sec>
 
-          {extensionsLoadingPct > 0 && (
-            <div style={{ marginTop: 12, fontSize: 12, fontWeight: 700, color: '#a855f7' }}>
-              Total Extensions Loading: +{extensionsLoadingPct}%
-            </div>
-          )}
-        </Sec>
+            <Sec title="Loss Cost">
+              <LossCostPanel technical={technical} quotedRatePm={quoted.rate} />
+            </Sec>
 
-        {/* ── Market Rate ── */}
-        <Sec title="① Market Rate Pricing">
-          <FR label="Market Rate (‰)" hint="Average set rate for this class/region">
-            <input className="fi" type="number" value={f.market_rate_per_mille} onChange={e => set('market_rate_per_mille', e.target.value)} min={0} step={0.001} style={{ width: 120 }} />
-          </FR>
-          <FR label="Market Premium"><div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(var(--text-rgb),0.85)' }}>{fmtN(f.market_premium)}</div></FR>
-          <FR label="Source"><input className="fi" value={f.market_source} onChange={e => set('market_source', e.target.value)} placeholder="e.g. Market benchmark 2026, Broker indication" /></FR>
-        </Sec>
+            {/* The committed book, not a static territorial budget (F14). */}
+            <Sec title="Capacity Check">
+              <FacCapacityPanel riskId={riskId} />
+            </Sec>
 
-        {/* ── Actuarial ── */}
-        <Sec title="② Actuarial Pricing">
-          <FR label="Method">
-            <select className="fi" value={f.actuarial_method} onChange={e => set('actuarial_method', e.target.value)}>
-              <option value="">— Select —</option>
-              <option value="BURNING_COST">Burning Cost</option>
-              <option value="EXPOSURE_RATED">Exposure Rated</option>
-              <option value="FREQUENCY_SEVERITY">Frequency × Severity</option>
-            </select>
-          </FR>
-          <FR label="Expected Loss Ratio %"><PctInput value={f.expected_loss_ratio} onChange={v => set('expected_loss_ratio', v)} style={{ width: 100 }} /></FR>
-          <FR label="Loading %"><PctInput value={f.loading_pct} onChange={v => set('loading_pct', v)} style={{ width: 100 }} placeholder="Expense + profit" /></FR>
-          <FR label="Actuarial Rate (‰)"><input className="fi" type="number" value={f.actuarial_rate_per_mille} onChange={e => set('actuarial_rate_per_mille', e.target.value)} min={0} step={0.001} style={{ width: 120 }} /></FR>
-          <FR label="Actuarial Premium"><div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(var(--text-rgb),0.85)' }}>{fmtN(f.actuarial_premium)}</div></FR>
-          {f.actuarial_method === 'BURNING_COST' && (
-            <FR label="Burning Cost Ratio"><input className="fi" type="number" value={f.burning_cost_ratio} onChange={e => set('burning_cost_ratio', e.target.value)} min={0} step={0.01} style={{ width: 100 }} /></FR>
-          )}
-        </Sec>
+            <Sec title="Technical Build-Up">
+              <TechnicalBuildUp technical={technical} />
+              {!technical?.priced && (
+                <div className="facpx-note">
+                  The technical build-up appears once the server has priced the risk.
+                </div>
+              )}
+            </Sec>
 
-        {/* ── Blend ── */}
-        <Sec title="③ Blended Rate">
-          <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
-            <FR label="Market Weight %"><PctInput value={f.market_weight_pct} onChange={v => { set('market_weight_pct', v); set('actuarial_weight_pct', String(100 - (Number(v) || 0))); }} style={{ width: 80 }} /></FR>
-            <FR label="Actuarial Weight %"><PctInput value={f.actuarial_weight_pct} onChange={() => {}} readOnly style={{ width: 80, opacity: 0.6 }} /></FR>
-          </div>
-          <FR label="Blended Rate (‰)"><div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-amber)' }}>{cleanNum(f.blended_rate_per_mille) || '—'}</div></FR>
-          <FR label="Blended Premium"><div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-amber)' }}>{fmtN(f.blended_premium)}</div></FR>
-        </Sec>
+            {hasWorkbook && (
+              <Sec title="Workbook Rate Build-Up">
+                <PricingWaterfall
+                  output={engineOutput}
+                  exposure={exposure}
+                  extensionsLoadingPct={extensionsLoadingPct}
+                  coverLoadings={coverLoadings}
+                  adjustmentPct={quoted.adj}
+                  adjustmentReason={eng.uw_adjustment_reason}
+                  quotedRate={quoted.rate}
+                  quotedPremium={quoted.premium}
+                />
+              </Sec>
+            )}
 
-        {/* ── Final ── */}
-        <Sec title="④ Final UW Rate">
-          <FR label="UW Adjustment %" hint="+ surcharge / - discount">
-            <PctInput value={f.uw_adjustment_pct} onChange={v => set('uw_adjustment_pct', v)} style={{ width: 100 }} />
-          </FR>
-          <FR label="Adjustment Reason"><input className="fi" value={f.uw_adjustment_reason} onChange={e => set('uw_adjustment_reason', e.target.value)} placeholder="e.g. Poor housekeeping, NatCat exposure" /></FR>
+            {hasWorkbook && (
+              <Sec title="Engine Detail">
+                <EngineReadout output={engineOutput} exposure={exposure} />
+              </Sec>
+            )}
 
-          {extensionsLoadingPct > 0 && (
-            <div style={{ marginTop: 8, fontSize: 11, color: 'rgba(168,85,247,0.85)' }}>
-              Extensions loading applied: +{extensionsLoadingPct}% on base rate
-            </div>
-          )}
-
-          <div style={{ marginTop: 16, padding: 16, background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.25)', borderRadius: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--accent-rgb),0.8)' }}>Final Rate (‰)</div>
-                <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--accent)', marginTop: 4 }}>{cleanNum(f.final_rate_per_mille) || '—'}</div>
+            {quoted.rate != null && (
+              <div className="facpx-quoted">
+                <div className="facpx-quoted-inner">
+                  <div>
+                    <div className="facpx-quoted-kicker">
+                      Quoted Rate (‰){quoted.source === 'ENGINE' ? ' · workbook only' : ''}
+                    </div>
+                    <div className="facpx-quoted-val">{quoted.rate.toFixed(4)}</div>
+                  </div>
+                  <div className="facpx-quoted-col--right">
+                    <div className="facpx-quoted-kicker">Quoted Premium</div>
+                    <div className="facpx-quoted-val">{fmtN(quoted.premium)}</div>
+                  </div>
+                </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--accent-rgb),0.8)' }}>Final Premium</div>
-                <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--accent)', marginTop: 4 }}>{fmtN(f.final_premium)}</div>
-              </div>
-            </div>
-          </div>
-        </Sec>
+            )}
+          </>
+        )}
         </ReadOnlyWrap>
       </div>
       </AsyncBoundary>

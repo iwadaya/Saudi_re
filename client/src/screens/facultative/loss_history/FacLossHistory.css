@@ -1,0 +1,34 @@
+/* FacLossHistory.css — styles for the exposure-basis columns and the
+   experience assumptions (Phase 2). Co-located per docs/css-roadmap.md;
+   values carry over verbatim from the inline styles they replace. */
+
+.facexp-cell { padding: 4px 6px; text-align: right; }
+.facexp-input { width: 120px; text-align: right; font-size: 11px; }
+.facexp-input--narrow { width: 100px; text-align: right; font-size: 11px; }
+
+.facexp-ratio {
+  padding: 6px 10px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: rgba(var(--text-rgb), 0.4);
+}
+.facexp-ratio--set { color: rgba(var(--text-rgb), 0.85); }
+.facexp-ratio--over { color: var(--accent-rose); }
+
+.facexp-assumptions {
+  margin-top: 14px;
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.facexp-assumption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.facexp-years { width: 70px; }
+.facexp-hint { font-size: 10px; color: rgba(var(--text-rgb), 0.58); }

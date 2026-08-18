@@ -1,13 +1,19 @@
 // src/screens/facultative/pricing/FacPricingPanels.jsx
-// The two big panels of the fac pricing screen — UwFactorsPanel (the underwriting
-// factor scorer) and EngineReadout (the computed-output table) — plus the pctChip
-// helper, extracted to keep FacPricing under the 800-line budget. Props unchanged;
-// no behaviour change.
+// The panels of the fac pricing screen — the underwriting-factor scorer, the
+// rate build-up, the engine detail table, and the two notes that explain what
+// the engine is doing (or why it is not doing anything). Extracted to keep
+// FacPricing under the 800-line budget.
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../../api';
 import { useScreenSave } from '../../../hooks/useScreenSave';
-import { computeScoreAndDecision } from '../../../logic/facPropertyPricing';
+import {
+  computeScoreAndDecision, SCORE_COMPLETENESS_MIN,
+} from '../../../../../shared/fac/families/scheduleProperty.js';
+import { RATING_BASIS_LABEL } from '../../../../../shared/fac/registry.js';
+import { METHOD_LABEL } from '../../../../../shared/fac/pipeline.js';
+import { benchmarkPosition } from '../../../../../shared/fac/methods/benchmark.js';
 import { logger } from '../../../utils/logger';
+import './FacPricing.css';
 
 function pctChip(decimal) {
   // discount_loading is stored as a decimal (e.g. -0.10 = -10%).
@@ -17,7 +23,79 @@ function pctChip(decimal) {
   return `${sign}${Math.abs(n * 100).toFixed(2)}%`;
 }
 
-export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange }) {
+// Number(null) is 0 and Number('') is 0, both finite — so a bare
+// Number.isFinite guard renders a missing figure as "0", which is a very
+// different statement from "not computed". Screen every blank out first.
+const blank = (v) => v == null || v === '';
+const pm = (v) => (!blank(v) && Number.isFinite(Number(v)) ? Number(v).toFixed(4) : '—');
+const money = (v) => (!blank(v) && Number.isFinite(Number(v)) ? Math.round(Number(v)).toLocaleString('en-US') : '—');
+const pctOf = (v) => (!blank(v) && Number.isFinite(Number(v)) ? `${(Number(v) * 100).toFixed(2)}%` : '—');
+
+const EXPOSURE_BASIS_LABEL = {
+  LOCATIONS:   'the location schedule',
+  SECTIONS:    'the section sums insured',
+  RISK_HEADER: 'the risk header sums insured',
+  NONE:        'no exposure entered yet',
+};
+
+// ───────────────────────────────────────────────────────────────────────────
+// Which exposure the price is being computed against, and which reference set
+// produced it. Both used to be invisible: the premium basis silently switched
+// between the location total and the risk header depending on whether any
+// location happened to exist (F11), and a row re-opened after a rate revision
+// recomputed against the new rates with nothing to say so (F12).
+// ───────────────────────────────────────────────────────────────────────────
+export function ExposureBasisNote({ exposure, rateVersion, family }) {
+  if (!exposure) return null;
+  const basis = EXPOSURE_BASIS_LABEL[exposure.basis] || 'no exposure entered yet';
+  return (
+    <div className="facpx-basis">
+      <span>
+        Priced on <strong>{basis}</strong>
+        {exposure.total_si > 0 && (
+          <> — <span className="facpx-basis-si">{money(exposure.total_si)}</span>
+            {exposure.bi_included && <> ({pctOf(exposure.pd_si_share)} material damage)</>}
+          </>
+        )}
+      </span>
+      {family && <span>Family: <strong>{family.label}</strong></span>}
+      {rateVersion && <span>Rates: <strong>{rateVersion}</strong></span>}
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// A class whose engine is not built yet, or a property risk missing an input
+// the engine needs. Both used to surface as an exception message rendered in
+// red — the property engine threw `Unknown occupancy_code` at every marine,
+// casualty and cyber risk that reached it (F1). Neither is an error; both are
+// states with a next action.
+// ───────────────────────────────────────────────────────────────────────────
+export function FamilyBlocker({ blocker, family }) {
+  if (!blocker) return null;
+  const notBuilt = blocker.reason === 'NOT_IMPLEMENTED';
+  const accent = notBuilt ? 'var(--accent-blue-rgb)' : 'var(--accent-amber-rgb)';
+  return (
+    <div className="facpx-blocker" style={{ '--fac-accent': accent }}>
+      <div className="facpx-blocker-kicker">
+        {notBuilt ? 'No engine for this class yet' : 'Missing input'}
+      </div>
+      <div className="facpx-blocker-body">
+        {blocker.message}
+      </div>
+      {family && (
+        <div className="facpx-blocker-meta">
+          {family.label} · {RATING_BASIS_LABEL[family.ratingBasis] || family.ratingBasis}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Underwriting factors
+// ───────────────────────────────────────────────────────────────────────────
+export function UwFactorsPanel({ riskId, risk, exposure, onScoreChange, onSelectionsChange }) {
   const [collapsed, setCollapsed] = useState(false);
   const [factors, setFactors]       = useState([]);
   const [weights, setWeights]       = useState(null);
@@ -26,9 +104,6 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
   const [selections, setSelections] = useState({});
   const [notes, setNotes]           = useState('');
 
-  // Load reference data + the risk's saved selections. Factor master,
-  // weights, scoring tables and occupancies are cached client-side so
-  // navigating between screens does not refetch.
   useEffect(() => {
     if (!riskId) return;
     Promise.all([
@@ -44,8 +119,6 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
     }).catch(logger.error);
   }, [riskId]);
 
-  // Hydrate selections separately so reloading the saved blob does not
-  // race the reference-data fetch.
   const hydrateSelections = useCallback((data) => {
     setSelections(data?.selections || {});
     setNotes(data?.notes || '');
@@ -70,25 +143,14 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
     markDirty();
   }, [markDirty]);
 
-  // Filter the master list down to the 18 qualitative factors — those
-  // with at least one option in fac_factor_option. HAZARD_GRADE and
-  // FREQUENCY_GRADE come from the occupancy + dedicated score tables,
-  // not from a user-picked option.
   const qualitativeFactors = useMemo(
     () => factors.filter((f) => Array.isArray(f.options) && f.options.length > 0),
     [factors],
   );
 
-  // BI is included when bi_sum_insured > 0 OR pd_sum_insured is 0 with
-  // BI > 0; in practice the existing risk model treats any positive BI
-  // SI as BI-included. Falls through to WITHOUT_BI when there is no
-  // BI exposure.
-  const biIncluded = useMemo(() => {
-    const bi = Number(risk?.bi_sum_insured) || 0;
-    return bi > 0;
-  }, [risk]);
-
-  // Live score — pure client-side compute, no network call.
+  // Live score — pure client-side compute, no network call. The exposure
+  // profile decides the weight scheme, so the panel and the engine below it
+  // can never disagree about whether this risk has BI.
   const liveScore = useMemo(() => {
     if (!risk || !factors.length || !weights || !scoring) return null;
     try {
@@ -96,7 +158,7 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
         {
           occupancy_code: risk.occupancy_code,
           factor_selections: selections,
-          bi_included: biIncluded,
+          exposure,
           market_rate_pm: 0,
         },
         {
@@ -113,62 +175,54 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
     } catch {
       return null;
     }
-  }, [risk, factors, weights, scoring, occupancies, selections, biIncluded]);
+  }, [risk, factors, weights, scoring, occupancies, selections, exposure]);
 
-  // Surface the score upwards if the parent wants to compose it with the
-  // pricing screen's other readouts.
   useEffect(() => {
     if (onScoreChange) onScoreChange(liveScore);
   }, [liveScore, onScoreChange]);
 
-  // Mirror selections to the parent so the engine in FacPricing
-  // recomputes in real time as the underwriter ticks options here.
   useEffect(() => {
     if (onSelectionsChange) onSelectionsChange(selections);
   }, [selections, onSelectionsChange]);
 
-  // Lift the save() handle on the parent so WizardLayout's onBeforeNext
-  // can flush both this panel and the pricing screen on navigation.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     window.__facUwFactorsSave = saveUwFactors;
     return () => { delete window.__facUwFactorsSave; };
   }, [saveUwFactors]);
 
-  const scheme = biIncluded ? 'WITH_BI' : 'WITHOUT_BI';
+  const scheme = exposure?.bi_included ? 'WITH_BI' : 'WITHOUT_BI';
+  const completeness = liveScore?.score_completeness ?? 0;
+  const complete = completeness >= SCORE_COMPLETENESS_MIN;
 
   return (
-    <div style={{ marginBottom: 20, padding: '14px 18px',
-                  background: 'rgba(var(--accent-blue-rgb),0.05)',
-                  border: '1px solid rgba(var(--accent-blue-rgb),0.28)', borderRadius: 12 }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: collapsed ? 0 : 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+    <div className="facpx-uw">
+      <div className={`facpx-uw-head${collapsed ? '' : ' facpx-uw-head--open'}`}>
+        <div className="facpx-uw-toggle"
              role="button" tabIndex={0} aria-expanded={!collapsed}
              onClick={() => setCollapsed((c) => !c)}
              onKeyDown={(e) => {
                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCollapsed((c) => !c); }
              }}>
-          <span style={{ fontSize: 13, color: 'rgba(var(--accent-blue-rgb),0.80)' }}>{collapsed ? '▶' : '▼'}</span>
-          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em',
-                         textTransform: 'uppercase', color: 'rgba(var(--accent-blue-rgb),0.80)' }}>
+          <span className="facpx-uw-caret">{collapsed ? '▶' : '▼'}</span>
+          <span className="facpx-uw-title">
             Underwriting Factors — Drivers of Rate &amp; Score
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18 }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
-                          textTransform: 'uppercase', color: 'var(--muted)' }}>Scheme</div>
-            <div style={{ fontSize: 12, fontWeight: 800, color: 'rgba(var(--accent-blue-rgb),0.9)', fontVariantNumeric: 'tabular-nums', lineHeight: '22px' }}>{scheme.replace(/_/g, ' ')}</div>
+        <div className="facpx-uw-stats">
+          <div className="facpx-uw-stat">
+            <div className="facpx-kicker">Scheme</div>
+            <div className="facpx-uw-scheme">{scheme.replace(/_/g, ' ')}</div>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
-                          textTransform: 'uppercase', color: 'var(--muted)' }}>Score</div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>
+          <div className="facpx-uw-stat">
+            <div className="facpx-kicker">Score</div>
+            <div className={`facpx-uw-score${complete ? '' : ' facpx-uw-score--provisional'}`}>
               {liveScore ? liveScore.underwriting_score.toFixed(2) : '—'}
-              {liveScore?.capacity_grade && (
-                <span style={{ marginLeft: 8, fontSize: 10, color: 'rgba(var(--accent-rgb),0.85)' }}>
-                  {liveScore.capacity_grade} · {liveScore.uw_action}
+              {liveScore && (
+                <span className={`facpx-uw-grade${complete ? '' : ' facpx-uw-grade--provisional'}`}>
+                  {complete
+                    ? `${liveScore.capacity_grade} · ${liveScore.uw_action}`
+                    : 'PROVISIONAL'}
                 </span>
               )}
             </div>
@@ -176,62 +230,55 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
         </div>
       </div>
 
+      {/* Completeness. An unselected factor is UNSCORED, not zero — a
+          half-filled form used to converge on a score near 0, which is the
+          bottom grade, which reads as DECLINE (F5). */}
+      {liveScore && (
+        <div className="facpx-meter">
+          <div className="facpx-meter-labels">
+            <span>{(completeness * 100).toFixed(0)}% of the scoring weight selected</span>
+            {!complete && (
+              <span className="facpx-meter-floor">
+                {(SCORE_COMPLETENESS_MIN * 100).toFixed(0)}% needed before a grade is issued
+              </span>
+            )}
+          </div>
+          <div className="facpx-meter-track">
+            <div className={`facpx-meter-fill${complete ? '' : ' facpx-meter-fill--provisional'}`}
+                 style={{ '--fac-fill': `${Math.min(100, completeness * 100)}%` }} />
+          </div>
+        </div>
+      )}
+
       {!collapsed && (
         <>
           {qualitativeFactors.length === 0 ? (
-            <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)', padding: '8px 0' }}>
+            <div className="facpx-factors-loading">
               Loading factor catalogue…
             </div>
           ) : (
             (() => {
-              // One grid template shared by the header row and every
-              // factor row, so the columns stay perfectly aligned even
-              // as the panel resizes. The dropdown column is bounded —
-              // otherwise it stretches to the right edge and the score
-              // / loading chips end up orphaned far from the field.
-              const ROW_COLS = '240px minmax(260px, 560px) 90px 110px';
+              const unscored = new Set(liveScore?.unscored_factors || []);
               return (
                 <div>
-                  {/* Column headers */}
-                  <div style={{ display: 'grid', gridTemplateColumns: ROW_COLS,
-                                 gap: 16, alignItems: 'center',
-                                 padding: '0 0 8px',
-                                 borderBottom: '1px solid var(--hairline)',
-                                 marginBottom: 8 }}>
-                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                                   textTransform: 'uppercase', color: 'var(--muted)' }}>
-                      Factor
-                    </div>
-                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                                   textTransform: 'uppercase', color: 'var(--muted)' }}>
-                      Option
-                    </div>
-                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                                   textTransform: 'uppercase', color: 'var(--muted)',
-                                   textAlign: 'right' }}>
-                      Score
-                    </div>
-                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                                   textTransform: 'uppercase', color: 'var(--muted)',
-                                   textAlign: 'right' }}>
-                      Loading
-                    </div>
+                  <div className="facpx-factor-head">
+                    <div className="facpx-col-head">Factor</div>
+                    <div className="facpx-col-head">Option</div>
+                    <div className="facpx-col-head facpx-col-head--num">Score</div>
+                    <div className="facpx-col-head facpx-col-head--num">Loading</div>
                   </div>
 
                   {qualitativeFactors.map((factor) => {
                     const selectedLabel = selections[factor.factor_code] || '';
                     const selectedOpt = factor.options.find((o) => o.option_label === selectedLabel);
+                    const isUnscored = unscored.has(factor.factor_code);
                     return (
-                      <div key={factor.factor_code} style={{ display: 'grid',
-                           gridTemplateColumns: ROW_COLS, gap: 16, alignItems: 'center',
-                           padding: '8px 0',
-                           borderBottom: '1px solid var(--hairline)' }}>
-                        <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.85)' }}>
+                      <div key={factor.factor_code} className="facpx-factor-row">
+                        <div className="facpx-factor-name">
                           {factor.factor_name}
                         </div>
-                        <select className="fi" value={selectedLabel}
-                                onChange={(e) => setSelection(factor.factor_code, e.target.value)}
-                                style={{ fontSize: 12, width: '100%' }}>
+                        <select className="fi facpx-factor-select" value={selectedLabel}
+                                onChange={(e) => setSelection(factor.factor_code, e.target.value)}>
                           <option value="">— Select —</option>
                           {factor.options.map((o) => (
                             <option key={o.option_id || o.option_label} value={o.option_label}>
@@ -239,16 +286,13 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
                             </option>
                           ))}
                         </select>
-                        <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums',
-                                      fontSize: 11, fontWeight: 700,
-                                      color: selectedOpt ? 'var(--accent)' : 'rgba(var(--text-rgb),0.4)' }}>
-                          {selectedOpt ? `score ${selectedOpt.score}` : '—'}
+                        <div className={`facpx-factor-num${selectedOpt ? ' facpx-factor-num--scored'
+                          : (isUnscored ? ' facpx-factor-num--unscored' : '')}`}>
+                          {selectedOpt ? `score ${selectedOpt.score}` : (isUnscored ? 'unscored' : '—')}
                         </div>
-                        <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums',
-                                      fontSize: 11, fontWeight: 700,
-                                      color: factor.affects_rate
-                                        ? (selectedOpt ? 'var(--accent-amber)' : 'rgba(var(--text-rgb),0.4)')
-                                        : 'rgba(var(--text-rgb),0.45)' }}>
+                        <div className={`facpx-factor-num${factor.affects_rate
+                          ? (selectedOpt ? ' facpx-factor-num--loading' : '')
+                          : ' facpx-factor-num--inert'}`}>
                           {factor.affects_rate
                             ? (selectedOpt ? pctChip(selectedOpt.discount_loading || 0) : '—')
                             : 'score only'}
@@ -261,11 +305,10 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
             })()
           )}
 
-          <div style={{ marginTop: 12 }}>
+          <div className="facpx-uw-notes">
             <textarea className="fi" rows={2} value={notes}
                       onChange={(e) => { setNotes(e.target.value); markDirty(); }}
-                      placeholder="Underwriter notes on these factor selections…"
-                      style={{ width: '100%', resize: 'vertical', fontSize: 12 }} />
+                      placeholder="Underwriter notes on these factor selections…" />
           </div>
         </>
       )}
@@ -274,80 +317,315 @@ export function UwFactorsPanel({ riskId, risk, onScoreChange, onSelectionsChange
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Engine readout — pure display of computeFacQuote's result. Kept side-by-
-// side with the legacy dual-engine sections; once underwriters trust this
-// path we can retire the manual market/blend inputs.
+// Rate build-up — the whole price, top to bottom, in the order it is derived.
+//
+// The screen used to show four disconnected loading mechanisms and a final
+// figure that came from a manual blend rather than any of them (F9). Every
+// line here feeds the next, and the last line is what gets quoted.
 // ───────────────────────────────────────────────────────────────────────────
-export function EngineReadout({ output, premiums, totalLocSar }) {
+function WaterfallRow({ label, detail, value, emphasis, indent }) {
+  return (
+    <div className={`facpx-wf-row${emphasis ? ' facpx-wf-row--rule' : ''}`}>
+      <div className={indent ? 'facpx-wf-cell--indent' : undefined}>
+        <span className="facpx-wf-label">{label}</span>
+        {detail && <span className="facpx-wf-detail">{detail}</span>}
+      </div>
+      <div className="facpx-wf-value">
+        {value}
+      </div>
+    </div>
+  );
+}
+
+export function PricingWaterfall({
+  output, exposure, extensionsLoadingPct, coverLoadings,
+  adjustmentPct, adjustmentReason, quotedRate, quotedPremium,
+}) {
   if (!output) {
     return (
-      <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)', padding: '12px 0' }}>
-        Engine waiting for reference data… (occupancies, factors and locations must load first).
+      <div className="facpx-wf-empty">
+        Waiting for reference data — occupancies, factors and the location schedule load first.
       </div>
     );
   }
   if (output._error) {
     return (
-      <div style={{ fontSize: 12, color: 'var(--accent-rose)', padding: '12px 0' }}>
+      <div className="facpx-wf-error">
         {(output.warnings || []).join(' / ') || 'Engine error.'}
       </div>
     );
   }
-  const pm = (v) => (Number.isFinite(Number(v)) ? Number(v).toFixed(4) : '—');
-  const money = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)).toLocaleString('en-US') : '—');
-  const pct = (v) => (Number.isFinite(Number(v)) ? `${(Number(v) * 100).toFixed(2)}%` : '—');
 
-  const rows = [
-    ['Flexa Base Rate (‰)',           pm(output.flexa_base_rate_pm)],
-    ['Technical Rate — no NatCat (‰)', pm(output.technical_rate_no_natcat_pm)],
-    ['Flood / Storm Loaded (‰)',       pm(output.flood_storm_rate_loaded_pm)],
-    ['Earthquake Loaded (‰)',          pm(output.earthquake_rate_loaded_pm)],
-    ['Total Rate (‰)',                 pm(output.total_rate_pm)],
-    ['BI Rate (‰)',                    pm(output.bi_rate_pm)],
-    ['Net Rate (‰)',                   pm(output.net_rate_pm)],
-    ['Final Net Rate (‰)',             pm(output.final_net_rate_pm)],
-    ['Final Gross Rate (‰)',           pm(output.final_gross_rate_pm)],
-    ['Technical Premium (SAR)',        money(premiums?.technical)],
-    ['Expected Premium (SAR)',         money(premiums?.expected)],
-    ['Underwriting Score',
-      Number.isFinite(Number(output.underwriting_score))
-        ? Number(output.underwriting_score).toFixed(2) : '—'],
-    ['Capacity Grade',                 output.capacity_grade || '—'],
-    ['UW Action',                      output.uw_action || '—'],
-    ['Max Capacity %',                 pct(output.max_capacity_pct)],
-    ['Max Capacity (SAR)',             money(output.max_capacity_sar)],
-    ['Market vs Tech %',               pct(output.market_vs_tech_pct)],
-    ['Market vs Tech Band',            output.market_vs_tech_band || '—'],
-  ];
+  const natcat = Number(output.flood_storm_rate_loaded_pm || 0) + Number(output.earthquake_rate_loaded_pm || 0);
+  const grossUp = output.final_net_rate_pm > 0 && output.final_gross_rate_pm > 0
+    ? output.final_gross_rate_pm / output.final_net_rate_pm
+    : null;
+
   return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-        {rows.map(([label, value]) => (
-          <div key={label} style={{ display: 'flex', justifyContent: 'space-between',
-               padding: '6px 12px', background: 'var(--control-bg)',
-               border: '1px solid var(--hairline)', borderRadius: 8 }}>
-            <span style={{ fontSize: 11, color: 'var(--muted)' }}>{label}</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(var(--text-rgb),0.90)',
-                           fontVariantNumeric: 'tabular-nums' }}>{value}</span>
-          </div>
-        ))}
-      </div>
-      {Number.isFinite(totalLocSar) && totalLocSar > 0 && (
-        <div style={{ marginTop: 8, fontSize: 10, color: 'rgba(var(--text-rgb),0.7)' }}>
-          Premium computed against total location SAR SI = {money(totalLocSar)}.
-        </div>
+    <section aria-label="Rate build-up">
+      <WaterfallRow label="FLEXA base rate" detail="occupancy" value={pm(output.flexa_base_rate_pm)} />
+      <WaterfallRow label="Technical rate" detail="× (1 + factor discounts / loadings)" value={pm(output.technical_rate_no_natcat_pm)} emphasis />
+      <WaterfallRow label="Flood / storm" indent value={pm(output.flood_storm_rate_loaded_pm)} />
+      <WaterfallRow label="Earthquake" indent value={pm(output.earthquake_rate_loaded_pm)} />
+      <WaterfallRow label="+ NatCat load" detail="zone rates, factor-loaded" value={pm(natcat)} />
+      <WaterfallRow label="= Total rate" value={pm(output.total_rate_pm)} emphasis />
+      {exposure?.bi_included && (
+        <>
+          <WaterfallRow label="BI rate" detail="indemnity loading × total × BI plan" indent value={pm(output.bi_rate_pm)} />
+          <WaterfallRow label="= Net rate" detail={`${pctOf(exposure.pd_si_share)} MD / ${pctOf(1 - exposure.pd_si_share)} BI`} value={pm(output.net_rate_pm)} emphasis />
+        </>
       )}
+      {coverLoadings?.length > 0 && (
+        <WaterfallRow
+          label="+ Extensions"
+          detail={`${coverLoadings.length} applied, +${extensionsLoadingPct.toFixed(0)}%`}
+          value={pm(output.final_net_rate_pm)}
+        />
+      )}
+      <WaterfallRow label="= Technical net" value={pm(output.final_net_rate_pm)} emphasis />
+      <WaterfallRow
+        label="÷ (1 − commission − margin − expenses)"
+        detail={grossUp ? `gross-up ×${grossUp.toFixed(3)}` : null}
+        value={pm(output.final_gross_rate_pm)}
+      />
+      <WaterfallRow label="= TECHNICAL GROSS" value={pm(output.final_gross_rate_pm)} emphasis />
+      {adjustmentPct !== 0 && (
+        <WaterfallRow
+          label="UW adjustment"
+          detail={adjustmentReason?.trim() || '⚠ no reason given'}
+          value={`${adjustmentPct > 0 ? '+' : '−'}${Math.abs(adjustmentPct * 100).toFixed(1)}%`}
+        />
+      )}
+      <WaterfallRow label="QUOTED RATE (‰)" value={quotedRate == null ? '—' : quotedRate.toFixed(4)} emphasis />
+      <WaterfallRow
+        label="Quoted premium"
+        detail={exposure?.total_si > 0 ? `on ${money(exposure.total_si)}` : 'no exposure entered'}
+        value={money(quotedPremium)}
+      />
+
       {(output.warnings || []).length > 0 && (
-        <div style={{ marginTop: 10, padding: '8px 12px',
-                       background: 'rgba(var(--accent-amber-rgb),0.05)',
-                       border: '1px solid rgba(var(--accent-amber-rgb),0.25)', borderRadius: 8 }}>
-          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
-                        color: 'rgba(var(--accent-amber-rgb),0.85)', marginBottom: 4 }}>WARNINGS</div>
+        <div className="facpx-warnings">
+          <div className="facpx-warnings-kicker">WARNINGS</div>
           {output.warnings.map((w, i) => (
-            <div key={i} style={{ fontSize: 11, color: 'rgba(var(--accent-amber-rgb),0.9)' }}>{w}</div>
+            <div key={i} className="facpx-warning">{w}</div>
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Engine detail — the score and capacity half, plus the raw rate figures for
+// anyone reconciling against the workbook.
+// ───────────────────────────────────────────────────────────────────────────
+export function EngineReadout({ output, exposure }) {
+  if (!output || output._error) return null;
+
+  const complete = (output.score_completeness ?? 0) >= SCORE_COMPLETENESS_MIN;
+  const rows = [
+    ['Underwriting Score',
+      Number.isFinite(Number(output.underwriting_score))
+        ? Number(output.underwriting_score).toFixed(2) : '—'],
+    ['Scoring Completeness', pctOf(output.score_completeness)],
+    ['Capacity Grade', complete ? (output.capacity_grade || '—') : 'not issued'],
+    ['UW Action', output.uw_action || '—'],
+    ['Max Capacity %', complete ? pctOf(output.max_capacity_pct) : '—'],
+    ['Max Capacity (SAR)', money(output.max_capacity_sar)],
+    ['Market vs Tech %', pctOf(output.market_vs_tech_pct)],
+    ['Market vs Tech Band', output.market_vs_tech_band || 'not scored — no benchmark rate'],
+    ['Technical Premium', money(output.premiums?.technical)],
+    ['Expected Premium', money(output.premiums?.expected)],
+    // The exposure basis itself is stated once, at the top of the screen.
+    ['Total Sum Insured', money(exposure?.total_si)],
+  ];
+
+  return (
+    <div>
+      <div className="facpx-detail-grid">
+        {rows.map(([label, value]) => (
+          <div key={label} className="facpx-detail-cell">
+            <span className="facpx-detail-label">{label}</span>
+            <span className="facpx-detail-value">{value}</span>
+          </div>
+        ))}
+      </div>
+      {(output.unscored_factors || []).length > 0 && (
+        <div className="facpx-unscored">
+          Unscored: {output.unscored_factors.join(', ')}
+        </div>
+      )}
     </div>
+  );
+}
+
+
+// ───────────────────────────────────────────────────────────────────────────
+// Loss cost — the independent estimates, and the weight each one carries.
+//
+// This is the part of the build-up that was missing entirely. The workbook
+// rate was the only view of the loss cost the tool held, the risk's own loss
+// history never reached a price (F4), and there was no exposure rating at
+// all (F3). Showing the candidates side by side, each with its weight and
+// its reason for carrying that weight, is what lets an underwriter defend
+// the number rather than just report it.
+//
+// A method with no data says so, in its own words, and takes no weight.
+// That is deliberately different from a method that priced at zero.
+// ───────────────────────────────────────────────────────────────────────────
+const METHOD_ROLE_LABEL = {
+  EXPERIENCE: 'experience',
+  EXPOSURE: 'exposure',
+  REFERENCE: 'reference only',
+};
+
+function MethodRow({ candidate, weight }) {
+  const pct = weight == null ? null : `${(weight * 100).toFixed(0)}%`;
+  const d = candidate.diagnostics || {};
+  const detail = candidate.code === 'BURNING_COST' && candidate.available
+    ? `${d.exposure_years ?? '—'} yrs · ${candidate.claimCount ?? 0} claim${candidate.claimCount === 1 ? '' : 's'} in layer`
+    : candidate.code === 'BENCHMARK' && candidate.available
+      ? `${d.n} bound · ${String(d.confidence || '').toLowerCase()} confidence`
+      : candidate.code === 'EXPOSURE_CURVE' && candidate.available
+        ? (d.bands?.[0]?.curve ? `curve ${d.bands[0].curve}` : 'curve applied')
+        : METHOD_ROLE_LABEL[candidate.role] || '';
+
+  return (
+    <div className="facpx-method">
+      <div>
+        <span className="facpx-method-name">{candidate.label || METHOD_LABEL[candidate.code] || candidate.code}</span>
+        {detail && <span className="facpx-method-detail">{detail}</span>}
+        {!candidate.available && (
+          <div className="facpx-method-unavailable">{candidate.unavailableReason}</div>
+        )}
+      </div>
+      <div className="facpx-method-rate">{candidate.available ? pm(candidate.ratePm) : '—'}</div>
+      <div className={`facpx-method-weight${pct ? '' : ' facpx-method-weight--none'}`}>
+        {pct || (candidate.role === 'REFERENCE' ? 'reference' : '—')}
+      </div>
+    </div>
+  );
+}
+
+export function LossCostPanel({ technical, quotedRatePm }) {
+  if (!technical) {
+    return (
+      <div className="facpx-wf-empty">
+        Loss-cost methods run on the server — they need the loss experience and the
+        curve library. Waiting for the first price…
+      </div>
+    );
+  }
+  if (!technical.priced) {
+    return (
+      <div className="facpx-wf-error">
+        {technical.reason || 'No loss-cost method produced a rate.'}
+      </div>
+    );
+  }
+
+  const z = technical.credibility?.z;
+  const benchmark = (technical.candidates || []).find((c) => c.code === 'BENCHMARK');
+  const position = benchmark?.available
+    ? benchmarkPosition(quotedRatePm, benchmark.diagnostics) : null;
+
+  return (
+    <section aria-label="Loss cost methods">
+      <div className="facpx-method facpx-method--head">
+        <div className="facpx-col-head">Method</div>
+        <div className="facpx-col-head facpx-col-head--num">Rate ‰</div>
+        <div className="facpx-col-head facpx-col-head--num">Weight</div>
+      </div>
+      {(technical.candidates || []).map((c) => (
+        <MethodRow key={c.code} candidate={c} weight={technical.weights?.[c.code] ?? null} />
+      ))}
+
+      <div className="facpx-method facpx-method--total">
+        <div>
+          <span className="facpx-method-name">Blended loss cost</span>
+          {z != null && (
+            <span className="facpx-method-detail">
+              credibility Z = {(z * 100).toFixed(0)}%
+              {technical.credibility?.capped ? ' (capped)' : ''}
+              {technical.weightSource === 'OVERRIDE' ? ' · weights overridden' : ''}
+            </span>
+          )}
+        </div>
+        <div className="facpx-method-rate">{pm(technical.blendedLossCostPm)}</div>
+        <div className="facpx-method-weight" />
+      </div>
+
+      {technical.weightSource === 'OVERRIDE' && technical.weightOverrideReason && (
+        <div className="facpx-method-override">
+          Weights overridden — {technical.weightOverrideReason.replace(/_/g, ' ').toLowerCase()}
+        </div>
+      )}
+
+      {position && (
+        <div className="facpx-method-benchmark">
+          Quoted rate sits {position.position.replace(/_/g, ' ').toLowerCase()} of the bound book
+          {position.ratio != null && <> — {position.ratio.toFixed(2)}× the median</>}.
+        </div>
+      )}
+
+      {(technical.warnings || []).length > 0 && (
+        <div className="facpx-warnings">
+          <div className="facpx-warnings-kicker">METHOD NOTES</div>
+          {technical.warnings.map((w, i) => (
+            <div key={i} className="facpx-warning">{w}</div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * The technical build-up that sits between the blended loss cost and the
+ * quoted rate. Shown only when the server priced it — the local engine
+ * cannot see the loss history or the curves.
+ */
+export function TechnicalBuildUp({ technical }) {
+  if (!technical?.priced) return null;
+  const basis = technical.riskLoadBasis || {};
+  return (
+    <section aria-label="Technical build-up">
+      <WaterfallRow label="Blended loss cost" value={pm(technical.blendedLossCostPm)} emphasis />
+      {technical.catLoadPm > 0 && (
+        <WaterfallRow label="+ Cat load" detail="modelled AAL" value={pm(technical.catLoadPm)} />
+      )}
+      {/* Separately-rated sections — war & strikes above all — are added
+          here, never blended. A hull rate and a war rate answer different
+          questions, and a war rate that moved this week has to be visible
+          as its own line or nobody sees it move. */}
+      {(technical.additiveSections || []).map((sec) => (
+        <WaterfallRow
+          key={sec.code}
+          label={`+ ${sec.label}`}
+          detail="separately rated"
+          value={pm(sec.ratePm)}
+        />
+      ))}
+      <WaterfallRow label="= Expected loss" value={pm(technical.expectedLossPm)} emphasis />
+      {technical.riskLoadPm > 0 && (
+        <WaterfallRow
+          label="+ Risk load"
+          detail={basis.kind === 'THETA_SIGMA'
+            ? `θ ${basis.theta} × σ over ${basis.years} yrs`
+            : `${((basis.pct || 0) * 100).toFixed(1)}% of expected loss`}
+          value={pm(technical.riskLoadPm)}
+        />
+      )}
+      {technical.internalExpensePm > 0 && (
+        <WaterfallRow label="+ Internal expense" value={pm(technical.internalExpensePm)} />
+      )}
+      <WaterfallRow label="= Technical net" value={pm(technical.technicalNetPm)} emphasis />
+      <WaterfallRow
+        label="÷ (1 − commission − brokerage − tax − margin)"
+        detail={`gross-up ×${(1 / (technical.grossUpDenominator || 1)).toFixed(3)}`}
+        value={pm(technical.technicalGrossPm)}
+      />
+      <WaterfallRow label="= TECHNICAL GROSS" value={pm(technical.technicalGrossPm)} emphasis />
+    </section>
   );
 }

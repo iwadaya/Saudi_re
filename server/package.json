@@ -16,7 +16,8 @@
     "audit:ownership": "node scripts/audit-contract-quote-ownership.js",
     "audit:public-docs": "node scripts/audit-public-documents.js",
     "gdpr:anonymize-user": "node scripts/anonymize-user.js",
-    "refresh:ldf-benchmarks": "node src/jobs/refreshLdfBenchmarks.js"
+    "refresh:ldf-benchmarks": "node src/jobs/refreshLdfBenchmarks.js",
+    "refresh:fac-accumulation": "node src/jobs/refreshFacAccumulation.js"
   },
   "dependencies": {
     "cloudinary": "^2.5.1",

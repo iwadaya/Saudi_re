@@ -1,0 +1,115 @@
+/* client/src/screens/facultative/coverage_structure/FacLayerTower.css
+   The excess tower grid. Styles live here rather than inline so the screen
+   stays under the frontend budget's inline-style metric. */
+
+.fac-tower { margin-top: 8px; }
+
+.fac-tower__intro {
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.65);
+  line-height: 1.55;
+  margin-bottom: 14px;
+  max-width: 62ch;
+}
+
+.fac-tower__scroll { overflow-x: auto; }
+
+.fac-tower__table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.fac-tower__table th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgba(var(--text-rgb), 0.55);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+
+.fac-tower__table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(var(--text-rgb), 0.06);
+  vertical-align: middle;
+}
+
+.fac-tower__num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.fac-tower__table input.fi { width: 100%; min-width: 88px; }
+.fac-tower__table input.fac-tower__narrow { min-width: 62px; }
+
+.fac-tower__derived {
+  font-variant-numeric: tabular-nums;
+  color: rgba(var(--text-rgb), 0.85);
+  white-space: nowrap;
+}
+
+.fac-tower__derived--muted { color: rgba(var(--text-rgb), 0.45); }
+
+.fac-tower__free {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(var(--accent-amber-rgb, 217 164 60), 0.16);
+  color: rgb(var(--accent-amber-rgb, 217 164 60));
+}
+
+.fac-tower__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  align-items: center;
+}
+
+.fac-tower__btn {
+  appearance: none;
+  cursor: pointer;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid var(--stroke-soft);
+  background: var(--control-bg);
+  color: var(--muted);
+}
+
+.fac-tower__btn:hover { color: var(--accent-blue); border-color: rgba(var(--accent-blue-rgb), 0.45); }
+
+.fac-tower__btn--row {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.fac-tower__totals {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.75);
+}
+
+.fac-tower__totals strong { font-variant-numeric: tabular-nums; color: var(--text); }
+
+.fac-tower__empty {
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.55);
+  padding: 14px 0;
+}
+
+.fac-tower__note {
+  margin-top: 10px;
+  font-size: 11px;
+  color: rgba(var(--text-rgb), 0.55);
+  line-height: 1.5;
+  max-width: 62ch;
+}

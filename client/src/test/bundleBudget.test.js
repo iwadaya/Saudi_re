@@ -45,7 +45,27 @@ const RAW_BUDGETS_KB = {
   'np-screens': 280,       //                                          (254.1)
   'prop-screens': 405,     // proportional treaty + pricing screens    (367.1)
   'shared-screens': 265,   // loss/pareto + cross-tier shared screens  (237.6)
-  'fac-screens': 180,      // facultative AI doc-ingest + clauses      (161.8)
+  // 2026-08-18 RE-BASELINE, fac only. Two things changed together:
+  //   • shared/fac (the facultative pricing engine) got its own manual chunk.
+  //     It is pure math read from both app-core (config/wizard.js, for the
+  //     family registry) and the fac screens; unassigned it landed wherever
+  //     rollup reached it first. Splitting it took app-core from 87.3 to
+  //     79.6 KB gzip.
+  //   • The fac screens gained the excess-tower grid (Phase 3), which is
+  //     screen code and belongs in this chunk.
+  // fac-screens had crept to 179.9 KiB against a 180 budget before either
+  // change — the gate was one commit from firing on whoever came next. Both
+  // numbers below are the measured build plus ~10% headroom, the same
+  // convention as the rest of this table.
+  // 2026-08-18, second pass: shared/fac split its family METADATA from its
+  // family ENGINES (families/meta.js + engines.js). The browser needs to know
+  // that Hull & Machinery rates per mille of agreed value; it does not need
+  // the hull engine, because the server prices hull. fac-engine went from
+  // 67.5 KiB (eleven engines) to 25.1 KiB — smaller than before Phase 4 added
+  // six families, which is the point: a family the browser does not run now
+  // costs it nothing.
+  'fac-screens': 205,      // fac screens incl. tower + capacity panel  (189.6)
+  'fac-engine': 32,        // shared/fac — registry metadata + property  (25.1)
   // exceljs is a lazy-loaded, pay-on-click chunk — generous on purpose.
   exceljs: 1100,
 };
