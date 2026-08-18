@@ -27,11 +27,21 @@ jobs:
   build-scan-sbom:
     name: build + SBOM (Syft) + scan (Trivy)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write # upload SARIF to GitHub code scanning
     env:
       IMAGE: universe3:ci-${{ github.sha }}
+      JOBS_IMAGE: universe3-jobs:ci-${{ github.sha }}
+      # Official Trivy image, pinned by digest (v0.74.0). Replaces
+      # aquasecurity/trivy-action, which internally references
+      # aquasecurity/setup-trivy@v0.2.1 — a tag that no longer resolves
+      # upstream, so every run of this job failed ~20s in with
+      # "Unable to resolve action ... unable to find version v0.2.1".
+      # Running the release image directly removes that indirection and
+      # pins the scanner itself rather than a wrapper around it.
+      TRIVY_IMAGE: aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -66,13 +76,16 @@ jobs:
       # ── Vulnerability scan ──
       # Report HIGH+CRITICAL to code scanning (non-blocking visibility) …
       - name: Trivy scan → SARIF (report)
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
-        with:
-          image-ref: ${{ env.IMAGE }}
-          format: sarif
-          output: trivy-results.sarif
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/work" -w /work \
+            -v trivy-cache:/root/.cache/trivy \
+            "$TRIVY_IMAGE" image \
+              --format sarif --output trivy-results.sarif \
+              --severity HIGH,CRITICAL --ignore-unfixed \
+              "$IMAGE"
 
       - name: Upload Trivy SARIF to code scanning
         if: always()
@@ -85,13 +98,15 @@ jobs:
       # without being noisy on day one. Tighten to HIGH,CRITICAL once the base
       # image is on a regular bump cadence.
       - name: Trivy scan → gate (fail on fixable CRITICAL)
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
-        with:
-          image-ref: ${{ env.IMAGE }}
-          format: table
-          severity: CRITICAL
-          ignore-unfixed: true
-          exit-code: '1'
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v trivy-cache:/root/.cache/trivy \
+            "$TRIVY_IMAGE" image \
+              --format table --severity CRITICAL --ignore-unfixed \
+              --exit-code 1 \
+              "$IMAGE"
 
       # ── Cron/backup jobs image (Dockerfile.jobs). Previously unscanned — its
       #    debian base + postgresql-client/awscli layers carry their own CVE
@@ -102,15 +117,17 @@ jobs:
           context: .
           file: Dockerfile.jobs
           load: true
-          tags: universe3-jobs:ci-${{ github.sha }}
+          tags: ${{ env.JOBS_IMAGE }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Trivy scan jobs image → gate (fail on fixable CRITICAL)
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
-        with:
-          image-ref: universe3-jobs:ci-${{ github.sha }}
-          format: table
-          severity: CRITICAL
-          ignore-unfixed: true
-          exit-code: '1'
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v trivy-cache:/root/.cache/trivy \
+            "$TRIVY_IMAGE" image \
+              --format table --severity CRITICAL --ignore-unfixed \
+              --exit-code 1 \
+              "$JOBS_IMAGE"
