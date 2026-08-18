@@ -6,10 +6,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api';
 import Topbar from '../../components/Topbar';
-import { Button, Field, Input, Modal } from '../../components/ui';
+import { Button, Callout, Field, Input, Modal, Select, Table } from '../../components/ui';
+import { ApprovalBadge } from '../../components/ledger';
 import { logger } from '../../utils/logger';
 import { formatWithCommasDecimal, sanitizeNumber } from '../../utils/format';
-import { ApprovalPill } from './ClaimsHomeScreen';
 
 const errMsg = (e, fallback) => {
   const b = e?.body;
@@ -25,15 +25,35 @@ const fmtMoney = (v) => {
 const fmtDate = (v) => (v ? String(v).slice(0, 10) : '–');
 const fmtPct = (v) => (v == null ? '–' : `${Number(v)}%`);
 
+const MOVEMENT_COLUMNS = [
+  { key: '#' }, { key: 'Date' }, { key: 'Type' },
+  { key: 'Paid @100%', num: true }, { key: 'OS @100%', num: true },
+  { key: 'Incurred @100%', num: true }, { key: 'Line %', num: true },
+  { key: 'Comment' }, { key: 'By' },
+];
+
+const ACTION_TITLES = {
+  close: 'Close Claim', decline: 'Decline Claim', reopen: 'Reopen Claim',
+  submit: 'Submit for Approval', approve: 'Approve Claim', reject: 'Reject Claim',
+};
+
+const ACTION_BLURBS = {
+  reopen: 'Reopening restates the closing position (OS remains 0) — book a RESERVE_CHANGE movement afterwards to re-establish the reserve.',
+  close: 'Closing books a CLOSURE movement that zeroes the outstanding reserve. Paid-to-date is preserved.',
+  decline: 'Declining books a CLOSURE movement that zeroes the outstanding reserve. Paid-to-date is preserved.',
+  submit: 'Submitting sends the claim for review. It is frozen — no edits, movements, or lifecycle changes — until it is approved or rejected.',
+  approve: 'Approving finalises the claim as submitted.',
+  reject: 'Rejecting returns the claim to the handler for revision. Give a reason so they know what to fix.',
+};
+
 function PosCard({ label, v100, vShare, ccy }) {
   return (
-    <div style={{
-      flex: '1 1 200px', minWidth: 200, padding: '16px 18px', borderRadius: 14,
-      background: 'var(--surface-2)', border: '1px solid rgba(var(--accent-rgb),0.18)',
-    }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 8 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)' }}>{fmtMoney(vShare)} <span style={{ fontSize: 11, color: 'var(--text-subtle)' }}>{ccy || ''} our share</span></div>
-      <div style={{ fontSize: 12, color: 'var(--text-subtle)', marginTop: 4 }}>{fmtMoney(v100)} @ 100%</div>
+    <div className="cf-pos">
+      <div className="cf-pos__label">{label}</div>
+      <div className="cf-pos__value">
+        {fmtMoney(vShare)} <span className="cf-pos__unit">{ccy || ''} our share</span>
+      </div>
+      <div className="cf-pos__at100">{fmtMoney(v100)} @ 100%</div>
     </div>
   );
 }
@@ -149,12 +169,12 @@ export default function ClaimDetailScreen() {
   const canSubmit = claim && ['DRAFT', 'REJECTED'].includes(claim.approval_status);
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg0)', fontFamily: 'var(--font-sans)' }}>
+    <div className="cf-screen">
       <Topbar
         title={claim ? claim.claim_ref : 'Claim'}
         subtitle={claim ? `${claim.cedant_name || ''} · ${claim.treaty_type || ''} · UW ${claim.uw_year || ''}` : ''}
         actions={(
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="cf-actions">
             <Button onClick={() => navigate('/claims')}>← Register</Button>
             {canSubmit && <Button onClick={() => { setActionOpen('submit'); setReason(''); }}>Submit for Approval</Button>}
             {underReview && <Button variant="primary" onClick={() => { setActionOpen('approve'); setReason(''); }}>Approve</Button>}
@@ -168,38 +188,30 @@ export default function ClaimDetailScreen() {
         )}
       />
 
-      <div style={{ maxWidth: 1180, margin: '0 auto', padding: '24px 20px' }}>
-        {error && <div style={{ color: '#f87171', fontSize: 13, marginBottom: 12 }}>{error}</div>}
-        {loading && <div style={{ color: 'var(--text-subtle)', padding: 24 }}>Loading…</div>}
+      <div className="cf-page cf-page--narrow">
+        {error && <div className="cf-error" role="alert">{error}</div>}
+        {loading && <div className="cf-loading">Loading…</div>}
 
         {claim && underReview && (
-          <div style={{
-            padding: '10px 14px', borderRadius: 10, marginBottom: 14, fontSize: 12.5,
-            background: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.35)', color: '#fbbf24',
-          }}>
-            Waiting for approval{claim.submitted_by_name ? ` — submitted by ${claim.submitted_by_name}` : ''}{claim.submitted_at ? ` on ${fmtDate(claim.submitted_at)}` : ''}. The claim is frozen until it is approved or rejected.
-          </div>
+          <Callout variant="warn" title="Waiting for approval" className="cf-banner">
+            {claim.submitted_by_name ? `Submitted by ${claim.submitted_by_name}` : 'Submitted'}
+            {claim.submitted_at ? ` on ${fmtDate(claim.submitted_at)}` : ''}. The claim is frozen until it is approved or rejected.
+          </Callout>
         )}
         {claim && claim.approval_status === 'REJECTED' && (
-          <div style={{
-            padding: '10px 14px', borderRadius: 10, marginBottom: 14, fontSize: 12.5,
-            background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.35)', color: '#f87171',
-          }}>
-            Rejected{claim.reviewed_by_name ? ` by ${claim.reviewed_by_name}` : ''}{claim.reviewed_at ? ` on ${fmtDate(claim.reviewed_at)}` : ''}{claim.review_comment ? ` — “${claim.review_comment}”` : ''}. Revise and resubmit for approval.
-          </div>
+          <Callout variant="danger" title="Rejected" className="cf-banner">
+            {claim.reviewed_by_name ? `Rejected by ${claim.reviewed_by_name}` : 'Rejected'}
+            {claim.reviewed_at ? ` on ${fmtDate(claim.reviewed_at)}` : ''}
+            {claim.review_comment ? ` — “${claim.review_comment}”` : ''}. Revise and resubmit for approval.
+          </Callout>
         )}
         {claim && (
           <>
             {/* Header facts */}
-            <div style={{
-              display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12,
-              padding: '16px 18px', borderRadius: 14, marginBottom: 18,
-              background: 'var(--surface-2)', border: '1px solid rgba(var(--accent-rgb),0.14)',
-              fontSize: 12.5,
-            }}>
+            <div className="cf-facts">
               {[
                 ['Status', claim.status],
-                ['Approval', <ApprovalPill key="approval" status={claim.approval_status} />],
+                ['Approval', <ApprovalBadge key="approval" status={claim.approval_status} />],
                 ['Loss date', fmtDate(claim.loss_date)],
                 ['Reported', fmtDate(claim.reported_date)],
                 ['Loss type', claim.loss_type + (claim.cat_event_ref ? ` · ${claim.cat_event_ref}` : '')],
@@ -211,129 +223,112 @@ export default function ClaimDetailScreen() {
                 ['Currency', claim.currency_code || '–'],
               ].map(([k, v]) => (
                 <div key={k}>
-                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 3 }}>{k}</div>
-                  <div style={{ color: 'var(--text)', fontWeight: 600 }}>{v}</div>
+                  <div className="cf-fact__label">{k}</div>
+                  <div className="cf-fact__value">{v}</div>
                 </div>
               ))}
             </div>
 
-            {claim.description && (
-              <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6, marginBottom: 18, padding: '0 4px' }}>{claim.description}</div>
-            )}
+            {claim.description && <div className="cf-desc">{claim.description}</div>}
 
             {/* Position */}
-            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 24 }}>
+            <div className="cf-pos-row">
               <PosCard label="Paid" v100={claim.gross_paid_100} vShare={claim.paid_our_share} ccy={claim.currency_code} />
               <PosCard label="Outstanding" v100={claim.gross_os_100} vShare={claim.os_our_share} ccy={claim.currency_code} />
               <PosCard label="Incurred" v100={claim.gross_incurred_100} vShare={claim.incurred_our_share} ccy={claim.currency_code} />
             </div>
 
             {/* Movement ledger */}
-            <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 8 }}>Movement Ledger</div>
-            <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid rgba(var(--accent-rgb),0.14)', marginBottom: 26 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-                <thead>
-                  <tr style={{ background: 'var(--surface-2)', textAlign: 'left' }}>
-                    {['#', 'Date', 'Type', 'Paid @100%', 'OS @100%', 'Incurred @100%', 'Line %', 'Comment', 'By'].map((h, i) => (
-                      <th key={h} style={{ padding: '9px 12px', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-subtle)', textAlign: i >= 3 && i <= 6 ? 'right' : 'left' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(claim.movements || []).map((m) => (
-                    <tr key={m.movement_id} style={{ borderTop: '1px solid rgba(var(--accent-rgb),0.08)' }}>
-                      <td style={{ padding: '9px 12px', color: 'var(--text-subtle)' }}>{m.movement_no}</td>
-                      <td style={{ padding: '9px 12px', color: 'var(--text)' }}>{fmtDate(m.movement_date)}</td>
-                      <td style={{ padding: '9px 12px', fontWeight: 700, color: 'var(--accent)' }}>{m.movement_type}</td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--text)' }}>{fmtMoney(m.gross_paid_100)}</td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--text)' }}>{fmtMoney(m.gross_os_100)}</td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--text)' }}>{fmtMoney(m.gross_incurred_100)}</td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--text-subtle)' }}>{fmtPct(m.share_pct)}</td>
-                      <td style={{ padding: '9px 12px', color: 'var(--text-subtle)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={m.comment || ''}>{m.comment || ''}</td>
-                      <td style={{ padding: '9px 12px', color: 'var(--text-subtle)' }}>{m.created_by_name || '–'}</td>
-                    </tr>
+            <div className="cf-section-title">Movement Ledger</div>
+            <Table wrapClassName="cf-section-gap">
+              <thead>
+                <tr>
+                  {MOVEMENT_COLUMNS.map(({ key, num }) => (
+                    <th key={key} className={num ? 'cf-num' : undefined}>{key}</th>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </tr>
+              </thead>
+              <tbody>
+                {(claim.movements || []).map((m) => (
+                  <tr key={m.movement_id}>
+                    <td className="cf-cell-muted">{m.movement_no}</td>
+                    <td>{fmtDate(m.movement_date)}</td>
+                    <td className="cf-cell-accent">{m.movement_type}</td>
+                    <td className="cf-num">{fmtMoney(m.gross_paid_100)}</td>
+                    <td className="cf-num">{fmtMoney(m.gross_os_100)}</td>
+                    <td className="cf-num cf-num--strong">{fmtMoney(m.gross_incurred_100)}</td>
+                    <td className="cf-num cf-cell-muted">{fmtPct(m.share_pct)}</td>
+                    <td className="cf-cell-clip" title={m.comment || ''}>{m.comment || ''}</td>
+                    <td className="cf-cell-muted">{m.created_by_name || '–'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
 
             {/* Attachments */}
-            <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 8 }}>Attachments</div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <input
+            <div className="cf-section-title">Attachments</div>
+            <div className="cf-attach">
+              <Input
                 type="file" multiple
+                className="cf-attach__input"
                 onChange={(e) => setDocFiles(Array.from(e.target.files || []))}
-                style={{
-                  flex: 1, minWidth: 240, background: 'var(--surface-2)', color: 'var(--text)',
-                  border: '1px solid rgba(var(--accent-rgb),0.25)', borderRadius: 8,
-                  padding: '7px 10px', fontSize: 12.5, fontFamily: 'var(--font-sans)',
-                }}
                 aria-label="Attach files to this claim"
               />
               <Button loading={uploading} onClick={uploadDocs} disabled={!docFiles.length}>
                 Upload{docFiles.length ? ` (${docFiles.length})` : ''}
               </Button>
             </div>
-            {docError && <div style={{ color: '#f87171', fontSize: 12.5, marginBottom: 10 }}>{docError}</div>}
+            {docError && <div className="cf-error" role="alert">{docError}</div>}
             {(claim.documents || []).length > 0 && (
-              <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid rgba(var(--accent-rgb),0.14)', marginBottom: 26 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-                  <thead>
-                    <tr style={{ background: 'var(--surface-2)', textAlign: 'left' }}>
-                      {['File', 'Size', 'Uploaded', 'By', ''].map((h) => (
-                        <th key={h || 'actions'} style={{ padding: '9px 12px', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-subtle)' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {claim.documents.map((d) => (
-                      <tr key={d.document_id} style={{ borderTop: '1px solid rgba(var(--accent-rgb),0.08)' }}>
-                        <td style={{ padding: '9px 12px' }}>
-                          <a href={api.getClaimDocumentViewUrl(d.document_id)} target="_blank" rel="noreferrer"
-                            style={{ color: 'var(--accent)', fontWeight: 700, textDecoration: 'none' }}>
-                            {d.file_name}
-                          </a>
-                          {d.title ? <div style={{ fontSize: 11, color: 'var(--text-subtle)' }}>{d.title}</div> : null}
-                        </td>
-                        <td style={{ padding: '9px 12px', color: 'var(--text-subtle)' }}>
-                          {d.size_bytes != null ? `${(Number(d.size_bytes) / 1024).toLocaleString(undefined, { maximumFractionDigits: 0 })} KB` : '–'}
-                        </td>
-                        <td style={{ padding: '9px 12px', color: 'var(--text)' }}>{fmtDate(d.uploaded_at)}</td>
-                        <td style={{ padding: '9px 12px', color: 'var(--text-subtle)' }}>{d.uploaded_by_name || '–'}</td>
-                        <td style={{ padding: '9px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                          <a href={api.getClaimDocumentDownloadUrl(d.document_id)}
-                            style={{ color: 'var(--accent)', fontSize: 12, marginRight: 12, textDecoration: 'none' }}>Download</a>
-                          <button
-                            onClick={() => deleteDoc(d.document_id, d.file_name)}
-                            style={{ background: 'none', border: 'none', color: '#f87171', fontSize: 12, cursor: 'pointer', padding: 0, fontFamily: 'var(--font-sans)' }}
-                          >Delete</button>
-                        </td>
-                      </tr>
+              <Table wrapClassName="cf-section-gap">
+                <thead>
+                  <tr>
+                    {['File', 'Size', 'Uploaded', 'By', ''].map((h) => (
+                      <th key={h || 'actions'}>{h}</th>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </tr>
+                </thead>
+                <tbody>
+                  {claim.documents.map((d) => (
+                    <tr key={d.document_id}>
+                      <td>
+                        <a href={api.getClaimDocumentViewUrl(d.document_id)} target="_blank" rel="noreferrer" className="cf-link">
+                          {d.file_name}
+                        </a>
+                        {d.title ? <div className="cf-cell-sub">{d.title}</div> : null}
+                      </td>
+                      <td className="cf-cell-muted">
+                        {d.size_bytes != null ? `${(Number(d.size_bytes) / 1024).toLocaleString(undefined, { maximumFractionDigits: 0 })} KB` : '–'}
+                      </td>
+                      <td>{fmtDate(d.uploaded_at)}</td>
+                      <td className="cf-cell-muted">{d.uploaded_by_name || '–'}</td>
+                      <td className="cf-actions-cell">
+                        <a href={api.getClaimDocumentDownloadUrl(d.document_id)} className="cf-link cf-link--sm">Download</a>
+                        <button type="button" className="cf-linkbtn" onClick={() => deleteDoc(d.document_id, d.file_name)}>Delete</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
             )}
             {!(claim.documents || []).length && (
-              <div style={{ fontSize: 12.5, color: 'var(--text-subtle)', marginBottom: 26 }}>No attachments yet — cedant advices, adjuster reports and settlement proofs live here.</div>
+              <div className="cf-attach-empty">No attachments yet — cedant advices, adjuster reports and settlement proofs live here.</div>
             )}
 
             {/* Notes */}
-            <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 8 }}>Notes</div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <div style={{ flex: 1 }}>
-                <Input placeholder="Add a working note…" value={note} onChange={(e) => setNote(e.target.value)}
+            <div className="cf-section-title">Notes</div>
+            <div className="cf-notes-row">
+              <div className="cf-notes-row__input">
+                <Input placeholder="Add a working note…" value={note} aria-label="New note"
+                  onChange={(e) => setNote(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') submitNote(); }} />
               </div>
               <Button onClick={submitNote}>Add note</Button>
             </div>
             {(claim.notes || []).map((n) => (
-              <div key={n.note_id} style={{
-                padding: '10px 14px', borderRadius: 10, marginBottom: 8, fontSize: 12.5,
-                background: 'var(--surface-2)', border: '1px solid rgba(var(--accent-rgb),0.10)',
-              }}>
-                <div style={{ color: 'var(--text)' }}>{n.note}</div>
-                <div style={{ color: 'var(--text-subtle)', fontSize: 10.5, marginTop: 4 }}>{n.created_by_name || 'Unknown'} · {fmtDate(n.created_at)}</div>
+              <div key={n.note_id} className="cf-note-item">
+                <div className="cf-note-item__body">{n.note}</div>
+                <div className="cf-note-item__meta">{n.created_by_name || 'Unknown'} · {fmtDate(n.created_at)}</div>
               </div>
             ))}
           </>
@@ -348,48 +343,35 @@ export default function ClaimDetailScreen() {
             <Button variant="primary" loading={saving} onClick={submitMovement}>Book</Button>
           </>
         )}>
-        <div style={{ fontSize: 12, color: 'var(--text-subtle)', marginBottom: 12, lineHeight: 1.55 }}>
-          Enter the <b>cumulative</b> position at 100% as at this movement (bordereau restatement) — not the delta.
+        <div className="cf-note-text cf-note-text--modal">
+          Enter the <b className="cf-strong">cumulative</b> position at 100% as at this movement (bordereau restatement) — not the delta.
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div className="cf-grid2">
           <Field label="Movement type">
-            <select value={mv.movement_type} onChange={(e) => setMv((f) => ({ ...f, movement_type: e.target.value }))}
-              style={{ background: 'var(--surface-2)', color: 'var(--text)', border: '1px solid rgba(var(--accent-rgb),0.25)', borderRadius: 8, padding: '8px 10px', fontSize: 12.5, width: '100%' }}>
+            <Select value={mv.movement_type} onChange={(e) => setMv((f) => ({ ...f, movement_type: e.target.value }))}>
               {['ADVICE', 'RESERVE_CHANGE', 'PAYMENT', 'RECOVERY'].map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+            </Select>
           </Field>
           <Field label="Movement date"><Input type="date" value={mv.movement_date} onChange={(e) => setMv((f) => ({ ...f, movement_date: e.target.value }))} /></Field>
           <Field label="Cumulative paid @100%"><Input inputMode="decimal" value={formatWithCommasDecimal(mv.gross_paid_100)} onChange={(e) => setMv((f) => ({ ...f, gross_paid_100: sanitizeNumber(e.target.value) }))} /></Field>
           <Field label="Outstanding reserve @100%"><Input inputMode="decimal" value={formatWithCommasDecimal(mv.gross_os_100)} onChange={(e) => setMv((f) => ({ ...f, gross_os_100: sanitizeNumber(e.target.value) }))} /></Field>
-          <div style={{ gridColumn: '1 / -1' }}>
+          <div className="cf-grid-full">
             <Field label="Comment"><Input value={mv.comment} onChange={(e) => setMv((f) => ({ ...f, comment: e.target.value }))} placeholder="e.g. Interim payment per cedant SOA Q2" /></Field>
           </div>
         </div>
-        {mvError && <div style={{ color: '#f87171', fontSize: 12.5, marginTop: 12 }}>{mvError}</div>}
+        {mvError && <div className="cf-error cf-error--modal" role="alert">{mvError}</div>}
       </Modal>
 
       {/* Close/decline/reopen confirm */}
       <Modal open={!!actionOpen} onClose={() => setActionOpen(null)}
-        title={{
-          close: 'Close Claim', decline: 'Decline Claim', reopen: 'Reopen Claim',
-          submit: 'Submit for Approval', approve: 'Approve Claim', reject: 'Reject Claim',
-        }[actionOpen] || ''}
+        title={ACTION_TITLES[actionOpen] || ''}
         footer={(
           <>
             <Button onClick={() => setActionOpen(null)}>Cancel</Button>
             <Button variant={actionOpen === 'decline' || actionOpen === 'reject' ? 'danger' : 'primary'} loading={saving} onClick={submitAction}>Confirm</Button>
           </>
         )}>
-        <div style={{ fontSize: 12.5, color: 'var(--text-subtle)', marginBottom: 12, lineHeight: 1.55 }}>
-          {{
-            reopen: 'Reopening restates the closing position (OS remains 0) — book a RESERVE_CHANGE movement afterwards to re-establish the reserve.',
-            close: 'Closing books a CLOSURE movement that zeroes the outstanding reserve. Paid-to-date is preserved.',
-            decline: 'Declining books a CLOSURE movement that zeroes the outstanding reserve. Paid-to-date is preserved.',
-            submit: 'Submitting sends the claim for review. It is frozen — no edits, movements, or lifecycle changes — until it is approved or rejected.',
-            approve: 'Approving finalises the claim as submitted.',
-            reject: 'Rejecting returns the claim to the handler for revision. Give a reason so they know what to fix.',
-          }[actionOpen] || ''}
-        </div>
+        <div className="cf-note-text cf-note-text--modal">{ACTION_BLURBS[actionOpen] || ''}</div>
         <Field label={actionOpen === 'reject' ? 'Reason (recommended)' : 'Reason'}>
           <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" />
         </Field>

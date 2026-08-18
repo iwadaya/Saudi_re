@@ -52,6 +52,7 @@ jobs:
       || github.event.schedule == '30 3 * * 0'
       || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'restore-verification')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
@@ -93,6 +94,7 @@ jobs:
       github.event.schedule == '0 2 * * *'
       || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'db-backup')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
       BACKUP_DIR: ${{ github.workspace }}/backup-out
@@ -138,6 +140,7 @@ jobs:
       github.event.schedule == '0 4 * * *'
       || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'snapshot-cleanup')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
       ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
@@ -159,6 +162,7 @@ jobs:
       github.event.schedule == '0 5 * * 1'
       || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'ldf-refresh')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
       ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}

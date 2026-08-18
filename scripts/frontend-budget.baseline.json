@@ -1,12 +1,12 @@
 {
   "generatedAt": "2026-08-18",
-  "note": "Ratchet baseline for scripts/frontend-budget.mjs — see docs/frontend-hardening.md",
+  "note": "Ratchet baseline for scripts/frontend-budget.mjs — see docs/frontend-hardening.md. Re-measured on the merge of the facultative pricing work into the Claims & Finance design-system port: the two improved different screens, and the combined tree is 3035/81 against main's 3124/82.",
   "metrics": {
-    "inlineStyles": 3197,
+    "inlineStyles": 3035,
     "filesOver800Loc": 0,
-    "onClickNonInteractive": 82,
+    "onClickNonInteractive": 81,
     "consoleCalls": 0,
-    "useStateCalls": 650,
+    "useStateCalls": 652,
     "setLoadingCalls": 78
   }
 }

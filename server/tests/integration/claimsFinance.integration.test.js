@@ -396,4 +396,36 @@ describe.skipIf(shouldSkipDb)('integration: claims + finance modules', () => {
     const waiting = await harness.fetchApp('GET', '/api/claims?approval_status=WAITING_APPROVAL').then((r) => r.json());
     expect(waiting.some((c) => c.claim_id === claimId)).toBe(false);
   });
+
+  // Runs last: it deliberately walks the claim back out of FINALISED, so the
+  // KPI assertions above must have already observed the finalised state.
+  it('the review freeze covers attachments — no adding or removing evidence mid-review', async () => {
+    // Editing a FINALISED claim drops it to DRAFT, where attachments are open.
+    expect((await harness.fetchApp('PUT', `/api/claims/${claimId}`,
+      { body: { insured_name: 'Frozen Evidence Co' } })).status).toBe(200);
+
+    const form = new FormData();
+    form.append('file', new Blob(['adjuster report'], { type: 'text/plain' }), 'adjuster.txt');
+    const up = await harness.fetchApp('POST', `/api/claims/${claimId}/documents`, { body: form });
+    expect(up.status).toBe(201);
+    const doc = await up.json();
+
+    expect((await harness.fetchApp('POST', `/api/claims/${claimId}/submit`, { body: {} })).status).toBe(200);
+
+    // Under review the approver must see exactly the pack that was submitted.
+    const late = new FormData();
+    late.append('file', new Blob(['late addition'], { type: 'text/plain' }), 'late.txt');
+    const lateUp = await harness.fetchApp('POST', `/api/claims/${claimId}/documents`, { body: late });
+    expect(lateUp.status).toBe(422);
+
+    const frozenDel = await harness.fetchApp('DELETE', `/api/claims/documents/${doc.document_id}`);
+    expect(frozenDel.status).toBe(422);
+    // Nothing was removed.
+    expect((await harness.fetchApp('GET', `/api/claims/documents/${doc.document_id}/download`)).status).toBe(200);
+
+    // Rejecting hands the claim back and lifts the freeze.
+    expect((await harness.fetchApp('POST', `/api/claims/${claimId}/reject`,
+      { body: { reason: 'evidence freeze check' } })).status).toBe(200);
+    expect((await harness.fetchApp('DELETE', `/api/claims/documents/${doc.document_id}`)).status).toBe(200);
+  });
 });

@@ -22,6 +22,7 @@ jobs:
   audit:
     name: prod dependency audit
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -54,6 +55,7 @@ jobs:
   license-scan:
     name: dependency license scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -86,6 +88,7 @@ jobs:
   lint-and-unit:
     name: lint + unit tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -114,29 +117,66 @@ jobs:
       # and cache disabled (verified across five separate workflow
       # runs). Pull the tarball directly from the npm registry and
       # drop it into place — sidesteps npm's optional-deps machinery
-      # entirely. Pinned to 1.0.1 to match the lockfile.
+      # entirely.
+      #
+      # Version and integrity are READ FROM package-lock.json rather than
+      # hard-coded. They were pinned to 1.0.1 while rolldown itself floated
+      # (vite/vitest pull it transitively) to 1.1.2, so this step planted a
+      # 1.0.1 native binding under a 1.1.2 JS package — which loads, then
+      # fails at first use with an opaque "Cannot convert undefined or null
+      # to object" out of the binding-error aggregator. Deriving both values
+      # from the lockfile keeps them consistent by construction the next time
+      # rolldown moves, and keeps the integrity check anchored to a committed
+      # file rather than to whatever the registry serves.
       - name: Plant rolldown linux binding from npm registry
         run: |
           set -euo pipefail
-          PKG_DIR=node_modules/@rolldown/binding-linux-x64-gnu
-          # Pinned to 1.0.1 to match package-lock.json; the tarball is verified
-          # against the lockfile's recorded sha512 integrity BEFORE extraction so
-          # a tampered/MITM'd tarball can never execute as a native .node binding.
-          EXPECTED="sha512-XABVmGp9Tg0WspTVvwduTc4fpqy6JnAUrSQe6OuyqD/03nI7r0O9OWUkMIwFrjKAIqolvqoA4ZrJppgwE0Gxmw=="
-          if [ ! -f "$PKG_DIR/rolldown-binding.linux-x64-gnu.node" ]; then
-            mkdir -p "$PKG_DIR"
-            curl -sSL https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.0.1.tgz -o /tmp/rolldown.tgz
-            ACTUAL="sha512-$(openssl dgst -sha512 -binary /tmp/rolldown.tgz | openssl base64 -A)"
-            if [ "$ACTUAL" != "$EXPECTED" ]; then
-              echo "rolldown tarball integrity mismatch! expected=$EXPECTED actual=$ACTUAL" >&2
-              exit 1
-            fi
-            tar -xz --strip-components=1 -C "$PKG_DIR" -f /tmp/rolldown.tgz
-            echo "rolldown linux binding planted (integrity verified):"
-            ls -la "$PKG_DIR"
-          else
-            echo "rolldown linux binding already present — no-op"
+          PKG=@rolldown/binding-linux-x64-gnu
+          PKG_DIR="node_modules/$PKG"
+          # Read the resolved version + integrity for the binding out of the
+          # lockfile. The tarball is verified against that recorded sha512
+          # BEFORE extraction, so a tampered/MITM'd tarball can never execute
+          # as a native .node binding.
+          read -r VERSION EXPECTED < <(node -e '
+            const lock = require("./package-lock.json");
+            const key = "node_modules/@rolldown/binding-linux-x64-gnu";
+            const e = lock.packages[key];
+            if (!e) { console.error(`${key} missing from package-lock.json`); process.exit(1); }
+            console.log(e.version, e.integrity);
+          ')
+          echo "lockfile pins $PKG@$VERSION"
+          # Guard against the drift this step used to paper over: the binding
+          # must match the rolldown package that will load it.
+          ROLLDOWN_VERSION="$(node -e 'console.log(require("./package-lock.json").packages["node_modules/rolldown"].version)')"
+          if [ "$VERSION" != "$ROLLDOWN_VERSION" ]; then
+            echo "rolldown version mismatch: rolldown@$ROLLDOWN_VERSION vs binding@$VERSION." >&2
+            echo "Align the root optionalDependencies pin in package.json with rolldown's version." >&2
+            exit 1
           fi
+          # Plant unconditionally rather than skipping when a .node is already
+          # present. npm/cli#4828 makes the extraction non-deterministic: in the
+          # same workflow run the lint job got no binding (so the old code
+          # planted one and passed) while the integration job got a partial
+          # extraction — enough for the "already present" check to skip, not
+          # enough for rolldown to load — and died on the same startup error.
+          # Overwriting costs about a second and removes the nondeterminism.
+          rm -rf "$PKG_DIR"
+          mkdir -p "$PKG_DIR"
+          curl -sSL "https://registry.npmjs.org/$PKG/-/binding-linux-x64-gnu-$VERSION.tgz" -o /tmp/rolldown.tgz
+          ACTUAL="sha512-$(openssl dgst -sha512 -binary /tmp/rolldown.tgz | openssl base64 -A)"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "rolldown tarball integrity mismatch! expected=$EXPECTED actual=$ACTUAL" >&2
+            exit 1
+          fi
+          tar -xz --strip-components=1 -C "$PKG_DIR" -f /tmp/rolldown.tgz
+          echo "rolldown linux binding $VERSION planted (integrity verified):"
+          ls -la "$PKG_DIR"
+          # Prove the binding actually loads before handing off to vitest, so a
+          # bad plant fails here with a clear message instead of surfacing later
+          # as an opaque vite config-load error.
+          # Absolute path: require() treats a bare "node_modules/..." string as a
+          # module specifier, not a file path.
+          node -e "require('$PWD/$PKG_DIR/rolldown-binding.linux-x64-gnu.node'); console.log('rolldown binding loads OK')"
 
       # ── Enterprise gate (mirrors `npm run verify`, package.json) ──
       # Every step below is a hard gate: a non-zero exit fails the job, and the
@@ -168,6 +208,7 @@ jobs:
   integration:
     name: integration tests (postgres)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     needs: lint-and-unit
     services:
       postgres:

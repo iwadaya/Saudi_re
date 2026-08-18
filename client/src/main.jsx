@@ -45,6 +45,7 @@ import './styles/shared/loss_list.css';
 import './styles/shared/loss_selection.css';
 import './styles/shared/profile.css';
 import './styles/shared/history.css';
+import './styles/shared/claims_finance.css';
 import './styles/proportional/cat_loss_pareto.css';
 import './styles/proportional/cresta_zones.css';
 import './styles/proportional/event_loss_tables.css';
