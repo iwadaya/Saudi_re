@@ -11,6 +11,15 @@ FROM node:20.18.0-alpine AS client-builder
 WORKDIR /app/client
 COPY client/package*.json ./
 RUN npm ci
+# The client imports pricing primitives and the xlsx theme from the repo-root
+# shared/ directory — e.g. src/logic/stopLossPricing.js pulls
+# ../../../shared/pricingMath.js and src/screens/home/exportPortfolio.js
+# dynamically imports ../../../../shared/universeXlsxTheme.js. WORKDIR is
+# /app/client, so those resolve to /app/shared. Without this COPY the bundle
+# never builds: vite fails with "Could not resolve
+# ../../../../shared/universeXlsxTheme.js". Copied before the client sources so
+# the layer is not invalidated by every client edit.
+COPY shared/ /app/shared/
 COPY client/ ./
 RUN npm run build
 
