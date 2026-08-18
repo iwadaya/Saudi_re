@@ -123,12 +123,26 @@ runtime:
 - **Healthcheck.** A `HEALTHCHECK` probes the DB-free `/api/health` endpoint
   using Node's built-in `fetch` (no `curl`/`wget` in the image).
 - **Pinned base.** The base image is pinned to an exact patch
-  (`node:20.18.0-alpine`) for reproducible builds; bump it deliberately when the
-  scanner reports a fixed base CVE.
+  (`node:20.20.2-alpine`) for reproducible builds; bump it deliberately when the
+  scanner reports a fixed base CVE. `.nvmrc` / `.node-version` track the same
+  patch so CI tests on the version the image ships. Bumped from 20.18.0 when
+  the image scan first ran and flagged `libcrypto3`/`libssl3` 3.3.2-r0
+  (CVE-2026-31789, OpenSSL heap overflow; fixed 3.3.7-r0).
+- **No package manager at runtime.** The runtime stage deletes
+  `npm`/`npx`/`corepack`. Nothing in the running container uses them —
+  ENTRYPOINT/CMD and the HEALTHCHECK call `node` directly, and dependencies are
+  installed in the builder stages — while npm ships its own vendored dependency
+  tree, which is where the scan found `tar` 6.2.1 (CVE-2026-59873). Node 20 LTS
+  bundles npm 10, which still vendors tar 6, so this is removed rather than
+  upgraded.
 
 **SBOM + image scanning** run in CI (`.github/workflows/image-security.yml`):
 Syft produces an SPDX SBOM (uploaded as a 90-day artifact) and Trivy scans the
-built image. HIGH+CRITICAL findings (fixable) are reported to GitHub code
+built image. Trivy runs as the official release image pinned by digest
+(`aquasec/trivy@sha256:…`, v0.74.0) rather than via `aquasecurity/trivy-action`
+— the action internally referenced `aquasecurity/setup-trivy@v0.2.1`, a tag that
+stopped resolving upstream and failed the job before any scan ran. Bump the
+digest deliberately, the same way the base image is bumped. HIGH+CRITICAL findings (fixable) are reported to GitHub code
 scanning (SARIF); a fixable **CRITICAL** hard-fails the build. This complements
 the source-level `npm audit` gate by covering the OS/base-image layers. Tighten
 the hard gate to HIGH+CRITICAL once the base image is on a regular bump cadence.
@@ -173,6 +187,13 @@ Beyond the runtime `npm audit` gate and the Trivy image scan, the pipeline runs:
 
 - **CodeQL** (`.github/workflows/codeql.yml`) — SAST over first-party JS/TS on
   every push/PR and weekly; findings surface in the repo's Code scanning tab.
+  **Requires Code Security (GitHub Advanced Security) to be enabled on the
+  repository.** It is not currently enabled, so the workflow probes for the
+  feature and skips with a warning in the run summary instead of failing every
+  run with "Code Security must be enabled". Until an administrator turns it on
+  under Settings → Code security, **first-party code is not being scanned** —
+  this is an open gap, not a passing check. No workflow change is needed once
+  the setting is flipped.
 - **Dependency licence scan** (`ci.yml` → `license-scan`) — fails the build on a
   strong/network-copyleft licence (GPL/AGPL/LGPL/SSPL/EUPL/CDDL) in any shipped
   dependency, protecting the proprietary licence (`LICENSE`, `UNLICENSED`).
