@@ -4,10 +4,10 @@
 # Base is pinned to an exact patch (not a floating major) so builds are
 # reproducible and image scanning has a deterministic target; bump it
 # deliberately when the scanner flags a fixed base CVE. For a fully hardened
-# pipeline, pin by digest (node:20.18.0-alpine@sha256:…).
+# pipeline, pin by digest (node:20.20.2-alpine@sha256:…).
 
 # ── Stage 1: build the client bundle ──
-FROM node:20.18.0-alpine AS client-builder
+FROM node:20.20.2-alpine AS client-builder
 WORKDIR /app/client
 COPY client/package*.json ./
 RUN npm ci
@@ -24,19 +24,31 @@ COPY client/ ./
 RUN npm run build
 
 # ── Stage 2: install production-only server deps ──
-FROM node:20.18.0-alpine AS server-builder
+FROM node:20.20.2-alpine AS server-builder
 WORKDIR /app/server
 COPY server/package*.json ./
 RUN npm ci --omit=dev
 COPY server/ ./
 
 # ── Stage 3: minimal runtime ──
-FROM node:20.18.0-alpine AS runner
+FROM node:20.20.2-alpine AS runner
 
 # tini = tiny init for correct PID 1 behaviour (forwards SIGTERM to node so
 # graceful shutdown runs, and reaps any zombies). The runtime installs no other
 # OS packages, keeping the attack surface small.
 RUN apk add --no-cache tini
+
+# The runtime never invokes a package manager: ENTRYPOINT/CMD and the
+# HEALTHCHECK all call `node` directly, and every dependency is installed in
+# the builder stages above. npm nonetheless ships inside the base image with
+# its own vendored dependency tree — which is where the image scan found tar
+# 6.2.1 (CVE-2026-59873, gzip-bomb DoS). Node 20 LTS bundles npm 10, which
+# still vendors tar 6, so bumping the base alone does not clear it. Dropping
+# npm/npx/corepack removes that tree from the shipped image and takes a
+# package manager out of production at the same time.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+           /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
 ENV NODE_ENV=production
 WORKDIR /app

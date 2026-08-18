@@ -123,8 +123,18 @@ runtime:
 - **Healthcheck.** A `HEALTHCHECK` probes the DB-free `/api/health` endpoint
   using Node's built-in `fetch` (no `curl`/`wget` in the image).
 - **Pinned base.** The base image is pinned to an exact patch
-  (`node:20.18.0-alpine`) for reproducible builds; bump it deliberately when the
-  scanner reports a fixed base CVE.
+  (`node:20.20.2-alpine`) for reproducible builds; bump it deliberately when the
+  scanner reports a fixed base CVE. `.nvmrc` / `.node-version` track the same
+  patch so CI tests on the version the image ships. Bumped from 20.18.0 when
+  the image scan first ran and flagged `libcrypto3`/`libssl3` 3.3.2-r0
+  (CVE-2026-31789, OpenSSL heap overflow; fixed 3.3.7-r0).
+- **No package manager at runtime.** The runtime stage deletes
+  `npm`/`npx`/`corepack`. Nothing in the running container uses them —
+  ENTRYPOINT/CMD and the HEALTHCHECK call `node` directly, and dependencies are
+  installed in the builder stages — while npm ships its own vendored dependency
+  tree, which is where the scan found `tar` 6.2.1 (CVE-2026-59873). Node 20 LTS
+  bundles npm 10, which still vendors tar 6, so this is removed rather than
+  upgraded.
 
 **SBOM + image scanning** run in CI (`.github/workflows/image-security.yml`):
 Syft produces an SPDX SBOM (uploaded as a 90-day artifact) and Trivy scans the
