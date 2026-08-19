@@ -36,6 +36,7 @@ import {
 } from '../validation/facultative.js';
 import { applyRecommendation } from '../lib/facRecommendationApply.js';
 import { assertCanEdit, assertCanReadEntity, getEditPermission } from '../services/permissions.js';
+import { requireMinLevel } from '../middleware/requestContext.js';
 import {
   computeFacPricing,
   verifyFacPricingSave,
@@ -1847,6 +1848,9 @@ router.post(
 // ═══════════════════════════════════════════════════════════════════════════
 
 const actorId = (req) => req.user?.userId || null;
+// Rate revisions change global pricing references; restrict this surface to
+// users with approval authority (TM+).
+router.use('/fac/admin', requireMinLevel(4));
 
 router.get('/fac/admin/rate-versions', asyncHandler(async (_req, res) => {
   res.json({ versions: await listVersions() });
