@@ -33,7 +33,7 @@ import {
 import { checkPortfolioCompliance } from '../lib/portfolioCompliance.js';
 import { logAudit } from '../services/audit.js';
 import { actorFromReq } from '../middleware/requestContext.js';
-import { assertAiEnabled } from '../lib/aiGovernance.js';
+import { assertAiEnabled, requireAiEnabled } from '../lib/aiGovernance.js';
 
 const router = Router();
 
@@ -231,7 +231,7 @@ function buildPromptContext({ cedantId, body, portfolio, npLayers }) {
 }
 
 async function callClaude(userJson) {
-  assertAiEnabled(); // fail-closed AI gate before any provider request
+  assertAiEnabled(); // defence in depth: routes also gate via requireAiEnabled
   if (!env.anthropicApiKey) {
     const err = new Error('ANTHROPIC_API_KEY not configured on server');
     err.statusCode = 503;
@@ -326,6 +326,7 @@ async function applyLineSizeWrite(client, contractId, proposedFraction) {
 
 router.post(
   '/ai/cedant/:cedantId/portfolio-recommendations',
+  requireAiEnabled,
   validateBody(portfolioRecommendationsRequestSchema),
   asyncHandler(async (req, res) => {
     const userId = requireUser(req, res); if (!userId) return;
@@ -344,8 +345,12 @@ router.post(
     try {
       claudeOut = await callClaude(promptCtx);
     } catch (e) {
-      logger.error('[ai/cedant] Claude call failed', { error: e?.message, statusCode: e?.statusCode });
-      return res.status(e.statusCode || 502).json({ error: e?.message || 'AI call failed' });
+      logger.error('[ai/cedant] Claude call failed', { error: e?.message, statusCode: e?.status || e?.statusCode });
+      // AiDisabledError carries `status` (403) + `code`; config/provider faults
+      // carry `statusCode`. Reading only `statusCode` turned a closed gate
+      // into a 502 with the gate's message.
+      return res.status(e?.status || e?.statusCode || 502)
+        .json({ error: e?.message || 'AI call failed', ...(e?.code ? { code: e.code } : {}) });
     }
 
     // Parse + Zod-validate the response

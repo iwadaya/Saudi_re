@@ -22,6 +22,18 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/reinsurance_tool
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:4000}
       RUN_MIGRATIONS_ON_BOOT: 'true'
+      # ── AI features (slip upload/check, market intelligence) ──
+      # Fail-closed master gate (server/src/lib/aiGovernance.js). Local dev
+      # turns it on so the slip-ingest button and the Market Intelligence
+      # modal work out of the box; export AI_FEATURES_ENABLED=false to get
+      # the fail-closed posture back. The gate alone is not enough — without
+      # a provider key the AI endpoints return 403 AI_NOT_CONFIGURED. Keys
+      # come from your shell or a root .env file (see .env.example); never
+      # commit them here.
+      AI_FEATURES_ENABLED: ${AI_FEATURES_ENABLED:-true}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
