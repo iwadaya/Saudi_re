@@ -76,7 +76,7 @@ Before starting deployment, the IT team should obtain or decide:
 - [ ] Which runtime to use: PM2 + Nginx, Docker Compose, or systemd (§6)
 - [ ] Public DNS name for the application (e.g. `universe.internal.company.com`)
 - [ ] TLS certificate strategy (Let's Encrypt via certbot, internal CA, or terminate at upstream proxy)
-- [ ] AI keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`) — all optional. Slip ingestion falls back across providers; without any AI key, the slip-ingest feature is unavailable but the rest of the app runs normally. AI features (slip upload/check, market intelligence) also require the master gate `AI_FEATURES_ENABLED=true` — it is fail-closed, so keys alone are not enough.
+- [ ] AI keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`) — all optional. Slip ingestion falls back across providers; without any AI key, the slip-ingest feature is unavailable but the rest of the app runs normally. AI features (slip upload/check, market intelligence) also require the master gate `AI_FEATURES_ENABLED=true` in production — it is fail-closed there, so keys alone are not enough.
 - [ ] A 64-byte random `SESSION_SECRET` (generate with `openssl rand -hex 32`)
 - [ ] Confirmation the server can reach the relevant AI provider endpoints (`api.openai.com`, `generativelanguage.googleapis.com`, `api.anthropic.com`) for any AI keys you intend to use
 - [ ] Backup strategy for Postgres (recommended: nightly `pg_dump` to off-host storage)
@@ -363,7 +363,7 @@ Key variables (full list in `.env.example`):
 | `CORS_ORIGIN` | Yes | Set to the public URL, e.g. `https://universe.internal.company.com`. **Do not use `*` in production.** |
 | `ALLOW_DEMO_AUTH` | No | **Dev/test only.** When `true`, enables the `demo2026` shortcut and `x-user-*` header identity. NEVER set in production — leave unset so only verified bearer tokens authenticate. |
 | `ALLOW_NAME_AUTH` | No | **Client-pilot testing only** (e.g. the Saudi Re pilot). When `true`, `POST /api/auth/name-login` signs a tester in with just first name + surname (no password) and issues a normal revocable cookie session; an unknown name gets an Underwriter account with an unusable random password. Fail-closed — off unless exactly `true`. Remove once the pilot moves to credential/SSO login. |
-| `AI_FEATURES_ENABLED` | No | Master gate for ALL AI features (slip upload/check, market intelligence). Fail-closed: unless exactly `true`, every AI endpoint returns `403 AI_DISABLED` regardless of provider keys. |
+| `AI_FEATURES_ENABLED` | No | Master gate for ALL AI features (slip upload/check, market intelligence). Defaults to OFF under `NODE_ENV=production` (and `test`), ON under `development`; when off, every AI endpoint returns `403 AI_DISABLED` regardless of provider keys. Production therefore needs an explicit `true`. |
 | `OPENAI_API_KEY` | No | Required for AI market intelligence; slip ingestion tries Gemini first and falls back to OpenAI. Needs `AI_FEATURES_ENABLED=true` to take effect. |
 | `UPLOAD_DIR` | No | Defaults to `./uploads` relative to project root |
 | `CLOUDINARY_URL` (or `CLOUDINARY_CLOUD_NAME`/`API_KEY`/`API_SECRET`) | **Yes (production)** | Durable **private** object storage for uploads. Without it, production uploads fail `503 STORAGE_NOT_DURABLE` (a web dyno's disk is ephemeral). Override with `ALLOW_LOCAL_UPLOADS=true` only for a single box with a persistent mounted volume. |
@@ -530,7 +530,7 @@ Logs go to stdout in JSON. Capture with PM2 / Docker / journalctl as appropriate
 | Login screen lists no users | Reference data didn't seed; tables missing | Tail logs for migration errors. The auth route falls back to two demo users when DB tables aren't yet ready — that's the symptom. Re-run migrations. |
 | `X-Pool-Waiting` consistently > 0 | Pool exhaustion under load | Raise `DB_POOL_MAX`, ensure Postgres `max_connections` has headroom |
 | 502 Bad Gateway via Nginx | Node process down or wrong port | Check the runtime's status, confirm `proxy_pass` port matches `PORT` env var |
-| AI slip ingest / market intelligence returns `403 AI_DISABLED` | `AI_FEATURES_ENABLED` not set to `true` | Set `AI_FEATURES_ENABLED=true` and restart. The gate is fail-closed by design (see `server/src/lib/aiGovernance.js`). |
+| AI slip ingest / market intelligence returns `403 AI_DISABLED` | `AI_FEATURES_ENABLED` not set to `true` (production is fail-closed by default) | Set `AI_FEATURES_ENABLED=true` on the service and restart. In Render this is a dashboard env var — `render.yaml` only applies it on a blueprint sync. |
 | AI slip ingest returns 500 or `403 AI_NOT_CONFIGURED` | Provider key (`OPENAI_API_KEY`/`GEMINI_API_KEY`) missing or invalid | Set the env var, restart. Feature is optional — disable the slip-ingest button if AI not desired. |
 
 ## 14. Repository structure (orientation)

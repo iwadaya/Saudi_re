@@ -110,8 +110,15 @@ export const env = Object.freeze({
   anthropicApiKey: values.ANTHROPIC_API_KEY || '',
   openaiApiKey: values.OPENAI_API_KEY || '',
   geminiApiKey: values.GEMINI_API_KEY || '',
-  // AI governance — fail-closed by default (AI disabled unless explicitly on).
-  aiFeaturesEnabled: toBool(values.AI_FEATURES_ENABLED, false),
+  // AI governance. Fail-closed wherever the data is real: production and test
+  // default to OFF, so a deployed service never calls an external provider
+  // without an explicit AI_FEATURES_ENABLED=true, and the suite never depends
+  // on an ambient default. Local development defaults ON so the slip-ingest
+  // button and the Market Intelligence modal work without extra setup — set
+  // AI_FEATURES_ENABLED=false to get the fail-closed posture back there too.
+  // The gate still needs a provider key either way; without one it raises
+  // AI_NOT_CONFIGURED rather than silently doing nothing (lib/aiGovernance.js).
+  aiFeaturesEnabled: toBool(values.AI_FEATURES_ENABLED, nodeEnv === 'development'),
   aiCustomerOptOut: toBool(values.AI_CUSTOMER_OPTOUT, false),
   aiRedactionEnabled: toBool(values.AI_REDACTION_ENABLED, true),
   axcoApiKey: values.AXCO_API_KEY || '',

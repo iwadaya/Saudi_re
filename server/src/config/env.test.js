@@ -135,3 +135,38 @@ describe('validateEnv (fail-fast)', () => {
     expect(exitSpy).not.toHaveBeenCalled();
   });
 });
+
+// The AI gate's default posture. Enabling AI sends treaty/document content to
+// an external provider, so the default must stay OFF anywhere the data is
+// real — only local development opts in for you (see lib/aiGovernance.js).
+describe('aiFeaturesEnabled default (AI gate posture)', () => {
+  const ORIGINAL = { ...process.env };
+
+  async function loadEnv({ nodeEnv, flag }) {
+    vi.resetModules();
+    process.env.NODE_ENV = nodeEnv;
+    if (flag === undefined) delete process.env.AI_FEATURES_ENABLED;
+    else process.env.AI_FEATURES_ENABLED = flag;
+    const mod = await import('./env.js');
+    return mod.env;
+  }
+
+  afterEach(() => { process.env = { ...ORIGINAL }; });
+
+  it('production defaults to OFF — a deployed service never calls a provider unasked', async () => {
+    expect((await loadEnv({ nodeEnv: 'production' })).aiFeaturesEnabled).toBe(false);
+  });
+
+  it('test defaults to OFF — the suite never depends on the ambient default', async () => {
+    expect((await loadEnv({ nodeEnv: 'test' })).aiFeaturesEnabled).toBe(false);
+  });
+
+  it('development defaults to ON — local AI features work without extra setup', async () => {
+    expect((await loadEnv({ nodeEnv: 'development' })).aiFeaturesEnabled).toBe(true);
+  });
+
+  it('an explicit value always wins over the per-environment default', async () => {
+    expect((await loadEnv({ nodeEnv: 'development', flag: 'false' })).aiFeaturesEnabled).toBe(false);
+    expect((await loadEnv({ nodeEnv: 'production', flag: 'true' })).aiFeaturesEnabled).toBe(true);
+  });
+});
