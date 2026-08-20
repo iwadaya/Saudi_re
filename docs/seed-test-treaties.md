@@ -82,6 +82,51 @@ summary, portfolio exports and country aggregates that everyone sees.
 `--verify` (read-only) and `--reset-only` are never blocked — the undo has to
 work even when the guard would have said no.
 
+## Running it against Neon
+
+Two Neon-specific things matter, both about which endpoint you point at.
+
+**Run the migrations against the direct endpoint, not the pooler.**
+`startup/runMigrations.js` serialises a run by taking a *session-scoped*
+`pg_advisory_lock`, held on one checked-out client and released on a second
+statement. Neon's `-pooler` host is PgBouncer in transaction pooling mode,
+where consecutive statements are not guaranteed the same backend — so the
+unlock can miss the session that holds the lock. Drop `-pooler` from the host
+for the migration step:
+
+```bash
+# pooler:  ep-xxxx-pooler.<region>.aws.neon.tech   ← app traffic
+# direct:  ep-xxxx.<region>.aws.neon.tech          ← migrations
+DATABASE_URL='postgresql://USER:PASSWORD@ep-xxxx.<region>.aws.neon.tech/neondb?sslmode=require' \
+  npm run migrate:status --prefix server    # read-only; shows applied vs pending
+DATABASE_URL='...direct...' npm run migrate:up --prefix server
+```
+
+**The seed itself is fine on either endpoint.** It wraps one contract per
+`BEGIN`/`COMMIT` on a single checked-out client, which is exactly what
+transaction pooling supports. The direct endpoint is the simpler default.
+
+```bash
+DATABASE_URL='...' DB_CONNECT_TIMEOUT_MS=20000 DB_POOL_MIN=1 \
+  SEED_PROP_COUNT=100 SEED_NP_COUNT=100 \
+  node server/scripts/seedTestTreaties.js
+```
+
+- **`DB_CONNECT_TIMEOUT_MS`** — the pool default is 5s, which a suspended Neon
+  compute can miss on the first connection while it wakes.
+- **`DB_POOL_MIN=1`** — the seed is single-threaded, so the default four warm
+  connections are three idle ones burning a Neon compute's connection budget.
+- **`channel_binding=require`** in a Neon-copied URL is a libpq parameter.
+  node-postgres does not implement channel binding and ignores it; `sslmode`
+  is honoured. If a connection is rejected outright, drop that parameter.
+- **Budget the wall clock.** 100 + 100 writes ~100k rows, one round trip each.
+  That is ~35s against a local Postgres and tens of minutes over a network hop
+  to Neon — it is a "start it and go away" job, not an interactive one. Each
+  contract commits on its own, so an interruption costs one treaty.
+
+Counts come from `SEED_PROP_COUNT` / `SEED_NP_COUNT` (default 50 each); nothing
+else changes between a 50/50 and a 100/100 run.
+
 ## Determinism
 
 The generator is seeded (`SEED_RANDOM_SEED`, default `20260820`), so two runs
