@@ -20,7 +20,7 @@
 // live sources; /treaty-recommendations passes withWebSearch=false
 // since the report already supplies the context.
 //
-// Every route that talks to a provider sits behind the fail-closed
+// Every route that talks to a provider sits behind the shared
 // requireAiEnabled gate (applied per-route — this router is mounted at
 // /api alongside others), so a closed gate 403s with an AI_DISABLED
 // code before any DB, Axco or provider work happens.
