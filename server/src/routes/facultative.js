@@ -8,6 +8,7 @@ import { pool } from '../db/pool.js';
 import { asyncHandler, numOrNull, dateOrNull, assertExists } from '../helpers.js';
 import { validateBody } from '../lib/validate.js';
 import { assertParentEntityUnchanged, touchParentEntity } from '../lib/parentEntityPersistence.js';
+import { requireMinLevel } from '../middleware/requestContext.js';
 import {
   storeUploadedFile,
   deleteUploadedFile,
@@ -1993,7 +1994,7 @@ router.get('/fac/risks/:id/accumulation', asyncHandler(async (req, res) => {
 
 // Manual refresh, for an operator who has just loaded budgets or corrected a
 // bound risk and does not want to wait for the nightly job.
-router.post('/fac/accumulation/refresh', asyncHandler(async (req, res) => {
+router.post('/fac/accumulation/refresh', requireMinLevel(4), asyncHandler(async (req, res) => {
   const out = await refreshAccumulation();
   logger.info('fac accumulation refreshed', { requestId: req.requestId, ...out });
   res.json(out);
