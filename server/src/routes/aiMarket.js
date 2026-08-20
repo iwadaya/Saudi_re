@@ -19,6 +19,11 @@
 // the web_search_preview tool so the model can verify numbers against
 // live sources; /treaty-recommendations passes withWebSearch=false
 // since the report already supplies the context.
+//
+// Every route that talks to a provider sits behind the fail-closed
+// requireAiEnabled gate (applied per-route — this router is mounted at
+// /api alongside others), so a closed gate 403s with an AI_DISABLED
+// code before any DB, Axco or provider work happens.
 
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
@@ -28,7 +33,7 @@ import { logger } from '../lib/logger.js';
 import { validateBody } from '../lib/validate.js';
 import { logAudit } from '../services/audit.js';
 import { actorFromReq } from '../middleware/requestContext.js';
-import { assertAiEnabled } from '../lib/aiGovernance.js';
+import { assertAiEnabled, requireAiEnabled } from '../lib/aiGovernance.js';
 import { checkPortfolioCompliance } from '../lib/portfolioCompliance.js';
 import { fetchMarketSnapshot as fetchAxcoSnapshot } from '../lib/axcoClient.js';
 import { fetchWorldBankSnapshot } from '../lib/worldBankClient.js';
@@ -216,7 +221,7 @@ async function findFreshReport({ countryId, cobId, targetYear, ttlDays }) {
 // ingest call in routes/ai.js (Bearer auth, /v1/responses, `input`
 // array of role+content messages).
 async function callOpenAI({ system, userPrompt, withWebSearch = true, maxTokens = OPENAI_MAX_TOKENS }) {
-  assertAiEnabled(); // fail-closed AI gate before any provider request
+  assertAiEnabled(); // defence in depth: routes also gate via requireAiEnabled
   if (!env.openaiApiKey) {
     const err = new Error('OPENAI_API_KEY not configured on server');
     err.statusCode = 503;
@@ -280,6 +285,7 @@ function extractJsonText(openaiResponse) {
 // POST /api/ai/market/generate-report
 router.post(
   '/ai/market/generate-report',
+  requireAiEnabled,
   validateBody(marketReportRequestSchema),
   asyncHandler(async (req, res) => {
     const userId = requireUser(req, res); if (!userId) return;
@@ -356,9 +362,13 @@ router.post(
       raw = await callOpenAI({ system: SYSTEM_PROMPT, userPrompt });
     } catch (e) {
       logger.error('[ai/market] OpenAI call failed', {
-        error: e?.message, statusCode: e?.statusCode,
+        error: e?.message, statusCode: e?.status || e?.statusCode,
       });
-      return res.status(e.statusCode || 502).json({ error: e?.message || 'AI call failed' });
+      // AiDisabledError carries `status` (403) + `code`; config/provider faults
+      // carry `statusCode`. Reading only `statusCode` turned a closed gate
+      // into a 502 with the gate's message.
+      return res.status(e?.status || e?.statusCode || 502)
+        .json({ error: e?.message || 'AI call failed', ...(e?.code ? { code: e.code } : {}) });
     }
     const durationMs = Date.now() - t0;
 
@@ -764,6 +774,7 @@ function withStagingMetadata(row) {
 // POST /api/ai/market/treaty-recommendations
 router.post(
   '/ai/market/treaty-recommendations',
+  requireAiEnabled,
   validateBody(treatyRecommendationsRequestSchema),
   asyncHandler(async (req, res) => {
     const userId = requireUser(req, res); if (!userId) return;
@@ -821,7 +832,11 @@ router.post(
       });
     } catch (e) {
       logger.error('[ai/market] treaty-rec OpenAI call failed', { error: e?.message });
-      return res.status(e.statusCode || 502).json({ error: e?.message || 'AI call failed' });
+      // AiDisabledError carries `status` (403) + `code`; config/provider faults
+      // carry `statusCode`. Reading only `statusCode` turned a closed gate
+      // into a 502 with the gate's message.
+      return res.status(e?.status || e?.statusCode || 502)
+        .json({ error: e?.message || 'AI call failed', ...(e?.code ? { code: e.code } : {}) });
     }
 
     const text = extractJsonText(raw);
@@ -1328,6 +1343,7 @@ Keep "commentary" concrete: name the two or three metrics that drive your verdic
 
 router.post(
   '/ai/market/structure-commentary',
+  requireAiEnabled,
   validateBody(structureCommentaryRequestSchema),
   asyncHandler(async (req, res) => {
     const userId = requireUser(req, res); if (!userId) return;

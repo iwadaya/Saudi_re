@@ -306,6 +306,7 @@ vi.mock('../lib/imfClient.js', () => ({
   fetchImfSnapshot: imfFetchMock,
 }));
 
+const { env: envMock }             = await import('../config/env.js');
 const { default: aiMarketRouter } = await import('./aiMarket.js');
 const { attachRequestContext }    = await import('../middleware/requestContext.js');
 
@@ -404,6 +405,9 @@ function resetState() {
 
 beforeEach(() => {
   resetState();
+  envMock.aiFeaturesEnabled = true;
+  envMock.openaiApiKey      = 'test-key';
+  envMock.aiCustomerOptOut  = false;
   logAuditMock.mockClear();
   axcoFetchMock.mockClear();
   axcoFetchMock.mockResolvedValue(null);
@@ -418,6 +422,75 @@ beforeEach(() => {
 });
 
 afterEach(() => { fetchSpy.mockRestore(); });
+
+// ── AI governance gate ────────────────────────────────────────────
+//
+// Regression: the gate lives in middleware AHEAD of each LLM-calling
+// route, so a closed gate 403s with the AI_DISABLED code before any
+// DB/Axco work or provider request. It used to be enforced only inside
+// callOpenAI, whose catch block read `e.statusCode` (AiDisabledError
+// carries `status`), so a closed gate surfaced as a 502.
+describe('AI governance gate on /api/ai/market/*', () => {
+  const GATED = [
+    ['/api/ai/market/generate-report',
+      { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR }],
+    ['/api/ai/market/treaty-recommendations',
+      { contract_id: CONTRACT_ID, report_id: REPORT_ID }],
+    ['/api/ai/market/structure-commentary',
+      { contract_id: CONTRACT_ID, scope: 'country', structure_label: 'QS 30%',
+        source_metrics: {}, peer_medians: {}, peer_count: 4 }],
+  ];
+
+  it('403s AI_DISABLED (not 502) on every LLM route and makes NO provider call', async () => {
+    envMock.aiFeaturesEnabled = false;
+    const app = buildApp();
+    for (const [path, body] of GATED) {
+      const res = await call(app, { method: 'POST', path, body });
+      expect(res.status, `${path} should 403`).toBe(403);
+      expect(res.body.code, `${path} should carry AI_DISABLED`).toBe('AI_DISABLED');
+    }
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(state.insertedReport).toBeNull();
+  });
+
+  it('403s AI_NOT_CONFIGURED when the gate is open but no provider key is set', async () => {
+    envMock.openaiApiKey = '';
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/generate-report',
+      body: { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR },
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('AI_NOT_CONFIGURED');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('403s AI_OPTED_OUT when the customer opt-out is set', async () => {
+    envMock.aiCustomerOptOut = true;
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/generate-report',
+      body: { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR },
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('AI_OPTED_OUT');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('still maps a real provider fault to 502', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: false, status: 500,
+      json: async () => ({ error: { message: 'upstream boom' } }),
+    });
+    const app = buildApp();
+    const res = await call(app, {
+      method: 'POST', path: '/api/ai/market/generate-report',
+      body: { country_id: COUNTRY_ID, class_of_business_id: COB_ID, target_year: TARGET_YR },
+    });
+    expect(res.status).toBe(502);
+    expect(res.body.error).toMatch(/upstream boom/);
+  });
+});
 
 // ── 8.2 — generate-report ─────────────────────────────────────────
 describe('POST /api/ai/market/generate-report', () => {
