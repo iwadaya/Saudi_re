@@ -369,7 +369,11 @@ async function ensureReference(client) {
   if (!usdId) throw new Error('currency USD is missing — run the migrations first.');
 
   const underwriters = users.filter((u) => u.role_code === 'UW');
-  const approvers = users.filter((u) => u.role_code !== 'UW');
+  // role_code is nullable (uw_role indexes it WHERE role_code IS NOT NULL), so a
+  // deployment carrying custom roles has approver-eligible users with no code.
+  // `!== 'UW'` admits those, and their NULL then lands in
+  // contract_offer.next_approver_role. Require a code rather than just "not UW".
+  const approvers = users.filter((u) => u.role_code && u.role_code !== 'UW');
   return {
     ghanaId,
     cedants,
