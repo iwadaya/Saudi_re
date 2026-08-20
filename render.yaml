@@ -55,12 +55,12 @@ services:
       - key: SESSION_SECRET
         sync: false
       # ── AI features (slip upload/check, market intelligence) ──
-      # Master gate for all AI endpoints (lib/aiGovernance.js). Fail-closed:
-      # without this the slip-ingest button and the Market Intelligence modal
-      # return 403 AI_DISABLED even when provider keys are set. Enabling still
-      # requires at least one provider key below in the Render dashboard —
-      # market intelligence uses OPENAI_API_KEY specifically; slip ingestion
-      # tries Gemini first and falls back to OpenAI.
+      # Master gate for all AI endpoints (lib/aiGovernance.js). ON by default,
+      # so this line is belt-and-braces — set it to "false" to turn AI off and
+      # have the slip-ingest button and the Market Intelligence modal return
+      # 403 AI_DISABLED. A call still requires at least one provider key below,
+      # set in the Render dashboard — market intelligence uses OPENAI_API_KEY
+      # specifically; slip ingestion tries Gemini first and falls back to OpenAI.
       - key: AI_FEATURES_ENABLED
         value: "true"
       - key: GEMINI_API_KEY

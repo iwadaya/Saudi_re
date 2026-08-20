@@ -110,15 +110,16 @@ export const env = Object.freeze({
   anthropicApiKey: values.ANTHROPIC_API_KEY || '',
   openaiApiKey: values.OPENAI_API_KEY || '',
   geminiApiKey: values.GEMINI_API_KEY || '',
-  // AI governance. Fail-closed wherever the data is real: production and test
-  // default to OFF, so a deployed service never calls an external provider
-  // without an explicit AI_FEATURES_ENABLED=true, and the suite never depends
-  // on an ambient default. Local development defaults ON so the slip-ingest
-  // button and the Market Intelligence modal work without extra setup — set
-  // AI_FEATURES_ENABLED=false to get the fail-closed posture back there too.
-  // The gate still needs a provider key either way; without one it raises
-  // AI_NOT_CONFIGURED rather than silently doing nothing (lib/aiGovernance.js).
-  aiFeaturesEnabled: toBool(values.AI_FEATURES_ENABLED, nodeEnv === 'development'),
+  // AI governance. The gate defaults ON in every environment, production
+  // included, so the AI features work without per-environment setup. This is
+  // an explicit product decision: AI calls send treaty and document content to
+  // an external provider, so the deployment owner is responsible for the
+  // customer/legal approval and the no-retention provider route that
+  // lib/aiGovernance.js documents. Set AI_FEATURES_ENABLED=false (or
+  // AI_CUSTOMER_OPTOUT=true for a tenant) to close the gate again.
+  // A provider key is still required: with none configured the gate raises
+  // AI_NOT_CONFIGURED rather than attempting a call.
+  aiFeaturesEnabled: toBool(values.AI_FEATURES_ENABLED, true),
   aiCustomerOptOut: toBool(values.AI_CUSTOMER_OPTOUT, false),
   aiRedactionEnabled: toBool(values.AI_REDACTION_ENABLED, true),
   axcoApiKey: values.AXCO_API_KEY || '',

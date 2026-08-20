@@ -17,9 +17,9 @@ import { actorFromReq } from '../middleware/requestContext.js';
 
 const router = Router();
 
-// Fail-closed AI gate, applied PER-ROUTE below (not router.use — this router is
+// The AI gate, applied PER-ROUTE below (not router.use — this router is
 // mounted at /api alongside others, and router-level middleware would gate every
-// sibling /api route). When AI_FEATURES_ENABLED is unset (or a customer is opted
+// sibling /api route). When AI_FEATURES_ENABLED is false (or a customer is opted
 // out) these endpoints 403 before any provider call.
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
