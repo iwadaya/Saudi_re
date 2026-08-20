@@ -37,6 +37,51 @@ Around 40% of the portfolio is written on those cedants.
 The CPI and FX figures are indicative reference values for a test environment,
 not a source of record.
 
+## Running it on Render
+
+Yes — the script has no build step and no dependency the deployed service does
+not already have.
+
+The web service in `render.yaml` uses `runtime: node`, so the whole repo is
+checked out on the instance and `npm ci --prefix server` installs everything the
+script imports (it pulls in `server/src/db/pool.js`, whose only real dependency
+is `pg`, a plain server dependency — the server has no devDependencies at all).
+`DATABASE_URL` is already in the service environment.
+
+Open **Shell** on the service (paid instance types) and run:
+
+```bash
+NODE_ENV=production SEED_ALLOW_PRODUCTION=1 npm run seed:treaties
+```
+
+Notes:
+
+- **`validateEnv()` is not on this path.** It only runs from
+  `startup/bootstrap.js`, so the script needs `DATABASE_URL` and nothing else —
+  no `AUTH_JWT_SECRET`, no `SESSION_SECRET`. That also means it runs fine from a
+  `runtime: node` cron service that only carries `DATABASE_URL`, the same way
+  `cleanup:snapshots` does.
+- **It is slower there.** ~40k `INSERT`s, one round trip each. That is ~16s
+  against a local Postgres and closer to a few minutes over a network hop to a
+  managed database. Let it finish; it prints progress.
+- **In the Docker image, call `node` directly.** The runtime image deletes npm
+  (see the Dockerfile), so `npm run seed:treaties` will not work there:
+  `node server/scripts/seedTestTreaties.js`. The script *is* in the image —
+  `.dockerignore` excludes tests and docs, not `server/scripts/`.
+- **Migrations first.** `preDeployCommand` already runs them; the script only
+  reads the schema, it never creates it.
+
+### The production guard
+
+Seeding refuses to run when `NODE_ENV=production` unless
+`SEED_ALLOW_PRODUCTION=1` is set, and prints the (password-redacted) target
+first. This is a real foot-gun otherwise: the web service's `DATABASE_URL` is
+the live database, and 100 fabricated treaties show up in the dashboards, home
+summary, portfolio exports and country aggregates that everyone sees.
+
+`--verify` (read-only) and `--reset-only` are never blocked — the undo has to
+work even when the guard would have said no.
+
 ## Determinism
 
 The generator is seeded (`SEED_RANDOM_SEED`, default `20260820`), so two runs

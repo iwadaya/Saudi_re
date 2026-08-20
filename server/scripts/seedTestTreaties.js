@@ -1803,6 +1803,44 @@ async function verify(client) {
   return { ids: ids.length, gaps };
 }
 
+// ── production guard ────────────────────────────────────────────────────────
+//
+// Seeding writes ~40k rows of fabricated business into whatever DATABASE_URL
+// points at, and it lands in the live portfolio views — dashboards, home
+// summary, portfolio exports, country aggregates. On a deployed environment
+// that has to be a deliberate act, so require an explicit opt-in there.
+// --verify (read-only) and --reset-only (removes seeded rows only) are never
+// blocked: the escape hatch must always work.
+
+function redactUrl(value) {
+  if (!value) return '(DATABASE_URL unset — using the built-in default)';
+  try {
+    const url = new URL(value);
+    if (url.password) url.password = '***';
+    return url.toString();
+  } catch {
+    return value.replace(/:[^@]*@/, ':***@');
+  }
+}
+
+function assertSeedableTarget() {
+  if (process.env.NODE_ENV !== 'production') return;
+  if (['1', 'true', 'yes'].includes(String(process.env.SEED_ALLOW_PRODUCTION || '').toLowerCase())) {
+    console.log(`⚠  NODE_ENV=production — seeding anyway (SEED_ALLOW_PRODUCTION set).`);
+    console.log(`   Target: ${redactUrl(process.env.DATABASE_URL)}`);
+    return;
+  }
+  console.error(
+    `Refusing to seed: NODE_ENV=production.\n`
+    + `  Target: ${redactUrl(process.env.DATABASE_URL)}\n`
+    + `  This inserts ${PROP_COUNT + NP_COUNT} fabricated treaties that will show up in the\n`
+    + `  dashboards, home summary and portfolio exports everyone sees.\n`
+    + `  If that is what you want, re-run with SEED_ALLOW_PRODUCTION=1.\n`
+    + `  To undo a seed: node server/scripts/seedTestTreaties.js --reset-only`,
+  );
+  process.exit(1);
+}
+
 // ── main ────────────────────────────────────────────────────────────────────
 
 async function summarise(client) {
@@ -1842,6 +1880,7 @@ async function main() {
       return;
     }
 
+    if (!RESET_ONLY) assertSeedableTarget();
     if (RESET) await resetSeed(client);
     if (RESET_ONLY) return;
 
