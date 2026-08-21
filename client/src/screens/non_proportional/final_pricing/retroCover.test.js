@@ -16,8 +16,8 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  aiLineSuggestion, analyseRetroCover, buildRetroLayers, defaultProgrammeFor,
-  normaliseProgramme, optimiseLine, retroImpact, retroLineCurve, retroVerdict,
+  aiLineSuggestion, analyseRetroCover, buildRetroLayers, normaliseProgramme,
+  optimiseLine, programmeFromRecord, retroImpact, retroLineCurve, retroVerdict,
 } from './retroCover.js';
 
 const LAYERS = [
@@ -192,26 +192,55 @@ describe('analyseRetroCover + retroVerdict', () => {
     expect(retroVerdict(analyseRetroCover([], PROG, { suggestedLinePct: 10 })).status).toBe('NONE');
     expect(retroVerdict(analyseRetroCover(LAYERS, PROG, {})).status).toBe('NONE');
   });
+
+  it('analyses nothing at all when no retro contract has been captured', () => {
+    const a = analyseRetroCover(LAYERS, null, { suggestedLinePct: 10, currentLines: [15, 5] });
+    expect(a.hasProgramme).toBe(false);
+    expect(a.curve).toEqual([]);
+    expect(a.suggested).toBeNull();
+    expect(a.current).toBeNull();
+    expect(a.optimal).toBeNull();
+
+    const v = retroVerdict(a);
+    expect(v.status).toBe('NO_PROGRAMME');
+    expect(v.detail).toMatch(/administrator captures it/i);
+  });
 });
 
 describe('programme helpers', () => {
-  it('derives a starting programme from the tower — 25% xs 5%', () => {
-    expect(defaultProgrammeFor(LAYERS)).toMatchObject({
-      retentionAmt: 1_500_000, limitAmt: 7_500_000, rolPct: 8, cessionPct: 0,
+  // The admin-captured record (server shape) for one underwriting year.
+  const RECORD = {
+    retro_programme_id: 'r1', uw_year: 2026, currency: 'USD', label: '2026 Cat XL Retro',
+    retention_amt: 1_000_000, limit_amt: 4_000_000, rol_pct: 3,
+    used_limit_amt: 0, cession_pct: 0, commission_pct: 25, max_line_pct: 25,
+  };
+
+  it('maps the admin retro contract onto the pricing shape', () => {
+    expect(programmeFromRecord(RECORD)).toEqual({
+      retentionAmt: 1_000_000, limitAmt: 4_000_000, rolPct: 3, usedLimitAmt: 0,
+      cessionPct: 0, commissionPct: 25, maxLinePct: 25,
+      uwYear: 2026, currency: 'USD', label: '2026 Cat XL Retro',
     });
   });
 
-  it('falls back to the flat programme without any limits', () => {
-    expect(defaultProgrammeFor([]).retentionAmt).toBe(5_000_000);
+  it('reads numeric columns that arrive as strings from the database', () => {
+    const p = programmeFromRecord({ ...RECORD, retention_amt: '1000000.00', rol_pct: '3.500000' });
+    expect(p.retentionAmt).toBe(1_000_000);
+    expect(p.rolPct).toBe(3.5);
   });
 
-  it('defaults absent fields, keeps explicit zeros and clamps percentages', () => {
-    const p = normaliseProgramme({ cessionPct: 0, commissionPct: 140, rolPct: '7.5%', retentionAmt: '2,000,000' });
-    expect(p.cessionPct).toBe(0);
+  it('returns null without a record — there is nothing to analyse', () => {
+    expect(programmeFromRecord(null)).toBeNull();
+    expect(programmeFromRecord(undefined)).toBeNull();
+  });
+
+  it('defaults blank columns to zero, keeps the line ceiling, clamps percentages', () => {
+    const p = normaliseProgramme({ commissionPct: 140, rolPct: '7.5%', retentionAmt: '2,000,000' });
     expect(p.commissionPct).toBe(100);
     expect(p.rolPct).toBe(7.5);
     expect(p.retentionAmt).toBe(2_000_000);
-    expect(p.limitAmt).toBe(45_000_000);           // absent → default
+    expect(p.limitAmt).toBe(0);                    // blank on the record → no cover
+    expect(p.maxLinePct).toBe(25);
   });
 
   it('builds layers from the offer modal rows, per-layer technical over average', () => {

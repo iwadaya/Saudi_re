@@ -110,6 +110,16 @@ export default function NpOfferModal({
                   egnpi: toN(npDetail.estGnpi),
                   techRatioAvgPct: techRatioAvg,
                 });
+                // The retro contract is captured per underwriting year: prefer
+                // the treaty's own start year, fall back to its inception date.
+                const retroUwYear = (() => {
+                  const y = parseInt(String(npDetail.startYear ?? '').trim(), 10);
+                  if (Number.isFinite(y) && y > 1900) return y;
+                  const d = String(npDetail.inceptionDate || npDetail.inception_date || '');
+                  const m = /^(\d{4})/.exec(d);
+                  return m ? Number(m[1]) : 0;
+                })();
+
                 const applyLineToAll = pct => {
                   const next = {};
                   layers.forEach((_, i) => { next[i] = String(pct); });
@@ -335,7 +345,9 @@ export default function NpOfferModal({
                         {/* ── RETRO COVER ANALYSIS (treaty offer only) ── */}
                         {/* What the suggested line does to the outward programme,
                             and which line gets the most out of the retro capacity
-                            it consumes. Written lines feed the "written now"
+                            it consumes. The programme is the admin-captured retro
+                            contract for this treaty's underwriting year and
+                            currency; written lines feed the "written now"
                             scenario, so it moves with the table below. */}
                         {!isQuote && (
                           <NpRetroCoverPanel
@@ -345,6 +357,7 @@ export default function NpOfferModal({
                             suggestedLinePct={aiLine.linePct}
                             currentLines={layerData.map(r => r.wlNum)}
                             currency={currency}
+                            uwYear={retroUwYear}
                             readOnly={isTerminal}
                             onApplyLine={applyLineToAll}
                           />

@@ -35,6 +35,11 @@
 // retention starts growing again, it falls away. The peak is the retro-optimal
 // line.
 //
+// The programme itself is not guessed here: it is the outward retro contract an
+// admin captures for the underwriting year (server table `retro_programme`),
+// read through programmeFromRecord(). Without a record for the treaty's year and
+// currency there is no analysis to show — see retroVerdict's NO_PROGRAMME.
+//
 // Pure functions only — no React, no DOM, no storage.
 
 import { toN, fmtC } from './formatters.js';
@@ -61,25 +66,22 @@ import { toN, fmtC } from './formatters.js';
 /** Line grid resolution for the optimisation curve, in line points. */
 export const LINE_STEP_PCT = 0.25;
 
-/** Programme used when there is nothing to derive a default from. */
-export const FALLBACK_PROGRAMME = {
+/**
+ * Field defaults. These are NOT a stand-in programme — an absent record means
+ * no analysis at all. They only fill a column the admin left blank on a record
+ * that does exist (a programme with no quota share, say).
+ */
+export const PROGRAMME_DEFAULTS = {
   cessionPct: 0,
-  commissionPct: 25,
-  retentionAmt: 5_000_000,
-  limitAmt: 45_000_000,
-  rolPct: 8,
+  commissionPct: 0,
+  retentionAmt: 0,
+  limitAmt: 0,
+  rolPct: 0,
   usedLimitAmt: 0,
   maxLinePct: 25,
 };
 
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
-
-/** Round to two significant figures — keeps derived defaults readable. */
-function roundNice(n) {
-  if (!(n > 0)) return 0;
-  const mag = 10 ** (Math.floor(Math.log10(n)) - 1);
-  return Math.round(n / mag) * mag;
-}
 
 /**
  * Turn the offer modal's per-layer rows into the shape this module wants.
@@ -105,35 +107,44 @@ export function buildRetroLayers(layerData, rawLayers = [], techRatioAvgPct = 0)
 }
 
 /**
- * A starting programme scaled to the tower in front of the underwriter, so the
- * panel says something useful before anyone touches the assumptions: retention
- * at 5% of the 100% tower, 25% of the tower in retro limit above it.
+ * Map the admin-captured `retro_programme` record onto the shape the maths
+ * wants. Returns null for no record — the caller must say "no programme", not
+ * analyse against zeros.
  *
- * @param {RetroLayer[]} layers
- * @returns {RetroProgramme}
+ * @param {Record<string, any>|null|undefined} record
+ * @returns {(RetroProgramme & {uwYear: number, currency: string, label: string|null})|null}
  */
-export function defaultProgrammeFor(layers) {
-  const tower = (layers || []).reduce((s, l) => s + toN(l.limit), 0);
-  if (!(tower > 0)) return { ...FALLBACK_PROGRAMME };
+export function programmeFromRecord(record) {
+  if (!record) return null;
   return {
-    ...FALLBACK_PROGRAMME,
-    retentionAmt: roundNice(tower * 0.05),
-    limitAmt: roundNice(tower * 0.25),
+    ...normaliseProgramme({
+      cessionPct: record.cession_pct,
+      commissionPct: record.commission_pct,
+      retentionAmt: record.retention_amt,
+      limitAmt: record.limit_amt,
+      rolPct: record.rol_pct,
+      usedLimitAmt: record.used_limit_amt,
+      maxLinePct: record.max_line_pct,
+    }),
+    uwYear: toN(record.uw_year),
+    currency: record.currency || '',
+    label: record.label || null,
   };
 }
 
-/** Coerce anything user-entered into a usable programme. Absent fields fall
- *  back to the default; a field the user has explicitly emptied reads as 0. */
-export function normaliseProgramme(p = {}) {
+/** Coerce anything — a record, a what-if edit — into a usable programme.
+ *  Absent fields fall back to the field default; an emptied field reads as 0. */
+export function normaliseProgramme(raw) {
+  const p = raw || {};
   const num = (v, d) => (v === undefined || v === null ? d : toN(v));
   return {
-    cessionPct: clamp(num(p.cessionPct, FALLBACK_PROGRAMME.cessionPct), 0, 100),
-    commissionPct: clamp(num(p.commissionPct, FALLBACK_PROGRAMME.commissionPct), 0, 100),
-    retentionAmt: Math.max(0, num(p.retentionAmt, FALLBACK_PROGRAMME.retentionAmt)),
-    limitAmt: Math.max(0, num(p.limitAmt, FALLBACK_PROGRAMME.limitAmt)),
-    rolPct: clamp(num(p.rolPct, FALLBACK_PROGRAMME.rolPct), 0, 100),
+    cessionPct: clamp(num(p.cessionPct, PROGRAMME_DEFAULTS.cessionPct), 0, 100),
+    commissionPct: clamp(num(p.commissionPct, PROGRAMME_DEFAULTS.commissionPct), 0, 100),
+    retentionAmt: Math.max(0, num(p.retentionAmt, PROGRAMME_DEFAULTS.retentionAmt)),
+    limitAmt: Math.max(0, num(p.limitAmt, PROGRAMME_DEFAULTS.limitAmt)),
+    rolPct: clamp(num(p.rolPct, PROGRAMME_DEFAULTS.rolPct), 0, 100),
     usedLimitAmt: Math.max(0, num(p.usedLimitAmt, 0)),
-    maxLinePct: clamp(num(p.maxLinePct, FALLBACK_PROGRAMME.maxLinePct), 1, 100),
+    maxLinePct: clamp(num(p.maxLinePct, PROGRAMME_DEFAULTS.maxLinePct), 1, 100),
   };
 }
 
@@ -251,6 +262,17 @@ export function optimiseLine(curve) {
  */
 export function analyseRetroCover(layers, rawProgramme, opts = {}) {
   const programme = normaliseProgramme(rawProgramme);
+  // No retro contract captured for this year and currency: nothing to price a
+  // line through, and inventing one would be worse than saying so.
+  if (!rawProgramme) {
+    return {
+      programme, curve: [], hasProgramme: false,
+      hasExposure: (layers || []).some(l => toN(l.limit) > 0),
+      suggestedLinePct: toN(opts.suggestedLinePct),
+      suggested: null, current: null, optimal: null, marginPeak: null,
+      capacity: null, constrained: false,
+    };
+  }
   const curve = retroLineCurve(layers, programme);
   const { optimal, marginPeak, capacity, constrained } = optimiseLine(curve);
   const suggestedLinePct = toN(opts.suggestedLinePct);
@@ -261,6 +283,7 @@ export function analyseRetroCover(layers, rawProgramme, opts = {}) {
   return {
     programme,
     curve,
+    hasProgramme: true,
     hasExposure: (layers || []).some(l => toN(l.limit) > 0),
     suggestedLinePct,
     suggested: suggestedLinePct > 0 ? retroImpact(layers, programme, suggestedLinePct) : null,
@@ -289,6 +312,13 @@ export function retroVerdict(analysis, fmt = {}) {
 
   if (!analysis?.hasExposure) {
     return { status: 'NONE', headline: 'No layer limits yet', detail: 'Enter layer limits and pricing to see the retro impact of a line.' };
+  }
+  if (!analysis.hasProgramme) {
+    return {
+      status: 'NO_PROGRAMME',
+      headline: 'No retro contract captured',
+      detail: 'The outward retro programme for this treaty\'s underwriting year and currency has not been entered yet. An administrator captures it under Admin → Retro Programme.',
+    };
   }
   if (!suggested) {
     return { status: 'NONE', headline: 'No line suggestion yet', detail: 'Run the pricing engine to generate a suggested line to test against the retro programme.' };

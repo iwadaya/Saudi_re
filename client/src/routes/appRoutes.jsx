@@ -62,6 +62,7 @@ const ClaimsHomeScreen  = lazy(() => import('../screens/claims/ClaimsHomeScreen'
 const ClaimDetailScreen = lazy(() => import('../screens/claims/ClaimDetailScreen'));
 const FinanceHomeScreen = lazy(() => import('../screens/finance/FinanceHomeScreen'));
 const UserManagementScreen = lazy(() => import('../screens/admin/UserManagementScreen'));
+const RetroProgrammeScreen = lazy(() => import('../screens/admin/RetroProgrammeScreen'));
 const FormulaWorkbench     = lazy(() => import('../screens/workbench/FormulaWorkbench'));
 const FormulaDetail        = lazy(() => import('../screens/workbench/FormulaDetail'));
 
@@ -89,6 +90,7 @@ export const appRoutes = [
   { path: '/approvals', component: ApprovalsScreen, approvalsOnly: true },
   { path: '/import',    component: ExcelImportAgent },
   { path: '/admin/users', component: UserManagementScreen, approvalsOnly: true },
+  { path: '/admin/retro-programme', component: RetroProgrammeScreen, approvalsOnly: true },
   { path: '/workbench', component: FormulaWorkbench },
   { path: '/workbench/:module/:name', component: FormulaDetail },
 

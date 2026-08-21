@@ -11,19 +11,24 @@
 // curve underneath sweeps every line on the grid so the trade-off, and the
 // point where the programme runs out, are visible rather than inferred.
 //
-// The programme assumptions are editable and persist locally: one outward
-// programme applies across treaties, so once entered they stick.
+// The programme is NOT guessed here. It is the outward retro contract an admin
+// captures for each underwriting year (Admin → Retro Programme), looked up by
+// the treaty's year and currency. No record for that pair ⇒ the panel says so
+// and shows no numbers; an FX-converted stand-in would be a different cover.
+// The underwriter can run what-if edits on top of it, which are never saved.
 //
 // All maths lives in ../retroCover.js; all styling in the .retro-* block of
 // styles/non_proportional/final_pricing.css — this file is structure only.
 
 import { useState } from 'react';
+import { api } from '../../../../api';
+import { useResource } from '../../../../hooks/useResource';
 import { fmtC } from '../formatters.js';
-import { analyseRetroCover, buildRetroLayers, defaultProgrammeFor, retroVerdict } from '../retroCover.js';
+import {
+  analyseRetroCover, buildRetroLayers, programmeFromRecord, retroVerdict,
+} from '../retroCover.js';
 
-const STORE_KEY = 'u3.retroProgramme.v1';
-
-/** Programme fields, in the order they read on the strip. */
+/** What-if fields, in the order they read on the strip. */
 const FIELDS = [
   { k: 'retentionAmt', label: 'Retention', kind: 'money', hint: 'Net priority per event' },
   { k: 'limitAmt', label: 'Retro Limit', kind: 'money', hint: 'Cover above the retention' },
@@ -33,24 +38,7 @@ const FIELDS = [
   { k: 'commissionPct', label: 'QS Comm', kind: 'pct', hint: 'Commission earned on the cession' },
 ];
 
-const VERDICT_ICON = { BREACH: '⚠', OVER: '◐', HEADROOM: '↑', ALIGNED: '✓', NONE: '•' };
-
-const readStored = () => {
-  try { return JSON.parse(window.localStorage.getItem(STORE_KEY) || 'null') || null; } catch { return null; }
-};
-const writeStored = p => { try { window.localStorage.setItem(STORE_KEY, JSON.stringify(p)); } catch { /* ignore */ } };
-
-/** Stored programme if the underwriter has entered one, else derived from the tower. */
-function initialProgramme(layers) {
-  const derived = defaultProgrammeFor(layers);
-  const stored = readStored() || {};
-  const out = {};
-  Object.keys(derived).forEach(k => {
-    const v = stored[k] !== undefined && stored[k] !== '' ? stored[k] : derived[k];
-    out[k] = typeof v === 'number' && Math.abs(v) >= 1000 ? fmtC(v) : String(v);
-  });
-  return out;
-}
+const VERDICT_ICON = { BREACH: '⚠', OVER: '◐', HEADROOM: '↑', ALIGNED: '✓', NO_PROGRAMME: '⛨', NONE: '•' };
 
 /** Lines sit on a quarter-point grid: keep 2dp, drop dead zeros. */
 const lineLabel = n => `${(Number.isFinite(n) ? n : 0).toFixed(2).replace(/\.?0+$/, '')}%`;
@@ -62,25 +50,41 @@ export default function NpRetroCoverPanel({
   suggestedLinePct = 0,
   currentLines = [],
   currency = 'USD',
+  uwYear = 0,
   readOnly = false,
   onApplyLine,
 }) {
   const layers = buildRetroLayers(layerData, rawLayers, techRatioAvgPct);
-  const [programme, setProgramme] = useState(() => initialProgramme(layers));
-  const [editing, setEditing] = useState(false);
+  // What-if overlay on the admin record. Deliberately not persisted: the
+  // programme of record is the admin's, this is a scratch pad.
+  const [whatIf, setWhatIf] = useState(null);
 
-  const money = n => (Math.abs(n) >= 0.5 ? `${currency} ${fmtC(Math.round(n))}` : '—');
-  const signedMoney = n => (Math.abs(n) < 0.5 ? '—' : `${n < 0 ? '−' : ''}${currency} ${fmtC(Math.abs(Math.round(n)))}`);
+  const year = Number(uwYear) || 0;
+  const ccy = String(currency || '').toUpperCase();
+  const canLookUp = year > 0 && /^[A-Z]{3}$/.test(ccy);
+  const lookup = useResource(
+    signal => api.lookupRetroProgramme(year, ccy, { signal }),
+    [year, ccy],
+    { enabled: canLookUp, reportLabel: 'retro programme' },
+  );
+
+  const record = lookup.data?.programme || null;
+  const available = lookup.data?.availableCurrencies || [];
+  const onRecord = programmeFromRecord(record);
+  const effective = onRecord && whatIf ? { ...onRecord, ...whatIf } : onRecord;
+
+  const money = n => (Math.abs(n) >= 0.5 ? `${ccy || currency} ${fmtC(Math.round(n))}` : '—');
+  const signedMoney = n => (Math.abs(n) < 0.5 ? '—' : `${n < 0 ? '−' : ''}${ccy || currency} ${fmtC(Math.abs(Math.round(n)))}`);
 
   // Cheap enough to run on every render (a hundred grid points over a handful
   // of layers), and re-running keeps it honest as the written lines are typed.
-  const analysis = analyseRetroCover(layers, programme, { suggestedLinePct, currentLines });
+  const analysis = analyseRetroCover(layers, effective, { suggestedLinePct, currentLines });
   const verdict = retroVerdict(analysis, { money });
 
-  const setField = (k, v) => {
-    const next = { ...programme, [k]: v };
-    setProgramme(next);
-    writeStored(next);
+  const setField = (k, v) => setWhatIf(prev => ({ ...(prev || {}), [k]: v }));
+  const fieldValue = k => {
+    const v = whatIf && k in whatIf ? whatIf[k] : (onRecord ? onRecord[k] : '');
+    return typeof v === 'number' && Math.abs(v) >= 1000 ? fmtC(v) : String(v ?? '');
   };
 
   const { suggested, current, optimal, capacity, programme: prog } = analysis;
@@ -94,39 +98,68 @@ export default function NpRetroCoverPanel({
   return (
     <div className="off-card retro-panel" data-testid="retro-cover-panel">
 
-      {/* ── HEADER: what the programme is, and the way into editing it ── */}
+      {/* ── HEADER: the contract of record, and the way into a what-if ── */}
       <div className="retro-head">
         <div>
           <div className="off-card-title retro-title">⛨ Retro Cover Analysis</div>
-          <div className="retro-sub">
-            {money(prog.limitAmt)} xs {money(prog.retentionAmt)} @ {prog.rolPct}% ROL
-            {prog.usedLimitAmt > 0 ? ` · ${money(prog.usedLimitAmt)} already used` : ''}
-            {prog.cessionPct > 0 ? ` · ${prog.cessionPct}% retro QS` : ' · no retro QS'}
+          <div className="retro-sub" data-testid="retro-programme-line">
+            {lookup.loading ? 'Loading the retro contract…'
+              : !canLookUp ? 'Set the treaty’s inception year and currency to load the retro contract.'
+                : lookup.error ? 'Could not load the retro contract.'
+                  : !record ? `No retro contract captured for ${year} ${ccy}${available.length ? ` · placed in ${available.join(', ')}` : ''}`
+                    : `${record.label || `${year} retro`} · ${money(prog.limitAmt)} xs ${money(prog.retentionAmt)} @ ${prog.rolPct}% ROL`
+                      + `${prog.usedLimitAmt > 0 ? ` · ${money(prog.usedLimitAmt)} used` : ''}`
+                      + `${prog.cessionPct > 0 ? ` · ${prog.cessionPct}% retro QS` : ' · no retro QS'}`}
           </div>
+          {record && (
+            <div className="retro-provenance">
+              {`Contract of record for ${record.uw_year} ${record.currency}`}
+              {record.reinsurer ? ` · ${record.reinsurer}` : ''}
+              {record.updated_by ? ` · maintained by ${record.updated_by}` : ''}
+              {whatIf ? ' · showing what-if assumptions' : ''}
+            </div>
+          )}
         </div>
-        <button type="button" className="retro-toggle" onClick={() => setEditing(v => !v)}>
-          {editing ? 'Hide assumptions' : 'Programme assumptions'}
-        </button>
+        {record && (
+          <div className="retro-head-actions">
+            {whatIf && (
+              <button type="button" className="retro-toggle retro-toggle--reset" data-testid="retro-reset"
+                onClick={() => setWhatIf(null)}>
+                Reset to contract
+              </button>
+            )}
+            <button type="button" className="retro-toggle" data-testid="retro-whatif"
+              onClick={() => setWhatIf(prev => (prev ? null : {}))}>
+              {whatIf ? 'Hide what-if' : 'What-if'}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* ── PROGRAMME ASSUMPTIONS ── */}
-      {editing && (
+      {/* ── WHAT-IF ASSUMPTIONS (never saved) ── */}
+      {whatIf && (
         <div className="retro-assumptions" data-testid="retro-assumptions">
-          {FIELDS.map(f => (
-            <div key={f.k} className="retro-field">
-              <label className="retro-field-label" htmlFor={`retro-${f.k}`}>
-                {f.label} {f.kind === 'pct' ? '%' : `(${currency})`}
-              </label>
-              <input id={`retro-${f.k}`} className="retro-field-input" inputMode="decimal"
-                value={programme[f.k] ?? ''} onChange={e => setField(f.k, e.target.value)} />
-              <div className="retro-field-hint">{f.hint}</div>
-            </div>
-          ))}
+          <div className="retro-assumptions-note">
+            What-if only — the retro contract of record is unchanged. Ask an administrator to
+            update it under Admin → Retro Programme.
+          </div>
+          <div className="retro-assumptions-grid">
+            {FIELDS.map(f => (
+              <div key={f.k} className="retro-field">
+                <label className="retro-field-label" htmlFor={`retro-${f.k}`}>
+                  {f.label} {f.kind === 'pct' ? '%' : `(${ccy || currency})`}
+                </label>
+                <input id={`retro-${f.k}`} className="retro-field-input" inputMode="decimal"
+                  value={fieldValue(f.k)} onChange={e => setField(f.k, e.target.value)} />
+                <div className="retro-field-hint">{f.hint}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       {/* ── VERDICT ── */}
-      <div className={`retro-verdict retro-verdict--${verdict.status.toLowerCase()}`} data-testid="retro-verdict">
+      <div className={`retro-verdict retro-verdict--${verdict.status.toLowerCase().replace(/_/g, '-')}`} data-testid="retro-verdict">
         <span className="retro-verdict-icon">{VERDICT_ICON[verdict.status] || VERDICT_ICON.NONE}</span>
         <div>
           <div className="retro-verdict-head">{verdict.headline}</div>
@@ -227,7 +260,7 @@ function UtilBar({ pct, breached }) {
  */
 function RetroCurve({ analysis, suggested, optimal, capacity, money }) {
   const curve = analysis.curve || [];
-  if (!analysis.hasExposure || curve.length === 0) return null;
+  if (!analysis.hasProgramme || !analysis.hasExposure || curve.length === 0) return null;
 
   const W = 620, H = 130, L = 8, R = 8, T = 14, B = 20;
   const xMax = analysis.programme.maxLinePct;

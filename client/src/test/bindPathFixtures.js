@@ -264,6 +264,31 @@ export const aggDrilldownSnapshot = {
 
 const copy = (value) => JSON.parse(JSON.stringify(value));
 
+/**
+ * The admin-captured retro contract behind the offer modal's retro cover
+ * analysis. Sized to the NP fixture's 500,000 tower so the panel has a
+ * meaningful position to price: 100,000 xs 25,000 at 8% rate on line.
+ */
+export const retroProgrammeSnapshot = {
+  retro_programme_id: '9f1c0a10-0000-4000-8000-00000000ret0',
+  uw_year: 2026,
+  currency: 'SAR',
+  label: '2026 Cat XL Retro',
+  reinsurer: 'Retro Re',
+  inception_date: '2026-01-01',
+  expiry_date: '2026-12-31',
+  retention_amt: 25000,
+  limit_amt: 100000,
+  rol_pct: 8,
+  used_limit_amt: 0,
+  cession_pct: 0,
+  commission_pct: 25,
+  max_line_pct: 25,
+  notes: null,
+  is_active: true,
+  updated_by: 'Ada Admin',
+};
+
 export function makeBindPathApiMock(fn, overrides = {}) {
   const defaults = {
     listClassOfBusiness: fn().mockResolvedValue(copy(refData.cobs)),
@@ -310,6 +335,15 @@ export function makeBindPathApiMock(fn, overrides = {}) {
     getWordingChecklist: fn().mockResolvedValue({ items: [], latest_run: null }),
     saveWordingChecklist: fn().mockResolvedValue({ items: [], latest_run: null }),
     runWordingChecklistAi: fn().mockResolvedValue({ ok: false, items: [], latest_run: null }),
+    // The offer modal's retro cover analysis looks up the admin-captured retro
+    // contract for the treaty's underwriting year and currency. 100,000 xs
+    // 25,000 at 8% ROL against the fixture's 500,000 tower.
+    lookupRetroProgramme: fn((year, currency) => Promise.resolve({
+      programme: copy({ ...retroProgrammeSnapshot, uw_year: year || 2026, currency: currency || 'SAR' }),
+      year: year || 2026,
+      currency: currency || 'SAR',
+      availableCurrencies: [currency || 'SAR'],
+    })),
     getEligibleApprovers: fn().mockResolvedValue([{ user_id: 'cu-bind-test', display_name: 'Chief Underwriter', role_code: 'CU' }]),
     submitOfferForApproval: fn().mockResolvedValue({ ok: true }),
     markOfferApproved: fn().mockResolvedValue({ ok: true }),

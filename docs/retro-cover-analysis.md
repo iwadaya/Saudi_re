@@ -1,10 +1,13 @@
 # Retro Cover Analysis — Offer Modal
 
-**Status:** Implemented (NP treaty offer modal).
+**Status:** Implemented (NP treaty offer modal + admin capture).
 **Audience:** Underwriting / actuarial / engineering.
 **Code:** `client/src/screens/non_proportional/final_pricing/retroCover.js`
 (maths, pure), `.../components/NpRetroCoverPanel.jsx` (panel),
-`.retro-*` in `client/src/styles/non_proportional/final_pricing.css`.
+`.retro-*` in `client/src/styles/non_proportional/final_pricing.css`,
+`client/src/screens/admin/RetroProgrammeScreen.jsx` (admin capture),
+`server/src/routes/retroProgrammes.js` + migration
+`140_retro_programme.sql` (the record).
 
 ---
 
@@ -78,20 +81,40 @@ or `BREACH` (not fully protected).
 
 ## 4. Where the programme comes from
 
-There is no retro programme in the database today. The panel therefore:
+The retro contract is **company data, captured manually by an admin for each
+underwriting year** — never derived, never guessed. It lives in
+`public.retro_programme` (migration 140), one row per `(uw_year, currency)`,
+maintained under **Admin → Retro Programme** (`/admin/retro-programme`, level 2:
+Chief Executive / Chief Underwriter / Chief Actuary, enforced again on the
+server). Reads are open to any authenticated user — every underwriter needs the
+programme to see what their line does to it.
 
-- **derives** a starting programme from the tower in front of the underwriter —
-  retention at 5% of the 100% tower, retro limit at 25% of it, 8% ROL, no quota
-  share — so it says something useful before anyone touches it; and
-- **persists** whatever the underwriter enters under `u3.retroProgramme.v1` in
-  `localStorage`, since one outward programme applies across treaties.
+| Field | Meaning |
+|---|---|
+| `uw_year`, `currency` | The key. Saving an existing pair replaces it (upsert). |
+| `label`, `reinsurer`, `inception_date`, `expiry_date` | Placement identity. |
+| `retention_amt`, `limit_amt`, `rol_pct` | The retro XL: limit xs retention, at that rate on line. |
+| `used_limit_amt` | Limit the rest of the book has already burned — the admin maintains it as the year runs. |
+| `cession_pct`, `commission_pct` | The retro quota share above the XL. |
+| `max_line_pct` | Largest line the optimiser may recommend. |
 
-That is the main limitation of the feature as built: the assumptions are
-per-browser, not per-company, and nothing validates them against the actual
-outward placement. Promoting them to a company-level record (with the retro
-placement, its reinstatements and the limit consumed to date by bound business)
-is the natural next step, and the maths module is already shaped for it — it
-takes a programme object and nothing else.
+The offer modal looks the contract up by the treaty's underwriting year (its
+start year, else the year of its inception date) and its currency. Two
+deliberate refusals:
+
+- **No FX.** A programme placed in another currency is not this treaty's cover,
+  so the lookup matches the currency exactly and reports which currencies that
+  year does have rather than converting.
+- **No stand-in.** With no record for that year and currency the panel says so
+  and shows nothing — no scenarios, no curve, no invented retention.
+
+The underwriter can layer **what-if** assumptions on top of the record inside the
+modal. Those are never saved and are labelled as such while they are in force;
+changing the contract of record is the admin's job.
+
+Still outstanding: the record carries no reinstatement terms, and
+`used_limit_amt` is maintained by hand rather than accumulated from bound
+business.
 
 ## 5. Known simplifications
 
@@ -108,3 +131,5 @@ takes a programme object and nothing else.
   sliding-scale or loss-participation commission.
 - **The panel is NP treaty-only.** Quote mode shows the submission summary
   instead, and the proportional offer modal has no equivalent yet.
+- **One programme per year and currency.** A tower of several retro layers, or a
+  mid-year replacement placement, has to be entered as one blended set of terms.

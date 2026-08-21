@@ -784,12 +784,20 @@ td.col-expiring { background: rgba(var(--accent-blue-rgb),0.03) !important; }
   border: 1px solid rgba(167,139,250,0.32); transition: background .15s;
 }
 .retro-toggle:hover { background: rgba(167,139,250,0.2); }
+.retro-toggle--reset { color: rgba(255,255,255,0.55); background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.18); }
+.retro-toggle--reset:hover { background: rgba(255,255,255,0.12); }
+.retro-head-actions { display: flex; gap: 8px; align-items: center; }
+/* Provenance line — whose contract this is, and whether a what-if is layered on it. */
+.retro-provenance { font-size: 10px; color: rgba(255,255,255,0.28); margin-top: 3px; }
 
-/* ── Programme assumptions ── */
+/* ── What-if assumptions (never saved) ── */
 .retro-assumptions {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;
-  padding: 12px 14px; background: rgba(167,139,250,0.04);
+  padding: 12px 14px; background: rgba(251,146,60,0.05);
   border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.retro-assumptions-note { font-size: 10px; color: rgba(251,146,60,0.75); margin-bottom: 10px; }
+.retro-assumptions-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;
 }
 .retro-field-label {
   display: block; font-size: 9px; font-weight: 700; letter-spacing: .10em;
@@ -815,6 +823,7 @@ td.col-expiring { background: rgba(var(--accent-blue-rgb),0.03) !important; }
 .retro-verdict--over     { --retro-tone: #fb923c; background: rgba(251,146,60,0.08);  border-color: rgba(251,146,60,0.3); }
 .retro-verdict--headroom { --retro-tone: #38bdf8; background: rgba(56,189,248,0.07);  border-color: rgba(56,189,248,0.28); }
 .retro-verdict--aligned  { --retro-tone: #4ade80; background: rgba(74,222,128,0.07);  border-color: rgba(74,222,128,0.28); }
+.retro-verdict--no-programme { --retro-tone: #a78bfa; background: rgba(167,139,250,0.07); border-color: rgba(167,139,250,0.28); }
 .retro-verdict-icon { font-size: 14px; line-height: 1.2; color: var(--retro-tone); }
 .retro-verdict-head { font-size: 12px; font-weight: 800; color: var(--retro-tone); }
 .retro-verdict-detail { font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 2px; line-height: 1.45; }
