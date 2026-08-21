@@ -37,9 +37,10 @@ const schema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
-  // AI/data-governance gate. Fail-closed: when AI_FEATURES_ENABLED is unset no
-  // external LLM call is made. Enabling requires customer/legal approval and a
-  // configured provider. AI_CUSTOMER_OPTOUT blocks all AI for the tenant.
+  // AI/data-governance gate. Production/test are fail-closed by default; local
+  // development defaults on unless AI_FEATURES_ENABLED is explicitly set.
+  // Enabling requires customer/legal approval and a configured provider.
+  // AI_CUSTOMER_OPTOUT blocks all AI for the tenant.
   AI_FEATURES_ENABLED: z.string().optional(),
   AI_CUSTOMER_OPTOUT: z.string().optional(),
   AI_REDACTION_ENABLED: z.string().optional(),
@@ -110,16 +111,12 @@ export const env = Object.freeze({
   anthropicApiKey: values.ANTHROPIC_API_KEY || '',
   openaiApiKey: values.OPENAI_API_KEY || '',
   geminiApiKey: values.GEMINI_API_KEY || '',
-  // AI governance. The gate defaults ON in every environment, production
-  // included, so the AI features work without per-environment setup. This is
-  // an explicit product decision: AI calls send treaty and document content to
-  // an external provider, so the deployment owner is responsible for the
-  // customer/legal approval and the no-retention provider route that
-  // lib/aiGovernance.js documents. Set AI_FEATURES_ENABLED=false (or
-  // AI_CUSTOMER_OPTOUT=true for a tenant) to close the gate again.
-  // A provider key is still required: with none configured the gate raises
-  // AI_NOT_CONFIGURED rather than attempting a call.
-  aiFeaturesEnabled: toBool(values.AI_FEATURES_ENABLED, true),
+  // AI governance. Fail-closed wherever live customer data is likely: production
+  // and test default OFF, so no external provider calls happen unless the
+  // deployment explicitly opts in with AI_FEATURES_ENABLED=true. Development
+  // defaults ON for local feature testing convenience. A provider key is still
+  // required either way; without one the gate raises AI_NOT_CONFIGURED.
+  aiFeaturesEnabled: toBool(values.AI_FEATURES_ENABLED, nodeEnv === 'development'),
   aiCustomerOptOut: toBool(values.AI_CUSTOMER_OPTOUT, false),
   aiRedactionEnabled: toBool(values.AI_REDACTION_ENABLED, true),
   axcoApiKey: values.AXCO_API_KEY || '',

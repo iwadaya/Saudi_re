@@ -136,10 +136,10 @@ describe('validateEnv (fail-fast)', () => {
   });
 });
 
-// The AI gate's default posture: ON in every environment, production included,
-// so the AI features work without per-environment setup. Enabling AI sends
-// treaty/document content to an external provider — closing the gate is an
-// explicit AI_FEATURES_ENABLED=false (see lib/aiGovernance.js).
+// The AI gate's default posture. Enabling AI sends treaty/document content to
+// an external provider, so the default stays OFF where customer data is likely
+// real (production + test). Local development opts in by default for feature
+// testing convenience.
 describe('aiFeaturesEnabled default (AI gate posture)', () => {
   const ORIGINAL = { ...process.env };
 
@@ -154,12 +154,20 @@ describe('aiFeaturesEnabled default (AI gate posture)', () => {
 
   afterEach(() => { process.env = { ...ORIGINAL }; });
 
-  it.each(['development', 'test', 'production'])('%s defaults to ON', async (nodeEnv) => {
-    expect((await loadEnv({ nodeEnv })).aiFeaturesEnabled).toBe(true);
+  it('production defaults to OFF — explicit opt-in required for provider egress', async () => {
+    expect((await loadEnv({ nodeEnv: 'production' })).aiFeaturesEnabled).toBe(false);
   });
 
-  it('an explicit AI_FEATURES_ENABLED=false closes the gate, production included', async () => {
+  it('test defaults to OFF — suites never depend on ambient AI enablement', async () => {
+    expect((await loadEnv({ nodeEnv: 'test' })).aiFeaturesEnabled).toBe(false);
+  });
+
+  it('development defaults to ON — local AI features work without extra setup', async () => {
+    expect((await loadEnv({ nodeEnv: 'development' })).aiFeaturesEnabled).toBe(true);
+  });
+
+  it('an explicit value always wins over the per-environment default', async () => {
     expect((await loadEnv({ nodeEnv: 'development', flag: 'false' })).aiFeaturesEnabled).toBe(false);
-    expect((await loadEnv({ nodeEnv: 'production', flag: 'false' })).aiFeaturesEnabled).toBe(false);
+    expect((await loadEnv({ nodeEnv: 'production', flag: 'true' })).aiFeaturesEnabled).toBe(true);
   });
 });
