@@ -1,17 +1,23 @@
 // components/NpOfferModal.jsx — Phase 4.1 extraction.
 //
 // The full offer workflow modal: stepper, treaty summary strip, AI line
-// suggestion + treaty classification, per-layer written/signed lines,
-// the role-gated workflow cards (submit / CU decision / signed-line /
-// terminal states), and the approval trail. JSX + derivations moved
-// verbatim from NpFinalPricing's showOfferModal IIFE — props in,
+// suggestion + treaty classification, retro cover analysis, per-layer
+// written/signed lines, the role-gated workflow cards (submit / CU decision /
+// signed-line / terminal states), and the approval trail. JSX + derivations
+// moved verbatim from NpFinalPricing's showOfferModal IIFE — props in,
 // callbacks out, no logic changes (including the modal-local toN
 // shadow).
+//
+// The AI line suggestion is computed once here (aiLineSuggestion) and shared by
+// the suggestion card, the per-layer table and the retro panel, so all three
+// apply the same number.
 
 import { api } from '../../../../api';
 import PctInput from '../../../../components/PctInput';
 import { fmtC, capPct2 } from '../formatters.js';
 import { structureCombinedTotals, layerCombinedPricing } from '../fqQuoteMath.js';
+import { aiLineSuggestion } from '../retroCover.js';
+import NpRetroCoverPanel from './NpRetroCoverPanel.jsx';
 
 /**
  * @param {{
@@ -97,6 +103,18 @@ export default function NpOfferModal({
                   const sOver   = slFrac > 0 && wlFrac > 0 && slFrac > wlFrac;
                   return { layer: l.layer || `L${i+1}`, limit, attach, egnpi, ep100, rolPct, wlRaw, wlNum, wlFrac, linePrem, lineLimit, peril, perilColor, slRaw, slNum, slFrac, sLinePrem, sLineLimit, sOver, isRisk, isCat };
                 });
+
+                // One suggestion, three consumers (card, layer table, retro panel).
+                const aiLine = aiLineSuggestion({
+                  layers: layerData.map(r => ({ limit: r.limit, rolPct: r.rolPct })),
+                  egnpi: toN(npDetail.estGnpi),
+                  techRatioAvgPct: techRatioAvg,
+                });
+                const applyLineToAll = pct => {
+                  const next = {};
+                  layers.forEach((_, i) => { next[i] = String(pct); });
+                  setLayerWrittenLines(next);
+                };
 
                 const hasApprovedQuoteStructure = isQuote && approvedStructures.some(Boolean);
                 const hasAnyWritten  = isQuote
@@ -260,27 +278,23 @@ export default function NpOfferModal({
                         {!isQuote && (
                         <div style={{ marginBottom: 20 }}>
                         {(() => {
-                          const egnpiBlock = toN(npDetail.estGnpi);
-                          const totLimB    = layerData.reduce((s,r) => s+r.limit, 0);
-                          const rolLayersB = layerData.filter(r => r.rolPct > 0);
-                          const avgRolB    = rolLayersB.length ? rolLayersB.reduce((s,r) => s+r.rolPct,0)/rolLayersB.length : 0;
+                          const totLimB    = aiLine.totalLimit;
+                          const avgRolB    = aiLine.avgRolPct;
                           const techRB     = techRatioAvg / 100;
-                          const mActB      = avgRolB > 0 && techRB > 0 ? Math.max(0,(avgRolB/100)-techRB) : 0;
-                          const balRatioB  = egnpiBlock > 0 ? totLimB/egnpiBlock : 0;
+                          const mActB      = aiLine.marginAct;
+                          const balRatioB  = aiLine.balanceRatio;
                           const premScoreB = Math.min(100,Math.round((Math.min(balRatioB,80)/80)*50+(totLimB>0?Math.min(totLimB/5_000_000_000,1)*50:0)));
                           const margScoreB = Math.min(100,Math.round((Math.max(0,Math.min(mActB,0.5))/0.5)*60+(Math.max(0,0.7-techRB)/0.7)*40));
                           const heatLabel  = premScoreB>65&&margScoreB>65?'Premium & Margin Driver':premScoreB>65?'Premium Driver':margScoreB>65?'Margin Driver':'Balanced';
                           const heatColor  = premScoreB>65&&margScoreB>65?'#a78bfa':premScoreB>65?'#38bdf8':margScoreB>65?'#4ade80':'#94a3b8';
-                          const mQB = Math.max(0,Math.min(1,mActB/0.3));
-                          const bQB = Math.max(0,Math.min(1,balRatioB/60));
-                          const aiLinePctB = Math.max(1,Math.min(20,Math.round((mQB*0.6+bQB*0.4)*20*10)/10||10));
-                          const aiReasonB  = mActB>=0.15?`Strong margin (${(mActB*100).toFixed(1)}%) — full line supportable.`:mActB>=0.08?`Acceptable margin (${(mActB*100).toFixed(1)}%) — moderate line.`:techRB>0?`Thin margin (${(mActB*100).toFixed(1)}%) — conservative line advised.`:'Run pricing engine to generate suggestion.';
+                          const aiLinePctB = aiLine.linePct;
+                          const aiReasonB  = aiLine.reason;
                           return (
                             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, flexShrink:0 }}>
                               <div className="off-ai">
                                 <div className="off-ai-head">
                                   <div className="off-ai-label">✦ AI Suggested Line Size</div>
-                                  {!isTerminal&&<button className="off-ai-apply" type="button" onClick={()=>{const n={};layers.forEach((_,i)=>n[i]=String(aiLinePctB));setLayerWrittenLines(n);}}>Apply to all →</button>}
+                                  {!isTerminal&&<button className="off-ai-apply" type="button" onClick={()=>applyLineToAll(aiLinePctB)}>Apply to all →</button>}
                                 </div>
                                 <div className="off-ai-number">
                                   <div className="off-ai-pct">{aiLinePctB.toFixed(1)}</div>
@@ -318,20 +332,29 @@ export default function NpOfferModal({
                         </div>
                         )}
 
+                        {/* ── RETRO COVER ANALYSIS (treaty offer only) ── */}
+                        {/* What the suggested line does to the outward programme,
+                            and which line gets the most out of the retro capacity
+                            it consumes. Written lines feed the "written now"
+                            scenario, so it moves with the table below. */}
+                        {!isQuote && (
+                          <NpRetroCoverPanel
+                            layerData={layerData}
+                            rawLayers={layers}
+                            techRatioAvgPct={techRatioAvg}
+                            suggestedLinePct={aiLine.linePct}
+                            currentLines={layerData.map(r => r.wlNum)}
+                            currency={currency}
+                            readOnly={isTerminal}
+                            onApplyLine={applyLineToAll}
+                          />
+                        )}
+
                         {/* ── PER-LAYER TABLE (treaty offer only) ── */}
                         {!isQuote && (
                         <div style={{ marginBottom: 20 }}>
                         {(() => {
-                          const egnpiTotal = toN(npDetail.estGnpi);
-                          const totLim     = layerData.reduce((s,r) => s + r.limit, 0);
-                          const rolLayers  = layerData.filter(r => r.rolPct > 0);
-                          const avgRol     = rolLayers.length ? rolLayers.reduce((s,r) => s+r.rolPct,0)/rolLayers.length : 0;
-                          const techR      = techRatioAvg / 100;
-                          const mAct       = avgRol > 0 && techR > 0 ? Math.max(0,(avgRol/100)-techR) : 0;
-                          const balRatio   = egnpiTotal > 0 ? totLim/egnpiTotal : 0;
-                          const mQ = Math.max(0,Math.min(1,mAct/0.3));
-                          const bQ = Math.max(0,Math.min(1,balRatio/60));
-                          const aiLinePct  = Math.max(1,Math.min(20,Math.round((mQ*0.6+bQ*0.4)*20*10)/10 || 10));
+                          const aiLinePct  = aiLine.linePct;
                           const isApproved = offerStatus === 'AWAITING_SIGNED_LINE';
                           const th = { padding:'7px 10px', fontSize:9, fontWeight:700, letterSpacing:'.10em',
                             textTransform:'uppercase', color:'rgba(255,255,255,0.35)', whiteSpace:'nowrap',
@@ -351,7 +374,7 @@ export default function NpOfferModal({
                                       <th style={{...th,color:'#a78bfa'}}>Tech Ratio</th>
                                       <th style={{...th,color:'rgba(0,232,184,0.8)',textAlign:'center'}}>
                                         <div>✦ AI Line</div>
-                                        {!isTerminal&&<button onClick={()=>{const n={};layerData.forEach((_,i)=>n[i]=String(aiLinePct));setLayerWrittenLines(n);}} style={{fontSize:8,padding:'1px 6px',borderRadius:8,border:'1px solid rgba(0,232,184,0.3)',background:'rgba(0,232,184,0.07)',color:'rgba(0,232,184,0.7)',cursor:'pointer',fontWeight:700,marginTop:2}}>apply all</button>}
+                                        {!isTerminal&&<button onClick={()=>applyLineToAll(aiLinePct)} style={{fontSize:8,padding:'1px 6px',borderRadius:8,border:'1px solid rgba(0,232,184,0.3)',background:'rgba(0,232,184,0.07)',color:'rgba(0,232,184,0.7)',cursor:'pointer',fontWeight:700,marginTop:2}}>apply all</button>}
                                       </th>
                                       <th style={{...th,color: isApproved?'#60a5fa':'rgba(255,255,255,0.2)',textAlign:'center',minWidth:90}}>
                                         Signed %{!isApproved&&<span style={{fontSize:8,display:'block',color:'rgba(255,255,255,0.2)',fontWeight:400,letterSpacing:0}}>unlocks on approval</span>}

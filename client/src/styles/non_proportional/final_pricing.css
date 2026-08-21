@@ -761,3 +761,149 @@ td.col-expiring { background: rgba(var(--accent-blue-rgb),0.03) !important; }
   background: var(--surface-solid) !important;
 }
 /* Scrolling cells: no stacking context — let sticky columns paint on top */
+
+/* =========================================================
+   RETRO COVER ANALYSIS — offer modal (NpRetroCoverPanel)
+   Lives inside the offer modal's fixed dark chrome (.off-*, defined in
+   styles/proportional/pricing.css), so the palette here is that surface's
+   fixed rgba/hex rather than the theme tokens — the modal does not reskin.
+========================================================= */
+.retro-panel { padding: 0; overflow: hidden; margin-bottom: 20px; }
+
+.retro-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.retro-title { color: #a78bfa; padding: 0; margin-bottom: 0; border-bottom: none; }
+.retro-sub { font-size: 11px; color: rgba(255,255,255,0.38); margin-top: 3px; }
+.retro-toggle {
+  font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  padding: 5px 10px; border-radius: 8px; cursor: pointer; font-family: inherit;
+  color: rgba(167,139,250,0.9); background: rgba(167,139,250,0.08);
+  border: 1px solid rgba(167,139,250,0.32); transition: background .15s;
+}
+.retro-toggle:hover { background: rgba(167,139,250,0.2); }
+
+/* ── Programme assumptions ── */
+.retro-assumptions {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;
+  padding: 12px 14px; background: rgba(167,139,250,0.04);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.retro-field-label {
+  display: block; font-size: 9px; font-weight: 700; letter-spacing: .10em;
+  text-transform: uppercase; color: rgba(255,255,255,0.35); margin-bottom: 4px;
+}
+.retro-field-input {
+  width: 100%; box-sizing: border-box; border-radius: 6px; padding: 5px 8px;
+  border: 1px solid rgba(167,139,250,0.3); background: rgba(255,255,255,0.05);
+  color: #fff; font-size: 12px; font-weight: 700; font-family: inherit;
+  text-align: right; outline: none;
+}
+.retro-field-input:focus { border-color: rgba(167,139,250,0.7); }
+.retro-field-hint { font-size: 9px; color: rgba(255,255,255,0.28); margin-top: 3px; }
+
+/* ── Verdict banner ── */
+.retro-verdict {
+  display: flex; gap: 10px; align-items: flex-start; margin: 12px 14px;
+  padding: 10px 12px; border-radius: 8px;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1);
+  --retro-tone: rgba(255,255,255,0.5);
+}
+.retro-verdict--breach   { --retro-tone: #f87171; background: rgba(248,113,113,0.08); border-color: rgba(248,113,113,0.3); }
+.retro-verdict--over     { --retro-tone: #fb923c; background: rgba(251,146,60,0.08);  border-color: rgba(251,146,60,0.3); }
+.retro-verdict--headroom { --retro-tone: #38bdf8; background: rgba(56,189,248,0.07);  border-color: rgba(56,189,248,0.28); }
+.retro-verdict--aligned  { --retro-tone: #4ade80; background: rgba(74,222,128,0.07);  border-color: rgba(74,222,128,0.28); }
+.retro-verdict-icon { font-size: 14px; line-height: 1.2; color: var(--retro-tone); }
+.retro-verdict-head { font-size: 12px; font-weight: 800; color: var(--retro-tone); }
+.retro-verdict-detail { font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 2px; line-height: 1.45; }
+
+/* ── Scenario table ── */
+.retro-table-wrap { overflow-x: auto; }
+.retro-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.retro-table th {
+  padding: 7px 10px; font-size: 9px; font-weight: 700; letter-spacing: .10em;
+  text-transform: uppercase; color: rgba(255,255,255,0.35); white-space: nowrap;
+  text-align: right; border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.retro-table td {
+  padding: 8px 10px; font-size: 12px; text-align: right; white-space: nowrap;
+  color: rgba(255,255,255,0.78); font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.retro-table th.retro-c-scenario { text-align: left; }
+.retro-table th.retro-c-line,
+.retro-table th.retro-c-util,
+.retro-table th.retro-c-apply { text-align: center; }
+.retro-table th.retro-c-recovery { color: #a78bfa; }
+.retro-table th.retro-c-retained { color: #60a5fa; }
+.retro-table th.retro-c-cost     { color: #fb923c; }
+.retro-table th.retro-c-margin   { color: #4ade80; }
+
+.retro-row { --retro-mark: rgba(255,255,255,0.75); }
+.retro-row--suggested { --retro-mark: rgba(0,232,184,0.9); }
+.retro-row--optimal   { --retro-mark: #4ade80; }
+.retro-table td.retro-c-scenario { text-align: left; font-weight: 700; color: var(--retro-mark); }
+.retro-table td.retro-c-line { text-align: center; font-weight: 800; color: var(--retro-mark); }
+.retro-table td.retro-c-util,
+.retro-table td.retro-c-apply { text-align: center; }
+.retro-table td.retro-c-recovery { color: #a78bfa; }
+.retro-table td.retro-c-retained { color: #60a5fa; font-weight: 700; }
+.retro-table td.retro-c-cost     { color: #fb923c; }
+.retro-table td.retro-c-margin   { color: #4ade80; font-weight: 700; }
+.retro-table td.retro-breach     { color: #f87171; }
+
+.retro-note { font-size: 9px; font-weight: 400; color: rgba(255,255,255,0.3); }
+.retro-note--bad  { color: #f87171; }
+.retro-note--cost { color: rgba(251,146,60,0.6); }
+
+.retro-apply {
+  font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 10px;
+  cursor: pointer; white-space: nowrap; font-family: inherit;
+  color: var(--retro-mark); background: rgba(255,255,255,0.05);
+  border: 1px solid var(--retro-mark); transition: background .15s;
+}
+.retro-apply:hover { background: rgba(255,255,255,0.12); }
+
+/* ── Retro limit utilisation bar ── */
+.retro-util { display: inline-flex; align-items: center; gap: 6px; }
+.retro-util-bar { display: block; }
+.retro-util-track { fill: rgba(255,255,255,0.08); }
+.retro-util-fill--ok   { fill: #a78bfa; }
+.retro-util-fill--warn { fill: #fb923c; }
+.retro-util-fill--bad  { fill: #f87171; }
+.retro-util-val { font-size: 11px; font-weight: 700; }
+.retro-util-val--ok   { color: #a78bfa; }
+.retro-util-val--warn { color: #fb923c; }
+.retro-util-val--bad  { color: #f87171; }
+
+/* ── Optimisation curve ── */
+.retro-curve { padding: 4px 14px 14px; }
+.retro-curve-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap; margin-bottom: 4px;
+}
+.retro-curve-title {
+  font-size: 10px; font-weight: 700; letter-spacing: .10em;
+  text-transform: uppercase; color: rgba(255,255,255,0.35);
+}
+.retro-legend { display: flex; gap: 12px; font-size: 10px; }
+.retro-legend-item--margin   { color: #4ade80; }
+.retro-legend-item--retained { color: #60a5fa; }
+.retro-legend-item--breach   { color: #f87171; }
+.retro-chart { display: block; width: 100%; height: auto; background: rgba(255,255,255,0.02); border-radius: 8px; }
+.retro-chart-breach { fill: rgba(248,113,113,0.07); }
+.retro-chart-base { stroke: rgba(255,255,255,0.16); stroke-width: 1; }
+.retro-chart-margin { fill: rgba(74,222,128,0.16); stroke: #4ade80; stroke-width: 1.4; }
+.retro-chart-retained { fill: none; stroke: #60a5fa; stroke-width: 1.2; stroke-dasharray: 4 3; }
+/* Chart type scales with the viewBox, so these are viewBox units, not px on
+   screen — at the offer modal's width they land at roughly 12–14px. */
+.retro-chart-axis { fill: rgba(255,255,255,0.3); font-size: 7px; }
+.retro-chart-axis--bad { fill: rgba(248,113,113,0.75); }
+.retro-mark line { stroke-width: 1; stroke-dasharray: 3 3; }
+.retro-mark text { font-size: 8px; font-weight: 700; }
+.retro-mark--suggested line, .retro-mark--suggested text { stroke: rgba(0,232,184,0.9); fill: rgba(0,232,184,0.9); }
+.retro-mark--optimal line,   .retro-mark--optimal text   { stroke: #4ade80; fill: #4ade80; }
+.retro-mark text { stroke: none; }
+.retro-curve-foot { font-size: 10px; color: rgba(255,255,255,0.35); margin-top: 6px; }

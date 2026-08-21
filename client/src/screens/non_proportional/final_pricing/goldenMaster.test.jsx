@@ -152,9 +152,28 @@ describe('NpFinalPricing golden master (treaty mode)', () => {
     expect(offModal.querySelector('.off-hm-scores').textContent).toBe(
       'Premium Score 0/100Margin Score 40/100Classification Balanced',
     );
-    expect(rowsOf(offModal.querySelector('.off-card table'))).toEqual([
+    // The retro cover panel is also an .off-card with a table in it and sits
+    // above this one — select the layer table explicitly rather than by order.
+    expect(rowsOf(offModal.querySelector('.off-card:not([data-testid]) table'))).toEqual([
       ['Layer', 'Written %', 'Limit', 'Premium', 'ROL %', 'Tech Ratio', '✦ AI Lineapply all', 'Signed %unlocks on approval'],
       ['L1', '[]', '500,000', '42,500', '8.50%', '—', '10.0% →', '[]'],
+    ]);
+  });
+
+  it('computes the exact retro cover position for the suggested and optimal lines', async () => {
+    const { container } = renderScreen();
+    await settleTreatyMode(container);
+
+    fireEvent.click(screen.getByRole('button', { name: /Offer Treaty/i }));
+    const retro = container.querySelector('[data-testid="retro-cover-panel"]');
+    // Programme derived from the 500,000 tower: 130,000 xs 25,000 at 8% ROL.
+    // Suggested 10% line → 50,000 event, 25,000 recovered, 25,000 retained,
+    // 2,000 of cover against 4,250 of premium. The fixture has no technical
+    // ratio, so expected loss is nil and net margin is the net premium.
+    expect(rowsOf(retro.querySelector('table'))).toEqual([
+      ['Scenario', 'Line', 'Gross Exposure', 'Retro Recovery', 'Net Retained', 'Cost Of Cover', 'Net Premium', 'Net Margin', 'Limit Used', ''],
+      ['✦ AI suggested', '10%', 'SAR 50,000', 'SAR 25,000', 'SAR 25,000', 'SAR 2,00047.1% of premium', 'SAR 2,250', 'SAR 2,250100.0% margin', '19%', 'apply 10% →'],
+      ['◎ Retro-optimal', '25%', 'SAR 125,000', 'SAR 100,000', 'SAR 25,000', 'SAR 8,00075.3% of premium', 'SAR 2,625', 'SAR 2,625100.0% margin', '77%', 'apply 25% →'],
     ]);
   });
 
