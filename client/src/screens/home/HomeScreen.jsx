@@ -582,6 +582,11 @@ export default function HomeScreen() {
   return (
     <div className="app-shell grid-bg HOME_PAGE">
       <Topbar title="MODELLING TOOL" subtitle="Reinsurance treaty pricing & modelling workspace" actions={<>
+        {/* Back to the module picker (Treaty / Facultative / Claims / Finance).
+            Same label and destination as the Facultative home's control so the
+            two module landing screens offer the same way out. First in the row:
+            it navigates away from the module, the rest act within it. */}
+        <button className="topbar-pill" onClick={() => navigate('/select')}>← Switch Product</button>
         <button className="topbar-pill" onClick={() => navigate('/dashboard')}>Dashboard</button>
         <button className="topbar-pill" onClick={() => setShowReinsurerAnalysis(true)}>Reinsurer Analysis</button>
         <button className="topbar-pill" onClick={() => setShowInsights(true)}>Portfolio Intelligence</button>
