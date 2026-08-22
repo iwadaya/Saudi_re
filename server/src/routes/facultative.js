@@ -197,12 +197,14 @@ router.post('/fac/risks', validateBody(facRiskSaveSchema), asyncHandler(async (r
       cedant_region, renewal_or_new, expiring_reference, risk_country_zone,
       multi_location_flag, multi_occupancy_flag, risk_location_top_address,
       occupancy_code, occupancy_name, hazard_grade_override,
-      hazard_category, risk_category, frequency_category
+      hazard_category, risk_category, frequency_category,
+      insured_address_lat, insured_address_lng, insured_address_place_id
     ) VALUES (
       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
       $16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
       $31,$32,$33,$34,$35,$36,$37,$38,$39,
-      $40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52
+      $40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,
+      $53,$54,$55
     ) RETURNING *
   `, [
     b.cedant_id || null, b.broker_id || null, b.country_id || null, b.currency_id || null,
@@ -225,59 +227,139 @@ router.post('/fac/risks', validateBody(facRiskSaveSchema), asyncHandler(async (r
     b.multi_location_flag ?? false, b.multi_occupancy_flag ?? false, b.risk_location_top_address || null,
     numOrNull(b.occupancy_code), b.occupancy_name || null, numOrNull(b.hazard_grade_override),
     b.hazard_category || null, numOrNull(b.risk_category), numOrNull(b.frequency_category),
+    // Geocode of insured_address — present only when the address was picked from
+    // Places autocomplete; a hand-typed address leaves all three NULL.
+    numOrNull(b.insured_address_lat), numOrNull(b.insured_address_lng), b.insured_address_place_id || null,
   ]);
   res.status(201).json(rows[0]);
 }));
 
-// UPDATE risk
-router.put('/fac/risks/:id', validateBody(facRiskSaveSchema), asyncHandler(async (req, res) => {
+// ── Partial-update support for PUT /fac/risks/:id ───────────────────────────
+//
+// The handler MERGES: it writes only the columns the client actually sent.
+//
+// It used to write all ~50 columns on every call, which was wrong because three
+// screens deliberately save a slice rather than the whole risk —
+// FacCoverageStructure (placement + shares + premium), FacDeductibles, and
+// FacPricing (ri_premium + original_rate on their own). Every column those
+// slices omitted was set to NULL. That surfaced as
+//   500 "null value in column insured_name ... violates not-null constraint"
+// which was luck rather than protection: the NOT NULL on insured_name is the
+// only reason the rest of the row was not silently wiped, and a slice also
+// quietly reset status to DRAFT.
+//
+// One column per entry, each reproducing the coercion the full-row write used,
+// so a full-form save from the risk-detail screen behaves exactly as before.
+// The keys of this map are the ONLY identifiers that can reach the SQL — a
+// client key that is not here is ignored, never interpolated.
+const RISK_UPDATE_COLUMNS = {
+  cedant_id:      (b) => b.cedant_id || null,
+  broker_id:      (b) => b.broker_id || null,
+  country_id:     (b) => b.country_id || null,
+  currency_id:    (b) => b.currency_id || null,
+  insured_name:   (b) => b.insured_name,
+  insured_address:    (b) => b.insured_address || null,
+  nature_of_business: (b) => b.nature_of_business || null,
+  fac_cob_id:     (b) => b.fac_cob_id || null,
+  inception_date: (b) => dateOrNull(b.inception_date),
+  expiry_date:    (b) => dateOrNull(b.expiry_date),
+  policy_period_months: (b) => numOrNull(b.policy_period_months) || 12,
+  uw_year:        (b) => numOrNull(b.uw_year),
+  total_sum_insured: (b) => numOrNull(b.total_sum_insured),
+  pd_sum_insured: (b) => numOrNull(b.pd_sum_insured),
+  bi_sum_insured: (b) => numOrNull(b.bi_sum_insured),
+  placement_type: (b) => b.placement_type || 'PROPORTIONAL',
+  cedant_retention_pct: (b) => numOrNull(b.cedant_retention_pct),
+  ri_share_pct:   (b) => numOrNull(b.ri_share_pct),
+  our_share_pct:  (b) => numOrNull(b.our_share_pct),
+  np_retention:   (b) => numOrNull(b.np_retention),
+  np_limit:       (b) => numOrNull(b.np_limit),
+  np_our_share_pct: (b) => numOrNull(b.np_our_share_pct),
+  deductible_amount: (b) => numOrNull(b.deductible_amount),
+  deductible_description: (b) => b.deductible_description || null,
+  commission_pct: (b) => numOrNull(b.commission_pct),
+  brokerage_pct:  (b) => numOrNull(b.brokerage_pct),
+  taxes_pct:      (b) => numOrNull(b.taxes_pct),
+  original_premium: (b) => numOrNull(b.original_premium),
+  ri_premium:     (b) => numOrNull(b.ri_premium),
+  original_rate:  (b) => numOrNull(b.original_rate),
+  pml_amount:     (b) => numOrNull(b.pml_amount),
+  pml_pct:        (b) => numOrNull(b.pml_pct),
+  mfl_amount:     (b) => numOrNull(b.mfl_amount),
+  mfl_pct:        (b) => numOrNull(b.mfl_pct),
+  // Only the owner can reach this guarded route, so an explicitly-sent blank
+  // assignee falls back to them rather than NULLing the row into read-only and
+  // locking the owner out of their own next save.
+  assigned_to_user_id: (b, req) => b.assigned_to_user_id || req.user?.userId || null,
+  linked_contract_id: (b) => b.linked_contract_id || null,
+  underwriter_notes:  (b) => b.underwriter_notes || null,
+  status:         (b) => b.status || 'DRAFT',
+  cedant_region:  (b) => b.cedant_region || null,
+  renewal_or_new: (b) => b.renewal_or_new || null,
+  expiring_reference: (b) => b.expiring_reference || null,
+  risk_country_zone:  (b) => b.risk_country_zone || null,
+  multi_location_flag:  (b) => b.multi_location_flag ?? false,
+  multi_occupancy_flag: (b) => b.multi_occupancy_flag ?? false,
+  risk_location_top_address: (b) => b.risk_location_top_address || null,
+  occupancy_code: (b) => numOrNull(b.occupancy_code),
+  occupancy_name: (b) => b.occupancy_name || null,
+  hazard_grade_override: (b) => numOrNull(b.hazard_grade_override),
+  hazard_category: (b) => b.hazard_category || null,
+  risk_category:   (b) => numOrNull(b.risk_category),
+  frequency_category: (b) => numOrNull(b.frequency_category),
+  insured_address_lat: (b) => numOrNull(b.insured_address_lat),
+  insured_address_lng: (b) => numOrNull(b.insured_address_lng),
+  insured_address_place_id: (b) => b.insured_address_place_id || null,
+};
+
+// Which fields the client actually sent, captured from the RAW body BEFORE zod
+// runs. This cannot be read off the parsed body: optionalUuid/money/pct100 all
+// turn an explicit null into undefined, so afterwards "omitted" and "cleared"
+// look identical — and they are different intents. Sent-as-null must still
+// clear the column, exactly as it did under the full-row write.
+function captureSentKeys(req, _res, next) {
+  const raw = req.body;
+  req.sentKeys = new Set(raw && typeof raw === 'object' && !Array.isArray(raw) ? Object.keys(raw) : []);
+  next();
+}
+
+// UPDATE risk — merges the sent fields into the existing row.
+router.put('/fac/risks/:id', captureSentKeys, validateBody(facRiskSaveSchema), asyncHandler(async (req, res) => {
   const { id } = req.params;
   await assertCanEdit(req, 'FAC_RISK', id);
   const b = req.body;
-  const { rows } = await pool.query(`
-    UPDATE public.fac_risk SET
-      cedant_id = $2, broker_id = $3, country_id = $4, currency_id = $5,
-      insured_name = $6, insured_address = $7, nature_of_business = $8, fac_cob_id = $9,
-      inception_date = $10, expiry_date = $11, policy_period_months = $12, uw_year = $13,
-      total_sum_insured = $14, pd_sum_insured = $15, bi_sum_insured = $16,
-      placement_type = $17, cedant_retention_pct = $18, ri_share_pct = $19, our_share_pct = $20,
-      np_retention = $21, np_limit = $22, np_our_share_pct = $23,
-      deductible_amount = $24, deductible_description = $25,
-      commission_pct = $26, brokerage_pct = $27, taxes_pct = $28,
-      original_premium = $29, ri_premium = $30, original_rate = $31,
-      pml_amount = $32, pml_pct = $33, mfl_amount = $34, mfl_pct = $35,
-      assigned_to_user_id = $36,
-      linked_contract_id = $37, underwriter_notes = $38, status = $39,
-      cedant_region = $40, renewal_or_new = $41, expiring_reference = $42,
-      risk_country_zone = $43, multi_location_flag = $44, multi_occupancy_flag = $45,
-      risk_location_top_address = $46, occupancy_code = $47, occupancy_name = $48,
-      hazard_grade_override = $49, hazard_category = $50, risk_category = $51,
-      frequency_category = $52
-    WHERE fac_risk_id = $1
-    RETURNING *
-  `, [
-    id,
-    b.cedant_id || null, b.broker_id || null, b.country_id || null, b.currency_id || null,
-    b.insured_name, b.insured_address || null, b.nature_of_business || null, b.fac_cob_id || null,
-    dateOrNull(b.inception_date), dateOrNull(b.expiry_date), numOrNull(b.policy_period_months) || 12, numOrNull(b.uw_year),
-    numOrNull(b.total_sum_insured), numOrNull(b.pd_sum_insured), numOrNull(b.bi_sum_insured),
-    b.placement_type || 'PROPORTIONAL', numOrNull(b.cedant_retention_pct), numOrNull(b.ri_share_pct), numOrNull(b.our_share_pct),
-    numOrNull(b.np_retention), numOrNull(b.np_limit), numOrNull(b.np_our_share_pct),
-    numOrNull(b.deductible_amount), b.deductible_description || null,
-    numOrNull(b.commission_pct), numOrNull(b.brokerage_pct), numOrNull(b.taxes_pct),
-    numOrNull(b.original_premium), numOrNull(b.ri_premium), numOrNull(b.original_rate),
-    numOrNull(b.pml_amount), numOrNull(b.pml_pct), numOrNull(b.mfl_amount), numOrNull(b.mfl_pct),
-    // Preserve ownership on a plain save: only the owner can reach this guarded
-    // route, so default the assignee to them rather than NULLing it (which would
-    // make the risk read-only and lock the owner out of their own next save).
-    b.assigned_to_user_id || req.user?.userId || null,
-    b.linked_contract_id || null, b.underwriter_notes || null, b.status || 'DRAFT',
-    b.cedant_region || null, b.renewal_or_new || null, b.expiring_reference || null,
-    b.risk_country_zone || null, b.multi_location_flag ?? false, b.multi_occupancy_flag ?? false,
-    b.risk_location_top_address || null, numOrNull(b.occupancy_code), b.occupancy_name || null,
-    numOrNull(b.hazard_grade_override), b.hazard_category || null, numOrNull(b.risk_category),
-    numOrNull(b.frequency_category),
-  ]);
+
+  // A sent-but-blank name would hit the NOT NULL and surface as an opaque 500.
+  // Say what is wrong instead. (Omitting the key entirely is fine — it means
+  // "leave the name alone", which is what every slice-saving screen wants.)
+  if (req.sentKeys.has('insured_name') && !String(b.insured_name ?? '').trim()) {
+    return res.status(400).json({
+      error: 'insured_name cannot be blank.',
+      code: 'VALIDATION_FAILED',
+    });
+  }
+
+  const params = [id];
+  const sets = [];
+  for (const [column, valueFor] of Object.entries(RISK_UPDATE_COLUMNS)) {
+    if (!req.sentKeys.has(column)) continue;
+    params.push(valueFor(b, req));
+    sets.push(`${column} = $${params.length}`);
+  }
+
+  // Nothing updatable was sent — return the row rather than writing an empty
+  // SET (a syntax error) or a pointless touch of updated_at.
+  if (!sets.length) {
+    const { rows: current } = await pool.query(
+      'SELECT * FROM public.fac_risk WHERE fac_risk_id = $1', [id]);
+    if (!current.length) return res.status(404).json({ error: 'Risk not found' });
+    return res.json(current[0]);
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE public.fac_risk SET ${sets.join(', ')} WHERE fac_risk_id = $1 RETURNING *`,
+    params,
+  );
   if (!rows.length) return res.status(404).json({ error: 'Risk not found' });
   res.json(rows[0]);
 }));
