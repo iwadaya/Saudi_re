@@ -255,6 +255,25 @@ export default function Topbar({ title, subtitle, actions }) {
                 </div>
               )}
 
+              {/* Product — back to the module picker (Treaty / Facultative /
+                  Claims / Finance). Lives here rather than as a topbar pill so
+                  every Topbar screen gets the same way out; the pill only ever
+                  existed on the treaty home. Sits next to Log Out because both
+                  leave the current module, while everything above is a
+                  preference within it. */}
+              {session && (
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--hairline)' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(var(--text-rgb),0.58)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Product</div>
+                  <button type="button" onClick={() => { setSettingsOpen(false); navigate('/select'); }}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--hairline-strong)', background: 'var(--surface-hover)', color: 'rgba(var(--text-rgb),0.85)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                    ← Switch product
+                  </button>
+                  <div style={{ fontSize: 9, color: 'rgba(var(--text-rgb),0.58)', marginTop: 4, lineHeight: 1.4 }}>
+                    Back to Treaty, Facultative, Claims and Finance.
+                  </div>
+                </div>
+              )}
+
               {/* Logout */}
               {session && (
                 <div style={{ padding: 8 }}>
