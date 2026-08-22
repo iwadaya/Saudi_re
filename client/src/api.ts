@@ -417,38 +417,6 @@ export { HttpError };
 
 // ── Shapes for the async renewal-pack import flow ───────────────────────────
 
-/** The outward retro contract for one underwriting year and currency. */
-export interface RetroProgramme {
-  retro_programme_id: string;
-  uw_year: number;
-  currency: string;
-  label: string | null;
-  reinsurer: string | null;
-  inception_date: string | null;
-  expiry_date: string | null;
-  retention_amt: number;
-  limit_amt: number;
-  rol_pct: number;
-  used_limit_amt: number;
-  cession_pct: number;
-  commission_pct: number;
-  max_line_pct: number;
-  notes: string | null;
-  is_active: boolean;
-  created_at?: string;
-  updated_at?: string;
-  created_by?: string | null;
-  updated_by?: string | null;
-}
-
-/** Lookup result — an exact (year, currency) match, or null plus what does exist. */
-export interface RetroProgrammeLookup {
-  programme: RetroProgramme | null;
-  year: number;
-  currency: string;
-  availableCurrencies: string[];
-}
-
 export interface RenewalImportStarted { jobId: string }
 export type RenewalImportJobStatus =
   | { status: 'processing' }
@@ -916,21 +884,6 @@ export const api = {
   getRoles(opts?: RequestOpts): Promise<unknown> { return request(PATHS.authRoles, opts); },
   getUserMandate(userId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/auth/mandates/${enc(userId)}`, opts); },
   setUserMandate(userId: string, payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request(`/api/auth/mandates/${enc(userId)}`, { method: 'PUT', body: payload, ...opts }); },
-
-  // Retro programme — the outward retro contract an admin captures per
-  // underwriting year (read by the offer modal's retro cover analysis).
-  getRetroProgrammes(year?: number | string, opts?: RequestOpts): Promise<{ programmes: RetroProgramme[] }> {
-    return request(year ? `/api/retro-programmes?year=${enc(String(year))}` : '/api/retro-programmes', opts);
-  },
-  lookupRetroProgramme(year: number | string, currency: string, opts?: RequestOpts): Promise<RetroProgrammeLookup> {
-    return request(`/api/retro-programmes/lookup?year=${enc(String(year))}&currency=${enc(currency)}`, opts);
-  },
-  saveRetroProgramme(payload: Partial<RetroProgramme>, opts?: RequestOpts): Promise<{ programme: RetroProgramme }> {
-    return request('/api/retro-programmes', { method: 'POST', body: payload, ...opts });
-  },
-  deleteRetroProgramme(id: string, opts?: RequestOpts): Promise<{ ok: boolean }> {
-    return request(`/api/retro-programmes/${enc(id)}`, { method: 'DELETE', ...opts });
-  },
 
   // AI / document text extraction
   aiComplete(payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request('/api/ai/complete', { method: 'POST', body: payload, ...opts }); },

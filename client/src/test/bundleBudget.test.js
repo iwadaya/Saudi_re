@@ -39,17 +39,7 @@ const APP_CORE_CEILING_KB = APP_CORE_BUDGET_KB * 1.20;   // hard ceiling: budget
 // measurements (KiB) from the 2026-06-18 production build in parentheses.
 const RAW_BUDGETS_KB = {
   vendor: 300,             // React + router, plus non-lazy deps      (285.4)
-  // 2026-08-21 RE-BASELINE, np-final-pricing only. The offer modal gained the
-  // retro cover analysis (retroCover.js + NpRetroCoverPanel.jsx: the outward
-  // programme maths, the scenario table and the inline-SVG optimisation curve),
-  // which is +13.7 KiB raw / +4.6 KiB gzip of JS here — its styling lives in
-  // the .retro-* block of styles/non_proportional/final_pricing.css, not in
-  // the chunk. The chart is hand-rolled SVG precisely to keep recharts out of
-  // the offer path. The chunk had also crept from the 2026-06-18 baseline of
-  // 296.5 to 310.3 before this change, leaving 3.3 KiB against the old 330
-  // gate. Measured build + ~10% headroom, the same convention as the rest of
-  // this table.
-  'np-final-pricing': 360, // the big screen — still the biggest       (324.0)
+  'np-final-pricing': 330, // the big screen — still the biggest       (296.5)
   // np-screens covers the Aggregate XL structure (NpAggregateXlStructure +
   // read-only mount on Final Pricing) and the Stop Loss workflow.
   'np-screens': 280,       //                                          (254.1)

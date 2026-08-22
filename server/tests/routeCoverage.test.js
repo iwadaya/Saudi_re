@@ -41,7 +41,7 @@ describe('registerApiRoutes wires every router', () => {
     registerApiRoutes(fakeApp);
 
     // The list in registerApiRoutes.js — keep this in lockstep with it.
-    expect(mounted.length).toBe(26);
+    expect(mounted.length).toBe(25);
     expect(mounted.every((m) => m.prefix === '/api')).toBe(true);
     // Every mounted value is an Express router (callable with a .stack array).
     expect(mounted.every((m) => typeof m.router === 'function' && Array.isArray(m.router.stack))).toBe(true);

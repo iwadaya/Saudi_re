@@ -273,9 +273,6 @@ export default function Topbar({ title, subtitle, actions }) {
         {isAtLeast(2) && (
           <button className="topbar-home" type="button" onClick={() => navigate('/admin/users')}>⚙ USERS</button>
         )}
-        {isAtLeast(2) && (
-          <button className="topbar-home" type="button" onClick={() => navigate('/admin/retro-programme')}>⛨ RETRO</button>
-        )}
         <button className="topbar-home" type="button" onClick={() => navigate('/')}>↑ HOME</button>
       </div>
     </header>
