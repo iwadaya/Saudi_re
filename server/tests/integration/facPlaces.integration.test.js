@@ -88,9 +88,12 @@ d('fac address lookup + geocode persistence', () => {
       expect(created.insured_address_place_id).toBeNull();
     }, 30_000);
 
-    it('clears the coordinates when an edited address arrives without them', async () => {
-      // The client drops lat/lng as soon as the text is edited by hand; the
-      // server must persist that clearing, not keep the old point.
+    it('clears the coordinates when the form sends them back as null', async () => {
+      // How the real form behaves: FacRiskDetail always includes the three keys
+      // (`state.insured_address_lat ?? null`), so editing the address by hand
+      // sends explicit nulls and the point is dropped. PUT merges, so an
+      // explicit null clears while an omitted key is left alone — see
+      // facRiskPartialUpdate.integration.test.js.
       const created = await (await app.fetchApp('POST', '/api/fac/risks', {
         body: {
           insured_name: 'IT Recloc Risk', insured_address: 'A place',
@@ -101,7 +104,12 @@ d('fac address lookup + geocode persistence', () => {
       const id = created.fac_risk_id;
 
       const res = await app.fetchApp('PUT', `/api/fac/risks/${id}`, {
-        body: { insured_name: 'IT Recloc Risk', insured_address: 'A different place typed by hand', ...refs },
+        body: {
+          insured_name: 'IT Recloc Risk',
+          insured_address: 'A different place typed by hand',
+          insured_address_lat: null, insured_address_lng: null, insured_address_place_id: null,
+          ...refs,
+        },
       });
       expect(res.status).toBe(200);
 
@@ -111,6 +119,29 @@ d('fac address lookup + geocode persistence', () => {
       expect(rows[0].insured_address_lat).toBeNull();
       expect(rows[0].insured_address_lng).toBeNull();
       expect(rows[0].insured_address_place_id).toBeNull();
+    }, 30_000);
+
+    it('leaves a stored point alone when a slice-saving screen omits the keys', async () => {
+      // FacCoverageStructure / FacDeductibles / FacPricing never mention the
+      // address. Their saves must not silently drop a captured location.
+      const created = await (await app.fetchApp('POST', '/api/fac/risks', {
+        body: {
+          insured_name: 'IT Keep Coords', insured_address: 'A place',
+          insured_address_lat: 24.6911, insured_address_lng: 46.6853, insured_address_place_id: 'KEEP',
+          ...refs,
+        },
+      })).json();
+
+      const res = await app.fetchApp('PUT', `/api/fac/risks/${created.fac_risk_id}`, {
+        body: { ri_premium: 123, original_rate: 0.4 },
+      });
+      expect(res.status).toBe(200);
+
+      const { rows } = await pool.query(
+        `SELECT insured_address_lat, insured_address_place_id FROM public.fac_risk WHERE fac_risk_id = $1`,
+        [created.fac_risk_id]);
+      expect(Number(rows[0].insured_address_lat)).toBeCloseTo(24.6911, 6);
+      expect(rows[0].insured_address_place_id).toBe('KEEP');
     }, 30_000);
 
     it('rejects out-of-range coordinates', async () => {
