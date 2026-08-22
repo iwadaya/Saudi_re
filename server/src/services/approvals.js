@@ -757,8 +757,15 @@ async function resolveOfferByEntity({ contractId, quoteId }) {
  */
 async function claimPeerSlot({ offerId, slot, actorUserId, decision, comment, client }) {
   const db = client || pool;
+  // The actor id is bound TWICE, deliberately: $2 assigns the uuid peerN_user_id
+  // column, $5 is the text side of the jsonb membership test. They cannot share a
+  // placeholder — Postgres infers ONE type per parameter, so the `$2::text` this
+  // clause used to carry pinned $2 to text and made `SET peerN_user_id=$2` fail at
+  // PARSE time with 42804 ("column is of type uuid but expression is of type
+  // text"). That is value-independent, so it broke EVERY peer approval, for every
+  // role, on every offer — see the regression test in approvals.claimPeerSlot.
   const membership = `EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(approver_options,'[]'::jsonb)) ao
-                             WHERE COALESCE(ao->>'user_id', ao#>>'{}') = $2::text)`;
+                             WHERE COALESCE(ao->>'user_id', ao#>>'{}') = $5::text)`;
   if (slot === 'peer1') {
     const { rows } = await db.query(
       `UPDATE public.contract_offer
@@ -769,7 +776,7 @@ async function claimPeerSlot({ offerId, slot, actorUserId, decision, comment, cl
           AND peer1_decision IS NULL
           AND ${membership}
         RETURNING offer_id`,
-      [offerId, actorUserId, decision, comment || null]
+      [offerId, actorUserId, decision, comment || null, actorUserId]
     );
     return rows.length > 0;
   }
@@ -785,7 +792,7 @@ async function claimPeerSlot({ offerId, slot, actorUserId, decision, comment, cl
         AND peer1_user_id IS DISTINCT FROM $2
         AND ${membership}
       RETURNING offer_id`,
-    [offerId, actorUserId, decision, comment || null]
+    [offerId, actorUserId, decision, comment || null, actorUserId]
   );
   return rows.length > 0;
 }
