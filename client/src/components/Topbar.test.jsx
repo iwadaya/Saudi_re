@@ -1,15 +1,20 @@
-// Topbar Settings: the "View treaties" tickbox writes the per-user preference.
+// Topbar Settings: the "View treaties" tickbox writes the per-user preference,
+// and the Product section gets you back to the module picker.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import Topbar from './Topbar.jsx';
 import { setSession, clearSession } from '../utils/auth';
 import { getViewAllTreaties } from '../utils/prefs';
 
-const { apiMock } = vi.hoisted(() => ({ apiMock: {
-  getViewableUsers: vi.fn().mockResolvedValue([]),
-  changePassword: vi.fn().mockResolvedValue({ ok: true }),
-} }));
+const { apiMock, navigateMock } = vi.hoisted(() => ({
+  navigateMock: vi.fn(),
+  apiMock: {
+    getViewableUsers: vi.fn().mockResolvedValue([]),
+    changePassword: vi.fn().mockResolvedValue({ ok: true }),
+  },
+}));
 vi.mock('../api', () => ({ api: apiMock }));
+vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock }));
 
 afterEach(() => { cleanup(); localStorage.clear(); clearSession(); vi.clearAllMocks(); });
 beforeEach(() => { setSession({ userId: 'me', roleCode: 'CU', hierarchyLevel: 2, displayName: 'Me' }); });
@@ -92,5 +97,37 @@ describe('Topbar — change password', () => {
     render(<Topbar title="X" />);
     fireEvent.click(screen.getByRole('button', { name: /SETTINGS/i }));
     expect(screen.queryByRole('button', { name: /^Change password$/i })).toBeNull();
+  });
+});
+
+describe('Topbar — switching product', () => {
+  // The module picker used to be reachable only from a pill on the treaty home
+  // (and the Facultative home's own control). Moving it into Settings gives
+  // every Topbar screen — Claims, Finance, Dashboard, Workbench — the same way
+  // out. Topbar's "HOME" button is not that: it navigates to '/', the treaty
+  // home itself.
+  const openSettings = () => {
+    render(<Topbar title="X" />);
+    fireEvent.click(screen.getByRole('button', { name: /SETTINGS/i }));
+  };
+
+  it('offers a Switch product control in the Settings panel', () => {
+    openSettings();
+    expect(screen.getByText('Product')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /switch product/i })).toBeInTheDocument();
+  });
+
+  it('navigates to the module picker and closes the panel', () => {
+    openSettings();
+    fireEvent.click(screen.getByRole('button', { name: /switch product/i }));
+    expect(navigateMock).toHaveBeenCalledWith('/select');
+    // Panel collapses, so returning to this screen does not land behind it.
+    expect(screen.queryByRole('button', { name: /switch product/i })).not.toBeInTheDocument();
+  });
+
+  it('is hidden when logged out', () => {
+    clearSession();
+    openSettings();
+    expect(screen.queryByRole('button', { name: /switch product/i })).not.toBeInTheDocument();
   });
 });
