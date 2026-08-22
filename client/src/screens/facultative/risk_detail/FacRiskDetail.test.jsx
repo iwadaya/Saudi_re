@@ -21,6 +21,12 @@ const apiMock = vi.hoisted(() => ({
   facGetOccupancies: vi.fn(),
   facGetNatcatRates: vi.fn(),
   facGetScoringTables: vi.fn(),
+  // Address lookup — the Insured Address field probes this on mount. Left
+  // unconfigured here so the field behaves as the plain text input these
+  // specs assert against.
+  facPlacesStatus: vi.fn(),
+  facPlacesSuggest: vi.fn(),
+  facPlaceDetails: vi.fn(),
   // Related Treaties side-section (lazy; only fires once cedant+cob set)
   facGetEligibleTreaties: vi.fn(),
   facGetTreatyLinks: vi.fn(),
@@ -57,6 +63,7 @@ beforeEach(() => {
   apiMock.facGetNatcatRates.mockResolvedValue({ rates: [] });
   apiMock.facGetScoringTables.mockResolvedValue({ territorial_capacity: [] });
   apiMock.facGetSections.mockResolvedValue([]);
+  apiMock.facPlacesStatus.mockResolvedValue({ configured: false });
   apiMock.facSaveSections.mockResolvedValue([]);
   apiMock.facGetEligibleTreaties.mockResolvedValue({ treaties: [] });
   apiMock.facGetTreatyLinks.mockResolvedValue({ links: [] });

@@ -417,6 +417,23 @@ export { HttpError };
 
 // ── Shapes for the async renewal-pack import flow ───────────────────────────
 
+export interface PlaceSuggestion {
+  placeId: string;
+  /** Full one-line description, e.g. "12 King Fahd Rd, Al Olaya, Riyadh". */
+  text: string;
+  /** Street line, for the bold first row of a suggestion. */
+  mainText: string;
+  /** Locality/country, for the muted second row. */
+  secondaryText: string;
+}
+export interface PlaceDetails {
+  placeId: string;
+  formattedAddress: string;
+  /** null when Google returned no geometry for the place. */
+  latitude: number | null;
+  longitude: number | null;
+}
+
 export interface RenewalImportStarted { jobId: string }
 export type RenewalImportJobStatus =
   | { status: 'processing' }
@@ -911,6 +928,20 @@ export const api = {
   facCreateRisk(payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request('/api/fac/risks', { method: 'POST', body: payload, ...opts }); },
   facUpdateRisk(id: string, payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}`, { method: 'PUT', body: payload, ...opts }); },
   facDeleteRisk(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}`, { method: 'DELETE', ...opts }); },
+
+  // ── Address lookup (Google Places, proxied server-side) ──
+  // POST, not GET: the typed address is customer data and does not belong in a
+  // URL, an access log or a Referer header. facPlacesStatus lets the form fall
+  // back to a plain text input on a deployment with no GOOGLE_MAPS_API_KEY.
+  facPlacesStatus(opts?: RequestOpts): Promise<{ configured: boolean }> {
+    return request('/api/fac/places/status', opts);
+  },
+  facPlacesSuggest(payload: { input: string; sessionToken?: string; regionCode?: string }, opts?: RequestOpts): Promise<{ suggestions: PlaceSuggestion[] }> {
+    return request('/api/fac/places/suggest', { method: 'POST', body: payload, ...opts });
+  },
+  facPlaceDetails(payload: { placeId: string; sessionToken?: string }, opts?: RequestOpts): Promise<PlaceDetails> {
+    return request('/api/fac/places/details', { method: 'POST', body: payload, ...opts });
+  },
   /** Classes of business on the risk, each with its own sum insured. */
   facGetSections(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}/sections`, opts); },
   /** The per-year exposure a burning cost divides by. */

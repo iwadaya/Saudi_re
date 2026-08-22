@@ -13,6 +13,7 @@ import aiCedantRouter from './aiCedant.js';
 import aiMarketRouter from './aiMarket.js';
 import facultativeRouter from './facultative.js';
 import facultativeReferenceRouter from './facultativeReference.js';
+import facPlacesRouter from './facPlaces.js';
 import clientEventsRouter from './clientEvents.js';
 import workbenchRouter from './workbench.js';
 import peerStructuresRouter from './peerStructures.js';
@@ -40,6 +41,7 @@ const routers = [
   aiMarketRouter,
   facultativeRouter,
   facultativeReferenceRouter,
+  facPlacesRouter,
   clientEventsRouter,
   workbenchRouter,
   peerStructuresRouter,

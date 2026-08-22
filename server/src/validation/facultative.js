@@ -73,6 +73,11 @@ export const facRiskSaveSchema = z.object({
   // Insured + class of business
   insured_name:        optionalText,
   insured_address:     optionalText,
+  // Geocode captured when the address is picked from Places autocomplete.
+  // Bounded to real coordinate ranges so a bad client cannot store nonsense.
+  insured_address_lat:      z.coerce.number().min(-90).max(90).nullish(),
+  insured_address_lng:      z.coerce.number().min(-180).max(180).nullish(),
+  insured_address_place_id: optionalText,
   nature_of_business:  optionalText,
   fac_cob_id:          optionalUuid,
 

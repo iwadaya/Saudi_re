@@ -197,12 +197,14 @@ router.post('/fac/risks', validateBody(facRiskSaveSchema), asyncHandler(async (r
       cedant_region, renewal_or_new, expiring_reference, risk_country_zone,
       multi_location_flag, multi_occupancy_flag, risk_location_top_address,
       occupancy_code, occupancy_name, hazard_grade_override,
-      hazard_category, risk_category, frequency_category
+      hazard_category, risk_category, frequency_category,
+      insured_address_lat, insured_address_lng, insured_address_place_id
     ) VALUES (
       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
       $16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
       $31,$32,$33,$34,$35,$36,$37,$38,$39,
-      $40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52
+      $40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,
+      $53,$54,$55
     ) RETURNING *
   `, [
     b.cedant_id || null, b.broker_id || null, b.country_id || null, b.currency_id || null,
@@ -225,6 +227,9 @@ router.post('/fac/risks', validateBody(facRiskSaveSchema), asyncHandler(async (r
     b.multi_location_flag ?? false, b.multi_occupancy_flag ?? false, b.risk_location_top_address || null,
     numOrNull(b.occupancy_code), b.occupancy_name || null, numOrNull(b.hazard_grade_override),
     b.hazard_category || null, numOrNull(b.risk_category), numOrNull(b.frequency_category),
+    // Geocode of insured_address — present only when the address was picked from
+    // Places autocomplete; a hand-typed address leaves all three NULL.
+    numOrNull(b.insured_address_lat), numOrNull(b.insured_address_lng), b.insured_address_place_id || null,
   ]);
   res.status(201).json(rows[0]);
 }));
@@ -252,7 +257,9 @@ router.put('/fac/risks/:id', validateBody(facRiskSaveSchema), asyncHandler(async
       risk_country_zone = $43, multi_location_flag = $44, multi_occupancy_flag = $45,
       risk_location_top_address = $46, occupancy_code = $47, occupancy_name = $48,
       hazard_grade_override = $49, hazard_category = $50, risk_category = $51,
-      frequency_category = $52
+      frequency_category = $52,
+      insured_address_lat = $53, insured_address_lng = $54,
+      insured_address_place_id = $55
     WHERE fac_risk_id = $1
     RETURNING *
   `, [
@@ -277,6 +284,8 @@ router.put('/fac/risks/:id', validateBody(facRiskSaveSchema), asyncHandler(async
     b.risk_location_top_address || null, numOrNull(b.occupancy_code), b.occupancy_name || null,
     numOrNull(b.hazard_grade_override), b.hazard_category || null, numOrNull(b.risk_category),
     numOrNull(b.frequency_category),
+    // Geocode of insured_address — see the INSERT above.
+    numOrNull(b.insured_address_lat), numOrNull(b.insured_address_lng), b.insured_address_place_id || null,
   ]);
   if (!rows.length) return res.status(404).json({ error: 'Risk not found' });
   res.json(rows[0]);

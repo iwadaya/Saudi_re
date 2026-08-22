@@ -4,6 +4,7 @@ import api from '../../../api';
 import { logger } from '../../../utils/logger';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
+import PlacesAddressInput from '../../../components/PlacesAddressInput';
 import AsyncBoundary from '../../../components/AsyncBoundary';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import { useResource } from '../../../hooks/useResource';
@@ -87,6 +88,7 @@ export default function FacRiskDetail() {
 
   const [f, setF] = useState({
     insured_name: '', insured_address: '', nature_of_business: '',
+    insured_address_lat: null, insured_address_lng: null, insured_address_place_id: '',
     cedant_id: '', broker_id: '', country_id: '', currency_id: '', fac_cob_id: '',
     inception_date: '', expiry_date: '', policy_period_months: '12', uw_year: '',
     total_sum_insured: '', pd_sum_insured: '', bi_sum_insured: '',
@@ -207,6 +209,9 @@ export default function FacRiskDetail() {
   const hydrate = useCallback((r) => {
     setF({
       insured_name: r.insured_name || '', insured_address: r.insured_address || '',
+      insured_address_lat: r.insured_address_lat ?? null,
+      insured_address_lng: r.insured_address_lng ?? null,
+      insured_address_place_id: r.insured_address_place_id || '',
       nature_of_business: r.nature_of_business || '',
       cedant_id: r.cedant_id || '', broker_id: r.broker_id || '',
       country_id: r.country_id || '', currency_id: r.currency_id || '',
@@ -287,6 +292,9 @@ export default function FacRiskDetail() {
       multi_location_flag: Boolean(state.multi_location_flag),
       multi_occupancy_flag: Boolean(state.multi_occupancy_flag),
       risk_location_top_address: state.risk_location_top_address || null,
+      insured_address_lat: state.insured_address_lat ?? null,
+      insured_address_lng: state.insured_address_lng ?? null,
+      insured_address_place_id: state.insured_address_place_id || null,
       occupancy_code: numOrNull(state.occupancy_code),
       occupancy_name: state.occupancy_name || null,
       hazard_grade_override: numOrNull(state.hazard_grade_override),
@@ -474,7 +482,25 @@ export default function FacRiskDetail() {
         {/* ── Insured ── */}
         <SectionTitle>Insured Risk</SectionTitle>
         <FR label="Insured Name"><input className="fi" value={f.insured_name} onChange={e => set('insured_name', e.target.value)} placeholder="e.g. SABIC Petrochemical Plant" /></FR>
-        <FR label="Insured Address"><input className="fi" value={f.insured_address} onChange={e => set('insured_address', e.target.value)} placeholder="Physical address of premises" /></FR>
+        <FR label="Insured Address" hint="Start typing to search; picking a result also records the location">
+          <PlacesAddressInput
+            value={f.insured_address}
+            onChange={v => set('insured_address', v)}
+            hasCoords={f.insured_address_lat != null && f.insured_address_lng != null}
+            onPlacePicked={({ address, latitude, longitude, placeId }) => {
+              set('insured_address', address);
+              set('insured_address_lat', latitude);
+              set('insured_address_lng', longitude);
+              set('insured_address_place_id', placeId);
+            }}
+            onPlaceCleared={() => {
+              set('insured_address_lat', null);
+              set('insured_address_lng', null);
+              set('insured_address_place_id', '');
+            }}
+            placeholder="Physical address of premises"
+          />
+        </FR>
         <FR label="Nature of Business" hint="Occupation / activity"><input className="fi" value={f.nature_of_business} onChange={e => set('nature_of_business', e.target.value)} placeholder="e.g. Petrochemical manufacturing" /></FR>
 
         {/* ── Risk Profile (Summary Sheet top half) ── */}
