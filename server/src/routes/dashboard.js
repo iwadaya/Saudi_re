@@ -25,20 +25,20 @@ const regionBucket = `CASE
   END`;
 
 // Latest rate_to_usd per currency_code (alias fx).
-const fxSub = `(SELECT DISTINCT ON (currency_code)
+export const fxSub = `(SELECT DISTINCT ON (currency_code)
                     currency_code, COALESCE(rate_to_usd, 1.0) AS rate_to_usd
                   FROM public.ref_exchange_rate
                   ORDER BY currency_code, effective_date DESC) fx`;
 
 // Reinsurer signed share (signed line, else latest written line, else 100%)
 // as a 0–1 fraction.
-const signedShare = `(COALESCE(c.signed_line_pct,
+export const signedShare = `(COALESCE(c.signed_line_pct,
     (SELECT o.written_line_pct FROM public.contract_offer o
      WHERE o.contract_id=c.contract_id ORDER BY o.updated_at DESC LIMIT 1),
     100.0) / 100.0)`;
 
 // Non-proportional detection from the treaty-type category.
-const isNp = `(COALESCE(tt.category,'') ILIKE '%NP%' OR COALESCE(tt.category,'') ILIKE '%NON%')`;
+export const isNp = `(COALESCE(tt.category,'') ILIKE '%NP%' OR COALESCE(tt.category,'') ILIKE '%NON%')`;
 
 // Standard premium-weighted aggregate expressions over the `units` CTE, so a
 // caller can `SELECT ${UNIT_AGGREGATES.avgRol} ... FROM units`. Rates (rol,
