@@ -39,9 +39,6 @@ function renderScreen({ quoteMode = false } = {}) {
         cedantName: 'Audit Cedant',
         countryName: 'Saudi Arabia',
         currencyCode: 'SAR',
-        // Inception date: the offer modal's retro cover analysis looks the
-        // retro contract up by (underwriting year, currency).
-        inceptionDate: '2026-01-01',
         classIds: [bindIds.cobMotor, bindIds.cobProperty],
         classOfBusinessIds: [bindIds.cobMotor, bindIds.cobProperty],
         lineOfBusinessLabels: ['Motor', 'Property'],
@@ -87,12 +84,8 @@ describe('NpFinalPricing golden master (treaty mode)', () => {
     const { container } = renderScreen();
     await settleTreatyMode(container);
 
-    // UW YEAR reads 2026 because the fixture now carries inceptionDate
-    // 2026-01-01 (added for the retro cover analysis, which looks the retro
-    // contract up by underwriting year). It is the hero echoing a new fixture
-    // input — every computed figure below is unchanged.
     expect(container.querySelector('.bbg-hero').textContent).toBe(
-      'RISK & CAT XLCEDANT Audit CedantCOUNTRY Saudi ArabiaCOB Motor, PropertyCCY SARUW YEAR 2026DRAFT' +
+      'RISK & CAT XLCEDANT Audit CedantCOUNTRY Saudi ArabiaCOB Motor, PropertyCCY SARUW YEAR —DRAFT' +
       '▸ Structure MetricsLayers2Total Earned PremSAR 1,550,000Total ROL103.33%COST STRUCTUREBrokerage7%' +
       'Est. GNPI · 100% TreatySAR1,500,000Total LimitSAR 1,500,000Treaty TypeRISK & CAT XLXL TypeRISKAcctg Method—Layers2TOTAL ROL103.33%' +
       '▸ Layer StructureRISK XLLayers2DeductibleSAR 100,000Total LimitSAR 1,500,000CAT XLLayers1DeductibleSAR 100,000Total LimitSAR 500,000',
@@ -159,32 +152,9 @@ describe('NpFinalPricing golden master (treaty mode)', () => {
     expect(offModal.querySelector('.off-hm-scores').textContent).toBe(
       'Premium Score 0/100Margin Score 40/100Classification Balanced',
     );
-    // The retro cover panel is also an .off-card with a table in it and sits
-    // above this one — select the layer table explicitly rather than by order.
-    expect(rowsOf(offModal.querySelector('.off-card:not([data-testid]) table'))).toEqual([
+    expect(rowsOf(offModal.querySelector('.off-card table'))).toEqual([
       ['Layer', 'Written %', 'Limit', 'Premium', 'ROL %', 'Tech Ratio', '✦ AI Lineapply all', 'Signed %unlocks on approval'],
       ['L1', '[]', '500,000', '42,500', '8.50%', '—', '10.0% →', '[]'],
-    ]);
-  });
-
-  it('computes the exact retro cover position for the suggested and optimal lines', async () => {
-    const { container } = renderScreen();
-    await settleTreatyMode(container);
-
-    fireEvent.click(screen.getByRole('button', { name: /Offer Treaty/i }));
-    // The panel loads the admin-captured retro contract (bindPathFixtures'
-    // retroProgrammeSnapshot: 100,000 xs 25,000 at 8% ROL) before it can price
-    // anything.
-    await waitFor(() => expect(screen.getByTestId('retro-scenario-suggested')).toBeTruthy());
-    const retro = container.querySelector('[data-testid="retro-cover-panel"]');
-    // Suggested 10% line → 50,000 event, 25,000 recovered, 25,000 retained,
-    // 2,000 of cover against 4,250 of premium. The fixture has no technical
-    // ratio, so expected loss is nil and net margin is the net premium. The
-    // optimal 25% line consumes the whole 100,000 of limit.
-    expect(rowsOf(retro.querySelector('table'))).toEqual([
-      ['Scenario', 'Line', 'Gross Exposure', 'Retro Recovery', 'Net Retained', 'Cost Of Cover', 'Net Premium', 'Net Margin', 'Limit Used', ''],
-      ['✦ AI suggested', '10%', 'SAR 50,000', 'SAR 25,000', 'SAR 25,000', 'SAR 2,00047.1% of premium', 'SAR 2,250', 'SAR 2,250100.0% margin', '25%', 'apply 10% →'],
-      ['◎ Retro-optimal', '25%', 'SAR 125,000', 'SAR 100,000', 'SAR 25,000', 'SAR 8,00075.3% of premium', 'SAR 2,625', 'SAR 2,625100.0% margin', '100%', 'apply 25% →'],
     ]);
   });
 

@@ -23,7 +23,6 @@ import renewalPackRouter from './renewalPack.js';
 import ldfBlendingRouter from './ldfBlending.js';
 import claimsRouter from './claims.js';
 import financeRouter from './finance.js';
-import retroProgrammesRouter from './retroProgrammes.js';
 
 const routers = [
   lookupsRouter,
@@ -51,7 +50,6 @@ const routers = [
   ldfBlendingRouter,
   claimsRouter,
   financeRouter,
-  retroProgrammesRouter,
 ];
 
 export function registerApiRoutes(app) {
