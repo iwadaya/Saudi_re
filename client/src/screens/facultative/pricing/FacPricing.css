@@ -421,3 +421,140 @@
   color: rgba(var(--text-rgb), 0.6);
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Class accumulation modal ─────────────────────────────────────────────
+   Styles live here rather than inline because the screens layer is gated by
+   scripts/frontend-budget.mjs on inline-style count — see
+   docs/frontend-hardening.md. */
+.facacc-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.facacc-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+.facacc-dialog {
+  position: relative;
+  width: min(1000px, 100%);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-bg-strong);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 14px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.facacc-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.facacc-head-main { flex: 1; }
+.facacc-title { font-size: 14px; font-weight: 800; }
+.facacc-sub {
+  font-size: 10px;
+  color: rgba(var(--text-rgb), 0.55);
+  margin-top: 2px;
+}
+.facacc-close {
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-hover);
+  color: rgba(var(--text-rgb), 0.85);
+  border-radius: 8px;
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.facacc-body { overflow-y: auto; padding: 14px 18px 18px; }
+.facacc-muted { font-size: 12px; color: rgba(var(--text-rgb), 0.6); }
+.facacc-error { font-size: 12px; color: var(--accent-rose, #f87171); }
+.facacc-notice {
+  font-size: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.30);
+  color: rgba(var(--text-rgb), 0.85);
+}
+
+.facacc-tiles { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.facacc-tile {
+  flex: 1 1 150px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline-strong);
+}
+.facacc-tile--total   { border-color: rgba(var(--accent-rgb), 0.45); }
+.facacc-tile--subject { border-color: rgba(0, 212, 255, 0.40); }
+.facacc-tile-label {
+  font-size: 9px; font-weight: 800; letter-spacing: .11em;
+  text-transform: uppercase; color: rgba(var(--text-rgb), 0.52);
+}
+.facacc-tile-value {
+  font-size: 20px; font-weight: 800; margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.facacc-tile-sub {
+  font-size: 11px; color: rgba(var(--text-rgb), 0.62);
+  font-variant-numeric: tabular-nums;
+}
+.facacc-tile-note { font-size: 9px; color: rgba(var(--text-rgb), 0.45); margin-top: 3px; }
+
+.facacc-tablewrap { overflow-x: auto; border: 1px solid var(--hairline); border-radius: 10px; }
+.facacc-table { width: 100%; min-width: 620px; border-collapse: collapse; }
+.facacc-table th {
+  padding: 7px 10px; text-align: left;
+  font-size: 9px; font-weight: 800; letter-spacing: .10em; text-transform: uppercase;
+  color: rgba(var(--text-rgb), 0.52);
+  border-bottom: 1px solid var(--hairline);
+  position: sticky; top: 0; background: var(--panel-bg-strong);
+}
+.facacc-table th.facacc-r, .facacc-table td.facacc-r {
+  text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.facacc-table td { padding: 7px 10px; text-align: left; }
+.facacc-row { border-bottom: 1px solid var(--hairline); }
+.facacc-name { font-size: 12px; color: rgba(var(--text-rgb), 0.88); }
+.facacc-meta { font-size: 10px; color: rgba(var(--text-rgb), 0.48); }
+.facacc-dim  { font-size: 11px; color: rgba(var(--text-rgb), 0.66); }
+.facacc-num  { font-size: 12px; }
+.facacc-empty { color: rgba(var(--text-rgb), 0.5); font-size: 12px; }
+.facacc-group {
+  font-size: 9px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase;
+  color: rgba(var(--text-rgb), 0.45); background: rgba(var(--text-rgb), 0.02);
+}
+.facacc-subtotal { border-top: 1px solid var(--hairline-strong); background: rgba(var(--text-rgb), 0.03); }
+.facacc-subtotal td { font-size: 12px; font-weight: 800; }
+.facacc-subtotal td:first-child { font-size: 11px; }
+.facacc-total { border-top: 2px solid var(--hairline-strong); }
+.facacc-total td { font-size: 13px; font-weight: 800; }
+.facacc-total td:first-child { font-size: 12px; }
+.facacc-subject { background: rgba(0, 212, 255, 0.05); }
+.facacc-subject td { font-size: 12px; }
+.facacc-subject-note { font-size: 10px; color: rgba(var(--text-rgb), 0.5); }
+
+.facacc-trigger-row { display: flex; justify-content: flex-end; margin: 0 0 10px; }
+.facacc-trigger {
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-hover);
+  color: rgba(var(--text-rgb), 0.85);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.facacc-trigger:disabled { cursor: not-allowed; opacity: 0.5; }

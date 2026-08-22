@@ -48,6 +48,7 @@ import {
   LossCostPanel, TechnicalBuildUp,
 } from './FacPricingPanels';
 import FacCapacityPanel from './FacCapacityPanel';
+import FacClassAccumulationModal from './FacClassAccumulationModal';
 
 const ENGINE_VERSION = '2.0.0';
 
@@ -157,6 +158,7 @@ export default function FacPricing() {
   const loaded = useRef(false);
   const dirty = useRef(false);
   const [risk, setRisk] = useState(null);
+  const [showClassAccumulation, setShowClassAccumulation] = useState(false);
   const [facClasses, setFacClasses] = useState([]);
   const [selectedExtensions, setSelectedExtensions] = useState(new Set());
   const [customExtensions, setCustomExtensions] = useState([]); // { id, label, loadingPct }
@@ -569,6 +571,23 @@ export default function FacPricing() {
 
         <ExposureBasisNote exposure={exposure} rateVersion={rateVersion} family={family} />
 
+        {/* Deliberately ABOVE the family blocker. The capacity panel further
+            down answers "what is committed in this CRESTA zone" and only
+            renders once the engine can price; this answers "what does the book
+            already carry in this class", which the underwriter wants precisely
+            when a risk is still missing inputs and they are deciding whether to
+            pursue it at all. */}
+        <div className="facacc-trigger-row">
+          <button
+            type="button"
+            className="facacc-trigger"
+            onClick={() => setShowClassAccumulation(true)}
+            disabled={!riskId}
+          >
+            Class accumulation — fac + treaty
+          </button>
+        </div>
+
         {blocker && <FamilyBlocker blocker={blocker} family={family} />}
 
         {!blocker && (
@@ -727,6 +746,9 @@ export default function FacPricing() {
         </ReadOnlyWrap>
       </div>
       </AsyncBoundary>
+      {showClassAccumulation && riskId && (
+        <FacClassAccumulationModal riskId={riskId} onClose={() => setShowClassAccumulation(false)} />
+      )}
     </WizardLayout>
   );
 }

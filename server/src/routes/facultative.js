@@ -36,6 +36,7 @@ import {
 } from '../validation/facultative.js';
 import { applyRecommendation } from '../lib/facRecommendationApply.js';
 import { assertCanEdit, assertCanReadEntity, getEditPermission } from '../services/permissions.js';
+import { getClassAccumulation } from '../services/facClassAccumulationService.js';
 import {
   computeFacPricing,
   verifyFacPricingSave,
@@ -2094,6 +2095,16 @@ router.post('/fac/accumulation/refresh', asyncHandler(async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const _LINKABLE_CONTRACT_STATUSES = ['BOUND', 'SIGNED', 'RENEWED'];
+
+// Class accumulation for the Final Pricing modal: every bound fac risk in the
+// class being priced plus every inforce treaty covering it, at our share, so
+// the underwriter sees what this line is adding to. Read-only.
+router.get('/fac/risks/:id/class-accumulation', asyncHandler(async (req, res) => {
+  const result = await getClassAccumulation(req.params.id);
+  if (!result) return res.status(404).json({ error: 'Risk not found' });
+  res.setHeader('Cache-Control', 'no-store'); // positions move as risks bind
+  res.json(result);
+}));
 
 router.get('/fac/risks/:id/eligible-treaties', asyncHandler(async (req, res) => {
   const riskId = req.params.id;

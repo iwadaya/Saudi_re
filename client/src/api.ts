@@ -434,6 +434,53 @@ export interface PlaceDetails {
   longitude: number | null;
 }
 
+export interface FacAccumulationTotals {
+  exposureUsd: number;
+  premiumUsd: number;
+  count: number;
+}
+export interface FacAccumulationFacLine {
+  facRiskId: string;
+  facRef: string | null;
+  insuredName: string | null;
+  cedantName: string | null;
+  facClassName: string | null;
+  uwYear: number | null;
+  currencyCode: string | null;
+  exposureUsd: number;
+  premiumUsd: number;
+}
+export interface FacAccumulationTreatyLine {
+  contractId: string;
+  cedantName: string | null;
+  treatyType: string | null;
+  isNp: boolean;
+  uwYear: number | null;
+  uwStatus: string | null;
+  currencyCode: string | null;
+  exposureUsd: number;
+  premiumUsd: number;
+}
+export interface FacClassAccumulation {
+  class: {
+    facRiskId: string;
+    facCobId: string | null;
+    facClassName: string | null;
+    category: string | null;
+    classOfBusinessId: string | null;
+    className: string | null;
+  };
+  /** Set when the class cannot be accumulated (no class picked, or no treaty mapping). */
+  unavailableReason: string | null;
+  facRisks: FacAccumulationFacLine[];
+  treaties: FacAccumulationTreatyLine[];
+  facSubtotal: FacAccumulationTotals;
+  treatySubtotal: FacAccumulationTotals;
+  total: FacAccumulationTotals;
+  /** The risk being priced — shown on its own line, never inside a subtotal. */
+  currentRisk: (FacAccumulationFacLine & { status: string | null }) | null;
+}
+
 export interface RenewalImportStarted { jobId: string }
 export type RenewalImportJobStatus =
   | { status: 'processing' }
@@ -925,6 +972,10 @@ export const api = {
     return request(`/api/fac/risks${qs ? '?' + qs : ''}`, opts);
   },
   facGetRisk(id: string, opts?: RequestOpts): Promise<FacRisk> { return request<FacRisk>(`/api/fac/risks/${enc(id)}`, opts); },
+  /** Class accumulation for the Final Pricing modal — bound fac + inforce treaties, our share, USD. */
+  facGetClassAccumulation(id: string, opts?: RequestOpts): Promise<FacClassAccumulation> {
+    return request<FacClassAccumulation>(`/api/fac/risks/${enc(id)}/class-accumulation`, opts);
+  },
   facCreateRisk(payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request('/api/fac/risks', { method: 'POST', body: payload, ...opts }); },
   facUpdateRisk(id: string, payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}`, { method: 'PUT', body: payload, ...opts }); },
   facDeleteRisk(id: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/fac/risks/${enc(id)}`, { method: 'DELETE', ...opts }); },
