@@ -32,3 +32,43 @@
 }
 .facexp-years { width: 70px; }
 .facexp-hint { font-size: 10px; color: rgba(var(--text-rgb), 0.58); }
+
+/* ── Paste-friendly loss grid ─────────────────────────────────────────────
+   The grid opens with a block of empty rows and grows to fit a pasted region.
+   Styles live here rather than inline: the screens layer is gated on
+   inline-style count (scripts/frontend-budget.mjs). */
+.faclh-gridnote {
+  font-size: 11px;
+  line-height: 1.55;
+  color: rgba(var(--text-rgb), 0.62);
+  background: var(--control-bg);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+.faclh-gridnote b { color: rgba(var(--text-rgb), 0.82); font-weight: 700; }
+
+.faclh-actions { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
+.faclh-add {
+  appearance: none;
+  border: 1px dashed rgba(var(--accent-rgb), 0.30);
+  background: rgba(var(--accent-rgb), 0.05);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.faclh-clear {
+  appearance: none;
+  border: 1px solid var(--hairline-strong);
+  background: transparent;
+  color: rgba(var(--text-rgb), 0.62);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
