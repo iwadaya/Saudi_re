@@ -20,6 +20,19 @@ import {
 } from '../../../shared/fac/accumulation.js';
 import { buildExposureProfile, familyForClass } from '../../../shared/fac/index.js';
 
+// fac_location carries carrier shares as fractions (0..1), while fac_risk stores
+// our_share_pct / ri_share_pct as percentages (0..100). When location-level
+// shares are absent, convert the risk-level fallback by /100 before multiplying.
+const RISK_SHARE_FRACTION_SQL = '(COALESCE(r.our_share_pct, r.ri_share_pct, 100) / 100.0)';
+const LOCATION_PD_SHARE_SQL = `COALESCE(l.carrier_pd_share_pct, ${RISK_SHARE_FRACTION_SQL})`;
+const LOCATION_BI_SHARE_SQL = `COALESCE(l.carrier_bi_share_pct, l.carrier_pd_share_pct, ${RISK_SHARE_FRACTION_SQL})`;
+
+function pctToFraction(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n / 100 : null;
+}
+
 /**
  * Refresh the committed-exposure view.
  *
@@ -61,10 +74,9 @@ export async function riskZoneContributions(riskId) {
     `SELECT l.cresta_zone AS zone,
             SUM(
               COALESCE(l.pd_si, 0) * COALESCE(l.pd_pml_pct, 1)
-              * COALESCE(l.carrier_pd_share_pct, r.our_share_pct, r.ri_share_pct, 1)
+              * ${LOCATION_PD_SHARE_SQL}
               + COALESCE(l.bi_si, 0) * COALESCE(l.bi_pml_pct, 1)
-              * COALESCE(l.carrier_bi_share_pct, l.carrier_pd_share_pct,
-                         r.our_share_pct, r.ri_share_pct, 1)
+              * ${LOCATION_BI_SHARE_SQL}
             ) AS adding
        FROM public.fac_location l
        JOIN public.fac_risk r ON r.fac_risk_id = l.fac_risk_id
@@ -114,10 +126,9 @@ export async function zoneExposure(zones, uwYear, excludeRiskId = null) {
         `SELECT l.cresta_zone AS zone,
                 SUM(
                   COALESCE(l.pd_si, 0) * COALESCE(l.pd_pml_pct, 1)
-                  * COALESCE(l.carrier_pd_share_pct, r.our_share_pct, r.ri_share_pct, 1)
+                  * ${LOCATION_PD_SHARE_SQL}
                   + COALESCE(l.bi_si, 0) * COALESCE(l.bi_pml_pct, 1)
-                  * COALESCE(l.carrier_bi_share_pct, l.carrier_pd_share_pct,
-                             r.our_share_pct, r.ri_share_pct, 1)
+                  * ${LOCATION_BI_SHARE_SQL}
                 ) AS committed
            FROM public.fac_location l
            JOIN public.fac_risk r ON r.fac_risk_id = l.fac_risk_id
@@ -158,7 +169,7 @@ export async function vendorExposure(vendorKeys, excludeRiskId = null) {
   if (!vendorKeys || vendorKeys.length === 0) return [];
   const { rows } = await pool.query(
     `SELECT d.vendor_key,
-            COALESCE(SUM(s.limit_amount * COALESCE(r.our_share_pct, r.ri_share_pct, 1)), 0)
+            COALESCE(SUM(s.limit_amount * ${RISK_SHARE_FRACTION_SQL}), 0)
               AS committed_limit,
             COUNT(DISTINCT r.fac_risk_id) AS risk_count
        FROM public.fac_cyber_dependency d
@@ -191,7 +202,7 @@ export async function warRegionExposure(regions, excludeRiskId = null) {
     `SELECT UPPER(s.exposure_detail->>'war_region') AS region,
             COALESCE(SUM(
               COALESCE(s.sum_insured, s.exposure_base, 0)
-              * COALESCE(r.our_share_pct, r.ri_share_pct, 1)
+              * ${RISK_SHARE_FRACTION_SQL}
             ), 0) AS committed
        FROM public.fac_risk_section s
        JOIN public.fac_risk r ON r.fac_risk_id = s.fac_risk_id
@@ -271,7 +282,7 @@ export async function checkFacCapacity(riskId) {
     perRiskLine: {
       lineSize: line.amount,
       maxCapacityPct: pricingRes.rows[0]?.max_capacity_pct ?? null,
-      writtenShare: risk.our_share_pct ?? risk.ri_share_pct ?? null,
+      writtenShare: pctToFraction(risk.our_share_pct ?? risk.ri_share_pct ?? null),
     },
     zones: contributions.map((c) => ({
       zone: c.zone,
