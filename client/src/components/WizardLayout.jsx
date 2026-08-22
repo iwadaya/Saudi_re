@@ -2,6 +2,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import WizardTabs from './WizardTabs';
+import { ROUTE_PATHS } from '../config/wizard';
 import WizardNav from './WizardNav';
 import ThemeSwitcher from './ThemeSwitcher';
 import useWizard from '../hooks/useWizard';
@@ -84,6 +85,21 @@ export default function WizardLayout({
     if (ok) wizard.goNext();
   };
 
+  // Jumping straight to a step from the sidebar has to save exactly like
+  // Back/Next: same tracked save, same "a failed save blocks navigation" rule.
+  // Direction only decides which hook runs (screens pass the same function to
+  // both) and which way Retry replays, so compare positions in the wizard order
+  // and fall back to 'next' when the order is unknown.
+  const handleTabNavigate = useCallback(async (path) => {
+    if (path === undefined || path === null) return;
+    const order = Array.isArray(wizard.order) ? wizard.order : [];
+    const here = order.indexOf(routeKey);
+    const there = order.findIndex((k) => ROUTE_PATHS[k] === path);
+    const goingBack = here >= 0 && there >= 0 && there < here;
+    const ok = await runTrackedSave(goingBack ? onBeforeBack : onBeforeNext, goingBack ? 'back' : 'next');
+    if (ok) navigate(path);
+  }, [wizard.order, routeKey, runTrackedSave, onBeforeBack, onBeforeNext, navigate]);
+
   const retrySave = useCallback(async () => {
     const last = lastHandlerRef.current;
     if (!last) return;
@@ -133,7 +149,7 @@ export default function WizardLayout({
       </header>
 
       <div className="wizard-layout">
-        <WizardTabs activeKey={routeKey} />
+        <WizardTabs activeKey={routeKey} onNavigate={handleTabNavigate} />
         <main id="wizard-main" className="wizard-content" role="main" aria-label={title || 'Wizard content'}>
           {headerPill && (
             <div className="wizard-header-pill" role="status" aria-live="polite">{headerPill}</div>

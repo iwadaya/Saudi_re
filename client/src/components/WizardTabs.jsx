@@ -4,7 +4,19 @@ import { useAppState } from '../context/AppContext';
 import { PROP_TAB_GROUPS, NP_TAB_GROUPS, FAC_TAB_GROUPS, STEP_LABELS, ROUTE_PATHS, facStepVisible } from '../config/wizard';
 import { isNpCatFlowDisabled, isNpRiskFlowDisabled, isNpStopLossTreaty } from '../utils/npTreatyType';
 
-export default function WizardTabs({ activeKey }) {
+/**
+ * @param {object} props
+ * @param {string} props.activeKey  the current step's route key
+ * @param {(path: string) => void|Promise<void>} [props.onNavigate]
+ *   How to leave the current step. WizardLayout passes a handler that runs the
+ *   screen's save first and only navigates if it succeeds — the same contract
+ *   the Back/Next dock has always had. Without it these tabs navigated with a
+ *   bare navigate() and silently discarded every unsaved edit, which is what
+ *   users hit: the sidebar is nine always-visible buttons, while the Back/Next
+ *   dock auto-hides. Falls back to a plain navigate so the component still
+ *   works standalone (and in its own tests).
+ */
+export default function WizardTabs({ activeKey, onNavigate }) {
   const navigate = useNavigate();
   const { state } = useAppState();
   const mode = activeKey?.startsWith('FAC_') ? 'FAC' : activeKey?.startsWith('NP_') ? 'NP' : 'PROP';
@@ -80,7 +92,7 @@ export default function WizardTabs({ activeKey }) {
                   type="button"
                   className={`wizard-tab ${isActive ? 'wizard-tab--active' : ''}`}
                   aria-current={isActive ? 'step' : undefined}
-                  onClick={() => navigate(ROUTE_PATHS[key])}
+                  onClick={() => (onNavigate ? onNavigate(ROUTE_PATHS[key]) : navigate(ROUTE_PATHS[key]))}
                 >
                   {STEP_LABELS[key] || key}
                 </button>
