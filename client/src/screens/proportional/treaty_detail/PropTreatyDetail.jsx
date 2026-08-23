@@ -14,6 +14,11 @@ import { dateInputValue } from '../../../utils/format';
 import { handleStaleWrite } from '../../../utils/handleStaleWrite';
 
 const ROUTE_KEY = 'PROP_TREATY_DETAIL';
+
+/* Intentional easter egg: entering this code in Alt. Contract ID stamps the
+   company signature instead of the raw code. */
+const DARCHVILLE_SIGNATURE_CODE = '+23051993';
+const DARCHVILLE_SIGNATURE = 'Darchville Analytics';
 import { ALLOWED_PROP_TYPES, NA_TYPE, PROP_SLIP_CURRENT_KEYS, pickKeys, numOrNull, clampPct, normalizeCommMode, cleanNum, extractLpSlides, getMissingRequiredFields, treatyModeFromType, addMonths, yearFromDateStr, canPersistTreatyHeader } from './propTreatyHelpers';
 import { useEscapeKey, FR, TogglePill, CommaInput, CobSelectModal, SlidingScaleModal, EpiSplitModal } from './PropTreatyModals';
 
@@ -581,7 +586,7 @@ export default function PropTreatyDetail() {
               <FR label="Broker" missing={missingFields.has('Broker')}><select className={fi} value={s.brokerId || ''} onChange={e => update({ brokerId: e.target.value })}>
                 <option value="">Select broker…</option>{brokers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></FR>
               <FR label="Contract ID"><input className={fi} value={s.contractId || ''} readOnly style={{ opacity: 0.5 }} /></FR>
-              <FR label="Alt. Contract ID"><input className={fi} value={s.altContractId || ''} onChange={e => update({ altContractId: e.target.value })} placeholder="External system reference…" /></FR>
+              <FR label="Alt. Contract ID"><input className={fi} value={s.altContractId || ''} onChange={e => update({ altContractId: e.target.value.trim() === DARCHVILLE_SIGNATURE_CODE ? DARCHVILLE_SIGNATURE : e.target.value })} placeholder="External system reference…" /></FR>
               <FR label="Currency" missing={missingFields.has('Currency')}><select className={fi} value={s.currencyId || ''} onChange={e => update({ currencyId: e.target.value })}>
                 <option value="">Select currency…</option>{currencies.map(c => <option key={c.id} value={c.id}>{c.code || c.name}</option>)}</select></FR>
               {/* Don't clear _renewalManual on inception edit: a user who
