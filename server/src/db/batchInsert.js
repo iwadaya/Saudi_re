@@ -13,10 +13,10 @@
 // caller can skip the query entirely.
 //
 // Table/column names are interpolated (values are always parameterised),
-// so — like partialUpdate.js — they are validated against an identifier
-// allow-list and the helper throws on anything that isn't a plain
-// identifier. All call sites use hard-coded names, so this only ever
-// fires on a programming error, never on user input.
+// so they are validated against an identifier allow-list and the helper
+// throws on anything that isn't a plain identifier. All call sites use
+// hard-coded names, so this only ever fires on a programming error,
+// never on user input.
 
 const IDENT = /^[a-z_][a-z0-9_]*$/i;
 

@@ -42,7 +42,7 @@ const DEFAULT_TIMEOUT_MS = 8_000;
 const PLACE_ID_RE = /^[A-Za-z0-9_-]{1,255}$/;
 
 /** The configured API key, or '' when the feature is switched off. */
-export function placesApiKey() {
+function placesApiKey() {
   return String(process.env.GOOGLE_MAPS_API_KEY || '').trim();
 }
 

@@ -204,7 +204,7 @@ export function deductibleCredit({ mpl, deductible, G }) {
  * @param {number} attachment
  * @param {number} limit
  */
-export function bandLayerLoss(band, attachment, limit) {
+function bandLayerLoss(band, attachment, limit) {
   const exposure = num(band.exposure);
   const pml = Math.min(Math.max(num(band.pmlPct), 0), 1);
   const mpl = exposure * (pml > 0 ? pml : 1);

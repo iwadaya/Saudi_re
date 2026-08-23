@@ -195,7 +195,7 @@ export async function runImportJob({ jobId, entity, document, treatyCategory, ac
  * document row points at. Cloudinary URLs are fetched; local paths
  * are read via fs.
  */
-export async function loadDocumentBuffer(document) {
+async function loadDocumentBuffer(document) {
   const storagePath = document.storage_path;
   if (!storagePath) throw new Error(`Document ${document.document_id} has no storage_path`);
   if (isRemoteStoragePath(storagePath)) {

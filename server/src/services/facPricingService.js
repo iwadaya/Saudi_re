@@ -27,17 +27,12 @@ const REFERENCE_TTL_MS = 5 * 60 * 1000;
 /** @type {{at: number, data: object}|null} */
 let referenceCache = null;
 
-/** Test seam — reference data is memoised per process. */
-export function resetFacReferenceCache() {
-  referenceCache = null;
-}
-
 /**
  * Every reference table the schedule-property engine reads, in the exact
  * shape shared/fac expects. Mirrors what /api/fac/reference/* serves the
  * browser, so client and server feed the same formula the same numbers.
  */
-export async function loadFacReferenceData({ force = false } = {}) {
+async function loadFacReferenceData({ force = false } = {}) {
   if (!force && referenceCache && Date.now() - referenceCache.at < REFERENCE_TTL_MS) {
     return referenceCache.data;
   }
@@ -103,7 +98,7 @@ export async function loadFacReferenceData({ force = false } = {}) {
  * @param {string} familyCode
  * @param {Date|string|null} [asOf]
  */
-export async function loadCurveBands(familyCode, asOf = null) {
+async function loadCurveBands(familyCode, asOf = null) {
   if (!familyCode) return [];
   const { rows } = await pool.query(
     `SELECT b.min_exposure, b.max_exposure,
@@ -163,7 +158,7 @@ export async function loadCurveBands(familyCode, asOf = null) {
  * @param {Date|string|null} [asOf]
  * @returns {Promise<object>} the `rates` bag priceFacRiskFull passes to the family
  */
-export async function loadFamilyRates(familyCode, asOf = null) {
+async function loadFamilyRates(familyCode, asOf = null) {
   const effective = `effective_from <= COALESCE($1::date, CURRENT_DATE)
         AND (effective_to IS NULL OR effective_to >= COALESCE($1::date, CURRENT_DATE))`;
 
@@ -382,7 +377,7 @@ export async function loadFamilyRates(familyCode, asOf = null) {
  * @param {object} risk fac_risk row (needs rating_family, cedant_region)
  * @returns {Promise<{observations: Array, scope: string}>}
  */
-export async function loadBenchmarkObservations(risk) {
+async function loadBenchmarkObservations(risk) {
   if (!risk?.rating_family) return { observations: [], scope: null };
   const { rows } = await pool.query(
     `SELECT p.final_rate_per_mille AS rate_pm, r.uw_year
@@ -598,7 +593,7 @@ function withinTolerance(actual, expected) {
  * @param {object|null} computed  result of computeFacPricing
  * @returns {Array<{field: string, submitted: number, expected: number, diff: number}>}
  */
-export function verifyFacPricing(posted, computed) {
+function verifyFacPricing(posted, computed) {
   if (!posted || !computed?.ok || !computed.result) return [];
   const drifts = [];
   for (const [postedKey, computedKey] of VERIFIED_FIELDS) {
@@ -669,7 +664,7 @@ export async function verifyFacPricingSave(riskId, posted, requestId) {
  * @param {string} [requestId]
  * @returns {Promise<void>}
  */
-export async function recordDriftObservation(riskId, computed, drifts, requestId) {
+async function recordDriftObservation(riskId, computed, drifts, requestId) {
   try {
     // Only comparisons that actually happened are observations. A family with
     // no workbook produces no comparable fields, and counting it as agreement

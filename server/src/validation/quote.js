@@ -147,7 +147,7 @@ export const stripLargeCatSchema = z.object({
 }).passthrough();
 
 /** One large/cat-loss register row. All fields optional; the client may send partial rows. */
-export const lossRowSchema = z.object({
+const lossRowSchema = z.object({
   loss_id:                 optionalUuid,
   uw_year:                 uwYear,
   insured_name:            z.string().nullable().optional(),

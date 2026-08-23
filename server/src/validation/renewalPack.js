@@ -184,7 +184,7 @@ export const NonProportionalExtraction = z
 
 // ── helpers (exported for tests) ─────────────────────────────────────────────
 
-export const renewalPackSchemas = {
+const renewalPackSchemas = {
   proportional: ProportionalExtraction,
   non_proportional: NonProportionalExtraction,
 };

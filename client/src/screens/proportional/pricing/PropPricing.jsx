@@ -210,7 +210,6 @@ export default function PropPricing() {
           {showAggDrilldown && (
             <AggDrilldownModal
               contractId={cid}
-              shareRows={shareRows}
               onClose={() => setShowAggDrilldown(false)}
             />
           )}

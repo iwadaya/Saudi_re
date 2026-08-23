@@ -51,7 +51,7 @@ function ageMonths(uwYear, dateLike) {
 // matter because a stale/auto-set reported date (e.g. defaulted far in the
 // future) would otherwise compute an entry period past the triangle and never
 // strip; in that case we fall back to the loss-date proxy.
-export function resolveLossEntry(uwYear, dateOfLoss, reportedDate, rowMaxDev) {
+function resolveLossEntry(uwYear, dateOfLoss, reportedDate, rowMaxDev) {
   const lossAge = ageMonths(uwYear, dateOfLoss);
   const proxyEntry = lossAge == null ? 0 : lossAge + 3;
   const repAge = ageMonths(uwYear, reportedDate);

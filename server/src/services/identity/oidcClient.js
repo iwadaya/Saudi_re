@@ -22,7 +22,7 @@ let cached = null; // { key, config }
  * @param {object} [cfg] identity config (defaults to live env).
  * @returns {Promise<import('openid-client').Configuration>}
  */
-export async function getConfiguration(cfg = getIdentityConfig()) {
+async function getConfiguration(cfg = getIdentityConfig()) {
   if (!cfg.ssoEnabled) throw new Error('SSO is not enabled (IDENTITY_SSO_ENABLED).');
   if (!cfg.issuer || !cfg.clientId || !cfg.clientSecret) {
     throw new Error('SSO is misconfigured: IDENTITY_ISSUER, IDENTITY_CLIENT_ID and IDENTITY_CLIENT_SECRET are required.');

@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { Modal } from '../../../../components/ui';
 import AggregateAnalysisPanel from '../../../shared/aggregate_analysis/AggregateAnalysisPanel.jsx';
 
-export default function AggDrilldownModal({ contractId, shareRows: _shareRows, onClose }) {
+export default function AggDrilldownModal({ contractId, onClose }) {
   const [meta, setMeta] = useState(null);
 
   return (

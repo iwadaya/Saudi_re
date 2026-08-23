@@ -3,7 +3,7 @@ const TEST_NAME_KEY = 'UNIVERSE_TEST_NAME';
 
 // UUID of the seeded TUW demo user — all test sessions share this so FK
 // constraints (created_by_user_id, assigned_to_user_id) are satisfied.
-export const TEST_USER_UUID = '00000000-0000-0000-0000-000000000002';
+const TEST_USER_UUID = '00000000-0000-0000-0000-000000000002';
 
 export const ROLE_LABELS = {
   CE:'Chief Executive', CU:'Chief Underwriter',
@@ -56,12 +56,12 @@ export function clearSession() {
 // Test-access helpers are a DEV-only convenience and are compiled out of
 // production builds (import.meta.env.DEV is statically false in prod, so the
 // bodies dead-code-eliminate to a no-op).
-export function getTestName() {
+function getTestName() {
   if (!import.meta.env.DEV) return '';
   return safeStorage(s => s.getItem(TEST_NAME_KEY)) || '';
 }
 
-export function setTestName(name) {
+function setTestName(name) {
   if (!import.meta.env.DEV) return;
   safeStorage(s => s.setItem(TEST_NAME_KEY, name));
 }

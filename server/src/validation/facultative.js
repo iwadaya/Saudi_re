@@ -151,7 +151,7 @@ export const facRiskSaveSchema = z.object({
  * still accepted — the UI recomputes them from original × fx on save,
  * but the engine keeps SAR as the canonical aggregation unit.
  */
-export const facLocationSchema = z.object({
+const facLocationSchema = z.object({
   location_id:   optionalUuid,
   location_name: optionalText,
   address:       optionalText,
@@ -193,7 +193,7 @@ export const facLocationsSaveSchema = z.object({
  * exposure in whatever units the section's rating family uses, and stays
  * optional so a draft saves mid-entry.
  */
-export const facSectionSchema = z.object({
+const facSectionSchema = z.object({
   section_no:  z.preprocess((v) => {
     if (v === null || v === undefined || v === '') return undefined;
     const n = Number(v);
@@ -234,7 +234,7 @@ export const facSectionsSaveSchema = z.object({
  * means unlimited free reinstatements. Those are different from zero and
  * the difference is the price, so neither is defaulted.
  */
-export const facLayerSchema = z.object({
+const facLayerSchema = z.object({
   layer_no: z.preprocess((v) => {
     if (v === null || v === undefined || v === '') return undefined;
     const n = Number(v);
@@ -265,7 +265,7 @@ export const facLayersSaveSchema = z.object({
  * still needs a row — dropping the clean years is the commonest way a burn
  * rate comes out too high.
  */
-export const facExperienceBasisRowSchema = z.object({
+const facExperienceBasisRowSchema = z.object({
   loss_year:       z.preprocess((v) => {
     if (v === null || v === undefined || v === '') return undefined;
     const n = Number(v);
@@ -488,7 +488,7 @@ export const facRateVersionCreateSchema = z.object({
   owner_note:     optionalText,
 }).passthrough();
 
-export const facRateStageRowSchema = z.object({
+const facRateStageRowSchema = z.object({
   target_table: z.string().min(1).max(63),
   operation:    z.enum(['INSERT', 'UPDATE', 'DELETE']).default('INSERT'),
   row_key:      z.record(z.unknown()).optional(),

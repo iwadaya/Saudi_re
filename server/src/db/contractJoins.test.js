@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { contractContextJoins, contractContextColumns, contractContextListColumns } from './contractJoins.js';
+import { contractContextJoins } from './contractJoins.js';
 
 describe('contractContextJoins', () => {
   it('produces the canonical 5-table LEFT JOIN chain for contract', () => {
@@ -17,17 +17,5 @@ describe('contractContextJoins', () => {
     expect(sql).toMatch(/= q\.broker_id/);
     expect(sql).toMatch(/= q\.currency_id/);
     expect(sql).not.toMatch(/= c\./);
-  });
-
-  it('exposes the canonical column projection', () => {
-    expect(contractContextColumns).toContain('ced.company_name  AS cedant_name');
-    expect(contractContextColumns).toContain('bk.broker_name    AS broker_name');
-    expect(contractContextColumns).toContain('tt.treaty_type    AS treaty_type_name');
-  });
-
-  it('exposes a leaner list-projection for /quotes and /treaties indexes', () => {
-    expect(contractContextListColumns).toContain('ced.company_name  AS name');
-    expect(contractContextListColumns).toContain('cnt.country_name  AS country');
-    expect(contractContextListColumns).toContain('tt.treaty_type    AS treaty_type_name');
   });
 });

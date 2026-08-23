@@ -211,7 +211,7 @@ const PARENT_RESOLVERS = {
 };
 
 /** Map a nested resource to its owning {entityType, entityId} via a DB lookup. */
-export async function resolveParentEntity(resourceType, id) {
+async function resolveParentEntity(resourceType, id) {
   const r = PARENT_RESOLVERS[resourceType];
   if (!r || !id) return null;
   try {

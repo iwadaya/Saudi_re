@@ -29,7 +29,6 @@ import {
   layerIdx,
 } from '../state/pricingReducer';
 import type {
-  NpPricingState,
   PricingAction,
   Setter,
   LayersSlice,
@@ -187,16 +186,7 @@ export function useNpPricingState({
     },
   } = state;
 
-  const {
-    setLayers, setLeadSetup, setLocalStructureLayers, setTreatyMetrics, setCobUwLimits,
-    setExpiringEgnpi, setExpLayers, setNumExpLayers, setClientStructures, setQuoteStructures,
-    setApprovedStructures, setQuotePricing, setQuoteCobUwLimits, setCobToggles, setCobManual,
-    setSelectedCobs, setCobList, setOfferStatus, setOfferApprover, setOfferComment,
-    setLayerWrittenLines, setSignedLinePcts, setApprovalTrail, setEligibleApprovers,
-    setShowOfferModal, setLoading, setReinsurers, setPortfolioTreaties, setPortfolioExportRows,
-    setCedantProgLimit, setContractAgg100, setOtherCountryAgg, setLastUpdatedAt,
-    resetForContractSwitch,
-  } = setters;
+  const { resetForContractSwitch } = setters;
 
   // ── Derived pricing curve for quote mode ───────────────────────────────
   const quoteCurve = useMemo(

@@ -355,7 +355,7 @@ const egnpiHistoryPage = {
 
 // ── registry ────────────────────────────────────────────────────────────────
 
-export const PAGE_REGISTRY = {
+const PAGE_REGISTRY = {
   premium_history: makeTrianglePage('PREMIUM'),
   claims_history_paid: makeTrianglePage('CLAIMS_PAID'),
   claims_history_os: makeTrianglePage('CLAIMS_OS'),

@@ -1801,12 +1801,6 @@ router.get('/fac/analysis/:analysisId', asyncHandler(async (req, res) => {
   `, [analysisId]);
   if (!aRows.length) return res.status(404).json({ error: 'Analysis not found' });
 
-  // Hook for future tenant isolation. The current auth model gives
-  // every authenticated user access — so this 403 path is dead code
-  // right now but keeps the response shape stable for later.
-  // if (!userCanAccessRisk(req.user, aRows[0].fac_risk_id))
-  //   return res.status(403).json({ error: 'Forbidden' });
-
   const { rows: rRows } = await pool.query(`
     SELECT *
       FROM public.fac_ai_recommendation

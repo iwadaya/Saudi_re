@@ -47,10 +47,8 @@ import { toN } from './format.js';
 // and are the authority when the implementations below need to change.
 export {
   layerHit,
-  weightedAverage,
   annualiseLoss,
   rolFromAnnualLoss,
-  premiumFromRol,
   applyLoading,
 } from '../../../shared/pricingMath.js';
 
@@ -639,7 +637,7 @@ function interpOEP(points, loss) {
  * @param {unknown} value
  * @returns {string}
  */
-export function normCob(value) {
+function normCob(value) {
   return String(value ?? '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
