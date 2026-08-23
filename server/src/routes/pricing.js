@@ -25,6 +25,7 @@ import {
   arbiterDecisionController,
   approvalStateController,
   eligibleApproversController,
+  offerPermissionsController,
   arbiterOptionsController,
   markApprovedController,
   returnToUnderwriterController,
@@ -85,6 +86,7 @@ router.post('/treaties/:id/offer/peer-decision', loadTreatyCategory, assertBodyC
 router.post('/treaties/:id/offer/arbiter-decision', loadTreatyCategory, assertBodyCategoryMatches, asyncHandler(arbiterDecisionController));
 router.get('/treaties/:id/offer/approval-state', asyncHandler(approvalStateController));
 router.get('/treaties/:id/offer/eligible-approvers', asyncHandler(eligibleApproversController));
+router.get('/treaties/:id/offer/permissions', asyncHandler(offerPermissionsController));
 router.get('/treaties/:id/offer/arbiter-options', asyncHandler(arbiterOptionsController));
 router.post('/treaties/:id/offer/mark-approved', loadTreatyCategory, assertBodyCategoryMatches, asyncHandler(markApprovedController));
 router.post('/treaties/:id/offer/return-to-underwriter', loadTreatyCategory, assertBodyCategoryMatches, asyncHandler(returnToUnderwriterController));
