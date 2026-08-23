@@ -136,6 +136,12 @@ export default function FacHomeScreen() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => navigate('/fac/dashboard')} style={{
+            appearance: 'none', border: '1px solid rgba(148,163,184,0.18)',
+            background: 'rgba(8,16,40,0.45)', color: 'rgba(226,232,240,0.90)',
+            borderRadius: 999, padding: '7px 14px', fontSize: 11, fontWeight: 650,
+            cursor: 'pointer',
+          }}>Dashboard</button>
           <button onClick={() => setShowInsights(true)} style={{
             appearance: 'none', border: '1px solid rgba(148,163,184,0.18)',
             background: 'rgba(8,16,40,0.45)', color: 'rgba(226,232,240,0.90)',

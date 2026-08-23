@@ -1,7 +1,9 @@
 // client/src/screens/dashboard/dashboardExport.js
-// Client-side "Export to Excel" for the dashboard. Builds a branded Universe
+// Client-side "Export to Excel" for the dashboards. Builds a branded Universe
 // workbook off the data the active tab already loaded — no server endpoint —
-// so the file reflects the exact currency + filter state on screen.
+// so the file reflects the exact currency + filter state on screen. The treaty
+// dashboard uses the default manifest; the fac dashboard passes its own
+// manifest + label (facDashboardColumns.js) through the same writer.
 //
 // Reuses the shared XLSX theme (shared/universeXlsxTheme.js) and the lazy
 // exceljs wrapper (utils/excel → createWorkbook) that the portfolio export
@@ -16,6 +18,7 @@ const NUMFMT = {
   money: '#,##0',
   pct: '0.00%',
   mult: '0.00"×"',
+  permille: '0.00"‰"',   // fac rates are already in ‰ (1.23 → 1.23‰)
   int: '#,##0',
   text: null,
 };
@@ -117,20 +120,21 @@ function writePivot(ws, T, sheet, subtitle, piv, kind, rowLabel) {
   T.finishSheet(ws, hdr, 1);
 }
 
-function metaLines({ tabLabel, currency, filters, generated }) {
+function metaLines({ tabLabel, currency, filters, generated, notes }) {
   const f = filters || {};
   const parts = [];
   if (f.region) parts.push(`Region: ${f.region}`);
   if (f.uwYear) parts.push(`UW Year: ${f.uwYear}`);
   if (f.month) parts.push(`Month: ${f.month}`);
   if (f.treatyType) parts.push(`Treaty Type: ${f.treatyType}`);
+  if (f.facType) parts.push(`FAC Type: ${f.facType}`);
   if (f.yearsBack) parts.push(`Years back: ${f.yearsBack}`);
   return [
     ['Tab', tabLabel],
     ['Currency', currency],
     ['Generated', generated.toLocaleString()],
     ['Filters', parts.length ? parts.join('   ·   ') : 'All'],
-    ['Notes', 'Raw numeric values; balance = limit ÷ premium; blank cells are N/A.'],
+    ['Notes', notes || 'Raw numeric values; balance = limit ÷ premium; blank cells are N/A.'],
   ];
 }
 
@@ -142,10 +146,15 @@ function blockDesc(block) {
 
 /**
  * Build and download the active tab's workbook.
+ * `manifests` / `label` / `kpiRows` / `notes` default to the treaty
+ * dashboard's; the fac dashboard passes its own.
  * @returns {Promise<boolean>} false if the tab had nothing to export.
  */
-export async function exportDashboardTab({ tabId, tabLabel, data, currency, filters }) {
-  const manifest = DASHBOARD_EXPORT_MANIFEST[tabId] || [];
+export async function exportDashboardTab({
+  tabId, tabLabel, data, currency, filters,
+  manifests = DASHBOARD_EXPORT_MANIFEST, label = 'Dashboard', kpiRows = KPI_ROWS, notes,
+}) {
+  const manifest = manifests[tabId] || [];
   const blocks = [];
   for (const b of manifest) {
     const resolved = resolveBlock(b, data);
@@ -159,20 +168,20 @@ export async function exportDashboardTab({ tabId, tabLabel, data, currency, filt
 
   const date = todayIso();
   const meta = {
-    title: `Dashboard — ${tabLabel}`,
+    title: `${label} — ${tabLabel}`,
     date,
-    lines: metaLines({ tabLabel, currency, filters, generated: new Date() }),
+    lines: metaLines({ tabLabel, currency, filters, generated: new Date(), notes }),
   };
   T.coverSheet(workbook, blocks.map((b) => ({ name: b.sheet, desc: blockDesc(b) })), meta);
 
   const subtitle = `${tabLabel} · ${currency}`;
   for (const b of blocks) {
     const ws = workbook.addWorksheet(b.sheet);
-    if (b.type === 'kpis') writeKpis(ws, T, b.sheet, subtitle, b.resolved, b.cols || KPI_ROWS);
+    if (b.type === 'kpis') writeKpis(ws, T, b.sheet, subtitle, b.resolved, b.cols || kpiRows);
     else if (b.type === 'pivot') writePivot(ws, T, b.sheet, subtitle, b.resolved, b.kind, b.rowLabel || 'Row');
     else writeRows(ws, T, b.sheet, subtitle, b.cols, b.resolved); // table | series
   }
 
-  await wb.writeFile(`Universe_Dashboard_${tabId}_${currency}_${date}.xlsx`);
+  await wb.writeFile(`Universe_${label.replace(/[^A-Za-z0-9]+/g, '')}_${tabId}_${currency}_${date}.xlsx`);
   return true;
 }

@@ -14,8 +14,9 @@ const router = Router();
 // Referenced by both the per-tab queries and the reusable units/unitsLob CTE
 // builders, so prop vs NP metrics line up no matter which query computes them.
 
-// Region bucketing on the joined country row (alias cnt).
-const regionBucket = `CASE
+// Region bucketing on the joined country row (alias cnt). Shared with the
+// facultative dashboard (facDashboard.js) so both books bucket identically.
+export const regionBucket = `CASE
     WHEN cnt.region IN ('GCC','Levant','North Africa') THEN 'Middle East'
     WHEN cnt.region IN ('Sub-Saharan Africa')          THEN 'Africa'
     WHEN cnt.region IN ('South Asia','Southeast Asia','East Asia & Pacific') THEN 'Asia'
