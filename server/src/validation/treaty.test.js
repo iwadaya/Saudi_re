@@ -122,9 +122,27 @@ describe('treatyLossParticipationSchema — slides', () => {
     })).toThrow(/greater than/);
   });
 
-  it('rejects pct values above 100', () => {
+  it('accepts loss-ratio corridors above 100% (LP bands like 120–150% are routine)', () => {
     expect(() => treatyLossParticipationSchema.parse({
       slides: [{ min_lr: 120, max_lr: 150, share: 50 }],
+    })).not.toThrow();
+    expect(() => treatyLossParticipationSchema.parse({
+      min_loss_ratio_pct: 80,
+      max_loss_ratio_pct: 130,
+      reinsurer_share_pct: 50,
+      slides: [
+        { min_lr: 80, max_lr: 110, share: 50 },
+        { min_lr: 110, max_lr: 130, share: 25 },
+      ],
+    })).not.toThrow();
+  });
+
+  it('still rejects absurd loss ratios (>1000) and shares above 100', () => {
+    expect(() => treatyLossParticipationSchema.parse({
+      slides: [{ min_lr: 120, max_lr: 1500, share: 50 }],
+    })).toThrow();
+    expect(() => treatyLossParticipationSchema.parse({
+      slides: [{ min_lr: 70, max_lr: 120, share: 150 }],
     })).toThrow();
   });
 
