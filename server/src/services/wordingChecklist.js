@@ -123,38 +123,52 @@ export async function saveWordingChecklist(pool, entity, inputItems = [], option
   const items = Array.isArray(inputItems) ? inputItems : [];
   if (!items.length) return getWordingChecklist(pool, entity);
 
+  // Normalize up front, last-write-wins on duplicate keys (the old
+  // per-item delete+insert loop had the same semantics), so the whole
+  // save is two round-trips instead of 2N inside the transaction.
+  const byKey = new Map();
+  for (const item of items) {
+    const itemKey = String(item?.item_key || item?.key || '').trim();
+    if (!itemKey) continue;
+    byKey.set(itemKey, {
+      itemKey,
+      status: normalizeStatus(item?.status),
+      source: normalizeSource(item?.source || options.source || 'manual'),
+      evidence: cleanEvidence(item?.evidence),
+      documentId: item?.document_id || options.documentId || null,
+      analysisRunId: item?.analysis_run_id || options.analysisRunId || null,
+    });
+  }
+  const rows = [...byKey.values()];
+  if (!rows.length) return getWordingChecklist(pool, entity);
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    for (const item of items) {
-      const itemKey = String(item?.item_key || item?.key || '').trim();
-      if (!itemKey) continue;
-      const status = normalizeStatus(item?.status);
-      const source = normalizeSource(item?.source || options.source || 'manual');
-      const evidence = cleanEvidence(item?.evidence);
-      await client.query(
-        `DELETE FROM public.contract_wording_checklist
-          WHERE ${idColumn} = $1
-            AND item_key = $2`,
-        [id, itemKey],
-      );
-      await client.query(
-        `INSERT INTO public.contract_wording_checklist
-          (contract_id, quote_id, item_key, status, source, evidence, checked_at, checked_by_user_id, document_id, analysis_run_id)
-         VALUES ($1, $2, $3, $4, $5, $6, now(), $7, $8, $9)`,
-        [
-          type === 'contract' ? id : null,
-          type === 'quote' ? id : null,
-          itemKey,
-          status,
-          source,
-          evidence,
-          actorUserId,
-          item?.document_id || options.documentId || null,
-          item?.analysis_run_id || options.analysisRunId || null,
-        ],
-      );
-    }
+    await client.query(
+      `DELETE FROM public.contract_wording_checklist
+        WHERE ${idColumn} = $1
+          AND item_key = ANY($2::text[])`,
+      [id, rows.map((r) => r.itemKey)],
+    );
+    await client.query(
+      `INSERT INTO public.contract_wording_checklist
+        (contract_id, quote_id, item_key, status, source, evidence, checked_at, checked_by_user_id, document_id, analysis_run_id)
+       SELECT $1, $2, u.item_key, u.status, u.source, u.evidence, now(), $3, u.document_id, u.analysis_run_id
+         FROM unnest($4::text[], $5::text[], $6::text[], $7::text[], $8::uuid[], $9::uuid[])
+              AS u(item_key, status, source, evidence, document_id, analysis_run_id)`,
+      [
+        type === 'contract' ? id : null,
+        type === 'quote' ? id : null,
+        actorUserId,
+        rows.map((r) => r.itemKey),
+        rows.map((r) => r.status),
+        rows.map((r) => r.source),
+        rows.map((r) => r.evidence),
+        rows.map((r) => r.documentId),
+        rows.map((r) => r.analysisRunId),
+      ],
+    );
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});

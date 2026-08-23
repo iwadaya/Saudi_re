@@ -6,6 +6,7 @@ import multer from 'multer';
 import fs, { promises as fsp } from 'fs';
 import { pool } from '../db/pool.js';
 import { asyncHandler, numOrNull, dateOrNull, assertExists } from '../helpers.js';
+import { buildBatchInsert } from '../db/batchInsert.js';
 import { validateBody } from '../lib/validate.js';
 import { assertParentEntityUnchanged, touchParentEntity } from '../lib/parentEntityPersistence.js';
 import {
@@ -393,27 +394,27 @@ router.put('/fac/risks/:id/locations', validateBody(facLocationsSaveSchema), asy
     await assertExists(client, 'public.fac_risk', 'fac_risk_id', riskId, 'Risk');
     await assertParentEntityUnchanged(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await client.query(`DELETE FROM public.fac_location WHERE fac_risk_id = $1`, [riskId]);
-    for (let i = 0; i < locations.length; i++) {
-      const l = locations[i];
-      await client.query(`
-        INSERT INTO public.fac_location (
-          fac_risk_id, location_name, address, latitude, longitude,
-          cresta_zone, country_id, pd_si, bi_si, sort_order,
-          occupancy_code, pd_pml_pct, bi_pml_pct,
-          original_ccy, original_pd_si, original_bi_si, fx_to_sar,
-          carrier_pd_share_pct, carrier_bi_share_pct
-        )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
-      `, [
-        riskId, l.location_name || null, l.address || null,
+    const locationsInsert = buildBatchInsert({
+      table: 'public.fac_location',
+      columns: [
+        'fac_risk_id', 'location_name', 'address', 'latitude', 'longitude',
+        'cresta_zone', 'country_id', 'pd_si', 'bi_si', 'sort_order',
+        'occupancy_code', 'pd_pml_pct', 'bi_pml_pct',
+        'original_ccy', 'original_pd_si', 'original_bi_si', 'fx_to_sar',
+        'carrier_pd_share_pct', 'carrier_bi_share_pct',
+      ],
+      rows: locations.map((l, i) => [
+        l.location_name || null, l.address || null,
         numOrNull(l.latitude), numOrNull(l.longitude),
         l.cresta_zone || null, l.country_id || null,
         numOrNull(l.pd_si), numOrNull(l.bi_si), i,
         numOrNull(l.occupancy_code), numOrNull(l.pd_pml_pct), numOrNull(l.bi_pml_pct),
         l.original_ccy || null, numOrNull(l.original_pd_si), numOrNull(l.original_bi_si), numOrNull(l.fx_to_sar),
         numOrNull(l.carrier_pd_share_pct), numOrNull(l.carrier_bi_share_pct),
-      ]);
-    }
+      ]),
+      leadingId: riskId,
+    });
+    if (locationsInsert) await client.query(locationsInsert.sql, locationsInsert.params);
     await touchParentEntity(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId });
     await writeFacAuditEvent({ facRiskId: riskId, eventType: 'FAC_LOCATIONS_SAVED', actor: actorLabel(req), payload: { location_count: locations.length }, client });
     await client.query('COMMIT');
@@ -466,8 +467,11 @@ router.put('/fac/risks/:id/sections', validateBody(facSectionsSaveSchema), async
     await assertExists(client, 'public.fac_risk', 'fac_risk_id', riskId, 'Risk');
     await assertParentEntityUnchanged(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await client.query(`DELETE FROM public.fac_risk_section WHERE fac_risk_id = $1`, [riskId]);
-    for (let i = 0; i < sections.length; i++) {
-      const s = sections[i];
+    // One INSERT..SELECT over unnest instead of a round-trip per section.
+    // The JOIN keeps the original semantics: rating_family is resolved from
+    // fac_class_of_business, and a section naming an unknown fac_cob_id is
+    // silently skipped exactly as the per-row WHERE used to do.
+    if (sections.length) {
       await client.query(`
         INSERT INTO public.fac_risk_section (
           fac_risk_id, section_no, fac_cob_id, rating_family,
@@ -475,16 +479,32 @@ router.put('/fac/risks/:id/sections', validateBody(facSectionsSaveSchema), async
           limit_amount, attachment, deductible, deductible_basis,
           currency_id, exposure_detail, sort_order
         )
-        SELECT $1, $2, $3, c.rating_family,
-               $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13
-          FROM public.fac_class_of_business c
-         WHERE c.fac_cob_id = $3
+        SELECT $1, u.section_no, u.fac_cob_id, c.rating_family,
+               u.sum_insured, u.exposure_base, u.exposure_unit,
+               u.limit_amount, u.attachment, u.deductible, u.deductible_basis,
+               u.currency_id, u.exposure_detail, u.sort_order
+          FROM unnest(
+                 $2::int[], $3::uuid[], $4::numeric[], $5::numeric[], $6::text[],
+                 $7::numeric[], $8::numeric[], $9::numeric[], $10::text[],
+                 $11::uuid[], $12::jsonb[], $13::int[]
+               ) AS u(section_no, fac_cob_id, sum_insured, exposure_base, exposure_unit,
+                      limit_amount, attachment, deductible, deductible_basis,
+                      currency_id, exposure_detail, sort_order)
+          JOIN public.fac_class_of_business c ON c.fac_cob_id = u.fac_cob_id
       `, [
-        riskId, s.section_no, s.fac_cob_id,
-        numOrNull(s.sum_insured), numOrNull(s.exposure_base), s.exposure_unit || null,
-        numOrNull(s.limit_amount), numOrNull(s.attachment),
-        numOrNull(s.deductible), s.deductible_basis || null,
-        s.currency_id || null, JSON.stringify(s.exposure_detail || {}), i,
+        riskId,
+        sections.map((s) => s.section_no),
+        sections.map((s) => s.fac_cob_id),
+        sections.map((s) => numOrNull(s.sum_insured)),
+        sections.map((s) => numOrNull(s.exposure_base)),
+        sections.map((s) => s.exposure_unit || null),
+        sections.map((s) => numOrNull(s.limit_amount)),
+        sections.map((s) => numOrNull(s.attachment)),
+        sections.map((s) => numOrNull(s.deductible)),
+        sections.map((s) => s.deductible_basis || null),
+        sections.map((s) => s.currency_id || null),
+        sections.map((s) => JSON.stringify(s.exposure_detail || {})),
+        sections.map((_, i) => i),
       ]);
     }
     await touchParentEntity(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId });
@@ -549,22 +569,24 @@ router.put('/fac/risks/:id/layers', validateBody(facLayersSaveSchema), asyncHand
       ifUnmodifiedSince: req.headers['if-unmodified-since'],
     });
     await client.query('DELETE FROM public.fac_layer WHERE fac_risk_id = $1', [riskId]);
-    for (const l of layers) {
-      await client.query(`
-        INSERT INTO public.fac_layer (
-          fac_risk_id, section_id, layer_no, attachment, limit_amount,
-          our_share_pct, reinstatements, reinstatement_terms, aggregate_limit,
-          loss_cost, rol_pct, premium, notes
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13)
-      `, [
-        riskId, l.section_id || null, l.layer_no,
+    const layersInsert = buildBatchInsert({
+      table: 'public.fac_layer',
+      columns: [
+        'fac_risk_id', 'section_id', 'layer_no', 'attachment', 'limit_amount',
+        'our_share_pct', 'reinstatements', 'reinstatement_terms', 'aggregate_limit',
+        'loss_cost', 'rol_pct', 'premium', 'notes',
+      ],
+      rows: layers.map((l) => [
+        l.section_id || null, l.layer_no,
         numOrNull(l.attachment) ?? 0, numOrNull(l.limit_amount),
         numOrNull(l.our_share_pct), numOrNull(l.reinstatements),
         JSON.stringify(l.reinstatement_terms || []),
         numOrNull(l.aggregate_limit), numOrNull(l.loss_cost),
         numOrNull(l.rol_pct), numOrNull(l.premium), l.notes || null,
-      ]);
-    }
+      ]),
+      leadingId: riskId,
+    });
+    if (layersInsert) await client.query(layersInsert.sql, layersInsert.params);
     await touchParentEntity(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId });
     await writeFacAuditEvent({
       facRiskId: riskId,
@@ -692,16 +714,17 @@ router.put('/fac/risks/:id/losses', validateBody(facLossesSaveSchema), asyncHand
     await assertExists(client, 'public.fac_risk', 'fac_risk_id', riskId, 'Risk');
     await assertParentEntityUnchanged(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await client.query(`DELETE FROM public.fac_loss_history WHERE fac_risk_id = $1`, [riskId]);
-    for (const l of losses) {
-      await client.query(`
-        INSERT INTO public.fac_loss_history (fac_risk_id, loss_year, loss_date, loss_description,
-          cause_of_loss, fgu_paid, fgu_outstanding, ri_paid, ri_outstanding,
-          mitigation_measures, is_open,
-          indexed_incurred, as_if_incurred, development_factor,
-          exclude_from_rating, exclusion_reason)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-      `, [
-        riskId, numOrNull(l.loss_year), dateOrNull(l.loss_date), l.loss_description || null,
+    const lossesInsert = buildBatchInsert({
+      table: 'public.fac_loss_history',
+      columns: [
+        'fac_risk_id', 'loss_year', 'loss_date', 'loss_description',
+        'cause_of_loss', 'fgu_paid', 'fgu_outstanding', 'ri_paid', 'ri_outstanding',
+        'mitigation_measures', 'is_open',
+        'indexed_incurred', 'as_if_incurred', 'development_factor',
+        'exclude_from_rating', 'exclusion_reason',
+      ],
+      rows: losses.map((l) => [
+        numOrNull(l.loss_year), dateOrNull(l.loss_date), l.loss_description || null,
         l.cause_of_loss || null, numOrNull(l.fgu_paid), numOrNull(l.fgu_outstanding),
         numOrNull(l.ri_paid), numOrNull(l.ri_outstanding),
         l.mitigation_measures || null, l.is_open ?? true,
@@ -711,8 +734,10 @@ router.put('/fac/risks/:id/losses', validateBody(facLossesSaveSchema), asyncHand
         numOrNull(l.indexed_incurred), numOrNull(l.as_if_incurred),
         numOrNull(l.development_factor),
         l.exclude_from_rating ?? false, l.exclusion_reason || null,
-      ]);
-    }
+      ]),
+      leadingId: riskId,
+    });
+    if (lossesInsert) await client.query(lossesInsert.sql, lossesInsert.params);
     await touchParentEntity(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId });
     await writeFacAuditEvent({ facRiskId: riskId, eventType: 'FAC_LOSSES_SAVED', actor: actorLabel(req), payload: { loss_count: losses.length }, client });
     await client.query('COMMIT');
@@ -774,19 +799,20 @@ router.put('/fac/risks/:id/experience', validateBody(facExperienceSaveSchema), a
     await assertExists(client, 'public.fac_risk', 'fac_risk_id', riskId, 'Risk');
     await assertParentEntityUnchanged(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await client.query(`DELETE FROM public.fac_experience_basis WHERE fac_risk_id = $1`, [riskId]);
-    for (const r of rows) {
-      await client.query(
-        `INSERT INTO public.fac_experience_basis
-           (fac_risk_id, loss_year, exposure_base, exposure_unit, premium,
-            rate_change_pct, claim_count, notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [
-          riskId, r.loss_year, numOrNull(r.exposure_base), r.exposure_unit || null,
-          numOrNull(r.premium), numOrNull(r.rate_change_pct),
-          numOrNull(r.claim_count), r.notes || null,
-        ],
-      );
-    }
+    const basisInsert = buildBatchInsert({
+      table: 'public.fac_experience_basis',
+      columns: [
+        'fac_risk_id', 'loss_year', 'exposure_base', 'exposure_unit', 'premium',
+        'rate_change_pct', 'claim_count', 'notes',
+      ],
+      rows: rows.map((r) => [
+        r.loss_year, numOrNull(r.exposure_base), r.exposure_unit || null,
+        numOrNull(r.premium), numOrNull(r.rate_change_pct),
+        numOrNull(r.claim_count), r.notes || null,
+      ]),
+      leadingId: riskId,
+    });
+    if (basisInsert) await client.query(basisInsert.sql, basisInsert.params);
     await client.query(
       `UPDATE public.fac_risk
           SET severity_trend_pct = $2, experience_years = $3, experience_notes = $4
@@ -1439,15 +1465,20 @@ router.post('/fac/risks/:id/clauses-checklist', asyncHandler(async (req, res) =>
   try {
     await client.query('BEGIN');
     await assertParentEntityUnchanged(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
-    for (const it of items) {
-      await client.query(`
-        INSERT INTO public.fac_clauses_checklist (fac_risk_id, clause_code, is_checked, comments)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (fac_risk_id, clause_code) DO UPDATE
+    // One multi-row upsert. A single INSERT..ON CONFLICT cannot touch the
+    // same (fac_risk_id, clause_code) twice, so dedupe last-wins first —
+    // the same end state the old per-row loop produced.
+    const byCode = new Map(items.map((it) => [it.clause_code, it]));
+    const clausesUpsert = buildBatchInsert({
+      table: 'public.fac_clauses_checklist',
+      columns: ['fac_risk_id', 'clause_code', 'is_checked', 'comments'],
+      rows: [...byCode.values()].map((it) => [it.clause_code, Boolean(it.is_checked), it.comments || null]),
+      leadingId: id,
+      conflict: `ON CONFLICT (fac_risk_id, clause_code) DO UPDATE
           SET is_checked = EXCLUDED.is_checked,
-              comments   = EXCLUDED.comments
-      `, [id, it.clause_code, Boolean(it.is_checked), it.comments || null]);
-    }
+              comments   = EXCLUDED.comments`,
+    });
+    if (clausesUpsert) await client.query(clausesUpsert.sql, clausesUpsert.params);
     await touchParentEntity(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id });
     await writeFacAuditEvent({ facRiskId: id, eventType: 'FAC_CLAUSES_SAVED', actor: actorLabel(req), payload: { item_count: items.length }, client });
     await client.query('COMMIT');

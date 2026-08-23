@@ -25,6 +25,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { logger } from '../../lib/logger.js';
+import { buildBatchInsert } from '../../db/batchInsert.js';
 
 function assertEntity(entity) {
   if (!entity || (entity.type !== 'quote' && entity.type !== 'contract') || !entity.id) {
@@ -107,28 +108,32 @@ const crestaPage = {
     const fk = entity.type === 'quote' ? 'quote_id' : 'contract_id';
     await client.query(`DELETE FROM ${table} WHERE ${fk}=$1`, [entity.id]);
     const rows = (state?.rows || []).filter((r) => r && r.zone_id);
-    for (const r of rows) {
-      await client.query(
-        `INSERT INTO ${table}
-           (${fk}, country_id, zone_id, zone_name,
-            eq_agg, ws_agg, flood_agg, srcc_agg, others_agg,
-            treaty_type, cob_id, cob_name,
-            residential_bldg_pct, commercial_bldg_pct, commercial_cont_pct,
-            industrial_bldg_pct, industrial_cont_pct)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
-        [
-          entity.id, r.country_id || null, r.zone_id, r.zone_name || null,
-          numOrZero(r.eq_agg), numOrZero(r.ws_agg), numOrZero(r.flood_agg),
-          numOrZero(r.srcc_agg), numOrZero(r.others_agg),
-          r.treaty_type || 'Both', r.cob_id || null, r.cob_name || null,
-          numOrNullPct(r.residential_bldg_pct, 30),
-          numOrNullPct(r.commercial_bldg_pct, 25),
-          numOrNullPct(r.commercial_cont_pct, 15),
-          numOrNullPct(r.industrial_bldg_pct, 20),
-          numOrNullPct(r.industrial_cont_pct, 10),
-        ],
-      );
-    }
+    // CRESTA imports can carry hundreds of zones — one batched INSERT
+    // instead of a round-trip per zone (same rationale as the triangle
+    // page's unnest write above).
+    const crestaInsert = buildBatchInsert({
+      table,
+      columns: [
+        fk, 'country_id', 'zone_id', 'zone_name',
+        'eq_agg', 'ws_agg', 'flood_agg', 'srcc_agg', 'others_agg',
+        'treaty_type', 'cob_id', 'cob_name',
+        'residential_bldg_pct', 'commercial_bldg_pct', 'commercial_cont_pct',
+        'industrial_bldg_pct', 'industrial_cont_pct',
+      ],
+      rows: rows.map((r) => [
+        r.country_id || null, r.zone_id, r.zone_name || null,
+        numOrZero(r.eq_agg), numOrZero(r.ws_agg), numOrZero(r.flood_agg),
+        numOrZero(r.srcc_agg), numOrZero(r.others_agg),
+        r.treaty_type || 'Both', r.cob_id || null, r.cob_name || null,
+        numOrNullPct(r.residential_bldg_pct, 30),
+        numOrNullPct(r.commercial_bldg_pct, 25),
+        numOrNullPct(r.commercial_cont_pct, 15),
+        numOrNullPct(r.industrial_bldg_pct, 20),
+        numOrNullPct(r.industrial_cont_pct, 10),
+      ]),
+      leadingId: entity.id,
+    });
+    if (crestaInsert) await client.query(crestaInsert.sql, crestaInsert.params);
   },
   applies: () => true,
 };
@@ -267,31 +272,32 @@ const npStructurePage = {
     const fk = entity.type === 'quote' ? 'quote_id' : 'contract_id';
     await client.query(`DELETE FROM ${table} WHERE ${fk}=$1`, [entity.id]);
     const layers = state?.layers || [];
-    for (const l of layers) {
-      await client.query(
-        `INSERT INTO ${table}
-           (${fk}, layer_number, attachment, layer_limit, aggregate_limit, egnpi,
-            earned_premium, rate, rol, num_reinstatements, reinstatement_pct,
-            annual_agg_deductible, peril_scope, mdp, mdp_pct)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-        [
-          entity.id, Number(l.layer_number) || 1,
-          numOrNullCoerce(l.attachment),
-          numOrNullCoerce(l.layer_limit),
-          numOrNullCoerce(l.aggregate_limit),
-          numOrNullCoerce(l.egnpi),
-          numOrNullCoerce(l.earned_premium),
-          numOrNullCoerce(l.rate),
-          numOrNullCoerce(l.rol),
-          l.num_reinstatements == null ? null : Number(l.num_reinstatements),
-          numOrNullCoerce(l.reinstatement_pct),
-          numOrNullCoerce(l.annual_agg_deductible),
-          l.peril_scope || 'BOTH',
-          numOrNullCoerce(l.mdp),
-          numOrNullCoerce(l.mdp_pct),
-        ],
-      );
-    }
+    const layersInsert = buildBatchInsert({
+      table,
+      columns: [
+        fk, 'layer_number', 'attachment', 'layer_limit', 'aggregate_limit', 'egnpi',
+        'earned_premium', 'rate', 'rol', 'num_reinstatements', 'reinstatement_pct',
+        'annual_agg_deductible', 'peril_scope', 'mdp', 'mdp_pct',
+      ],
+      rows: layers.map((l) => [
+        Number(l.layer_number) || 1,
+        numOrNullCoerce(l.attachment),
+        numOrNullCoerce(l.layer_limit),
+        numOrNullCoerce(l.aggregate_limit),
+        numOrNullCoerce(l.egnpi),
+        numOrNullCoerce(l.earned_premium),
+        numOrNullCoerce(l.rate),
+        numOrNullCoerce(l.rol),
+        l.num_reinstatements == null ? null : Number(l.num_reinstatements),
+        numOrNullCoerce(l.reinstatement_pct),
+        numOrNullCoerce(l.annual_agg_deductible),
+        l.peril_scope || 'BOTH',
+        numOrNullCoerce(l.mdp),
+        numOrNullCoerce(l.mdp_pct),
+      ]),
+      leadingId: entity.id,
+    });
+    if (layersInsert) await client.query(layersInsert.sql, layersInsert.params);
   },
   applies: (cat) => cat === 'NON_PROPORTIONAL',
 };
@@ -326,29 +332,35 @@ const egnpiHistoryPage = {
     const table = entity.type === 'quote' ? 'public.quote_np_historical_performance' : 'public.contract_np_historical_performance';
     const fk = entity.type === 'quote' ? 'quote_id' : 'contract_id';
     await client.query(`DELETE FROM ${table} WHERE ${fk}=$1`, [entity.id]);
-    const rows = (state?.rows || []).filter((r) => Number.isFinite(Number(r.uw_year)));
-    for (const r of rows) {
-      await client.query(
-        `INSERT INTO ${table}
-           (${fk}, uw_year, premiums, claims, egnpi, result, loss_ratio, expense_ratio, combined_ratio)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT (${fk}, uw_year)
+    // Dedupe last-wins per uw_year: one multi-row upsert cannot touch the
+    // same (fk, uw_year) twice, and the old per-row loop's end state was
+    // last-wins anyway.
+    const byYear = new Map(
+      (state?.rows || [])
+        .filter((r) => Number.isFinite(Number(r.uw_year)))
+        .map((r) => [Number(r.uw_year), r]),
+    );
+    const egnpiInsert = buildBatchInsert({
+      table,
+      columns: [fk, 'uw_year', 'premiums', 'claims', 'egnpi', 'result', 'loss_ratio', 'expense_ratio', 'combined_ratio'],
+      rows: [...byYear.values()].map((r) => [
+        Number(r.uw_year),
+        numOrNullCoerce(r.premiums),
+        numOrNullCoerce(r.claims),
+        numOrNullCoerce(r.egnpi),
+        numOrNullCoerce(r.result),
+        numOrNullCoerce(r.loss_ratio),
+        numOrNullCoerce(r.expense_ratio),
+        numOrNullCoerce(r.combined_ratio),
+      ]),
+      leadingId: entity.id,
+      conflict: `ON CONFLICT (${fk}, uw_year)
          DO UPDATE SET premiums=EXCLUDED.premiums, claims=EXCLUDED.claims, egnpi=EXCLUDED.egnpi,
                        result=EXCLUDED.result, loss_ratio=EXCLUDED.loss_ratio,
                        expense_ratio=EXCLUDED.expense_ratio, combined_ratio=EXCLUDED.combined_ratio,
                        updated_at=now()`,
-        [
-          entity.id, Number(r.uw_year),
-          numOrNullCoerce(r.premiums),
-          numOrNullCoerce(r.claims),
-          numOrNullCoerce(r.egnpi),
-          numOrNullCoerce(r.result),
-          numOrNullCoerce(r.loss_ratio),
-          numOrNullCoerce(r.expense_ratio),
-          numOrNullCoerce(r.combined_ratio),
-        ],
-      );
-    }
+    });
+    if (egnpiInsert) await client.query(egnpiInsert.sql, egnpiInsert.params);
   },
   applies: (cat) => cat === 'NON_PROPORTIONAL',
 };
@@ -481,23 +493,25 @@ async function writeContractLossReport(client, contractId, kind, records) {
     reportId = ins[0].report_id;
   }
   await client.query(`DELETE FROM ${childTable} WHERE report_id=$1`, [reportId]);
-  for (const r of records) {
-    await client.query(
-      `INSERT INTO ${childTable}
-         (loss_id, report_id, uw_year, insured_name, loss_name, date_of_loss,
-          class_of_business, paid, os, incurred, is_selected)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)`,
-      [
-        randomUUID(), reportId,
-        r.uwYear == null ? null : Number(r.uwYear),
-        r.insuredName || null,
-        r.description || null,
-        r.date || null,
-        r.classOfBusiness || null,
-        numOrNullCoerce(r.paid),
-        numOrNullCoerce(r.os),
-        numOrNullCoerce(r.incurred),
-      ],
-    );
-  }
+  const lossesInsert = buildBatchInsert({
+    table: childTable,
+    columns: [
+      'report_id', 'loss_id', 'uw_year', 'insured_name', 'loss_name', 'date_of_loss',
+      'class_of_business', 'paid', 'os', 'incurred', 'is_selected',
+    ],
+    rows: records.map((r) => [
+      randomUUID(),
+      r.uwYear == null ? null : Number(r.uwYear),
+      r.insuredName || null,
+      r.description || null,
+      r.date || null,
+      r.classOfBusiness || null,
+      numOrNullCoerce(r.paid),
+      numOrNullCoerce(r.os),
+      numOrNullCoerce(r.incurred),
+      true,
+    ]),
+    leadingId: reportId,
+  });
+  if (lossesInsert) await client.query(lossesInsert.sql, lossesInsert.params);
 }

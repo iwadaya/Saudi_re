@@ -513,10 +513,13 @@ export async function computeFacPricing(riskId, overrides = {}) {
 
   // Phase 2 inputs. Each is optional — a method with no data reports itself
   // unavailable and the blend carries on with the ones that do have data.
-  const [curveBands, benchmark, rates] = await Promise.all([
+  // The rate-table version only needs the inception date, so it rides the
+  // same round-trip instead of serializing after the pricing step.
+  const [curveBands, benchmark, rates, rateTableVersion] = await Promise.all([
     loadCurveBands(risk.rating_family, risk.inception_date),
     loadBenchmarkObservations(risk),
     loadFamilyRates(risk.rating_family, risk.inception_date),
+    getActiveRateTableVersion(risk.inception_date),
   ]);
 
   const storedWeights = stored.blend_weights && typeof stored.blend_weights === 'object'
@@ -549,7 +552,7 @@ export async function computeFacPricing(riskId, overrides = {}) {
 
   return {
     ...priced,
-    rate_table_version: await getActiveRateTableVersion(risk.inception_date),
+    rate_table_version: rateTableVersion,
     inputs,
   };
 }

@@ -1,6 +1,7 @@
 // server/src/routes/lookups.js — Reference data endpoints aligned to actual schema
 import { Router } from "express";
 import { pool } from "../db/pool.js";
+import { getCobColumnNames, hasPricingMarginColumns } from '../lib/cobCols.js';
 import { asyncHandler } from "../helpers.js";
 import { invalidateJsonCache, jsonCache, sendCached } from "../middleware/httpCache.js";
 const router = Router();
@@ -34,19 +35,12 @@ router.get("/cedants", asyncHandler(async (req, res) => {
 router.get("/cedants/:cedantId/cedant-summary", asyncHandler(async (req, res) => {
   const { cedantId } = req.params;
 
-  // Introspect class_of_business name column (live DB may use class_name or class_of_business)
-  const cobCols = await pool.query(
-    `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='class_of_business' ORDER BY ordinal_position`
-  );
-  const cobColNames = cobCols.rows.map(r => r.column_name);
+  // Introspect class_of_business name column (live DB may use class_name or
+  // class_of_business) and the optional margin columns — both memoized per
+  // process in lib/cobCols.js, so this is only a catalog query on first hit.
+  const [cobColNames, hasMarg] = await Promise.all([getCobColumnNames(), hasPricingMarginColumns()]);
   const cobIdCol   = cobColNames.find(c => c === 'class_of_business_id') || cobColNames.find(c => c === 'class_id') || cobColNames[0];
   const cobNameCol = cobColNames.find(c => c === 'class_of_business') || cobColNames.find(c => c === 'class_name') || cobColNames[1] || cobColNames[0];
-
-  // Check which optional margin columns exist
-  const hasMargCols = await pool.query(
-    `SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='contract_pricing_outputs' AND column_name='actuarial_margin' LIMIT 1`
-  );
-  const hasMarg = hasMargCols.rows.length > 0;
   const margCols = hasMarg
     ? 'po.actuarial_margin, po.actual_margin, po.uw_margin, po.technical_result,'
     : 'NULL::numeric AS actuarial_margin, NULL::numeric AS actual_margin, NULL::numeric AS uw_margin, NULL::numeric AS technical_result,';
@@ -227,11 +221,9 @@ router.get("/cedants/:cedantId/cedant-summary", asyncHandler(async (req, res) =>
 router.get("/cedants/:cedantId/np-layers", asyncHandler(async (req, res) => {
   const { cedantId } = req.params;
 
-  // Introspect class_of_business name column (same pattern as cedant-summary)
-  const cobCols = await pool.query(
-    `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='class_of_business' ORDER BY ordinal_position`
-  );
-  const cobColNames = cobCols.rows.map(r => r.column_name);
+  // Introspect class_of_business name column (same pattern as cedant-summary;
+  // memoized per process in lib/cobCols.js)
+  const cobColNames = await getCobColumnNames();
   const cobIdCol   = cobColNames.find(c => c === 'class_of_business_id') || cobColNames.find(c => c === 'class_id') || cobColNames[0];
   const cobNameCol = cobColNames.find(c => c === 'class_of_business') || cobColNames.find(c => c === 'class_name') || cobColNames[1] || cobColNames[0];
 

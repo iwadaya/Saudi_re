@@ -1,6 +1,7 @@
 // server/src/routes/quotes.js — Quote CRUD + sub-entities, using quote_* tables
 import { Router } from "express";
 import { pool } from "../db/pool.js";
+import { getCobColumnNames } from '../lib/cobCols.js';
 import { asyncHandler, numOrNull, dateOrNull, boolOrDefault, safeUwYear, preserveBool, preserveNum, assertExists, isStaleSince, reinstatInt } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { resolveVariant } from '../lib/triangleVariant.js';
@@ -469,35 +470,33 @@ router.get("/quotes", asyncHandler(async (req, res) => {
   const pageNum = Math.max(1, numOrNull(page) ?? 1);
   const offsetNum = numOrNull(offset) ?? (pageNum - 1) * limitNum;
 
-  // Total count — cheap with indexed filters; one round-trip to give
-  // clients accurate pagination UI without a second endpoint.
-  const { rows: countRows } = await pool.query(
-    `SELECT COUNT(*)::int AS total FROM public.quote q ${where}`,
-    params,
-  );
+  // Lifecycle columns (quote_ref, quote_version, parent_contract_id)
+  // shipped in migration 044; production runs migrations on boot. The
+  // previous try/catch fallback returned a base-columns variant if those
+  // were missing — now dead code, removed. Count and page queries are
+  // independent, so they share one round-trip of latency.
+  const joins = contractContextJoins('q');
+  const [{ rows: countRows }, { rows }] = await Promise.all([
+    pool.query(`SELECT COUNT(*)::int AS total FROM public.quote q ${where}`, params),
+    pool.query(
+      `SELECT q.quote_id AS id, q.quote_id, q.status, q.uw_year, q.updated_at, q.created_at,
+              q.quote_ref, q.quote_version, q.parent_contract_id,
+              ced.company_name AS name, bk.broker_name AS broker,
+              cnt.country_name AS country, cnt.country_code,
+              tt.treaty_type, tt.treaty_type AS treaty_type_name, tt.category AS treaty_category,
+              cur.currency_code
+         FROM public.quote q
+         ${joins}
+         ${where}
+         ORDER BY q.updated_at DESC
+         LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limitNum, offsetNum]
+    ),
+  ]);
   const total = countRows[0]?.total ?? 0;
   res.setHeader('X-Total-Count', String(total));
   res.setHeader('X-Page-Size', String(limitNum));
   res.setHeader('X-Page', String(pageNum));
-  // Lifecycle columns (quote_ref, quote_version, parent_contract_id)
-  // shipped in migration 044; production runs migrations on boot. The
-  // previous try/catch fallback returned a base-columns variant if those
-  // were missing — now dead code, removed.
-  const joins = contractContextJoins('q');
-  const { rows } = await pool.query(
-    `SELECT q.quote_id AS id, q.quote_id, q.status, q.uw_year, q.updated_at, q.created_at,
-            q.quote_ref, q.quote_version, q.parent_contract_id,
-            ced.company_name AS name, bk.broker_name AS broker,
-            cnt.country_name AS country, cnt.country_code,
-            tt.treaty_type, tt.treaty_type AS treaty_type_name, tt.category AS treaty_category,
-            cur.currency_code
-       FROM public.quote q
-       ${joins}
-       ${where}
-       ORDER BY q.updated_at DESC
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-    [...params, limitNum, offsetNum]
-  );
   res.json(rows);
 }));
 
@@ -762,33 +761,31 @@ router.get("/quotes/:id/triangles/:type/with-exclusions", asyncHandler(async (re
   // INCURRED is not stored as its own triangle — it is paid + OS. Build the
   // combined full triangle here so the incurred loss amount can be stripped
   // directly from it (see combineIncurredCells in lib/triangleStripping.js).
-  let cells;
-  if (t === 'INCURRED') {
-    const [{ rows: paidCells }, { rows: osCells }] = await Promise.all([
+  const cellsPromise = t === 'INCURRED'
+    ? Promise.all([
       pool.query(`SELECT origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type='CLAIMS_PAID'::public.triangle_type AND variant='MODIFIED'::public.triangle_variant ORDER BY origin_year,dev_months`, [id]),
       pool.query(`SELECT origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type='CLAIMS_OS'::public.triangle_type AND variant='MODIFIED'::public.triangle_variant ORDER BY origin_year,dev_months`, [id]),
-    ]);
-    cells = combineIncurredCells(paidCells, osCells);
-  } else {
-    const { rows } = await pool.query(
+    ]).then(([{ rows: paidCells }, { rows: osCells }]) => combineIncurredCells(paidCells, osCells))
+    : pool.query(
       `SELECT cell_id,origin_year,dev_months,cum_value FROM public.quote_triangle_cells WHERE quote_id=$1 AND type=$2::public.triangle_type AND variant='MODIFIED'::public.triangle_variant ORDER BY origin_year,dev_months`,
       [id, t]
-    );
-    cells = rows;
-  }
-  const { rows: largeLosses } = await pool.query(
-    `SELECT ll.uw_year, ll.date_of_loss, ll.actuarial_reported_date, ll.paid, ll.os, ll.incurred
-       FROM public.contract_large_losses ll
-       JOIN public.contract_large_loss_report r ON r.report_id = ll.report_id
-      WHERE r.quote_id = $1`, [id]
-  );
-  const { rows: catLosses } = await pool.query(
-    `SELECT cl.uw_year, cl.date_of_loss, cl.actuarial_reported_date, cl.paid, cl.os, cl.incurred
-       FROM public.contract_cat_losses cl
-       JOIN public.contract_cat_loss_report r ON r.report_id = cl.report_id
-      WHERE r.quote_id = $1`, [id]
-  );
-  const { rows: pd } = await pool.query(`SELECT strip_large_cat_losses FROM public.quote_prop_details WHERE quote_id=$1`, [id]);
+    ).then(({ rows }) => rows);
+  const [cells, { rows: largeLosses }, { rows: catLosses }, { rows: pd }] = await Promise.all([
+    cellsPromise,
+    pool.query(
+      `SELECT ll.uw_year, ll.date_of_loss, ll.actuarial_reported_date, ll.paid, ll.os, ll.incurred
+         FROM public.contract_large_losses ll
+         JOIN public.contract_large_loss_report r ON r.report_id = ll.report_id
+        WHERE r.quote_id = $1`, [id]
+    ),
+    pool.query(
+      `SELECT cl.uw_year, cl.date_of_loss, cl.actuarial_reported_date, cl.paid, cl.os, cl.incurred
+         FROM public.contract_cat_losses cl
+         JOIN public.contract_cat_loss_report r ON r.report_id = cl.report_id
+        WHERE r.quote_id = $1`, [id]
+    ),
+    pool.query(`SELECT strip_large_cat_losses FROM public.quote_prop_details WHERE quote_id=$1`, [id]),
+  ]);
   const stripEnabled = pd[0]?.strip_large_cat_losses === true; // default false
   const field = stripEnabled ? stripFieldForType(t) : null;
   const allLosses = field ? [...largeLosses, ...catLosses] : [];
@@ -1049,11 +1046,9 @@ router.put("/quotes/:id/large-losses", validateBody(lossesSaveSchema), asyncHand
 // COBs, profiles, cresta, pricing, offer, NP — abbreviated for core patterns
 router.get("/quotes/:id/cobs", asyncHandler(async (req, res) => {
   try {
-    // Introspect class_of_business column names (live DB schema may differ from dump)
-    const colRes = await pool.query(
-      `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='class_of_business' ORDER BY ordinal_position`
-    );
-    const cols = colRes.rows.map(r => r.column_name);
+    // Introspect class_of_business column names (live DB schema may differ
+    // from dump; memoized per process in lib/cobCols.js)
+    const cols = await getCobColumnNames();
     const idCol   = cols.find(c => c === 'class_of_business_id') || cols.find(c => c === 'class_id') || cols.find(c => c.endsWith('_id')) || cols[0];
     const nameCol = cols.find(c => c === 'class_of_business') || cols.find(c => c === 'class_name') || cols.find(c => c.includes('name')) || cols[1] || cols[0];
     const codeCol = cols.find(c => c === 'code') || cols.find(c => c === 'class_code') || null;
