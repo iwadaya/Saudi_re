@@ -124,6 +124,10 @@ label{ color: rgba(var(--text-rgb),.82); font-weight: 600; }
 }
 
 .btn,
+/* Bare button reset — lets a semantic <button> wear non-button styling
+   (panel rows, inline icon actions) without inline style overrides. */
+.btn-bare{ background:none; border:none; padding:0; margin:0; font:inherit; color:inherit; text-align:inherit; cursor:pointer; }
+
 .chip-btn,
 .topbar-btn{
   appearance: none;
