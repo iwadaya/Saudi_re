@@ -7,6 +7,7 @@ import nonPropRouter from './nonProp.js';
 import quotesRouter from './quotes.js';
 import homeRouter from './home.js';
 import dashboardRouter from './dashboard.js';
+import facDashboardRouter from './facDashboard.js';
 import quoteLifecycleRouter from './quoteLifecycle.js';
 import aiRouter from './ai.js';
 import aiCedantRouter from './aiCedant.js';
@@ -35,6 +36,7 @@ const routers = [
   quotesRouter,
   homeRouter,
   dashboardRouter,
+  facDashboardRouter,
   quoteLifecycleRouter,
   aiRouter,
   aiCedantRouter,

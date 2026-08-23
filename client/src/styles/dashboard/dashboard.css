@@ -384,3 +384,21 @@ table.dash-tech td.dash-tcell--prop{ box-shadow: inset 3px 0 0 var(--accent); }
 @media (max-width: 620px){
   .dash-kpis{ grid-template-columns: 1fr; }
 }
+
+/* ===== Shared utility classes (treaty + fac dashboards) =====
+   Replace the static inline styles both dashboard screens repeated, so the
+   screens-layer inline-style budget ratchets down instead of up. */
+.dash-td--left{ text-align: left; }
+.dash-th--sort{ cursor: pointer; }
+.dash-mt12{ margin-top: 12px; }
+.dash-crumb-sep{ margin-left: 10px; }
+.dash-block-title--split{ display: flex; align-items: center; justify-content: space-between; }
+.dash-sw--premium{ background: #39b7ff; }
+.dash-sw--margin{ background: #ffb020; }
+.dash-ccy{ display: flex; gap: 2px; background: rgba(255,255,255,0.05); border-radius: 8px; padding: 3px; margin-right: 6px; }
+.dash-ccy-btn{
+  padding: 4px 12px; border-radius: 6px; border: none; cursor: pointer;
+  font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  background: transparent; color: rgba(255,255,255,0.40); transition: all .15s;
+}
+.dash-ccy-btn--on{ background: rgba(0,212,255,0.18); color: #00d4ff; }
