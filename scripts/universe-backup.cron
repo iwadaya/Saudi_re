@@ -21,3 +21,8 @@ BACKUP_RETENTION_DAYS=30
 
 # Weekly restore-rehearsal, Sunday 03:30 — fails loudly if the latest dump won't restore.
 30 3 * * 0 cd /opt/universe && scripts/verify-restore.sh >> /var/log/universe-backup.log 2>&1
+
+# Nightly uploads backup at 02:30 (local-disk backend; no-op if UPLOAD_DIR is
+# empty; skip when Cloudinary auto-backup covers the uploads instead). Closes
+# the docs/backup-recovery.md checklist item "Schedule scripts/backup-uploads.sh".
+30 2 * * * cd /opt/universe && scripts/backup-uploads.sh >> /var/log/universe-backup.log 2>&1

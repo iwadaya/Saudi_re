@@ -161,8 +161,9 @@ Mechanism is committed in code; these are the deploy-time settings:
       (`scripts/backup-uploads.sh`) wired in code.
 - [ ] Set `BACKUP_ENCRYPTION_PASSPHRASE` (secret) in every backup/verify
       scheduler, and enable bucket **SSE**.
-- [ ] Schedule `scripts/backup-uploads.sh` (local-disk backend) or enable
-      Cloudinary auto-backup (Cloudinary backend).
+- [x] Schedule `scripts/backup-uploads.sh` (local-disk backend) — nightly
+      02:30 entry in `scripts/universe-backup.cron` — or enable Cloudinary
+      auto-backup (Cloudinary backend).
 - [ ] Choose scheduler (GitHub Actions and/or Render Cron) and enable it.
 - [ ] Create the bucket; set `BACKUP_S3_BUCKET` + least-privilege `AWS_*` creds
       (and `BACKUP_S3_ENDPOINT` for non-AWS). Set `BACKUP_S3_BUCKET` as a secret

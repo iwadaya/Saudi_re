@@ -3,7 +3,7 @@
 **Audience:** IT team standing up the Universe reinsurance pricing tool on an Ubuntu server.
 **Source repo:** https://github.com/Darchville-Analytics/modelling_tool
 **Snapshot date:** 14 May 2026
-**Last verified:** 2026-06-14 @ `d445dba` (bearer-token auth, enforcing CSP, 12-char password policy, and dev-only Compose all reflected below).
+**Last verified:** 2026-08-23 (httpOnly-cookie + CSRF auth, enforcing CSP, 12-char password policy, and dev-only Compose all reflected below).
 **Maintainer contact:** Isheanesu Wadaya (Riyadh, UTC+3)
 
 ---
@@ -30,7 +30,7 @@ Target user base: ~30 underwriters in a single office. The app is internal only 
 
 | Layer | Technology |
 |---|---|
-| Client | React 18 + Vite, served as static SPA from the API server |
+| Client | React 19 + Vite, served as static SPA from the API server |
 | API | Express 5 on Node 20+ |
 | Database | PostgreSQL 14+ (17.5 used in development) |
 | File storage | Local filesystem by default; Cloudinary supported via env vars |
@@ -38,7 +38,7 @@ Target user base: ~30 underwriters in a single office. The app is internal only 
 
 The Express server serves both the API under `/api/*` and the built SPA from `client/dist`. There is no separate frontend host required.
 
-Migrations live in `server/src/db/migrations/` (73 files at time of writing). Each migration runs in a single transaction with per-statement savepoints — a non-skippable failure rolls the whole migration back so a half-applied state is never recorded. They are idempotent and safe to re-run.
+Migrations live in `server/src/db/migrations/`. Each migration runs in a single transaction with per-statement savepoints — a non-skippable failure rolls the whole migration back so a half-applied state is never recorded. They are idempotent and safe to re-run.
 
 Migrations do **not** run on app boot by default (`RUN_MIGRATIONS_ON_BOOT=false`). Run them as an explicit pre-deploy step:
 
@@ -412,7 +412,7 @@ After starting the service for the first time:
    SELECT COUNT(*) FROM public.currency;    -- expect 32
    ```
 
-6. **Test login (bearer-token auth).** Browse to `https://universe.internal.company.com`. Login is a real credential check: `POST /api/auth/login` verifies the password against the user's stored scrypt hash and returns a signed bearer token. The SPA stores that token and sends it as `Authorization: Bearer <token>` on every request; the server re-reads the user's role and authority level from the database on each request (the token carries only the user id), so a demotion takes effect immediately. There is **no** `demo2026`-for-everyone and **no** `x-user-*` header auth in production — those exist only under `ALLOW_DEMO_AUTH=true` for local dev (§7, §10).
+6. **Test login (cookie + CSRF auth).** Browse to `https://universe.internal.company.com`. Login is a real credential check: `POST /api/auth/login` verifies the password against the user's stored scrypt hash and sets a signed token in an **httpOnly `auth_token` cookie** plus a readable `csrf_token` cookie — the token is never returned in the JSON body and the SPA never stores it. The browser sends the cookies automatically; state-changing requests must echo the CSRF token in the `X-CSRF-Token` header (signed double-submit — see `SECURITY.md`). The server re-reads the user's role and authority level from the database on each request (the token carries only the user id), so a demotion takes effect immediately. There is **no** `demo2026`-for-everyone and **no** `x-user-*` header auth in production — those exist only under `ALLOW_DEMO_AUTH=true` for local dev (§7, §10).
 
    **First login / seeded users.** Migration `123_seed_users_force_change.sql` seeds three real accounts, each with the temporary password `Universe#1234` and `must_change_password=true`, so each is **forced to set a new password on first login** (hard server-side gate + mandatory client modal):
 
@@ -459,9 +459,9 @@ For an Option B (docker-compose) host that wants the same tighter control as A/C
 
 The auth-hardening work has landed; the items below are how the app behaves **today**:
 
-1. **Real credential auth.** `POST /api/auth/login` verifies the password against the user's stored **scrypt** hash and issues a signed bearer token. The `demo2026` password is a dev/test convenience gated behind `ALLOW_DEMO_AUTH=true` and is **never honoured in production**. There is no `DEMO_HASH_2026` placeholder on real accounts — every create/update path stores a scrypt hash (`server/src/routes/auth.js`).
+1. **Real credential auth.** `POST /api/auth/login` verifies the password against the user's stored **scrypt** hash and issues a signed token in an httpOnly `auth_token` cookie (plus a readable `csrf_token` cookie for the double-submit CSRF check). The `demo2026` password is a dev/test convenience gated behind `ALLOW_DEMO_AUTH=true` and is **never honoured in production**. There is no `DEMO_HASH_2026` placeholder on real accounts — every create/update path stores a scrypt hash (`server/src/routes/auth.js`).
 
-2. **Token-based, DB-backed authorisation.** Authorisation comes from the verified bearer token, not headers. `x-user-*` headers are trusted **only** under `ALLOW_DEMO_AUTH=true` (local dev). Role and authority level are re-read from the database on every request, so a stale token can't preserve elevated rights (`server/src/middleware/requestContext.js`).
+2. **Cookie-based, DB-backed authorisation.** Authorisation comes from the verified token in the httpOnly cookie, not headers (an `Authorization: Bearer` header works only under `ALLOW_DEMO_AUTH=true`, as do `x-user-*` headers — local dev). Role and authority level are re-read from the database on every request, so a stale token can't preserve elevated rights (`server/src/middleware/requestContext.js`).
 
 3. **Server-derived audit actor.** Audit/approval events take the actor from the verified `req.user` identity, never a client-supplied `_actor`/header.
 

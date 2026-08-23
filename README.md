@@ -3,7 +3,7 @@
 Deployment-ready monorepo for the Universe 3 reinsurance treaty pricing platform.
 
 ## Stack
-- React 18 + Vite frontend
+- React 19 + Vite frontend
 - Express 5 API server
 - PostgreSQL database
 
