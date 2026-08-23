@@ -311,6 +311,8 @@ export function makeBindPathApiMock(fn, overrides = {}) {
     saveWordingChecklist: fn().mockResolvedValue({ items: [], latest_run: null }),
     runWordingChecklistAi: fn().mockResolvedValue({ ok: false, items: [], latest_run: null }),
     getEligibleApprovers: fn().mockResolvedValue([{ user_id: 'cu-bind-test', display_name: 'Chief Underwriter', role_code: 'CU' }]),
+    // Owner-perspective rights: draft controls render, signing stays with an approver.
+    getOfferPermissions: fn().mockResolvedValue({ can_sign: false, can_ntu: true, can_return: false, can_recall: true, is_owner: true, is_submitter: true }),
     submitOfferForApproval: fn().mockResolvedValue({ ok: true }),
     markOfferApproved: fn().mockResolvedValue({ ok: true }),
     markOfferSigned: fn().mockResolvedValue({ ok: true }),

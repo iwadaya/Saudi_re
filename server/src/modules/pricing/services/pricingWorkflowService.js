@@ -11,6 +11,7 @@ import {
   markContractSigned,
   markNotTakenUp,
   recallOffer,
+  getTerminalPermissions,
 } from '../../../services/approvals.js';
 import { logAudit } from '../../../services/audit.js';
 import { withTransaction } from '../../../db/withTransaction.js';
@@ -120,6 +121,18 @@ export async function recallOfferAction(contractId, actor, reason) {
   // Only the submitter may recall, and only while still pending — enforced by
   // the RECALL action inside the approval service, which also logs the event.
   return recallOffer({ contractId, actorUserId: actor.actorUserId, actorName: actor.actorName, actorRole: actor.actorRole, reason });
+}
+
+export async function getOfferPermissionsAction(contractId, actor) {
+  // Which terminal actions the verified actor may take on this contract's live
+  // offer. Same primitives as the mutating endpoints (four-eyes included), so
+  // the client can render exactly the controls the server will accept.
+  return getTerminalPermissions({
+    entityType: 'CONTRACT',
+    entityId: contractId,
+    actorUserId: actor.actorUserId,
+    actorRole: actor.actorRole,
+  });
 }
 
 export async function markSignedAction(contractId, actor, signedLinePct) {

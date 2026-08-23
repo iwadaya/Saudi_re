@@ -89,7 +89,7 @@ vi.mock('./ldf/benchmark.js', () => ({ refreshBenchmarks: vi.fn(() => Promise.re
 
 const {
   assertWorkflowTransition, approveContract, markContractSigned, approveQuote,
-  markNotTakenUp, returnToUnderwriter, recallOffer,
+  markNotTakenUp, returnToUnderwriter, recallOffer, getTerminalPermissions,
 } = await import('./approvals.js');
 
 const M = 1_000_000;
@@ -254,6 +254,44 @@ describe('markContractSigned (markSignedAction path) — state AND signer author
   it('403s the submitter signing their own offer (four-eyes built into the eligible set)', async () => {
     poolMock.query = mockDb(signable());
     await expectStatus(markContractSigned({ contractId: 'c1', actorUserId: 'u-sub', actorRole: 'UW', signedLinePct: 12 }), 403, 'SIGN_FORBIDDEN');
+  });
+});
+
+describe('getTerminalPermissions — the client-facing mirror of the SIGN/NTU/RECALL authority', () => {
+  const cfg = (over = {}) => ({
+    contractStatus: 'AWAITING_SIGNED_LINE',
+    contractRow: { assigned_to_user_id: 'u-sub' },
+    offer: offer({ approver_options: [{ user_id: 'u-cu', role_code: 'CU' }] }),
+    submitter: submitter(),
+    candidates: [cand('u-cu', 'CU', 2, null)],
+    ...over,
+  });
+
+  it('an eligible approver can sign and NTU, but not recall', async () => {
+    poolMock.query = mockDb(cfg());
+    const p = await getTerminalPermissions({ entityType: 'CONTRACT', entityId: 'c1', actorUserId: 'u-cu', actorRole: 'CU' });
+    expect(p).toMatchObject({ can_sign: true, can_ntu: true, can_recall: false, is_submitter: false });
+  });
+
+  it('the submitter/owner cannot sign (four-eyes) but can NTU and recall', async () => {
+    poolMock.query = mockDb(cfg());
+    const p = await getTerminalPermissions({ entityType: 'CONTRACT', entityId: 'c1', actorUserId: 'u-sub', actorRole: 'UW' });
+    expect(p).toMatchObject({ can_sign: false, can_ntu: true, can_recall: true, is_owner: true, is_submitter: true });
+  });
+
+  it('a bystander gets no terminal rights at all', async () => {
+    poolMock.query = mockDb(cfg());
+    const p = await getTerminalPermissions({ entityType: 'CONTRACT', entityId: 'c1', actorUserId: 'u-else', actorRole: 'UW' });
+    expect(p).toMatchObject({ can_sign: false, can_ntu: false, can_recall: false, is_owner: false, is_submitter: false });
+  });
+
+  it('agrees with markContractSigned: whoever it says can_sign is exactly who the endpoint accepts', async () => {
+    poolMock.query = mockDb(cfg());
+    const cu = await getTerminalPermissions({ entityType: 'CONTRACT', entityId: 'c1', actorUserId: 'u-cu', actorRole: 'CU' });
+    expect(cu.can_sign).toBe(true);
+    poolMock.query = mockDb(cfg());
+    const r = await markContractSigned({ contractId: 'c1', actorUserId: 'u-cu', actorName: 'CU', actorRole: 'CU', signedLinePct: 12 });
+    expect(r.nextStatus).toBe('SIGNED');
   });
 });
 

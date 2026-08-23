@@ -894,6 +894,7 @@ export const api = {
       : `/api/treaties/${enc(contractId)}/offer/eligible-approvers`;
     return request(`${base}?${qs}`, opts);
   },
+  getOfferPermissions(contractId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/treaties/${enc(contractId)}/offer/permissions`, opts); },
   getArbiterOptions(contractId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/treaties/${enc(contractId)}/offer/arbiter-options`, opts); },
   peerDecision(contractId: string, payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request(`/api/treaties/${enc(contractId)}/offer/peer-decision`, { method: 'POST', body: payload, ...opts }); },
   arbiterDecision(contractId: string, payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request(`/api/treaties/${enc(contractId)}/offer/arbiter-decision`, { method: 'POST', body: payload, ...opts }); },
