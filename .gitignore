@@ -9,3 +9,7 @@ coverage/
 .DS_Store
 client/.npmrc
 client/dist/
+
+# Python bytecode cache (scripts/build-readiness-checklist-pdf.py)
+__pycache__/
+*.pyc
