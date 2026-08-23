@@ -29,6 +29,13 @@ const OPENAI_MODEL_DEFAULT = 'gpt-4o';
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const OPENAI_API = 'https://api.openai.com/v1/responses';
 
+// Hard upper bound on a single provider request. Without it a hung provider
+// pins the socket (and file descriptors) indefinitely and stalls graceful
+// shutdown until the deploy's hard deadline force-exits. AbortSignal.timeout
+// rejects the fetch with a TimeoutError, which the caller catches and falls
+// through to the next provider. Override with LLM_TIMEOUT_MS.
+const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS) || 60_000;
+
 /**
  * Call an LLM in JSON mode, trying Gemini first then OpenAI.
  *
@@ -153,6 +160,7 @@ async function callGemini({ systemPrompt, userPrompt, attachments, maxOutputToke
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
   });
   if (!r.ok) {
     const errBody = await r.json().catch(() => ({}));
@@ -207,6 +215,7 @@ async function callOpenAi({ systemPrompt, userPrompt, attachments, maxOutputToke
       'Authorization': `Bearer ${env.openaiApiKey}`,
     },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
   });
   if (!r.ok) {
     const errBody = await r.json().catch(() => ({}));
