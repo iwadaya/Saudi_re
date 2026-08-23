@@ -108,7 +108,12 @@ export type TreatyMode = 'RISK' | 'CAT' | 'BOTH';
 ── */
 export function recomputeDeductibles(allLayers: LayerRow[], baseDeductible: string): LayerRow[] {
   if (!allLayers.length) return allLayers;
-  const base = baseDeductible;
+  // A base of '', '0' or garbage means "no treaty-detail deductible available"
+  // (e.g. the detail slice was never hydrated this session) — layer 1 must then
+  // KEEP its loaded value. '0' is a truthy string, so a plain `base ||` fallback
+  // would overwrite a real saved attachment with 0 and the next save would
+  // persist the loss.
+  const base = toNum(baseDeductible) > 0 ? String(toNum(baseDeductible)) : '';
   const result: LayerRow[] = [];
   for (let i = 0; i < allLayers.length; i++) {
     if (i === 0) {

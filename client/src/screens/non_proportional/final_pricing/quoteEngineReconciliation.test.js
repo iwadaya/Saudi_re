@@ -36,7 +36,9 @@ const mockApi = {
   listClassOfBusiness: async () => [],
   getRiskProfile: async () => ({
     profile: { pml_percentage: 100, selected_curve: 'Y3', gross_loss_ratio: 100 },
-    bands: [{ from_amt: 0, to_amt: 10_000_000, no_of_risks: 10, total_sum_insured: 50_000_000 }],
+    // Band premium is required: exposure rating allocates premium × GLR
+    // through the destruction curve (Swiss Re method).
+    bands: [{ from_amt: 0, to_amt: 10_000_000, no_of_risks: 10, total_sum_insured: 50_000_000, gross_premium: 500_000 }],
   }),
   getContractCobs: async () => [],
 };

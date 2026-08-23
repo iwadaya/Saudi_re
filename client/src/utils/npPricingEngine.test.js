@@ -299,11 +299,33 @@ describe('calcPureBurningCost', () => {
     expect(r.rol).toBeCloseTo(0.20, 4);
   });
 
-  it('falls back to incurred+os when inflated_incurred is missing', () => {
+  it('falls back to incurred alone when inflated_incurred is missing — os is NOT added again', () => {
+    // incurred is stored as paid + os; the old fallback added os a second time.
     const losses = [{ uw_year: 2020, incurred: 300_000, os: 200_000 }];
     const r = calcPureBurningCost(losses, 100_000, 500_000, 10_000_000, 5);
-    // 500k loss → layer hit 400k → avgLossCost = (400k/5)/10M = 0.008 → rol = 0.16 (ROL)
-    expect(r.rol).toBeCloseTo(0.16, 4);
+    // 300k loss → layer hit 200k → avgLossCost = (200k/5)/10M = 0.004 → rol = 0.08 (ROL)
+    expect(r.rol).toBeCloseTo(0.08, 4);
+  });
+
+  it('applies the saved inflation_factor when inflated_incurred is missing', () => {
+    const losses = [{ uw_year: 2020, incurred: 300_000, os: 200_000, inflation_factor: 1.5 }];
+    const r = calcPureBurningCost(losses, 100_000, 500_000, 10_000_000, 5);
+    // 300k × 1.5 = 450k → layer hit 350k → avgLossCost = (350k/5)/10M = 0.007 → rol = 0.14
+    expect(r.rol).toBeCloseTo(0.14, 4);
+  });
+
+  it('prefers inflated_incurred over incurred × factor when both are present', () => {
+    const losses = [{ uw_year: 2020, inflated_incurred: 600_000, incurred: 300_000, inflation_factor: 1.5 }];
+    const r = calcPureBurningCost(losses, 100_000, 500_000, 10_000_000, 5);
+    // 600k → layer hit 500k (capped) → avgLossCost = (500k/5)/10M = 0.01 → rol = 0.20
+    expect(r.rol).toBeCloseTo(0.20, 4);
+  });
+
+  it('reconstructs from paid + os only when incurred itself is absent', () => {
+    const losses = [{ uw_year: 2020, paid: 250_000, os: 50_000 }];
+    const r = calcPureBurningCost(losses, 100_000, 500_000, 10_000_000, 5);
+    // 300k loss → layer hit 200k → rol = 0.08
+    expect(r.rol).toBeCloseTo(0.08, 4);
   });
 
   it('uses per-year EGNPI when provided (Clark alignment)', () => {
@@ -421,23 +443,53 @@ describe('calcRiskExposureRating', () => {
     const profiles = [{
       profile: { pml_percentage: 60, selected_curve: 'Y3' },
       bands: [
-        { no_of_risks: 100, total_sum_insured: 100_000_000 },   // avg SI 1M
-        { no_of_risks: 50,  total_sum_insured: 100_000_000 },   // avg SI 2M
+        { no_of_risks: 100, total_sum_insured: 100_000_000, gross_premium: 800_000 },   // avg SI 1M
+        { no_of_risks: 50,  total_sum_insured: 100_000_000, gross_premium: 600_000 },   // avg SI 2M
       ],
     }];
     const r = calcRiskExposureRating(profiles, 500_000, 1_500_000, 50_000_000);
     expect(r.rol).toBeGreaterThan(0);
     expect(r.totalExpLoss).toBeGreaterThan(0);
     expect(r.totalSI).toBe(200_000_000);
+    expect(r.totalPremium).toBe(1_400_000);
+  });
+
+  it('premium basis: expected layer loss can never exceed premium × gross loss ratio', () => {
+    // This is the invariant the old SI-basis implementation violated (it
+    // produced ROLs of thousands of percent on real-sized portfolios).
+    const profiles = [{
+      profile: { pml_percentage: 100, selected_curve: 'Y3' },
+      bands: [
+        { no_of_risks: 200, total_sum_insured: 600_000_000, gross_premium: 3_000_000 },
+        { no_of_risks: 50,  total_sum_insured: 400_000_000, gross_premium: 1_600_000 },
+        { no_of_risks: 20,  total_sum_insured: 300_000_000, gross_premium: 900_000 },
+      ],
+    }];
+    const r = calcRiskExposureRating(profiles, 1_000_000, 10_000_000, 20_000_000);
+    expect(r.totalExpLoss).toBeLessThanOrEqual(5_500_000);
+    expect(r.rol).toBeLessThan(1); // sane rate on line, not 6268%
+  });
+
+  it('allocates premium through the curve — exact hand check (Y3, PML 100%)', () => {
+    // Band avg SI 1M → PML 1M. Layer 500k xs 500k → d spans [0.5, 1].
+    // G(0.5, c=3) = ln(1 + (e³−1)·0.5)/3 = 0.785148 → layer share 0.214852.
+    // expLoss = 100_000 × 0.214852 = 21,485.2 → rol = 21,485.2 / 500_000.
+    const profiles = [{
+      profile: { pml_percentage: 100, selected_curve: 'Y3' },
+      bands: [{ no_of_risks: 10, total_sum_insured: 10_000_000, gross_premium: 100_000 }],
+    }];
+    const r = calcRiskExposureRating(profiles, 500_000, 500_000, 10_000_000);
+    expect(r.totalExpLoss).toBeCloseTo(21_485.2, 0);
+    expect(r.rol).toBeCloseTo(0.0429704, 5);
   });
 
   it('skips bands with zero risks or SI', () => {
     const profiles = [{
       profile: { pml_percentage: 60 },
       bands: [
-        { no_of_risks: 0, total_sum_insured: 1_000_000 },
-        { no_of_risks: 10, total_sum_insured: 0 },
-        { no_of_risks: 10, total_sum_insured: 10_000_000 },
+        { no_of_risks: 0, total_sum_insured: 1_000_000, gross_premium: 10_000 },
+        { no_of_risks: 10, total_sum_insured: 0, gross_premium: 10_000 },
+        { no_of_risks: 10, total_sum_insured: 10_000_000, gross_premium: 50_000 },
       ],
     }];
     // Only the third band contributes — so totalSI should equal 10M, not 11M
@@ -445,10 +497,23 @@ describe('calcRiskExposureRating', () => {
     expect(r.totalSI).toBe(10_000_000);
   });
 
+  it('skips (and counts) bands without a gross premium', () => {
+    const profiles = [{
+      profile: { pml_percentage: 100, selected_curve: 'Y3' },
+      bands: [
+        { no_of_risks: 10, total_sum_insured: 10_000_000 },                        // no premium
+        { no_of_risks: 10, total_sum_insured: 10_000_000, gross_premium: 100_000 },
+      ],
+    }];
+    const r = calcRiskExposureRating(profiles, 500_000, 500_000, 10_000_000);
+    expect(r.skippedNoPremium).toBe(1);
+    expect(r.totalExpLoss).toBeCloseTo(21_485.2, 0); // only the priced band
+  });
+
   it('honours gross_loss_ratio as a multiplier', () => {
     const baseProfile = {
       profile: { pml_percentage: 60, selected_curve: 'Y3' },
-      bands: [{ no_of_risks: 100, total_sum_insured: 100_000_000 }],
+      bands: [{ no_of_risks: 100, total_sum_insured: 100_000_000, gross_premium: 800_000 }],
     };
     const r1 = calcRiskExposureRating([baseProfile], 500_000, 500_000, 10_000_000);
     const r2 = calcRiskExposureRating(
@@ -463,8 +528,8 @@ describe('calcRiskExposureRating', () => {
     const profiles = [{
       profile: { pml_percentage: 60, selected_curve: 'Auto' },
       bands: [
-        { no_of_risks: 100, total_sum_insured: 30_000_000 },    // avg 300k → Y1
-        { no_of_risks: 100, total_sum_insured: 300_000_000 },   // avg 3M → Y4
+        { no_of_risks: 100, total_sum_insured: 30_000_000, gross_premium: 300_000 },    // avg 300k → Y1
+        { no_of_risks: 100, total_sum_insured: 300_000_000, gross_premium: 900_000 },   // avg 3M → Y4
       ],
     }];
     const r = calcRiskExposureRating(profiles, 500_000, 500_000, 50_000_000);
@@ -693,12 +758,13 @@ describe('calcLayerPricing — quote mode', () => {
     { uw_year: 2022, inflated_incurred: 1_800_000, is_selected: true, class_of_business: 'Motor' },
     { uw_year: 2023, inflated_incurred: 3_000_000, is_selected: true, class_of_business: 'Motor' },
   ];
-  // Seeded quote risk profile (mirrors contract_risk_profile shape).
+  // Seeded quote risk profile (mirrors contract_risk_profile shape —
+  // band premiums are required for premium-basis exposure rating).
   const seededProfile = {
     profile: { pml_percentage: 60, selected_curve: 'Y3' },
     bands: [
-      { no_of_risks: 100, total_sum_insured: 100_000_000 }, // avg SI 1M
-      { no_of_risks: 50,  total_sum_insured: 100_000_000 }, // avg SI 2M
+      { no_of_risks: 100, total_sum_insured: 100_000_000, gross_premium: 800_000 }, // avg SI 1M
+      { no_of_risks: 50,  total_sum_insured: 100_000_000, gross_premium: 600_000 }, // avg SI 2M
     ],
   };
 

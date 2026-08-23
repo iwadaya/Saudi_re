@@ -369,12 +369,19 @@ export function useNpPricingLoads({
       // ── Offer / approval status — always drive from live DB, never from JSONB ──
       // contract_offer.status (offer_status) is authoritative; uw_status is secondary fallback.
       // JSONB savedPricing.offerStatus is only used if DB has NO offer row at all (very old contracts).
-      const UW_STATUS_MAP: Record<string, string> = {
-        OFFERED: 'DRAFT', PENDING: 'DRAFT', RETURNED: 'DRAFT', APPROVED: 'AWAITING_SIGNED_LINE',
+      // RETURNED / RECALLED map to DRAFT on BOTH sources: after a recall or a
+      // return-to-UW the contract is back in Draft and must render the Draft
+      // step with the resubmit panel (mirrors prop's normalizeStatus). Leaving
+      // the raw offer status through froze the modal on "Signed / Complete"
+      // with no way to resubmit.
+      const STATUS_MAP: Record<string, string> = {
+        OFFERED: 'DRAFT', PENDING: 'DRAFT', RETURNED: 'DRAFT', RECALLED: 'DRAFT',
+        APPROVED: 'AWAITING_SIGNED_LINE',
       };
-      const dbOfferStatus = npData?.offer_status || null;
+      const rawOfferStatus = npData?.offer_status || null;
+      const dbOfferStatus = rawOfferStatus ? (STATUS_MAP[rawOfferStatus] || rawOfferStatus) : null;
       const dbUwStatus    = npData?.uw_status    || null;
-      const dbStatus = dbOfferStatus || (dbUwStatus ? (UW_STATUS_MAP[dbUwStatus] || dbUwStatus) : null);
+      const dbStatus = dbOfferStatus || (dbUwStatus ? (STATUS_MAP[dbUwStatus] || dbUwStatus) : null);
       setOfferStatus(dbStatus || savedPricing.offerStatus || '');
       // Approver: prefer DB offer row, fall back to JSONB
       setOfferApprover(npData?.offer_approver || savedPricing.offerApprover || '');
@@ -386,7 +393,10 @@ export function useNpPricingLoads({
       // ── Auto-open offer modal based on role + resolved status (mirrors PropPricing) ──
       const resolvedStatus = dbStatus || savedPricing.offerStatus || '';
       const role = getRole(); // roleCode e.g. CE, CU, TD, TM, TUW
-      if ((role === 'CU' || role === 'CE') && resolvedStatus === 'AWAITING_APPROVAL') setShowOfferModal(true);
+      // CU/CE also auto-open at AWAITING_SIGNED_LINE: the server's four-eyes
+      // rule makes an eligible approver — not the submitter — confirm signed
+      // lines, so the approver needs the modal even on a treaty they don't own.
+      if ((role === 'CU' || role === 'CE') && (resolvedStatus === 'AWAITING_APPROVAL' || resolvedStatus === 'AWAITING_SIGNED_LINE')) setShowOfferModal(true);
       if (role !== 'CU' && role !== 'CE' && (resolvedStatus === 'AWAITING_SIGNED_LINE' || resolvedStatus === 'APPROVED')) setShowOfferModal(true);
 
       // Load approval trail — pass quoteMode so it hits the correct endpoint

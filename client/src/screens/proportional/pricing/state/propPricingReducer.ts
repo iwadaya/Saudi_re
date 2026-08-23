@@ -56,6 +56,9 @@ export interface WorkflowSlice {
   offerComment: string;
   offerApprover: string;
   eligibleApprovers: AnyRecord[];
+  /** Server-derived terminal-action rights for the current user on this offer
+   *  (can_sign / can_ntu / can_recall / is_owner…). Null until loaded. */
+  offerPermissions: AnyRecord | null;
   returnReason: string;
   declineReason: string;
   approvalTrail: AnyRecord[];
@@ -136,6 +139,7 @@ export function createInitialPropPricingState(): PropPricingState {
       offerComment: '',
       offerApprover: '',
       eligibleApprovers: [],
+      offerPermissions: null,
       returnReason: '',
       declineReason: '',
       approvalTrail: [],
@@ -247,6 +251,9 @@ function resetForContractSwitch(state: PropPricingState): PropPricingState {
       offerApprover: '',
       offerStatus: 'DRAFT',
       signedLinePct: '',
+      // Rights are per-contract: never let one contract's can_sign leak into
+      // the next while its permissions load.
+      offerPermissions: null,
     },
     modals: { ...state.modals, showOffer: false, showDecline: false, insightOpen: false },
   };

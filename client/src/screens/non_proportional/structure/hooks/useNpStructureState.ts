@@ -125,7 +125,12 @@ export function useNpStructureState() {
   }, [npDetail]);
 
   const getBaseDeductible = useCallback(() => {
-    return String(toNum(npDetail.deductible || npDetail.maxRetention || npDetail.attachment || 0));
+    // '' (not '0') when the treaty-detail slice holds no deductible — e.g. a
+    // session that opened Structure without visiting Treaty Detail. The cascade
+    // treats '' as "keep layer 1's loaded value", so an unhydrated slice can
+    // never overwrite a saved attachment with 0.
+    const n = toNum(npDetail.deductible || npDetail.maxRetention || npDetail.attachment || 0);
+    return n > 0 ? String(n) : '';
   }, [npDetail]);
 
   /* ── Recalc pipeline wrappers ──
@@ -289,8 +294,20 @@ export function useNpStructureState() {
     const curDed = String(toNum(npDetail.deductible || npDetail.maxRetention || 0));
     const curNum = parseInt(npDetail.numberOfLayers || npDetail.number_of_layers || '0', 10) || 0;
 
-    const dedChanged       = prevDedRef.current !== null && prevDedRef.current !== curDed;
-    const numLayersChanged = prevNumLayersRef.current !== null && curNum > 0 && prevNumLayersRef.current !== curNum;
+    // The refs reset on every mount, so "previous value" cannot span a
+    // navigation (edit deductible on Treaty Detail → come back here). On the
+    // first run after the layers load, compare against the LOADED layers
+    // instead — a real detail-side value that disagrees with layer 1 must
+    // still re-cascade, or the edit silently never lands (and a corrupted
+    // attachment could never be repaired from the UI). An empty/zero detail
+    // value stays a non-signal: it means "slice not hydrated", never "reset
+    // the saved attachment to 0".
+    const dedChanged = prevDedRef.current === null
+      ? curDed !== '0' && curDed !== String(toNum(layers[0]?.deductible))
+      : prevDedRef.current !== curDed;
+    const numLayersChanged = prevNumLayersRef.current === null
+      ? curNum > 0 && curNum !== layers.length
+      : curNum > 0 && prevNumLayersRef.current !== curNum;
 
     prevDedRef.current       = curDed;
     prevNumLayersRef.current = curNum;
