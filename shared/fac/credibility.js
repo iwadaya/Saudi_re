@@ -2,9 +2,13 @@
 //
 // How much to believe a risk's own loss history.
 //
-// Bühlmann–Straub, in the form every reinsurance pricing note states it:
+// Bühlmann credibility, in the form every reinsurance pricing note states it:
 //
 //     Z = n / (n + k)
+//
+// (Strictly this is Bühlmann, not Bühlmann–Straub: Straub's extension weights
+// each year by its own exposure, which matters when the volume moves year to
+// year. n here is a single pooled volume, so the two coincide.)
 //
 // where n is the volume of the risk's own experience — claim count for a
 // per-risk layer — and k is the volume at which its experience deserves

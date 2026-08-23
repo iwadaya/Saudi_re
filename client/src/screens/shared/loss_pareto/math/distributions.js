@@ -67,6 +67,12 @@ export function fitWeibull(losses,xm){
 export function weibullCDF(x,k,lam,xm){const z=x-xm;return z<=0?0:1-Math.exp(-Math.pow(z/lam,k));}
 export function weibullQ(p,k,lam,xm){return xm+lam*Math.pow(-Math.log(1-p),1/k);}
 
+// KS statistic + Stephens' large-sample p-value (Numerical Recipes: the
+// first term of the Kolmogorov series Q(z) = 2Σ(−1)^{j−1}e^{−2j²z²}).
+// NOTE: the empirical CDF here runs 0→1 over the sample ABOVE xm, so cdfFn
+// must also be conditional on x ≥ xm. It is for Pareto/exponential/Weibull;
+// it is NOT for lognormalCDF. See the PDF note below and finding F-F in
+// docs/actuarial-formula-verification-2026-08.md.
 export function calcKS(losses,cdfFn,xm){
   const v=losses.filter(x=>x>=xm).sort((a,b)=>a-b);const n=v.length;
   if(n===0)return{ks:1,pValue:0};let mx=0;
@@ -131,7 +137,12 @@ export function calcLayerPriceNumerical(freq, D, L, survivalFn, steps = 400) {
   return { severity, rpp: freq * severity };
 }
 
-/* ── PDFs (conditional on x ≥ xm, normalised so ∫ f = 1 over [xm,∞)) ── */
+/* ── PDFs ──────────────────────────────────────────────────────────────
+   Pareto, exponential and Weibull are conditional on x ≥ xm (normalised so
+   ∫ f = 1 over [xm, ∞)). lognormalPDF/lognormalCDF are NOT — they are the
+   plain unconditional lognormal, so a lognormal compared against a sample
+   truncated at xm is being compared on a different scale than the other
+   three. See docs/actuarial-formula-verification-2026-08.md (F-F). ── */
 export function paretoPDF(x,a,xm){return x<xm?0:(a*Math.pow(xm,a))/Math.pow(x,a+1);}
 export function lognormalPDF(x,mu,sigma){
   if(x<=0)return 0;

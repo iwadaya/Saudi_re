@@ -142,8 +142,10 @@ export function fitPareto(losses, xm) {
 }
 
 /**
- * Pareto quantile: the loss at exceedance probability p
- * (i.e. 1-in-(1/p) event).
+ * Pareto quantile at CDF probability p: the loss x with P(X <= x) = p,
+ * i.e. Q(p) = xm * (1 - p)^(-1/alpha). The 1-in-N loss is therefore
+ * paretoQ(1 - 1/N, ...), NOT paretoQ(1/N, ...) — p is a cumulative
+ * probability here, not an exceedance probability.
  *
  * @param {number} p
  * @param {number} alpha
@@ -239,7 +241,10 @@ export function paretoExhaustion(alpha, xm, deductible, limit) {
  *      → loss cost % for that year.
  *   5. Average loss costs across all observation years (including zero-loss years)
  *      → average loss cost as % of EGNPI.
- *   6. ROL = avgAnnualLayerLoss / limit  (true Rate-on-Line).
+ *   6. avgAnnualLayerLoss = avgLossCost x prospective EGNPI, then
+ *      ROL = avgAnnualLayerLoss / limit  (true Rate-on-Line). See the
+ *      Step 6 note at the bottom of this function for why the loss cost
+ *      is applied to the PROSPECTIVE EGNPI, not the historical mean.
  *
  * @param {LossLike[]} losses     - Array of {uw_year, incurred, inflated_incurred, inflation_factor, is_selected}
  * @param {number} deductible  - Layer attachment (same currency as losses)
