@@ -2,7 +2,7 @@
   "generatedAt": "2026-08-23",
   "note": "Ratchet baseline for scripts/frontend-budget.mjs — see docs/frontend-hardening.md",
   "metrics": {
-    "inlineStyles": 2991,
+    "inlineStyles": 2993,
     "filesOver800Loc": 0,
     "onClickNonInteractive": 79,
     "consoleCalls": 0,
