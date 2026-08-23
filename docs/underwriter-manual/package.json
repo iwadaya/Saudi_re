@@ -1,0 +1,14 @@
+{
+  "name": "universe3-underwriter-manual",
+  "private": true,
+  "type": "module",
+  "description": "Generator for docs/Universe3-Underwriter-Manual.pdf",
+  "scripts": {
+    "capture": "node capture-screens.mjs",
+    "build": "node build-manual.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0",
+    "sharp": "^0.33.0"
+  }
+}
