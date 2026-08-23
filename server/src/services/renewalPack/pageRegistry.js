@@ -25,7 +25,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { logger } from '../../lib/logger.js';
-import { buildBatchInsert } from '../../db/batchInsert.js';
+import { buildBatchInserts } from '../../db/batchInsert.js';
 
 function assertEntity(entity) {
   if (!entity || (entity.type !== 'quote' && entity.type !== 'contract') || !entity.id) {
@@ -111,7 +111,7 @@ const crestaPage = {
     // CRESTA imports can carry hundreds of zones — one batched INSERT
     // instead of a round-trip per zone (same rationale as the triangle
     // page's unnest write above).
-    const crestaInsert = buildBatchInsert({
+    const crestaInsert = buildBatchInserts({
       table,
       columns: [
         fk, 'country_id', 'zone_id', 'zone_name',
@@ -133,7 +133,7 @@ const crestaPage = {
       ]),
       leadingId: entity.id,
     });
-    if (crestaInsert) await client.query(crestaInsert.sql, crestaInsert.params);
+    for (const stmt of crestaInsert) await client.query(stmt.sql, stmt.params);
   },
   applies: () => true,
 };
@@ -272,7 +272,7 @@ const npStructurePage = {
     const fk = entity.type === 'quote' ? 'quote_id' : 'contract_id';
     await client.query(`DELETE FROM ${table} WHERE ${fk}=$1`, [entity.id]);
     const layers = state?.layers || [];
-    const layersInsert = buildBatchInsert({
+    const layersInsert = buildBatchInserts({
       table,
       columns: [
         fk, 'layer_number', 'attachment', 'layer_limit', 'aggregate_limit', 'egnpi',
@@ -297,7 +297,7 @@ const npStructurePage = {
       ]),
       leadingId: entity.id,
     });
-    if (layersInsert) await client.query(layersInsert.sql, layersInsert.params);
+    for (const stmt of layersInsert) await client.query(stmt.sql, stmt.params);
   },
   applies: (cat) => cat === 'NON_PROPORTIONAL',
 };
@@ -340,7 +340,7 @@ const egnpiHistoryPage = {
         .filter((r) => Number.isFinite(Number(r.uw_year)))
         .map((r) => [Number(r.uw_year), r]),
     );
-    const egnpiInsert = buildBatchInsert({
+    const egnpiInsert = buildBatchInserts({
       table,
       columns: [fk, 'uw_year', 'premiums', 'claims', 'egnpi', 'result', 'loss_ratio', 'expense_ratio', 'combined_ratio'],
       rows: [...byYear.values()].map((r) => [
@@ -360,7 +360,7 @@ const egnpiHistoryPage = {
                        expense_ratio=EXCLUDED.expense_ratio, combined_ratio=EXCLUDED.combined_ratio,
                        updated_at=now()`,
     });
-    if (egnpiInsert) await client.query(egnpiInsert.sql, egnpiInsert.params);
+    for (const stmt of egnpiInsert) await client.query(stmt.sql, stmt.params);
   },
   applies: (cat) => cat === 'NON_PROPORTIONAL',
 };
@@ -493,7 +493,7 @@ async function writeContractLossReport(client, contractId, kind, records) {
     reportId = ins[0].report_id;
   }
   await client.query(`DELETE FROM ${childTable} WHERE report_id=$1`, [reportId]);
-  const lossesInsert = buildBatchInsert({
+  const lossesInsert = buildBatchInserts({
     table: childTable,
     columns: [
       'report_id', 'loss_id', 'uw_year', 'insured_name', 'loss_name', 'date_of_loss',
@@ -513,5 +513,5 @@ async function writeContractLossReport(client, contractId, kind, records) {
     ]),
     leadingId: reportId,
   });
-  if (lossesInsert) await client.query(lossesInsert.sql, lossesInsert.params);
+  for (const stmt of lossesInsert) await client.query(stmt.sql, stmt.params);
 }

@@ -31,7 +31,13 @@ export function getCobColumnNames() {
           WHERE table_schema='public' AND table_name='class_of_business'
           ORDER BY ordinal_position`
       )
-      .then(({ rows }) => rows.map((r) => r.column_name))
+      .then(({ rows }) => {
+        // An empty result means the table doesn't exist yet (migrations
+        // pending in an externally-migrated deployment) — don't pin that
+        // state; retry on the next request so the cache heals itself.
+        if (!rows.length) _namesPromise = null;
+        return rows.map((r) => r.column_name);
+      })
       .catch((err) => {
         _namesPromise = null;
         throw err;
@@ -57,7 +63,13 @@ export function hasPricingMarginColumns() {
           WHERE table_schema='public' AND table_name='contract_pricing_outputs'
             AND column_name='actuarial_margin' LIMIT 1`
       )
-      .then(({ rows }) => rows.length > 0)
+      .then(({ rows }) => {
+        const has = rows.length > 0;
+        // Cache only the positive answer: a pre-migration `false` would
+        // otherwise pin NULL margins until the process restarts.
+        if (!has) _marginPromise = null;
+        return has;
+      })
       .catch((err) => {
         _marginPromise = null;
         throw err;

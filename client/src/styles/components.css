@@ -997,6 +997,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
 /* Card inner padding for form content */
 .card.glass .mini-title{ padding:0 18px; }
 .card.glass > p{ padding:0 18px; }
+.card.glass > div:not(.card-head){ padding:0 18px; }
 .card.glass > div:last-child{ padding-bottom:18px; }
 
 /* Form grid inside cards */

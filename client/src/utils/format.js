@@ -100,18 +100,6 @@ export function formatWithCommasDecimal(v) {
 }
 
 /**
- * Display-cell variant of formatWithCommas: returns '—' for
- * null/undefined/NaN instead of an empty string. Use this when
- * rendering to a table cell or side-panel row where a visible dash
- * signals "no value" more clearly than blank space.
- *
- * Replaces the identical local `fmt(n)` helpers that had accreted in
- * half a dozen screens.
- *
- * @param {*} n
- * @returns {string}
- */
-/**
  * Comma-tolerant strict parse: strips grouping commas, trims; '' -> null,
  * non-finite -> null. The canonical form of the numOrNull helper that grew
  * copies across the fac/treaty screens.
@@ -144,6 +132,18 @@ export const cleanNum = (v) => {
   return n === Math.floor(n) ? String(Math.floor(n)) : String(n);
 };
 
+/**
+ * Display-cell variant of formatWithCommas: returns '—' for
+ * null/undefined/NaN instead of an empty string. Use this when
+ * rendering to a table cell or side-panel row where a visible dash
+ * signals "no value" more clearly than blank space.
+ *
+ * Replaces the identical local `fmt(n)` helpers that had accreted in
+ * half a dozen screens.
+ *
+ * @param {*} n
+ * @returns {string}
+ */
 export function fmtOrEm(n) {
   if (n === null || n === undefined || n === '') return '—';
   const v = typeof n === 'number' ? n : Number(n);

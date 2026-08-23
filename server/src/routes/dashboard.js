@@ -427,7 +427,7 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
               ${UNIT_AGGREGATES.balance}              AS balance,
               ${UNIT_AGGREGATES.avgRol}               AS rol,
               ${UNIT_AGGREGATES.uwMargin}             AS "uwMargin"
-            FROM units WHERE lob IS NOT NULL GROUP BY lob`, 'premium DESC')} AS by_lob_rows,
+            FROM units WHERE lob IS NOT NULL GROUP BY lob`, 'premium DESC, lob')} AS by_lob_rows,
           ${jsonAgg(`SELECT lob, treaty_type,
               COALESCE(SUM(premium),0)  AS premium,
               COALESCE(SUM(exposure),0) AS exposure,
@@ -489,7 +489,7 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
             ${UNIT_AGGREGATES.avgRol}   AS rol,
             ${UNIT_AGGREGATES.balance}  AS balance,
             ${UNIT_AGGREGATES.uwMargin} AS "uwMargin"
-          FROM units GROUP BY treaty_type`, 'premium DESC')} AS treaty_rows,
+          FROM units GROUP BY treaty_type`, 'premium DESC, "treatyType"')} AS treaty_rows,
         ${jsonAgg(`SELECT treaty_type, uw_year::text AS uw_year,
             COALESCE(SUM(premium),0) AS premium,
             COALESCE(SUM(exposure) FILTER (WHERE kind = 'PROP'),0) AS bal_num,

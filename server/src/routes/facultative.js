@@ -6,7 +6,7 @@ import multer from 'multer';
 import fs, { promises as fsp } from 'fs';
 import { pool } from '../db/pool.js';
 import { asyncHandler, numOrNull, dateOrNull, assertExists } from '../helpers.js';
-import { buildBatchInsert } from '../db/batchInsert.js';
+import { buildBatchInserts } from '../db/batchInsert.js';
 import { validateBody } from '../lib/validate.js';
 import { assertParentEntityUnchanged, touchParentEntity } from '../lib/parentEntityPersistence.js';
 import {
@@ -394,7 +394,7 @@ router.put('/fac/risks/:id/locations', validateBody(facLocationsSaveSchema), asy
     await assertExists(client, 'public.fac_risk', 'fac_risk_id', riskId, 'Risk');
     await assertParentEntityUnchanged(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await client.query(`DELETE FROM public.fac_location WHERE fac_risk_id = $1`, [riskId]);
-    const locationsInsert = buildBatchInsert({
+    const locationsInsert = buildBatchInserts({
       table: 'public.fac_location',
       columns: [
         'fac_risk_id', 'location_name', 'address', 'latitude', 'longitude',
@@ -414,7 +414,7 @@ router.put('/fac/risks/:id/locations', validateBody(facLocationsSaveSchema), asy
       ]),
       leadingId: riskId,
     });
-    if (locationsInsert) await client.query(locationsInsert.sql, locationsInsert.params);
+    for (const stmt of locationsInsert) await client.query(stmt.sql, stmt.params);
     await touchParentEntity(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId });
     await writeFacAuditEvent({ facRiskId: riskId, eventType: 'FAC_LOCATIONS_SAVED', actor: actorLabel(req), payload: { location_count: locations.length }, client });
     await client.query('COMMIT');
@@ -569,7 +569,7 @@ router.put('/fac/risks/:id/layers', validateBody(facLayersSaveSchema), asyncHand
       ifUnmodifiedSince: req.headers['if-unmodified-since'],
     });
     await client.query('DELETE FROM public.fac_layer WHERE fac_risk_id = $1', [riskId]);
-    const layersInsert = buildBatchInsert({
+    const layersInsert = buildBatchInserts({
       table: 'public.fac_layer',
       columns: [
         'fac_risk_id', 'section_id', 'layer_no', 'attachment', 'limit_amount',
@@ -586,7 +586,7 @@ router.put('/fac/risks/:id/layers', validateBody(facLayersSaveSchema), asyncHand
       ]),
       leadingId: riskId,
     });
-    if (layersInsert) await client.query(layersInsert.sql, layersInsert.params);
+    for (const stmt of layersInsert) await client.query(stmt.sql, stmt.params);
     await touchParentEntity(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId });
     await writeFacAuditEvent({
       facRiskId: riskId,
@@ -714,7 +714,7 @@ router.put('/fac/risks/:id/losses', validateBody(facLossesSaveSchema), asyncHand
     await assertExists(client, 'public.fac_risk', 'fac_risk_id', riskId, 'Risk');
     await assertParentEntityUnchanged(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await client.query(`DELETE FROM public.fac_loss_history WHERE fac_risk_id = $1`, [riskId]);
-    const lossesInsert = buildBatchInsert({
+    const lossesInsert = buildBatchInserts({
       table: 'public.fac_loss_history',
       columns: [
         'fac_risk_id', 'loss_year', 'loss_date', 'loss_description',
@@ -737,7 +737,7 @@ router.put('/fac/risks/:id/losses', validateBody(facLossesSaveSchema), asyncHand
       ]),
       leadingId: riskId,
     });
-    if (lossesInsert) await client.query(lossesInsert.sql, lossesInsert.params);
+    for (const stmt of lossesInsert) await client.query(stmt.sql, stmt.params);
     await touchParentEntity(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId });
     await writeFacAuditEvent({ facRiskId: riskId, eventType: 'FAC_LOSSES_SAVED', actor: actorLabel(req), payload: { loss_count: losses.length }, client });
     await client.query('COMMIT');
@@ -799,7 +799,7 @@ router.put('/fac/risks/:id/experience', validateBody(facExperienceSaveSchema), a
     await assertExists(client, 'public.fac_risk', 'fac_risk_id', riskId, 'Risk');
     await assertParentEntityUnchanged(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
     await client.query(`DELETE FROM public.fac_experience_basis WHERE fac_risk_id = $1`, [riskId]);
-    const basisInsert = buildBatchInsert({
+    const basisInsert = buildBatchInserts({
       table: 'public.fac_experience_basis',
       columns: [
         'fac_risk_id', 'loss_year', 'exposure_base', 'exposure_unit', 'premium',
@@ -812,7 +812,7 @@ router.put('/fac/risks/:id/experience', validateBody(facExperienceSaveSchema), a
       ]),
       leadingId: riskId,
     });
-    if (basisInsert) await client.query(basisInsert.sql, basisInsert.params);
+    for (const stmt of basisInsert) await client.query(stmt.sql, stmt.params);
     await client.query(
       `UPDATE public.fac_risk
           SET severity_trend_pct = $2, experience_years = $3, experience_notes = $4
@@ -1469,7 +1469,7 @@ router.post('/fac/risks/:id/clauses-checklist', asyncHandler(async (req, res) =>
     // same (fac_risk_id, clause_code) twice, so dedupe last-wins first —
     // the same end state the old per-row loop produced.
     const byCode = new Map(items.map((it) => [it.clause_code, it]));
-    const clausesUpsert = buildBatchInsert({
+    const clausesUpsert = buildBatchInserts({
       table: 'public.fac_clauses_checklist',
       columns: ['fac_risk_id', 'clause_code', 'is_checked', 'comments'],
       rows: [...byCode.values()].map((it) => [it.clause_code, Boolean(it.is_checked), it.comments || null]),
@@ -1478,7 +1478,7 @@ router.post('/fac/risks/:id/clauses-checklist', asyncHandler(async (req, res) =>
           SET is_checked = EXCLUDED.is_checked,
               comments   = EXCLUDED.comments`,
     });
-    if (clausesUpsert) await client.query(clausesUpsert.sql, clausesUpsert.params);
+    for (const stmt of clausesUpsert) await client.query(stmt.sql, stmt.params);
     await touchParentEntity(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id });
     await writeFacAuditEvent({ facRiskId: id, eventType: 'FAC_CLAUSES_SAVED', actor: actorLabel(req), payload: { item_count: items.length }, client });
     await client.query('COMMIT');

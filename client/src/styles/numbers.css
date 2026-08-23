@@ -13,6 +13,30 @@
 ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ───────── 1. Numeric cell typography (the gold standard) ───────── */
+:is(
+  .tri-cell,
+  .np-mini-input,
+  .np-val-pill--burn-input,
+  .df-val,
+  .df-input,
+  .num,
+  /* No-Triangulation / Straight-Experience screen — previously
+     inlined monospace + 13px + weight 600-800. Pulled here so the
+     cascade aligns it with dev-factors. Only data cells; headers
+     keep their smaller uppercase styling. */
+  .nt-table td,
+  .nt-cell,
+  .nt-cell--ro
+){
+  font-family: inherit !important;
+  font-size: var(--num-cell-fs) !important;
+  font-weight: var(--num-cell-fw) !important;
+  font-variant-numeric: tabular-nums slashed-zero lining-nums !important;
+  font-feature-settings: "tnum", "zero", "lnum" !important;
+  text-align: center !important;
+  line-height: var(--num-cell-lh) !important;
+  letter-spacing: 0 !important;
+}
 
 input[type="number"]{
   font-variant-numeric: tabular-nums slashed-zero lining-nums;
@@ -100,6 +124,24 @@ td[data-numeric]{
   letter-spacing: var(--num-th-letter-spacing) !important;
   text-transform: uppercase !important;
   color: var(--num-th-color) !important;
+}
+
+/* ───────── 6. Cap all heavy weights (700/800/900) to 600 on common
+   data-display classes. This is the single biggest "feels professional"
+   change — drops the Bloomberg-terminal bold across pricing, cresta,
+   pareto, cat-loss, risk-profile. ─── */
+:is(
+  .bbg-v,
+  .bbg-topbar-id,
+  .ca-btn,
+  .qs-total,
+  .ll-total,
+  .ll-count,
+  .ll-btn,
+  .tri-yr,
+  .tri-hdr
+){
+  font-weight: var(--num-cell-fw) !important;
 }
 
 /* ───────── 7. Bloomberg hero values — match dev-factors numeric cell */

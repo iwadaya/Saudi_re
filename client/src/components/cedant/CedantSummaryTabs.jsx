@@ -386,9 +386,10 @@ function OverviewTab({
   );
   const isCur = useCallback(r => idOfRow(r) === String(contractId), [contractId]);
 
-  // All row scans and totals in one memo: every keystroke in a line-size
-  // input re-renders the tab, and without this the ~12 full passes over
-  // the cedant's whole book (all UW years) re-ran on each one.
+  // All row scans and totals in one memo. Edits to line sizes / include
+  // flags still recompute (the totals depend on them), but renders driven
+  // by anything else — modals, saves, fetches, parent state — no longer
+  // re-run the ~12 full passes over the cedant's whole book.
   const {
     getLim100, getPrem100, getActLim, getActSz,
     included, totLim100, totPrem100, totActLim, totActSz, totModM, totActM,
