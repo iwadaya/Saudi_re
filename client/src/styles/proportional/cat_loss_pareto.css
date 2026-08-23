@@ -37,25 +37,6 @@
   letter-spacing: -0.01em;
 }
 
-.llp-mini-btn {
-  background: rgba(59, 130, 246, 0.1);
-  color: var(--accent-blue);
-  border: 1px solid rgba(59, 130, 246, 0.2);
-  padding: 6px 14px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.llp-mini-btn:hover {
-  background: rgba(59, 130, 246, 0.25);
-  transform: translateY(-1px);
-}
-
 /* --- Form Grid --- */
 .llp-form-grid {
   display: grid;
@@ -78,19 +59,6 @@
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.llp-info {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--surface-hover);
-  color: var(--muted);
-  font-size: 9px;
-  cursor: help;
 }
 
 .llp-input {
@@ -127,40 +95,6 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-}
-
-/* --- Tables (Stats & Return Periods) --- */
-.llp-rp-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.llp-rp-table th, 
-.llp-rp-table td {
-  padding: 12px 0;
-  border-bottom: 1px solid var(--hairline);
-  text-align: center;
-}
-
-.llp-rp-table th {
-  font-size: 11px;
-  text-transform: uppercase;
-  color: #64748b;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  padding-bottom: 8px;
-}
-
-.llp-rp-table td.num, 
-.llp-rp-table th.num {
-  text-align: center;
-  font-feature-settings: "tnum"; /* Monospaced numbers */
-}
-
-.llp-rp-table tr:last-child td {
-  border-bottom: none;
 }
 
 /* --- Chart Modal --- */
@@ -209,39 +143,4 @@
   color: var(--text);
   font-weight: 700;
   font-size: 15px;
-}
-
-.llp-x {
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-size: 20px;
-  cursor: pointer;
-  padding: 4px;
-  line-height: 1;
-  border-radius: 4px;
-  transition: all 0.2s;
-}
-
-.llp-x:hover { 
-  color: var(--text); 
-  background: var(--control-hover);
-}
-
-.llp-chart-container {
-  flex: 1;
-  width: 100%;
-  position: relative;
-}
-
-.chart-empty {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #64748b;
-  font-size: 13px;
-  border: 1px dashed var(--hairline-strong);
-  margin: 20px;
-  border-radius: 8px;
 }

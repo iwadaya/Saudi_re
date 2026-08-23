@@ -53,21 +53,15 @@ svg{
 /* Charts that draw orthogonal grids/axes get crisp pixel snapping */
 svg.crisp-grid line,
 svg.crisp-grid path.axis,
-svg.crisp-grid .gridline,
 svg.crisp-grid [data-crisp]{
   shape-rendering: crispEdges;
 }
 /* Hairline strokes that should remain exactly 1px regardless of viewBox */
-svg [data-hairline],
-svg .hairline{
+svg [data-hairline]{
   vector-effect: non-scaling-stroke;
 }
 img{
   image-rendering: -webkit-optimize-contrast;
-}
-.pixel-art{
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
 }
 
 /* ================================
@@ -75,9 +69,7 @@ img{
 ================================ */
 h1,h2,h3{ margin: 0; }
 
-.subtitle,
-.helptext,
-.muted-2{
+.subtitle{
   color: var(--muted-2);
 }
 
@@ -121,10 +113,6 @@ select option:checked {
 }
 
 /* Read-only calculated cells (used in NP Structure tables). */
-.np-input--readonly{
-  pointer-events: none;
-  opacity: .92;
-}
 
 label{ color: rgba(var(--text-rgb),.82); font-weight: 600; }
 
@@ -137,8 +125,7 @@ label{ color: rgba(var(--text-rgb),.82); font-weight: 600; }
 
 .btn,
 .chip-btn,
-.topbar-btn,
-.btn-green-outline{
+.topbar-btn{
   appearance: none;
   border: 1px solid var(--stroke-soft);
   background: var(--control-bg);
@@ -155,8 +142,7 @@ label{ color: rgba(var(--text-rgb),.82); font-weight: 600; }
 
 .btn:hover,
 .chip-btn:hover,
-.topbar-btn:hover,
-.btn-green-outline:hover{
+.topbar-btn:hover{
   background: var(--control-hover);
   border-color: rgba(148,163,184,.24);
   transform: translateY(-1px);
@@ -164,16 +150,14 @@ label{ color: rgba(var(--text-rgb),.82); font-weight: 600; }
 
 .btn:active,
 .chip-btn:active,
-.topbar-btn:active,
-.btn-green-outline:active{
+.topbar-btn:active{
   transform: translateY(0px);
   filter: brightness(.98);
 }
 
 .btn:focus-visible,
 .chip-btn:focus-visible,
-.topbar-btn:focus-visible,
-.btn-green-outline:focus-visible{
+.topbar-btn:focus-visible{
   outline: none;
   box-shadow:
     0 10px 22px rgba(0,0,0,.32),
@@ -183,8 +167,7 @@ label{ color: rgba(var(--text-rgb),.82); font-weight: 600; }
 
 .btn[disabled],
 .chip-btn[disabled],
-.topbar-btn[disabled],
-.btn-green-outline[disabled]{
+.topbar-btn[disabled]{
   opacity: .50;
   cursor: not-allowed;
   transform: none;
@@ -192,21 +175,8 @@ label{ color: rgba(var(--text-rgb),.82); font-weight: 600; }
 }
 
 /* Ghost / secondary */
-.btn--ghost,
 .dock-btn--ghost{
   background: var(--control-bg);
-}
-
-/* Outline accent buttons used in triangles/docs */
-.btn-green-outline{
-  border-color: rgba(var(--accent-rgb), .40);
-  background: rgba(var(--accent-rgb), .08);
-  color: var(--text);
-}
-
-.btn-green-outline:hover{
-  background: rgba(var(--accent-rgb), .12);
-  border-color: rgba(var(--accent-rgb), .55);
 }
 
 /* Catch-all focus ring for buttons/links not covered above */
@@ -396,14 +366,6 @@ button{ font-family:inherit; }
 .topbar-left{ display:flex; align-items:center; gap:12px; }
 .topbar-right{ display:flex; align-items:center; gap:10px; }
 
-.brand-dot{
-  width:34px;height:34px;border-radius: 12px;
-  display:grid;place-items:center;
-  background: radial-gradient(circle at 30% 30%, rgba(var(--accent-rgb),.35), rgba(var(--accent-rgb),.10));
-  border: 1px solid rgba(var(--accent-rgb),.45);
-  font-weight:600;
-}
-
 .logo-badge{
   width:34px;height:34px;border-radius:999px;
   display:flex;align-items:center;justify-content:center;
@@ -412,8 +374,6 @@ button{ font-family:inherit; }
   color:#e5e7eb;
   font-weight:700;
 }
-
-.brand-title{ font-size: 13px; letter-spacing: .06em; font-weight: 600; }
 .topbar-title{ letter-spacing:.08em; font-size:12px; color:rgba(var(--text-rgb),.9); }
 
 .topbar-btn,
@@ -441,40 +401,6 @@ button{ font-family:inherit; }
 }
 
 /* ================================
-   SHEET PANEL (global)
-================================ */
-.sheet-panel{
-  position: relative;
-  border-radius: 22px;
-  overflow: hidden;
-
-  background: radial-gradient(circle at top left,
-    rgba(148,163,184,.14) 0%,
-    rgba(15,23,42,.92) 38%,
-    rgba(8,16,40,.98) 100%);
-
-  border: 1px solid rgba(148,163,184,.16);
-  box-shadow: 0 18px 45px rgba(0,0,0,.65);
-  padding: 12px 12px 14px;
-}
-
-.sheet-grid{
-  position:absolute;
-  inset:0;
-  background-image:
-    linear-gradient(to right, rgba(148,163,184,.11) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(148,163,184,.11) 1px, transparent 1px);
-  background-size: 60px 60px;
-  opacity: .55;
-  pointer-events:none;
-}
-
-.sheet-panel-inner{
-  position: relative;
-  z-index: 1;
-}
-
-/* ================================
    PILLS / CHIPS
 ================================ */
 .welcome-pill,
@@ -490,8 +416,7 @@ button{ font-family:inherit; }
   white-space: nowrap;
 }
 
-.chip-btn,
-.chip-toggle{
+.chip-btn{
   border-radius: var(--radius-pill);
   padding: 8px 12px;
   border: 1px solid rgba(60,80,120,.45);
@@ -500,20 +425,6 @@ button{ font-family:inherit; }
   cursor:pointer;
   font-weight: 500;
 }
-
-/* Orange variant used for Dashboard CTA */
-.primary-pill.primary-pill--orange{
-  border-color: rgba(255, 140, 0, .60);
-  background: linear-gradient(180deg, rgba(255, 140, 0, .22), rgba(10,18,32,.55));
-  box-shadow: 0 10px 24px rgba(0,0,0,.22), 0 0 0 1px rgba(255, 140, 0, .12) inset;
-}
-.primary-pill.primary-pill--orange:hover{
-  transform: translateY(-1px);
-  box-shadow: 0 14px 28px rgba(0,0,0,.26), 0 0 0 1px rgba(255, 140, 0, .18) inset;
-}
-
-.chip-label{ opacity:.6; margin-right:6px; }
-.chip-value{ color: var(--accent); }
 
 /* ================================
    WORKSPACE BADGE
@@ -568,17 +479,6 @@ button{ font-family:inherit; }
 /* ================================
    FORM / CARD SYSTEM (shared)
 ================================ */
-.cards-grid-4{
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-  width: 100%;
-  align-items: stretch;
-  margin-top: 14px;
-}
-@media (max-width: 1024px){
-  .cards-grid-4{ grid-template-columns: minmax(0, 1fr); }
-}
 
 .card{
   border-radius: 20px;
@@ -590,17 +490,6 @@ button{ font-family:inherit; }
   flex-direction: column;
   gap: 14px;
   height: 100%;
-}
-
-.card-header{
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  color: var(--text-muted);
 }
 .card-header-label{ font-weight: 500; }
 
@@ -614,16 +503,6 @@ button{ font-family:inherit; }
   color: var(--text);
   background: var(--control-bg);
 }
-
-.form-grid{ display: flex; flex-direction: column; gap: 8px; }
-.form-row{
-  display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(0, 1.5fr);
-  gap: 10px;
-  align-items: center;
-}
-
-.form-label{ font-size: 12px; color: rgba(var(--text-rgb),.75); display:block; margin-bottom:0; }
 
 /* ===== Form Inputs ===== */
 .form-input{
@@ -646,28 +525,6 @@ button{ font-family:inherit; }
 }
 .form-input::placeholder{ color: rgba(var(--text-rgb),.5); }
 select.form-input{ cursor:pointer; appearance:auto; }
-
-.form-grid{
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px 20px;
-}
-@media (max-width: 600px){
-  .form-grid{ grid-template-columns: 1fr; }
-}
-
-.form-check{
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  cursor: pointer;
-}
-.form-check input[type="checkbox"]{
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-}
 
 /* ===== Wizard Dock Buttons (Back/Next) ===== */
 .wizard-dock-btn{
@@ -707,85 +564,6 @@ select.form-input{ cursor:pointer; appearance:auto; }
   pointer-events: none;
 }
 
-.input-shell{
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--stroke);
-  background: var(--control-bg);
-  padding: 6px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  font-size: 13px;
-  /* Keep control heights consistent across pages */
-  min-height: 40px;
-}
-
-/* Generic "saved" pills used across multiple screens */
-.saved-pills{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-  align-items:center;
-}
-
-.saved-pill{
-  display:inline-flex;
-  gap:8px;
-  align-items:center;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: var(--control-bg);
-  border: 1px solid var(--stroke-soft);
-  color: var(--text);
-  font-size:12px;
-}
-
-.saved-pill .dot{
-  width:10px;
-  height:10px;
-  border-radius:999px;
-  background: rgba(var(--accent-rgb), 0.95);
-  box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.14);
-}
-
-.saved-pill.is-empty{
-  opacity:0.7;
-}
-
-.saved-pill.is-empty .dot{
-  background: rgba(148, 163, 184, 0.7);
-  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.12);
-}
-
-.input-shell :is(select,input,textarea,button){
-  width: 100%;
-  border: none !important;
-  outline: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  color: var(--text);
-  font-size: 13px;
-}
-
-.input-shell input::placeholder{ color: rgba(148, 163, 184, 0.7); }
-
-.input-shell span.icon{
-  font-size: 11px;
-  color: rgba(148, 163, 184, 0.8);
-  white-space: nowrap;
-}
-
-.input-shell.number{ justify-content: flex-end; }
-.input-shell.number input{ text-align: center; }
-
-/* Make selects consistent across browsers */
-.input-shell select{
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-}
-
 /* Toggle system (shared) */
 .toggle-group{
   display: inline-flex;
@@ -822,59 +600,9 @@ select.form-input{ cursor:pointer; appearance:auto; }
   box-shadow: 0 0 12px rgba(var(--accent-rgb),0.25);
 }
 
-.section-subtitle{ font-size: 11px; color: var(--text-muted); }
-
-.inline-two{
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-@media (max-width: 640px){
-  .inline-two{ grid-template-columns: minmax(0, 1fr); }
-}
-
-/* If any page has global button background, keep cob-control clean */
-.input-shell .cob-control{
-  padding: 0;
-  height: auto;
-  line-height: normal;
-}
-
 /* ================================
    WORKFLOW TABS — COMPACT
 ================================ */
-.workspace--with-tabs{ padding-bottom: 64px; }
-
-.tabs-dock{
-  position: fixed;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
-  z-index: 60;
-
-  padding: 6px 8px;
-  border-radius: 12px;
-
-  background: linear-gradient(180deg, rgba(10,18,32,.55), rgba(10,18,32,.35));
-  border: 1px solid rgba(90,170,200,.18);
-
-  backdrop-filter: blur(var(--glass-blur));
-  box-shadow: 0 10px 26px rgba(0,0,0,.35);
-}
-
-
-
-.tabsbar{
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-behavior: smooth;
-  padding-bottom: 2px;
-  scrollbar-width: none;
-}
-.tabsbar::-webkit-scrollbar{ display: none; }
 
 .tab{
   flex: 0 0 auto;
@@ -897,26 +625,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
   border-color: rgba(90,170,200,.35);
   transform: translateY(-1px);
 }
-
-.tab--active{
-  background: linear-gradient(90deg, rgba(var(--accent-rgb),.95), rgba(var(--accent2-rgb),.95));
-  color: #04120b;
-  border-color: rgba(var(--accent-rgb),.65);
-  box-shadow: 0 6px 16px rgba(var(--accent-rgb),.22);
-  transform: translateY(-1px);
-}
-
-.tab--active:hover{ transform: translateY(-1px); }
 .tab:active{ transform: translateY(0); }
-
-/*
-  Class-of-business (Line of Business) picker
-  Fix: selected text was getting squashed in some layouts (showing only 1 character).
-  Ensure the label can grow and the caret stays at the far right.
-*/
-.cob-control{ display:flex; align-items:center; gap: 10px; width: 100%; cursor: pointer; }
-.cob-control > .icon{ margin-left: auto; flex: 0 0 auto; }
-.cob-value{ flex: 1 1 auto; min-width: 0; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ================================
    WIZARD DOCK (Back / Save & Continue)
@@ -974,23 +683,6 @@ select.form-input{ cursor:pointer; appearance:auto; }
     justify-content: space-between;
   }
 }
-/* Save & Continue = green OUTLINE (not filled) */
-.wizard-dock .dock-btn--primary{
-  background: var(--control-bg) !important;      /* themed control */
-  color: rgba(var(--text-rgb),.92) !important;   /* themed text */
-  border: 1px solid rgba(var(--accent-rgb),.55) !important; /* green outline */
-  box-shadow: 0 10px 26px rgba(0,0,0,.35) !important;
-}
-
-.wizard-dock .dock-btn--primary:hover{
-  background: rgba(var(--accent-rgb),.08) !important;   /* subtle glow */
-  box-shadow: 0 0 18px rgba(var(--accent-rgb),.12) !important;
-}
-
-/* optional: keep arrow/text crisp */
-.wizard-dock .dock-btn--primary:active{
-  transform: translateY(0);
-}
 /* ================================
    WIZARD DOCK (Back / Save & Continue)
    Single source of truth
@@ -1036,21 +728,6 @@ select.form-input{ cursor:pointer; appearance:auto; }
 }
 
 /* Save & Continue = green OUTLINE (not filled) */
-.wizard-dock .dock-btn--primary{
-  background: var(--control-bg) !important;
-  color: rgba(var(--text-rgb),.92) !important;
-  border: 1px solid rgba(var(--accent-rgb),.55) !important;
-  box-shadow: 0 10px 26px rgba(0,0,0,.35) !important;
-}
-
-.wizard-dock .dock-btn--primary:hover{
-  background: rgba(var(--accent-rgb),.08) !important;
-  box-shadow: 0 0 18px rgba(var(--accent-rgb),.12) !important;
-}
-
-.wizard-dock .dock-btn--primary:active{
-  transform: translateY(0);
-}
 
 .dock-btn[disabled]{
   opacity: .5;
@@ -1088,16 +765,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
 .NP_STRUCTURE .np-table-wrap--scroll::-webkit-scrollbar{ display:none; }
 
 /* Quote mode tables (multiple structures) should scroll horizontally instead of compressing */
-.NP_STRUCTURE .np-table-wrap--compact{
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-.NP_STRUCTURE .np-table-wrap--compact::-webkit-scrollbar{ display:none; }
 
-.NP_STRUCTURE .sheet-panel-inner,
-.NP_STRUCTURE .sheet-panel,
 .NP_STRUCTURE .np-struct-card{
   overflow-x: hidden;
 }
@@ -1114,46 +782,7 @@ select.form-input{ cursor:pointer; appearance:auto; }
   margin-right: auto;
 }
 
-/* Tighten quote structure layer table to fit without collisions */
-.NP_STRUCTURE .np-struct-table--quote th,
-.NP_STRUCTURE .np-struct-table--quote td{
-  padding: 6px 6px;
-  font-size: 12px;
-}
-
-.NP_STRUCTURE .np-struct-table--quote .np-cell-input{
-  justify-content: center;
-  gap: 6px;
-}
-
-.NP_STRUCTURE .np-struct-table--quote .np-mini-input{
-  text-align: center;
-  padding: 0 8px;
-}
-
 /* Quote COB tables: keep first column centered like the rest */
-.NP_STRUCTURE .np-cob-table--quote th:first-child,
-.NP_STRUCTURE .np-cob-table--quote td:first-child{
-  text-align: center;
-  padding-left: 8px;
-}
-
-.NP_STRUCTURE .np-struct-table--quote th:nth-child(1),
-.NP_STRUCTURE .np-struct-table--quote td:nth-child(1){ width: 6%; }
-.NP_STRUCTURE .np-struct-table--quote th:nth-child(2),
-.NP_STRUCTURE .np-struct-table--quote td:nth-child(2){ width: 16%; }
-.NP_STRUCTURE .np-struct-table--quote th:nth-child(3),
-.NP_STRUCTURE .np-struct-table--quote td:nth-child(3){ width: 18%; }
-.NP_STRUCTURE .np-struct-table--quote th:nth-child(4),
-.NP_STRUCTURE .np-struct-table--quote td:nth-child(4){ width: 6%; }
-.NP_STRUCTURE .np-struct-table--quote th:nth-child(5),
-.NP_STRUCTURE .np-struct-table--quote td:nth-child(5){ width: 18%; }
-.NP_STRUCTURE .np-struct-table--quote th:nth-child(6),
-.NP_STRUCTURE .np-struct-table--quote td:nth-child(6){ width: 12%; }
-.NP_STRUCTURE .np-struct-table--quote th:nth-child(7),
-.NP_STRUCTURE .np-struct-table--quote td:nth-child(7){ width: 12%; }
-.NP_STRUCTURE .np-struct-table--quote th:nth-child(8),
-.NP_STRUCTURE .np-struct-table--quote td:nth-child(8){ width: 12%; }
 
 .NP_STRUCTURE .np-cell-input{
   min-width: 0;
@@ -1208,35 +837,6 @@ select.form-input{ cursor:pointer; appearance:auto; }
   text-align: center;
 }
 
-/* COB multi-select button inside cell */
-.NP_EXPIRING_STRUCTURE .np-cob-btn{
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-
-  padding: 8px 10px;
-  border-radius: 12px;
-  border: 1px solid var(--stroke-soft);
-  background: var(--control-bg);
-  color: rgba(var(--text-rgb),.92);
-  cursor: pointer;
-}
-.NP_EXPIRING_STRUCTURE .np-cob-btn:hover{
-  border-color: rgba(var(--accent-rgb),.35);
-  box-shadow: 0 0 0 6px rgba(var(--accent-rgb),.06);
-}
-.NP_EXPIRING_STRUCTURE .np-cob-btn__value{
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.NP_EXPIRING_STRUCTURE .np-cob-btn__chev{
-  opacity: .75;
-  flex: 0 0 auto;
-}
-
 /* Small helpers */
 .NP_EXPIRING_STRUCTURE .cell-center{ text-align:center; }
 .NP_EXPIRING_STRUCTURE .cell-right{ text-align:right; }
@@ -1264,9 +864,8 @@ select.form-input{ cursor:pointer; appearance:auto; }
 .EVENT_LOSS_TABLES_PAGE .wizard-dock{
   bottom: 56px;
 }
-.EVENT_LOSS_TABLES_PAGE .table-wrap,
 .EVENT_LOSS_TABLES_PAGE .elt-table-wrap{
-  padding-bottom: 110px; /* prevents last rows under dock */
+  padding-bottom: 110px;
 }
 
 
@@ -1277,9 +876,6 @@ select.form-input{ cursor:pointer; appearance:auto; }
 
 
 /* ===== Checklist Modal ===== */
-.chk-modal .screen-modal-body{
-  padding: 16px 18px 14px;
-}
 
 .chk-wrap{
   display: grid;
@@ -1368,11 +964,6 @@ select.form-input{ cursor:pointer; appearance:auto; }
 }
 
 /* Quote workflow: keep COB rows centered/justified like the rest of the quote tables */
-.NP_STRUCTURE .np-cob-table--quote th:first-child,
-.NP_STRUCTURE .np-cob-table--quote td:first-child{
-  text-align: center;
-  padding-left: 8px;
-}
 .NP_STRUCTURE .np-cob-table th:nth-child(2),
 .NP_STRUCTURE .np-cob-table td:nth-child(2){
   width: 26%;
@@ -1381,9 +972,6 @@ select.form-input{ cursor:pointer; appearance:auto; }
 /* Center inputs inside cells but keep them from spilling into adjacent columns */
 .NP_STRUCTURE .np-cob-table .np-cell-input{ justify-content: center; }
 .NP_STRUCTURE .np-cob-table td:first-child .np-cell-input{ justify-content: flex-start; }
-
-/* Quote workflow: don't left-justify the first COB column */
-.NP_STRUCTURE .np-cob-table--quote td:first-child .np-cell-input{ justify-content: center; }
 
 /* Percent suffix spacing */
 .NP_STRUCTURE .np-cell-input .np-sfx{ margin-left: 6px; }
@@ -1394,100 +982,29 @@ select.form-input{ cursor:pointer; appearance:auto; }
 
 
 /* ===== Card Grid Layout ===== */
-.cards-grid{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-@media(max-width:960px){ .cards-grid{ grid-template-columns:1fr; } }
 .card.glass{
   background: var(--surface-2); border:1px solid var(--hairline-strong);
   border-radius:14px; padding:0; overflow:hidden;
 }
-.card-header{
-  display:flex; align-items:center; justify-content:space-between; padding:14px 18px;
-  border-bottom:1px solid var(--hairline);
-}
 .card-header-label{ font-weight:700; font-size:14px; letter-spacing:0.3px; }
-.card-tag{ font-size:10px; text-transform:uppercase; letter-spacing:0.1em; padding:3px 8px;
-  border-radius:20px; background:var(--surface-hover); color:rgba(var(--text-rgb),.7); }
-.card-desc{ padding:8px 18px 0; font-size:12px; color:rgba(var(--text-rgb),.7); }
 
 /* card-head (alias for card-header used in treaty detail) */
 .card-head{
   display:flex; align-items:center; justify-content:space-between; padding:14px 18px;
   border-bottom:1px solid var(--hairline);
 }
-.card-title{ font-weight:700; font-size:14px; letter-spacing:0.3px; }
-
-/* Toggle button (Fixed/Sliding, Yes/No) */
-.toggle-btn{
-  padding:5px 12px; border-radius:6px; font-size:11px; font-weight:600;
-  letter-spacing:0.5px; cursor:pointer; border:1px solid var(--hairline-strong);
-  background:var(--surface-hover); color:rgba(var(--text-rgb),.7); transition:all 0.15s;
-}
-.toggle-btn:hover{ background:var(--control-hover); color:rgba(var(--text-rgb),.75); }
-.toggle-btn--active{ background:rgba(var(--accent-rgb),0.15); color:var(--accent); border-color:rgba(var(--accent-rgb),0.3); }
 
 /* Card inner padding for form content */
-.card.glass .form-grid{ padding:14px 18px; }
 .card.glass .mini-title{ padding:0 18px; }
 .card.glass > p{ padding:0 18px; }
-.card.glass > div:not(.card-head):not(.form-grid){ padding:0 18px; }
 .card.glass > div:last-child{ padding-bottom:18px; }
 
 /* Form grid inside cards */
-.form-grid-rows{ padding:12px 18px 18px; display:flex; flex-direction:column; gap:8px; }
-.form-row{ display:grid; grid-template-columns:minmax(140px,1fr) minmax(0,1.4fr); gap:8px; align-items:center; }
-.form-row--wide{ grid-template-columns:1fr; }
-.form-label{ font-size:12px; color:rgba(var(--text-rgb),.75); }
-.input-shell{
-  display:flex; align-items:center; background:var(--control-bg);
-  border:1px solid var(--stroke-soft); border-radius:10px; padding:0 10px;
-  min-height:36px; font-size:13px; position:relative;
-}
-.input-shell input, .input-shell select{
-  flex:1; background:transparent; border:none; outline:none; color:var(--text);
-  font-size:13px; font-family:inherit; padding:6px 0; min-width:0;
-}
-.input-shell input.readonly{ color:rgba(var(--text-rgb),.58); }
-.input-shell input::placeholder{ color:rgba(var(--text-rgb),.5); }
-.input-shell select{ cursor:pointer; appearance:auto; }
-.input-suffix{ font-size:11px; color:rgba(var(--text-rgb),.58); margin-left:4px; white-space:nowrap; }
 .icon{ font-size:11px; color:rgba(var(--text-rgb),.5); }
-
-/* Two-col sub-grid */
-.two-col{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-
-/* Toggle group - use the primary definition above (pill-shaped) */
-.toggle-opt{
-  padding:5px 12px; border-radius:6px; font-size:11px; font-weight:600;
-  letter-spacing:0.5px; cursor:pointer; border:none;
-  background:transparent; color:rgba(var(--text-rgb),.7); transition:all 0.15s;
-}
-.toggle-opt.active{ background:rgba(var(--accent-rgb),0.15); color:var(--accent); }
-.toggle-opt:hover:not(.active){ background:var(--surface-hover); color:rgba(var(--text-rgb),.7); }
 
 /* Mini section title */
 .mini-title{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px;
   color:rgba(var(--text-rgb),.58); margin:4px 0; }
-
-/* Small buttons */
-.btn-sm{ padding:6px 14px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;
-  border:none; transition:all 0.12s; }
-.btn-accent{ background:linear-gradient(180deg,var(--accent),var(--accent2)); color:var(--accent-contrast); }
-.btn-accent:hover{ filter:brightness(1.08); transform:translateY(-1px); }
-.btn-danger-sm{ background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.2);
-  border-radius:6px; padding:4px 8px; cursor:pointer; font-size:12px; }
-.btn-danger-sm:hover{ background:rgba(239,68,68,0.25); }
-
-/* COB dropdown */
-.cob-control{ display:flex; align-items:center; justify-content:space-between; width:100%;
-  background:transparent; border:none; color:var(--text); font-size:13px; cursor:pointer; padding:6px 0; }
-.cob-dropdown{ display:none; position:absolute; top:100%; left:0; right:0; z-index:50;
-  background:var(--surface-elevated); border:1px solid var(--hairline-strong); border-radius:10px;
-  max-height:200px; overflow-y:auto; padding:6px; box-shadow:0 12px 32px rgba(0,0,0,0.5); }
-.cob-dropdown.open{ display:block; }
-.cob-option{ display:flex; align-items:center; gap:8px; padding:6px 8px; font-size:13px;
-  color:rgba(var(--text-rgb),.8); cursor:pointer; border-radius:6px; }
-.cob-option:hover{ background:var(--surface-hover); }
-.cob-option input{ accent-color:var(--accent); }
 
 /* Action pill buttons */
 .action-pill{
@@ -1540,9 +1057,7 @@ select.fi{ cursor: pointer; appearance: auto; }
    reported the field as missing. Cleared on the next edit. */
 .required-missing input.fi,
 .required-missing select.fi,
-.required-missing button.fi,
-.required-missing .pct-input input,
-.required-missing .pct-input {
+.required-missing button.fi {
   border-color: rgba(248, 113, 113, 0.6) !important;
   box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.25);
 }
@@ -1755,9 +1270,6 @@ input.tri-inp:focus{
               radial-gradient(ellipse at 80% 80%, rgba(96,165,250,0.06) 0%, transparent 50%);
 }
 
-/* Admin / User Management screen */
-.USER_MANAGEMENT { padding: 0 0 40px; }
-
 /* ================================
    GLOBAL TYPOGRAPHY NORMALISE
    Force every element to a single non-bold weight. Heavier weights
@@ -1784,43 +1296,13 @@ optgroup {
 }
 
 /* Section headings — full hierarchy weight */
-h1, h2, h3,
-strong, b,
-.page-title,
-.screen-title,
-.title-xl,
-.welcome-title,
-.panel-title,
-.card-title,
-.card-header-label {
+h1, h2, h3, strong, b, .welcome-title, .panel-title, .card-header-label {
   font-weight: 700 !important;
 }
 /* Secondary titles / chips / labels — readable bold without heaviness */
-h4, h5, h6,
-.mini-title,
-.panel-head,
-.brand-title,
-.topbar-title,
-.crumb-text,
-.topbar-home,
-.topbar-pill,
-.topbar-btn,
-.action-pill,
-.btn-sm,
-[class*="-title"],
-[class*="-label"],
-[class*="-name"] {
+h4, h5, h6, .mini-title, .panel-head, .topbar-title, .crumb-text, .topbar-home, .topbar-pill, .topbar-btn, .action-pill, [class*="-title"], [class*="-label"], [class*="-name"] {
   font-weight: 600 !important;
 }
-
-/* ================================
-   HOVER-REVEAL SCROLLBARS
-   Default: track + thumb both transparent so scrollable areas look
-   clean. On hover the thumb fades in to a visible alpha so users can
-   grab and drag it. Per-element rules with higher specificity (e.g.
-   .wizard-tabs, .ll-table-wrap, .tabsbar { scrollbar-width: none })
-   still win, so opt-outs and bespoke styling are preserved.
-================================ */
 
 /* Firefox */
 * {

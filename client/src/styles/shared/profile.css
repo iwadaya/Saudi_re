@@ -4,7 +4,6 @@
 ========================================================= */
 
 .PROFILE_SCREEN{ font-size: 13px; }
-.pf-loading{ padding: 30px; text-align: center; color: var(--muted); }
 
 /* ── COB Tabs ── */
 .PROFILE_SCREEN .pf-cob-tabs{

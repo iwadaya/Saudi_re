@@ -35,52 +35,6 @@
   --blur: blur(10px);
 }
 
-.LARGE_LOSS_PARETO_PAGE .sheet-panel-inner{
-  padding-bottom: 120px;
-}
-
-/* ---------- Dev-triangle-like bluish grid backdrop for main content ---------- */
-.LARGE_LOSS_PARETO_PAGE .sheet-panel{
-  position: relative;
-}
-
-.LARGE_LOSS_PARETO_PAGE .sheet-panel::before{
-  content:"";
-  position:absolute;
-  inset: 0;
-  pointer-events:none;
-  background:
-    linear-gradient(to top, rgba(var(--text-rgb),0.045) 1px, transparent 1px),
-    linear-gradient(to right, rgba(var(--text-rgb),0.035) 1px, transparent 1px),
-    radial-gradient(1200px 600px at 20% 10%, rgba(56,189,248,0.10), transparent 60%),
-    radial-gradient(900px 500px at 80% 30%, rgba(var(--accent-rgb),0.08), transparent 60%);
-  background-size: 100% 44px, 44px 100%, auto, auto;
-  opacity: 0.55;
-}
-
-/* ---------- Sheet pill polish ---------- */
-.LARGE_LOSS_PARETO_PAGE .sheet-pill{
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border: 1px solid var(--stroke1);
-  background: var(--control-bg);
-  color: var(--text2);
-  letter-spacing: 0.06em;
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  backdrop-filter: var(--blur);
-}
-.LARGE_LOSS_PARETO_PAGE .sheet-pill-dot{
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: rgba(var(--accent-rgb),0.95);
-  box-shadow: 0 0 0 2px rgba(var(--accent-rgb),0.20), 0 0 18px rgba(var(--accent-rgb),0.12);
-}
-
 /* ---------- Hero header ---------- */
 .LARGE_LOSS_PARETO_PAGE .llp-hero{
   margin-top: 14px;
@@ -173,61 +127,6 @@
   max-width: 720px;
 }
 
-/* ---------- Chips ---------- */
-.LARGE_LOSS_PARETO_PAGE .llp-chips{
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
-}
-@media (max-width: 980px){
-  .LARGE_LOSS_PARETO_PAGE .llp-chips{ grid-template-columns: repeat(2, minmax(0,1fr)); }
-}
-.LARGE_LOSS_PARETO_PAGE .llp-chip{
-  border-radius: 14px;
-  padding: 10px 12px;
-  border: 1px solid var(--stroke-soft);
-  background: var(--control-bg);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
-}
-.LARGE_LOSS_PARETO_PAGE .llp-chip-label{
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text3);
-}
-.LARGE_LOSS_PARETO_PAGE .llp-chip-value{
-  margin-top: 6px;
-  font-size: 14px;
-  font-weight: 900;
-  color: var(--text1);
-  font-variant-numeric: tabular-nums;
-}
-.LARGE_LOSS_PARETO_PAGE .llp-chip--green{
-  border-color: rgba(var(--accent-rgb),0.18);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.04),
-    0 0 0 1px rgba(var(--accent-rgb),0.10),
-    0 0 18px rgba(var(--accent-rgb),0.10);
-}
-.LARGE_LOSS_PARETO_PAGE .llp-chip--blue{
-  border-color: rgba(56,189,248,0.18);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.04),
-    0 0 0 1px rgba(56,189,248,0.10),
-    0 0 18px rgba(56,189,248,0.10);
-}
-.LARGE_LOSS_PARETO_PAGE .llp-chip--purple{
-  border-color: rgba(167,139,250,0.18);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.04),
-    0 0 0 1px rgba(167,139,250,0.10),
-    0 0 18px rgba(167,139,250,0.10);
-}
-.LARGE_LOSS_PARETO_PAGE .llp-chip--slate{
-  border-color: rgba(148,163,184,0.16);
-}
-
 /* ---------- Form grid ---------- */
 .LARGE_LOSS_PARETO_PAGE .llp-form-grid{
   display: grid;
@@ -258,20 +157,6 @@
   color: var(--text2);
 }
 
-.LARGE_LOSS_PARETO_PAGE .llp-info{
-  width: 18px; height: 18px;
-  border-radius: 999px;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  font-size: 11px;
-  font-weight: 900;
-  background: rgba(148,163,184,0.15);
-  border: 1px solid var(--stroke-soft);
-  color: rgba(var(--text-rgb),0.9);
-  cursor: help;
-}
-
 .LARGE_LOSS_PARETO_PAGE .llp-input{
   width: 100%;
   margin-top: 8px;
@@ -299,7 +184,7 @@
 }
 
 .LARGE_LOSS_PARETO_PAGE .llp-input.numeric{
-  text-align: center; /* matches your “center/justify in cells” preference */
+  text-align: center;
 }
 
 .LARGE_LOSS_PARETO_PAGE .llp-help{
@@ -321,15 +206,6 @@
 }
 
 /* ---------- Tables styled like “cells” ---------- */
-.LARGE_LOSS_PARETO_PAGE .llp-table-card{
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid rgba(var(--accent-rgb),0.16);
-  background: var(--surface-muted);
-  box-shadow:
-    0 0 0 1px rgba(var(--accent-rgb),0.08),
-    0 0 18px rgba(var(--accent-rgb),0.08);
-}
 
 .LARGE_LOSS_PARETO_PAGE .llp-table{
   width: 100%;
@@ -414,76 +290,6 @@
   color: rgba(var(--text-rgb),0.95);
   text-transform: uppercase;
 }
-.LARGE_LOSS_PARETO_PAGE .llp-x{
-  border-radius: 12px;
-  border: 1px solid var(--stroke-soft);
-  background: var(--control-bg);
-  color: rgba(var(--text-rgb),0.85);
-  padding: 6px 10px;
-  cursor: pointer;
-}
-.LARGE_LOSS_PARETO_PAGE .llp-x:hover{
-  border-color: rgba(56,189,248,0.30);
-  background: rgba(56,189,248,0.08);
-}
-
-.LARGE_LOSS_PARETO_PAGE .llp-modal-body{
-  padding: 14px 16px 16px;
-  overflow: auto;
-}
-
-.LARGE_LOSS_PARETO_PAGE .llp-chart-shell{
-  border-radius: 16px;
-  border: 1px solid rgba(56,189,248,0.14);
-  background:
-    radial-gradient(700px 380px at 20% 15%, rgba(56,189,248,0.10), transparent 60%),
-    radial-gradient(700px 380px at 80% 30%, rgba(var(--accent-rgb),0.08), transparent 60%),
-    var(--surface-muted);
-  overflow: hidden;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.04),
-    0 0 24px rgba(56,189,248,0.08);
-}
-
-.LARGE_LOSS_PARETO_PAGE .llp-chart-body{
-  width: 100%;
-  height: 560px;
-  display: block;
-}
-
-.LARGE_LOSS_PARETO_PAGE .llp-empty{
-  text-align:center;
-  padding: 60px 20px;
-  color: var(--muted);
-}
-
-/* SVG styling */
-.LARGE_LOSS_PARETO_PAGE .llp-gridline{ stroke: rgba(148,163,184,0.10); stroke-width: 1; }
-.LARGE_LOSS_PARETO_PAGE .llp-axis{ stroke: rgba(148,163,184,0.28); stroke-width: 2; }
-.LARGE_LOSS_PARETO_PAGE .llp-pt{ fill: rgba(56,189,248,0.65); stroke: rgba(56,189,248,0.35); stroke-width: 1; }
-.LARGE_LOSS_PARETO_PAGE .llp-axis-label{ fill: var(--muted); font-size: 12px; }
-.LARGE_LOSS_PARETO_PAGE .llp-legend-box{
-  fill: var(--surface-elevated);
-  stroke: var(--stroke-soft);
-  stroke-width: 1;
-}
-.LARGE_LOSS_PARETO_PAGE .llp-legend-pt{ fill: rgba(56,189,248,0.70); }
-.LARGE_LOSS_PARETO_PAGE .llp-legend-line{
-  stroke: rgba(var(--accent-rgb),0.75);
-  stroke-width: 2.6;
-}
-.LARGE_LOSS_PARETO_PAGE .llp-legend-txt{
-  fill: rgba(var(--text-rgb),0.85);
-  font-size: 12px;
-}
-
-/* modal note */
-.LARGE_LOSS_PARETO_PAGE .llp-modal-note{
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.35;
-}
 
 /* Focus */
 .LARGE_LOSS_PARETO_PAGE button:focus-visible,
@@ -491,10 +297,6 @@
   outline: 2px solid rgba(56,189,248,0.50);
   outline-offset: 2px;
 }
-
-/* ═══════════════════════════════════════════
-   New: Distribution tabs, GoF table, chart
-   ═══════════════════════════════════════════ */
 
 /* Distribution selector tabs */
 .LARGE_LOSS_PARETO_PAGE .llp-dist-tabs{
@@ -567,11 +369,6 @@
   flex-wrap:wrap; gap:8px;
 }
 
-/* Verdict styling */
-.LARGE_LOSS_PARETO_PAGE .llp-verdict{
-  font-weight:600; font-size:11px;
-}
-
 /* ═══ Return Period Curve Modal ═══ */
 .LARGE_LOSS_PARETO_PAGE .llp-modal-backdrop{
   position:fixed; inset:0; z-index:900;
@@ -602,10 +399,6 @@
 }
 .LARGE_LOSS_PARETO_PAGE .llp-modal-x:hover{
   background:var(--control-hover); color:rgba(var(--text-rgb),.8);
-}
-.LARGE_LOSS_PARETO_PAGE .llp-modal-note{
-  padding:8px 20px 16px; font-size:11px;
-  color:rgba(var(--text-rgb),.7); text-align:center;
 }
 
 /* Selected distribution row in GoF table */

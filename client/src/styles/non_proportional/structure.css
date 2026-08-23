@@ -2,21 +2,6 @@
    NP STRUCTURE — master stylesheet (deduplicated)
    ========================================================= */
 
-/* NP workflow: tables + cells centred */
-.np-structure-step table th,
-.np-structure-step table td {
-  text-align: center;
-  vertical-align: middle;
-}
-.np-structure-step table input,
-.np-structure-step table select {
-  text-align: center;
-}
-
-.np-structure-step .np-hero { margin: 8px 0 14px; }
-.np-structure-step .np-hero-title { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.2px; }
-.np-structure-step .np-hero-subtitle { margin-top: 6px; font-size: 0.92rem; color: var(--muted); max-width: 980px; }
-
 /* ── Card ── */
 .np-struct-card { border-radius: 18px; padding: 16px 16px 14px; margin-top: 16px; border: 1px solid var(--hairline); background: var(--surface-2); box-shadow: 0 12px 40px rgba(0,0,0,0.35); }
 .np-struct-card-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 2px 2px 10px; }
@@ -77,10 +62,6 @@
   width:     3100px !important;
   min-width: 3100px !important;
 }
-.np-struct-table--curve {
-  width: 100%;
-  min-width: 900px;
-}
 
 /* Headers */
 .np-struct-table thead th {
@@ -118,10 +99,6 @@
   text-align: center !important; font-weight: 800;
   background: var(--surface-solid);
 }
-
-/* ─────────────────────────────────────────────
-   COLUMN WIDTHS — wide enough to never compress
-   ───────────────────────────────────────────── */
 
 /* Standard money columns (LIMIT, DEDUCTIBLE, AGG LIMIT, EGNPI, EARNED PREM, MDP, AAD AMOUNT) */
 .np-struct-table th.np-col,
@@ -272,26 +249,11 @@
 .np-struct-footnote--right { text-align: center; }
 
 /* COB pill */
-.np-cob-pill { width: 100%; display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--stroke-soft); background: var(--surface-2); color: var(--text); cursor: pointer; text-align: center; }
-.np-cob-pill:hover { border-color: rgba(var(--accent-rgb),.35); box-shadow: 0 0 0 6px rgba(var(--accent-rgb),.06); }
-.np-cob-pill-sfx { opacity: .7; font-size: 12px; }
 
 .is-hidden { display: none !important; }
 
-/* ── Modal ── */
-body.np-modal-open { overflow: hidden; }
-.np-modal-backdrop { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 22px; background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); }
-.np-modal { width: min(980px, 100%); max-height: min(78vh, 760px); position: relative; overflow: auto; border-radius: 18px; border: 1px solid var(--hairline-strong); background: var(--surface-elevated); box-shadow: 0 20px 70px rgba(0,0,0,0.55); }
-.np-modal-inner { padding: 14px; }
-.np-modal-close { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--hairline-strong); background: var(--surface-muted); color: var(--text); cursor: pointer; font-size: 18px; line-height: 1; }
-.np-modal-close:hover { border-color: rgba(var(--accent-rgb),0.38); box-shadow: 0 0 0 3px rgba(var(--accent-rgb),0.10); }
-
 /* ── Glow cells ── */
-.np-glow-input { border-color: rgba(var(--accent-blue-rgb),0.22) !important; box-shadow: inset 0 0 0 1px rgba(var(--accent-blue-rgb),0.10), 0 0 0 2px rgba(var(--accent-blue-rgb),0.06); background: var(--control-bg) !important; }
-.np-glow-input:focus { border-color: rgba(var(--accent-blue-rgb),0.40) !important; box-shadow: inset 0 0 0 1px rgba(var(--accent-blue-rgb),0.20), 0 0 0 3px rgba(var(--accent-blue-rgb),0.14) !important; }
-.np-struct-table tbody td, .np-struct-table tbody th,
-.np-premiums-table tbody td, .np-premiums-table tbody th,
-.np-final-table tbody td, .np-final-table tbody th { box-shadow: inset 0 0 0 1px rgba(var(--accent-blue-rgb),0.06); }
+.np-struct-table tbody td, .np-struct-table tbody th, .np-final-table tbody td, .np-final-table tbody th { box-shadow: inset 0 0 0 1px rgba(var(--accent-blue-rgb),0.06); }
 
 /* ── Totals row (tfoot) — neon blue ── */
 .np-struct-table tfoot tr td,
@@ -316,33 +278,7 @@ body.np-modal-open { overflow: hidden; }
   transition: background .15s, border-color .15s;
 }
 .np-struct-btn:hover { background: var(--surface-2); }
-.np-struct-btn--accent {
-  border-color: rgba(var(--accent-blue-rgb),.45);
-  background: rgba(var(--accent-blue-rgb),.08);
-  color: var(--accent-blue);
-}
-.np-struct-btn--accent:hover { background: rgba(var(--accent-blue-rgb),.15); }
 .np-struct-btn--ghost { background: transparent; border-color: var(--hairline-strong); }
-
-/* ── Quote structure table — expiring structure minus Rate/EP/MDP/MDP%/ROL (11 cols) ── */
-/* Expiring is 3100px for 16 cols. Removed cols: rate(150)+EP(220)+MDP(220)+MDP%(120)+ROL(120)=830. */
-/* Quote width: 3100 - 830 = 2270px */
-.np-struct-table--wide.np-struct-table--quote,
-.np-struct-table--quote {
-  width:     2350px !important;
-  min-width: 2350px !important;
-}
-
-/* Aggregate Limit column wider in quote table */
-.np-struct-table--quote th.np-col-agg,
-.np-struct-table--quote td.np-col-agg {
-  width:     300px !important;
-  min-width: 300px !important;
-}
-
-/* ═══════════════════════════════════════════════════════
-   QUOTE STRUCTURE SECTION  (.qss-*)
-   ═══════════════════════════════════════════════════════ */
 
 /* ── Card header ── */
 .qss-header {

@@ -60,22 +60,6 @@
   gap: 40px;
 }
 
-.qs-section-head {
-  margin-bottom: 16px;
-}
-
-.qs-section-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 4px;
-}
-
-.qs-section-sub {
-  font-size: 13px;
-  color: #64748b;
-}
-
 /* --- 3. Tables --- */
 .qs-table-wrap {
   overflow-x: auto;
@@ -209,7 +193,7 @@
 .qs-modal-body {
   padding: 32px;
   overflow-y: auto;
-  background: #0f172a; /* Darker interior */
+  background: #0f172a;
 }
 
 .qs-modal-grid {
@@ -226,13 +210,6 @@
   margin-bottom: 4px;
   border-left: 3px solid #3b82f6;
   padding-left: 12px;
-}
-
-.qs-right-sub {
-  font-size: 13px;
-  color: #94a3b8;
-  margin-bottom: 20px;
-  padding-left: 15px;
 }
 
 .qs-table-wrap--tight {
@@ -289,13 +266,6 @@
   line-height: 1.1;
 }
 
-.qs-metric-unit {
-  font-size: 16px;
-  color: #64748b;
-  font-weight: 600;
-  margin-left: 2px;
-}
-
 .qs-metric-desc {
   font-size: 12px;
   color: #64748b;
@@ -310,13 +280,6 @@
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
-/* =========================================================
-   QUICK SUMMARY — Dev Triangle style "pill cells"
-   Paste at VERY BOTTOM of src/styles/pages/quickSummary.css
-   This keeps your table layout, but makes EACH VALUE look
-   like the Dev Triangle cells (glossy faint green, rounded),
-   and turns the LAST 3 columns red when negative.
-========================================================= */
 
 /* make table more compact + centered like triangles */
 .QUICK_SUMMARY_PAGE .qs-table{
@@ -343,105 +306,10 @@
   border-bottom: 1px solid rgba(148,163,184,.08);
 }
 
-/* ---------------------------------------------------------
-   ✅ The Dev-Triangle style cell wrapper used by JS:
-   <div class="qs-cell-pill ...">value</div>
---------------------------------------------------------- */
-.QUICK_SUMMARY_PAGE .qs-cell-pill{
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  min-width: 92px;           /* keeps table tidy */
-  height: 34px;              /* compact like triangles */
-  padding: 0 10px;
-
-  border-radius: 12px;
-
-  /* faint green internal shade (like dev triangles) */
-  background:
-    linear-gradient(
-      to bottom,
-      rgba(var(--accent-rgb),.08),
-      var(--control-bg)
-    );
-
-  border: 1px solid rgba(var(--accent-rgb),.18);
-
-  /* subtle gloss + very faint halo */
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.06),
-    0 0 0 1px rgba(var(--accent-rgb),.10),
-    0 0 6px rgba(var(--accent-rgb),.08);
-
-  color: rgba(var(--text-rgb),.88);
-  font-weight: 650;          /* not bold-heavy */
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* hover similar to triangle */
-.QUICK_SUMMARY_PAGE .qs-table tbody tr:hover .qs-cell-pill{
-  border-color: rgba(var(--accent-rgb),.24);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.08),
-    0 0 0 1px rgba(var(--accent-rgb),.14),
-    0 0 8px rgba(var(--accent-rgb),.10);
-}
-
-/* make the year pill look consistent but slightly more neutral */
-.QUICK_SUMMARY_PAGE .qs-year .qs-cell-pill,
-.QUICK_SUMMARY_PAGE th.qs-year .qs-cell-pill{
-  min-width: 86px;
-  justify-content: flex-start;
-  background:
-    linear-gradient(
-      to bottom,
-      rgba(148,163,184,.08),
-      var(--control-bg)
-    );
-  border-color: rgba(148,163,184,.18);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.06),
-    0 0 0 1px rgba(148,163,184,.10),
-    0 0 6px rgba(148,163,184,.08);
-}
-
-/* ---------------------------------------------------------
-   ✅ Negative variant used by JS:
-   <div class="qs-cell-pill qs-cell-pill--neg">
---------------------------------------------------------- */
-.QUICK_SUMMARY_PAGE .qs-cell-pill.qs-cell-pill--neg{
-  color: var(--accent-rose);
-
-  border-color: rgba(248,113,113,.38);
-
-  background:
-    linear-gradient(
-      to bottom,
-      rgba(248,113,113,.14),
-      var(--control-bg)
-    );
-
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.06),
-    0 0 0 1px rgba(248,113,113,.18),
-    0 0 8px rgba(248,113,113,.14);
-}
-
 /* totals row still reads as total, but uses same pill */
 .QUICK_SUMMARY_PAGE .qs-total{
   background: var(--table-row-alt);
 }
-.QUICK_SUMMARY_PAGE .qs-total .qs-cell-pill{
-  font-weight: 750;
-}
-
-/* optional: keep old qs-neg/qs-pos from modal tables if you still use them */
-/* =========================================================
-   QUICK SUMMARY HERO — compact + green pill buttons
-   (Paste at bottom of quickSummary.css)
-========================================================= */
 
 /* Compact the hero container */
 .QUICK_SUMMARY_PAGE .qs-hero{
@@ -541,10 +409,6 @@
     gap: 10px;
   }
 }
-/* =========================================================
-   FUTURISTIC MODAL SKIN (Portfolio Analysis / Stats)
-   Paste at bottom of quickSummary.css
-========================================================= */
 
 /* Backdrop: deeper + slight color bloom */
 .QUICK_SUMMARY_PAGE .qs-modal-backdrop{
@@ -685,13 +549,6 @@
     0 0 18px rgba(var(--accent-rgb),.18);
 }
 
-.QUICK_SUMMARY_PAGE .qs-right-sub{
-  padding-left: 0;
-  margin-bottom: 16px;
-  color: rgba(148,163,184,.88);
-  font-size: 12px;
-}
-
 /* Metrics grid: tighter + more “cardy” */
 .QUICK_SUMMARY_PAGE .qs-metrics-grid{
   gap: 12px;
@@ -738,10 +595,6 @@
   color: rgba(226,232,240,.94);
 }
 
-.QUICK_SUMMARY_PAGE .qs-metric-unit{
-  color: rgba(148,163,184,.85);
-}
-
 /* Optional: tint per card type without harsh colors */
 .QUICK_SUMMARY_PAGE .qs-metric--green{ border-color: rgba(var(--accent-rgb),.22); }
 .QUICK_SUMMARY_PAGE .qs-metric--blue{  border-color: rgba(59,130,246,.20); box-shadow: 0 12px 26px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06), 0 0 0 6px rgba(59,130,246,.06); }
@@ -755,58 +608,6 @@
 .QUICK_SUMMARY_PAGE .qs-page{
   display: flex;
   justify-content: center;
-}
-
-.QUICK_SUMMARY_PAGE .qs-modern{
-  width: min(1100px, 70vw); /* ✅ compact ~70% */
-  margin: 6px auto 0;
-  padding-bottom: 20px;
-}
-
-.QUICK_SUMMARY_PAGE .qs-hero2{
-  display:flex;
-  align-items:flex-end;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 14px 16px;
-  border-radius: 20px;
-  border: 1px solid var(--stroke-soft);
-  background: var(--surface-2);
-  backdrop-filter: blur(14px);
-}
-
-.QUICK_SUMMARY_PAGE .qs-hero2-title{
-  font-size: 22px;
-  font-weight: 900;
-  letter-spacing: -.02em;
-  color: rgba(var(--text-rgb),.94);
-}
-
-.QUICK_SUMMARY_PAGE .qs-hero2-sub{
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.QUICK_SUMMARY_PAGE .qs-hero2-right{
-  display:flex;
-  gap: 10px;
-}
-
-.QUICK_SUMMARY_PAGE .qs-neo-btn{
-  border-radius: 999px;
-  padding: 9px 14px;
-  border: 1px solid var(--stroke-soft);
-  background: var(--control-bg);
-  color: rgba(var(--text-rgb),.85);
-  font-weight: 800;
-  cursor: pointer;
-  transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
-}
-.QUICK_SUMMARY_PAGE .qs-neo-btn:hover{
-  transform: translateY(-1px);
-  border-color: rgba(148,163,184,.35);
-  box-shadow: 0 0 0 6px rgba(148,163,184,.08);
 }
 
 .QUICK_SUMMARY_PAGE .qs-kpis{
@@ -845,19 +646,6 @@
   font-size: 18px;
   font-weight: 900;
   color: rgba(var(--text-rgb),.95);
-}
-
-.QUICK_SUMMARY_PAGE .qs-kpi-sub{
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.QUICK_SUMMARY_PAGE .qs-grid2{
-  margin-top: 12px;
-  display:grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
 }
 
 .QUICK_SUMMARY_PAGE .qs-card{
@@ -929,7 +717,7 @@
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
-  min-width: 920px; /* keeps columns readable; scrolls on small screens */
+  min-width: 920px;
 }
 
 /* Wide tables (many columns) size each column to its content and scroll
@@ -988,10 +776,6 @@
 }
 
 /* first column (year) subtle */
-.QUICK_SUMMARY_PAGE .qs-col-year .qs-td{
-  font-weight: 900;
-  color: rgba(var(--text-rgb),.88);
-}
 
 .QUICK_SUMMARY_PAGE .qs-td{
   font-size: 13px;
@@ -1023,51 +807,11 @@
   font-weight: 900;
 }
 
-/* hint */
-.QUICK_SUMMARY_PAGE .qs-hint{
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--muted);
-  text-align: center;
-}
-
 /* responsive */
 @media (max-width: 1100px){
-  .QUICK_SUMMARY_PAGE .qs-modern{
-    width: min(980px, 92vw);
-  }
   .QUICK_SUMMARY_PAGE .qs-kpis{
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
-/* =========================================================
-   QUICK SUMMARY — CENTER EVERYTHING + GREEN GLOW CELLS
-   Paste at VERY BOTTOM so it wins
-========================================================= */
-
-/* Center the whole dashboard block */
-.QUICK_SUMMARY_PAGE .qs-modern{
-  margin-left: auto;
-  margin-right: auto;
-  text-align: center;
-}
-
-/* Hero: center both sides (title/sub + buttons) */
-.QUICK_SUMMARY_PAGE .qs-hero2{
-  justify-content: center !important;
-  align-items: center !important;
-  text-align: center;
-}
-
-.QUICK_SUMMARY_PAGE .qs-hero2-left{
-  display:flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.QUICK_SUMMARY_PAGE .qs-hero2-right{
-  justify-content: center;
 }
 
 /* KPIs centered */
@@ -1080,8 +824,7 @@
   text-align: center;
 }
 
-.QUICK_SUMMARY_PAGE .qs-kpi-value,
-.QUICK_SUMMARY_PAGE .qs-kpi-sub{
+.QUICK_SUMMARY_PAGE .qs-kpi-value{
   text-align: center;
 }
 
@@ -1160,14 +903,6 @@
     0 0 18px rgba(var(--accent-rgb),.10) !important;
 }
 
-/* Center the hint text */
-.QUICK_SUMMARY_PAGE .qs-hint{
-  text-align: center;
-}
-/* =========================================================
-   QUICK SUMMARY — ROUNDED TABLE CELLS
-========================================================= */
-
 /* round every cell box */
 .QUICK_SUMMARY_PAGE .qs-table-modern td{
   border-radius: 10px;
@@ -1176,17 +911,13 @@
 /* ensure rounding is visible (separate boxes, not merged grid) */
 .QUICK_SUMMARY_PAGE .qs-table-modern{
   border-collapse: separate !important;
-  border-spacing: 8px 8px !important; /* space between rounded cells */
+  border-spacing: 8px 8px !important;
 }
 
 /* optional: keep headers aligned nicely with the new spacing */
 .QUICK_SUMMARY_PAGE .qs-table-modern thead th{
   padding-bottom: 6px;
 }
-/* =========================================================
-   QUICK SUMMARY — FIX: DO NOT FLEX <td> (keeps columns)
-   Center content via inner pill instead
-========================================================= */
 
 /* restore normal table-cell behavior */
 .QUICK_SUMMARY_PAGE .qs-table-modern td{
@@ -1195,23 +926,10 @@
   text-align: center !important;
 }
 
-/* center the content inside the cell */
-.QUICK_SUMMARY_PAGE .qs-table-modern td .qs-cell-pill{
-  display: flex !important;
-  align-items: center !important;     /* vertical */
-  justify-content: center !important; /* horizontal */
-  text-align: center !important;
-  width: 100%;
-  height: 100%;
-}
-
 /* if you previously forced numeric right alignment, kill it */
 .QUICK_SUMMARY_PAGE .qs-td--num{
   text-align: center !important;
 }
-/* =========================================================
-   QUICK SUMMARY — REMOVE BOLD FROM ALL TABLE CELLS
-========================================================= */
 
 /* kill bold anywhere inside table cells */
 .QUICK_SUMMARY_PAGE td,
@@ -1226,14 +944,6 @@
 .QUICK_SUMMARY_PAGE .qs-total td *{
   font-weight: 400 !important;
 }
-
-/* ensure negative styling doesn't reintroduce bold */
-.QUICK_SUMMARY_PAGE .qs-cell-pill--neg{
-  font-weight: 400 !important;
-}
-/* =========================================================
-   QUICK SUMMARY — FLAT GREEN BORDERS (NO SHADOWS)
-========================================================= */
 
 /* remove all shadows everywhere in table */
 .QUICK_SUMMARY_PAGE .qs-table-modern td,
@@ -1265,9 +975,6 @@
 .QUICK_SUMMARY_PAGE .qs-total td{
   background: var(--surface-muted) !important;
 }
-/* =========================================================
-   QUICK SUMMARY — FLAT GREY BORDERS (NO SHADOWS)
-========================================================= */
 
 /* remove any remaining shadows */
 .QUICK_SUMMARY_PAGE .qs-table-modern td,
@@ -1324,7 +1031,7 @@
   vertical-align: middle !important;
   overflow: hidden !important;         /* ✅ prevents overlap */
   text-overflow: ellipsis !important;
-  white-space: nowrap !important;      /* ✅ stop UW wrapping */
+  white-space: nowrap !important;
 }
 
 /* Greyish borders for all cells */
@@ -1332,20 +1039,20 @@
 .QUICK_SUMMARY_PAGE .qs-table-modern td,
 .QUICK_SUMMARY_PAGE .qs-table.qs-stats th,
 .QUICK_SUMMARY_PAGE .qs-table.qs-stats td {
-  border: 1px solid var(--stroke-soft) !important; /* greyish */
+  border: 1px solid var(--stroke-soft) !important;
 }
 
 /* Center all numeric cells, keep first column readable */
 .QUICK_SUMMARY_PAGE .qs-table-modern td,
 .QUICK_SUMMARY_PAGE .qs-table.qs-stats td {
   text-align: center !important;
-  font-weight: 400 !important; /* remove bold */
+  font-weight: 400 !important;
 }
 
 .QUICK_SUMMARY_PAGE .qs-table-modern th,
 .QUICK_SUMMARY_PAGE .qs-table.qs-stats th {
   text-align: center !important;
-  font-weight: 400 !important; /* remove bold */
+  font-weight: 400 !important;
 }
 
 /* UW Year column: give it a stable width so it never overlaps */
@@ -1363,17 +1070,6 @@
   white-space: nowrap !important;
 }
 
-/* If any legacy "pill" wrappers exist inside cells, neutralize them */
-.QUICK_SUMMARY_PAGE .qs-cell,
-.QUICK_SUMMARY_PAGE .qs-cell-pill {
-  display: inline !important;
-  padding: 0 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
 /* Optional: keep header distinct but still rectangular */
 .QUICK_SUMMARY_PAGE .qs-table-modern thead th,
 .QUICK_SUMMARY_PAGE .qs-table.qs-stats thead th {
@@ -1387,26 +1083,8 @@
 .QUICK_SUMMARY_PAGE .qs-table.qs-stats .qs-total td {
   background: var(--surface-muted) !important;
 }
-/* QUICK SUMMARY: remove background grid lines */
-.QUICK_SUMMARY_PAGE .sheet-grid{
-  display: none !important;
-}
-
-/* (optional) if your grid is a background on the panel instead */
-.QUICK_SUMMARY_PAGE .sheet-panel,
-.QUICK_SUMMARY_PAGE .sheet-panel-inner{
-  background-image: none !important;
-}
-
-/* =========================================================
-   QUICK SUMMARY — FULL WIDTH + COMPACT ANALYSIS MODAL
-========================================================= */
 
 /* Full width layout — remove 70vw constraint */
-.QUICK_SUMMARY_PAGE .qs-modern{
-  width: 100% !important;
-  max-width: 100% !important;
-}
 
 .QUICK_SUMMARY_PAGE .qs-sections{
   width: 100%;
@@ -1483,7 +1161,6 @@
 .QUICK_SUMMARY_PAGE .qs-modal .qs-table .qs-year{ color: #fff; }
 .QUICK_SUMMARY_PAGE .qs-modal .qs-table-wrap{ border-color: rgba(255,255,255,0.1); background: rgba(15, 23, 42, 0.3); }
 .QUICK_SUMMARY_PAGE .qs-modal .qs-td{ color: rgba(226,232,240,.86); }
-.QUICK_SUMMARY_PAGE .qs-modal .qs-col-year .qs-td{ color: rgba(226,232,240,.88); }
 .QUICK_SUMMARY_PAGE .qs-modal .qs-table-modern thead th,
 .QUICK_SUMMARY_PAGE .qs-modal .qs-table.qs-stats thead th{ background: rgba(8,16,40,.45) !important; color: rgba(148,163,184,.88); }
 .QUICK_SUMMARY_PAGE .qs-modal .qs-table-modern th,
@@ -1497,4 +1174,3 @@
 .QUICK_SUMMARY_PAGE .qs-modal .qs-total{ background: rgba(255, 255, 255, 0.03); color: #fff; }
 .QUICK_SUMMARY_PAGE .qs-modal .qs-neg{ color: #f87171; }
 .QUICK_SUMMARY_PAGE .qs-modal .qs-pos{ color: #4ade80; }
-.QUICK_SUMMARY_PAGE .qs-modal .qs-hint{ color: rgba(148,163,184,.75); }

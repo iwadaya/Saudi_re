@@ -9,20 +9,15 @@
 }
 
 .modal-backdrop,
-.slide-modal-backdrop,
 .screen-modal-backdrop,
 .bbg-modal-backdrop,
 .bbg-modal-overlay,
 .bm-modal-backdrop,
 .qs-modal-backdrop,
 .llp-modal-backdrop,
-.llsel-modal-backdrop,
 .ls-modal-backdrop,
 .ca-modal-backdrop,
-.renew-modal,
-.np-modal-backdrop,
-.catsel-modal-backdrop,
-.ia-backdrop{
+.renew-modal{
   position: fixed !important;
   inset: 0 !important;
   z-index: var(--modal-stack) !important;
@@ -37,20 +32,15 @@
 }
 
 .modal,
-.slide-modal,
 .screen-modal,
 .bbg-modal,
 .bbg-modal-full,
 .bm-modal,
 .qs-modal,
 .llp-modal,
-.llsel-modal,
 .ls-modal,
 .ca-modal,
 .renew-panel,
-.np-modal,
-.catsel-modal,
-.ms-modal,
 .glass[role="dialog"]{
   box-sizing: border-box;
   max-width: calc(100vw - var(--modal-safe-inline) - var(--modal-safe-inline)) !important;
@@ -58,19 +48,15 @@
 }
 
 .modal,
-.slide-modal,
 .screen-modal,
 .bbg-modal,
 .bbg-modal-full,
 .bm-modal,
 .qs-modal,
 .llp-modal,
-.llsel-modal,
 .ls-modal,
 .ca-modal,
 .renew-panel,
-.catsel-modal,
-.ms-modal,
 .glass[role="dialog"]{
   margin-left: auto !important;
   margin-right: auto !important;
@@ -99,17 +85,13 @@
 
 .modal-title,
 .screen-modal-header,
-.slide-modal-header,
 .bbg-modal-head,
 .bm-modal-title,
 .qs-modal-head,
 .llp-modal-head,
-.llsel-modal-head,
 .ls-modal-head,
 .ca-modal-head,
-.renew-head,
-.np-modal-head,
-.catsel-modal-head{
+.renew-head{
   position: sticky;
   top: 0;
   z-index: 4;
@@ -125,12 +107,9 @@
 .bm-modal-title > span,
 .qs-modal-title,
 .llp-modal-title,
-.llsel-modal-title,
 .ls-modal-title,
 .ca-modal-title,
-.renew-title,
-.np-modal-title,
-.catsel-modal-title{
+.renew-title{
   min-width: 0;
 }
 
@@ -141,14 +120,9 @@
 .bm-modal-title .bm-pill,
 .qs-x,
 .llp-modal-x,
-.llp-x,
-.llsel-modal-x,
 .ls-modal-x,
 .ca-modal-x,
 .renew-x,
-.np-modal-close,
-.catsel-modal-x,
-.ms-close,
 [role="dialog"] [aria-label="Close"]{
   flex: 0 0 auto;
   margin-left: auto;
@@ -178,18 +152,12 @@
 }
 
 .screen-modal-body,
-.slide-modal-body,
 .bbg-modal-body,
 .bm-modal-body,
 .qs-modal-body,
-.llp-modal-body,
-.llsel-modal-body,
 .ls-modal-body,
 .ca-modal-body,
-.renew-body,
-.np-modal-body,
-.catsel-modal-body,
-.modal-body{
+.renew-body{
   min-height: 0;
 }
 

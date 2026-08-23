@@ -7,8 +7,6 @@
    (#f87171/#60a5fa/#34d399/#fbbf24/#a78bfa and derived #4ade80 tones)
    intentionally stays literal: it must remain in lock-step with the
    PERIL_COLORS map in the JSX, not with the theme accents. */
-
-/* ── Modal shell (on top of the ui/Modal primitive) ─────────────────── */
 /* Backdrop: the primitive's .ui-modal-backdrop defaults (z-index 1000,
    --surface-muted wash) are lighter and stack lower than this full-screen
    drill-down had. Re-apply the layering the old .modal-backdrop shell got
@@ -266,7 +264,6 @@
   padding: 18px 20px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.04);
-  /* border + glow stay inline — they follow the peak peril's color */
 }
 .agg-peak__title {
   font-size: 11px;
@@ -365,7 +362,6 @@
   top: 0;
   z-index: 2;
   cursor: pointer;
-  /* no text-align: keep the UA default (center), as before */
 }
 .agg-th--num { text-align: right; }
 .agg-th--center { text-align: center; }

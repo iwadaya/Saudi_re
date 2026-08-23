@@ -22,7 +22,7 @@ button{ font-family:inherit; }
   display: flex;
   flex: 1;
   min-height: 0;
-  overflow: hidden;  /* prevent outer scroll — each pane scrolls itself */
+  overflow: hidden;
   /* Cap sidebar+content together on wide screens so they align with the
      topbar pill and the home/dashboard containers (all 1680px centered). */
   max-width: var(--app-max-content);
@@ -127,10 +127,6 @@ button{ font-family:inherit; }
   margin-bottom: 16px;
 }
 
-.wizard-page-title{
-  display: none;
-}
-
 .wizard-page-body{
   /* Fills wizard-content; the outer .wizard-layout is already capped at
      var(--app-max-content) so content never stretches edge-to-edge on
@@ -164,16 +160,7 @@ button{ font-family:inherit; }
   max-width: none;
   display: flex;
   flex-direction: column;
-  overflow: hidden;  /* no outer page scroll */
-}
-
-/* Wide screen centering wrapper for wizard layout */
-.app-shell__wizard-wrap{
-  flex: 1;
-  min-height: 0;
-  display: flex;
   overflow: hidden;
-  background: transparent;
 }
 
 /* Pages WITHOUT wizard layout (Home, Dashboard, Approvals) scroll normally */
@@ -217,20 +204,6 @@ button{ font-family:inherit; }
   background-image:
     radial-gradient(circle at 1px 1px, rgba(148,163,184,.08) 1px, transparent 0);
   background-size: 24px 24px;
-}
-
-/* ===== Sliding Scale Modal ===== */
-
-.slide-modal-backdrop{
-  position: fixed;
-  inset: 0;
-  background: rgba(3, 7, 18, 0.75);
-  backdrop-filter: blur(6px);
-  z-index: 2000;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 /* ===== Screen Modal (embedded screens) ===== */
@@ -295,193 +268,8 @@ button{ font-family:inherit; }
 /* Hide navigation dock inside embedded screens */
 .screen-modal .wizard-dock{ display:none !important; }
 
-/* ===== Sliding Scale Modal Panel ===== */
-
-.slide-modal{
-  width: min(900px, 92vw);
-  max-height: 85vh;
-
-  background: var(--panel-bg-strong);
-  border-radius: 16px;
-  box-shadow:
-    0 20px 60px rgba(0, 0, 0, 0.6),
-    inset 0 0 0 1px var(--hairline);
-
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.slide-modal-header{
-  padding: 16px 20px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  border-bottom: 1px solid var(--hairline);
-}
-
-.slide-modal-body{
-  padding: 16px 20px;
-  overflow: auto;
-  flex: 1;
-}
-
-.slide-modal-footer{
-  padding: 14px 20px;
-  border-top: 1px solid var(--hairline);
-  display: flex;
-  justify-content: space-between;
-}
-
-/* =========================
-   Classy Green Gloss Buttons
-   (for Sliding Scale modal)
-   ========================= */
-
-/* Save / primary */
-.slide-modal .btn.primary,
-.slide-modal #saveSlide{
-  appearance:none;
-  border:none;
-  cursor:pointer;
-  color:var(--accent-contrast);
-  font-weight:700;
-  letter-spacing:.2px;
-  padding:10px 16px;
-  border-radius:12px;
-  background:
-    radial-gradient(120% 140% at 20% 0%, rgba(255,255,255,.55), rgba(255,255,255,0) 55%),
-    linear-gradient(180deg, var(--g1), var(--g2));
-  box-shadow:
-    0 12px 26px rgba(0,0,0,.45),
-    0 0 0 1px rgba(255,255,255,.12) inset,
-    0 1px 0 rgba(255,255,255,.25) inset,
-    0 0 24px var(--gGlow);
-  transition: transform .12s ease, filter .12s ease, box-shadow .12s ease;
-}
-
-.slide-modal .btn.primary:hover,
-.slide-modal #saveSlide:hover{
-  filter: brightness(1.04) saturate(1.05);
-  transform: translateY(-1px);
-  box-shadow:
-    0 14px 30px rgba(0,0,0,.52),
-    0 0 0 1px rgba(255,255,255,.14) inset,
-    0 1px 0 rgba(255,255,255,.28) inset,
-    0 0 30px rgba(var(--accent-rgb),.45);
-}
-
-.slide-modal .btn.primary:active,
-.slide-modal #saveSlide:active{
-  transform: translateY(0px);
-  filter: brightness(.98);
-}
-
-.slide-modal .btn.primary:focus-visible,
-.slide-modal #saveSlide:focus-visible{
-  outline:none;
-  box-shadow:
-    0 12px 26px rgba(0,0,0,.45),
-    0 0 0 1px rgba(255,255,255,.12) inset,
-    0 0 0 4px var(--gRing),
-    0 0 28px var(--gGlow);
-}
-
-/* Cancel / ghost */
-.slide-modal .btn.ghost,
-.slide-modal #cancelSlide{
-  appearance:none;
-  cursor:pointer;
-  color:rgba(var(--text-rgb),.92);
-  font-weight:650;
-  padding:10px 16px;
-  border-radius:12px;
-  background: var(--surface-hover);
-  border: 1px solid var(--hairline-strong);
-  box-shadow:
-    0 10px 22px rgba(0,0,0,.35),
-    0 1px 0 rgba(255,255,255,.08) inset;
-  transition: transform .12s ease, background .12s ease, border-color .12s ease;
-}
-
-.slide-modal .btn.ghost:hover,
-.slide-modal #cancelSlide:hover{
-  background: var(--control-hover);
-  border-color: var(--stroke);
-  transform: translateY(-1px);
-}
-
-.slide-modal .btn.ghost:active,
-.slide-modal #cancelSlide:active{
-  transform: translateY(0px);
-}
-
-/* Add Row button to match (green glossy but slightly smaller) */
-.slide-modal #addSlideRow,
-.slide-modal .orange-gloss-btn{
-  appearance:none;
-  border:none;
-  cursor:pointer;
-  color:var(--accent-contrast);
-  font-weight:700;
-  padding:8px 12px;
-  border-radius:11px;
-  background:
-    radial-gradient(120% 140% at 20% 0%, rgba(255,255,255,.48), rgba(255,255,255,0) 55%),
-    linear-gradient(180deg, rgba(var(--accent-rgb),.95), rgba(var(--accent2-rgb),.95));
-  box-shadow:
-    0 10px 20px rgba(0,0,0,.40),
-    0 0 0 1px rgba(255,255,255,.10) inset,
-    0 1px 0 rgba(255,255,255,.22) inset;
-  transition: transform .12s ease, filter .12s ease, box-shadow .12s ease;
-}
-
-.slide-modal #addSlideRow:hover,
-.slide-modal .orange-gloss-btn:hover{
-  transform: translateY(-1px);
-  filter: brightness(1.04) saturate(1.05);
-  box-shadow:
-    0 12px 24px rgba(0,0,0,.48),
-    0 0 0 1px rgba(255,255,255,.12) inset,
-    0 1px 0 rgba(255,255,255,.24) inset;
-}
-
-.slide-modal #addSlideRow:active,
-.slide-modal .orange-gloss-btn:active{
-  transform: translateY(0px);
-  filter: brightness(.98);
-}
-
-/* Remove row button: small dark pill with green hover */
-.slide-modal .slide-remove-btn{
-  width:34px;
-  height:30px;
-  border-radius:10px;
-  border:1px solid var(--hairline-strong);
-  background: var(--control-bg);
-  color: rgba(var(--text-rgb),.85);
-  cursor:pointer;
-  box-shadow: 0 8px 18px rgba(0,0,0,.35);
-  transition: transform .12s ease, border-color .12s ease, background .12s ease, box-shadow .12s ease;
-}
-
-.slide-modal .slide-remove-btn:hover{
-  transform: translateY(-1px);
-  border-color: rgba(var(--accent-rgb),.38);
-  background: rgba(var(--accent-rgb),.10);
-  box-shadow:
-    0 10px 22px rgba(0,0,0,.42),
-    0 0 0 3px rgba(var(--accent-rgb),.10);
-}
-
-.slide-modal .slide-remove-btn:active{
-  transform: translateY(0px);
-}
-
 /* Hide tabs dock / wizard tabs inside embedded screens */
-.screen-modal .tabs-dock{ display:none !important; }
-.screen-modal .wizard-tabs,
-.screen-modal .wizard-tabs-wrap,
-.screen-modal .workspace--with-tabs{
+.screen-modal .wizard-tabs{
   padding-bottom: 0 !important;
 }
 

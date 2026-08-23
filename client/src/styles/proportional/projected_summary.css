@@ -258,27 +258,19 @@
   background: var(--surface-hover);
 }
 
-/* =========================================================
-   styles/pages/projectedSummary.css
-   Changes:
-   1) DULL chart colors (less bright)
-   2) Add “pill cells” around table values (like Dev Factors)
-   3) Slightly reduce boldness (optional but matches your style)
-========================================================= */
-
 /* ---------- Dull the graph colors ---------- */
 .PROJECTED_SUMMARY_PAGE .ps-bar{
-  opacity: .78; /* slightly dull */
+  opacity: .78;
 }
 
 /* projected: dull green */
 .PROJECTED_SUMMARY_PAGE .ps-bar--proj{
-  background: rgba(var(--accent-rgb),.45); /* was 70,200,140 bright */
+  background: rgba(var(--accent-rgb),.45);
 }
 
 /* actual: dull amber/grey (less loud) */
 .PROJECTED_SUMMARY_PAGE .ps-bar--act{
-  background: rgba(148,163,184,.45); /* calm slate instead of orange */
+  background: rgba(148,163,184,.45);
 }
 
 /* Optional: legend dots if you use them elsewhere */
@@ -339,22 +331,15 @@
 .PROJECTED_SUMMARY_PAGE .ps-h2{ font-weight: 650; }
 .PROJECTED_SUMMARY_PAGE .ps-card-title{ font-weight: 650; }
 .PROJECTED_SUMMARY_PAGE .ps-block-title{ font-weight: 650; }
-/* =========================================================
-   styles/pages/projectedSummary.css  (ADD / OVERRIDE)
-   - Center/justify EVERYTHING inside table cells
-   - Faint green border/glow around value pills (like dev triangles)
-   - Add a legend for charts + dull colors
-   Paste at the VERY bottom so it wins
-========================================================= */
 
 /* ---------- Dull chart colors (calm, not bright) ---------- */
 .PROJECTED_SUMMARY_PAGE .ps-bar{ opacity: .72; }
 
 .PROJECTED_SUMMARY_PAGE .ps-bar--proj{
-  background: rgba(var(--accent-rgb),.38);   /* faint green */
+  background: rgba(var(--accent-rgb),.38);
 }
 .PROJECTED_SUMMARY_PAGE .ps-bar--act{
-  background: rgba(148,163,184,.38); /* muted slate */
+  background: rgba(148,163,184,.38);
 }
 
 /* ---------- Legend (visible + consistent) ---------- */
@@ -427,7 +412,7 @@
   text-align: center;            /* ✅ center text */
 
   background: var(--control-bg);
-  border: 1px solid rgba(var(--accent-rgb),.22);   /* faint green */
+  border: 1px solid rgba(var(--accent-rgb),.22);
 
   /* faint glossy edge like dev triangles */
   box-shadow:
@@ -459,18 +444,6 @@
     inset 0 1px 0 rgba(255,255,255,.06),
     0 0 0 1px rgba(var(--accent-rgb),.16),
     0 0 8px rgba(var(--accent-rgb),.14);
-}
-/* =========================================================
-   styles/pages/projectedSummary.css  (ADD / OVERRIDE)
-   Bluish background + subtle grid lines like Dev Triangles
-   Paste at VERY bottom so it wins
-========================================================= */
-
-.PROJECTED_SUMMARY_PAGE .sheet-panel-inner{
-  /* bluish depth */
-  background: var(--surface-muted);
-  border: 1px solid var(--hairline);
-  border-radius: 18px;
 }
 
 /* give the page area the “triangle” surface feel */
@@ -534,7 +507,7 @@
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.06), /* top gloss */
     0 0 0 1px rgba(var(--accent-rgb),.12),       /* edge */
-    0 0 6px rgba(var(--accent-rgb),.10);         /* halo */
+    0 0 6px rgba(var(--accent-rgb),.10);
 }
 
 /* Hover — same behaviour as dev triangles */
@@ -571,9 +544,6 @@
     0 0 0 1px rgba(239,68,68,.20),
     0 0 8px rgba(239,68,68,.18);
 }
-/* =========================================================
-   PROJECTED SUMMARY — Excel-style square cells
-========================================================= */
 
 /* table: crisp grid */
 .PROJECTED_SUMMARY_PAGE .ps-table{
@@ -641,9 +611,6 @@
 .PROJECTED_SUMMARY_PAGE .ps-total td .ps-cell{
   background: var(--surface-muted);
 }
-/* =========================================================
-   PROJECTED SUMMARY — Centered cells, NO green fill
-========================================================= */
 
 /* Center headers */
 .PROJECTED_SUMMARY_PAGE .ps-table th{
@@ -676,14 +643,11 @@
   border-color: rgba(239,68,68,.45) !important;
   color: rgba(239,68,68,.95) !important;
 }
-/* =========================================================
-   PROJECTED SUMMARY — Green borders + row highlight
-========================================================= */
 
 /* Green grid borders */
 .PROJECTED_SUMMARY_PAGE .ps-table td,
 .PROJECTED_SUMMARY_PAGE .ps-table th{
-  border: 1px solid rgba(var(--accent-rgb),.35) !important; /* green */
+  border: 1px solid rgba(var(--accent-rgb),.35) !important;
 }
 
 /* Neutral cell background (keep clean) */
@@ -721,9 +685,6 @@
   border-color: rgba(239,68,68,.55) !important;
   color: rgba(239,68,68,.95) !important;
 }
-/* =========================================================
-   PROJECTED SUMMARY — 70% compact table density
-========================================================= */
 
 /* Headers: tighter */
 .PROJECTED_SUMMARY_PAGE .ps-table th{
@@ -749,11 +710,6 @@
   height: 28px !important;
   font-size: 11px !important;
 }
-/* =========================================================
-   PROJECTED SUMMARY — Border color by table type
-   1st table = Projected (green)
-   2nd table = Actual (blue)
-========================================================= */
 
 /* =========================
    PROJECTED (GREEN)
@@ -761,7 +717,7 @@
 
 .PROJECTED_SUMMARY_PAGE .ps-block:nth-of-type(1) .ps-table td,
 .PROJECTED_SUMMARY_PAGE .ps-block:nth-of-type(1) .ps-table th{
-  border-color: rgba(var(--accent-rgb),.40) !important; /* green */
+  border-color: rgba(var(--accent-rgb),.40) !important;
 }
 
 /* Hover stays green */
@@ -775,7 +731,7 @@
 
 .PROJECTED_SUMMARY_PAGE .ps-block:nth-of-type(2) .ps-table td,
 .PROJECTED_SUMMARY_PAGE .ps-block:nth-of-type(2) .ps-table th{
-  border-color: rgba(59,130,246,.45) !important; /* blue */
+  border-color: rgba(59,130,246,.45) !important;
 }
 
 /* Hover stays blue */

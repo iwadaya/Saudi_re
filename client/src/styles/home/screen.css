@@ -39,28 +39,6 @@
   font-size: 12px;
   border: 1px solid rgba(255,255,255,.18);
 }
-.action-pill--cu{
-  border-color: rgba(88,166,255,.55);
-  background:
-    radial-gradient(120% 180% at 20% 0%, rgba(255,255,255,.55), rgba(255,255,255,0) 55%),
-    linear-gradient(180deg, rgba(88,166,255,.95), rgba(20,96,210,.92));
-  box-shadow:
-    0 14px 34px rgba(0,0,0,.55),
-    0 0 0 1px rgba(255,255,255,.12) inset,
-    0 1px 0 rgba(255,255,255,.22) inset,
-    0 0 30px rgba(88,166,255,.38);
-  color: #071325;
-  font-weight: 800;
-}
-.action-pill--cu:hover{
-  filter: brightness(1.06) saturate(1.08);
-  transform: translateY(-1px);
-  box-shadow:
-    0 18px 40px rgba(0,0,0,.58),
-    0 0 0 1px rgba(255,255,255,.14) inset,
-    0 1px 0 rgba(255,255,255,.22) inset,
-    0 0 40px rgba(88,166,255,.50);
-}
 
 .dash-grid{
   margin-top: 14px;
@@ -69,15 +47,8 @@
   gap: 14px;
   align-items: stretch;
 }
-.dash-grid--bottom{ margin-top: 14px; }
 
 .panel-equal{ min-height: 520px; }
-
-.cards-2x2{
-  display:grid;
-  grid-template-columns: repeat(2, minmax(260px, 1fr));
-  gap: 12px;
-}
 .cards-3x3{
   display:grid;
   grid-template-columns: repeat(3, minmax(260px, 1fr));
@@ -108,8 +79,6 @@
 .stat-sub{ margin-top: 6px; font-size: 12px; color: var(--muted); }
 
 /* Modelled / Expected LR small pointer */
-.lr-diff{ display:inline-flex; align-items:center; gap:4px; font-size: 11px; margin-left: 6px; opacity: .9; }
-.lr-arrow{ font-size: 10px; line-height: 1; }
 
 .region-head{ display:flex; justify-content:space-between; margin-bottom:10px; }
 .region-title,.region-mini{ font-size: 10px; letter-spacing: .10em; opacity: .65; }
@@ -179,8 +148,6 @@
   font-weight: 600;
   letter-spacing: .04em;
 }
-
-.renewals-list{ display:flex; flex-direction:column; gap:10px; }
 .renewal-row{
   border-radius:14px;
   padding:12px;
@@ -200,8 +167,6 @@
   background: var(--control-bg);
   border:1px solid var(--stroke);
 }
-.broker-label{ font-size:10px; opacity:.6; text-align:right; }
-.broker-value{ font-size:12px; margin-top:6px; text-align:right; }
 
 .draft-body{
   border-radius:14px;
@@ -230,39 +195,6 @@
 .draft-title{ font-size:14px; }
 .draft-meta{ margin-top:6px; font-size:12px; color: var(--muted); }
 .draft-open{ font-size:12px; opacity:.75; }
-
-/* =========================
-   HOME: Renew Treaty "alive" button
-   ========================= */
-.action-pill--renew{
-  position: relative;
-  border-color: rgba(var(--accent-rgb),.55);
-  box-shadow: 0 0 0 rgba(var(--accent-rgb),.0);
-  overflow: hidden;
-}
-.action-pill--renew:hover{
-  border-color: rgba(var(--accent-rgb),.85);
-  box-shadow: 0 0 0 4px rgba(var(--accent-rgb),.08);
-}
-.action-pill--renew::before{
-  content:"";
-  position:absolute;
-  inset:-40%;
-  background: radial-gradient(circle at 30% 20%, rgba(var(--accent-rgb),.18), transparent 60%);
-  transform: rotate(12deg);
-  opacity:.75;
-  pointer-events:none;
-}
-.renew-badge{
-  margin-left: 8px;
-  font-size: 10px;
-  letter-spacing: .08em;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(var(--accent-rgb),.16);
-  border: 1px solid rgba(var(--accent-rgb),.25);
-  color: var(--accent);
-}
 
 /* =========================
    Renew Modal (Stylish)
@@ -425,17 +357,6 @@
   border-color: rgba(var(--accent-rgb),.35);
   box-shadow: 0 0 0 4px rgba(var(--accent-rgb),.08);
 }
-
-.renew-spinner{
-  position:absolute;
-  right: 12px;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  border: 2px solid rgba(var(--text-rgb),.25);
-  border-top-color: rgba(var(--accent-rgb),.95);
-  animation: renewSpin .8s linear infinite;
-}
 @keyframes renewSpin{ to { transform: rotate(360deg); } }
 
 .renew-note{
@@ -527,39 +448,6 @@
   gap: 14px;
 }
 
-/* ═══ Panel Cedant Filter ═══ */
-.panel-filter{
-  appearance: none;
-  margin-left: auto;
-  height: 30px;
-  min-width: 160px;
-  max-width: 220px;
-  padding: 0 28px 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--stroke-soft);
-  background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(155,176,207,.65)'/%3E%3C/svg%3E") no-repeat right 10px center,
-    var(--control-bg);
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: .02em;
-  cursor: pointer;
-  outline: none;
-  transition: border-color .12s ease, box-shadow .12s ease;
-}
-.panel-filter:hover{
-  border-color: var(--stroke);
-}
-.panel-filter:focus{
-  border-color: rgba(var(--accent-rgb),.32);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.10);
-}
-.panel-filter option{
-  background: var(--surface-solid);
-  color: var(--text);
-}
-
 /* Panel head: flex-wrap so filter sits nicely on smaller screens */
 .panel-head{
   display: flex;
@@ -595,11 +483,6 @@
 
 /* Demo Login */
 .LOGIN_SCREEN{ display:flex; align-items:center; justify-content:center; min-height: calc(100vh - 40px); padding: 24px; }
-.login-card{ width: min(520px, 92vw); padding: 22px; border-radius: 18px; }
-.login-title{ font-size: 22px; font-weight: 800; letter-spacing: .4px; }
-.login-sub{ margin-top: 6px; }
-.login-actions{ display:flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
-.login-actions .action-pill{ flex: 1 1 220px; }
 .login-hint{ margin-top: 14px; }
 
 /* Chief approvals */
@@ -634,10 +517,6 @@
 }
 
 /* ── Ownership UX (Mine / Everyone toggle + per-row ownership) ───────────── */
-.own-bar{ display:flex; align-items:center; gap:10px; padding:8px 12px; flex-wrap:wrap; }
-.own-seg{ display:inline-flex; border:1px solid var(--hairline-strong); border-radius:8px; overflow:hidden; }
-.own-seg button{ background:none; border:none; color:rgba(var(--text-rgb),.7); font-size:12px; font-weight:600; padding:6px 14px; cursor:pointer; }
-.own-seg button.is-active{ background:rgba(var(--accent-rgb),.15); color:var(--accent); }
 .own-row{ display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--hairline); }
 .own-row__main{ flex:1; min-width:0; }
 .own-row__title{ color:var(--text); font-weight:600; font-size:13px; display:flex; align-items:center; gap:6px; }

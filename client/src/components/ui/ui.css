@@ -97,8 +97,6 @@
 }
 .ui-input:disabled { opacity: .55; cursor: not-allowed; }
 .ui-input--number { font-variant-numeric: tabular-nums; text-align: right; }
-
-/* ── Select ─────────────────────────────────────────────────────────── */
 /* Same surface as .ui-input; keeps the native chevron and popup so the
    control stays accessible without a JS listbox. */
 .ui-select {
