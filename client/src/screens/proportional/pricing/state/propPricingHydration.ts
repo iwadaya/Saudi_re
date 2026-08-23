@@ -13,7 +13,7 @@ import type { AnyRecord, ComponentsGrid, ShareGrid } from './propPricingReducer'
 export const normalizeStatus = (s: unknown): string => {
   if (!s) return 'DRAFT';
   const u = String(s).toUpperCase();
-  if (u === 'RETURNED') return 'DRAFT';
+  if (u === 'RETURNED' || u === 'RECALLED') return 'DRAFT';
   if (u === 'OFFERED' || u === 'PENDING') return 'DRAFT';
   return u;
 };

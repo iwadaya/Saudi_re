@@ -325,7 +325,13 @@ export default function PropTreatyDetail() {
   const stateRef = React.useRef(appState);
   const lastExplicitSaveAtRef = React.useRef(0);
   useEffect(() => { stateRef.current = appState; }, [appState]);
-  const save = useCallback(async () => {
+  const save = useCallback(async (opts = {}) => {
+    // draft: true — persist whatever is present WITHOUT the required-fields
+    // gate. Used by the unmount autosave so navigating away mid-form never
+    // discards work: the DB happily stores a partial draft (only the header
+    // columns are NOT NULL, and canPersistTreatyHeader guards those), while
+    // the full validation still runs on explicit Next/Back navigation.
+    const draft = opts?.draft === true;
     // Read the slice from the ref so save() stays referentially stable across
     // keystrokes — saveRef.current and the unmount effect both depend on this.
     const cur = stateRef.current?.propTreatyDetail || {};
@@ -337,7 +343,7 @@ export default function PropTreatyDetail() {
     // backend rejects with a generic 400. Only enforce when the user has
     // actually started the form — typed-Error message is rendered by
     // WizardLayout's runTrackedSave catch block.
-    if (hasContent) {
+    if (!draft && hasContent) {
       const selectedTypeName = treatyTypes.find(x => String(x.id) === String(cur.treatyTypeId))?.name || '';
       const missing = getMissingRequiredFields(cur, {
         tMode:    treatyModeFromType(selectedTypeName),
@@ -465,7 +471,10 @@ export default function PropTreatyDetail() {
       // DB. An existing row (contractId set) can always be re-saved.
       const persistable = cur?.contractId || canPersistTreatyHeader(cur);
       if (persistable && saveRef.current) {
-        saveRef.current().catch(e => logger.error('[PropTreatyDetail] unmount save failed:', e));
+        // draft: true — never let the required-fields gate throw away a
+        // partially-filled form on navigation (e.g. an unfinished sliding
+        // scale). Explicit Next/Back still validates in full.
+        saveRef.current({ draft: true }).catch(e => logger.error('[PropTreatyDetail] unmount save failed:', e));
       }
     };
   }, []);

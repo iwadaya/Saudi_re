@@ -238,7 +238,7 @@ router.put("/treaties/:id/dev-factors/:type", validateBody(devFactorPutSchema), 
 router.get("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
   const {rows:rr}=await pool.query(`SELECT * FROM public.contract_large_loss_report WHERE contract_id=$1`,[req.params.id]);
   if(!rr.length) return res.json({report:null,losses:[]});
-  const {rows:losses}=await pool.query(`SELECT * FROM public.contract_large_losses WHERE report_id=$1 ORDER BY uw_year,date_of_loss`,[rr[0].report_id]);
+  const {rows:losses}=await pool.query(`SELECT *, ROUND(COALESCE(NULLIF(incurred,0), COALESCE(paid,0)+COALESCE(os,0)) * COALESCE(NULLIF(inflation_factor,0),1), 2) AS inflated_incurred FROM public.contract_large_losses WHERE report_id=$1 ORDER BY uw_year,date_of_loss`,[rr[0].report_id]);
   res.json({report:rr[0],losses});
 }));
 router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
@@ -302,7 +302,7 @@ router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
 router.get("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
   const {rows:rr}=await pool.query(`SELECT * FROM public.contract_cat_loss_report WHERE contract_id=$1`,[req.params.id]);
   if(!rr.length) return res.json({report:null,losses:[]});
-  const {rows:losses}=await pool.query(`SELECT * FROM public.contract_cat_losses WHERE report_id=$1 ORDER BY uw_year,date_of_loss`,[rr[0].report_id]);
+  const {rows:losses}=await pool.query(`SELECT *, ROUND(COALESCE(NULLIF(incurred,0), COALESCE(paid,0)+COALESCE(os,0)) * COALESCE(NULLIF(inflation_factor,0),1), 2) AS inflated_incurred FROM public.contract_cat_losses WHERE report_id=$1 ORDER BY uw_year,date_of_loss`,[rr[0].report_id]);
   res.json({report:rr[0],losses});
 }));
 router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
