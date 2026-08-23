@@ -678,6 +678,30 @@ async function authorizeTerminalAction({ action, entityType, entityId, actorUser
 }
 
 /**
+ * Non-throwing view of authorizeTerminalAction for the client: which terminal
+ * actions the verified actor may perform on this entity's live offer. Built on
+ * the same context + eligibility primitives so the answer can never drift from
+ * what the mutating endpoints enforce.
+ */
+export async function getTerminalPermissions({ entityType, entityId, actorUserId, actorRole }) {
+  const ctx = await loadTerminalContext(entityType, entityId);
+  const isActor = (id) => id != null && actorUserId != null && String(id) === String(actorUserId);
+  const eligible = actorUserId
+    ? (entityType === 'CONTRACT'
+      ? await isEligibleContractApprover(ctx.offer, actorUserId)
+      : isEligibleQuoteApprover(ctx, { actorUserId, actorRole }))
+    : false;
+  return {
+    can_sign: eligible,
+    can_ntu: isActor(ctx.ownerId) || eligible,
+    can_return: eligible,
+    can_recall: isActor(ctx.submitterId),
+    is_owner: isActor(ctx.ownerId),
+    is_submitter: isActor(ctx.submitterId),
+  };
+}
+
+/**
  * Normalize a persisted approver_options value to a list of user_id strings.
  * Tolerates the canonical shape (jsonb array of candidate objects) as well as a
  * bare array of user_id strings or a JSON-encoded string of either.

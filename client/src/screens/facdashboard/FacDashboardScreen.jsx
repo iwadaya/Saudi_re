@@ -1,14 +1,22 @@
+// client/src/screens/facdashboard/FacDashboardScreen.jsx
+// Facultative portfolio dashboard — the fac twin of dashboard/DashboardScreen.
+// Same tabs, filters, pivot shapes and styling (styles/dashboard/dashboard.css),
+// fed by /api/fac-dashboard/*. Treaty concepts are translated to fac ones:
+// Treaty Type → FAC Type (Proportional FAC | XL FAC), LOB → fac class of
+// business, and the proportional headline is Rate ‰ (premium ÷ sum insured ×
+// 1000, the unit fac prices in) where treaty shows Balance ×; ROL stays the
+// XL headline. UW Margin is the share of premium above the technical price.
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 import Topbar from '../../components/Topbar';
 import AsyncBoundary from '../../components/AsyncBoundary';
 import { useResource } from '../../hooks/useResource';
-import { fmtNum, fmtPct, fmtMoney, fmtBal } from '../../utils/format';
-import { REGION_COLS, LOB_COLS, BY_YEAR_COLS, TREATY_TYPE_COLS } from './dashboardColumns';
-import { fitLabelColumn } from './labelWidth';
+import { fmtNum, fmtPct, fmtMoney, fmtBal, fmtPerMille } from '../../utils/format';
+import { FAC_REGION_COLS, FAC_LOB_COLS, FAC_BY_YEAR_COLS, FAC_TYPE_COLS, FAC_KPI_ROWS, FAC_DASHBOARD_EXPORT_MANIFEST } from './facDashboardColumns';
+import { fitLabelColumn } from '../dashboard/labelWidth';
 import { logger } from '../../utils/logger';
-import ComboChart from './comboChart';
+import ComboChart from '../dashboard/comboChart';
 
 const TABS = [
   { key: 'portfolio-overview', label: 'Portfolio Overview' },
@@ -22,29 +30,30 @@ const TABS = [
 
 // Map a shared column { kind } → on-screen display formatter. The Excel export
 // reads the same { key, label, kind } defs and maps kind → numFmt instead, so
-// the two never drift. (fmtBal renders a null balance as "—", not 0.00×.)
+// the two never drift. (fmtPerMille/fmtBal render a null as "—", not 0.)
 const KIND_FMT = {
   money: fmtMoney,
   pct: fmtPct,
   mult: fmtBal,
+  permille: fmtPerMille,
   int: (v) => fmtNum(v),
   text: (v) => (v == null ? '' : String(v)),
 };
 const withFmt = (cols) => cols.map((c) => ({ ...c, fmt: KIND_FMT[c.kind] }));
 
-const regionCols = withFmt(REGION_COLS);
-const lobCols = withFmt(LOB_COLS);
-const byYearCols = withFmt(BY_YEAR_COLS);
-const treatyTypeCols = withFmt(TREATY_TYPE_COLS);
+const regionCols = withFmt(FAC_REGION_COLS);
+const lobCols = withFmt(FAC_LOB_COLS);
+const byYearCols = withFmt(FAC_BY_YEAR_COLS);
+const facTypeCols = withFmt(FAC_TYPE_COLS);
 
 // Every value that can land in a table's first (row-label) column — across the
-// loaded tab data plus the region/treaty filter universes — so the fixed label
-// column is sized to the real longest LOB / region / country / treaty type.
+// loaded tab data plus the region/FAC-type filter universes — so the fixed
+// label column is sized to the real longest class / region / FAC type.
 function gatherLabels(data, filterOpts) {
   const out = new Set();
   for (const r of filterOpts?.regions || []) if (r != null && r !== '') out.add(String(r));
-  for (const t of filterOpts?.treatyTypes || []) if (t != null && t !== '') out.add(String(t));
-  const labelOf = (row) => row?.region ?? row?.lob ?? row?.country ?? row?.treatyType ?? row?.band ?? row?.uwYear ?? row?.key;
+  for (const t of filterOpts?.facTypes || []) if (t != null && t !== '') out.add(String(t));
+  const labelOf = (row) => row?.region ?? row?.lob ?? row?.country ?? row?.facType ?? row?.band ?? row?.uwYear ?? row?.key;
   const eat = (val) => {
     if (Array.isArray(val)) {
       for (const row of val) { const v = labelOf(row); if (v != null && v !== '') out.add(String(v)); }
@@ -137,11 +146,11 @@ function SummaryTable({ title, rows, columns, sort, sortKey, onSort, currency })
 }
 
 /* ── Technical-analysis: Strata-style diagonal-split matrix ────────────────
-   Rows = treaty type, Columns = UW year. Each cell is split on the diagonal:
-   top-left = the headline rate (Balance ×, for proportional; ROL %, for
-   non-proportional), bottom-right = UW Margin (green ≥ 0, red < 0). A coloured
-   left stripe marks the row's class. Reads the treaty×year pivots the Universe
-   query already returns — no new data shape. */
+   Rows = FAC type, Columns = UW year. Each cell is split on the diagonal:
+   top-left = the headline rate (Rate ‰, for proportional fac; ROL %, for XL
+   fac), bottom-right = UW Margin (green ≥ 0, red < 0). A coloured left stripe
+   marks the row's class. Reads the facType×year pivots the page query already
+   returns — no new data shape. */
 
 // Pivot → { rowKey: { values:{col:v}, total } } for O(1) cell lookup.
 function indexPivot(pivot) {
@@ -151,7 +160,7 @@ function indexPivot(pivot) {
 }
 
 function TechCell({ kind, top, topUnit, margin }) {
-  const topTxt = top == null ? '—' : (topUnit === 'BAL' ? fmtBal(top) : fmtPct(top));
+  const topTxt = top == null ? '—' : (topUnit === 'RATE' ? fmtPerMille(top) : fmtPct(top));
   const mTxt = margin == null ? '—' : fmtPct(margin);
   const mClass = margin == null ? 'muted' : margin >= 0 ? 'dash-pos' : 'dash-neg';
   const cls = ['dash-tcell', kind === 'NP' ? 'dash-tcell--np' : kind === 'PROP' ? 'dash-tcell--prop' : 'dash-tcell--neutral']
@@ -165,49 +174,49 @@ function TechCell({ kind, top, topUnit, margin }) {
 }
 
 function TechMatrix({ data }) {
-  const balByT = indexPivot(data?.treatyBalanceByYear);
-  const rolByT = indexPivot(data?.treatyRolByYear);
-  const marginByT = indexPivot(data?.treatyUwMarginByYear);
-  const kindMap = data?.treatyKindByType || {};
-  const byTreaty = data?.byTreatyType || [];
+  const rateByT = indexPivot(data?.facTypeRateByYear);
+  const rolByT = indexPivot(data?.facTypeRolByYear);
+  const marginByT = indexPivot(data?.facTypeUwMarginByYear);
+  const kindMap = data?.facKindByType || {};
+  const byFacType = data?.byFacType || [];
 
   // Union of years across the rate pivots, numerically sorted.
   const cols = [...new Set([
-    ...(data?.treatyBalanceByYear?.columns || []),
-    ...(data?.treatyRolByYear?.columns || []),
-    ...(data?.treatyUwMarginByYear?.columns || []),
+    ...(data?.facTypeRateByYear?.columns || []),
+    ...(data?.facTypeRolByYear?.columns || []),
+    ...(data?.facTypeUwMarginByYear?.columns || []),
   ])].sort((a, b) => Number(a) - Number(b));
 
-  // Treaty types in the breakdown's premium order (falls back to pivot rows).
-  const treaties = byTreaty.length
-    ? byTreaty.map(t => t.treatyType)
-    : Object.keys({ ...balByT.rows, ...rolByT.rows });
-  if (!cols.length || !treaties.length) {
+  // FAC types in the breakdown's premium order (falls back to pivot rows).
+  const types = byFacType.length
+    ? byFacType.map(t => t.facType)
+    : Object.keys({ ...rateByT.rows, ...rolByT.rows });
+  if (!cols.length || !types.length) {
     return <div className="glass dash-block"><div className="dash-block-title">Technical Matrix</div><div className="muted">No data.</div></div>;
   }
 
   const rate = (t, c) => {
     const np = kindMap[t] === 'NP';
-    const src = np ? rolByT : balByT;
-    return { val: src.rows[t]?.values?.[c] ?? null, unit: np ? 'ROL' : 'BAL' };
+    const src = np ? rolByT : rateByT;
+    return { val: src.rows[t]?.values?.[c] ?? null, unit: np ? 'ROL' : 'RATE' };
   };
-  const breakdown = Object.fromEntries(byTreaty.map(t => [t.treatyType, t]));
+  const breakdown = Object.fromEntries(byFacType.map(t => [t.facType, t]));
 
   return (
     <div className="glass dash-block">
-      <div className="dash-block-title">Technical Matrix — Treaty Type × UW Year <span className="dash-tag">BALANCE · ROL · UW MARGIN</span></div>
+      <div className="dash-block-title">Technical Matrix — FAC Type × UW Year <span className="dash-tag">RATE · ROL · UW MARGIN</span></div>
       <div className="dash-table-wrap">
         <table className="table dash-table dash-tech">
-          <thead><tr><th className="dash-th">Treaty Type</th>{cols.map(c => <th key={c} className="dash-th">{c}</th>)}<th className="dash-th">Total</th></tr></thead>
+          <thead><tr><th className="dash-th">FAC Type</th>{cols.map(c => <th key={c} className="dash-th">{c}</th>)}<th className="dash-th">Total</th></tr></thead>
           <tbody>
-            {treaties.map(t => {
+            {types.map(t => {
               const np = kindMap[t] === 'NP';
               const bd = breakdown[t];
               return (
                 <tr key={t}>
                   <td className="dash-td dash-td--left">{t}</td>
                   {cols.map(c => { const r = rate(t, c); return <TechCell key={c} kind={kindMap[t]} top={r.val} topUnit={r.unit} margin={marginByT.rows[t]?.values?.[c] ?? null} />; })}
-                  <TechCell kind={kindMap[t]} top={np ? bd?.rol ?? null : bd?.balance ?? null} topUnit={np ? 'ROL' : 'BAL'} margin={bd?.uwMargin ?? marginByT.rows[t]?.total ?? null} />
+                  <TechCell kind={kindMap[t]} top={np ? bd?.rol ?? null : bd?.rate ?? null} topUnit={np ? 'ROL' : 'RATE'} margin={bd?.uwMargin ?? marginByT.rows[t]?.total ?? null} />
                 </tr>
               );
             })}
@@ -227,16 +236,16 @@ function TechMatrix({ data }) {
 function TechLegend() {
   return (
     <div className="dash-tech-legend">
-      <div className="dash-lz"><span className="dash-sq"><i className="a">3.2×</i><i className="b">12%</i></span><span>Each cell split on the diagonal</span></div>
-      <div className="dash-lz"><span className="dash-pill dash-pill--prop" /><b>Proportional</b> — top-left = Balance (Limit ÷ Premium, ×)</div>
-      <div className="dash-lz"><span className="dash-pill dash-pill--np" /><b>Non-proportional</b> — top-left = ROL (Premium ÷ Limit, %)</div>
-      <div className="dash-lz">Bottom-right (both) = <b>UW Margin</b> (green ≥ 0, red &lt; 0)</div>
+      <div className="dash-lz"><span className="dash-sq"><i className="a">1.2‰</i><i className="b">12%</i></span><span>Each cell split on the diagonal</span></div>
+      <div className="dash-lz"><span className="dash-pill dash-pill--prop" /><b>Proportional FAC</b> — top-left = Rate (Premium ÷ Sum Insured, ‰)</div>
+      <div className="dash-lz"><span className="dash-pill dash-pill--np" /><b>XL FAC</b> — top-left = ROL (Premium ÷ Limit, %)</div>
+      <div className="dash-lz">Bottom-right (both) = <b>UW Margin</b> vs technical price (green ≥ 0, red &lt; 0)</div>
     </div>
   );
 }
 
-/* Strata-style band section: a table (Band | Policies | Premium-with-inline-bar
-   | % Prem | UW Margin) with a Table/Chart toggle. Reads rolBands / balanceBands
+/* Strata-style band section: a table (Band | Risks | Premium-with-inline-bar
+   | % Prem | UW Margin) with a Table/Chart toggle. Reads rolBands / rateBands
    verbatim. `rateKey`/`rateUnit` show the band's avg rate alongside. */
 function BandSection({ title, rows, rateKey, rateUnit, view, onView, currency }) {
   const data = rows || [];
@@ -247,8 +256,8 @@ function BandSection({ title, rows, rateKey, rateUnit, view, onView, currency })
     for (const r of data) { if (r.uwMargin != null) { num += r.uwMargin * (Number(r.premium) || 0); den += Number(r.premium) || 0; } }
     return den ? num / den : null;
   })();
-  const totContracts = data.reduce((s, r) => s + (Number(r.contracts) || 0), 0);
-  const rateFmt = rateUnit === 'BAL' ? fmtBal : fmtPct;
+  const totRisks = data.reduce((s, r) => s + (Number(r.risks) || 0), 0);
+  const rateFmt = rateUnit === 'RATE' ? fmtPerMille : fmtPct;
   const chartData = data.map(r => ({ label: r.band, premium: Number(r.premium) || 0, margin: r.uwMargin ?? null }));
 
   return (
@@ -273,8 +282,8 @@ function BandSection({ title, rows, rateKey, rateUnit, view, onView, currency })
         <div className="dash-table-wrap">
           <table className="table dash-table">
             <thead><tr>
-              <th className="dash-th">Band</th><th className="dash-th">Policies</th>
-              <th className="dash-th">Avg {rateUnit === 'BAL' ? 'Balance' : 'ROL'}</th>
+              <th className="dash-th">Band</th><th className="dash-th">Risks</th>
+              <th className="dash-th">Avg {rateUnit === 'RATE' ? 'Rate ‰' : 'ROL'}</th>
               <th className="dash-th">Premium</th><th className="dash-th">% Prem</th><th className="dash-th">UW Margin</th>
             </tr></thead>
             <tbody>
@@ -284,7 +293,7 @@ function BandSection({ title, rows, rateKey, rateUnit, view, onView, currency })
                 return (
                   <tr key={i}>
                     <td className="dash-td dash-td--left">{r.band}</td>
-                    <td className="dash-td">{fmtNum(r.contracts)}</td>
+                    <td className="dash-td">{fmtNum(r.risks)}</td>
                     <td className="dash-td">{rateFmt(r[rateKey])}</td>
                     <td className="dash-td"><span className="dash-barcell"><span className="dash-bar" style={{ width: `${w}%` }} /><span className="dash-bar-v">{fmtMoney(r.premium, currency)}</span></span></td>
                     <td className="dash-td">{totalPrem > 0 ? fmtPct((Number(r.premium) || 0) / totalPrem) : '—'}</td>
@@ -294,7 +303,7 @@ function BandSection({ title, rows, rateKey, rateUnit, view, onView, currency })
               })}
               <tr className="dash-tr-total">
                 <td className="dash-td dash-td--left"><b>Total</b></td>
-                <td className="dash-td"><b>{fmtNum(totContracts)}</b></td>
+                <td className="dash-td"><b>{fmtNum(totRisks)}</b></td>
                 <td className="dash-td">—</td>
                 <td className="dash-td"><b>{fmtMoney(totalPrem, currency)}</b></td>
                 <td className="dash-td"><b>100%</b></td>
@@ -308,14 +317,14 @@ function BandSection({ title, rows, rateKey, rateUnit, view, onView, currency })
   );
 }
 
-export default function DashboardScreen() {
+export default function FacDashboardScreen() {
   const navigate = useNavigate();
   const [tab, setTab] = useState('portfolio-overview');
-  const [filters, setFilters] = useState({ uwYear: '', month: '', region: '', treatyType: '', yearsBack: '3', currency: 'USD' });
-  const [filterOpts, setFilterOpts] = useState({ uwYears: [], months: [], regions: [], treatyTypes: [], currencies: ['USD','SAR','GBP'] });
-  const [sort, setSort] = useState({ byRegion: { key: 'premium', dir: 'desc' }, byLob: { key: 'premium', dir: 'desc' }, byYear: { key: 'uwYear', dir: 'asc' }, byBand: { key: 'premium', dir: 'desc' }, byBalanceBand: { key: 'premium', dir: 'desc' }, byTreaty: { key: 'premium', dir: 'desc' } });
+  const [filters, setFilters] = useState({ uwYear: '', month: '', region: '', facType: '', yearsBack: '3', currency: 'USD' });
+  const [filterOpts, setFilterOpts] = useState({ uwYears: [], months: [], regions: [], facTypes: [], currencies: ['USD','SAR','GBP'] });
+  const [sort, setSort] = useState({ byRegion: { key: 'premium', dir: 'desc' }, byLob: { key: 'premium', dir: 'desc' }, byYear: { key: 'uwYear', dir: 'asc' }, byBand: { key: 'premium', dir: 'desc' }, byRateBand: { key: 'premium', dir: 'desc' }, byFacType: { key: 'premium', dir: 'desc' } });
   const [exporting, setExporting] = useState(false);
-  const [bandView, setBandView] = useState({ rol: 'table', balance: 'table' });
+  const [bandView, setBandView] = useState({ rol: 'table', rate: 'table' });
 
   const currency = filters.currency || 'USD';
   const fm = useCallback((v) => fmtMoney(v), []);
@@ -328,10 +337,10 @@ export default function DashboardScreen() {
     () => {
       const qs = {};
       Object.entries(filters).forEach(([k, v]) => { if (v) qs[k] = v; });
-      return api.dashboardPage(tab, qs);
+      return api.facDashboardPage(tab, qs);
     },
     [tab, filters],
-    { reportLabel: 'dashboard' },
+    { reportLabel: 'fac-dashboard' },
   );
   const data = page.data;
   const loading = page.loading;
@@ -343,24 +352,29 @@ export default function DashboardScreen() {
     });
   }, []);
 
-  // Client-side Excel export of the data the active tab already loaded. exceljs
-  // + the exporter are dynamically imported on click to keep the bundle lean.
+  // Client-side Excel export of the data the active tab already loaded. The
+  // shared exporter (+ exceljs) is dynamically imported on click to keep the
+  // bundle lean; the fac manifest/labels ride in as parameters.
   const handleExport = useCallback(async () => {
     if (!data || loading) return;
     setExporting(true);
     try {
-      const { exportDashboardTab } = await import('./dashboardExport');
-      await exportDashboardTab({ tabId: tab, tabLabel: TABS.find(t => t.key === tab)?.label || tab, data, currency, filters });
-    } catch (e) { logger.warn('Dashboard export failed:', e); }
+      const { exportDashboardTab } = await import('../dashboard/dashboardExport');
+      await exportDashboardTab({
+        tabId: tab, tabLabel: TABS.find(t => t.key === tab)?.label || tab, data, currency, filters,
+        manifests: FAC_DASHBOARD_EXPORT_MANIFEST, label: 'FAC Dashboard', kpiRows: FAC_KPI_ROWS,
+        notes: 'Raw numeric values; rate ‰ = premium ÷ sum insured × 1000; blank cells are N/A.',
+      });
+    } catch (e) { logger.warn('FAC dashboard export failed:', e); }
     finally { setExporting(false); }
   }, [data, loading, tab, currency, filters]);
 
   const loadFilters = useCallback(async () => {
     try {
-      const res = await api.dashboardFilters();
-      setFilterOpts({ uwYears: res.uwYears || [], months: res.months || [], regions: res.regions || [], treatyTypes: res.treatyTypes || [], currencies: res.currencies || ['ZAR'] });
+      const res = await api.facDashboardFilters();
+      setFilterOpts({ uwYears: res.uwYears || [], months: res.months || [], regions: res.regions || [], facTypes: res.facTypes || [], currencies: res.currencies || ['USD'] });
       if (!filters.uwYear && res.defaultUwYear) setFilters(p => ({ ...p, uwYear: String(res.defaultUwYear) }));
-    } catch (e) { logger.warn('Dashboard filters:', e); }
+    } catch (e) { logger.warn('FAC dashboard filters:', e); }
   }, [filters.uwYear]);
 
   useEffect(() => { loadFilters(); }, [loadFilters]);
@@ -375,22 +389,22 @@ export default function DashboardScreen() {
 
   const k = data?.kpis || {};
   const showRegion = tab === 'regional-analysis' || tab === 'regional-technical-analysis';
-  const showTreaty = !(tab === 'return-analysis-proportional' || tab === 'return-analysis-nonproportional');
+  const showFacType = !(tab === 'return-analysis-proportional' || tab === 'return-analysis-nonproportional');
   const showYearsBack = tab === 'portfolio-summary';
   const showMonth = !(tab === 'return-analysis-proportional' || tab === 'return-analysis-nonproportional');
 
   return (
     <div className="dashboard-screen app-shell grid-bg">
-      <Topbar title="Portfolio Dashboard" subtitle={`Analytics & reporting · All amounts in ${currency}`}
+      <Topbar title="FAC Portfolio Dashboard" subtitle={`Facultative analytics & reporting · All amounts in ${currency}`}
         actions={
           <>
             <button className="topbar-pill" onClick={handleExport} disabled={exporting || loading || !data} title="Export this tab to Excel">{exporting ? 'Exporting…' : '↓ Export to Excel'}</button>
-            <button className="topbar-pill" onClick={() => navigate('/')}>← Home</button>
+            <button className="topbar-pill" onClick={() => navigate('/fac')}>← FAC Home</button>
           </>
         } />
       <main className="workspace dashboard-workspace">
         <div className="container dashboard-container">
-          <div className="crumb glass"><span className="dot" /><span className="crumb-text">DASHBOARD</span><span className="muted dash-crumb-sep">/</span><span className="crumb-text dash-crumb-sep">{TABS.find(t => t.key === tab)?.label}</span></div>
+          <div className="crumb glass"><span className="dot" /><span className="crumb-text">FAC DASHBOARD</span><span className="muted dash-crumb-sep">/</span><span className="crumb-text dash-crumb-sep">{TABS.find(t => t.key === tab)?.label}</span></div>
 
           {/* Tab bar */}
           <div className="dash-tabs glass">
@@ -412,9 +426,9 @@ export default function DashboardScreen() {
               {showRegion && <div className="dash-filter"><div className="dash-filter-label">Region</div>
                 <select className="dash-select" value={filters.region} onChange={e => setFilters(p => ({ ...p, region: e.target.value }))}>
                   <option value="">Choose</option>{filterOpts.regions.map(r => <option key={r} value={r}>{r}</option>)}</select></div>}
-              {showTreaty && <div className="dash-filter"><div className="dash-filter-label">Treaty Type</div>
-                <select className="dash-select" value={filters.treatyType} onChange={e => setFilters(p => ({ ...p, treatyType: e.target.value }))}>
-                  <option value="">All</option>{filterOpts.treatyTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>}
+              {showFacType && <div className="dash-filter"><div className="dash-filter-label">FAC Type</div>
+                <select className="dash-select" value={filters.facType} onChange={e => setFilters(p => ({ ...p, facType: e.target.value }))}>
+                  <option value="">All</option>{filterOpts.facTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>}
               <div className="dash-filter-actions">
                 {/* Currency toggle */}
                 <div className="dash-ccy">
@@ -422,21 +436,21 @@ export default function DashboardScreen() {
                     <button key={ccy} className={`dash-ccy-btn ${currency === ccy ? 'dash-ccy-btn--on' : ''}`} onClick={() => setFilters(p => ({ ...p, currency: ccy }))}>{ccy}</button>
                   ))}
                 </div>
-                <button className="chip-btn" onClick={() => setFilters(p => ({ ...p, region: '', treatyType: '' }))}>Reset</button>
+                <button className="chip-btn" onClick={() => setFilters(p => ({ ...p, region: '', facType: '' }))}>Reset</button>
                 <button className="primary-pill" onClick={page.refetch}>Apply</button>
               </div>
             </div>
           </section>
 
-          <AsyncBoundary loading={loading} error={page.error} onRetry={page.refetch} label="dashboard">
+          <AsyncBoundary loading={loading} error={page.error} onRetry={page.refetch} label="fac-dashboard">
             <section className="dash-mt12">
               {/* KPI tiles */}
               <div className="dash-kpis">
-                <Tile label="Contracts" value={fmtNum(k.contracts)} />
+                <Tile label="Risks" value={fmtNum(k.risks)} />
                 <Tile label="Premium" value={fm(k.premium)} />
                 <Tile label="Exposure" value={fm(k.exposure)} />
-                <Tile label="Treaty Balance" value={fmtBal(k.balance)} />
-                <Tile label="Avg ROL" value={fp(k.avgRol)} />
+                <Tile label="Avg Rate (Prop)" value={fmtPerMille(k.rate)} />
+                <Tile label="Avg ROL (XL)" value={fp(k.avgRol)} />
                 <Tile label="Avg UW Margin" value={fp(k.avgUwMargin)} />
               </div>
 
@@ -453,17 +467,17 @@ export default function DashboardScreen() {
                   </div>
                 </div>}
                 <SummaryTable title="Summary by Region" rows={data?.summaryByRegion || []} columns={regionCols} sort={sort.byRegion} sortKey="byRegion" onSort={handleSort} currency={currency} />
-                <SummaryTable title="Summary by Line of Business" rows={data?.summaryByLob || []} columns={lobCols} sort={sort.byLob} sortKey="byLob" onSort={handleSort} currency={currency} />
-                <PivotTable title="Premium (Region × Treaty Type)" data={data?.premiumRegionTreaty} cellFmt={fm} rowLabel="Region" />
-                <PivotTable title="Exposure (Region × Treaty Type)" data={data?.exposureRegionTreaty} cellFmt={fm} rowLabel="Region" />
-                <PivotTable title="UW Margin (Region × Treaty Type)" data={data?.uwMarginRegionTreaty} cellFmt={fp} rowLabel="Region" />
-                <PivotTable title="Portfolio Composition (Region × Treaty Type)" data={data?.compositionRegionTreaty} cellFmt={fp} rowLabel="Region" />
-                <PivotTable title="Premium (LOB × Treaty Type)" data={data?.premiumLobTreaty} cellFmt={fm} rowLabel="Line of Business" />
-                <PivotTable title="Exposure (LOB × Treaty Type)" data={data?.exposureLobTreaty} cellFmt={fm} rowLabel="Line of Business" />
-                <PivotTable title="Portfolio Mix (LOB × Treaty Type)" data={data?.compositionLobTreaty} cellFmt={fp} rowLabel="Line of Business" />
-                <PivotTable title="UW Margin (LOB × Treaty Type)" data={data?.uwMarginLobTreaty} cellFmt={fp} rowLabel="Line of Business" />
-                <PivotTable title="Premium by LOB and Region" data={data?.premiumLobRegion} cellFmt={fm} rowLabel="Line of Business" />
-                <PivotTable title="Underwriting Margins (LOB × Region)" data={data?.uwMarginLobRegion} cellFmt={fp} rowLabel="Line of Business" />
+                <SummaryTable title="Summary by Class of Business" rows={data?.summaryByLob || []} columns={lobCols} sort={sort.byLob} sortKey="byLob" onSort={handleSort} currency={currency} />
+                <PivotTable title="Premium (Region × FAC Type)" data={data?.premiumRegionFacType} cellFmt={fm} rowLabel="Region" />
+                <PivotTable title="Exposure (Region × FAC Type)" data={data?.exposureRegionFacType} cellFmt={fm} rowLabel="Region" />
+                <PivotTable title="UW Margin (Region × FAC Type)" data={data?.uwMarginRegionFacType} cellFmt={fp} rowLabel="Region" />
+                <PivotTable title="Portfolio Composition (Region × FAC Type)" data={data?.compositionRegionFacType} cellFmt={fp} rowLabel="Region" />
+                <PivotTable title="Premium (Class × FAC Type)" data={data?.premiumLobFacType} cellFmt={fm} rowLabel="Class of Business" />
+                <PivotTable title="Exposure (Class × FAC Type)" data={data?.exposureLobFacType} cellFmt={fm} rowLabel="Class of Business" />
+                <PivotTable title="Portfolio Mix (Class × FAC Type)" data={data?.compositionLobFacType} cellFmt={fp} rowLabel="Class of Business" />
+                <PivotTable title="UW Margin (Class × FAC Type)" data={data?.uwMarginLobFacType} cellFmt={fp} rowLabel="Class of Business" />
+                <PivotTable title="Premium by Class and Region" data={data?.premiumLobRegion} cellFmt={fm} rowLabel="Class of Business" />
+                <PivotTable title="Underwriting Margins (Class × Region)" data={data?.uwMarginLobRegion} cellFmt={fp} rowLabel="Class of Business" />
               </div>}
 
               {tab === 'portfolio-summary' && <div className="dash-stack">
@@ -475,11 +489,11 @@ export default function DashboardScreen() {
                 ? <div className="glass dash-block"><div className="dash-block-title">Regional Analysis</div><div className="muted">Select a region to view this page.</div></div>
                 : <div className="dash-stack">
                     <SummaryTable title="Summary by Year" rows={data?.byYear || []} columns={byYearCols} sort={sort.byYear} sortKey="byYear" onSort={handleSort} currency={currency} />
-                    <SummaryTable title="Summary by Line of Business" rows={data?.byLob || []} columns={lobCols} sort={sort.byLob} sortKey="byLob" onSort={handleSort} currency={currency} />
-                    <PivotTable title="Premium (LOB × Treaty Type)" data={data?.lobTreatyPremium} cellFmt={fm} rowLabel="Line of Business" />
-                    <PivotTable title="Exposure (LOB × Treaty Type)" data={data?.lobTreatyExposure} cellFmt={fm} rowLabel="Line of Business" />
-                    <PivotTable title="Composition (LOB × Treaty Type)" data={data?.lobTreatyComposition} cellFmt={fp} rowLabel="Line of Business" />
-                    <PivotTable title="UW Margin (LOB × Treaty Type)" data={data?.lobTreatyUwMargin} cellFmt={fp} rowLabel="Line of Business" />
+                    <SummaryTable title="Summary by Class of Business" rows={data?.byLob || []} columns={lobCols} sort={sort.byLob} sortKey="byLob" onSort={handleSort} currency={currency} />
+                    <PivotTable title="Premium (Class × FAC Type)" data={data?.lobFacTypePremium} cellFmt={fm} rowLabel="Class of Business" />
+                    <PivotTable title="Exposure (Class × FAC Type)" data={data?.lobFacTypeExposure} cellFmt={fm} rowLabel="Class of Business" />
+                    <PivotTable title="Composition (Class × FAC Type)" data={data?.lobFacTypeComposition} cellFmt={fp} rowLabel="Class of Business" />
+                    <PivotTable title="UW Margin (Class × FAC Type)" data={data?.lobFacTypeUwMargin} cellFmt={fp} rowLabel="Class of Business" />
                   </div>)}
 
               {(tab === 'portfolio-technical-analysis' || tab === 'regional-technical-analysis') && (
@@ -487,10 +501,10 @@ export default function DashboardScreen() {
                   ? <div className="glass dash-block"><div className="dash-block-title">Regional Technical Analysis</div><div className="muted">Select a region to view this page.</div></div>
                   : <div className="dash-stack">
                       <TechMatrix data={data} />
-                      <SummaryTable title="Treaty Type Breakdown" rows={data?.byTreatyType || []} columns={treatyTypeCols} sort={sort.byTreaty} sortKey="byTreaty" onSort={handleSort} currency={currency} />
-                      <BandSection title="Non-Proportional — ROL Bands" rows={data?.rolBands || []} rateKey="rol" rateUnit="ROL" view={bandView.rol} onView={(v) => setBandView(p => ({ ...p, rol: v }))} currency={currency} />
-                      <BandSection title="Proportional — Balance Bands" rows={data?.balanceBands || []} rateKey="balance" rateUnit="BAL" view={bandView.balance} onView={(v) => setBandView(p => ({ ...p, balance: v }))} currency={currency} />
-                      <PivotTable title="Treaty Premium (by UW Year)" data={data?.treatyPremiumByYear} cellFmt={fm} rowLabel="Treaty Type" />
+                      <SummaryTable title="FAC Type Breakdown" rows={data?.byFacType || []} columns={facTypeCols} sort={sort.byFacType} sortKey="byFacType" onSort={handleSort} currency={currency} />
+                      <BandSection title="XL FAC — ROL Bands" rows={data?.rolBands || []} rateKey="rol" rateUnit="ROL" view={bandView.rol} onView={(v) => setBandView(p => ({ ...p, rol: v }))} currency={currency} />
+                      <BandSection title="Proportional FAC — Rate Bands" rows={data?.rateBands || []} rateKey="rate" rateUnit="RATE" view={bandView.rate} onView={(v) => setBandView(p => ({ ...p, rate: v }))} currency={currency} />
+                      <PivotTable title="FAC Premium (by UW Year)" data={data?.facTypePremiumByYear} cellFmt={fm} rowLabel="FAC Type" />
                     </div>)}
 
               {tab === 'return-analysis-proportional' && <div className="dash-stack">
@@ -504,17 +518,6 @@ export default function DashboardScreen() {
                 <PivotTable title="Portfolio Premium" data={data?.npPortfolioPremium} cellFmt={fm} rowLabel="Region" />
                 <PivotTable title="Portfolio %" data={data?.npPortfolioPct} cellFmt={fp} rowLabel="Region" />
               </div>}
-
-              {/* Fallback: raw table for any data with rows */}
-              {!['portfolio-overview','portfolio-summary','regional-analysis','portfolio-technical-analysis','regional-technical-analysis','return-analysis-proportional','return-analysis-nonproportional'].includes(tab) && data?.rows && (
-                <div className="panel glass" style={{ marginTop: 16 }}>
-                  <div className="panel-head"><div className="panel-title">{TABS.find(t => t.key === tab)?.label}</div></div>
-                  <div className="panel-body" style={{ overflowX: 'auto' }}>
-                    <table className="data-table"><thead><tr>{Object.keys(data.rows[0] || {}).map(k => <th key={k}>{k.replace(/_/g, ' ')}</th>)}</tr></thead>
-                      <tbody>{data.rows.map((row, i) => <tr key={i}>{Object.values(row).map((v, j) => <td key={j}>{typeof v === 'number' ? fmtNum(v, { decimals: 2 }) : String(v ?? '')}</td>)}</tr>)}</tbody></table>
-                  </div>
-                </div>
-              )}
             </section>
           </AsyncBoundary>
         </div>

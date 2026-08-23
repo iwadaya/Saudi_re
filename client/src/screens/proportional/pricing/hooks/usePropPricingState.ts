@@ -84,7 +84,7 @@ export function usePropPricingState({ appState, contractId, readOnly = false, on
   const {
     grid: { components, uwUserEdited, leads, shareRows, shareGrid, yearly, comment, snapshots, snapLabel },
     workflow: {
-      offerStatus, offerLine, offerComment, offerApprover, eligibleApprovers,
+      offerStatus, offerLine, offerComment, offerApprover, eligibleApprovers, offerPermissions,
       returnReason, declineReason, approvalTrail, signedLinePct,
     },
     modals: {
@@ -175,6 +175,19 @@ export function usePropPricingState({ appState, contractId, readOnly = false, on
       setEligibleApprovers(Array.isArray(rows) ? rows : []);
     }).catch(() => {});
   }, [cid]);
+
+  // ── Load the current user's terminal-action rights on this offer ────────
+  // Server-derived (same four-eyes logic the mutating endpoints enforce), so
+  // the modal renders exactly the sign/NTU/recall controls that will succeed.
+  // Re-fetched when the offer status changes: submitting or approving changes
+  // who the submitter/eligible signers are.
+  useEffect(() => {
+    const setOfferPermissions = (next: any) => dispatch({ type: 'workflow/set', key: 'offerPermissions', next });
+    if (!cid) return;
+    api.getOfferPermissions(cid).then((p: any) => {
+      setOfferPermissions(p && typeof p === 'object' ? p : null);
+    }).catch(() => {});
+  }, [cid, offerStatus]);
 
   // ── Load data ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -691,7 +704,7 @@ export function usePropPricingState({ appState, contractId, readOnly = false, on
     // raw state
     loading, error, reloadPricing, dirty, saveMsg, lastUpdatedAt, contract, components, uwUserEdited,
     leads, shareRows, shareGrid, yearly, comment, snapshots, snapLabel,
-    offerStatus, offerLine, offerComment, offerApprover, eligibleApprovers,
+    offerStatus, offerLine, offerComment, offerApprover, eligibleApprovers, offerPermissions,
     returnReason, declineReason, approvalTrail, signedLinePct,
     showDecline, showOffer, showMandateBlock, showQuickSummary, showMarketIntelligence,
     showAggBreakdown, showInDepth, showAggDrilldown, showSnapHistory, insightOpen, insightKey,

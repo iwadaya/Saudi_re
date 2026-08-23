@@ -33,6 +33,11 @@ export default function PropOfferModal({
   onSubmitForApproval, onMarkApproved, onMarkSigned, onMarkNTU, onReturnToUW,
   onDecline, onRecall,
   eligibleApprovers,
+  // Server-derived terminal-action rights for the current user on this offer
+  // ({can_sign, can_ntu, can_recall, is_owner, is_submitter} — null until
+  // loaded). Same four-eyes logic the mutating endpoints enforce, so the
+  // footer renders exactly the controls the server will accept.
+  offerPermissions,
   // Quote → signed/bind is disabled in this build. When true, the
   // AWAITING_SIGNED_LINE workflow renders as a terminal "Quote
   // Approved (standalone)" card instead of showing the Mark
@@ -45,6 +50,15 @@ export default function PropOfferModal({
   if(!show) return null;
 
   const stepIndex = offerStatus==='DRAFT'?0:offerStatus==='AWAITING_APPROVAL'?1:offerStatus==='AWAITING_SIGNED_LINE'?2:3;
+
+  // Until permissions load, fall back to the legacy owner/CU split for the
+  // draft controls, and to "no signing" for the terminal ones: a disabled
+  // Mark Signed with a four-eyes hint beats a button that 403s at the server.
+  const perms     = offerPermissions;
+  const canSign   = !!perms?.can_sign;
+  const canNtu    = perms ? !!perms.can_ntu    : !isCU;
+  const canRecall = perms ? !!perms.can_recall : !isCU;
+  const canSubmit = perms ? !!perms.is_owner   : !isCU;
   const steps = [
     {k:'Draft',s:'DRAFT'},{k:'Awaiting Approval',s:'AWAITING_APPROVAL'},
     {k:'Awaiting Signed Line',s:'AWAITING_SIGNED_LINE'},
@@ -228,8 +242,8 @@ export default function PropOfferModal({
                 </div>
               )}
 
-              {/* UW draft comment */}
-              {!isCU&&!isTerminal&&offerStatus!=='AWAITING_SIGNED_LINE'&&(
+              {/* UW draft comment — the drafting owner's note */}
+              {canSubmit&&!isTerminal&&offerStatus!=='AWAITING_SIGNED_LINE'&&(
                 <div className="off-card" style={{flex:1}}>
                   <div className="off-card-title">Comment</div>
                   <textarea className="bbg-textarea" rows={4} value={offerComment} onChange={e=>setOfferComment(e.target.value)}
@@ -269,7 +283,7 @@ export default function PropOfferModal({
 
           {/* Footer */}
           <div className="off-footer">
-            {!isCU&&!isTerminal&&offerStatus==='DRAFT'&&(
+            {canSubmit&&!isTerminal&&offerStatus==='DRAFT'&&(
               <div className="off-footer-left">
                 <span style={{fontSize:11,color:'rgba(255,255,255,0.38)',whiteSpace:'nowrap'}}>Send to</span>
                 <select className="bbg-select" value={offerApprover} onChange={e=>setOfferApprover(e.target.value)} style={{maxWidth:220}}>
@@ -278,31 +292,39 @@ export default function PropOfferModal({
                 </select>
               </div>
             )}
-            {(isCU||isTerminal||offerStatus==='AWAITING_APPROVAL'||offerStatus==='AWAITING_SIGNED_LINE')&&<div className="off-footer-left"/>}
+            {!(canSubmit&&!isTerminal&&offerStatus==='DRAFT')&&<div className="off-footer-left"/>}
             <div style={{display:'flex',gap:8,flexShrink:0}}>
               <button className="bbg-btn" onClick={onClose}>Close</button>
-              {!isCU&&!isTerminal&&!isQuote&&offerStatus==='AWAITING_SIGNED_LINE'&&(()=>{
+              {!isTerminal&&!isQuote&&offerStatus==='AWAITING_SIGNED_LINE'&&(()=>{
+                // Rendered for everyone in this state, enabled only for users
+                // the server will accept: an eligible approver who is not the
+                // submitter (four-eyes) signs; the owner or an approver NTUs.
                 const w = parseFloat(String(offerLine||'').replace(/%/g,'').trim());
                 const s = parseFloat(String(signedLinePct||'').replace(/%/g,'').trim());
                 const over = Number.isFinite(w) && Number.isFinite(s) && s > w;
                 return (<>
+                  {!canSign && <span style={{fontSize:11,color:'#fbbf24',alignSelf:'center'}}>
+                    Four-eyes: an eligible approver (not the submitter) records the signed line
+                  </span>}
                   <span style={{fontSize:11,color:'rgba(255,255,255,0.45)',alignSelf:'center'}}>Signed line</span>
                   <PctInput value={signedLinePct} onChange={v=>setSignedLinePct(v)} placeholder="0.0%"
-                    style={{width:90,...(over?{borderColor:'#f87171'}:{})}}/>
+                    disabled={!canSign}
+                    style={{width:90,...(over?{borderColor:'#f87171'}:{}),...(!canSign?{opacity:0.5,cursor:'not-allowed'}:{})}}/>
                   {over && <span style={{fontSize:11,color:'#f87171',alignSelf:'center'}}>≤ written {w}%</span>}
-                  <button className="bbg-btn bbg-btn--offer" disabled={over}
-                    style={over?{opacity:0.5,cursor:'not-allowed'}:{}} onClick={onMarkSigned}>✍ Mark Signed</button>
-                  <button className="bbg-btn" style={{borderColor:'rgba(249,115,22,0.45)',color:'#fb923c'}}
-                    onClick={()=>{if(window.confirm('Mark this treaty NTU (Not Taken Up)? This is final.'))onMarkNTU();}}>🚫 NTU</button>
+                  <button className="bbg-btn bbg-btn--offer" disabled={over||!canSign}
+                    title={!canSign?'Only an eligible approver other than the submitter can mark this signed.':undefined}
+                    style={(over||!canSign)?{opacity:0.5,cursor:'not-allowed'}:{}} onClick={onMarkSigned}>✍ Mark Signed</button>
+                  {canNtu&&<button className="bbg-btn" style={{borderColor:'rgba(249,115,22,0.45)',color:'#fb923c'}}
+                    onClick={()=>{if(window.confirm('Mark this treaty NTU (Not Taken Up)? This is final.'))onMarkNTU();}}>🚫 NTU</button>}
                 </>);
               })()}
-              {!isCU&&!isTerminal&&offerStatus==='DRAFT'&&(
+              {canSubmit&&!isTerminal&&offerStatus==='DRAFT'&&(
                 <button className="bbg-btn bbg-btn--offer" onClick={onSubmitForApproval}>Submit for Approval →</button>
               )}
               {!isCU&&!isTerminal&&offerStatus==='AWAITING_APPROVAL'&&(<>
                 <span style={{fontSize:12,color:'rgba(255,255,255,0.40)',alignSelf:'center'}}>⏳ Awaiting CU review…</span>
-                <button className="bbg-btn" style={{borderColor:'rgba(251,191,36,0.45)',color:'#fbbf24'}}
-                  onClick={()=>{if(window.confirm('Recall this submission? The treaty will return to Draft.'))onRecall&&onRecall();}}>↩ Recall</button>
+                {canRecall&&<button className="bbg-btn" style={{borderColor:'rgba(251,191,36,0.45)',color:'#fbbf24'}}
+                  onClick={()=>{if(window.confirm('Recall this submission? The treaty will return to Draft.'))onRecall&&onRecall();}}>↩ Recall</button>}
               </>)}
             </div>
           </div>

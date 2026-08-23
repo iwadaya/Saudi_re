@@ -31,6 +31,7 @@ import {
   recallOfferAction,
   markSignedAction,
   markNtuAction,
+  getOfferPermissionsAction,
 } from '../services/pricingWorkflowService.js';
 import { resolveActor } from '../services/pricingHelpers.js';
 import { logger } from '../../../lib/logger.js';
@@ -177,6 +178,11 @@ export async function eligibleApproversController(req, res) {
 
 export async function arbiterOptionsController(req, res) {
   res.json(await getArbiterOptionsAction(req.params.id));
+}
+
+export async function offerPermissionsController(req, res) {
+  const actor = await resolveActor(req);
+  res.json(await getOfferPermissionsAction(req.params.id, actor));
 }
 
 export async function markApprovedController(req, res) {

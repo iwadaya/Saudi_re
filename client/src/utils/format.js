@@ -22,6 +22,10 @@ export const fmtX = (v) => Number.isFinite(Number(v)) ? `${Number(v).toFixed(2)}
 // '—' rather than a misleading 0.00×. A genuine 0 still shows as 0.00×.
 export const fmtBal = (v) => (v != null && Number.isFinite(Number(v))) ? `${Number(v).toFixed(2)}×` : '—';
 
+// N/A-aware rate per mille (fac pricing unit): value already in ‰ of sum
+// insured — 1.234 → '1.23‰'; null/blank (e.g. an XL-only group) → '—'.
+export const fmtPerMille = (v) => (v != null && Number.isFinite(Number(v))) ? `${Number(v).toFixed(2)}‰` : '—';
+
 export function fmtMoney(n) {
   const v = Number(n);
   if (!Number.isFinite(v)) return '0';

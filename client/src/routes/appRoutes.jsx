@@ -6,6 +6,7 @@ const SelectScreen = lazy(() => import('../screens/select/SelectScreen'));
 const HomeScreen = lazy(() => import('../screens/home/HomeScreen'));
 const FacHomeScreen = lazy(() => import('../screens/facultative/home/FacHomeScreen'));
 const DashboardScreen = lazy(() => import('../screens/dashboard/DashboardScreen'));
+const FacDashboardScreen = lazy(() => import('../screens/facdashboard/FacDashboardScreen'));
 const ApprovalsScreen = lazy(() => import('../screens/approvals/ApprovalsScreen'));
 
 const PropTreatyDetail = lazy(() => import('../screens/proportional/treaty_detail/PropTreatyDetail'));
@@ -86,6 +87,7 @@ export const appRoutes = [
   { path: '/', component: HomeScreen },
   { path: '/fac', component: FacHomeScreen },
   { path: '/dashboard', component: DashboardScreen },
+  { path: '/fac/dashboard', component: FacDashboardScreen },
   { path: '/approvals', component: ApprovalsScreen, approvalsOnly: true },
   { path: '/import',    component: ExcelImportAgent },
   { path: '/admin/users', component: UserManagementScreen, approvalsOnly: true },

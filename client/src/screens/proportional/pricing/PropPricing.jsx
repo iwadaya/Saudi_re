@@ -50,7 +50,7 @@ export default function PropPricing() {
     // state
     loading, error, reloadPricing, dirty, saveMsg, contract, components, leads, shareRows, shareGrid,
     yearly, comment, snapshots, snapLabel,
-    offerStatus, offerLine, offerComment, offerApprover, eligibleApprovers,
+    offerStatus, offerLine, offerComment, offerApprover, eligibleApprovers, offerPermissions,
     returnReason, declineReason, approvalTrail, signedLinePct,
     showDecline, showOffer, showMandateBlock, showQuickSummary, showMarketIntelligence,
     showAggBreakdown, showInDepth, showAggDrilldown, showSnapHistory, insightOpen, insightKey,
@@ -214,11 +214,6 @@ export default function PropPricing() {
             />
           )}
 
-          {/* ═══ READ-ONLY BANNER ═══ */}
-          <PropPricingReadOnlyBanner
-            isReadOnly={isReadOnly} offerStatus={offerStatus} setShowOffer={setShowOffer}
-          />
-
           {/* ═══ DECISION BAR ═══ */}
           <PropPricingDecisionBar
             comment={comment} setComment={setComment} setDirty={setDirty}
@@ -241,26 +236,6 @@ export default function PropPricing() {
           <PropMandateBlockModal
             showMandateBlock={showMandateBlock} setShowMandateBlock={setShowMandateBlock}
             mandateCheck={mandateCheck} userSession={userSession} userRole={userRole}
-          />
-
-          {/* ═══ OFFER MODAL ═══ */}
-          <PropOfferModal
-            show={showOffer} onClose={() => setShowOffer(false)}
-            offerStatus={offerStatus} offerLine={offerLine} setOfferLine={setOfferLine}
-            offerComment={offerComment} setOfferComment={setOfferComment}
-            offerApprover={offerApprover} setOfferApprover={setOfferApprover}
-            returnReason={returnReason} setReturnReason={setReturnReason}
-            signedLinePct={signedLinePct} setSignedLinePct={setSignedLinePct}
-            approvalTrail={approvalTrail} actorName={actorName} isCU={isCU}
-            isTerminal={isTerminal} marginAct={marginAct} marginUw={marginUw}
-            crAct={crAct} crUw={crUw} epi={epi} limit={limit} eventLimit={eventLimit}
-            fxInverse={fxInverse} safeCcy={safeCcy} money={money} aiCalc={aiCalc}
-            contractId={cid} mandateCheck={mandateCheck}
-            onSubmitForApproval={doSubmitForApproval}
-            onMarkApproved={doMarkApproved} onReturnToUW={doReturnToUW}
-            onMarkSigned={doMarkSigned} onMarkNTU={doMarkNTU} onDecline={doDecline} onRecall={doRecall}
-            eligibleApprovers={eligibleApprovers}
-            isQuote={!!appState.quoteMode}
           />
 
           {/* ═══ MARKET INTELLIGENCE MODAL ═══
@@ -297,6 +272,35 @@ export default function PropPricing() {
           <PropMovingAverageCharts yearly={yearly} terms={movingAvgTerms} />
 
           </ReadOnlyWrap>
+
+          {/* ═══ READ-ONLY BANNER + OFFER MODAL ═══
+              Rendered OUTSIDE ReadOnlyWrap: the wrap's `inert` exists to stop
+              edits to pricing data, but the offer workflow is exactly what a
+              non-assignee approver (e.g. the CU recording the signed line) must
+              still operate. The modal gates its own controls per role, status
+              and the server-derived offerPermissions. */}
+          <PropPricingReadOnlyBanner
+            isReadOnly={isReadOnly} offerStatus={offerStatus} setShowOffer={setShowOffer}
+          />
+          <PropOfferModal
+            show={showOffer} onClose={() => setShowOffer(false)}
+            offerStatus={offerStatus} offerLine={offerLine} setOfferLine={setOfferLine}
+            offerComment={offerComment} setOfferComment={setOfferComment}
+            offerApprover={offerApprover} setOfferApprover={setOfferApprover}
+            returnReason={returnReason} setReturnReason={setReturnReason}
+            signedLinePct={signedLinePct} setSignedLinePct={setSignedLinePct}
+            approvalTrail={approvalTrail} actorName={actorName} isCU={isCU}
+            isTerminal={isTerminal} marginAct={marginAct} marginUw={marginUw}
+            crAct={crAct} crUw={crUw} epi={epi} limit={limit} eventLimit={eventLimit}
+            fxInverse={fxInverse} safeCcy={safeCcy} money={money} aiCalc={aiCalc}
+            contractId={cid} mandateCheck={mandateCheck}
+            onSubmitForApproval={doSubmitForApproval}
+            onMarkApproved={doMarkApproved} onReturnToUW={doReturnToUW}
+            onMarkSigned={doMarkSigned} onMarkNTU={doMarkNTU} onDecline={doDecline} onRecall={doRecall}
+            eligibleApprovers={eligibleApprovers}
+            offerPermissions={offerPermissions}
+            isQuote={!!appState.quoteMode}
+          />
         </div>
       )}
     </WizardLayout>

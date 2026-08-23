@@ -259,6 +259,8 @@ const PATHS = {
   dashboardFilters: '/api/dashboard/filters',
   dashboardOverview: (qs = '') => `/api/dashboard/overview${qs ? `?${qs}` : ''}`,
   dashboardPage: (tab?: string, qs = '') => `/api/dashboard/page/${enc(tab || 'portfolio-overview')}${qs ? `?${qs}` : ''}`,
+  facDashboardFilters: '/api/fac-dashboard/filters',
+  facDashboardPage: (tab?: string, qs = '') => `/api/fac-dashboard/page/${enc(tab || 'portfolio-overview')}${qs ? `?${qs}` : ''}`,
   lossSelectionLatest: (id: string, lossType: string) => `/api/treaties/${enc(id)}/loss-selection/${enc(lossType)}/latest`,
   saveLossSelectionSnapshot: (id: string, lossType: string) => `/api/treaties/${enc(id)}/loss-selection/${enc(lossType)}/snapshot`,
 };
@@ -894,6 +896,7 @@ export const api = {
       : `/api/treaties/${enc(contractId)}/offer/eligible-approvers`;
     return request(`${base}?${qs}`, opts);
   },
+  getOfferPermissions(contractId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/treaties/${enc(contractId)}/offer/permissions`, opts); },
   getArbiterOptions(contractId: string, opts?: RequestOpts): Promise<unknown> { return request(`/api/treaties/${enc(contractId)}/offer/arbiter-options`, opts); },
   peerDecision(contractId: string, payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request(`/api/treaties/${enc(contractId)}/offer/peer-decision`, { method: 'POST', body: payload, ...opts }); },
   arbiterDecision(contractId: string, payload?: unknown, opts?: RequestOpts): Promise<unknown> { return request(`/api/treaties/${enc(contractId)}/offer/arbiter-decision`, { method: 'POST', body: payload, ...opts }); },
@@ -959,6 +962,8 @@ export const api = {
   dashboardFilters(opts?: RequestOpts): Promise<unknown> { return request(PATHS.dashboardFilters, opts); },
   dashboardOverview(params: QueryParams = {}, opts?: RequestOpts): Promise<unknown> { return request(PATHS.dashboardOverview(toQuery(params)), opts); },
   dashboardPage(tab?: string, params: QueryParams = {}, opts?: RequestOpts): Promise<unknown> { return request(PATHS.dashboardPage(tab, toQuery(params)), opts); },
+  facDashboardFilters(opts?: RequestOpts): Promise<unknown> { return request(PATHS.facDashboardFilters, opts); },
+  facDashboardPage(tab?: string, params: QueryParams = {}, opts?: RequestOpts): Promise<unknown> { return request(PATHS.facDashboardPage(tab, toQuery(params)), opts); },
 
   // ── Facultative ──────────────────────────────────────────────────────────
   facListClasses(opts?: RequestOpts): Promise<unknown> { return request('/api/fac/lookups/classes', opts); },
