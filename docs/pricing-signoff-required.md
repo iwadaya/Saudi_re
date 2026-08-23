@@ -1,6 +1,8 @@
 # Pricing — open findings requiring credentialed actuarial sign-off
 
-> **Status: NOT RESOLVED. DO NOT auto-fix.**
+> **Status: OPEN — blocked pending credentialed actuarial sign-off.**
+> Do not change the pricing math for any item below without a documented
+> actuary / product-owner decision recorded against it.
 > This document only *lists* the open actuarial findings and marks them as
 > blocked on a credentialed (human) actuary / product-owner decision. The
 > P0-5 scaffolding work (shared formulas, server verification, golden-master

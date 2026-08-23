@@ -1,9 +1,15 @@
 # Deployment — internal test environment
 
 Everything needed to stand up Universe 3 on a single Linux server for
-internal testing by ~30 concurrent users. The target environment is
-intentionally modest; production-grade scale-out lives in
+internal testing by ~30 concurrent users, via **PM2 on a VM**. The target
+environment is intentionally modest; production-grade scale-out lives in
 [`scaling.md`](./scaling.md) once you've outgrown this.
+
+> **Scope:** this is the focused PM2-on-a-VM runbook for a test box. For the
+> full handover covering all deploy options (Docker Compose, Render, PM2,
+> systemd), env-var reference and backups, see the root
+> [`DEPLOYMENT.md`](../DEPLOYMENT.md). Where the two overlap, `DEPLOYMENT.md`
+> is canonical.
 
 ---
 
@@ -30,7 +36,7 @@ or two small VMs (2/4/40 each) if you want separation. Either works.
 | Component | Version | Source |
 |-----------|---------|--------|
 | OS | Ubuntu Server 22.04 LTS (or Debian 12 / RHEL 9 equivalent) | |
-| Node.js | **20.18.0** (pinned in `.nvmrc`) | nodesource repo or nvm |
+| Node.js | the version pinned in [`.nvmrc`](../.nvmrc) (`nvm use` selects it) | nodesource repo or nvm |
 | PostgreSQL | **16.x** | apt postgres-16 or managed service |
 | nginx | latest stable | distro repo |
 | PM2 | installed by `npm install` (listed in devDependencies) | npm |

@@ -2,9 +2,8 @@
 
 **Audience:** IT team standing up the Universe reinsurance pricing tool on an Ubuntu server.
 **Source repo:** https://github.com/Darchville-Analytics/modelling_tool
-**Snapshot date:** 14 May 2026
-**Last verified:** 2026-06-14 @ `d445dba` (bearer-token auth, enforcing CSP, 12-char password policy, and dev-only Compose all reflected below).
-**Maintainer contact:** Isheanesu Wadaya (Riyadh, UTC+3)
+**Canonical facts:** version-specific values (Node, Postgres, migration count) are stated once in the repo — `.nvmrc`, `docker-compose.yml`, `server/src/db/migrations/` — and this doc defers to them rather than restating exact numbers that drift.
+**Maintainer contact:** the Darchville Analytics platform team (review routing in `.github/CODEOWNERS`).
 
 ---
 
@@ -30,15 +29,15 @@ Target user base: ~30 underwriters in a single office. The app is internal only 
 
 | Layer | Technology |
 |---|---|
-| Client | React 18 + Vite, served as static SPA from the API server |
-| API | Express 5 on Node 20+ |
-| Database | PostgreSQL 14+ (17.5 used in development) |
+| Client | React 19 + Vite, served as static SPA from the API server |
+| API | Express 5 on Node (version pinned in `.nvmrc`) |
+| Database | PostgreSQL 16 (bundled Docker stack); 14+ supported |
 | File storage | Local filesystem by default; Cloudinary supported via env vars |
 | Process management | PM2 (config provided), or Docker Compose (config provided), or systemd |
 
 The Express server serves both the API under `/api/*` and the built SPA from `client/dist`. There is no separate frontend host required.
 
-Migrations live in `server/src/db/migrations/` (73 files at time of writing). Each migration runs in a single transaction with per-statement savepoints — a non-skippable failure rolls the whole migration back so a half-applied state is never recorded. They are idempotent and safe to re-run.
+Migrations live in `server/src/db/migrations/` (run `npm run migrate:status --prefix server` for the current count and applied/pending state). Each migration runs in a single transaction with per-statement savepoints — a non-skippable failure rolls the whole migration back so a half-applied state is never recorded. They are idempotent and safe to re-run.
 
 Migrations do **not** run on app boot by default (`RUN_MIGRATIONS_ON_BOOT=false`). Run them as an explicit pre-deploy step:
 
@@ -59,11 +58,11 @@ Minimum specification for ~30 concurrent users:
 | RAM | 4 GB | 8 GB |
 | Disk | 20 GB | 50 GB |
 | Ubuntu | 22.04 LTS | 24.04 LTS |
-| Node.js | 20.18.0 | 20.18.0+ |
-| PostgreSQL | 14 | 17 |
+| Node.js | see `.nvmrc` | see `.nvmrc` |
+| PostgreSQL | 14 | 16+ |
 
 Notes:
-- The Node version is pinned in `.nvmrc` and `.node-version`. Use exactly what's there.
+- The Node version is pinned in `.nvmrc` and `.node-version`. Use exactly what's there (`nvm use` selects it).
 - The 4 GB minimum assumes Postgres on a separate host. Co-locating Postgres on the same box pushes the minimum to 8 GB.
 - A real load test has not yet been run. Treat these numbers as a starting point and revise after measuring.
 
@@ -273,8 +272,8 @@ The application will be exposed on port 4000 by default. Front it with Nginx (sa
 
 ```bash
 docker compose ps
-docker compose logs --tail=200 app
-docker compose restart app
+docker compose logs --tail=200 universe-app
+docker compose restart universe-app
 docker compose pull && docker compose up -d --build   # update
 docker compose down                                    # stop everything
 ```
@@ -451,7 +450,13 @@ docker compose up -d --build                   # Option B — docker-compose
 sudo systemctl restart universe                # Option C
 ```
 
-For an Option B (docker-compose) host that wants the same tighter control as A/C, unset `RUN_MIGRATIONS_ON_BOOT` in `docker-compose.yml` and run `npm run migrate:up --prefix server` (or `docker compose run --rm universe-app npm run migrate:up --prefix server`) before `up -d`.
+For an Option B (docker-compose) host that wants the same tighter control as A/C, unset `RUN_MIGRATIONS_ON_BOOT` in `docker-compose.yml` and run migrations before `up -d`. The runtime image has **no npm** (it is stripped for security), so inside the container call `node` directly rather than an npm script:
+
+```bash
+docker compose run --rm universe-app node server/src/db/migrate.js
+```
+
+Outside the container (from a checkout with dev deps installed) `npm run migrate:up --prefix server` is equivalent.
 
 ## 10. Security notes — read before going live
 

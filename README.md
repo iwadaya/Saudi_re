@@ -1,11 +1,19 @@
 # Universe 3
 
-Deployment-ready monorepo for the Universe 3 reinsurance treaty pricing platform.
+Universe 3 is a reinsurance treaty pricing and modelling platform: it prices
+proportional, non-proportional and facultative business, runs the quote →
+approval → bind workflow, and produces renewal packs and portfolio analytics.
 
 ## Stack
-- React 18 + Vite frontend
+- React 19 + Vite frontend (lazy-loaded SPA, served by the API in production)
 - Express 5 API server
 - PostgreSQL database
+- Shared pricing math in `shared/`, imported by both client and server
+
+## Prerequisites
+- **Node.js** — the version pinned in [`.nvmrc`](.nvmrc) (`nvm use` selects it). `package.json` engines require `>=20.18.0`.
+- **PostgreSQL 16** (the bundled Docker stack uses `postgres:16-alpine`).
+- **npm** (ships with Node).
 
 ## Local development
 1. Copy `.env.example` to `.env`
@@ -48,44 +56,61 @@ DATABASE_URL=postgres://user:pass@host:5432/reinsurance_tool_test scripts/test-d
 See `CONTRIBUTING.md` → _Database integration tests_ for the manual steps and
 conventions for adding new ones.
 
-## Environment variables
-- `PORT`: HTTP port for the server
-- `DATABASE_URL`: PostgreSQL connection string
-- `DASHBOARD_DATABASE_URL`: optional secondary database
-- `CORS_ORIGIN`: allowed origin list for browser requests
-- `UPLOAD_DIR`: upload storage path
-- `RUN_MIGRATIONS_ON_BOOT`: whether SQL migrations run at startup
-- `DB_POOL_MAX` / `DB_POOL_MIN`: pool sizing (per-process; see `docs/scaling.md`)
-- `OTEL_ENABLED`: set to `1` to enable OpenTelemetry traces + metrics
-- `OTEL_SERVICE_NAME`: service name in traces (default `universe-server`)
-- `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP HTTP endpoint (default `http://localhost:4318`)
-- `OTEL_TRACES_SAMPLER_ARG`: optional 0..1 sampling ratio
-- `PROM_EXPORTER_PORT`: Prometheus scrape port (default `9464`)
-- `PRICING_STRICT`: set to `1` to reject (`422 PRICING_DRIFT`) client-submitted
-  NP pricing outputs that fail the server-side spot check against
-  `shared/pricingMath.js`. Defaults to warn-only; every response carries
-  an `X-Pricing-Drift-Count` header either way.
-
-See `docs/observability.md` for the full enable-to-dashboards recipe,
-`docs/scaling.md` for PM2 cluster mode, `docs/architecture.md` for the
-data model and quote/treaty duality, `docs/migration-audit.md` for the
-prod-schema rebase checklist, and `docs/css-roadmap.md` for the CSS
-tokens-to-pilot plan.
-
-## Docker
+## Docker (local / controlled test environment)
 ```bash
 docker compose up --build
 ```
 
-The compose file starts the application and a PostgreSQL database.
+Starts the app and a PostgreSQL database, runs migrations on boot, and seeds
+reference data. Sign in with a seeded demo user (e.g. `cuo` / `demo2026`) —
+`docker-compose.yml` sets `ALLOW_DEMO_AUTH=true`, which is a dev/test-only
+convenience the server refuses to honour under `NODE_ENV=production`.
 
-## Notes
-- Legacy snapshot directories were removed from the deployment package.
-- Request user context is now normalized on the server from request headers to support cleaner auditing and role-aware endpoints.
-- Routes are lazy-loaded on the client to reduce the initial bundle size.
+Load sample treaties for manual testing once the stack is healthy:
+
+```bash
+docker compose exec universe-app node server/scripts/seedTestTreaties.js
+```
+
+> The compose file is for local/test use. Production deploys via Render
+> (`render.yaml`) or your own orchestrator, with real auth secrets injected as
+> secret env vars. See `DEPLOYMENT.md`.
+
+## Environment variables
+Every variable is documented in [`.env.example`](.env.example). The essentials:
+
+| Variable | Purpose |
+|---|---|
+| `PORT` | HTTP port for the server (default `4000`) |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `CORS_ORIGIN` | Allowed origin list for browser requests |
+| `AUTH_JWT_SECRET` | Auth-token signing secret (**required in production**, ≥32 chars) |
+| `SESSION_SECRET` | CSRF/session secret (≥32 chars; falls back to `AUTH_JWT_SECRET`) |
+| `UPLOAD_DIR` | Upload storage path |
+| `RUN_MIGRATIONS_ON_BOOT` | Whether SQL migrations run at startup |
+| `DB_POOL_MAX` / `DB_POOL_MIN` | Pool sizing (per-process; see `docs/scaling.md`) |
+| `OTEL_ENABLED` | Set to `1` to enable OpenTelemetry traces + metrics |
+| `PRICING_STRICT` | Set to `1` to reject (422) client pricing that drifts from `shared/pricingMath.js` |
 
 ## Scheduled jobs
-There is no in-process scheduler. The following scripts are designed to be invoked nightly by the platform's cron facility (Render Cron, Kubernetes CronJob, GitHub Actions, etc.) from the `server/` directory:
+There is no in-process scheduler. These scripts are invoked nightly by the
+platform's cron facility (Render Cron, Kubernetes CronJob, GitHub Actions —
+see `render.yaml` and `.github/workflows/scheduled-jobs.yml`) from the
+`server/` directory:
 
 - `npm run cleanup:snapshots` — purges `import_snapshots` rows past the 30-day retention window.
 - `npm run refresh:ldf-benchmarks` — rebuilds the `mv_ldf_benchmark_*` materialized views. Also fires opportunistically after each contract reaches a terminal state (SIGNED / DECLINED / NTU); the nightly run is the safety net.
+
+## Further reading
+| Document | What it covers |
+|---|---|
+| `DEPLOYMENT.md` | Deployment options (Docker, Render, PM2), env wiring, backups |
+| `SECURITY.md` | Auth model, CSP, dependency/image scanning, disclosure |
+| `CONTRIBUTING.md` | Dev workflow, integration-test conventions |
+| `docs/architecture.md` | Data model and quote/treaty duality |
+| `docs/scaling.md` | PM2 cluster mode and horizontal scaling |
+| `docs/observability.md` | OpenTelemetry enable-to-dashboards recipe |
+
+## License
+Proprietary and confidential — see [`LICENSE`](LICENSE). All package manifests
+are marked `UNLICENSED`; the code is not licensed for redistribution.

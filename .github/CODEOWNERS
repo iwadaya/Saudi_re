@@ -1,0 +1,20 @@
+# Code owners — GitHub requests review from the owners listed here whenever a
+# matching path changes. See https://docs.github.com/articles/about-code-owners
+#
+# ACTION REQUIRED: replace the placeholder team below with your real GitHub
+# team slug (e.g. @darchville-analytics/platform) or explicit usernames.
+# Entries pointing at a non-existent team/user are ignored by GitHub, so the
+# lines below are intentionally commented until real owners are filled in.
+
+# Default owners for everything in the repo.
+# * @darchville-analytics/platform
+
+# Pricing math is shared by client and server — route changes to the actuarial reviewers.
+# /shared/           @darchville-analytics/actuarial
+# /server/src/services/   @darchville-analytics/platform
+
+# Deployment, CI and security posture.
+# /.github/          @darchville-analytics/platform
+# /Dockerfile        @darchville-analytics/platform
+# /render.yaml       @darchville-analytics/platform
+# /SECURITY.md       @darchville-analytics/platform

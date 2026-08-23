@@ -40,7 +40,7 @@ npm start             # serve client/dist via the express server
 ```
 client/
   src/
-    api.js                    central HTTP client (uses utils/httpClient)
+    api.ts                    central HTTP client (uses utils/httpClient)
     components/               cross-screen UI (Topbar, Toast, ThemeSwitcher, ...)
     hooks/                    shared React hooks (useScreenSave, useToast, ...)
     screens/                  one folder per workflow tier
@@ -71,7 +71,7 @@ server/
 ### State + saves
 - Wizard screens use `useScreenSave` (`client/src/hooks/useScreenSave.js`) — handles load/dirty/save/skip.
 - Save handlers must return `true` on success, `false` on failure. WizardLayout uses the bool to gate navigation.
-- Mutations use the centralized `request()` in `client/src/api.js`. POST/PUT/DELETE do NOT auto-retry; opt in via `retry: { methods: new Set(['POST']) }` only when the operation is genuinely idempotent.
+- Mutations use the centralized `request()` in `client/src/api.ts`. POST/PUT/DELETE do NOT auto-retry; opt in via `retry: { methods: new Set(['POST']) }` only when the operation is genuinely idempotent.
 
 ### Server routes
 - New route files live in `server/src/routes/`. Add them to `registerApiRoutes.js`.

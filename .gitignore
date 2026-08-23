@@ -4,8 +4,26 @@ server/node_modules/
 server/uploads/
 uploads/
 coverage/
+
+# Env files — keep the committed *.env.example templates, ignore everything else
+# (including Vite's .env.local / .env.*.local and any .env.production).
 .env
-*.log
-.DS_Store
-client/.npmrc
+.env.*
+!.env.example
+!**/.env.example
+
+# Build output
+dist/
 client/dist/
+*.tsbuildinfo
+.vite/
+
+# Logs
+*.log
+
+# Editor / OS droppings
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+client/.npmrc

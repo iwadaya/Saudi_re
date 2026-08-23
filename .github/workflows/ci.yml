@@ -15,9 +15,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  NODE_VERSION: '20.18.0'
-
 jobs:
   audit:
     name: prod dependency audit
@@ -246,24 +243,40 @@ jobs:
           npm ci --include=optional
           npm ci --include=optional --prefix server
 
-      # Same npm/cli#4828 workaround as the lint+unit job — the
-      # integration job runs vitest via `npm run test:server`.
+      # Same npm/cli#4828 workaround as the lint+unit job — the integration job
+      # runs vitest via `npm run test:server`. Version + integrity are READ FROM
+      # package-lock.json (not hard-coded) so the binding always matches the
+      # rolldown package that loads it; a hard-coded 1.0.1 here silently drifted
+      # from the lockfile's 1.1.2 and planted a mismatched native binding.
       - name: Plant rolldown linux binding from npm registry
         run: |
           set -euo pipefail
-          PKG_DIR=node_modules/@rolldown/binding-linux-x64-gnu
-          # Verify the tarball against the lockfile's sha512 before extracting.
-          EXPECTED="sha512-XABVmGp9Tg0WspTVvwduTc4fpqy6JnAUrSQe6OuyqD/03nI7r0O9OWUkMIwFrjKAIqolvqoA4ZrJppgwE0Gxmw=="
-          if [ ! -f "$PKG_DIR/rolldown-binding.linux-x64-gnu.node" ]; then
-            mkdir -p "$PKG_DIR"
-            curl -sSL https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.0.1.tgz -o /tmp/rolldown.tgz
-            ACTUAL="sha512-$(openssl dgst -sha512 -binary /tmp/rolldown.tgz | openssl base64 -A)"
-            if [ "$ACTUAL" != "$EXPECTED" ]; then
-              echo "rolldown tarball integrity mismatch! expected=$EXPECTED actual=$ACTUAL" >&2
-              exit 1
-            fi
-            tar -xz --strip-components=1 -C "$PKG_DIR" -f /tmp/rolldown.tgz
+          PKG=@rolldown/binding-linux-x64-gnu
+          PKG_DIR="node_modules/$PKG"
+          read -r VERSION EXPECTED < <(node -e '
+            const lock = require("./package-lock.json");
+            const key = "node_modules/@rolldown/binding-linux-x64-gnu";
+            const e = lock.packages[key];
+            if (!e) { console.error(`${key} missing from package-lock.json`); process.exit(1); }
+            console.log(e.version, e.integrity);
+          ')
+          echo "lockfile pins $PKG@$VERSION"
+          ROLLDOWN_VERSION="$(node -e 'console.log(require("./package-lock.json").packages["node_modules/rolldown"].version)')"
+          if [ "$VERSION" != "$ROLLDOWN_VERSION" ]; then
+            echo "rolldown version mismatch: rolldown@$ROLLDOWN_VERSION vs binding@$VERSION." >&2
+            echo "Align the root optionalDependencies pin in package.json with rolldown's version." >&2
+            exit 1
           fi
+          rm -rf "$PKG_DIR"
+          mkdir -p "$PKG_DIR"
+          curl -sSL "https://registry.npmjs.org/$PKG/-/binding-linux-x64-gnu-$VERSION.tgz" -o /tmp/rolldown.tgz
+          ACTUAL="sha512-$(openssl dgst -sha512 -binary /tmp/rolldown.tgz | openssl base64 -A)"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "rolldown tarball integrity mismatch! expected=$EXPECTED actual=$ACTUAL" >&2
+            exit 1
+          fi
+          tar -xz --strip-components=1 -C "$PKG_DIR" -f /tmp/rolldown.tgz
+          node -e "require('$PWD/$PKG_DIR/rolldown-binding.linux-x64-gnu.node'); console.log('rolldown binding loads OK')"
 
       - name: Run DB migrations
         run: npm run migrate --prefix server
