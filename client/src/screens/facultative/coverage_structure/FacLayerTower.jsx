@@ -15,12 +15,7 @@ import { useCallback, useMemo } from 'react';
 import { rateOnLine, paybackYears, totalCover } from '../../../../../shared/fac/layers.js';
 import './FacLayerTower.css';
 
-const numOrNull = (v) => {
-  const c = String(v ?? '').replace(/,/g, '').trim();
-  if (!c) return null;
-  const n = Number(c);
-  return Number.isFinite(n) ? n : null;
-};
+import { numOrNull } from '../../../utils/format';
 const stripDigits = (v) => String(v ?? '').replace(/[^\d]/g, '');
 const fmtComma = (v) => {
   const d = stripDigits(v);

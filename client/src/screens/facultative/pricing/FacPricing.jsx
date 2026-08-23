@@ -43,6 +43,7 @@ import { familyForClass, pricingBlocker } from '../../../../../shared/fac/regist
 import { scheduleProperty } from '../../../../../shared/fac/families/scheduleProperty.js';
 import { logger } from '../../../utils/logger';
 import './FacPricing.css';
+import { numOrNull } from '../../../utils/format';
 import {
   UwFactorsPanel, EngineReadout, PricingWaterfall, FamilyBlocker, ExposureBasisNote,
   LossCostPanel, TechnicalBuildUp,
@@ -54,7 +55,6 @@ const ENGINE_VERSION = '2.0.0';
 
 const ROUTE_KEY = 'FAC_PRICING';
 
-const numOrNull = v => { const c = String(v ?? '').replace(/,/g,'').trim(); if (!c) return null; const n = Number(c); return Number.isFinite(n) ? n : null; };
 const fmtN = v => { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—'; };
 
 function FR({ label, children, hint }) {

@@ -27,7 +27,7 @@ import { buildExposureProfile } from '../../../shared/fac/index.js';
 import { renewalSnapshot, renewalComparison } from '../../../shared/fac/renewal.js';
 
 /** The adequacy bands the distribution and the hit ratio share. */
-export const ADEQUACY_BANDS = [
+const ADEQUACY_BANDS = [
   { label: '< 0.80', min: null, max: 0.80 },
   { label: '0.80 – 0.90', min: 0.80, max: 0.90 },
   { label: '0.90 – 1.00', min: 0.90, max: 1.00 },
@@ -54,7 +54,7 @@ function bandFor(adequacy) {
  * @param {object} filters {uwYear, family, region}
  * @returns {Promise<Array<object>>}
  */
-export async function loadPricedRisks({ uwYear = null, family = null, region = null } = {}) {
+async function loadPricedRisks({ uwYear = null, family = null, region = null } = {}) {
   const { rows } = await pool.query(
     `SELECT r.fac_risk_id, r.insured_name, r.status, r.uw_year, r.cedant_region,
             c.rating_family, c.class_name,

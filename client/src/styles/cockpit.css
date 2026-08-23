@@ -57,9 +57,6 @@ body::after{
   box-shadow: 0 14px 40px rgba(0,0,0,.55);
 }
 
-.btn--primary:hover,
-.dock-btn--primary:hover,
-.ms-btn-primary:hover,
 .primary-pill:hover,
 .action-pill--primary:hover{
   filter: brightness(1.05) saturate(1.06);
@@ -67,48 +64,21 @@ body::after{
 }
 
 /* Inputs: consistent cockpit control height */
-.input-shell input,
-.input-shell select,
-.input-shell button.cob-control,
 :is(input[type="text"],input[type="number"],input[type="search"],input[type="email"],input[type="date"],textarea,select){
   min-height: 40px;
 }
 
 /* Thin separators that read like panel seams */
-.divider,
-.sheet-grid{
+.divider{
   opacity: .85;
 }
 
-/* Tabs: more like toggles on a console */
-.tabs-dock{
-  border-top: 1px solid var(--hud-line);
-  background: var(--surface-muted);
-  backdrop-filter: blur(10px);
-}
-
-.tabsbar .tab{
-  border: 1px solid var(--stroke-soft);
-  background: var(--control-bg);
-  color: rgba(var(--text-rgb),.86);
-  box-shadow: 0 10px 22px rgba(0,0,0,.30);
-}
-
-.tabsbar .tab.tab--active{
-  border-color: rgba(var(--accent-rgb),.42);
-  background: rgba(var(--accent-rgb),.10);
-  color: var(--accent);
-  box-shadow: 0 14px 32px rgba(0,0,0,.42), 0 0 24px rgba(var(--accent-rgb),.16);
-}
-
 /* Modals: centered cockpit dialog feel */
-.modal-backdrop,
-.slide-modal-backdrop{
+.modal-backdrop{
   background: rgba(3, 7, 18, 0.78);
 }
 
 .modal,
-.slide-modal,
 .renew-panel{
   border: 1px solid var(--hud-line-2);
   box-shadow: 0 24px 70px rgba(0,0,0,.72);
@@ -179,12 +149,9 @@ body::after{
 }
 
 .glass,
-.sheet-panel,
 .card,
 .panel.glass,
-.ms-modal,
 .modal,
-.slide-modal,
 .screen-modal,
 .renew-panel{
   border-color: var(--hairline-strong);
@@ -196,12 +163,9 @@ body::after{
   backdrop-filter: saturate(145%) blur(16px);
 }
 
-.sheet-panel,
 .card,
 .panel.glass,
-.ms-modal,
 .modal,
-.slide-modal,
 .screen-modal,
 .renew-panel{
   border-radius: var(--radius-lg);
@@ -214,14 +178,12 @@ body::after{
 }
 
 .panel-head,
-.card-header,
 .card-head{
   color: var(--text-subtle);
   border-color: var(--hairline);
 }
 
 .panel-title,
-.card-title,
 .card-header-label{
   color: var(--text-strong);
   letter-spacing: .08em;
@@ -241,8 +203,7 @@ body::after{
   background: var(--topbar-bg);
 }
 
-.topbar-title,
-.brand-title{
+.topbar-title{
   color: var(--text-strong);
   letter-spacing: .10em;
 }
@@ -250,9 +211,7 @@ body::after{
 .topbar-btn,
 .topbar-pill,
 .chip-btn,
-.chip-toggle,
-.btn,
-.ms-btn{
+.btn{
   border-color: var(--hairline-strong);
   background: var(--control-bg);
   color: var(--text);
@@ -261,17 +220,12 @@ body::after{
 
 .topbar-btn:hover,
 .chip-btn:hover,
-.chip-toggle:hover,
-.btn:hover,
-.ms-btn:hover{
+.btn:hover{
   background: var(--control-hover);
   border-color: rgba(var(--accent-rgb),.30);
 }
 
 .topbar-home,
-.btn--primary,
-.dock-btn--primary,
-.ms-btn-primary,
 .primary-pill,
 .action-pill--primary,
 .wizard-dock-btn--next{
@@ -287,7 +241,6 @@ body::after{
     0 0 28px rgba(var(--accent-rgb),.24) !important;
 }
 
-.brand-dot,
 .logo-badge{
   border-radius: 10px;
   border-color: rgba(var(--accent-rgb),.38);
@@ -344,7 +297,6 @@ body::after{
 }
 
 .crumb,
-.saved-pill,
 .welcome-pill,
 .pill-mini{
   background: rgba(var(--accent-rgb),.075);
@@ -352,31 +304,21 @@ body::after{
   color: var(--text);
 }
 
-:is(input[type="text"],input[type="number"],input[type="search"],input[type="email"],input[type="date"],textarea,select),
-.form-input,
-.input-shell{
+:is(input[type="text"],input[type="number"],input[type="search"],input[type="email"],input[type="date"],textarea,select),.form-input{
   border-color: var(--hairline-strong);
   background: var(--control-bg);
   color: var(--text);
   box-shadow: var(--shadow-control);
 }
 
-:is(input[type="text"],input[type="number"],input[type="search"],input[type="email"],input[type="date"],textarea,select):hover,
-.form-input:hover,
-.input-shell:hover{
+:is(input[type="text"],input[type="number"],input[type="search"],input[type="email"],input[type="date"],textarea,select):hover,.form-input:hover{
   border-color: rgba(var(--accent-rgb),.26);
   background: var(--control-hover);
 }
 
-:is(input[type="text"],input[type="number"],input[type="search"],input[type="email"],input[type="date"],textarea,select):focus,
-.form-input:focus,
-.input-shell:focus-within{
+:is(input[type="text"],input[type="number"],input[type="search"],input[type="email"],input[type="date"],textarea,select):focus,.form-input:focus{
   border-color: rgba(var(--accent-rgb),.42);
   box-shadow: var(--shadow-control), 0 0 0 4px var(--focus);
-}
-
-.input-shell :is(select,input,textarea,button){
-  color: var(--text);
 }
 
 .table,
@@ -410,8 +352,7 @@ body::after{
 }
 
 .toggle-group,
-.view-tabs,
-.tabs-dock{
+.view-tabs{
   border: 1px solid var(--hairline-strong);
   background: var(--control-bg);
   box-shadow: var(--shadow-control);
@@ -425,23 +366,12 @@ body::after{
 }
 
 .toggle-option.active,
-.view-tab.is-active,
-.tab--active,
-.tabsbar .tab.tab--active{
+.view-tab.is-active{
   border-color: rgba(var(--accent-rgb),.34);
   background:
     linear-gradient(180deg, rgba(var(--accent-rgb),.18), rgba(var(--accent-rgb),.075));
   color: var(--accent);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 10px 24px rgba(0,0,0,.25);
-}
-
-.tabs-dock{
-  border-radius: 10px;
-  background: var(--control-bg);
-}
-
-.tabsbar .tab{
-  border-radius: 8px;
 }
 
 .view-tabs{

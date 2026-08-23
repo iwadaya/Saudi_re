@@ -22,6 +22,7 @@
  */
 
 import { toN } from './format.js';
+import { layerHit } from '../../../shared/pricingMath.js';
 
 /**
  * @typedef {import('../types/pricing').LossLike} LossLike
@@ -47,10 +48,8 @@ import { toN } from './format.js';
 // and are the authority when the implementations below need to change.
 export {
   layerHit,
-  weightedAverage,
   annualiseLoss,
   rolFromAnnualLoss,
-  premiumFromRol,
   applyLoading,
 } from '../../../shared/pricingMath.js';
 
@@ -265,8 +264,7 @@ export function calcPureBurningCost(losses, deductible, limit, egnpi, obsYears, 
   // Step 2–3: apply deductible, cap at limit, sum by year
   const byYear = /** @type {Record<string, number>} */ ({});
   for (const { year, loss } of withValues) {
-    const layerHit = Math.max(0, Math.min(loss - deductible, limit));
-    byYear[String(year)] = (byYear[String(year)] || 0) + layerHit;
+    byYear[String(year)] = (byYear[String(year)] || 0) + layerHit(loss, deductible, limit);
   }
 
   const totalLayerLoss = Object.values(byYear).reduce((s, v) => s + v, 0);
@@ -539,8 +537,8 @@ export function calcCatExposureRating(crestaRows, deductible, limit, egnpi, catS
       for (let i = 0; i < points.length - 1; i++) {
         const p1 = points[i],   p2 = points[i + 1];
         const f1 = 1 / p1.rp,  f2 = 1 / p2.rp;
-        const h1 = Math.max(0, Math.min(p1.loss - deductible, limit));
-        const h2 = Math.max(0, Math.min(p2.loss - deductible, limit));
+        const h1 = layerHit(p1.loss, deductible, limit);
+        const h2 = layerHit(p2.loss, deductible, limit);
         aep += (f1 - f2) * (h1 + h2) / 2;
       }
       const rol = limit > 0 ? aep / limit : 0;
@@ -583,7 +581,7 @@ export function calcCatExposureRating(crestaRows, deductible, limit, egnpi, catS
     if (totalExposure > 0 && egnpi > 0) {
       const impliedLoss = egnpi * 0.15; // base: 15% expected annual loss ratio as seed
       const rol = limit > 0
-        ? Math.max(0, Math.min(impliedLoss - deductible, limit)) / (limit * (obsYears || 10))
+        ? layerHit(impliedLoss, deductible, limit) / (limit * (obsYears || 10))
         : 0;
       return { rol, totalExposure, method: 'flat_loss_ratio_fallback' };
     }
@@ -639,7 +637,7 @@ function interpOEP(points, loss) {
  * @param {unknown} value
  * @returns {string}
  */
-export function normCob(value) {
+function normCob(value) {
   return String(value ?? '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')

@@ -36,9 +36,6 @@
 
 import { num, numOrNull } from './num.js';
 
-/** How a level of the check came out. */
-export const CHECK_STATUS = ['PASS', 'BREACH', 'NO_BUDGET', 'NOT_APPLICABLE'];
-
 /**
  * The line size this risk would take, on the basis its family uses.
  *

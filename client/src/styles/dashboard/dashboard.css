@@ -66,23 +66,6 @@
 }
 
 /* More compact typography + spacing for the Premium-by-Region block */
-.dash-block--premium-region .dash-block-title{
-  font-size: 10px;
-  margin-bottom: 8px;
-  font-weight: 500;
-}
-
-.dash-block--premium-region .dash-table th,
-.dash-block--premium-region .dash-table td{
-  font-size: 10px;
-  padding: 5px 6px;
-  font-weight: 400;
-}
-
-.dash-block--premium-region .dash-table thead th{
-  padding-top: 7px;
-  padding-bottom: 7px;
-}
 
 .dash-table-wrap{
   overflow-x: auto;
@@ -128,12 +111,6 @@
   cursor: pointer;
 }
 
-.dash-th--orange{
-  background: #ffb020 !important;
-  color: #0b1020 !important;
-  font-weight: 800;
-}
-
 .dash-td{ font-variant-numeric: tabular-nums; }
 
 .dash-sort{ opacity: .6; font-size: 11px; }
@@ -171,15 +148,6 @@
   display:flex;
   gap: 10px;
   justify-content: flex-end;
-}
-
-.dash-alert{
-  margin-top: 10px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(var(--accent-rose-rgb), .22);
-  background: rgba(var(--accent-rose-rgb), .08);
-  color: rgba(var(--text-rgb),.9);
 }
 
 /* KPI tiles (Portfolio Overview top cards)
@@ -239,16 +207,6 @@
   margin-top: 6px;
   font-size: 12px;
   opacity: .65;
-}
-
-.dash-panels{
-  display:grid;
-  grid-template-columns: 1.2fr 1.8fr;
-  gap: 12px;
-}
-
-.dash-panels .panel{
-  min-height: 210px;
 }
 
 .dash-spark{
@@ -420,7 +378,6 @@ table.dash-tech td.dash-tcell--prop{ box-shadow: inset 3px 0 0 var(--accent); }
   .dash-filter-actions{ justify-content: flex-start; }
   .dash-kpis{ grid-template-columns: repeat(2, minmax(180px, 1fr)); }
   .dash-grid{ grid-template-columns: repeat(2, minmax(160px, 1fr)); }
-  .dash-panels{ grid-template-columns: 1fr; }
   .dash-table{ min-width: 420px; }
 }
 

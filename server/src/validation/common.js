@@ -42,12 +42,27 @@ export const pctOpen = z.preprocess((v) => {
   return Number.isFinite(n) ? n : undefined;
 }, z.number().min(0).max(1000).optional());
 
-/** Optional integer year. */
-export const uwYear = z.preprocess((v) => {
+/** Shared integer preprocess: ''/null/undefined -> undefined, else trunc. */
+const intPreprocess = (v) => {
   if (v === null || v === undefined || v === '') return undefined;
   const n = Number(v);
   return Number.isFinite(n) ? Math.trunc(n) : undefined;
-}, z.number().int().min(1900).max(2200).optional());
+};
+
+/**
+ * Integer field factory with optional bounds; required unless
+ * optional:true. Composes the shared preprocess so schema files stop
+ * copying it.
+ */
+export const intField = ({ min, max, optional = false } = {}) => {
+  let s = z.number().int();
+  if (min !== undefined) s = s.min(min);
+  if (max !== undefined) s = s.max(max);
+  return z.preprocess(intPreprocess, optional ? s.optional() : s);
+};
+
+/** Optional integer year. */
+export const uwYear = z.preprocess(intPreprocess, z.number().int().min(1900).max(2200).optional());
 
 /** Date — ISO YYYY-MM-DD or longer. Returns the YYYY-MM-DD prefix. */
 export const isoDate = z.preprocess((v) => {

@@ -69,24 +69,30 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
     }
   }
 
-  // Pre-aggregate COB per contract in one query — avoids N correlated subqueries
-  const cobAgg = async () => {
+  // Pre-aggregate COB for just the listed rows in one query each — avoids N
+  // correlated subqueries without scanning the whole book (the lists below
+  // are LIMIT 50, so at most ~200 ids are ever needed).
+  const cobAgg = async (contractIds) => {
+    if (!contractIds.length) return {};
     const { rows } = await pool.query(
       `SELECT ccb.contract_id,
               string_agg(cob.class_of_business, ', ' ORDER BY cob.class_of_business) AS cob
          FROM public.contract_class_of_business ccb
          JOIN public.class_of_business cob ON cob.class_of_business_id = ccb.class_of_business_id
-        GROUP BY ccb.contract_id`
+        WHERE ccb.contract_id = ANY($1::uuid[])
+        GROUP BY ccb.contract_id`, [contractIds]
     );
     return Object.fromEntries(rows.map(r => [r.contract_id, r.cob]));
   };
-  const cobAggQuote = async () => {
+  const cobAggQuote = async (quoteIds) => {
+    if (!quoteIds.length) return {};
     const { rows } = await pool.query(
       `SELECT qcb.quote_id,
               string_agg(cob.class_of_business, ', ' ORDER BY cob.class_of_business) AS cob
          FROM public.quote_class_of_business qcb
          JOIN public.class_of_business cob ON cob.class_of_business_id = qcb.class_of_business_id
-        GROUP BY qcb.quote_id`
+        WHERE qcb.quote_id = ANY($1::uuid[])
+        GROUP BY qcb.quote_id`, [quoteIds]
     );
     return Object.fromEntries(rows.map(r => [r.quote_id, r.cob]));
   };
@@ -126,8 +132,6 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
     { rows: drafts },
     { rows: submitted },
     { rows: renewals },
-    cobMap,
-    cobMapQ,
     regionResult,
     quotesResult,
   ] = await Promise.all([
@@ -149,8 +153,6 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
                         AND child.uw_status = 'DRAFT')
                    ${userFilter}
                  ORDER BY c.renewal_date ASC LIMIT 50`, cParams),
-    cobAgg(),
-    cobAggQuote(),
     pool.query(`
       SELECT
         CASE
@@ -187,6 +189,7 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
         cnt.country_name AS country, tt.treaty_type AS treaty_type,
         tt.treaty_type AS treaty_type_name, tt.category AS treaty_category,
         q.uw_year, q.updated_at, q.parent_contract_id,
+        q.quote_ref, q.quote_version,
         bk.broker_name AS broker
       FROM public.quote q
       LEFT JOIN public.companies ced ON ced.company_id=q.cedant_id
@@ -198,21 +201,19 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
     ).catch(() => ({ rows: [] })),
   ]);
 
+  // COB aggregates scoped to exactly the rows being returned.
+  const contractIds = [...new Set([...drafts, ...submitted, ...renewals].map(r => r.id))];
+  const [cobMap, cobMapQ] = await Promise.all([
+    cobAgg(contractIds),
+    cobAggQuote(quotesResult.rows.map(r => r.id)),
+  ]);
+
   // Attach pre-aggregated COB strings in JS — O(1) map lookup per row
   drafts.forEach(r => { r.cob = cobMap[r.id] || null; });
   submitted.forEach(r => { r.cob = cobMap[r.id] || null; });
   renewals.forEach(r => { r.cob = cobMap[r.id] || null; });
 
-  // Enrich quotes with quote_ref/quote_version if available
-  let quotes = quotesResult.rows.map(r => ({ ...r, cob: cobMapQ[r.id] || null }));
-  try {
-    const refRows = await pool.query(
-      `SELECT quote_id, quote_ref, quote_version FROM public.quote WHERE quote_id = ANY($1::uuid[])`,
-      [quotes.map(r => r.id)]
-    );
-    const refMap = Object.fromEntries(refRows.rows.map(r => [r.quote_id, r]));
-    quotes = quotes.map(r => { const m = refMap[r.id]; return m ? { ...r, quote_ref: m.quote_ref, quote_version: m.quote_version } : r; });
-  } catch {}
+  const quotes = quotesResult.rows.map(r => ({ ...r, cob: cobMapQ[r.id] || null }));
 
   const region_premiums = regionResult.rows.filter(r => r.region_bucket !== 'Other');
   const byStatus = Object.fromEntries(statusCounts.map(r => [r.uw_status, r.count]));
@@ -240,8 +241,9 @@ router.get("/home/summary", asyncHandler(async (req, res) => {
 // PROP: one row per contract.
 // NP:   one row per layer (layer_number, attachment, limit, earned_premium, rol, rate).
 router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
-  // Prop contracts — one row each
-  const { rows: prop } = await pool.query(`
+  // Prop and NP exports are independent whole-book scans — run them in
+  // parallel to halve the wall-clock latency of this endpoint.
+  const propPromise = pool.query(`
     SELECT
       c.contract_id,
       'PROP'                                        AS category,
@@ -347,7 +349,7 @@ router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
   `);
 
   // NP contracts — one row per layer
-  const { rows: np } = await pool.query(`
+  const npPromise = pool.query(`
     SELECT
       c.contract_id,
       'NP'                                          AS category,
@@ -439,6 +441,7 @@ router.get("/home/portfolio-export", asyncHandler(async (req, res) => {
     ORDER BY c.uw_year DESC, ced.company_name, c.contract_id, nl.layer_number
   `);
 
+  const [{ rows: prop }, { rows: np }] = await Promise.all([propPromise, npPromise]);
   res.json({ prop, np });
 }));
 

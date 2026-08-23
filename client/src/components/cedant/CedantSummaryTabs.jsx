@@ -380,36 +380,49 @@ function OverviewTab({
     setLineSizes(ls);
   }, [allRows]);
 
-  const rows = yearFilter === 'ALL' ? allRows : allRows.filter(r => getUwYear(r) === yearFilter);
-  const isCur = r => idOfRow(r) === String(contractId);
+  const rows = useMemo(
+    () => (yearFilter === 'ALL' ? allRows : allRows.filter(r => getUwYear(r) === yearFilter)),
+    [allRows, yearFilter],
+  );
+  const isCur = useCallback(r => idOfRow(r) === String(contractId), [contractId]);
 
-  const getLim100 = r => {
-    if (isNp && isCur(r) && cur100Limit > 0) return cur100Limit;
-    return num(ga(r, 'limit', 'treaty_limit', 'total_limit', 'qs_limit', 'total_capacity', 'capacity', 'totalCapacity', 'qs_limit_amt'));
-  };
-  const getPrem100 = r => {
-    if (isNp && isCur(r) && cur100Prem > 0) return cur100Prem;
-    return num(ga(r, 'premium', 'epi', 'premium_amt', 'written_premium', 'quota_share_epi', 'quotaShareEpi', 'gross_premium'));
-  };
-  const parsePct = s => { const v = parseFloat(String(s).replace('%', '').trim()); return Number.isFinite(v) ? v / 100 : 0; };
-  const getActLim = r => { const lp = parsePct(lineSizes[idOfRow(r)] || ''); return lp > 0 ? getLim100(r) * lp : 0; };
-  const getActSz  = r => { const lp = parsePct(lineSizes[idOfRow(r)] || ''); return lp > 0 ? getPrem100(r) * lp : 0; };
+  // All row scans and totals in one memo. Edits to line sizes / include
+  // flags still recompute (the totals depend on them), but renders driven
+  // by anything else — modals, saves, fetches, parent state — no longer
+  // re-run the ~12 full passes over the cedant's whole book.
+  const {
+    getLim100, getPrem100, getActLim, getActSz,
+    included, totLim100, totPrem100, totActLim, totActSz, totModM, totActM,
+  } = useMemo(() => {
+    const getLim100 = r => {
+      if (isNp && isCur(r) && cur100Limit > 0) return cur100Limit;
+      return num(ga(r, 'limit', 'treaty_limit', 'total_limit', 'qs_limit', 'total_capacity', 'capacity', 'totalCapacity', 'qs_limit_amt'));
+    };
+    const getPrem100 = r => {
+      if (isNp && isCur(r) && cur100Prem > 0) return cur100Prem;
+      return num(ga(r, 'premium', 'epi', 'premium_amt', 'written_premium', 'quota_share_epi', 'quotaShareEpi', 'gross_premium'));
+    };
+    const parsePct = s => { const v = parseFloat(String(s).replace('%', '').trim()); return Number.isFinite(v) ? v / 100 : 0; };
+    const getActLim = r => { const lp = parsePct(lineSizes[idOfRow(r)] || ''); return lp > 0 ? getLim100(r) * lp : 0; };
+    const getActSz  = r => { const lp = parsePct(lineSizes[idOfRow(r)] || ''); return lp > 0 ? getPrem100(r) * lp : 0; };
 
-  const included = rows.filter(r => includeMap[idOfRow(r)] !== false);
-  const totLim100  = included.reduce((a, r) => a + getLim100(r),  0);
-  const totPrem100 = included.reduce((a, r) => a + getPrem100(r), 0);
-  const totActLim  = included.reduce((a, r) => a + getActLim(r),  0);
-  const totActSz   = included.reduce((a, r) => a + getActSz(r),   0);
-  const wAvg = fn => {
-    if (!included.length || totPrem100 === 0) return null;
-    return included.reduce((a, r) => a + fn(r) * getPrem100(r), 0) / totPrem100;
-  };
-  const totModM = wAvg(r => (isCur(r) && liveModelledMargin != null)
-    ? liveModelledMargin
-    : num(ga(r, 'actuarial_margin', 'actuarialMargin', 'modelled_margin')));
-  const totActM = wAvg(r => (isCur(r) && liveActualMargin != null)
-    ? liveActualMargin
-    : num(ga(r, 'actual_margin', 'actualMargin', 'margin_actual')));
+    const included = rows.filter(r => includeMap[idOfRow(r)] !== false);
+    const totLim100  = included.reduce((a, r) => a + getLim100(r),  0);
+    const totPrem100 = included.reduce((a, r) => a + getPrem100(r), 0);
+    const totActLim  = included.reduce((a, r) => a + getActLim(r),  0);
+    const totActSz   = included.reduce((a, r) => a + getActSz(r),   0);
+    const wAvg = fn => {
+      if (!included.length || totPrem100 === 0) return null;
+      return included.reduce((a, r) => a + fn(r) * getPrem100(r), 0) / totPrem100;
+    };
+    const totModM = wAvg(r => (isCur(r) && liveModelledMargin != null)
+      ? liveModelledMargin
+      : num(ga(r, 'actuarial_margin', 'actuarialMargin', 'modelled_margin')));
+    const totActM = wAvg(r => (isCur(r) && liveActualMargin != null)
+      ? liveActualMargin
+      : num(ga(r, 'actual_margin', 'actualMargin', 'margin_actual')));
+    return { getLim100, getPrem100, getActLim, getActSz, included, totLim100, totPrem100, totActLim, totActSz, totModM, totActM };
+  }, [rows, includeMap, lineSizes, isCur, isNp, cur100Limit, cur100Prem, liveModelledMargin, liveActualMargin]);
 
   const allSelected = rows.length > 0 && rows.every(r => includeMap[idOfRow(r)] !== false);
   const toggleAll = () => {

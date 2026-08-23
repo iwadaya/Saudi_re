@@ -15,19 +15,10 @@
 /* ───────── 1. Numeric cell typography (the gold standard) ───────── */
 :is(
   .tri-cell,
-  .tri-pill-input,
-  .tri-uy,
-  .tri-pill,
-  .tri-df-table td,
-  .tri-df-table th,
-  .lr-cell,
   .np-mini-input,
   .np-val-pill--burn-input,
-  .np-final-wide-table--quote .np-mini-input--pct,
   .df-val,
   .df-input,
-  .tri-r-input,
-  .num-cell,
   .num,
   /* No-Triangulation / Straight-Experience screen — previously
      inlined monospace + 13px + weight 600-800. Pulled here so the
@@ -47,15 +38,13 @@
   letter-spacing: 0 !important;
 }
 
-input[type="number"],
-input.num-input{
+input[type="number"]{
   font-variant-numeric: tabular-nums slashed-zero lining-nums;
   font-feature-settings: "tnum", "zero", "lnum";
 }
 
 td.num,
-td[data-numeric],
-.num-value{
+td[data-numeric]{
   font-size: var(--num-cell-fs);
   font-weight: var(--num-cell-fw);
   font-variant-numeric: tabular-nums slashed-zero lining-nums;
@@ -67,8 +56,6 @@ td[data-numeric],
    body sans-serif). Two loss-selection screens and the triangle table
    had their own monospace stacks. ───────── */
 .tri-table,
-.ll-selected-input,
-.inf-inp,
 .llp-table,
 .llp-table td,
 .llp-table th{
@@ -99,15 +86,9 @@ td[data-numeric],
    Every screen declared its own *-h2 / *-title class with different
    sizes and weights (22px/800, 24px/700, 20px/800, 18px/900, 16px/900).
    Clamp them all to the dev-factors rhythm. */
-.tri-h2,
 .qs-hero-title,
 .llp-title,
-.rp-h2,
-.ca-title,
-.np-page-title,
-.page-title,
-.screen-title,
-.title-xl{
+.ca-title{
   font-size: var(--num-title-fs) !important;
   font-weight: var(--num-cell-fw) !important;
   letter-spacing: 0 !important;
@@ -116,12 +97,7 @@ td[data-numeric],
 }
 
 /* Secondary / section titles — 14px / 600 (dev factors std) */
-.df-section-title,
-.qs-section-title,
-.ca-subtitle,
-.rp-section-title,
-.np-section-title,
-.tri-title-row .screen-title{
+.df-section-title{
   font-size: var(--num-section-fs) !important;
   font-weight: var(--num-cell-fw) !important;
   color: var(--text-strong) !important;
@@ -129,9 +105,7 @@ td[data-numeric],
 
 /* Muted subtitle/helper */
 .df-section-sub,
-.qs-hero-sub,
-.ca-desc,
-.muted-2{
+.qs-hero-sub{
   font-size: var(--num-muted-fs) !important;
   font-weight: var(--num-cell-fw) !important;
   color: var(--muted-2) !important;
@@ -139,13 +113,10 @@ td[data-numeric],
 
 /* ───────── 5. Table headers — harmonize letter-spacing + weight ──── */
 .df-h,
-.tri-r-head,
-.tri-r-sticky,
 .qs-table th,
 .ca-th,
 .ll-table th,
 .llp-table th,
-.np-table th,
 .df-mini-label,
 .df-method-label{
   font-size: var(--num-th-fs) !important;
@@ -158,24 +129,15 @@ td[data-numeric],
 /* ───────── 6. Cap all heavy weights (700/800/900) to 600 on common
    data-display classes. This is the single biggest "feels professional"
    change — drops the Bloomberg-terminal bold across pricing, cresta,
-   pareto, cat-loss, risk-profile. Specificity increased with the :where
-   wrapper so existing rules still match, but weights are clamped. ─── */
+   pareto, cat-loss, risk-profile. ─── */
 :is(
   .bbg-v,
   .bbg-topbar-id,
-  .ca-pill,
-  .ca-tab,
   .ca-btn,
-  .ca-val,
-  .ca-total,
-  .llp-val,
-  .rp-val,
-  .rp-total,
   .qs-total,
   .ll-total,
   .ll-count,
   .ll-btn,
-  .font-bold,
   .tri-yr,
   .tri-hdr
 ){
@@ -198,8 +160,7 @@ td[data-numeric],
 /* ───────── 8. ExcelImportAgent — strip the textarea monospace block
    used for slip ingest preview so it doesn't look out of place. If the
    user genuinely wants mono there, we can scope it back. ─────────── */
-.ExcelImportAgent textarea,
-.excel-import-agent textarea{
+.ExcelImportAgent textarea{
   font-family: inherit !important;
   font-size: 13px !important;
 }
@@ -207,16 +168,12 @@ td[data-numeric],
 /* ───────── 9. Anti-"kill-bold" override cleanup — the triangles CSS
    blanket-set every descendant to font-weight 400 !important. Restore
    our 500 on numeric cells and 600 on headers (wins by being later). */
-.TRIANGLES_PAGE .tri-cell,
-.TRIANGLES_PAGE .tri-inp,
 .PROP_PREMIUM_TRIANGLES .tri-cell,
 .PROP_PREMIUM_TRIANGLES .tri-inp,
 .PROP_PREMIUM_TRIANGLES td,
 .PROP_PREMIUM_TRIANGLES td input{
   font-weight: var(--num-cell-fw) !important;
 }
-.TRIANGLES_PAGE .tri-hdr,
-.TRIANGLES_PAGE .tri-h2,
 .PROP_PREMIUM_TRIANGLES th,
 .PROP_PREMIUM_TRIANGLES h1,
 .PROP_PREMIUM_TRIANGLES h2{

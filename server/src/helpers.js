@@ -62,6 +62,22 @@ export function numOrNull(v) {
 }
 
 /**
+ * Strict variant for already-typed JSON payloads (external API clients):
+ * only null/undefined and non-finite map to null — no comma stripping,
+ * and '' is NOT special-cased (unlike numOrNull above).
+ */
+export function strictNumOrNull(v) {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Current UTC calendar year — shared by the external-data clients. */
+export function currentYear() {
+  return new Date().getUTCFullYear();
+}
+
+/**
  * Parse to an ISO date string (YYYY-MM-DD) or null.
  * Handles YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, and Date-parseable strings.
  */

@@ -78,7 +78,6 @@ server/
 - Validate request bodies with `validateBody(schema)` from `server/src/lib/validate.js`. Schemas live under `server/src/validation/` and compose primitives from `validation/common.js`.
 - Resolve quote-vs-treaty mode with `entityContext(req)` from `server/src/lib/entityContext.js` instead of branching inline.
 - Build the standard FK joins with `contractContextJoins(alias)` from `server/src/db/contractJoins.js`.
-- Patch updates with `buildPartialUpdate()` from `server/src/db/partialUpdate.js` — it enforces the column allow-list and translates absent vs explicit-null correctly.
 
 ### Database
 - Schema changes go in `server/src/db/migrations/NNN_description.sql`. They run automatically on boot (`RUN_MIGRATIONS_ON_BOOT=true`, on by default).

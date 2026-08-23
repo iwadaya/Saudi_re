@@ -171,7 +171,7 @@ export function usePropPricingActions({
       await api.declineContract(cid, reason, { body: { reason, _actor: actorName } });
       setOfferStatusState('DECLINED');
       api.getApprovalTrail(cid).then(setApprovalTrail).catch(() => {});
-    } catch(e) { showToast('Failed to decline: ' + (e?.message || 'Server error')); return; }
+    } catch(e) { showToast('Failed to decline: ' + (e?.message || 'Server error')); }
   };
 
   // ── CU decline triggered from offer modal ────────────────────────────────

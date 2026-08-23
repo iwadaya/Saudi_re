@@ -276,7 +276,7 @@ const REMOTE_ASSET_HOST = 'res.cloudinary.com';
  * anything user-controlled) is rejected — the caller must fall back to a
  * disk read or refuse.
  */
-export function isFetchableRemoteAssetUrl(url) {
+function isFetchableRemoteAssetUrl(url) {
   let u;
   try { u = new URL(String(url)); } catch { return false; }
   return u.protocol === 'https:' && u.hostname.toLowerCase() === REMOTE_ASSET_HOST;

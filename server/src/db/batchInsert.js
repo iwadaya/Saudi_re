@@ -13,10 +13,10 @@
 // caller can skip the query entirely.
 //
 // Table/column names are interpolated (values are always parameterised),
-// so — like partialUpdate.js — they are validated against an identifier
-// allow-list and the helper throws on anything that isn't a plain
-// identifier. All call sites use hard-coded names, so this only ever
-// fires on a programming error, never on user input.
+// so they are validated against an identifier allow-list and the helper
+// throws on anything that isn't a plain identifier. All call sites use
+// hard-coded names, so this only ever fires on a programming error,
+// never on user input.
 
 const IDENT = /^[a-z_][a-z0-9_]*$/i;
 
@@ -59,4 +59,32 @@ export function buildBatchInsert({ table, columns, rows, leadingId, conflict = '
   }
   const sql = `INSERT INTO ${table} (${columns.join(',')}) VALUES ${placeholders.join(',')}${conflict ? ` ${conflict}` : ''}`;
   return { sql, params };
+}
+
+// Postgres caps bind parameters per statement at 65535 (Int16 in the wire
+// protocol); beyond it the count silently wraps and the insert fails with a
+// confusing "bind message supplies N parameters" error. Leave headroom.
+const MAX_PARAMS_PER_STATEMENT = 60000;
+
+/**
+ * Chunked variant of buildBatchInsert: returns an array of {sql, params}
+ * statements, each safely under the wire-protocol parameter limit, so
+ * callers with unbounded row counts (CRESTA zone imports, loss schedules)
+ * can `for (const s of ...) await client.query(s.sql, s.params)`.
+ * Returns [] when there are no rows. With an ON CONFLICT clause the caller
+ * must ensure conflict keys don't repeat across rows (dedupe first), which
+ * a single statement requires anyway.
+ *
+ * @param {Parameters<typeof buildBatchInsert>[0]} args
+ * @returns {Array<{sql: string, params: unknown[]}>}
+ */
+export function buildBatchInserts({ table, columns, rows, leadingId, conflict = '' }) {
+  const perRow = Math.max(1, columns.length - 1);
+  const rowsPerChunk = Math.max(1, Math.floor((MAX_PARAMS_PER_STATEMENT - 1) / perRow));
+  const out = [];
+  for (let i = 0; i < rows.length; i += rowsPerChunk) {
+    const stmt = buildBatchInsert({ table, columns, rows: rows.slice(i, i + rowsPerChunk), leadingId, conflict });
+    if (stmt) out.push(stmt);
+  }
+  return out;
 }

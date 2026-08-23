@@ -12,23 +12,6 @@ import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
 
-// Screen files that already exceeded the 800-line budget when the hardening
-// baseline was taken (see docs/frontend-hardening.md). They may not grow past
-// 1,500 lines; brand-new screens must stay under 800. When a file on this list
-// is decomposed below 800 LOC, delete its entry so the stricter default
-// applies again. Files already past 1,500 carry a file-level
-// `/* eslint-disable max-lines */` annotated with TODO(hardening) instead.
-const OVERSIZED_SCREENS_LEGACY = [
-  'client/src/screens/proportional/treaty_detail/PropTreatyDetail.jsx',
-  'client/src/screens/facultative/pricing/FacPricing.jsx',
-  'client/src/screens/shared/ExcelImportAgent.jsx',
-  'client/src/screens/non_proportional/excess_dev_factors/NpExcessDevFactors.jsx',
-  'client/src/screens/non_proportional/expiring_structure/NpExpiringStructure.jsx',
-  'client/src/screens/shared/LossSelectionScreen.jsx',
-  'client/src/screens/facultative/risk_detail/FacRiskDetail.jsx',
-  'client/src/screens/non_proportional/final_pricing/components/FQPricingGraphModal.jsx',
-];
-
 export default [
   {
     ignores: [
@@ -136,13 +119,6 @@ export default [
       'react-hooks/exhaustive-deps': 'error',
     },
   },
-  {
-    files: OVERSIZED_SCREENS_LEGACY,
-    rules: {
-      'max-lines': ['error', { max: 1500, skipBlankLines: false, skipComments: false }],
-    },
-  },
-
   // ─── Accessibility (Phase 5 — driven to zero, now gated) ──────────
   // The screens + components layers are keyboard/screen-reader clean;
   // jsx-a11y recommended keeps them that way. Patterns in use: real

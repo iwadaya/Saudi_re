@@ -5,55 +5,16 @@
 // from a risk to a price — which is what lets the server verify what the
 // browser sent (see POST /api/fac/risks/:id/price).
 
+// Only what actually crosses the client/server boundary is re-exported
+// here; the pipeline's internals (methods/, credibility, layers, families)
+// export their own symbols for direct import and white-box tests.
 export { buildExposureProfile } from './exposure.js';
-export { num, numOrNull, isNum } from './num.js';
-
-export { burningCostLossCost, restateLoss, DEFAULT_DEVELOPMENT_FACTOR } from './methods/burningCost.js';
 export {
-  exposureCurveLossCost, mbbefdCurve, tabulatedCurve, curveEvaluator,
-  layerExpectedLoss, deductibleCredit,
-} from './methods/exposureCurve.js';
-export { benchmarkLossCost, benchmarkPosition, MIN_CONFIDENT_OBSERVATIONS } from './methods/benchmark.js';
-
-export {
-  credibilityFactor, mechanicalWeights, applyWeightOverride, blendRates,
-  annualLossVolatility, OVERRIDE_REASONS, DEFAULT_CREDIBILITY,
-} from './credibility.js';
-
-export {
-  toCandidate, buildTechnicalPremium, technicalAdequacy,
-  METHOD_ROLE, METHOD_LABEL, DEFAULT_RISK_LOAD_THETA,
-} from './pipeline.js';
-
-export {
-  getFamily,
   listFamilies,
   familyForClass,
-  familiesForClasses,
-  wizardStepsForFamilies,
-  pricingBlocker,
   RATING_BASIS_LABEL,
   SEGMENT_LABEL,
-  DEFAULT_FAMILY_CODE,
 } from './registry.js';
-
-export {
-  computeRatePath,
-  computeScoreAndDecision,
-  computePremiums,
-  computeFacQuote,
-  SCORE_COMPLETENESS_MIN,
-} from './families/scheduleProperty.js';
-
-export {
-  alphaFromDoublingLoading, doublingLoadingFromAlpha, ilfEvaluator,
-  ilfLayerLossCost, claimsMadeStepFactor, ilfLossCost,
-} from './methods/ilfCurve.js';
-
-export {
-  rateOnLine, paybackYears, layerPremium, reinstatementPremium,
-  totalCover, freeCover, priceTower,
-} from './layers.js';
 
 // Attaching the engines to the registry is a side effect of importing this
 // module, and it has to happen before anything below runs. The browser

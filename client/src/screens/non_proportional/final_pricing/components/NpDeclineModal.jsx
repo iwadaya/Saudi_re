@@ -35,6 +35,6 @@ export default function NpDeclineModal({ pricing, open, contractId, quoteMode, s
                     </div>
                   </div>
                 </div>
-              
+
   );
 }

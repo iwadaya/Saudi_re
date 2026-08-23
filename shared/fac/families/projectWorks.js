@@ -36,6 +36,7 @@
 // fac_project_load_rate all ship empty (migration 137).
 
 import { num, numOrNull } from '../num.js';
+import { pickByTerritory } from '../rateSelect.js';
 import { projectPeriodFactor, periodMonths, EARNING_PATTERNS } from '../period.js';
 import { metaFor } from './meta.js';
 
@@ -101,12 +102,7 @@ export function selectProjectRate(rates, { projectType, territory, contractValue
   const forType = (rates || []).filter(
     (r) => (r.project_type || '').toUpperCase() === (projectType || '').toUpperCase() && inBand(r),
   );
-  const exact = forType.find(
-    (r) => (r.territory || '').toUpperCase() === (territory || '').toUpperCase(),
-  );
-  if (exact) return { rate: exact, fellBackToWorldwide: false };
-  const worldwide = forType.find((r) => (r.territory || '').toUpperCase() === 'WORLDWIDE');
-  return { rate: worldwide || null, fellBackToWorldwide: Boolean(worldwide) };
+  return pickByTerritory(forType, territory);
 }
 
 /**

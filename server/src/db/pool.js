@@ -50,10 +50,6 @@ pool.on('error', (err) => {
 
 logger.info('DB pool configured', { max: poolMax, min: poolMin });
 
-export const dashboardPool = env.dashboardDatabaseUrl
-  ? new Pool({ connectionString: env.dashboardDatabaseUrl, max: 10, min: 1, keepAlive: true })
-  : null;
-
 /**
  * Snapshot of pool usage — surfaced by GET /api/health/db for ops
  * visibility under load. totalCount = open connections (idle + busy);
@@ -76,9 +72,6 @@ export async function closePools() {
   if (poolsClosed) return;
   poolsClosed = true;
   await pool.end();
-  if (dashboardPool) {
-    await dashboardPool.end();
-  }
 }
 
 

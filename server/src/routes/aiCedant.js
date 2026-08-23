@@ -18,6 +18,7 @@
 
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
+import { getCobColumnNames } from '../lib/cobCols.js';
 import { env } from '../config/env.js';
 import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
@@ -101,12 +102,7 @@ function compact(obj, numericKeys = []) {
 // lookups.js does. The live DB has used both `class_of_business` and
 // `class_name` historically; we introspect rather than hard-code.
 async function resolveCobCols() {
-  const { rows } = await pool.query(
-    `SELECT column_name FROM information_schema.columns
-       WHERE table_schema='public' AND table_name='class_of_business'
-       ORDER BY ordinal_position`,
-  );
-  const cols = rows.map(r => r.column_name);
+  const cols = await getCobColumnNames();
   const idCol   = cols.find(c => c === 'class_of_business_id') || cols.find(c => c === 'class_id') || cols[0];
   const nameCol = cols.find(c => c === 'class_of_business')    || cols.find(c => c === 'class_name') || cols[1] || cols[0];
   return { idCol, nameCol };
@@ -124,7 +120,8 @@ async function fetchPortfolio(cedantId) {
     WHERE ccb.contract_id = ${alias}.contract_id
   )`;
 
-  const { rows: propRows } = await pool.query(`
+  // The PROP and NP scans are independent — run them in parallel.
+  const propPromise = pool.query(`
     SELECT
       c.contract_id, c.uw_year, c.status, c.signed_line_pct,
       tt.treaty_type AS treaty_type,
@@ -145,7 +142,7 @@ async function fetchPortfolio(cedantId) {
       AND EXISTS (SELECT 1 FROM public.contract_prop_details pd WHERE pd.contract_id = c.contract_id)
   `, [cedantId]);
 
-  const { rows: npRows } = await pool.query(`
+  const npPromise = pool.query(`
     SELECT
       c.contract_id, c.uw_year, c.status, c.signed_line_pct,
       tt.treaty_type AS treaty_type,
@@ -176,6 +173,7 @@ async function fetchPortfolio(cedantId) {
       AND EXISTS (SELECT 1 FROM public.contract_np_details nd WHERE nd.contract_id = c.contract_id)
   `, [cedantId]);
 
+  const [{ rows: propRows }, { rows: npRows }] = await Promise.all([propPromise, npPromise]);
   return [...propRows, ...npRows].map(r => ({
     ...r,
     // effective_line_pct is stored as percent (e.g. 10 = 10%) — return as fraction

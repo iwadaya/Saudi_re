@@ -157,6 +157,12 @@ export const unitsLobBody = (where, ccyDivisor) => buildUnitsBody(where, ccyDivi
 export const unitsCte     = (where, ccyDivisor) => `units AS (${unitsBody(where, ccyDivisor)})`;
 export const unitsLobCte  = (where, ccyDivisor) => `units AS (${unitsLobBody(where, ccyDivisor)})`;
 
+// json_agg sub-select used to fan several aggregates out of ONE materialized
+// `units` build; an optional ORDER BY inside json_agg preserves row order
+// through the rollup. Shared by the overview/summary/regional/technical tabs.
+const jsonAgg = (sql, order = '') =>
+  `COALESCE((SELECT json_agg(t${order ? ` ORDER BY ${order}` : ''}) FROM (${sql}) t), '[]'::json)`;
+
 // ── Filters ───────────────────────────────────────────────────────────────
 router.get("/dashboard/filters", asyncHandler(async (_req, res) => {
   const [years, regions, treatyTypes, months] = await Promise.all([
@@ -244,10 +250,7 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
 
     // Build the heavy prop+NP `units` set ONCE per query: a MATERIALIZED CTE is
     // evaluated a single time and shared by every reference, so the seven aggregates
-    // fan out from one build instead of recomputing the union seven times. An
-    // optional ORDER BY is pushed into json_agg so row order survives the rollup.
-    const jsonAgg = (sql, order = '') =>
-      `COALESCE((SELECT json_agg(t${order ? ` ORDER BY ${order}` : ''}) FROM (${sql}) t), '[]'::json)`;
+    // fan out from one build instead of recomputing the union seven times.
 
     // Two queries — one over `units`, one over the LOB-fanned `units` — run in
     // parallel, replacing seven independent CTE rebuilds (and seven pooled
@@ -371,29 +374,28 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
 
   // ── portfolio-summary ─────────────────────────────────────────────────
   if (tab === 'portfolio-summary') {
-    const unitsW = unitsCte(where, ccyDivisor);
-    const [byYearR, regionYearR] = await Promise.all([
-      pool.query(`WITH ${unitsW}
-        SELECT uw_year AS "uwYear",
-          COUNT(DISTINCT contract_id)::int        AS contracts,
-          ${UNIT_AGGREGATES.premium}  AS premium,
-          ${UNIT_AGGREGATES.exposure} AS exposure,
-          ${UNIT_AGGREGATES.balance}              AS balance,
-          ${UNIT_AGGREGATES.avgRol}               AS rol,
-          ${UNIT_AGGREGATES.uwMargin}             AS "uwMargin"
-        FROM units GROUP BY uw_year ORDER BY uw_year`, params),
-      pool.query(`WITH ${unitsW}
-        SELECT region, uw_year::text AS uw_year, COALESCE(SUM(premium),0) AS premium
-        FROM units GROUP BY region, uw_year ORDER BY region, uw_year`, params),
-    ]);
+    // ONE materialized `units` build shared by both aggregates (same pattern
+    // as portfolio-overview) instead of two independent CTE rebuilds.
+    const { rows: [s] } = await pool.query(`WITH units AS MATERIALIZED (${unitsBody(where, ccyDivisor)})
+      SELECT
+        ${jsonAgg(`SELECT uw_year AS "uwYear",
+            COUNT(DISTINCT contract_id)::int        AS contracts,
+            ${UNIT_AGGREGATES.premium}  AS premium,
+            ${UNIT_AGGREGATES.exposure} AS exposure,
+            ${UNIT_AGGREGATES.balance}              AS balance,
+            ${UNIT_AGGREGATES.avgRol}               AS rol,
+            ${UNIT_AGGREGATES.uwMargin}             AS "uwMargin"
+          FROM units GROUP BY uw_year`, '"uwYear"')} AS by_year_rows,
+        ${jsonAgg(`SELECT region, uw_year::text AS uw_year, COALESCE(SUM(premium),0) AS premium
+          FROM units GROUP BY region, uw_year`, 'region, uw_year')} AS region_year_rows`, params);
     return res.json({
       kpis: {},
-      byYear: byYearR.rows.map(r => ({
+      byYear: (s?.by_year_rows || []).map(r => ({
         ...r,
         premium: Number(r.premium), exposure: Number(r.exposure),
         balance: num(r.balance), rol: num(r.rol), uwMargin: num(r.uwMargin),
       })),
-      regionYear: buildPivot(regionYearR.rows, 'region', 'uw_year', 'premium'),
+      regionYear: buildPivot(s?.region_year_rows || [], 'region', 'uw_year', 'premium'),
     });
   }
 
@@ -401,12 +403,13 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
   // Region-scoped: the region filter is already in `where`, so every unit
   // here belongs to the selected region and portfolioPct is within-region.
   if (tab === 'regional-analysis') {
-    const unitsW   = unitsCte(where, ccyDivisor);
-    const unitsLob = unitsLobCte(where, ccyDivisor);
     const mwNum = 'COALESCE(SUM(margin*premium) FILTER (WHERE margin IS NOT NULL),0) AS mw_num';
     const mwDen = 'COALESCE(SUM(premium)        FILTER (WHERE margin IS NOT NULL),0) AS mw_den';
-    const [byYearR, byLobR, lobTreatyR] = await Promise.all([
-      pool.query(`WITH ${unitsW}
+    // Two queries: the by-year rollup over `units`, and ONE materialized
+    // LOB-fanned build shared by both LOB aggregates (previously two
+    // independent rebuilds of the heavy union).
+    const [byYearR, lobRes] = await Promise.all([
+      pool.query(`WITH ${unitsCte(where, ccyDivisor)}
         SELECT uw_year AS "uwYear",
           COUNT(DISTINCT contract_id)::int        AS contracts,
           ${UNIT_AGGREGATES.premium}  AS premium,
@@ -415,24 +418,26 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
           ${UNIT_AGGREGATES.avgRol}               AS rol,
           ${UNIT_AGGREGATES.uwMargin}             AS "uwMargin"
         FROM units GROUP BY uw_year ORDER BY uw_year`, params),
-      pool.query(`WITH ${unitsLob}
-        SELECT lob,
-          COUNT(DISTINCT contract_id)::int        AS contracts,
-          ${UNIT_AGGREGATES.premium}  AS premium,
-          ${UNIT_AGGREGATES.exposure} AS exposure,
-          ${UNIT_AGGREGATES.balance}              AS balance,
-          ${UNIT_AGGREGATES.avgRol}               AS rol,
-          ${UNIT_AGGREGATES.uwMargin}             AS "uwMargin"
-        FROM units WHERE lob IS NOT NULL GROUP BY lob ORDER BY 3 DESC`, params),
-      pool.query(`WITH ${unitsLob}
-        SELECT lob, treaty_type,
-          COALESCE(SUM(premium),0)  AS premium,
-          COALESCE(SUM(exposure),0) AS exposure,
-          ${mwNum}, ${mwDen}
-        FROM units WHERE lob IS NOT NULL GROUP BY lob, treaty_type`, params),
+      pool.query(`WITH units AS MATERIALIZED (${unitsLobBody(where, ccyDivisor)})
+        SELECT
+          ${jsonAgg(`SELECT lob,
+              COUNT(DISTINCT contract_id)::int        AS contracts,
+              ${UNIT_AGGREGATES.premium}  AS premium,
+              ${UNIT_AGGREGATES.exposure} AS exposure,
+              ${UNIT_AGGREGATES.balance}              AS balance,
+              ${UNIT_AGGREGATES.avgRol}               AS rol,
+              ${UNIT_AGGREGATES.uwMargin}             AS "uwMargin"
+            FROM units WHERE lob IS NOT NULL GROUP BY lob`, 'premium DESC, lob')} AS by_lob_rows,
+          ${jsonAgg(`SELECT lob, treaty_type,
+              COALESCE(SUM(premium),0)  AS premium,
+              COALESCE(SUM(exposure),0) AS exposure,
+              ${mwNum}, ${mwDen}
+            FROM units WHERE lob IS NOT NULL GROUP BY lob, treaty_type`)} AS lob_treaty_rows`, params),
     ]);
-    const totalLobPrem = byLobR.rows.reduce((s, r) => s + Number(r.premium), 0);
-    const lobTreatyPremium = buildPivot(lobTreatyR.rows, 'lob', 'treaty_type', 'premium');
+    const byLobRows = lobRes.rows[0]?.by_lob_rows || [];
+    const lobTreatyRows = lobRes.rows[0]?.lob_treaty_rows || [];
+    const totalLobPrem = byLobRows.reduce((s, r) => s + Number(r.premium), 0);
+    const lobTreatyPremium = buildPivot(lobTreatyRows, 'lob', 'treaty_type', 'premium');
     return res.json({
       kpis: {},
       byYear: byYearR.rows.map(r => ({
@@ -440,16 +445,16 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
         premium: Number(r.premium), exposure: Number(r.exposure),
         balance: num(r.balance), rol: num(r.rol), uwMargin: num(r.uwMargin),
       })),
-      byLob: byLobR.rows.map(r => ({
+      byLob: byLobRows.map(r => ({
         lob: r.lob, contracts: r.contracts,
         premium: Number(r.premium), exposure: Number(r.exposure),
         rol: num(r.rol), balance: num(r.balance), uwMargin: num(r.uwMargin),
         portfolioPct: totalLobPrem > 0 ? Number(r.premium) / totalLobPrem : 0,
       })),
       lobTreatyPremium,
-      lobTreatyExposure:    buildPivot(lobTreatyR.rows, 'lob', 'treaty_type', 'exposure'),
+      lobTreatyExposure:    buildPivot(lobTreatyRows, 'lob', 'treaty_type', 'exposure'),
       lobTreatyComposition: normalizePivot(lobTreatyPremium),
-      lobTreatyUwMargin:    buildWeightedPivot(lobTreatyR.rows, 'lob', 'treaty_type', 'mw_num', 'mw_den'),
+      lobTreatyUwMargin:    buildWeightedPivot(lobTreatyRows, 'lob', 'treaty_type', 'mw_num', 'mw_den'),
     });
   }
 
@@ -457,52 +462,47 @@ router.get("/dashboard/page/:tab", asyncHandler(async (req, res) => {
   // Both tabs are identical apart from the region filter, which is already in
   // `where`; the regional tab is gated client-side on a region selection.
   if (tab === 'portfolio-technical-analysis' || tab === 'regional-technical-analysis') {
-    const unitsW = unitsCte(where, ccyDivisor);
-    const [rolBandsR, balanceBandsR, treatyR, treatyYearR] = await Promise.all([
-      // ROL bands over NP units only.
-      pool.query(`WITH ${unitsW}
-        SELECT ${bandCaseSql('rol', ROL_BANDS)} AS band,
-          COUNT(DISTINCT contract_id)::int AS contracts,
-          COALESCE(SUM(premium),0)  AS premium,
-          COALESCE(SUM(exposure),0) AS exposure,
-          ${UNIT_AGGREGATES.avgRol}   AS rol,
-          ${UNIT_AGGREGATES.uwMargin} AS "uwMargin"
-        FROM units WHERE kind = 'NP' GROUP BY 1`, params),
-      // Balance bands over PROP units only.
-      pool.query(`WITH ${unitsW}
-        SELECT ${bandCaseSql('balance', BALANCE_BANDS)} AS band,
-          COUNT(DISTINCT contract_id)::int AS contracts,
-          COALESCE(SUM(premium),0)  AS premium,
-          COALESCE(SUM(exposure),0) AS exposure,
-          ${UNIT_AGGREGATES.balance}  AS balance,
-          ${UNIT_AGGREGATES.uwMargin} AS "uwMargin"
-        FROM units WHERE kind = 'PROP' GROUP BY 1`, params),
-      // Treaty-type breakdown over all units (rol resolves for NP, balance for
-      // PROP — the FILTER expressions drop the NULLs). `kind` is the dominant
-      // class by premium, so the client can colour each treaty type as prop/NP.
-      pool.query(`WITH ${unitsW}
-        SELECT treaty_type AS "treatyType",
-          CASE WHEN COALESCE(SUM(premium) FILTER (WHERE kind = 'NP'),0)
-                  >  COALESCE(SUM(premium) FILTER (WHERE kind = 'PROP'),0)
-               THEN 'NP' ELSE 'PROP' END AS kind,
-          COALESCE(SUM(premium),0)  AS premium,
-          COALESCE(SUM(exposure),0) AS exposure,
-          ${UNIT_AGGREGATES.avgRol}   AS rol,
-          ${UNIT_AGGREGATES.balance}  AS balance,
-          ${UNIT_AGGREGATES.uwMargin} AS "uwMargin"
-        FROM units GROUP BY treaty_type ORDER BY 3 DESC`, params),
-      // Treaty-type × UW year — premium plus weighted-pivot num/den pairs.
-      pool.query(`WITH ${unitsW}
-        SELECT treaty_type, uw_year::text AS uw_year,
-          COALESCE(SUM(premium),0) AS premium,
-          COALESCE(SUM(exposure) FILTER (WHERE kind = 'PROP'),0) AS bal_num,
-          COALESCE(SUM(premium)  FILTER (WHERE kind = 'PROP'),0) AS bal_den,
-          COALESCE(SUM(rol*premium)     FILTER (WHERE rol     IS NOT NULL),0) AS rol_num,
-          COALESCE(SUM(premium)         FILTER (WHERE rol     IS NOT NULL),0) AS rol_den,
-          COALESCE(SUM(margin*premium)  FILTER (WHERE margin  IS NOT NULL),0) AS mw_num,
-          COALESCE(SUM(premium)         FILTER (WHERE margin  IS NOT NULL),0) AS mw_den
-        FROM units GROUP BY treaty_type, uw_year`, params),
-    ]);
+    // ONE materialized `units` build shared by all four aggregates (previously
+    // four independent rebuilds of the heavy prop+NP union per request).
+    const { rows: [tRow] } = await pool.query(`WITH units AS MATERIALIZED (${unitsBody(where, ccyDivisor)})
+      SELECT
+        ${jsonAgg(`SELECT ${bandCaseSql('rol', ROL_BANDS)} AS band,
+            COUNT(DISTINCT contract_id)::int AS contracts,
+            COALESCE(SUM(premium),0)  AS premium,
+            COALESCE(SUM(exposure),0) AS exposure,
+            ${UNIT_AGGREGATES.avgRol}   AS rol,
+            ${UNIT_AGGREGATES.uwMargin} AS "uwMargin"
+          FROM units WHERE kind = 'NP' GROUP BY 1`)} AS rol_band_rows,
+        ${jsonAgg(`SELECT ${bandCaseSql('balance', BALANCE_BANDS)} AS band,
+            COUNT(DISTINCT contract_id)::int AS contracts,
+            COALESCE(SUM(premium),0)  AS premium,
+            COALESCE(SUM(exposure),0) AS exposure,
+            ${UNIT_AGGREGATES.balance}  AS balance,
+            ${UNIT_AGGREGATES.uwMargin} AS "uwMargin"
+          FROM units WHERE kind = 'PROP' GROUP BY 1`)} AS balance_band_rows,
+        ${jsonAgg(`SELECT treaty_type AS "treatyType",
+            CASE WHEN COALESCE(SUM(premium) FILTER (WHERE kind = 'NP'),0)
+                    >  COALESCE(SUM(premium) FILTER (WHERE kind = 'PROP'),0)
+                 THEN 'NP' ELSE 'PROP' END AS kind,
+            COALESCE(SUM(premium),0)  AS premium,
+            COALESCE(SUM(exposure),0) AS exposure,
+            ${UNIT_AGGREGATES.avgRol}   AS rol,
+            ${UNIT_AGGREGATES.balance}  AS balance,
+            ${UNIT_AGGREGATES.uwMargin} AS "uwMargin"
+          FROM units GROUP BY treaty_type`, 'premium DESC, "treatyType"')} AS treaty_rows,
+        ${jsonAgg(`SELECT treaty_type, uw_year::text AS uw_year,
+            COALESCE(SUM(premium),0) AS premium,
+            COALESCE(SUM(exposure) FILTER (WHERE kind = 'PROP'),0) AS bal_num,
+            COALESCE(SUM(premium)  FILTER (WHERE kind = 'PROP'),0) AS bal_den,
+            COALESCE(SUM(rol*premium)     FILTER (WHERE rol     IS NOT NULL),0) AS rol_num,
+            COALESCE(SUM(premium)         FILTER (WHERE rol     IS NOT NULL),0) AS rol_den,
+            COALESCE(SUM(margin*premium)  FILTER (WHERE margin  IS NOT NULL),0) AS mw_num,
+            COALESCE(SUM(premium)         FILTER (WHERE margin  IS NOT NULL),0) AS mw_den
+          FROM units GROUP BY treaty_type, uw_year`)} AS treaty_year_rows`, params);
+    const rolBandsR     = { rows: tRow?.rol_band_rows || [] };
+    const balanceBandsR = { rows: tRow?.balance_band_rows || [] };
+    const treatyR       = { rows: tRow?.treaty_rows || [] };
+    const treatyYearR   = { rows: tRow?.treaty_year_rows || [] };
 
     // Re-key band aggregates and emit one row per declared band (zero-filling
     // empty bands), preserving declared order.

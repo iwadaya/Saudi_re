@@ -1,7 +1,7 @@
 // src/screens/facultative/loss_history/FacLossHistory.jsx
 import { useCallback, useMemo, useState } from 'react';
 import api from '../../../api';
-import { dateInputValue } from '../../../utils/format';
+import { dateInputValue, numOrNull, fmtComma, stripDigits, cleanNum } from '../../../utils/format';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import { useScreenSave } from '../../../hooks/useScreenSave';
@@ -9,10 +9,6 @@ import { useFacRiskId } from '../../../hooks/useContractId';
 import './FacLossHistory.css';
 
 const ROUTE_KEY = 'FAC_LOSS_HISTORY';
-const numOrNull = v => { const c = String(v ?? '').replace(/,/g,'').trim(); if (!c) return null; const n = Number(c); return Number.isFinite(n) ? n : null; };
-const fmtComma = v => { const d = String(v ?? '').replace(/[^\d]/g,''); return d ? Number(d).toLocaleString('en-US') : ''; };
-const stripDigits = v => String(v ?? '').replace(/[^\d]/g,'');
-const cleanNum = v => { if (v == null || v === '') return ''; const n = Number(v); if (!Number.isFinite(n)) return String(v); return n === Math.floor(n) ? String(Math.floor(n)) : String(n); };
 
 // The grid opens with a block of empty rows so an underwriter can paste a loss
 // run straight out of Excel without clicking "add" twenty times, and grows to

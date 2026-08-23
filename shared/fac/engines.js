@@ -24,7 +24,7 @@ import { cyberLimit } from './families/cyberLimit.js';
 import { motorFleet } from './families/motorFleet.js';
 import { paBenefit } from './families/paBenefit.js';
 
-export const ENGINES = [
+const ENGINES = [
   scheduleProperty,
   projectWorks,
   plantOperational,

@@ -1,21 +1,5 @@
 /* src/styles/pages/devFactors.css */
 
-/* =========================================================
-   DEV_FACTORS_PAGE — Premium look + scrollable tables
-   + green-accent borders + reduced bold (professional)
-========================================================= */
-
-.DEV_FACTORS_PAGE .df-page{
-  margin-top: 6px;
-}
-
-/* Keep the top header row tight like Treaty Docs */
-.DEV_FACTORS_PAGE .sheet-header-row{
-  padding-bottom: 10px;
-  margin-bottom: 10px;
-  border-bottom: 1px solid var(--stroke-soft);
-}
-
 /* ---------------------------------------
    TOP ROW: compact date pills + method toggle
 ---------------------------------------- */
@@ -32,7 +16,7 @@
   border-radius: 18px;
   background: var(--surface-muted);
   border: 1px solid var(--stroke-soft);
-  box-shadow: 0 8px 18px rgba(0,0,0,.14); /* softened */
+  box-shadow: 0 8px 18px rgba(0,0,0,.14);
 }
 
 .DEV_FACTORS_PAGE .df-controls{
@@ -130,12 +114,6 @@
   border-radius: 999px;
 }
 
-.DEV_FACTORS_PAGE .df-help{
-  margin: 10px 2px 10px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
 /* ---------------------------------------
    Shared card base
 ---------------------------------------- */
@@ -145,7 +123,7 @@
   padding: 10px;
   background: var(--surface-muted);
   border: 1px solid var(--stroke-soft);
-  box-shadow: 0 8px 18px rgba(0,0,0,.14); /* softened */
+  box-shadow: 0 8px 18px rgba(0,0,0,.14);
 }
 
 .DEV_FACTORS_PAGE .df-card--notice{
@@ -173,99 +151,6 @@
 }
 
 /* ---------------------------------------
-   TRIANGLE (read-only) — premium look
----------------------------------------- */
-
-.DEV_FACTORS_PAGE .tri-r-table{
-  border-collapse: separate;
-  border-spacing: 0;
-  width: max-content;
-  min-width: 100%;
-}
-
-.DEV_FACTORS_PAGE .tri-r-head,
-.DEV_FACTORS_PAGE .tri-r-sticky{
-  background: var(--table-head-bg);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--hairline);
-  color: rgba(var(--text-rgb),.78);
-  font-size: 11px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  font-weight: 600; /* reduced */
-  padding: 10px 12px;
-  text-align: center;
-  box-shadow: 0 6px 14px rgba(0,0,0,.18);
-}
-
-.DEV_FACTORS_PAGE .tri-r-sticky{
-  position: sticky;
-  left: 0;
-  z-index: 5;
-  text-align: center;
-  white-space: nowrap;
-
-  /* sticky divider */
-  border-right: 1px solid rgba(var(--accent-rgb),.22);
-}
-
-.DEV_FACTORS_PAGE .tri-r-sticky--head{
-  z-index: 7;
-}
-
-.DEV_FACTORS_PAGE .tri-r-sticky--row{
-  color: rgba(var(--text-rgb),.90);
-  font-size: 13px;
-  letter-spacing: .02em;
-  text-transform: none;
-  font-weight: 600; /* reduced */
-}
-
-/* ✅ Green-accent table grid */
-.DEV_FACTORS_PAGE .tri-r-cell{
-  border-bottom: 1px solid rgba(var(--accent-rgb),.12);
-  border-right: 1px solid var(--hairline);
-  background: var(--table-row-alt);
-  padding: 0;
-}
-
-.DEV_FACTORS_PAGE .tri-r-cell--active{
-  background: rgba(var(--accent-rgb),.05);
-}
-
-/* Diagonal emphasis */
-.DEV_FACTORS_PAGE .tri-r-cell--diag{
-  background: rgba(var(--accent-rgb),.08);
-  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb),.35);
-}
-
-/* Display pill inside cell (read-only) */
-.DEV_FACTORS_PAGE .tri-r-input{
-  width: 100%;
-  min-width: 140px;
-  height: 38px;
-
-  border: 1px solid var(--hairline);
-  background: var(--control-bg);
-  color: rgba(var(--text-rgb),.88);
-
-  border-radius: 12px;
-  padding: 0 12px;
-  margin: 6px;
-
-  text-align: center;
-  font-weight: 500; /* reduced */
-  font-variant-numeric: tabular-nums;
-
-  opacity: .95;
-}
-
-/* Hover polish */
-.DEV_FACTORS_PAGE .tri-r-table tbody tr:hover td{
-  background: rgba(var(--accent-rgb),.06);
-}
-
-/* ---------------------------------------
    DF SECTION
 ---------------------------------------- */
 
@@ -287,11 +172,6 @@
   margin-top: 4px;
   font-size: 12px;
   color: var(--muted);
-}
-
-.DEV_FACTORS_PAGE .df-blocks{
-  display: grid;
-  gap: 12px;
 }
 
 /* DF table */
@@ -381,35 +261,6 @@
 }
 
 /* ---------------------------------------
-   Underwriter row (toggle sits next to label)
----------------------------------------- */
-
-.DEV_FACTORS_PAGE .df-uw-row{
-  border-radius: 18px;
-  padding: 12px 12px;
-  background: var(--surface-muted);
-  border: 1px solid var(--stroke-soft);
-  box-shadow: 0 8px 18px rgba(0,0,0,.14);
-}
-
-.DEV_FACTORS_PAGE .df-uw-left{
-  display:flex;
-  align-items:center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.DEV_FACTORS_PAGE .df-uw-title{
-  font-size: 16px;
-  font-weight: 600; /* reduced */
-  color: rgba(var(--text-rgb),.92);
-}
-
-.DEV_FACTORS_PAGE .df-uw-toggle .toggle-group{
-  padding: 3px;
-}
-
-/* ---------------------------------------
    Wizard dock — match Treaty/Documents (green outline primary)
 ---------------------------------------- */
 
@@ -424,37 +275,22 @@
   border: 1px solid var(--stroke);
   background: var(--control-bg);
   color: rgba(var(--text-rgb),.85);
-  font-weight: 500; /* reduced */
-}
-
-.DEV_FACTORS_PAGE .dock-btn--primary{
-  background: transparent;
-  border: 1px solid rgba(var(--accent-rgb),.75);
-  box-shadow: 0 0 0 6px rgba(var(--accent-rgb),.10);
-  color: rgba(var(--text-rgb),.92);
-  font-weight: 600; /* reduced */
+  font-weight: 500;
 }
 
 /* Responsive */
 @media (max-width: 860px){
   .DEV_FACTORS_PAGE .df-mini{ min-width: 150px; }
 }
-/* =========================================================
-   Compact, rounded tables — professional & calm
-   (paste at bottom of devFactors.css)
-========================================================= */
 
 /* ---------- Global table density ---------- */
 
-.DEV_FACTORS_PAGE .tri-r-table,
 .DEV_FACTORS_PAGE .df-table{
-  font-size: 12px;                /* ↓ slightly smaller */
+  font-size: 12px;
 }
 
 /* ---------- Headers: tighter ---------- */
 
-.DEV_FACTORS_PAGE .tri-r-head,
-.DEV_FACTORS_PAGE .tri-r-sticky,
 .DEV_FACTORS_PAGE .df-h,
 .DEV_FACTORS_PAGE .df-r{
   padding: 8px 10px;              /* ↓ was 10–12 */
@@ -463,33 +299,10 @@
 
 /* ---------- Rounded data cells ---------- */
 
-.DEV_FACTORS_PAGE .tri-r-cell,
 .DEV_FACTORS_PAGE .df-c{
   padding: 0;
   background: transparent;        /* let inner pill define shape */
-  border: none;                   /* remove boxy grid feel */
-}
-
-/* ---------- Inner pill (triangle values) ---------- */
-
-.DEV_FACTORS_PAGE .tri-r-input{
-  min-width: 120px;               /* ↓ narrower */
-  height: 32px;                   /* ↓ shorter */
-  margin: 4px;                    /* ↓ tighter */
-  padding: 0 10px;
-
-  border-radius: 999px;           /* fully rounded */
-  font-size: 12px;
-  font-weight: 500;
-
-  background: var(--control-bg);
-  border: 1px solid rgba(var(--accent-rgb),.22);
-}
-
-/* Diagonal still slightly emphasized */
-.DEV_FACTORS_PAGE .tri-r-cell--diag .tri-r-input{
-  border-color: rgba(var(--accent-rgb),.45);
-  background: rgba(var(--accent-rgb),.10);
+  border: none;
 }
 
 /* ---------- Inner pill (DF values) ---------- */
@@ -510,43 +323,25 @@
 
 /* ---------- Row separators: subtle only ---------- */
 
-.DEV_FACTORS_PAGE .tri-r-table tbody tr,
 .DEV_FACTORS_PAGE .df-table tbody tr{
   border-bottom: 1px solid rgba(148,163,184,.10);
 }
 
 /* ---------- Hover polish (quiet) ---------- */
 
-.DEV_FACTORS_PAGE .tri-r-table tbody tr:hover .tri-r-input,
 .DEV_FACTORS_PAGE .df-table tbody tr:hover .df-val{
   background: rgba(var(--accent-rgb),.14);
   border-color: rgba(var(--accent-rgb),.45);
 }
-/* =========================================================
-   Neutral tables — no diagonal emphasis, centered content
-   (paste at bottom of devFactors.css)
-========================================================= */
-
-/* ---------- Remove ALL diagonal-specific styling ---------- */
-
-.DEV_FACTORS_PAGE .tri-r-cell--diag,
-.DEV_FACTORS_PAGE .tri-r-cell--diag .tri-r-input{
-  background: inherit !important;
-  box-shadow: none !important;
-  border-color: rgba(148,163,184,.22) !important;
-}
 
 /* ---------- Table density + font size ---------- */
 
-.DEV_FACTORS_PAGE .tri-r-table,
 .DEV_FACTORS_PAGE .df-table{
   font-size: 12px;
 }
 
 /* ---------- Headers: centered & compact ---------- */
 
-.DEV_FACTORS_PAGE .tri-r-head,
-.DEV_FACTORS_PAGE .tri-r-sticky,
 .DEV_FACTORS_PAGE .df-h,
 .DEV_FACTORS_PAGE .df-r{
   padding: 8px 10px;
@@ -556,7 +351,6 @@
 }
 
 /* Sticky row labels: center vertically & horizontally */
-.DEV_FACTORS_PAGE .tri-r-sticky,
 .DEV_FACTORS_PAGE .df-r{
   display: flex;
   align-items: center;
@@ -565,7 +359,6 @@
 
 /* ---------- Neutral cell containers ---------- */
 
-.DEV_FACTORS_PAGE .tri-r-cell,
 .DEV_FACTORS_PAGE .df-c{
   padding: 0;
   background: transparent;
@@ -574,7 +367,6 @@
 
 /* ---------- Rounded inner pills (triangle + DF) ---------- */
 
-.DEV_FACTORS_PAGE .tri-r-input,
 .DEV_FACTORS_PAGE .df-val{
   min-width: 120px;
   height: 32px;
@@ -598,24 +390,18 @@
 
 /* ---------- Row separators only (very subtle) ---------- */
 
-.DEV_FACTORS_PAGE .tri-r-table tbody tr,
 .DEV_FACTORS_PAGE .df-table tbody tr{
   border-bottom: 1px solid rgba(148,163,184,.10);
 }
 
 /* ---------- Hover state (uniform, no emphasis) ---------- */
 
-.DEV_FACTORS_PAGE .tri-r-table tbody tr:hover .tri-r-input,
 .DEV_FACTORS_PAGE .df-table tbody tr:hover .df-val{
   background: rgba(148,163,184,.12);
   border-color: rgba(148,163,184,.35);
 }
-/* =========================================================
-   FINAL: Faint glossy green — ONLY for cells with content
-========================================================= */
 
 /* Reset any previous glow */
-.DEV_FACTORS_PAGE .tri-r-input,
 .DEV_FACTORS_PAGE .df-val{
   box-shadow: none;
   border-color: var(--stroke-soft);
@@ -623,7 +409,6 @@
 }
 
 /* Apply glow ONLY if the cell has content */
-.DEV_FACTORS_PAGE .tri-r-input:not(:empty),
 .DEV_FACTORS_PAGE .df-val:not(:empty){
   border: 1px solid rgba(var(--accent-rgb),.28); /* fainter green */
 
@@ -637,11 +422,10 @@
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.06), /* soft gloss */
     0 0 0 1px rgba(var(--accent-rgb),.14),        /* thin edge */
-    0 0 6px rgba(var(--accent-rgb),.12);          /* faint halo */
+    0 0 6px rgba(var(--accent-rgb),.12);
 }
 
 /* Hover — still subtle */
-.DEV_FACTORS_PAGE .tri-r-table tbody tr:hover .tri-r-input:not(:empty),
 .DEV_FACTORS_PAGE .df-table tbody tr:hover .df-val:not(:empty){
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.08),
@@ -650,103 +434,12 @@
 }
 
 /* Keyboard focus (quiet, professional) */
-.DEV_FACTORS_PAGE td:focus-within .tri-r-input:not(:empty),
 .DEV_FACTORS_PAGE td:focus-within .df-val:not(:empty){
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.10),
     0 0 0 2px rgba(var(--accent-rgb),.28),
     0 0 10px rgba(var(--accent-rgb),.22);
 }
-/* =========================================================
-   FINAL FIX: Diagonal cells behave like all other cells
-========================================================= */
-
-/* Completely remove any diagonal-specific styling */
-.DEV_FACTORS_PAGE .tri-r-cell--diag,
-.DEV_FACTORS_PAGE .tri-r-cell--diag .tri-r-input{
-  background: inherit !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-
-/* Re-apply STANDARD neutral pill styling */
-.DEV_FACTORS_PAGE .tri-r-cell--diag .tri-r-input{
-  background: var(--control-bg) !important;
-  border: 1px solid var(--stroke-soft) !important;
-}
-
-/* Apply faint green glow ONLY if diagonal cell has content */
-.DEV_FACTORS_PAGE .tri-r-cell--diag .tri-r-input:not(:empty){
-  border: 1px solid rgba(var(--accent-rgb),.28) !important;
-
-  background:
-    linear-gradient(
-      to bottom,
-      rgba(var(--accent-rgb),.10),
-      var(--control-bg)
-    ) !important;
-
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.06),
-    0 0 0 1px rgba(var(--accent-rgb),.14),
-    0 0 6px rgba(var(--accent-rgb),.12) !important;
-}
-/* =========================================================
-   DEV FACTORS — Section color coding
-   Parametrized = Blue
-   Underwriter = Orange
-========================================================= */
-
-/* =======================
-   PARAMETRIZED (BLUE)
-======================= */
-
-.DEV_FACTORS_PAGE .parametrized-section,
-.DEV_FACTORS_PAGE .section--parametrized{
-  background: rgba(59,130,246,.10);           /* blue-500 tint */
-  border: 1px solid rgba(59,130,246,.35);
-}
-
-.DEV_FACTORS_PAGE .parametrized-section .tri-cell:focus,
-.DEV_FACTORS_PAGE .section--parametrized .tri-cell:focus{
-  border-color: rgba(59,130,246,.65);
-  box-shadow: 0 0 0 4px rgba(59,130,246,.18);
-}
-
-/* optional: header / label tint */
-.DEV_FACTORS_PAGE .parametrized-section th,
-.DEV_FACTORS_PAGE .section--parametrized th{
-  color: var(--accent-blue);               /* lighter blue */
-}
-
-
-/* =======================
-   UNDERWRITER (ORANGE)
-======================= */
-
-.DEV_FACTORS_PAGE .underwriter-section,
-.DEV_FACTORS_PAGE .section--underwriter{
-  background: rgba(249,115,22,.10);            /* orange-500 tint */
-  border: 1px solid rgba(249,115,22,.35);
-}
-
-.DEV_FACTORS_PAGE .underwriter-section .tri-cell:focus,
-.DEV_FACTORS_PAGE .section--underwriter .tri-cell:focus{
-  border-color: rgba(249,115,22,.65);
-  box-shadow: 0 0 0 4px rgba(249,115,22,.18);
-}
-
-/* optional: header / label tint */
-.DEV_FACTORS_PAGE .underwriter-section th,
-.DEV_FACTORS_PAGE .section--underwriter th{
-  color: var(--accent-amber);                /* soft orange */
-}
-/* =========================================================
-   DEV FACTORS — Section theming
-   Parametrized = Blue
-   Underwriter = Orange
-   CSS-only (uses :has on section title text)
-========================================================= */
 
 /* ---------- PARAMETRIZED (BLUE) ---------- */
 .DEV_FACTORS_PAGE .df-section:has(.df-section-title:is(:contains("Parametrized"), :contains("PARAMETRIZED"))){
@@ -760,7 +453,7 @@
 
 .DEV_FACTORS_PAGE .df-section:has(.df-section-title:is(:contains("Parametrized"), :contains("PARAMETRIZED"))) .df-section-title,
 .DEV_FACTORS_PAGE .df-section:has(.df-section-title:is(:contains("Parametrized"), :contains("PARAMETRIZED"))) .df-section-sub{
-  color: var(--accent-blue);              /* soft blue */
+  color: var(--accent-blue);
 }
 
 /* focus glow for editable cells inside parametrized (if any) */
@@ -782,7 +475,7 @@
 
 .DEV_FACTORS_PAGE .df-section:has(.df-section-title:is(:contains("Underwriter"), :contains("UNDERWRITER"))) .df-section-title,
 .DEV_FACTORS_PAGE .df-section:has(.df-section-title:is(:contains("Underwriter"), :contains("UNDERWRITER"))) .df-section-sub{
-  color: var(--accent-amber);              /* soft orange */
+  color: var(--accent-amber);
 }
 
 /* focus glow for chosen inputs (these are editable) */
@@ -827,10 +520,6 @@
   border-color: rgba(249,115,22,.70);
   box-shadow: 0 0 0 4px rgba(249,115,22,.18);
 }
-/* =========================================================
-   DEV FACTORS — Parametrized section
-   Make ALL cell borders blue (table + inputs)
-========================================================= */
 
 /* Card border already blue; keep it */
 .DEV_FACTORS_PAGE .df-section--parametrized .df-card{
@@ -875,10 +564,6 @@
 .DEV_FACTORS_PAGE .df-section--parametrized .df-r{
   border-color: rgba(59,130,246,.22) !important;
 }
-/* =========================================================
-   DEV FACTORS — Parametrized pills must be BLUE (not green)
-   Overrides global success / green pill styling
-========================================================= */
 
 /* Read-only value pills */
 .DEV_FACTORS_PAGE .df-section--parametrized .df-val{
@@ -942,12 +627,6 @@
 .DEV_FACTORS_PAGE .df-section--parametrized .df-table td{
   border-color: rgba(37,99,235,.35) !important;
 }
-/* =========================================================
-   DEV FACTORS — Underwriter section UI polish
-   - Save Factors right + orange
-   - Underwriter cells orange pill style
-   - Chosen base toggle compact (≈30% smaller)
-========================================================= */
 
 /* Layout: chosen controls left + right */
 .DEV_FACTORS_PAGE .df-chosen-controls{
@@ -966,23 +645,6 @@
   margin-left: auto;
   display: flex;
   align-items: center;
-}
-
-/* Save button: orange, sits right */
-.DEV_FACTORS_PAGE .df-save-btn{
-  border-radius: 999px;
-  padding: 8px 12px;
-  border: 1px solid rgba(249,115,22,.70);
-  background: rgba(249,115,22,.14);
-  color: var(--accent-amber);
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.DEV_FACTORS_PAGE .df-save-btn:hover{
-  background: rgba(249,115,22,.20);
-  border-color: rgba(249,115,22,.90);
 }
 
 /* Underwriter section card already orange tint in your theme block;
@@ -1166,8 +828,7 @@
 }
 
 /* Remove green glow overrides */
-.DEV_FACTORS_PAGE .df-val:not(:empty),
-.DEV_FACTORS_PAGE .tri-r-input:not(:empty){
+.DEV_FACTORS_PAGE .df-val:not(:empty){
   border: none !important;
   background: transparent !important;
   box-shadow: none !important;

@@ -22,6 +22,7 @@
 
 import { useCallback, useMemo } from 'react';
 import { useAppState } from '../../../context/AppContext';
+import { fmtMoney } from './NpStructureHelpers';
 
 const SLICE_KEY = 'npAggregateXlInputs';
 
@@ -34,10 +35,6 @@ const DEFAULT_LAYER = {
   cat: false,
 };
 
-function fmtMoney(v) {
-  const n = Number(String(v ?? '').replace(/[^\d.-]/g, ''));
-  return Number.isFinite(n) ? n.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '';
-}
 function stripNum(v) {
   return String(v ?? '').replace(/[^\d.-]/g, '');
 }

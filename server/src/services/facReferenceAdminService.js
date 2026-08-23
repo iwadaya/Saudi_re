@@ -43,7 +43,7 @@ import { logger } from '../lib/logger.js';
  *
  * `key` is the natural key used to locate a row for UPDATE and DELETE.
  */
-export const STAGEABLE = {
+const STAGEABLE = {
   fac_exposure_curve: {
     key: ['curve_code'],
     columns: ['curve_code', 'curve_name', 'curve_set', 'source', 'kind', 'params',
@@ -538,7 +538,7 @@ async function applyStagedRow(client, row) {
 }
 
 /** @param {string} versionId @returns {Promise<object>} */
-export async function loadVersion(versionId) {
+async function loadVersion(versionId) {
   const { rows } = await pool.query(
     'SELECT * FROM public.fac_rate_table_version WHERE version_id = $1', [versionId],
   );

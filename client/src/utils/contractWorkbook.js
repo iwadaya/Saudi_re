@@ -62,7 +62,7 @@ function cellValue(v) {
 }
 
 /** Humanise a snake_case / camelCase key into a header label. */
-export function humanizeKey(k) {
+function humanizeKey(k) {
   return String(k)
     .replace(/_/g, ' ')
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')

@@ -91,7 +91,7 @@ export const METHOD_LABEL = {
 };
 
 /** Multiple of σ used for the risk load when the experience supports one. */
-export const DEFAULT_RISK_LOAD_THETA = 0.10;
+const DEFAULT_RISK_LOAD_THETA = 0.10;
 
 /**
  * Normalise a method result into a candidate the blend can reason about.

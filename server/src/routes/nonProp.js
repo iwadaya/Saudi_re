@@ -1,6 +1,7 @@
 // server/src/routes/nonProp.js — Non-proportional treaty endpoints (PARTIAL-SAVE SAFE)
 import { Router } from "express";
 import { pool } from "../db/pool.js";
+import { getCobColumnNames } from '../lib/cobCols.js';
 import { asyncHandler, numOrNull, assertExists, reinstatInt } from '../helpers.js';
 import { entityContext } from '../lib/entityContext.js';
 import { assertParentEntityUnchanged, touchParentEntity } from '../lib/parentEntityPersistence.js';
@@ -607,12 +608,9 @@ router.get("/treaties/:id/cedant-programme-limits", asyncHandler(async (req, res
   const contractCobs = (contract_cob_ids || []).filter(Boolean);
   const cobIds = layerCobs.length ? layerCobs : contractCobs;
 
-  // 2. Introspect class_of_business PK column name (live DB may differ from dump)
-  const cobColRes = await pool.query(
-    `SELECT column_name FROM information_schema.columns
-     WHERE table_schema='public' AND table_name='class_of_business' ORDER BY ordinal_position`
-  );
-  const cobCols = cobColRes.rows.map(r => r.column_name);
+  // 2. Introspect class_of_business PK column name (live DB may differ from
+  // dump; memoized per process in lib/cobCols.js)
+  const cobCols = await getCobColumnNames();
   const cobIdCol   = cobCols.find(c => c === 'class_of_business_id') || cobCols.find(c => c.endsWith('_id')) || cobCols[0];
   const cobNameCol = cobCols.find(c => c === 'class_of_business') || cobCols.find(c => c.includes('name')) || cobCols[1] || cobCols[0];
 

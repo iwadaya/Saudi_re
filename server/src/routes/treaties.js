@@ -59,32 +59,35 @@ router.get("/treaties", asyncHandler(async (req, res) => {
   // check the raw input instead.
   const off = (offset != null && offset !== '') ? (Number(offset) || 0) : (pageNum - 1) * lim;
 
-  // Count only the base + filters (joins not needed for COUNT)
+  // Count only the base + filters. The reference joins can never change
+  // COUNT(*) (all are LEFT JOINs on unique PKs), so the count query only
+  // needs treaty_type — and only when the category filter references it.
   const countSql = `SELECT COUNT(*)::int AS total FROM public.contract c
-     ${contractContextJoins('c')}
+     ${category ? 'LEFT JOIN public.treaty_type tt ON tt.treaty_type_id = c.treaty_type_id' : ''}
      ${where}`;
-  const {rows: countRows} = await pool.query(countSql, params);
+  const [{ rows: countRows }, { rows }] = await Promise.all([
+    pool.query(countSql, params),
+    pool.query(
+      `SELECT c.contract_id AS id,c.contract_id,c.uw_year,c.status,c.uw_status,
+         c.cedant_id,ced.company_name AS cedant_name,c.broker_id,bk.broker_name,
+         c.country_id,cnt.country_name,cnt.country_code,c.treaty_type_id,
+         tt.treaty_type AS treaty_type_name,tt.category AS treaty_category,
+         c.currency_id,cur.currency_code,c.experience_source,c.renewal_date,
+         c.contract_group_id,c.signed_line_pct,c.contract_description,c.created_at,c.updated_at,
+         EXISTS(SELECT 1 FROM public.contract_np_details nd WHERE nd.contract_id=c.contract_id) AS has_np_details,
+         pd.qs_limit,pd.retention_pct,pd.retention_amt,pd.num_lines,pd.total_capacity,
+         pd.surplus_max_retention,pd.cession_pct,pd.quota_share_epi,pd.surplus_epi
+       FROM public.contract c
+       ${contractContextJoins('c')}
+       LEFT JOIN public.contract_prop_details pd ON pd.contract_id=c.contract_id
+       ${where} ORDER BY c.updated_at DESC LIMIT $${i++} OFFSET $${i++}`,
+      [...params, lim, off]
+    ),
+  ]);
   const total = countRows[0]?.total ?? 0;
   res.setHeader('X-Total-Count', String(total));
   res.setHeader('X-Page-Size', String(lim));
   res.setHeader('X-Page', String(pageNum));
-
-  const {rows}=await pool.query(
-    `SELECT c.contract_id AS id,c.contract_id,c.uw_year,c.status,c.uw_status,
-       c.cedant_id,ced.company_name AS cedant_name,c.broker_id,bk.broker_name,
-       c.country_id,cnt.country_name,cnt.country_code,c.treaty_type_id,
-       tt.treaty_type AS treaty_type_name,tt.category AS treaty_category,
-       c.currency_id,cur.currency_code,c.experience_source,c.renewal_date,
-       c.contract_group_id,c.signed_line_pct,c.contract_description,c.created_at,c.updated_at,
-       EXISTS(SELECT 1 FROM public.contract_np_details nd WHERE nd.contract_id=c.contract_id) AS has_np_details,
-       pd.qs_limit,pd.retention_pct,pd.retention_amt,pd.num_lines,pd.total_capacity,
-       pd.surplus_max_retention,pd.cession_pct,pd.quota_share_epi,pd.surplus_epi
-     FROM public.contract c
-     ${contractContextJoins('c')}
-     LEFT JOIN public.contract_prop_details pd ON pd.contract_id=c.contract_id
-     ${where} ORDER BY c.updated_at DESC LIMIT $${i++} OFFSET $${i++}`,
-    [...params, lim, off]
-  );
   res.json(rows);
 }));
 

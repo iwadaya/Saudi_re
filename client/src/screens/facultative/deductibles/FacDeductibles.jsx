@@ -4,12 +4,9 @@ import api from '../../../api';
 import WizardLayout from '../../../components/WizardLayout';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import { useFacRiskId } from '../../../hooks/useContractId';
+import { numOrNull, fmtComma, stripDigits, cleanNum } from '../../../utils/format';
 
 const ROUTE_KEY = 'FAC_DEDUCTIBLES';
-const numOrNull = v => { const c = String(v ?? '').replace(/,/g,'').trim(); if (!c) return null; const n = Number(c); return Number.isFinite(n) ? n : null; };
-const cleanNum = v => { if (v == null || v === '') return ''; const n = Number(v); if (!Number.isFinite(n)) return String(v); return n === Math.floor(n) ? String(Math.floor(n)) : String(n); };
-const fmtComma = v => { const d = String(v ?? '').replace(/[^\d]/g,''); return d ? Number(d).toLocaleString('en-US') : ''; };
-const stripDigits = v => String(v ?? '').replace(/[^\d]/g,'');
 
 function FR({ label, children }) {
   return (

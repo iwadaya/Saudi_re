@@ -35,35 +35,3 @@ export function contractContextJoins(baseAlias) {
     `LEFT JOIN public.currency    cur ON cur.currency_id   = ${baseAlias}.currency_id`,
   ].join('\n');
 }
-
-/**
- * Canonical SELECT projection for cedant/broker/country/treaty_type/currency
- * display names used by listing endpoints. Add any columns the caller needs
- * by concatenating after this fragment.
- *
- * @returns {string} Comma-joined list of projected columns (no leading comma).
- */
-export const contractContextColumns =
-  [
-    'ced.company_name  AS cedant_name',
-    'bk.broker_name    AS broker_name',
-    'cnt.country_name  AS country_name',
-    'cnt.country_code  AS country_code',
-    'tt.treaty_type    AS treaty_type_name',
-    'tt.category       AS treaty_category',
-    'cur.currency_code AS currency_code',
-  ].join(',\n         ');
-
-/**
- * Short-form projection used by some list endpoints that only need the
- * primary display label (cedant), country, and treaty type/category/currency.
- */
-export const contractContextListColumns =
-  [
-    'ced.company_name  AS name',
-    'cnt.country_name  AS country',
-    'cnt.country_code',
-    'tt.treaty_type    AS treaty_type_name',
-    'tt.category       AS treaty_category',
-    'cur.currency_code',
-  ].join(',\n         ');

@@ -1,6 +1,7 @@
 // server/src/routes/treatyData.js — Sub-entity endpoints (triangles, losses, profiles, cresta, docs, etc.)
 import { Router } from "express";
 import { pool } from "../db/pool.js";
+import { getCobColumnNames } from '../lib/cobCols.js';
 import { asyncHandler, numOrNull, dateOrNull, safeUwYear, preserveBool, preserveNum, assertExists, isStaleSince } from '../helpers.js';
 import { logger } from '../lib/logger.js';
 import { resolveVariant } from '../lib/triangleVariant.js';
@@ -50,35 +51,33 @@ router.get("/treaties/:id/triangles/:type/with-exclusions", asyncHandler(async (
   // INCURRED is not stored as its own triangle — it is paid + OS. Build the
   // combined full triangle here so the incurred loss amount can be stripped
   // directly from it (see combineIncurredCells in lib/triangleStripping.js).
-  let cells;
-  if (t === 'INCURRED') {
-    const [{ rows: paidCells }, { rows: osCells }] = await Promise.all([
+  const cellsPromise = t === 'INCURRED'
+    ? Promise.all([
       pool.query(`SELECT origin_year,dev_months,cum_value FROM public.contract_triangle_cells WHERE contract_id=$1 AND type='CLAIMS_PAID'::public.triangle_type AND variant='MODIFIED'::public.triangle_variant ORDER BY origin_year,dev_months`, [id]),
       pool.query(`SELECT origin_year,dev_months,cum_value FROM public.contract_triangle_cells WHERE contract_id=$1 AND type='CLAIMS_OS'::public.triangle_type AND variant='MODIFIED'::public.triangle_variant ORDER BY origin_year,dev_months`, [id]),
-    ]);
-    cells = combineIncurredCells(paidCells, osCells);
-  } else {
-    const { rows } = await pool.query(
+    ]).then(([{ rows: paidCells }, { rows: osCells }]) => combineIncurredCells(paidCells, osCells))
+    : pool.query(
       `SELECT cell_id,origin_year,dev_months,cum_value FROM public.contract_triangle_cells WHERE contract_id=$1 AND type=$2::public.triangle_type AND variant='MODIFIED'::public.triangle_variant ORDER BY origin_year,dev_months`,
       [id, t]
-    );
-    cells = rows;
-  }
-  const { rows: largeLosses } = await pool.query(
-    `SELECT ll.uw_year, ll.date_of_loss, ll.actuarial_reported_date, ll.paid, ll.os, ll.incurred
-       FROM public.contract_large_losses ll
-       JOIN public.contract_large_loss_report r ON r.report_id = ll.report_id
-      WHERE r.contract_id = $1`, [id]
-  );
-  const { rows: catLosses } = await pool.query(
-    `SELECT cl.uw_year, cl.date_of_loss, cl.actuarial_reported_date, cl.paid, cl.os, cl.incurred
-       FROM public.contract_cat_losses cl
-       JOIN public.contract_cat_loss_report r ON r.report_id = cl.report_id
-      WHERE r.contract_id = $1`, [id]
-  );
-  // Honour the per-treaty strip flag: when stripping is off, the stripped
-  // variant is identical to the full triangle (no losses removed).
-  const { rows: pd } = await pool.query(`SELECT strip_large_cat_losses FROM public.contract_prop_details WHERE contract_id=$1`, [id]);
+    ).then(({ rows }) => rows);
+  const [cells, { rows: largeLosses }, { rows: catLosses }, { rows: pd }] = await Promise.all([
+    cellsPromise,
+    pool.query(
+      `SELECT ll.uw_year, ll.date_of_loss, ll.actuarial_reported_date, ll.paid, ll.os, ll.incurred
+         FROM public.contract_large_losses ll
+         JOIN public.contract_large_loss_report r ON r.report_id = ll.report_id
+        WHERE r.contract_id = $1`, [id]
+    ),
+    pool.query(
+      `SELECT cl.uw_year, cl.date_of_loss, cl.actuarial_reported_date, cl.paid, cl.os, cl.incurred
+         FROM public.contract_cat_losses cl
+         JOIN public.contract_cat_loss_report r ON r.report_id = cl.report_id
+        WHERE r.contract_id = $1`, [id]
+    ),
+    // Honour the per-treaty strip flag: when stripping is off, the stripped
+    // variant is identical to the full triangle (no losses removed).
+    pool.query(`SELECT strip_large_cat_losses FROM public.contract_prop_details WHERE contract_id=$1`, [id]),
+  ]);
   const stripEnabled = pd[0]?.strip_large_cat_losses === true; // default false
   const field = stripEnabled ? stripFieldForType(t) : null;
   const allLosses = field ? [...largeLosses, ...catLosses] : [];
@@ -590,11 +589,9 @@ router.put("/treaties/:id/loss-selection/:lossType/snapshot", asyncHandler(async
 // ── COBs ──
 router.get("/treaties/:id/cobs", asyncHandler(async (req, res) => {
   try {
-    // Introspect ALL column names for class_of_business table
-    const colRes = await pool.query(
-      `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='class_of_business' ORDER BY ordinal_position`
-    );
-    const cols = colRes.rows.map(r => r.column_name);
+    // Introspect ALL column names for class_of_business table (memoized
+    // per process in lib/cobCols.js)
+    const cols = await getCobColumnNames();
     // Find the PK/ID column
     const idCol   = cols.find(c => c === 'class_of_business_id') || cols.find(c => c === 'class_id') || cols.find(c => c.endsWith('_id')) || cols[0];
     // Find the name column
@@ -882,11 +879,10 @@ router.get("/documents/:docId/text", asyncHandler(async (req, res) => {
 
   try {
     if (isRemoteStoragePath(sp)) {
-      const { default: nodeFetch } = await import('node-fetch');
       // Fetch via a freshly-minted signed URL rather than the stored one — the
       // asset is private, so the permanent URL is not directly readable.
       const fetchUrl = (await getSignedReadUrl(sp)) || sp;
-      const r = await nodeFetch(fetchUrl);
+      const r = await fetch(fetchUrl);
       if (!r.ok) return res.json({ text: '', error: 'Could not fetch from cloud' });
       buffer = Buffer.from(await r.arrayBuffer());
     } else {

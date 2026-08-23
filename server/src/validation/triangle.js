@@ -41,7 +41,7 @@ const cumValue = z.preprocess(
   z.number().finite().nullable(),
 );
 
-export const triangleCellSchema = z.object({
+const triangleCellSchema = z.object({
   origin_year: originYear,
   dev_months: devMonths,
   cum_value: cumValue,
@@ -69,7 +69,7 @@ const chosenSource = z
   .nullable()
   .optional();
 
-export const devFactorRowSchema = z.object({
+const devFactorRowSchema = z.object({
   dev_month: z.preprocess(
     (v) => (v === '' || v == null ? undefined : Number(v)),
     z.number().int().gte(0).lte(720),

@@ -56,7 +56,7 @@ export async function refreshAccumulation() {
  * @param {string} riskId
  * @returns {Promise<Array<{zone: string, adding: number}>>}
  */
-export async function riskZoneContributions(riskId) {
+async function riskZoneContributions(riskId) {
   const { rows } = await pool.query(
     `SELECT l.cresta_zone AS zone,
             SUM(
@@ -88,7 +88,7 @@ export async function riskZoneContributions(riskId) {
  * @param {string|null} excludeRiskId
  * @returns {Promise<Map<string, {committed: Array, budget: object|null}>>}
  */
-export async function zoneExposure(zones, uwYear, excludeRiskId = null) {
+async function zoneExposure(zones, uwYear, excludeRiskId = null) {
   const out = new Map();
   if (!zones || zones.length === 0) return out;
 

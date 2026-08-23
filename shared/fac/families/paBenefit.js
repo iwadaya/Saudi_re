@@ -32,6 +32,7 @@
 // fac_pa_base_rate ships empty (migration 137).
 
 import { num, numOrNull } from '../num.js';
+import { pickByTerritory } from '../rateSelect.js';
 import { metaFor } from './meta.js';
 
 export const FAMILY_CODE = 'PA_BENEFIT';
@@ -87,12 +88,7 @@ export function selectPaRate(rates, { occupationalClass, coverBasis, territory }
     (r) => String(r.occupational_class).toUpperCase() === String(occupationalClass).toUpperCase()
       && (r.cover_basis || '24_HOUR').toUpperCase() === (coverBasis || '24_HOUR').toUpperCase(),
   );
-  const exact = pool.find(
-    (r) => (r.territory || '').toUpperCase() === (territory || '').toUpperCase(),
-  );
-  if (exact) return { rate: exact, fellBackToWorldwide: false };
-  const worldwide = pool.find((r) => (r.territory || '').toUpperCase() === 'WORLDWIDE');
-  return { rate: worldwide || null, fellBackToWorldwide: Boolean(worldwide) };
+  return pickByTerritory(pool, territory);
 }
 
 /**

@@ -12,18 +12,13 @@ import WizardLayout from '../../../components/WizardLayout';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import { useFacRiskId } from '../../../hooks/useContractId';
 import { logger } from '../../../utils/logger';
+import { numOrNull } from '../../../utils/format';
 
 const ROUTE_KEY = 'FAC_LOCATIONS';
 
 const MAX_LOCATIONS = 50;
 const WARN_LOCATIONS = 20;
 
-const numOrNull = (v) => {
-  const c = String(v ?? '').replace(/,/g, '').trim();
-  if (!c) return null;
-  const n = Number(c);
-  return Number.isFinite(n) ? n : null;
-};
 const fmtComma = (v) => {
   const n = numOrNull(v);
   if (n == null) return '';

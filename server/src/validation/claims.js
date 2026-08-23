@@ -36,7 +36,7 @@ const optionalText = (max) => z.preprocess(
   z.string().max(max).optional(),
 );
 
-export const LOSS_TYPES = ['ATTRITIONAL', 'LARGE', 'CAT'];
+const LOSS_TYPES = ['ATTRITIONAL', 'LARGE', 'CAT'];
 export const APPROVAL_STATUSES = ['DRAFT', 'WAITING_APPROVAL', 'REJECTED', 'FINALISED'];
 export const FINANCE_STATUSES = ['PENDING_SETUP', 'ACTIVE', 'SUSPENDED', 'CLOSED'];
 

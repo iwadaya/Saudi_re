@@ -29,7 +29,7 @@ import { getStaleWritePayload } from '../utils/handleStaleWrite.js';
 import { getPricingDriftPayload, formatPricingDriftMessage } from '../utils/pricingErrors.js';
 import { reportError } from '../utils/errorReporter.js';
 
-export interface UseResourceOptions {
+interface UseResourceOptions {
   /** When false the fetcher never runs and any in-flight request is aborted. */
   enabled?: boolean;
   /** Label attached to the error report so server logs say which resource failed. */
@@ -108,9 +108,9 @@ export function useResource<T>(
   return { data: state.data, error: state.error, loading: state.loading, refetch: load };
 }
 
-export type ResourceErrorKind = 'stale-write' | 'pricing-drift' | 'http' | 'unknown';
+type ResourceErrorKind = 'stale-write' | 'pricing-drift' | 'http' | 'unknown';
 
-export interface ResourceErrorInfo {
+interface ResourceErrorInfo {
   kind: ResourceErrorKind;
   /** Human-readable, screen-ready message. */
   message: string;

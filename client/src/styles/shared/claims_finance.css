@@ -97,8 +97,6 @@
 
 /* Approval / rejection banner above the claim body. */
 .cf-banner { margin-bottom: 14px; }
-
-/* ── Table helpers (composed on the ui Table primitive) ─────────────── */
 /* Trailing gap when a table is followed by the next section heading. */
 .cf-section-gap { margin-bottom: 26px; }
 .cf-num { text-align: right; }

@@ -30,15 +30,8 @@
 .facdoc-dropzone-title { font-size: 13px; font-weight: 800; color: rgba(var(--text-rgb),0.85); }
 .facdoc-dropzone-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
 .facdoc-file-input { display: none; }
-.facdoc-upload-row {
-  display: grid;
-  grid-template-columns: 1fr 220px 160px;
-  gap: 12px;
-  align-items: end;
-}
 .facdoc-upload-name { font-size: 12px; font-weight: 700; color: rgba(var(--text-rgb),0.85); }
 .facdoc-upload-meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
-.facdoc-kind-label,
 .facdoc-field-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
 
 /* Treaty-style upload form: file info on top, then the metadata fields

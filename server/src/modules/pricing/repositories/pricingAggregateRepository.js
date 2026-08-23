@@ -30,6 +30,14 @@ async function getCobCols() {
   return _cobCols;
 }
 
+// The five CRESTA peril aggregates summed per row — the expression every
+// breakdown query in this file shares (single source; a sixth peril column
+// becomes a one-line change).
+const PERIL_TOTAL = "COALESCE(cd.eq_agg,0)+COALESCE(cd.ws_agg,0)+COALESCE(cd.flood_agg,0)+COALESCE(cd.srcc_agg,0)+COALESCE(cd.others_agg,0)";
+
+// Contracts that still count toward accumulations.
+const LIVE_STATUS_FILTER = "c.uw_status NOT IN ('DECLINED','NTU')";
+
 function cobJoin(cols) {
   return `LEFT JOIN public.class_of_business cob ON cob.${cols.pk}::text = cd.cob_id::text`;
 }
@@ -64,7 +72,7 @@ export async function getCountryAggregates(countryId, excludeId) {
       ORDER BY contract_id, offer_id DESC
     ) co_latest ON co_latest.contract_id = c.contract_id
     WHERE c.country_id::text=$1::text
-      AND c.uw_status NOT IN ('DECLINED','NTU')
+      AND ${LIVE_STATUS_FILTER}
       ${excludeClause}
   `;
   const { rows } = await pool.query(sql, params);
@@ -80,7 +88,7 @@ export async function getAggCobBreakdown(contractId) {
   const contractRows = await pool.query(
     `SELECT
       ${labelWithId} AS cob,
-      COALESCE(SUM(COALESCE(cd.eq_agg,0)+COALESCE(cd.ws_agg,0)+COALESCE(cd.flood_agg,0)+COALESCE(cd.srcc_agg,0)+COALESCE(cd.others_agg,0)),0) AS total_agg,
+      COALESCE(SUM(${PERIL_TOTAL}),0) AS total_agg,
       COALESCE(SUM(COALESCE(cd.eq_agg,0)),0) AS eq_agg,
       COALESCE(SUM(COALESCE(cd.ws_agg,0)),0) AS ws_agg,
       COALESCE(SUM(COALESCE(cd.flood_agg,0)),0) AS flood_agg,
@@ -99,7 +107,7 @@ export async function getAggCobBreakdown(contractId) {
     const result = await pool.query(
       `SELECT
         ${labelWithId} AS cob,
-        COALESCE(SUM(COALESCE(cd.eq_agg,0)+COALESCE(cd.ws_agg,0)+COALESCE(cd.flood_agg,0)+COALESCE(cd.srcc_agg,0)+COALESCE(cd.others_agg,0)),0) AS total_agg,
+        COALESCE(SUM(${PERIL_TOTAL}),0) AS total_agg,
         COALESCE(SUM(COALESCE(cd.eq_agg,0)),0) AS eq_agg,
         COALESCE(SUM(COALESCE(cd.ws_agg,0)),0) AS ws_agg,
         COALESCE(SUM(COALESCE(cd.flood_agg,0)),0) AS flood_agg,
@@ -110,7 +118,7 @@ export async function getAggCobBreakdown(contractId) {
        ${cobJoin(cols)}
        WHERE c.country_id = $1
          AND c.contract_id != $2
-         AND c.uw_status NOT IN ('DECLINED','NTU')
+         AND ${LIVE_STATUS_FILTER}
        GROUP BY ${labelWithId}
        ORDER BY total_agg DESC`,
       [countryId, contractId]
@@ -189,7 +197,7 @@ export async function getAggDrilldown(contractId) {
       SUM(COALESCE(cd.eq_agg,0)) AS eq_agg, SUM(COALESCE(cd.ws_agg,0)) AS ws_agg,
       SUM(COALESCE(cd.flood_agg,0)) AS flood_agg, SUM(COALESCE(cd.srcc_agg,0)) AS srcc_agg,
       SUM(COALESCE(cd.others_agg,0)) AS others_agg,
-      SUM(COALESCE(cd.eq_agg,0)+COALESCE(cd.ws_agg,0)+COALESCE(cd.flood_agg,0)+COALESCE(cd.srcc_agg,0)+COALESCE(cd.others_agg,0)) AS total_agg
+      SUM(${PERIL_TOTAL}) AS total_agg
      FROM ${crestaTable} cd
      ${cobJoin(cols)}
      WHERE cd.${ownerCol}=$1
@@ -208,12 +216,12 @@ export async function getAggDrilldown(contractId) {
         SUM(COALESCE(cd.eq_agg,0)) AS eq_agg, SUM(COALESCE(cd.ws_agg,0)) AS ws_agg,
         SUM(COALESCE(cd.flood_agg,0)) AS flood_agg, SUM(COALESCE(cd.srcc_agg,0)) AS srcc_agg,
         SUM(COALESCE(cd.others_agg,0)) AS others_agg,
-        SUM(COALESCE(cd.eq_agg,0)+COALESCE(cd.ws_agg,0)+COALESCE(cd.flood_agg,0)+COALESCE(cd.srcc_agg,0)+COALESCE(cd.others_agg,0)) AS total_agg,
+        SUM(${PERIL_TOTAL}) AS total_agg,
         COUNT(DISTINCT cd.contract_id) AS contract_count
        FROM public.contract_cresta_data cd
        JOIN public.contract c ON c.contract_id = cd.contract_id
        WHERE c.country_id::text = $1::text
-         AND c.uw_status NOT IN ('DECLINED','NTU')
+         AND ${LIVE_STATUS_FILTER}
        GROUP BY cd.zone_id
        ORDER BY total_agg DESC`,
       [countryId]
@@ -226,12 +234,12 @@ export async function getAggDrilldown(contractId) {
         SUM(COALESCE(cd.eq_agg,0)) AS eq_agg, SUM(COALESCE(cd.ws_agg,0)) AS ws_agg,
         SUM(COALESCE(cd.flood_agg,0)) AS flood_agg, SUM(COALESCE(cd.srcc_agg,0)) AS srcc_agg,
         SUM(COALESCE(cd.others_agg,0)) AS others_agg,
-        SUM(COALESCE(cd.eq_agg,0)+COALESCE(cd.ws_agg,0)+COALESCE(cd.flood_agg,0)+COALESCE(cd.srcc_agg,0)+COALESCE(cd.others_agg,0)) AS total_agg
+        SUM(${PERIL_TOTAL}) AS total_agg
        FROM public.contract_cresta_data cd
        JOIN public.contract c ON c.contract_id = cd.contract_id
        ${cobJoin(cols)}
        WHERE c.country_id::text = $1::text
-         AND c.uw_status NOT IN ('DECLINED','NTU')
+         AND ${LIVE_STATUS_FILTER}
        GROUP BY ${label}
        ORDER BY total_agg DESC`,
       [countryId]
@@ -243,12 +251,12 @@ export async function getAggDrilldown(contractId) {
         c.contract_id, c.uw_year,
         co.company_name AS cedant_name,
         COALESCE(c.signed_line_pct, 0) AS signed_line_pct,
-        SUM(COALESCE(cd.eq_agg,0)+COALESCE(cd.ws_agg,0)+COALESCE(cd.flood_agg,0)+COALESCE(cd.srcc_agg,0)+COALESCE(cd.others_agg,0)) AS total_agg
+        SUM(${PERIL_TOTAL}) AS total_agg
        FROM public.contract c
        LEFT JOIN public.contract_cresta_data cd ON cd.contract_id = c.contract_id
        LEFT JOIN public.companies co ON co.company_id = c.cedant_id
        WHERE c.country_id::text = $1::text
-         AND c.uw_status NOT IN ('DECLINED','NTU')
+         AND ${LIVE_STATUS_FILTER}
        GROUP BY c.contract_id, c.uw_year, co.company_name, c.signed_line_pct
        ORDER BY total_agg DESC
        LIMIT 15`,

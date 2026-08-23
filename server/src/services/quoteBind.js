@@ -81,7 +81,26 @@ const selList = (cols) => cols.map((c) => (c.cast ? `${quoteIdent(c.name)}::${c.
  * `{ name, cast }` where `cast` is the dest type to coerce to when the two
  * sides' types differ (null when identical or for array types).
  */
-async function copyableColumns(client, src, dest, exclude = []) {
+// The column intersection is schema-static after boot migrations, and a bind
+// performs ~40 of these catalog self-joins while holding the quote lock —
+// memoize per (src, dest, exclude) for the process lifetime (same rationale
+// as the probes in modules/pricing/repositories/repositoryUtils.js). Failures
+// are not cached so a transient error retries on the next bind.
+const _copyableColumnsCache = new Map();
+
+function copyableColumns(client, src, dest, exclude = []) {
+  const key = `${src}|${dest}|${[...exclude].sort().join(',')}`;
+  if (!_copyableColumnsCache.has(key)) {
+    const promise = fetchCopyableColumns(client, src, dest, exclude).catch((err) => {
+      _copyableColumnsCache.delete(key);
+      throw err;
+    });
+    _copyableColumnsCache.set(key, promise);
+  }
+  return _copyableColumnsCache.get(key);
+}
+
+async function fetchCopyableColumns(client, src, dest, exclude) {
   const { rows } = await client.query(
     `SELECT s.column_name, s.udt_name AS src_udt, d.udt_name AS dest_udt
        FROM information_schema.columns s

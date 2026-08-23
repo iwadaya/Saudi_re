@@ -13,15 +13,10 @@ import LoadErrorPanel from '../../../components/LoadErrorPanel';
 import { useFacRiskId } from '../../../hooks/useContractId';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import { logger } from '../../../utils/logger';
+import { numOrNull } from '../../../utils/format';
 
 const ROUTE_KEY = 'FAC_SUMMARY';
 
-const numOrNull = (v) => {
-  const c = String(v ?? '').replace(/,/g, '').trim();
-  if (!c) return null;
-  const n = Number(c);
-  return Number.isFinite(n) ? n : null;
-};
 const fmt0 = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? Math.round(n).toLocaleString('en-US') : '—';

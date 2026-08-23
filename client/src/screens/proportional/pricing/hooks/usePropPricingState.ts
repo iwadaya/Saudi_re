@@ -37,7 +37,7 @@ import {
   createInitialPropPricingState,
 } from '../state/propPricingReducer';
 import type {
-  GridSlice, WorkflowSlice, ModalsSlice, SaveLifecycleSlice, UiSlice, RefDataSlice,
+  GridSlice, WorkflowSlice, ModalsSlice, SaveLifecycleSlice, UiSlice,
   PropPricingAction, Setter, AnyRecord,
 } from '../state/propPricingReducer';
 import {

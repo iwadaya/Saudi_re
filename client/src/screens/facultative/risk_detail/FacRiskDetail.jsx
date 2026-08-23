@@ -12,13 +12,10 @@ import { useFacRiskId } from '../../../hooks/useContractId';
 import { useAppState } from '../../../context/AppContext';
 import { FR, SectionTitle } from './FacRiskDetail.parts.jsx';
 import RelatedTreatiesSection from './RelatedTreatiesSection.jsx';
+import { numOrNull, fmtComma, stripDigits, cleanNum } from '../../../utils/format';
 
 const ROUTE_KEY = 'FAC_RISK_DETAIL';
 
-const numOrNull = v => { const c = String(v ?? '').replace(/,/g, '').trim(); if (!c) return null; const n = Number(c); return Number.isFinite(n) ? n : null; };
-const fmtComma = v => { const d = String(v ?? '').replace(/[^\d]/g, ''); return d ? Number(d).toLocaleString('en-US') : ''; };
-const stripDigits = v => String(v ?? '').replace(/[^\d]/g, '');
-const cleanNum = v => { if (v == null || v === '') return ''; const n = Number(v); if (!Number.isFinite(n)) return String(v); return n === Math.floor(n) ? String(Math.floor(n)) : String(n); };
 const fmt = v => { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—'; };
 
 function CommaInput({ value, onChange, placeholder, readOnly }) {

@@ -7,23 +7,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api';
 import Topbar from '../../components/Topbar';
 import { Button, Callout, Field, Input, Modal, Select, Table } from '../../components/ui';
-import { ApprovalBadge } from '../../components/ledger';
+import { ApprovalBadge, fmtMoney, fmtDate, fmtPct } from '../../components/ledger';
+import { errorMessage as errMsg } from '../../utils/errorBody';
 import { logger } from '../../utils/logger';
 import { formatWithCommasDecimal, sanitizeNumber } from '../../utils/format';
 
-const errMsg = (e, fallback) => {
-  const b = e?.body;
-  if (b && typeof b === 'object' && (b.error || b.message)) return String(b.error || b.message);
-  return e?.message ? String(e.message) : fallback;
-};
-
-const fmtMoney = (v) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return '–';
-  return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
-};
-const fmtDate = (v) => (v ? String(v).slice(0, 10) : '–');
-const fmtPct = (v) => (v == null ? '–' : `${Number(v)}%`);
 
 const MOVEMENT_COLUMNS = [
   { key: '#' }, { key: 'Date' }, { key: 'Type' },

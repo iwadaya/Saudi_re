@@ -27,6 +27,7 @@
 
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
+import { getCobColumnNames } from '../lib/cobCols.js';
 import { env } from '../config/env.js';
 import { asyncHandler } from '../helpers.js';
 import { logger } from '../lib/logger.js';
@@ -169,12 +170,7 @@ async function resolveCountry(countryId) {
 // pattern as routes/lookups.js — the live DB has used either
 // `class_of_business` or `class_name` as the display column historically.
 async function resolveCob(cobId) {
-  const colRes = await pool.query(
-    `SELECT column_name FROM information_schema.columns
-      WHERE table_schema='public' AND table_name='class_of_business'
-      ORDER BY ordinal_position`,
-  );
-  const cols = colRes.rows.map(r => r.column_name);
+  const cols = await getCobColumnNames();
   const idCol   = cols.find(c => c === 'class_of_business_id') || cols.find(c => c === 'class_id') || cols[0];
   const nameCol = cols.find(c => c === 'class_of_business')    || cols.find(c => c === 'class_name') || cols[1] || cols[0];
   // axco_class_code is added by migration 096; older installs may not

@@ -28,6 +28,7 @@
 // docs/facultative-pricing-design.md §8 and shared/fac/methods/ilfCurve.js.
 
 import { ilfLossCost } from '../methods/ilfCurve.js';
+import { pickByTerritory } from '../rateSelect.js';
 import { num, numOrNull } from '../num.js';
 import { metaFor } from './meta.js';
 
@@ -97,10 +98,7 @@ export function selectBaseRate(rates, { facCobId, territory, basisUnit }) {
   );
   const unitsAvailable = [...new Set(forClass.map((r) => r.basis_unit).filter(Boolean))];
   const pool = forClass.filter((r) => !basisUnit || r.basis_unit === basisUnit);
-  const exact = pool.find((r) => (r.territory || '').toUpperCase() === (territory || '').toUpperCase());
-  if (exact) return { rate: exact, fellBackToWorldwide: false, unitsAvailable };
-  const worldwide = pool.find((r) => (r.territory || '').toUpperCase() === 'WORLDWIDE');
-  return { rate: worldwide || null, fellBackToWorldwide: Boolean(worldwide), unitsAvailable };
+  return { ...pickByTerritory(pool, territory), unitsAvailable };
 }
 
 /**

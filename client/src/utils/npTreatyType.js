@@ -12,7 +12,7 @@ function norm(x) {
 }
 
 /** Read the current NP treaty type name from appState.npTreatyDetail. */
-export function getCurrentNpTreatyTypeName(appState) {
+function getCurrentNpTreatyTypeName(appState) {
   const s = appState || {};
   const c = s.npTreatyDetail;
   if (!c) return '';

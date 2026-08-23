@@ -8,22 +8,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
 import Topbar from '../../components/Topbar';
 import { Button, Select, Table } from '../../components/ui';
-import { FinanceStatusBadge, KpiCard } from '../../components/ledger';
+import { FinanceStatusBadge, KpiCard, fmtMoney, fmtDate, fmtPct } from '../../components/ledger';
+import { errorMessage as errMsg } from '../../utils/errorBody';
 import { logger } from '../../utils/logger';
 
-const errMsg = (e, fallback) => {
-  const b = e?.body;
-  if (b && typeof b === 'object' && (b.error || b.message)) return String(b.error || b.message);
-  return e?.message ? String(e.message) : fallback;
-};
-
-const fmtMoney = (v) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return '–';
-  return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
-};
-const fmtDate = (v) => (v ? String(v).slice(0, 10) : '–');
-const fmtPct = (v) => (v == null ? '–' : `${Number(v)}%`);
 
 const COLUMNS = [
   { key: 'Cedant / Treaty' }, { key: 'UW Year' }, { key: 'Pushed' }, { key: 'Source' },

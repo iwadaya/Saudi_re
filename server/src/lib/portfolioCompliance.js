@@ -71,12 +71,6 @@ export function checkPortfolioCompliance(_cedantId, rec, ctx) {
   }
 
   return warnings;
-
-  // TODO: when the compliance module ships, also check:
-  // - 30% domestic cession rule (IA / KSA)
-  // - Counterparty sanctions screening (UN, OFAC, EU, UK HMT)
-  // - IA Circular 85 foreign reinsurer registration
-  // - ZATCA 5% WHT — affects expected return calc
 }
 
 /**

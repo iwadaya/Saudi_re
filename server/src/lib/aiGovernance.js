@@ -30,7 +30,7 @@ import { logger } from './logger.js';
 
 // audit_log.entity_id is uuid-typed; AI calls are not a single entity, so they
 // audit against a fixed sentinel id with the real subject carried in the payload.
-export const AI_AUDIT_ENTITY_ID = '00000000-0000-0000-0000-000000000000';
+const AI_AUDIT_ENTITY_ID = '00000000-0000-0000-0000-000000000000';
 
 /** Error thrown when the AI gate blocks a call. Carries an HTTP 403. */
 export class AiDisabledError extends Error {
@@ -92,7 +92,7 @@ export function assertAiEnabled(ctx = {}) {
 }
 
 /** Build the gate context from a request (per-request/customer opt-out hook). */
-export function aiContextFromReq(req) {
+function aiContextFromReq(req) {
   // Per-customer opt-out can be populated upstream (e.g. from a cedant/tenant
   // setting) onto req.aiCustomerOptedOut; defaults to the global flag only.
   return { customerOptedOut: req?.aiCustomerOptedOut === true };
@@ -143,7 +143,7 @@ export function validateAiProviderConfig({ log = logger } = {}) {
 // NOTE: this redacts TEXT only. Binary document attachments (PDF base64) bypass
 // it — protecting those needs extract-then-redact or an enterprise no-retention
 // route, and is tracked as a follow-up.
-export const DEFAULT_REDACTORS = Object.freeze([
+const DEFAULT_REDACTORS = Object.freeze([
   { name: 'email', pattern: /[\w.+-]+@[\w-]+\.[\w.-]+/g, replacement: '[REDACTED_EMAIL]' },
   { name: 'iban', pattern: /\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/g, replacement: '[REDACTED_IBAN]' },
   { name: 'ssn', pattern: /\b\d{3}-\d{2}-\d{4}\b/g, replacement: '[REDACTED_SSN]' },

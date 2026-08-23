@@ -52,16 +52,6 @@
 
 .fac-tower__derived--muted { color: rgba(var(--text-rgb), 0.45); }
 
-.fac-tower__free {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
-  background: rgba(var(--accent-amber-rgb, 217 164 60), 0.16);
-  color: rgb(var(--accent-amber-rgb, 217 164 60));
-}
-
 .fac-tower__actions {
   display: flex;
   gap: 8px;
