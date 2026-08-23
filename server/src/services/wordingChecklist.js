@@ -190,8 +190,7 @@ async function readDocumentBuffer(doc) {
   const storagePath = doc?.storage_path || '';
   if (!storagePath) return null;
   if (storagePath.startsWith('http://') || storagePath.startsWith('https://')) {
-    const { default: nodeFetch } = await import('node-fetch');
-    const response = await nodeFetch(storagePath);
+    const response = await fetch(storagePath);
     if (!response.ok) throw new Error(`Could not fetch document (${response.status})`);
     return Buffer.from(await response.arrayBuffer());
   }
@@ -238,7 +237,6 @@ function extractJson(text) {
 async function callOpenAiChecklist(items, doc, documentText) {
   assertAiEnabled(); // fail-closed AI gate before any provider request
   if (!env.openaiApiKey) return null;
-  const { default: nodeFetch } = await import('node-fetch');
   const checklistJson = JSON.stringify(items.map(item => ({
     item_key: item.item_key,
     label: item.label,
@@ -258,7 +256,7 @@ async function callOpenAiChecklist(items, doc, documentText) {
     '{"summary":"short summary","items":[{"item_key":"same key","status":"found|missing|partial|unknown","evidence":"short evidence or reason"}]}',
     'Every checklist item_key must appear exactly once. Mark missing when the slip does not contain the wording.',
   ].join('\n');
-  const response = await nodeFetch(OPENAI_API_URL, {
+  const response = await fetch(OPENAI_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

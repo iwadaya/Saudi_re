@@ -882,11 +882,10 @@ router.get("/documents/:docId/text", asyncHandler(async (req, res) => {
 
   try {
     if (isRemoteStoragePath(sp)) {
-      const { default: nodeFetch } = await import('node-fetch');
       // Fetch via a freshly-minted signed URL rather than the stored one — the
       // asset is private, so the permanent URL is not directly readable.
       const fetchUrl = (await getSignedReadUrl(sp)) || sp;
-      const r = await nodeFetch(fetchUrl);
+      const r = await fetch(fetchUrl);
       if (!r.ok) return res.json({ text: '', error: 'Could not fetch from cloud' });
       buffer = Buffer.from(await r.arrayBuffer());
     } else {
