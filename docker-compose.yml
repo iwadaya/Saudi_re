@@ -9,6 +9,10 @@
 services:
   universe-app:
     build: .
+    # Recover from crashes and host reboots so a test environment stays up
+    # unattended. `docker compose up -d` returns 0 even when the app later
+    # exits, so without this a failed boot leaves a silently-dead container.
+    restart: unless-stopped
     ports:
       - '4000:4000'
     environment:
@@ -20,7 +24,14 @@ services:
       ALLOW_DEMO_AUTH: 'true'
       PORT: 4000
       DATABASE_URL: postgresql://postgres:postgres@db:5432/reinsurance_tool
+      # Reaching the app by the VM's IP/hostname rather than localhost? Override
+      # this to that origin (comma-separated for several), e.g.
+      #   CORS_ORIGIN=http://10.0.0.5:4000 docker compose up
+      # otherwise browser mutations (POST/PUT/DELETE) fail CORS preflight.
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:4000}
+      # Persist uploaded slips/documents on the named volume below, not the
+      # container's ephemeral layer, so they survive `up -d --build`.
+      UPLOAD_DIR: /app/uploads
       RUN_MIGRATIONS_ON_BOOT: 'true'
       # ── AI features (slip upload/check, market intelligence) ──
       # Fail-closed master gate (server/src/lib/aiGovernance.js). Local dev
@@ -34,25 +45,34 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - uploads_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
     # Mirrors the image HEALTHCHECK (Dockerfile) — Compose marks the app healthy
     # once /api/health responds, so `docker compose ps` and dependents see it.
+    # start_period covers a cold-start boot: all migrations apply and reference
+    # data seeds BEFORE app.listen(), which on a fresh DB can exceed 20s.
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||4000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
-      start_period: 20s
+      start_period: 120s
       retries: 3
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: reinsurance_tool
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+    # Bind to loopback only: the DB is reachable from the app container over the
+    # compose network regardless, and this keeps the postgres/postgres dev
+    # credentials off every interface of the host running the test environment.
+    # Drop the mapping entirely if you never need a host-side psql.
     ports:
-      - '5432:5432'
+      - '127.0.0.1:5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -60,5 +80,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+# Load sample treaties/quotes for manual testing once the stack is healthy:
+#   docker compose exec universe-app node server/scripts/seedTestTreaties.js
+# (the image has no npm, so call node directly — see docs/seed-test-treaties.md)
 volumes:
   postgres_data:
+  uploads_data:

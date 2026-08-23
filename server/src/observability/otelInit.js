@@ -43,7 +43,16 @@ export async function initOtel() {
   // collector at localhost.
   const endpoint    = otlpTraceEndpoint(process.env.OTEL_EXPORTER_OTLP_ENDPOINT);
   const samplerArg  = Number(process.env.OTEL_TRACES_SAMPLER_ARG);
-  const promPort    = Number(process.env.PROM_EXPORTER_PORT) || 9464;
+  // One Prometheus scrape server per process. Under PM2 cluster mode every
+  // worker runs this file, so a fixed port makes workers 1..N-1 die with
+  // EADDRINUSE — surfaced as an uncaughtException that trips graceful shutdown,
+  // restart-looping until PM2 gives up. Offset the port by the worker index
+  // (NODE_APP_INSTANCE) so each worker binds its own /metrics; scrape 9464,
+  // 9465, … A single-process deploy (Render `runtime: node`, Docker) has
+  // instance 0 and keeps the base port.
+  const promBasePort = Number(process.env.PROM_EXPORTER_PORT) || 9464;
+  const workerIndex  = Number(process.env.NODE_APP_INSTANCE) || 0;
+  const promPort     = promBasePort + workerIndex;
   // Private by default: bind the scrape server to loopback so /metrics is
   // not reachable off-box. Override with PROM_EXPORTER_HOST for a trusted
   // private-network scraper.

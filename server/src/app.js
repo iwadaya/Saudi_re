@@ -302,8 +302,15 @@ export function createApp() {
     for (const w of warnings) logger.warn('[identity] config warning', { message: w });
   }
 
-  // Trust Render's proxy so rate-limiter reads the real client IP
-  app.set('trust proxy', 1);
+  // Trust N proxy hops so the rate-limiter and logs read the real client IP
+  // from X-Forwarded-For. Default 1 (Render/most LBs put exactly one hop in
+  // front). Set TRUST_PROXY_HOPS=0 for a DIRECT-to-port deploy — otherwise any
+  // client can send its own X-Forwarded-For and mint a fresh rate-limit bucket
+  // (login brute-force included). Raise it if you chain multiple proxies.
+  const trustProxyHops = process.env.TRUST_PROXY_HOPS === undefined
+    ? 1
+    : Number(process.env.TRUST_PROXY_HOPS);
+  app.set('trust proxy', Number.isFinite(trustProxyHops) ? trustProxyHops : 1);
   // Weak ETag is a fast non-cryptographic hash of the body; strong ETag
   // is a full md5. Hot JSON endpoints already set their own ETag in the
   // cache middleware, so the only consumer of Express's default is rare

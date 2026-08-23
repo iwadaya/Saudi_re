@@ -1,7 +1,7 @@
 // Secret-config validation: production refuses to boot without a strong
 // AUTH_JWT_SECRET; dev/test mints an ephemeral one.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { checkSecretsConfig, checkDemoAuthConfig, checkMfaEnforcementConfig, validateEnv, INSECURE_SECRET_PLACEHOLDER } from './env.js';
+import { checkSecretsConfig, checkDemoAuthConfig, checkNameAuthConfig, checkLoadTestConfig, checkMfaEnforcementConfig, validateEnv, INSECURE_SECRET_PLACEHOLDER } from './env.js';
 
 const STRONG = 'x'.repeat(40);
 
@@ -56,6 +56,39 @@ describe('checkDemoAuthConfig (A6 — demo-auth fenced from production)', () => 
   });
   it('development with ALLOW_DEMO_AUTH=true is fine (dev/test convenience)', () => {
     expect(checkDemoAuthConfig({ nodeEnv: 'development', allowDemoAuth: 'true' })).toEqual([]);
+  });
+});
+
+describe('checkNameAuthConfig (passwordless name-login fenced from production)', () => {
+  it('production + ALLOW_NAME_AUTH=true is an error', () => {
+    expect(checkNameAuthConfig({ nodeEnv: 'production', allowNameAuth: 'true' }))
+      .toEqual([expect.stringMatching(/ALLOW_NAME_AUTH must not be enabled in production/)]);
+  });
+  it('production accepts other truthy forms (1/yes/on) as enabled', () => {
+    for (const v of ['1', 'yes', 'on']) {
+      expect(checkNameAuthConfig({ nodeEnv: 'production', allowNameAuth: v })).toHaveLength(1);
+    }
+  });
+  it('production without ALLOW_NAME_AUTH (unset / false) is OK', () => {
+    expect(checkNameAuthConfig({ nodeEnv: 'production', allowNameAuth: undefined })).toEqual([]);
+    expect(checkNameAuthConfig({ nodeEnv: 'production', allowNameAuth: 'false' })).toEqual([]);
+  });
+  it('development with ALLOW_NAME_AUTH=true is fine (pilot convenience)', () => {
+    expect(checkNameAuthConfig({ nodeEnv: 'development', allowNameAuth: 'true' })).toEqual([]);
+  });
+});
+
+describe('checkLoadTestConfig (rate-limit bypass fenced from production)', () => {
+  it('production + LOAD_TEST=true is an error', () => {
+    expect(checkLoadTestConfig({ nodeEnv: 'production', loadTest: 'true' }))
+      .toEqual([expect.stringMatching(/LOAD_TEST must not be enabled in production/)]);
+  });
+  it('production without LOAD_TEST (unset / false) is OK', () => {
+    expect(checkLoadTestConfig({ nodeEnv: 'production', loadTest: undefined })).toEqual([]);
+    expect(checkLoadTestConfig({ nodeEnv: 'production', loadTest: 'false' })).toEqual([]);
+  });
+  it('development with LOAD_TEST=true is fine (benchmarking convenience)', () => {
+    expect(checkLoadTestConfig({ nodeEnv: 'development', loadTest: 'true' })).toEqual([]);
   });
 });
 
@@ -133,6 +166,19 @@ describe('validateEnv (fail-fast)', () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('__exit__'); });
     expect(() => validateEnv()).not.toThrow();
     expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('exits(1) in production when ALLOW_NAME_AUTH is enabled, even with a strong secret', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.AUTH_JWT_SECRET = STRONG;
+    delete process.env.ALLOW_DEMO_AUTH; // isolate the name-auth fence
+    process.env.ALLOW_NAME_AUTH = 'true';
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('__exit__'); });
+    expect(() => validateEnv()).toThrow('__exit__');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errSpy.mock.calls.join('\n')).toMatch(/ALLOW_NAME_AUTH must not be enabled in production/);
+    delete process.env.ALLOW_NAME_AUTH;
   });
 });
 

@@ -1,6 +1,9 @@
 import { pool } from '../db/pool.js';
 import { logger } from '../lib/logger.js';
 
+const toBool = (v, fallback = false) =>
+  v === undefined || v === '' ? fallback : ['1', 'true', 'yes', 'on'].includes(String(v).toLowerCase());
+
 // ── Seed data ────────────────────────────────────────────────────────────────
 
 const countries = [
@@ -97,7 +100,29 @@ async function tryInsertMany(label, sql, rows) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
+// Distinct from the migration lock id — serialises reference-data seeding the
+// same way. Every cluster worker runs bootstrap() in parallel; without this
+// they all seed at once (redundant writes) and, worse, all run the destructive
+// treaty_type cleanup below concurrently. The lock makes one worker seed while
+// the rest block briefly, then find every row already present and no-op.
+const REFDATA_LOCK_ID = 8675310; // "universe3 reference data"
+
 export async function ensureReferenceData() {
+  const lockClient = await pool.connect();
+  try {
+    await lockClient.query('SELECT pg_advisory_lock($1)', [REFDATA_LOCK_ID]);
+    return await ensureReferenceDataLocked();
+  } finally {
+    try {
+      await lockClient.query('SELECT pg_advisory_unlock($1)', [REFDATA_LOCK_ID]);
+    } catch (e) {
+      logger.warn('reference-data unlock failed (lock will drop on disconnect)', { error: e.message });
+    }
+    lockClient.release();
+  }
+}
+
+async function ensureReferenceDataLocked() {
   await tryInsertMany(
     'countries',
     'INSERT INTO public.country (country_name, country_code) SELECT $1, $2 WHERE NOT EXISTS (SELECT 1 FROM public.country WHERE country_code = $2)',
@@ -123,21 +148,31 @@ export async function ensureReferenceData() {
     treatyTypes,
   );
 
-  // Remove any non-canonical rows — remap FKs then delete
-  try {
-    const canonicalNames = treatyTypes.map(([name]) => name);
-    const orphanRows = await pool.query(
-      `SELECT treaty_type_id, treaty_type FROM public.treaty_type WHERE treaty_type <> ALL($1::text[])`,
-      [canonicalNames]
-    );
-    for (const row of orphanRows.rows) {
-      // null out FKs rather than misassign
-      await pool.query('UPDATE public.contract SET treaty_type_id=NULL WHERE treaty_type_id=$1', [row.treaty_type_id]).catch(() => {});
-      await pool.query('UPDATE public.quote    SET treaty_type_id=NULL WHERE treaty_type_id=$1', [row.treaty_type_id]).catch(() => {});
-      await pool.query('DELETE FROM public.treaty_type WHERE treaty_type_id=$1', [row.treaty_type_id]).catch(() => {});
+  // Optional cleanup of non-canonical treaty types — remap FKs then delete.
+  // This is DESTRUCTIVE (nulls contract.treaty_type_id / quote.treaty_type_id
+  // for any row pointing at a non-canonical type), so it is OFF by default and
+  // never runs on a routine boot. Enable it deliberately for a one-time cleanup
+  // with REFDATA_PRUNE_TREATY_TYPES=true; a data-entry treaty type added on
+  // purpose is otherwise preserved.
+  if (toBool(process.env.REFDATA_PRUNE_TREATY_TYPES, false)) {
+    try {
+      const canonicalNames = treatyTypes.map(([name]) => name);
+      const orphanRows = await pool.query(
+        `SELECT treaty_type_id, treaty_type FROM public.treaty_type WHERE treaty_type <> ALL($1::text[])`,
+        [canonicalNames]
+      );
+      for (const row of orphanRows.rows) {
+        // null out FKs rather than misassign
+        await pool.query('UPDATE public.contract SET treaty_type_id=NULL WHERE treaty_type_id=$1', [row.treaty_type_id]).catch(() => {});
+        await pool.query('UPDATE public.quote    SET treaty_type_id=NULL WHERE treaty_type_id=$1', [row.treaty_type_id]).catch(() => {});
+        await pool.query('DELETE FROM public.treaty_type WHERE treaty_type_id=$1', [row.treaty_type_id]).catch(() => {});
+      }
+      if (orphanRows.rows.length) {
+        logger.info('ensureReferenceData: pruned non-canonical treaty types', { count: orphanRows.rows.length });
+      }
+    } catch (e) {
+      logger.warn('ensureReferenceData: treaty_type cleanup skipped', { error: e.message?.split('\n')[0] });
     }
-  } catch (e) {
-    logger.warn('ensureReferenceData: treaty_type cleanup skipped', { error: e.message?.split('\n')[0] });
   }
 
 

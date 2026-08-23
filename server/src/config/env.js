@@ -194,6 +194,40 @@ export function checkDemoAuthConfig({ nodeEnv: ne, allowDemoAuth } = {}) {
 }
 
 /**
+ * Pure name-auth fence (testable). ALLOW_NAME_AUTH turns on POST
+ * /api/auth/name-login, which signs a user in by display name ALONE — no
+ * password, no token (see routes/auth.js). Combined with the public
+ * GET /api/auth/users directory that is an unauthenticated path to any
+ * account, including approvals authority. It is a pilot convenience only and,
+ * like the demo backdoor, must never run on a production service. Returns an
+ * array of error strings; empty means OK. Only enforced in production.
+ */
+export function checkNameAuthConfig({ nodeEnv: ne, allowNameAuth } = {}) {
+  const errors = [];
+  if (ne !== 'production') return errors;
+  if (toBool(allowNameAuth, false)) {
+    errors.push('ALLOW_NAME_AUTH must not be enabled in production — it activates passwordless sign-in by display name (POST /api/auth/name-login), an unauthenticated path to any account. Run the name-login pilot on a non-production (staging/preview) service instead. Unset it (or set it to false) before deploying.');
+  }
+  return errors;
+}
+
+/**
+ * Pure load-test fence (testable). LOAD_TEST=true makes rateLimitBypassed()
+ * skip BOTH the IP and per-user API limiters (see app.js), including the login
+ * brute-force ceiling — a benchmarking convenience that removes a core
+ * production defense. Returns an array of error strings; empty means OK. Only
+ * enforced in production.
+ */
+export function checkLoadTestConfig({ nodeEnv: ne, loadTest } = {}) {
+  const errors = [];
+  if (ne !== 'production') return errors;
+  if (toBool(loadTest, false)) {
+    errors.push('LOAD_TEST must not be enabled in production — it disables the IP and per-user rate limiters (including login brute-force protection). Unset it before deploying.');
+  }
+  return errors;
+}
+
+/**
  * Fail-closed MFA enforcement (opt-in). When IDENTITY_ENFORCE_MFA is truthy the
  * operator is asserting "MFA must be enforced." We then refuse to boot on a
  * config that would NOT actually enforce it — SSO off (nothing carries the
@@ -231,6 +265,8 @@ export function validateEnv() {
       sessionSecret: process.env.SESSION_SECRET || '',
     }),
     ...checkDemoAuthConfig({ nodeEnv, allowDemoAuth: process.env.ALLOW_DEMO_AUTH }),
+    ...checkNameAuthConfig({ nodeEnv, allowNameAuth: process.env.ALLOW_NAME_AUTH }),
+    ...checkLoadTestConfig({ nodeEnv, loadTest: process.env.LOAD_TEST }),
     ...checkMfaEnforcementConfig({
       enforceMfa: process.env.IDENTITY_ENFORCE_MFA,
       ssoEnabled: process.env.IDENTITY_SSO_ENABLED,

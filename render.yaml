@@ -37,13 +37,15 @@ services:
       # ALLOW_DEMO_AUTH=true) for testing; production must not.
       - key: ALLOW_OPEN_REGISTRATION
         value: "false"
-      # ── Saudi Re pilot (TEMPORARY) ──
-      # Passwordless name login: testers sign in with first name + surname and
-      # get a real revocable cookie session (unknown names become Treaty
-      # Underwriter accounts). Fail-closed flag — flip to "false" (or delete)
-      # the moment the pilot ends and real credential/SSO login takes over.
+      # Passwordless name login (POST /api/auth/name-login) signs a user in by
+      # display name alone. It is a pilot convenience and is fenced OUT of
+      # production by config/env.checkNameAuthConfig — NODE_ENV=production +
+      # ALLOW_NAME_AUTH=true refuses to boot, because combined with the public
+      # user directory it is an unauthenticated path to any account. Run the
+      # pilot on a SEPARATE non-production (staging/preview) service that sets
+      # NODE_ENV=staging-or-development, never on this production service.
       - key: ALLOW_NAME_AUTH
-        value: "true"
+        value: "false"
       - key: DATABASE_URL
         sync: false
       # REQUIRED in production (validateEnv refuses to boot without it): the

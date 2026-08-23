@@ -39,6 +39,16 @@ export const pool = new Pool({
   connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS) || 5_000,
   statement_timeout: 30_000,   // kill runaway queries — prevents pool starvation
   query_timeout: 30_000,
+  // statement_timeout only bounds a RUNNING statement. A handler that BEGINs and
+  // then stalls between statements (an awaited external call, an unresolved
+  // promise, a path that returns without COMMIT) otherwise holds the connection
+  // AND its row locks until the client is released. These two cap that:
+  //  • idle_in_transaction_session_timeout — server aborts a transaction left
+  //    idle too long, freeing the connection and its locks.
+  //  • lock_timeout — a statement waiting on a lock fails fast instead of
+  //    blocking behind a long-held one (turns deadlock-ish waits into errors).
+  idle_in_transaction_session_timeout: Number(process.env.DB_IDLE_TX_TIMEOUT_MS) || 60_000,
+  lock_timeout: Number(process.env.DB_LOCK_TIMEOUT_MS) || 10_000,
   keepAlive: true,             // TCP keep-alive so idle conns don't get reaped by NAT
 });
 

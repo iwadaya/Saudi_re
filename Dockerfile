@@ -65,6 +65,15 @@ COPY --chown=node:node --from=client-builder /app/client/dist ./client/dist
 COPY --chown=node:node shared ./shared
 COPY --chown=node:node .env.example ./.env.example
 
+# Pre-create the default upload directory owned by the runtime user. createApp()
+# calls fs.mkdirSync(env.uploadDir) at boot, and env.uploadDir resolves to
+# /app/uploads. WORKDIR created /app as root:root, and COPY --chown only chowns
+# the entries it copies, not the pre-existing parent — so without this the
+# unprivileged `node` user gets EACCES creating /app/uploads and the container
+# exits 1 on first boot. (A real deployment should mount durable storage or set
+# UPLOAD_DIR / object storage; this keeps the default image bootable.)
+RUN install -d -o node -g node /app/uploads
+
 # Drop privileges: the process runs as `node`, not root.
 USER node
 
