@@ -36,6 +36,9 @@ import {
   facTreatyLinkCreateSchema,
 } from '../validation/facultative.js';
 import { applyRecommendation } from '../lib/facRecommendationApply.js';
+// Region bucketing + latest-fx sub-select shared with the treaty/fac
+// dashboards, so the home region bars and the dashboards always agree.
+import { fxSub, regionBucket as facRegionBucket } from './dashboard.js';
 import { assertCanEdit, assertCanReadEntity, getEditPermission } from '../services/permissions.js';
 import { getClassAccumulation } from '../services/facClassAccumulationService.js';
 import {
@@ -1264,6 +1267,101 @@ router.get('/fac/kpis', asyncHandler(async (_req, res) => {
     FROM public.fac_risk
   `);
   res.json(rows[0]);
+}));
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FAC HOME SUMMARY — the fac twin of /home/summary (home.js): status counts,
+// the four home-panel lists, and premium by region, in one payload.
+// ═══════════════════════════════════════════════════════════════════════════
+
+router.get('/fac/home-summary', asyncHandler(async (_req, res) => {
+  // One row per fac risk with everything the home panels render.
+  const riskCols = `
+    r.fac_risk_id AS id, r.fac_ref, r.insured_name, r.status, r.placement_type,
+    r.uw_year, r.inception_date, r.expiry_date, r.updated_at, r.renewal_or_new,
+    r.total_sum_insured, r.ri_premium,
+    ced.company_name AS cedant_name, cnt.country_name AS country,
+    cb.class_name AS cob, bk.broker_name AS broker, cur.currency_code`;
+  const riskJoins = `
+    FROM public.fac_risk r
+    LEFT JOIN public.companies ced ON ced.company_id = r.cedant_id
+    LEFT JOIN public.country cnt ON cnt.country_id = r.country_id
+    LEFT JOIN public.fac_class_of_business cb ON cb.fac_cob_id = r.fac_cob_id
+    LEFT JOIN public.brokers bk ON bk.broker_id = r.broker_id
+    LEFT JOIN public.currency cur ON cur.currency_id = r.currency_id`;
+
+  const [
+    { rows: statusCounts },
+    { rows: boundPrem },
+    { rows: drafts },
+    { rows: quotes },
+    { rows: renewals },
+    { rows: submitted },
+    regionResult,
+  ] = await Promise.all([
+    pool.query(`SELECT status, COUNT(*)::int AS count FROM public.fac_risk GROUP BY status`),
+    // Bound premium at our share, converted to USD so it sums across currencies
+    // (same fx convention as the fac dashboard).
+    pool.query(`
+      SELECT COALESCE(SUM(COALESCE(r.ri_premium,0) * COALESCE(fx.rate_to_usd,1.0)), 0) AS bound_premium
+      FROM public.fac_risk r
+      LEFT JOIN public.currency cur ON cur.currency_id = r.currency_id
+      LEFT JOIN ${fxSub} ON fx.currency_code = cur.currency_code
+      WHERE r.status = 'BOUND'`),
+    pool.query(`SELECT ${riskCols} ${riskJoins} WHERE r.status = 'DRAFT'
+                ORDER BY r.updated_at DESC NULLS LAST LIMIT 50`),
+    pool.query(`SELECT ${riskCols} ${riskJoins} WHERE r.status IN ('QUOTED','REFERRED')
+                ORDER BY r.updated_at DESC NULLS LAST LIMIT 50`),
+    // Renewal candidates: bound risks expiring inside the window that no other
+    // risk already references as its expiring predecessor (mirrors the treaty
+    // renewals panel's no-child-draft guard).
+    pool.query(`SELECT ${riskCols} ${riskJoins}
+                WHERE r.status = 'BOUND'
+                  AND r.expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + interval '60 days'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM public.fac_risk child
+                     WHERE child.fac_risk_id <> r.fac_risk_id
+                       AND child.expiring_reference IS NOT NULL
+                       AND (child.expiring_reference = r.bound_reference
+                         OR child.expiring_reference = r.fac_ref))
+                ORDER BY r.expiry_date ASC LIMIT 50`),
+    // History: everything past the pipeline. QUOTED/REFERRED live in the
+    // quotes panel (fac quotes are statuses, not a separate table), so they
+    // are excluded here rather than duplicated.
+    pool.query(`SELECT ${riskCols} ${riskJoins} WHERE r.status NOT IN ('DRAFT','QUOTED','REFERRED')
+                ORDER BY r.updated_at DESC NULLS LAST LIMIT 50`),
+    pool.query(`
+      SELECT ${facRegionBucket} AS region_bucket,
+             COALESCE(SUM(COALESCE(r.ri_premium,0) * COALESCE(fx.rate_to_usd,1.0)), 0) AS total_epi
+      FROM public.fac_risk r
+      LEFT JOIN public.country cnt ON cnt.country_id = r.country_id
+      LEFT JOIN public.currency cur ON cur.currency_id = r.currency_id
+      LEFT JOIN ${fxSub} ON fx.currency_code = cur.currency_code
+      WHERE r.status NOT IN ('DRAFT','DECLINED','NTU','CANCELLED')
+        AND r.uw_year = EXTRACT(YEAR FROM CURRENT_DATE)::int
+        AND cnt.region IS NOT NULL
+      GROUP BY 1 ORDER BY 1
+    `).catch(() => ({ rows: [] })),
+  ]);
+
+  const byStatus = Object.fromEntries(statusCounts.map((r) => [r.status, r.count]));
+  res.json({
+    stats: {
+      total:     statusCounts.reduce((s, r) => s + r.count, 0),
+      drafts:    byStatus.DRAFT     || 0,
+      quoted:    byStatus.QUOTED    || 0,
+      referred:  byStatus.REFERRED  || 0,
+      bound:     byStatus.BOUND     || 0,
+      ntu:       byStatus.NTU       || 0,
+      declined:  byStatus.DECLINED  || 0,
+      cancelled: byStatus.CANCELLED || 0,
+      renewed:   byStatus.RENEWED   || 0,
+      bound_premium: Number(boundPrem[0]?.bound_premium) || 0,
+    },
+    drafts, quotes, renewals, submitted,
+    region_premiums: regionResult.rows.filter((r) => r.region_bucket !== 'Other'),
+  });
 }));
 
 

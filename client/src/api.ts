@@ -971,6 +971,7 @@ export const api = {
     return request(`/api/fac/lookups/market-rates${qs ? '?' + qs : ''}`, opts);
   },
   facGetKpis(opts?: RequestOpts): Promise<unknown> { return request('/api/fac/kpis', opts); },
+  facHomeSummary(opts?: RequestOpts): Promise<unknown> { return request('/api/fac/home-summary', opts); },
   facListRisks(params?: QueryParams, opts?: RequestOpts): Promise<unknown> {
     const qs = toQuery(params);
     return request(`/api/fac/risks${qs ? '?' + qs : ''}`, opts);
