@@ -16,4 +16,20 @@ export function parseErrorBody(error) {
   return body;
 }
 
+/**
+ * Human-readable message for a thrown API error: the server's own
+ * error/message field when the body carries one, then the Error message,
+ * then the caller's fallback. The single implementation of the errMsg
+ * helper the ledger screens used to copy around.
+ *
+ * @param {unknown} error
+ * @param {string} fallback
+ * @returns {string}
+ */
+export function errorMessage(error, fallback) {
+  const b = parseErrorBody(error);
+  if (b && typeof b === 'object' && (b.error || b.message)) return String(b.error || b.message);
+  return error?.message ? String(error.message) : fallback;
+}
+
 export default parseErrorBody;

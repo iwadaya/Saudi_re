@@ -26,6 +26,7 @@
 // fac_motor_base_rate ships empty (migration 137).
 
 import { ilfEvaluator } from '../methods/ilfCurve.js';
+import { pickByTerritory } from '../rateSelect.js';
 import { selectIlfCurve } from './liabilityLimit.js';
 import { num, numOrNull } from '../num.js';
 import { metaFor } from './meta.js';
@@ -77,12 +78,7 @@ export function selectMotorRate(rates, { category, territory }) {
   const pool = (rates || []).filter(
     (r) => (r.vehicle_category || '').toUpperCase() === (category || '').toUpperCase(),
   );
-  const exact = pool.find(
-    (r) => (r.territory || '').toUpperCase() === (territory || '').toUpperCase(),
-  );
-  if (exact) return { rate: exact, fellBackToWorldwide: false };
-  const worldwide = pool.find((r) => (r.territory || '').toUpperCase() === 'WORLDWIDE');
-  return { rate: worldwide || null, fellBackToWorldwide: Boolean(worldwide) };
+  return pickByTerritory(pool, territory);
 }
 
 /**

@@ -14,6 +14,16 @@ export function toNum(v) {
 export function rateToFloat(v) { const n = parseFloat(String(v ?? '').replace(/%/g, '')); return Number.isFinite(n) && n > 0 ? n : 0; }
 export function appendPct(v) { const s = String(v ?? '').replace(/%/g, '').trim(); return s ? s + '%' : ''; }
 export const fmtC = v => formatWithCommas(v);
+/** Grouped whole-currency echo of a possibly-formatted value ('' when unparseable). */
+export function fmtMoney(v) {
+  const n = Number(String(v ?? '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(n) ? n.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '';
+}
+/** Lenient numeric parse of a formatted value (null when unparseable). */
+export function parseNum(v) {
+  const n = Number(String(v ?? '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
 export function fmtPctMaybe(n01) { if (!Number.isFinite(n01) || n01 <= 0) return ''; const v = n01 * 100; return `${v.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')}%`; }
 
 /* strOrEmpty: null/undefined/0 → '', non-zero values preserved as strings */

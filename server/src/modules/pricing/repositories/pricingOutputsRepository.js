@@ -4,6 +4,7 @@ import { logger } from '../../../lib/logger.js';
 import { assertParentEntityUnchanged, touchParentEntity } from '../../../lib/parentEntityPersistence.js';
 import { logAudit, SYSTEM_ACTOR } from '../../../services/audit.js';
 import { getPricingSchemaFlags, numOrNull, upsertPricingOutputsWithClient, withTransaction } from './repositoryUtils.js';
+import { replacePricingYearlyWithClient } from './pricingYearlyRepository.js';
 
 // "Who modelled" — the scalar outputs summarised in the PRICED audit payload.
 const PRICED_OUTPUT_KEYS = [
@@ -66,36 +67,10 @@ export async function getPricingOutputs(contractId) {
 }
 
 export async function upsertPricingOutputs(contractId, data) {
-  await pool.query(
-    `INSERT INTO public.contract_pricing_outputs
-      (contract_id,epi,attritional_ratio,large_loss_load,cat_loss_load,commission_ratio,brokerage_ratio,tax_ratio,technical_result,max_commission,target_margin)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-     ON CONFLICT (contract_id) DO UPDATE SET
-      epi=EXCLUDED.epi,
-      attritional_ratio=EXCLUDED.attritional_ratio,
-      large_loss_load=EXCLUDED.large_loss_load,
-      cat_loss_load=EXCLUDED.cat_loss_load,
-      commission_ratio=EXCLUDED.commission_ratio,
-      brokerage_ratio=EXCLUDED.brokerage_ratio,
-      tax_ratio=EXCLUDED.tax_ratio,
-      technical_result=EXCLUDED.technical_result,
-      max_commission=EXCLUDED.max_commission,
-      target_margin=EXCLUDED.target_margin,
-      updated_at=now()`,
-    [
-      contractId,
-      numOrNull(data.epi),
-      numOrNull(data.attritional_ratio),
-      numOrNull(data.large_loss_load),
-      numOrNull(data.cat_loss_load),
-      numOrNull(data.commission_ratio),
-      numOrNull(data.brokerage_ratio),
-      numOrNull(data.tax_ratio),
-      numOrNull(data.technical_result),
-      numOrNull(data.max_commission),
-      numOrNull(data.target_margin),
-    ]
-  );
+  // pg's Pool and PoolClient share the query(text, params) interface, so the
+  // client-parameterized upsert in repositoryUtils is the single source of
+  // the SQL — no second copy to drift.
+  await upsertPricingOutputsWithClient(pool, contractId, data);
 }
 
 export async function saveCompositePricing(payload) {
@@ -186,24 +161,7 @@ export async function saveCompositePricing(payload) {
     }
 
     if (Array.isArray(yearly)) {
-      await client.query('DELETE FROM public.contract_pricing_yearly WHERE contract_id=$1', [contractId]);
-      // One multi-row INSERT instead of a round-trip per year — see db/batchInsert.js.
-      const yearlyInsert = buildBatchInsert({
-        table: 'public.contract_pricing_yearly',
-        columns: ['contract_id', 'uw_year', 'ultimate_premium', 'ultimate_loss', 'loss_ratio', 'commission_amt', 'brokerage_amt', 'technical_result', 'record_type'],
-        rows: yearly.map((row) => [
-          row.uw_year,
-          numOrNull(row.ultimate_premium),
-          numOrNull(row.ultimate_loss),
-          numOrNull(row.loss_ratio),
-          numOrNull(row.commission_amt),
-          numOrNull(row.brokerage_amt),
-          numOrNull(row.technical_result),
-          row.record_type || 'PROJECTED',
-        ]),
-        leadingId: contractId,
-      });
-      if (yearlyInsert) await client.query(yearlyInsert.sql, yearlyInsert.params);
+      await replacePricingYearlyWithClient(client, contractId, yearly);
     }
 
     if (Array.isArray(components)) {

@@ -5,15 +5,11 @@
 
 import { z } from 'zod';
 import {
-  optionalUuid, money, pct100, uwYear, isoDate, boolish,
+  optionalUuid, money, pct100, uwYear, isoDate, boolish, intField,
 } from './common.js';
 
 /** Integer in 1..10 used for hazard_grade overrides. */
-const hazardGrade1To10 = z.preprocess((v) => {
-  if (v === null || v === undefined || v === '') return undefined;
-  const n = Number(v);
-  return Number.isFinite(n) ? Math.trunc(n) : undefined;
-}, z.number().int().min(1).max(10).optional());
+const hazardGrade1To10 = intField({ min: 1, max: 10, optional: true });
 
 /** Nullable text — '' / null / undefined all collapse to undefined. */
 const optionalText = z.preprocess(
@@ -21,12 +17,8 @@ const optionalText = z.preprocess(
   z.string().optional(),
 );
 
-/** Optional non-negative integer (e.g. risk_category, frequency_category). */
-const optionalInt = z.preprocess((v) => {
-  if (v === null || v === undefined || v === '') return undefined;
-  const n = Number(v);
-  return Number.isFinite(n) ? Math.trunc(n) : undefined;
-}, z.number().int().optional());
+/** Optional integer (e.g. risk_category, frequency_category). */
+const optionalInt = intField({ optional: true });
 
 /**
  * Optional decimal in 0..1 (stored that way per migration 080's
@@ -40,12 +32,8 @@ const optionalFraction01 = z.preprocess((v) => {
   return Number.isFinite(n) ? n : undefined;
 }, z.number().min(0).max(1.0001).optional());
 
-/** Optional non-negative float — e.g. fx_to_sar. */
-const optionalNumber = z.preprocess((v) => {
-  if (v === null || v === undefined || v === '') return undefined;
-  const n = Number(String(v).replace(/,/g, ''));
-  return Number.isFinite(n) ? n : undefined;
-}, z.number().nonnegative().optional());
+/** Optional non-negative float — e.g. fx_to_sar. Same contract as money. */
+const optionalNumber = money;
 
 /** Optional ISO-style 3-letter currency code, case-insensitive. */
 const optionalCcy = z.preprocess(
@@ -84,11 +72,7 @@ export const facRiskSaveSchema = z.object({
   // Policy period
   inception_date:        isoDate,
   expiry_date:           isoDate,
-  policy_period_months:  z.preprocess((v) => {
-    if (v === null || v === undefined || v === '') return undefined;
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.trunc(n) : undefined;
-  }, z.number().int().min(1).max(120).optional()),
+  policy_period_months:  intField({ min: 1, max: 120, optional: true }),
   uw_year:               uwYear,
 
   // Sums insured
@@ -111,11 +95,7 @@ export const facRiskSaveSchema = z.object({
   taxes_pct:            pct100,
   original_premium:     money,
   ri_premium:           money,
-  original_rate:        z.preprocess((v) => {
-    if (v === null || v === undefined || v === '') return undefined;
-    const n = Number(String(v).replace(/,/g, ''));
-    return Number.isFinite(n) ? n : undefined;
-  }, z.number().nonnegative().optional()),
+  original_rate:        money,
 
   // PML / MFL
   pml_amount:  money,
@@ -194,11 +174,7 @@ export const facLocationsSaveSchema = z.object({
  * optional so a draft saves mid-entry.
  */
 const facSectionSchema = z.object({
-  section_no:  z.preprocess((v) => {
-    if (v === null || v === undefined || v === '') return undefined;
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.trunc(n) : undefined;
-  }, z.number().int().min(1).max(20)),
+  section_no:  intField({ min: 1, max: 20 }),
   fac_cob_id:  z.string().uuid('fac_cob_id must be a UUID'),
 
   sum_insured:   money,
@@ -235,11 +211,7 @@ export const facSectionsSaveSchema = z.object({
  * the difference is the price, so neither is defaulted.
  */
 const facLayerSchema = z.object({
-  layer_no: z.preprocess((v) => {
-    if (v === null || v === undefined || v === '') return undefined;
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.trunc(n) : undefined;
-  }, z.number().int().min(1).max(50)),
+  layer_no: intField({ min: 1, max: 50 }),
   section_id:      optionalUuid,
   attachment:      money,
   limit_amount:    money,
@@ -266,11 +238,7 @@ export const facLayersSaveSchema = z.object({
  * rate comes out too high.
  */
 const facExperienceBasisRowSchema = z.object({
-  loss_year:       z.preprocess((v) => {
-    if (v === null || v === undefined || v === '') return undefined;
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.trunc(n) : undefined;
-  }, z.number().int().min(1900).max(2200)),
+  loss_year:       intField({ min: 1900, max: 2200 }),
   exposure_base:   money,
   exposure_unit:   optionalText,
   premium:         money,

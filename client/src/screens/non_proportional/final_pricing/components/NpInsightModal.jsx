@@ -108,6 +108,6 @@ export default function NpInsightModal({ pricing, open, contractId, isQuote, isT
                     </div>
                   </div>
                 </div>
-              
+
   );
 }

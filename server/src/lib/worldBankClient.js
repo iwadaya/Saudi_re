@@ -19,6 +19,7 @@
 // `series` for sparkline/trend rendering on the client.
 
 import { logger } from './logger.js';
+import { strictNumOrNull as numOrNull, currentYear } from '../helpers.js';
 
 const BASE_URL = 'https://api.worldbank.org/v2';
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -114,9 +115,3 @@ async function fetchOneIndicator({ countryCode, indicator }) {
   };
 }
 
-function currentYear() { return new Date().getUTCFullYear(); }
-function numOrNull(v) {
-  if (v == null) return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}

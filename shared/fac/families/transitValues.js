@@ -30,6 +30,7 @@
 // both ship empty (migration 136).
 
 import { num, numOrNull } from '../num.js';
+import { pickByTerritory } from '../rateSelect.js';
 import { metaFor } from './meta.js';
 
 export const FAMILY_CODE = 'TRANSIT_VALUES';
@@ -112,12 +113,7 @@ export function selectTransitRate(rates, segment) {
     (r) => (r.commodity || '').toUpperCase() === (segment.commodity || '').toUpperCase()
       && (r.conveyance || '').toUpperCase() === (segment.conveyance || '').toUpperCase(),
   );
-  const exact = pool.find(
-    (r) => (r.route_region || '').toUpperCase() === (segment.routeRegion || '').toUpperCase(),
-  );
-  if (exact) return { rate: exact, fellBackToWorldwide: false };
-  const worldwide = pool.find((r) => (r.route_region || '').toUpperCase() === 'WORLDWIDE');
-  return { rate: worldwide || null, fellBackToWorldwide: Boolean(worldwide) };
+  return pickByTerritory(pool, segment.routeRegion, 'route_region');
 }
 
 /**

@@ -22,6 +22,7 @@
 
 import { env } from '../config/env.js';
 import { logger } from './logger.js';
+import { strictNumOrNull as numOrNull } from '../helpers.js';
 
 const REQUEST_TIMEOUT_MS = 8_000;
 
@@ -173,8 +174,3 @@ export function buildSnapshotUrl({ baseUrl, countryCode, cobCode }) {
   return `${root}/markets/${c}/classes/${b}/snapshot`;
 }
 
-function numOrNull(v) {
-  if (v == null) return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}

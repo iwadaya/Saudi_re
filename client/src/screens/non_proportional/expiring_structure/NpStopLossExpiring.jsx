@@ -13,18 +13,11 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import PctInput from '../../../components/PctInput';
 import { useAppState } from '../../../context/AppContext';
+import { fmtMoney, parseNum } from '../structure/NpStructureHelpers';
 
 const SLICE_KEY = 'npStopLossExpiring';
 const DEFAULT_LAYER = { attachment_lr_pct: '', limit_lr_pct: '', epi: '', rate_pct: '', rol_pct: '' };
 
-function fmtMoney(v) {
-  const n = Number(String(v ?? '').replace(/[^\d.-]/g, ''));
-  return Number.isFinite(n) ? n.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '';
-}
-function parseNum(v) {
-  const n = Number(String(v ?? '').replace(/[^\d.-]/g, ''));
-  return Number.isFinite(n) ? n : null;
-}
 
 export default function NpStopLossExpiring({ currency = 'SAR' }) {
   const { state: appState, setSlice } = useAppState();

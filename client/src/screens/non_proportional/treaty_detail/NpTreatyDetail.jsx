@@ -13,16 +13,17 @@ import {
   addMonthsClamped,
   dateInputValue,
   yearFromDateInput,
+  numOrNull,
+  fmtComma,
+  stripDigits,
+  cleanNum,
 } from '../../../utils/format';
 import { handleStaleWrite } from '../../../utils/handleStaleWrite';
 
 const ROUTE_KEY = 'NP_TREATY_DETAIL';
 
 /* ─── helpers (exported helpers are covered by NpTreatyDetail.test.js) ─── */
-export const numOrNull = v => { const c = String(v ?? '').replace(/,/g,'').trim(); if (!c) return null; const n = Number(c); return Number.isFinite(n) ? n : null; };
-const fmtComma = v => { const d = String(v ?? '').replace(/[^\d]/g,''); return d ? Number(d).toLocaleString('en-US') : ''; };
-const stripDigits = v => String(v ?? '').replace(/[^\d]/g,'');
-const cleanNum = v => { if (v == null || v === '') return ''; const n = Number(v); if (!Number.isFinite(n)) return String(v); return n === Math.floor(n) ? String(Math.floor(n)) : String(n); };
+export { numOrNull };
 
 /**
  * Add months to a 'YYYY-MM-DD' string with day clamping. Date.setMonth

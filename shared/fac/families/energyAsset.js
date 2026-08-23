@@ -25,6 +25,7 @@
 // fac_energy_base_rate and fac_energy_sublimit_rate ship empty (migration 137).
 
 import { num, numOrNull } from '../num.js';
+import { pickByTerritory } from '../rateSelect.js';
 import { metaFor } from './meta.js';
 
 export const FAMILY_CODE = 'ENERGY_ASSET';
@@ -90,12 +91,7 @@ export function selectEnergyRate(rates, { assetType, hazardBand, territory }) {
     (r) => (r.asset_type || '').toUpperCase() === (assetType || '').toUpperCase()
       && (r.process_hazard_band || 'STANDARD').toUpperCase() === (hazardBand || 'STANDARD').toUpperCase(),
   );
-  const exact = pool.find(
-    (r) => (r.territory || '').toUpperCase() === (territory || '').toUpperCase(),
-  );
-  if (exact) return { rate: exact, fellBackToWorldwide: false };
-  const worldwide = pool.find((r) => (r.territory || '').toUpperCase() === 'WORLDWIDE');
-  return { rate: worldwide || null, fellBackToWorldwide: Boolean(worldwide) };
+  return pickByTerritory(pool, territory);
 }
 
 /**

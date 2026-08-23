@@ -25,13 +25,13 @@ const COB_COLORS = [
 
 /* ═══════════════════════════════════════════════════════════════
    MBBEFD EXPOSURE CURVES  (Swiss Re standard)
-   
+
    Single-parameter first-loss function G(d):
      G(d) = ln(1 + (e^c - 1) · d) / c     for c > 0
      G(d) = d                                for c = 0 (uniform)
-   
+
    G(0) = 0, G(1) = 1.  Higher c = more loss concentration.
-   
+
    Swiss Re Y curves:
      Y1: c = 0   (Uniform — loss ∝ destruction)
      Y2: c = 1.5 (Light concentration)

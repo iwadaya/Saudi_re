@@ -7,22 +7,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 import Topbar from '../../components/Topbar';
 import { Button, Field, Input, Modal, Select, Table } from '../../components/ui';
-import { ApprovalBadge, ClaimStatusBadge, KpiCard } from '../../components/ledger';
+import { ApprovalBadge, ClaimStatusBadge, KpiCard, fmtMoney, fmtDate } from '../../components/ledger';
+import { errorMessage as errMsg } from '../../utils/errorBody';
 import { logger } from '../../utils/logger';
 import { formatWithCommasDecimal, sanitizeNumber } from '../../utils/format';
 
-const errMsg = (e, fallback) => {
-  const b = e?.body;
-  if (b && typeof b === 'object' && (b.error || b.message)) return String(b.error || b.message);
-  return e?.message ? String(e.message) : fallback;
-};
-
-const fmtMoney = (v) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return '–';
-  return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
-};
-const fmtDate = (v) => (v ? String(v).slice(0, 10) : '–');
 const parseAmt = (v) => Number(String(v ?? '').replace(/,/g, ''));
 
 const EMPTY_FORM = {

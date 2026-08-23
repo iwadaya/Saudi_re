@@ -23,6 +23,7 @@
 // fac_plant_base_rate and fac_plant_factor ship empty (migration 137).
 
 import { num, numOrNull } from '../num.js';
+import { pickByTerritory } from '../rateSelect.js';
 import { metaFor } from './meta.js';
 
 export const FAMILY_CODE = 'PLANT_OPERATIONAL';
@@ -84,12 +85,7 @@ export function selectPlantRate(rates, { machineType, territory }) {
   const pool = (rates || []).filter(
     (r) => (r.machine_type || '').toUpperCase() === (machineType || '').toUpperCase(),
   );
-  const exact = pool.find(
-    (r) => (r.territory || '').toUpperCase() === (territory || '').toUpperCase(),
-  );
-  if (exact) return { rate: exact, fellBackToWorldwide: false };
-  const worldwide = pool.find((r) => (r.territory || '').toUpperCase() === 'WORLDWIDE');
-  return { rate: worldwide || null, fellBackToWorldwide: Boolean(worldwide) };
+  return pickByTerritory(pool, territory);
 }
 
 /**

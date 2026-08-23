@@ -111,6 +111,39 @@ export function formatWithCommasDecimal(v) {
  * @param {*} n
  * @returns {string}
  */
+/**
+ * Comma-tolerant strict parse: strips grouping commas, trims; '' -> null,
+ * non-finite -> null. The canonical form of the numOrNull helper that grew
+ * copies across the fac/treaty screens.
+ * @param {unknown} v
+ * @returns {number|null}
+ */
+export const numOrNull = (v) => {
+  const c = String(v ?? '').replace(/,/g, '').trim();
+  if (!c) return null;
+  const n = Number(c);
+  return Number.isFinite(n) ? n : null;
+};
+
+/** Digits-only comma grouping for text inputs: "1234567" -> "1,234,567". */
+export const fmtComma = (v) => { const d = String(v ?? '').replace(/[^\d]/g, ''); return d ? Number(d).toLocaleString('en-US') : ''; };
+
+/** Strip everything but digits (paste/keystroke sanitizer for integer fields). */
+export const stripDigits = (v) => String(v ?? '').replace(/[^\d]/g, '');
+
+/**
+ * Editable-cell echo of a stored numeric: integers lose their decimal point,
+ * non-numerics pass through unchanged, null/'' stay ''.
+ * @param {unknown} v
+ * @returns {string}
+ */
+export const cleanNum = (v) => {
+  if (v == null || v === '') return '';
+  const n = Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  return n === Math.floor(n) ? String(Math.floor(n)) : String(n);
+};
+
 export function fmtOrEm(n) {
   if (n === null || n === undefined || n === '') return '—';
   const v = typeof n === 'number' ? n : Number(n);

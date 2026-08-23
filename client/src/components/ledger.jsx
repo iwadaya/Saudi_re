@@ -69,3 +69,21 @@ export function ApprovalBadge({ status }) {
 export function FinanceStatusBadge({ status }) {
   return <Badge tone={FINANCE_STATUS_TONE[status] || 'warn'}>{label(status)}</Badge>;
 }
+
+/* ── Shared ledger display formatters ─────────────────────────────────
+   The claims/finance screens all render money, dates and percents the
+   same way (en-dash for missing); one copy here instead of one per
+   screen. */
+
+/** Whole-unit money or en-dash: 1234567.8 → "1,234,568". */
+export const fmtMoney = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '–';
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+};
+
+/** yyyy-mm-dd slice of a date/timestamp, or en-dash. */
+export const fmtDate = (v) => (v ? String(v).slice(0, 10) : '–');
+
+/** Percent with unit, or en-dash for null/undefined. */
+export const fmtPct = (v) => (v == null ? '–' : `${Number(v)}%`);

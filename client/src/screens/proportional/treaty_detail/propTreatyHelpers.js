@@ -4,7 +4,7 @@
 // extraction, date math). Extracted to keep the screen under the 800-line budget.
 // No React, no side effects; some are re-exported from PropTreatyDetail for the
 // unit tests that pin their behaviour.
-import { addMonthsClamped, yearFromDateInput } from '../../../utils/format';
+import { addMonthsClamped, yearFromDateInput, numOrNull } from '../../../utils/format';
 
 export const ALLOWED_PROP_TYPES = new Set(['Quota Share','Quota Share & Surplus','First Surplus','Second Surplus','Third Surplus','Fac Oblig']);
 export const NA_TYPE = 'Not applicable for this treaty type';
@@ -12,17 +12,16 @@ export const PROP_SLIP_CURRENT_KEYS = 'countryId cedantId treatyTypeId classIds 
 export const pickKeys = (source, keys) => keys.reduce((out, key) => { out[key] = source[key]; return out; }, {});
 
 /* ─── helpers (exported for unit tests) ─── */
-export const numOrNull = v => { const c = String(v ?? '').replace(/,/g,'').trim(); if (!c) return null; const n = Number(c); return Number.isFinite(n) ? n : null; };
+export { numOrNull, fmtComma } from '../../../utils/format';
 export const clampPct = v => { const n = numOrNull(v); return n == null ? 0 : Math.max(0, Math.min(100, n)); };
-export const fmtComma = v => { const d = String(v ?? '').replace(/[^\d]/g,''); return d ? Number(d).toLocaleString('en-US') : ''; };
 /** Like fmtComma but preserves a decimal portion. "1234.5" → "1,234.5". */
 export { formatWithCommasDecimal as fmtCommaDecimal } from '../../../utils/format';
-export const stripDigits = v => String(v ?? '').replace(/[^\d]/g,'');
+export { stripDigits } from '../../../utils/format';
 /** Decimal-preserving variant of stripDigits. Keeps digits and a decimal point. */
 export const stripNonNumeric = v => String(v ?? '').replace(/[^\d.]/g, '');
 export const normalizeCommMode = v => { const r = String(v ?? '').toLowerCase(); return r.includes('slid') ? 'sliding' : 'fixed'; };
 /** Strip trailing decimal zeros from DB numeric values: "30.000000" → "30", "2.50" → "2.5", "" → "" */
-export const cleanNum = v => { if (v == null || v === '') return ''; const n = Number(v); if (!Number.isFinite(n)) return String(v); return n === Math.floor(n) ? String(Math.floor(n)) : String(n); };
+export { cleanNum } from '../../../utils/format';
 
 /**
  * Extract loss-participation slides from the LP modal's row state.
