@@ -12,6 +12,15 @@ Source of record: `docs/actuarial-audit.md` (Executive Findings + Formula
 Inventory). Line references drift as code changes — re-confirm against the
 current file before acting.
 
+`docs/actuarial-formula-verification-2026-08.md` re-checked every aggregating
+and actuarial formula against published sources and against an independent
+numerical computation (`node test/verifyActuarialFormulas.mjs`). It confirms
+items 1–3 below with citations and adds four further findings that need the
+same sign-off — the Risk-XL exposure-rating base (F-B), the FREQ_SEVERITY
+frequency/severity population mismatch (F-C), the burning-cost EGNPI gap
+(F-D), and the lognormal goodness-of-fit scale (F-F). Nothing there changed
+pricing math either.
+
 ## Open HIGH findings (blocked on actuarial sign-off)
 
 1. **`loading >= 100` handling is inconsistent and undocumented.**

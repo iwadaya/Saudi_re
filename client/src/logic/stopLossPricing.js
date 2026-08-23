@@ -134,9 +134,10 @@ function samplePoisson(rand, lambda) {
       if (p <= L) return k - 1;
     }
   }
-  // Normal approximation with continuity correction for large λ.
-  // The bias on E[S] is exact (mean preserved); only the third+
-  // moments differ slightly from a true Poisson — fine at this scale.
+  // Normal approximation for large λ, rounded to the nearest integer.
+  // (No continuity correction is applied — rounding a N(λ, λ) draw is the
+  // whole of it.) The mean is preserved; only the third and higher moments
+  // differ from a true Poisson, which at λ ≥ 30 is immaterial here.
   const z = sampleStandardNormal(rand);
   return Math.max(0, Math.round(lambda + Math.sqrt(lambda) * z));
 }

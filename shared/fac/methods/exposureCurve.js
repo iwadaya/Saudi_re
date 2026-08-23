@@ -15,7 +15,9 @@
 //     E[loss to (D, D+L]] = MPL × [ G(min((D+L)/MPL, 1)) − G(min(D/MPL, 1)) ]
 //
 // and the credit for a deductible d — the share of the ground-up cost the
-// cedant keeps — is 1 − G(min(d/MPL, 1)).
+// cedant keeps below the deductible, which is what `deductibleCredit` returns
+// — is G(min(d/MPL, 1)). The insurer's remaining share above it is the
+// complement, 1 − G(min(d/MPL, 1)).
 //
 // That arithmetic is the definition of the curve and needs no calibration.
 // What the CURVE is does: its shape is a view about how severe losses are
