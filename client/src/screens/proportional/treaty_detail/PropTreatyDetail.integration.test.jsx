@@ -107,6 +107,19 @@ describe('PropTreatyDetail integration', () => {
     expect(payload.terms.detail.cession_pct).toBe(40);
   });
 
+  it('stamps the Darchville signature when the code is entered in Alt. Contract ID', async () => {
+    renderScreen();
+
+    expect(await screen.findByText('Alt. Contract ID')).toBeInTheDocument();
+
+    fireEvent.change(inputFor('Alt. Contract ID'), { target: { value: '+23051993' } });
+    await waitFor(() => expect(inputFor('Alt. Contract ID')).toHaveValue('Darchville Analytics'));
+
+    // Any other value passes through untouched.
+    fireEvent.change(inputFor('Alt. Contract ID'), { target: { value: 'EXT-REF-42' } });
+    await waitFor(() => expect(inputFor('Alt. Contract ID')).toHaveValue('EXT-REF-42'));
+  });
+
   it('shows the stale-write modal and overwrites only after confirmation', async () => {
     renderScreen();
 
