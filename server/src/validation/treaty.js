@@ -93,17 +93,19 @@ export const treatyCommissionsSchema = z.object({
 }).passthrough();
 
 /**
- * One loss-participation corridor row. Accepts both snake_case (server
+ * One loss-participation corridor row. Loss-ratio bounds use pctOpen —
+ * corridors above 100% LR (e.g. a 120–150% band) are routine —
+ * while the participation share stays a true 0..100 percentage. Accepts both snake_case (server
  * canonical) and camelCase aliases (legacy client). Refine asserts that
  * max_lr > min_lr when both are present so corridors don't invert.
  */
 const lpSlideSchema = z.object({
-  min_lr:  pct100,
-  max_lr:  pct100,
+  min_lr:  pctOpen,
+  max_lr:  pctOpen,
   share:   pct100,
   // Camel-case aliases the legacy client sometimes sends — kept for compat
-  minLr:   pct100,
-  maxLr:   pct100,
+  minLr:   pctOpen,
+  maxLr:   pctOpen,
 }).passthrough().refine(
   s => {
     const min = s.min_lr ?? s.minLr;
@@ -116,11 +118,11 @@ const lpSlideSchema = z.object({
 /** Loss participation slice. */
 export const treatyLossParticipationSchema = z.object({
   enabled:               boolish,
-  min_loss_ratio_pct:    pct100,
-  max_loss_ratio_pct:    pct100,
+  min_loss_ratio_pct:    pctOpen,
+  max_loss_ratio_pct:    pctOpen,
   reinsurer_share_pct:   pct100,
-  minLossRatioPct:       pct100,
-  maxLossRatioPct:       pct100,
+  minLossRatioPct:       pctOpen,
+  maxLossRatioPct:       pctOpen,
   reinsurerSharePct:     pct100,
   slides:                z.array(lpSlideSchema).max(5).optional(),
 }).passthrough();
