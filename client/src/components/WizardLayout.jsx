@@ -61,16 +61,22 @@ export default function WizardLayout({
     if (!handler) return true;
     setSaveState({ status: 'saving', at: null, error: null });
     lastHandlerRef.current = { handler, direction };
+    // A failed save blocks navigation — bring the SaveStateIndicator banner
+    // (rendered at the top of the wizard body) into view, otherwise a user
+    // deep in a long form sees nothing happen and assumes the tab is broken.
+    const revealError = () => { try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { /* non-browser env */ } };
     try {
       const result = await handler();
       if (result === false) {
         setSaveState({ status: 'error', at: Date.now(), error: 'Save returned false' });
+        revealError();
         return false;
       }
       setSaveState({ status: 'saved', at: Date.now(), error: null });
       return true;
     } catch (err) {
       setSaveState({ status: 'error', at: Date.now(), error: err?.message || 'Server error' });
+      revealError();
       return false;
     }
   }, [autosave]);

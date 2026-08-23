@@ -84,6 +84,30 @@ export function fmtPct(v) {
   return (v * 100).toFixed(2) + '%';
 }
 
+/**
+ * On-levelled value of one loss row — the single loss basis every pricing
+ * method shares (burn, Pareto fit, cat Pareto fallback).
+ *
+ * Priority:
+ *   1. inflated_incurred when the API supplies it (already on-levelled);
+ *   2. incurred × inflation_factor — `incurred` is stored as paid + O/S,
+ *      so it is NEVER added to `os` again (doing so double-counted every
+ *      open loss), and the selection screen's saved inflation factor is
+ *      applied instead of being dropped;
+ *   3. (paid + os) × factor when a row carries no incurred at all.
+ *
+ * @param {LossLike} l
+ * @returns {number}
+ */
+export function lossValue(l) {
+  if (!l) return 0;
+  const inflated = cn(l.inflated_incurred);
+  if (inflated > 0) return inflated;
+  const base = cn(l.incurred) || (cn(l.paid) + cn(l.os));
+  const factor = cn(l.inflation_factor);
+  return base * (factor > 0 ? factor : 1);
+}
+
 // ── MBBEFD (Swiss Re exposure curve) ──────────────────────────────
 // G(d,c) = log(1 + (e^c - 1)*d) / c   where d = damage ratio ∈ [0,1]
 /**
@@ -253,10 +277,11 @@ export function calcPureBurningCost(losses, deductible, limit, egnpi, obsYears, 
 
   const selected = losses.filter(l => l.is_selected !== false);
 
-  // Use inflated_incurred if available, else incurred + os
+  // On-levelled loss basis — see lossValue(): inflated_incurred when the API
+  // supplies it, else incurred × inflation_factor (incurred already = paid + os).
   const withValues = selected.map(l => ({
     year: l.uw_year,
-    loss: cn(l.inflated_incurred) || (cn(l.incurred) + cn(l.os)),
+    loss: lossValue(l),
   })).filter(l => l.loss > 0);
 
   if (!withValues.length) return { rol: 0, avgAnnualLayerLoss: 0 };
@@ -365,7 +390,7 @@ export function calcParetoROL(losses, deductible, limit, egnpi, savedParams) {
   } else {
     // Fit from raw losses
     const selected = (losses || []).filter(l => l.is_selected !== false);
-    const vals = selected.map(l => cn(l.inflated_incurred) || cn(l.incurred) + cn(l.os)).filter(v => v > 0);
+    const vals = selected.map(lossValue).filter(v => v > 0);
     if (vals.length < 3) return { rol: 0, alpha: 0, xm: 0, prAttach: 0, prExhaust: 0 };
 
     const sorted = [...vals].sort((a, b) => a - b);
@@ -416,24 +441,36 @@ export function autoCurveForBand(avgSI) {
 
 // ── Risk XL Exposure Rating (MBBEFD) ──────────────────────────────
 /**
- * Exposure rating for Risk XL using MBBEFD risk curves.
- * Implements Swiss Re brochure 9-step procedure (Steps 1–9).
+ * Exposure rating for Risk XL using MBBEFD risk curves — Swiss Re method.
  *
- * Step 4 (auto-curve): when profile.selected_curve === 'Auto', the
- *   Y-curve is selected per band based on mean SI vs Swiss Re size thresholds.
- *   Otherwise the single saved curve is applied to all bands (legacy behaviour).
+ * The destruction-ratio curve G(d,c) gives the share of a band's RISK
+ * PREMIUM that pays for damage below ratio d of the band's PML. The
+ * layer therefore costs, per band:
  *
- * Step 8 (loss ratio): totalExpLoss is multiplied by profile.gross_loss_ratio
- *   (expressed as a %) before computing ROL. If not provided, defaults to 100%
- *   (no adjustment) to preserve backward compatibility.
+ *   expLoss = premium × grossLossRatio × [G(min((D+L)/PML, 1)) − G(min(D/PML, 1))]
+ *
+ * with PML = avgSI × pml% for the band. The curve only DISTRIBUTES the
+ * burning cost; its level comes from premium × loss ratio. (The previous
+ * implementation summed nRisks × LEV over sum insured — i.e. every policy
+ * suffering a destruction-curve loss every year — which produced expected
+ * layer losses far above the portfolio premium and ROLs of thousands of
+ * percent.)
+ *
+ * Step 4 (auto-curve): when profile.selected_curve === 'Auto', the Y-curve
+ *   is selected per band from mean SI vs the Swiss Re size thresholds.
+ * Step 8 (loss ratio): profile.gross_loss_ratio (a %) converts gross
+ *   premium to risk premium; defaults to 100% when absent.
+ *
+ * Bands without a gross_premium cannot be exposure-rated on this basis and
+ * are skipped (counted in `skippedNoPremium` so callers can flag it).
  *
  * @param {RiskProfileInput[]} profiles - [{profile: {c_value, pml_percentage, selected_curve,
  *                                          custom_b, gross_loss_ratio},
- *                                bands: [{from_amt, to_amt, no_of_risks, total_sum_insured}]}]
+ *                                bands: [{from_amt, to_amt, no_of_risks, total_sum_insured, gross_premium}]}]
  * @param {number} deductible
  * @param {number} limit
  * @param {number} egnpi
- * @returns {{ rol: number, totalExpLoss: number, totalSI?: number }}
+ * @returns {{ rol: number, totalExpLoss: number, totalSI?: number, totalPremium?: number, skippedNoPremium?: number }}
  */
 export function calcRiskExposureRating(profiles, deductible, limit, egnpi) {
   if (!profiles?.length || limit <= 0 || egnpi <= 0) {
@@ -442,6 +479,8 @@ export function calcRiskExposureRating(profiles, deductible, limit, egnpi) {
 
   let totalExpLoss = 0;
   let totalSI = 0;
+  let totalPremium = 0;
+  let skippedNoPremium = 0;
 
   for (const { profile, bands } of profiles) {
     if (!bands?.length) { console.warn('[MBBEFD] profile has no bands:', profile); continue; }
@@ -449,19 +488,22 @@ export function calcRiskExposureRating(profiles, deductible, limit, egnpi) {
     const curveKey = profile.selected_curve || 'Y3';
     const useAuto  = curveKey === 'Auto';
 
-    // Step 8: gross loss ratio multiplier (Swiss Re brochure p.22)
-    // profile.gross_loss_ratio is stored as a percentage (e.g. 55 = 55%)
-    // Default to 100 so legacy profiles without this field are unaffected.
+    // Step 8: gross loss ratio (a %, e.g. 55 = 55%). Applied per band so a
+    // multi-profile run never rescales another profile's contribution.
     const grossLossRatio = cn(profile.gross_loss_ratio) > 0
       ? cn(profile.gross_loss_ratio) / 100
       : 1.0;
 
     for (const band of bands) {
-      const nRisks = cn(band.no_of_risks);
-      const si     = cn(band.total_sum_insured);
+      const nRisks  = cn(band.no_of_risks);
+      const si      = cn(band.total_sum_insured);
+      const premium = cn(band.gross_premium);
       if (nRisks <= 0 || si <= 0) continue;
       const avgSI = si / nRisks;
       if (!Number.isFinite(avgSI) || avgSI <= 0) continue;
+
+      totalSI += si;
+      if (premium <= 0) { skippedNoPremium += 1; continue; }
 
       // Step 4: per-band curve selection when Auto mode is on
       const bandCurveKey = useAuto ? autoCurveForBand(avgSI) : curveKey;
@@ -469,17 +511,19 @@ export function calcRiskExposureRating(profiles, deductible, limit, egnpi) {
         ? cn(profile.custom_b)
         : (SWISS_RE_C[bandCurveKey] ?? 3.0);
 
-      totalSI += si;
-      const lev = mbbefdLayerLEV(avgSI, pmlPct, c, deductible, limit);
-      totalExpLoss += nRisks * lev;
-    }
+      const pml = avgSI * (pmlPct / 100);
+      if (pml <= 0) continue;
+      const dBot = Math.min(deductible / pml, 1);
+      const dTop = Math.min((deductible + limit) / pml, 1);
+      const layerShare = mbbefdG(dTop, c) - mbbefdG(dBot, c);
 
-    // Step 8: apply gross loss ratio to convert gross XL premium to risk premium
-    totalExpLoss *= grossLossRatio;
+      totalPremium += premium;
+      totalExpLoss += premium * grossLossRatio * layerShare;
+    }
   }
 
-  const rol = (totalSI > 0 && limit > 0) ? totalExpLoss / limit : 0;
-  return { rol, totalExpLoss, totalSI };
+  const rol = (totalExpLoss > 0 && limit > 0) ? totalExpLoss / limit : 0;
+  return { rol, totalExpLoss, totalSI, totalPremium, skippedNoPremium };
 }
 
 // ── Cat XL Exposure Rating (CRESTA-based) ─────────────────────────
@@ -552,7 +596,7 @@ export function calcCatExposureRating(crestaRows, deductible, limit, egnpi, catS
   // ── Method 2: Pareto fit on cat losses ───────────────────────────
   if ((catLosses?.length || 0) >= 3 && catLosses) {
     const selected = catLosses.filter(l => l.is_selected !== false);
-    const vals = selected.map(l => cn(l.inflated_incurred) || cn(l.incurred) + cn(l.os)).filter(v => v > 0);
+    const vals = selected.map(lossValue).filter(v => v > 0);
     if (vals.length >= 3) {
       const sorted = [...vals].sort((a, b) => a - b);
       const xm = sorted[Math.floor(sorted.length * 0.25)] || sorted[0];
