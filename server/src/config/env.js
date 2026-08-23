@@ -26,10 +26,6 @@ const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
   DATABASE_URL: z.string().min(1).default('postgresql://postgres:postgres@localhost:5432/reinsurance_tool'),
-  DASHBOARD_DATABASE_URL: z.string().optional().or(z.literal('')),
-  // Shared store for distributed rate limiting across instances. When unset,
-  // the rate limiters use a per-instance in-memory store (see lib/rateLimitStore.js).
-  REDIS_URL: z.string().optional().or(z.literal('')),
   UPLOAD_DIR: z.string().optional(),
   CLIENT_DIST_DIR: z.string().optional(),
   CORS_ORIGIN: z.string().default('*'),
@@ -96,11 +92,8 @@ export const env = Object.freeze({
   isProduction: nodeEnv === 'production',
   port: values.PORT,
   databaseUrl: values.DATABASE_URL,
-  dashboardDatabaseUrl: values.DASHBOARD_DATABASE_URL || '',
-  redisUrl: values.REDIS_URL || '',
   uploadDir: values.UPLOAD_DIR ? path.resolve(rootDir, values.UPLOAD_DIR) : defaultUploadDir,
   clientDistDir: values.CLIENT_DIST_DIR ? path.resolve(rootDir, values.CLIENT_DIST_DIR) : defaultClientDistDir,
-  clientSourceDir: path.resolve(rootDir, 'client'),
   corsOrigin: values.CORS_ORIGIN,
   // Default to OFF: a bad migration on boot can take the whole API
   // down. Run `npm run migrate:up` as an explicit pre-deploy step

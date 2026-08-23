@@ -51,7 +51,6 @@ conventions for adding new ones.
 ## Environment variables
 - `PORT`: HTTP port for the server
 - `DATABASE_URL`: PostgreSQL connection string
-- `DASHBOARD_DATABASE_URL`: optional secondary database
 - `CORS_ORIGIN`: allowed origin list for browser requests
 - `UPLOAD_DIR`: upload storage path
 - `RUN_MIGRATIONS_ON_BOOT`: whether SQL migrations run at startup

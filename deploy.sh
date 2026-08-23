@@ -23,7 +23,9 @@ npm run migrate
 
 echo "Reloading app..."
 cd /opt/universe
-pm2 reload universe
+# pm2 is a root devDependency, not a global install — resolve it from
+# node_modules/.bin via the npm scripts.
+npm run cluster:reload
 
 echo "Done! App is live."
-pm2 status
+npm run cluster:status
