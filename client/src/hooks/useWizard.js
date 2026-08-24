@@ -2,6 +2,8 @@
 import { useNavigate } from 'react-router-dom';
 import { useCallback } from 'react';
 import { useAppState } from '../context/AppContext';
+import { useContractId } from './useContractId';
+import { useNpTreatyDetail } from './useNpTreatyDetail';
 import { getWizardNav, ROUTE_PATHS, STEP_LABELS } from '../config/wizard';
 import { isNpCatFlowDisabled, isNpRiskFlowDisabled, isNpStopLossTreaty } from '../utils/npTreatyType';
 
@@ -12,9 +14,16 @@ export function useWizard(routeKey) {
   const triangulationsEnabled = appState.propTreatyDetail?.triangulationsAvailable !== false;
   const quoteMode = appState.quoteMode;
   const wizardMode = routeKey?.startsWith('FAC_') ? 'FAC' : routeKey?.startsWith('NP_') ? 'NP' : 'PROP';
-  const npCatDisabled  = isNpCatFlowDisabled(appState);
-  const npRiskDisabled = isNpRiskFlowDisabled(appState);
-  const npStopLoss     = isNpStopLossTreaty(appState);
+  // NP treaty-type gating with server fallback: on a deep link the raw slice
+  // is empty and would render Risk-XL/large-loss tabs on a CAT XL treaty
+  // (audit F6). Enabled only on NP routes — the fallback fetch would 409 on a
+  // proportional contract.
+  const contractId = useContractId();
+  const npDetail = useNpTreatyDetail(contractId, !!quoteMode, { enabled: wizardMode === 'NP' });
+  const npShim = { npTreatyDetail: npDetail };
+  const npCatDisabled  = isNpCatFlowDisabled(npShim);
+  const npRiskDisabled = isNpRiskFlowDisabled(npShim);
+  const npStopLoss     = isNpStopLossTreaty(npShim);
   // Rating families on the active fac risk, published by FacRiskDetail. When
   // it is absent (deep link, or no class picked yet) every fac step shows.
   const facFamilies    = appState.facRiskDetail?.ratingFamilies;

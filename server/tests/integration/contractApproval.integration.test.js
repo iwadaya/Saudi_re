@@ -57,6 +57,15 @@ d('contract approval — peer slot claim', () => {
   }, 60_000);
 
   afterAll(async () => {
+    // The minted users must stay ACTIVE during the run (approver eligibility
+    // filters is_active=true), so cleanup lives here. Contracts created by the
+    // tests may still reference them (assigned_to/offer FKs), so DELETE can
+    // fail — fall back to deactivating, which removes them from every user and
+    // approver dropdown (audit F8).
+    for (const id of [uwId, cuId, strangerId].filter(Boolean)) {
+      try { await pool.query(`DELETE FROM public.uw_user WHERE user_id=$1`, [id]); }
+      catch { try { await pool.query(`UPDATE public.uw_user SET is_active=false WHERE user_id=$1`, [id]); } catch { /* best effort */ } }
+    }
     await app?.close();
     await closePools();
   });

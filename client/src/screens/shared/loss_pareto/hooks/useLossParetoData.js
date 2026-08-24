@@ -29,26 +29,33 @@ export function useLossParetoData({ contractId, lossType, appState, td, actions 
         const qm = appState.quoteMode ? { quote: true } : undefined;
         const isNpCat = lossType === 'cat';
 
+        const [treaty, lossData, snapshotData] = await Promise.all([
+          api.getContract(contractId, qm).catch(() => ({})),
+          (lossType === 'cat' ? api.getCatLosses : api.getLargeLosses)(contractId, qm),
+          api.getLossSelectionLatest(contractId, lossType, qm).catch(() => null),
+        ]);
+
         // Fetch structure layers: prefer appState (already loaded by NpStructure),
-        // fall back to server fetch so the cap is correct even on direct navigation
+        // fall back to a server fetch so the cap is correct even on direct
+        // navigation. Gate the fallback on the CONTRACT's actual category —
+        // on a proportional treaty GET /:id/non-prop is fenced with a 409
+        // that the browser logs on every navigation, and wizardMode is not a
+        // reliable signal on a deep link (it resets to PROP). Quote flows are
+        // always non-proportional in this build.
         let npCap = 0;
         const stateLayers = appState.npStructureLayers || [];
+        const category = String(treaty?.header?.treaty_category || treaty?.treaty_category || '').toUpperCase();
+        const isNpTreaty = appState.quoteMode || (category ? category.startsWith('NON') : appState.wizardMode === 'NP');
         if (stateLayers.length > 0) {
           npCap = sumLayerLimits(stateLayers, isNpCat);
-        } else {
-          // Fetch from server — getNonPropTreaty returns { layers: [{layer_limit, peril_scope}] }
+        } else if (isNpTreaty) {
+          // getNonPropTreaty returns { layers: [{layer_limit, peril_scope}] }.
           const npData = await api.getNonPropTreaty(contractId, qm).catch(() => null);
           const serverLayers = npData?.layers || [];
           if (serverLayers.length > 0) {
             npCap = sumLayerLimits(serverLayers, isNpCat);
           }
         }
-
-        const [treaty, lossData, snapshotData] = await Promise.all([
-          api.getContract(contractId, qm).catch(() => ({})),
-          (lossType === 'cat' ? api.getCatLosses : api.getLargeLosses)(contractId, qm),
-          api.getLossSelectionLatest(contractId, lossType, qm).catch(() => null),
-        ]);
         const parseLossList = (raw) => (Array.isArray(raw) ? raw : [])
           .filter(l => l.is_selected !== false)
           .map(l => { const inc = cn(l.incurred) || (cn(l.paid) + cn(l.os)); return { ...l, incurred: inc, inflated: inc * cn(l.inflation_factor || 1) }; })
@@ -121,7 +128,7 @@ export function useLossParetoData({ contractId, lossType, appState, td, actions 
       } catch (e) { logger.error('Pareto load', e); }
       actions.loadDone();
     })();
-  }, [appState.npStructureLayers, appState.quoteMode, contractId, lossType, td.eventLimit, td.qsLimit, td.totalCapacity, actions]);
+  }, [appState.npStructureLayers, appState.quoteMode, appState.wizardMode, contractId, lossType, td.eventLimit, td.qsLimit, td.totalCapacity, actions]);
 }
 
 export default useLossParetoData;

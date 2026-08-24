@@ -40,11 +40,11 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
     const suffix = `${Date.now()}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
     const code = suffix.replace(/[^a-z0-9]/gi, '').slice(-10).toUpperCase();
     const [country, currency, broker, cedant, treatyType] = await Promise.all([
-      pool.query(`INSERT INTO public.country (country_code, country_name, region) VALUES ($1,$2,'R') RETURNING country_id`, [`Z${code}`, `T Country ${suffix}`]),
-      pool.query(`INSERT INTO public.currency (currency_code, currency_name) VALUES ($1,$2) RETURNING currency_id`, [`X${code}`, `T Currency ${suffix}`]),
-      pool.query(`INSERT INTO public.brokers (broker_name) VALUES ($1) RETURNING broker_id`, [`T Broker ${suffix}`]),
-      pool.query(`INSERT INTO public.companies (company_name) VALUES ($1) RETURNING company_id`, [`T Cedant ${suffix}`]),
-      pool.query(`INSERT INTO public.treaty_type (treaty_type, category) VALUES ($1,'PROPORTIONAL') RETURNING treaty_type_id`, [`T TType ${suffix}`]),
+      pool.query(`INSERT INTO public.country (country_code, country_name, region, is_active) VALUES ($1,$2,'R',false) RETURNING country_id`, [`Z${code}`, `T Country ${suffix}`]),
+      pool.query(`INSERT INTO public.currency (currency_code, currency_name, is_active) VALUES ($1,$2,false) RETURNING currency_id`, [`X${code}`, `T Currency ${suffix}`]),
+      pool.query(`INSERT INTO public.brokers (broker_name, is_active) VALUES ($1,false) RETURNING broker_id`, [`T Broker ${suffix}`]),
+      pool.query(`INSERT INTO public.companies (company_name, is_active) VALUES ($1,false) RETURNING company_id`, [`T Cedant ${suffix}`]),
+      pool.query(`INSERT INTO public.treaty_type (treaty_type, category, is_active) VALUES ($1,'PROPORTIONAL',false) RETURNING treaty_type_id`, [`T TType ${suffix}`]),
     ]);
     return {
       cedant_id: cedant.rows[0].company_id,
@@ -302,11 +302,11 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
     const suffix = `${Date.now()}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
     const code = suffix.replace(/[^a-z0-9]/gi, '').slice(-10).toUpperCase();
     const [country, currency, broker, cedant, treatyType] = await Promise.all([
-      pool.query(`INSERT INTO public.country (country_code, country_name, region) VALUES ($1,$2,'R') RETURNING country_id`, [`Z${code}`, `Ren Country ${suffix}`]),
-      pool.query(`INSERT INTO public.currency (currency_code, currency_name) VALUES ($1,$2) RETURNING currency_id`, [`X${code}`, `Ren Currency ${suffix}`]),
-      pool.query(`INSERT INTO public.brokers (broker_name) VALUES ($1) RETURNING broker_id`, [`Ren Broker ${suffix}`]),
-      pool.query(`INSERT INTO public.companies (company_name) VALUES ($1) RETURNING company_id`, [`Ren Cedant ${suffix}`]),
-      pool.query(`INSERT INTO public.treaty_type (treaty_type, category) VALUES ($1,'PROPORTIONAL') RETURNING treaty_type_id`, [`Ren TType ${suffix}`]),
+      pool.query(`INSERT INTO public.country (country_code, country_name, region, is_active) VALUES ($1,$2,'R',false) RETURNING country_id`, [`Z${code}`, `Ren Country ${suffix}`]),
+      pool.query(`INSERT INTO public.currency (currency_code, currency_name, is_active) VALUES ($1,$2,false) RETURNING currency_id`, [`X${code}`, `Ren Currency ${suffix}`]),
+      pool.query(`INSERT INTO public.brokers (broker_name, is_active) VALUES ($1,false) RETURNING broker_id`, [`Ren Broker ${suffix}`]),
+      pool.query(`INSERT INTO public.companies (company_name, is_active) VALUES ($1,false) RETURNING company_id`, [`Ren Cedant ${suffix}`]),
+      pool.query(`INSERT INTO public.treaty_type (treaty_type, category, is_active) VALUES ($1,'PROPORTIONAL',false) RETURNING treaty_type_id`, [`Ren TType ${suffix}`]),
     ]);
     const { rows: seeded } = await pool.query(
       `INSERT INTO public.contract (uw_year, status, uw_status, cedant_id, broker_id, currency_id, country_id, treaty_type_id, inception_date, renewal_date)

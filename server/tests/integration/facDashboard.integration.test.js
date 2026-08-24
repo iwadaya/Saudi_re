@@ -34,13 +34,13 @@ describe.skipIf(shouldSkipDb)('integration: fac dashboard aggregation', () => {
     const code = suffix.replace(/[^a-z0-9]/gi, '').slice(-10).toUpperCase();
 
     const [eu, me, currency, cedant, cobProp, cobEng, cobMar] = await Promise.all([
-      one(`INSERT INTO public.country (country_code, country_name, region) VALUES ($1,$2,'Europe') RETURNING country_id`, [`C${code}`, `FD EU ${suffix}`]),
-      one(`INSERT INTO public.country (country_code, country_name, region) VALUES ($1,$2,'GCC') RETURNING country_id`, [`D${code}`, `FD ME ${suffix}`]),
-      one(`INSERT INTO public.currency (currency_code, currency_name) VALUES ($1,$2) RETURNING currency_id`, [`Y${code}`, `FD Ccy ${suffix}`]),
-      one(`INSERT INTO public.companies (company_name) VALUES ($1) RETURNING company_id`, [`FD Cedant ${suffix}`]),
-      one(`INSERT INTO public.fac_class_of_business (class_name, category, code) VALUES ($1,'PROPERTY',$2) RETURNING fac_cob_id`, [`FD Property ${suffix}`, `FP${code}`]),
-      one(`INSERT INTO public.fac_class_of_business (class_name, category, code) VALUES ($1,'ENGINEERING',$2) RETURNING fac_cob_id`, [`FD Engineering ${suffix}`, `FE${code}`]),
-      one(`INSERT INTO public.fac_class_of_business (class_name, category, code) VALUES ($1,'MARINE',$2) RETURNING fac_cob_id`, [`FD Marine ${suffix}`, `FM${code}`]),
+      one(`INSERT INTO public.country (country_code, country_name, region, is_active) VALUES ($1,$2,'Europe',false) RETURNING country_id`, [`C${code}`, `FD EU ${suffix}`]),
+      one(`INSERT INTO public.country (country_code, country_name, region, is_active) VALUES ($1,$2,'GCC',false) RETURNING country_id`, [`D${code}`, `FD ME ${suffix}`]),
+      one(`INSERT INTO public.currency (currency_code, currency_name, is_active) VALUES ($1,$2,false) RETURNING currency_id`, [`Y${code}`, `FD Ccy ${suffix}`]),
+      one(`INSERT INTO public.companies (company_name, is_active) VALUES ($1,false) RETURNING company_id`, [`FD Cedant ${suffix}`]),
+      one(`INSERT INTO public.fac_class_of_business (class_name, category, code, is_active) VALUES ($1,'PROPERTY',$2,false) RETURNING fac_cob_id`, [`FD Property ${suffix}`, `FP${code}`]),
+      one(`INSERT INTO public.fac_class_of_business (class_name, category, code, is_active) VALUES ($1,'ENGINEERING',$2,false) RETURNING fac_cob_id`, [`FD Engineering ${suffix}`, `FE${code}`]),
+      one(`INSERT INTO public.fac_class_of_business (class_name, category, code, is_active) VALUES ($1,'MARINE',$2,false) RETURNING fac_cob_id`, [`FD Marine ${suffix}`, `FM${code}`]),
     ]);
     Object.assign(refs, {
       euId: eu.country_id, meId: me.country_id, currencyId: currency.currency_id, cedantId: cedant.company_id,

@@ -23,7 +23,7 @@ d('fac class accumulation', () => {
     // A treaty class, and two fac classes that both map to it — the mapping is
     // the whole point: pricing one must surface the other.
     ids.cobId = (await pool.query(
-      `INSERT INTO public.class_of_business (class_of_business, code) VALUES ($1,$2) RETURNING class_of_business_id`,
+      `INSERT INTO public.class_of_business (class_of_business, code, is_active) VALUES ($1,$2,false) RETURNING class_of_business_id`,
       [`ACC Property ${s}`, `ACC${s}`.slice(0, 12)])).rows[0].class_of_business_id;
     // The taxonomy columns are NOT optional decoration: facSectionsAndPricing
     // asserts every fac class carries a segment, rating family and exposure
@@ -31,8 +31,8 @@ d('fac class accumulation', () => {
     // shared test database. Mirror a real PROPERTY class.
     const mkFacCob = async (name, code) => (await pool.query(
       `INSERT INTO public.fac_class_of_business
-         (class_name, category, code, segment_code, rating_family, exposure_basis)
-       VALUES ($1,'PROPERTY',$2,'NON_MARINE_PROPERTY','SCHEDULE_PROPERTY','SI_PER_MILLE')
+         (class_name, category, code, segment_code, rating_family, exposure_basis, is_active)
+       VALUES ($1,'PROPERTY',$2,'NON_MARINE_PROPERTY','SCHEDULE_PROPERTY','SI_PER_MILLE',false)
        RETURNING fac_cob_id`,
       [name, code])).rows[0].fac_cob_id;
     ids.facCobA = await mkFacCob(`ACC IAR ${s}`, `A${s}`.slice(0, 12));
@@ -47,18 +47,18 @@ d('fac class accumulation', () => {
     }
 
     ids.broker = (await pool.query(
-      `INSERT INTO public.brokers (broker_name) VALUES ($1) RETURNING broker_id`, [`ACC Broker ${s}`])).rows[0].broker_id;
+      `INSERT INTO public.brokers (broker_name, is_active) VALUES ($1,false) RETURNING broker_id`, [`ACC Broker ${s}`])).rows[0].broker_id;
     ids.cedant = (await pool.query(
-      `INSERT INTO public.companies (company_name) VALUES ($1) RETURNING company_id`, [`ACC Cedant ${s}`])).rows[0].company_id;
+      `INSERT INTO public.companies (company_name, is_active) VALUES ($1,false) RETURNING company_id`, [`ACC Cedant ${s}`])).rows[0].company_id;
     ids.country = (await pool.query(
-      `INSERT INTO public.country (country_code,country_name,region) VALUES ($1,$2,'GCC') RETURNING country_id`,
+      `INSERT INTO public.country (country_code,country_name,region, is_active) VALUES ($1,$2,'GCC',false) RETURNING country_id`,
       [`A${s}`.slice(0, 3).toUpperCase(), `ACC Country ${s}`])).rows[0].country_id;
     // USD so the fx leg is 1.0 and the arithmetic below is exact.
     ids.currency = (await pool.query(
       `SELECT currency_id FROM public.currency WHERE currency_code='USD' LIMIT 1`)).rows[0]?.currency_id
       ?? (await pool.query(`INSERT INTO public.currency (currency_code,currency_name) VALUES ('USD','US Dollar') RETURNING currency_id`)).rows[0].currency_id;
     ids.treatyType = (await pool.query(
-      `INSERT INTO public.treaty_type (treaty_type, category) VALUES ($1,'PROPORTIONAL') RETURNING treaty_type_id`,
+      `INSERT INTO public.treaty_type (treaty_type, category, is_active) VALUES ($1,'PROPORTIONAL',false) RETURNING treaty_type_id`,
       [`ACC QS ${s}`])).rows[0].treaty_type_id;
 
     const mkRisk = async ({ facCob, name, tsi, share, premium, status }) => (await pool.query(

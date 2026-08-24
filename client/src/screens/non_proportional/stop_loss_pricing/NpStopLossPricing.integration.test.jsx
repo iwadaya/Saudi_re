@@ -18,10 +18,14 @@ const { apiMock } = vi.hoisted(() => ({
     getNpStopLossPricing: vi.fn(),
     saveNpStopLossPricing: vi.fn(),
     getNpEgnpiYear: vi.fn(),
+    // useNpTreatyDetail's deep-link fallback (fires when a test overrides the
+    // slice without a contractId): resolve null so the slice stays in charge.
+    getContract: vi.fn().mockResolvedValue(null),
+    getNonPropTreaty: vi.fn().mockResolvedValue(null),
   },
 }));
 
-vi.mock('../../../api', () => ({ default: apiMock }));
+vi.mock('../../../api', () => ({ default: apiMock, api: apiMock }));
 
 function renderStopLoss(appState = {}) {
   return renderBindScreen(<NpStopLossPricing />, {
@@ -29,7 +33,9 @@ function renderStopLoss(appState = {}) {
     contractId: 'contract-sl-001',
     appState: {
       wizardMode: 'NP',
-      npTreatyDetail: { startYear: 2024, experienceStartYear: 2019, treatyTypeName: 'Stop Loss' },
+      // contractId matches the rendered contract so useNpTreatyDetail's
+      // deep-link fallback never fetches in these tests (slice wins).
+      npTreatyDetail: { contractId: 'contract-sl-001', startYear: 2024, experienceStartYear: 2019, treatyTypeName: 'Stop Loss' },
       ...appState,
     },
   });
@@ -84,7 +90,7 @@ describe('NpStopLossPricing — render + interaction', () => {
 
   it('renders one Layer Cover row per layer from Treaty Detail', () => {
     renderStopLoss({
-      npTreatyDetail: { startYear: 2024, experienceStartYear: 2019, treatyTypeName: 'Stop Loss', numberOfLayers: 3 },
+      npTreatyDetail: { contractId: 'contract-sl-001', startYear: 2024, experienceStartYear: 2019, treatyTypeName: 'Stop Loss', numberOfLayers: 3 },
       npStopLossInputs: {
         layers: [
           { attachmentLossRatio: '80', limitLossRatio: '20', epi: '10000000' },

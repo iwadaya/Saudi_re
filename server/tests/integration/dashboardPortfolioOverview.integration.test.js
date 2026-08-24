@@ -33,16 +33,16 @@ describe.skipIf(shouldSkipDb)('integration: dashboard portfolio-overview aggrega
     const code = suffix.replace(/[^a-z0-9]/gi, '').slice(-10).toUpperCase();
 
     const [eu, me, currency, broker, cedant, ttProp, ttNp, cobProp, cobEng, cobMar] = await Promise.all([
-      one(`INSERT INTO public.country (country_code, country_name, region) VALUES ($1,$2,'Europe') RETURNING country_id`, [`A${code}`, `DO EU ${suffix}`]),
-      one(`INSERT INTO public.country (country_code, country_name, region) VALUES ($1,$2,'GCC') RETURNING country_id`, [`B${code}`, `DO ME ${suffix}`]),
-      one(`INSERT INTO public.currency (currency_code, currency_name) VALUES ($1,$2) RETURNING currency_id`, [`X${code}`, `DO Ccy ${suffix}`]),
-      one(`INSERT INTO public.brokers (broker_name) VALUES ($1) RETURNING broker_id`, [`DO Broker ${suffix}`]),
-      one(`INSERT INTO public.companies (company_name) VALUES ($1) RETURNING company_id`, [`DO Cedant ${suffix}`]),
-      one(`INSERT INTO public.treaty_type (treaty_type, category) VALUES ($1,'PROPORTIONAL') RETURNING treaty_type_id`, [`DO QS ${suffix}`]),
-      one(`INSERT INTO public.treaty_type (treaty_type, category) VALUES ($1,'NON_PROPORTIONAL') RETURNING treaty_type_id`, [`DO XL ${suffix}`]),
-      one(`INSERT INTO public.class_of_business (class_of_business, code) VALUES ($1,$2) RETURNING class_of_business_id`, [`DO Property ${suffix}`, `P${code}`]),
-      one(`INSERT INTO public.class_of_business (class_of_business, code) VALUES ($1,$2) RETURNING class_of_business_id`, [`DO Engineering ${suffix}`, `E${code}`]),
-      one(`INSERT INTO public.class_of_business (class_of_business, code) VALUES ($1,$2) RETURNING class_of_business_id`, [`DO Marine ${suffix}`, `M${code}`]),
+      one(`INSERT INTO public.country (country_code, country_name, region, is_active) VALUES ($1,$2,'Europe',false) RETURNING country_id`, [`A${code}`, `DO EU ${suffix}`]),
+      one(`INSERT INTO public.country (country_code, country_name, region, is_active) VALUES ($1,$2,'GCC',false) RETURNING country_id`, [`B${code}`, `DO ME ${suffix}`]),
+      one(`INSERT INTO public.currency (currency_code, currency_name, is_active) VALUES ($1,$2,false) RETURNING currency_id`, [`X${code}`, `DO Ccy ${suffix}`]),
+      one(`INSERT INTO public.brokers (broker_name, is_active) VALUES ($1,false) RETURNING broker_id`, [`DO Broker ${suffix}`]),
+      one(`INSERT INTO public.companies (company_name, is_active) VALUES ($1,false) RETURNING company_id`, [`DO Cedant ${suffix}`]),
+      one(`INSERT INTO public.treaty_type (treaty_type, category, is_active) VALUES ($1,'PROPORTIONAL',false) RETURNING treaty_type_id`, [`DO QS ${suffix}`]),
+      one(`INSERT INTO public.treaty_type (treaty_type, category, is_active) VALUES ($1,'NON_PROPORTIONAL',false) RETURNING treaty_type_id`, [`DO XL ${suffix}`]),
+      one(`INSERT INTO public.class_of_business (class_of_business, code, is_active) VALUES ($1,$2,false) RETURNING class_of_business_id`, [`DO Property ${suffix}`, `P${code}`]),
+      one(`INSERT INTO public.class_of_business (class_of_business, code, is_active) VALUES ($1,$2,false) RETURNING class_of_business_id`, [`DO Engineering ${suffix}`, `E${code}`]),
+      one(`INSERT INTO public.class_of_business (class_of_business, code, is_active) VALUES ($1,$2,false) RETURNING class_of_business_id`, [`DO Marine ${suffix}`, `M${code}`]),
     ]);
     Object.assign(refs, {
       euId: eu.country_id, meId: me.country_id, currencyId: currency.currency_id,

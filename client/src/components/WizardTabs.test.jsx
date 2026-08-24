@@ -10,7 +10,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import WizardTabs from './WizardTabs.jsx';
 
 const { navigateMock } = vi.hoisted(() => ({ navigateMock: vi.fn() }));
-vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock }));
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => navigateMock,
+  // useContractId (via the NP treaty-type fallback) reads router state.
+  useLocation: () => ({ state: null }),
+}));
 vi.mock('../context/AppContext', () => ({ useAppState: () => ({ state: {} }) }));
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });

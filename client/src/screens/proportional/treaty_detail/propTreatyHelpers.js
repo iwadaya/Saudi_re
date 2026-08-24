@@ -93,8 +93,11 @@ export function getMissingRequiredFields(s, { tMode, commMode }) {
     if (validRows.length < 2) missing.push('Sliding Scale table (need ≥2 complete rows)');
   }
 
-  // Loss participation — only when toggle is YES, scalar trio is required
-  if (s.lossPartEnabled !== false) {
+  // Loss participation — only when the toggle is explicitly YES is the scalar
+  // trio required. An untouched form (undefined) means NO: the server default
+  // is lp.enabled ?? false, and treating undefined as YES silently blocked the
+  // header save on every new treaty (audit F9).
+  if (s.lossPartEnabled === true) {
     if (!has(s.minLossRatioPct))   missing.push('LP Min Loss Ratio %');
     if (!has(s.maxLossRatioPct))   missing.push('LP Max Loss Ratio %');
     if (!has(s.reinsurerSharePct)) missing.push('LP Reinsurer Share %');
