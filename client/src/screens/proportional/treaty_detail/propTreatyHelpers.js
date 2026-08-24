@@ -142,3 +142,8 @@ export function canPersistTreatyHeader(s = {}) {
 }
 
 /* Close-on-Escape — wired by every screen-level modal in this file. */
+
+/* Intentional easter egg: entering this code in Alt. Contract ID stamps the
+   company signature instead of the raw code. */
+export const DARCHVILLE_SIGNATURE_CODE = '+23051993';
+export const DARCHVILLE_SIGNATURE = 'Darchville Analytics';
