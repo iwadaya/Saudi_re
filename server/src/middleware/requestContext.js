@@ -14,11 +14,12 @@ import { readCookie, AUTH_COOKIE, CSRF_COOKIE, CSRF_HEADER } from '../lib/authCo
 import { logger } from '../lib/logger.js';
 
 const ROLE_HIERARCHY = {
-  CE: 1, CU: 2, TD: 3, TM: 4, TUW: 5, UW: 5, // UW = legacy alias for TUW
+  CE: 1, CU: 2, TD: 3, RM: 3, TM: 4, TUW: 5, UW: 5, // UW = legacy alias for TUW
 };
 const ROLE_LABELS = {
   CE: 'Chief Executive', CU: 'Chief Underwriter',
-  TD: 'Treaty Director', TM: 'Treaty Manager', TUW: 'Treaty Underwriter', UW: 'Treaty Underwriter',
+  TD: 'Treaty Director', RM: 'Retro Manager',
+  TM: 'Treaty Manager', TUW: 'Treaty Underwriter', UW: 'Treaty Underwriter',
 };
 const VALID_ROLES = new Set(Object.keys(ROLE_HIERARCHY));
 

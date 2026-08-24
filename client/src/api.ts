@@ -240,6 +240,15 @@ const PATHS = {
   claimDocumentDownload: (docId: string) => `/api/claims/documents/${enc(docId)}/download`,
   claimDocumentView: (docId: string) => `/api/claims/documents/${enc(docId)}/view`,
   claimDocumentDelete: (docId: string) => `/api/claims/documents/${enc(docId)}`,
+  // Retro module
+  retroPermissions: '/api/retro/permissions',
+  retroProgrammes: '/api/retro/programmes',
+  retroProgramme: (id: string) => `/api/retro/programmes/${enc(id)}`,
+  retroProgrammePacks: (id: string) => `/api/retro/programmes/${enc(id)}/packs`,
+  retroPackDownload: (docId: string) => `/api/retro/packs/${enc(docId)}/download`,
+  retroPackDelete: (docId: string) => `/api/retro/packs/${enc(docId)}`,
+  retroCoverage: '/api/retro/coverage',
+  retroSummary: '/api/retro/summary',
   // Finance module
   financeTreaties: '/api/finance/treaties',
   financeSummary: '/api/finance/summary',
@@ -539,6 +548,29 @@ export const api = {
   deleteClaimDocument(docId: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.claimDocumentDelete(docId), { ...opts, method: 'DELETE' }); },
   getClaimDocumentDownloadUrl(docId: string): string { return `${API_BASE}${PATHS.claimDocumentDownload(docId)}`; },
   getClaimDocumentViewUrl(docId: string): string { return `${API_BASE}${PATHS.claimDocumentView(docId)}`; },
+
+  // ── Retro module ───────────────────────────────────────────────────────────
+  getRetroPermissions(opts?: RequestOpts): Promise<unknown> { return request(PATHS.retroPermissions, opts); },
+  listRetroProgrammes(filters: { year?: string | number; status?: string } = {}, opts?: RequestOpts): Promise<unknown> {
+    const qs = new URLSearchParams();
+    if (filters.year) qs.set('year', String(filters.year));
+    if (filters.status) qs.set('status', String(filters.status));
+    const q = qs.toString();
+    return request(q ? `${PATHS.retroProgrammes}?${q}` : PATHS.retroProgrammes, opts);
+  },
+  getRetroProgramme(id: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.retroProgramme(id), opts); },
+  createRetroProgramme(body: unknown, opts?: RequestOpts): Promise<unknown> { return request(PATHS.retroProgrammes, { ...opts, method: 'POST', body }); },
+  updateRetroProgramme(id: string, body: unknown, opts?: RequestOpts): Promise<unknown> { return request(PATHS.retroProgramme(id), { ...opts, method: 'PUT', body }); },
+  deleteRetroProgramme(id: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.retroProgramme(id), { ...opts, method: 'DELETE' }); },
+  uploadRetroPack(id: string, formData: FormData, opts?: RequestOpts): Promise<unknown> { return request(PATHS.retroProgrammePacks(id), { ...opts, method: 'POST', body: formData }); },
+  deleteRetroPack(docId: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.retroPackDelete(docId), { ...opts, method: 'DELETE' }); },
+  getRetroPackDownloadUrl(docId: string): string { return `${API_BASE}${PATHS.retroPackDownload(docId)}`; },
+  getRetroCoverage(year?: string | number, opts?: RequestOpts): Promise<unknown> {
+    return request(year ? `${PATHS.retroCoverage}?year=${enc(String(year))}` : PATHS.retroCoverage, opts);
+  },
+  getRetroSummary(year?: string | number, opts?: RequestOpts): Promise<unknown> {
+    return request(year ? `${PATHS.retroSummary}?year=${enc(String(year))}` : PATHS.retroSummary, opts);
+  },
 
   // ── Finance module ─────────────────────────────────────────────────────────
   listFinanceTreaties(status?: string, opts?: RequestOpts): Promise<unknown> {
