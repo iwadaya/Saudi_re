@@ -8,6 +8,10 @@ import { addMonthsClamped, yearFromDateInput, numOrNull } from '../../../utils/f
 
 export const ALLOWED_PROP_TYPES = new Set(['Quota Share','Quota Share & Surplus','First Surplus','Second Surplus','Third Surplus','Fac Oblig']);
 export const NA_TYPE = 'Not applicable for this treaty type';
+/* Intentional easter egg: entering this code in Alt. Contract ID stamps the
+   company signature instead of the raw code. */
+export const DARCHVILLE_SIGNATURE_CODE = '+23051993';
+export const DARCHVILLE_SIGNATURE = 'Darchville Analytics';
 export const PROP_SLIP_CURRENT_KEYS = 'countryId cedantId treatyTypeId classIds brokerId currencyId inceptionDate renewalDate experienceStartYear qsLimit retentionPct cessionPct surplusMaxRetention numLines eventLimit aal quotaShareEpi surplusEpi brokeragePct taxesPct lossCapPct fixedCommissionQSPct'.split(' ');
 export const pickKeys = (source, keys) => keys.reduce((out, key) => { out[key] = source[key]; return out; }, {});
 
