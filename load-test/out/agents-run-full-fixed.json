@@ -1,0 +1,746 @@
+{
+  "startedAt": "2026-08-24T00:11:03.395Z",
+  "baseUrl": "http://127.0.0.1:4600",
+  "seed": 20260823,
+  "uwYear": 2027,
+  "agents": {
+    "requested": 40,
+    "authenticated": 40
+  },
+  "portfolio": {
+    "contractsPlanned": 100,
+    "contractsCreated": 100,
+    "baseContracts": 60,
+    "renewals": 40,
+    "quotes": 70,
+    "quoteListTotal": 80
+  },
+  "durations": {
+    "totalMs": 11742,
+    "concurrentWorkMs": 9328
+  },
+  "http": {
+    "calls": 3580,
+    "byStatus": {
+      "200": 2710,
+      "201": 190,
+      "400": 200,
+      "401": 60,
+      "403": 160,
+      "404": 50,
+      "409": 140,
+      "422": 70
+    }
+  },
+  "latency": [
+    {
+      "label": "GET /treaties/:id",
+      "count": 910,
+      "errors": 0,
+      "statuses": {
+        "200": 870,
+        "404": 40
+      },
+      "p50": 103,
+      "p95": 166,
+      "p99": 322,
+      "max": 620
+    },
+    {
+      "label": "PUT /treaties/:id",
+      "count": 328,
+      "errors": 0,
+      "statuses": {
+        "200": 228,
+        "400": 40,
+        "409": 60
+      },
+      "p50": 126,
+      "p95": 225,
+      "p99": 260,
+      "max": 272
+    },
+    {
+      "label": "POST /treaties/:id/triangles/:type",
+      "count": 230,
+      "errors": 0,
+      "statuses": {
+        "200": 150,
+        "400": 80
+      },
+      "p50": 115,
+      "p95": 153,
+      "p99": 179,
+      "max": 189
+    },
+    {
+      "label": "PUT /treaties/:id (workflow)",
+      "count": 180,
+      "errors": 0,
+      "statuses": {
+        "200": 120,
+        "422": 60
+      },
+      "p50": 133,
+      "p95": 183,
+      "p99": 197,
+      "max": 207
+    },
+    {
+      "label": "GET /quotes/:id",
+      "count": 180,
+      "errors": 0,
+      "statuses": {
+        "200": 170,
+        "404": 10
+      },
+      "p50": 63,
+      "p95": 100,
+      "p99": 110,
+      "max": 117
+    },
+    {
+      "label": "GET /treaties (list)",
+      "count": 121,
+      "errors": 0,
+      "statuses": {
+        "200": 121
+      },
+      "p50": 60,
+      "p95": 95,
+      "p99": 111,
+      "max": 143
+    },
+    {
+      "label": "PUT /treaties/:id/large-losses",
+      "count": 120,
+      "errors": 0,
+      "statuses": {
+        "200": 120
+      },
+      "p50": 135,
+      "p95": 180,
+      "p99": 192,
+      "max": 197
+    },
+    {
+      "label": "GET /treaties/:id/triangles/:type",
+      "count": 120,
+      "errors": 0,
+      "statuses": {
+        "200": 120
+      },
+      "p50": 74,
+      "p95": 111,
+      "p99": 123,
+      "max": 130
+    },
+    {
+      "label": "GET /treaties/:id/large-losses",
+      "count": 120,
+      "errors": 0,
+      "statuses": {
+        "200": 120
+      },
+      "p50": 83,
+      "p95": 113,
+      "p99": 125,
+      "max": 128
+    },
+    {
+      "label": "PUT /quotes/:id",
+      "count": 120,
+      "errors": 0,
+      "statuses": {
+        "200": 80,
+        "409": 40
+      },
+      "p50": 94,
+      "p95": 215,
+      "p99": 234,
+      "max": 250
+    },
+    {
+      "label": "POST /treaties",
+      "count": 100,
+      "errors": 0,
+      "statuses": {
+        "201": 60,
+        "400": 40
+      },
+      "p50": 58,
+      "p95": 434,
+      "p99": 502,
+      "max": 524
+    },
+    {
+      "label": "POST /quotes",
+      "count": 80,
+      "errors": 0,
+      "statuses": {
+        "201": 40,
+        "400": 40
+      },
+      "p50": 41,
+      "p95": 137,
+      "p99": 160,
+      "max": 168
+    },
+    {
+      "label": "PUT /treaties/:id (race)",
+      "count": 80,
+      "errors": 0,
+      "statuses": {
+        "200": 40,
+        "409": 40
+      },
+      "p50": 74,
+      "p95": 150,
+      "p99": 160,
+      "max": 161
+    },
+    {
+      "label": "PUT /treaties/:id/cat-losses",
+      "count": 60,
+      "errors": 0,
+      "statuses": {
+        "200": 60
+      },
+      "p50": 135,
+      "p95": 162,
+      "p99": 167,
+      "max": 170
+    },
+    {
+      "label": "GET /treaties/:id/cat-losses",
+      "count": 60,
+      "errors": 0,
+      "statuses": {
+        "200": 60
+      },
+      "p50": 79,
+      "p95": 108,
+      "p99": 117,
+      "max": 119
+    },
+    {
+      "label": "GET /treaties/:id/dev-factors/:type/staleness",
+      "count": 60,
+      "errors": 0,
+      "statuses": {
+        "200": 60
+      },
+      "p50": 51,
+      "p95": 69,
+      "p99": 78,
+      "max": 79
+    },
+    {
+      "label": "GET /treaties/:id (peer)",
+      "count": 60,
+      "errors": 0,
+      "statuses": {
+        "200": 60
+      },
+      "p50": 119,
+      "p95": 144,
+      "p99": 159,
+      "max": 163
+    },
+    {
+      "label": "PUT /treaties/:id (peer)",
+      "count": 60,
+      "errors": 0,
+      "statuses": {
+        "403": 60
+      },
+      "p50": 49,
+      "p95": 62,
+      "p99": 71,
+      "max": 73
+    },
+    {
+      "label": "DELETE /treaties/:id (peer)",
+      "count": 60,
+      "errors": 0,
+      "statuses": {
+        "403": 60
+      },
+      "p50": 45,
+      "p95": 61,
+      "p99": 65,
+      "max": 68
+    },
+    {
+      "label": "PUT /treaties/:id (anon)",
+      "count": 60,
+      "errors": 0,
+      "statuses": {
+        "401": 60
+      },
+      "p50": 22,
+      "p95": 33,
+      "p99": 34,
+      "max": 34
+    },
+    {
+      "label": "GET /quotes (list)",
+      "count": 41,
+      "errors": 0,
+      "statuses": {
+        "200": 41
+      },
+      "p50": 59,
+      "p95": 87,
+      "p99": 103,
+      "max": 106
+    },
+    {
+      "label": "POST /auth/name-login",
+      "count": 40,
+      "errors": 0,
+      "statuses": {
+        "200": 40
+      },
+      "p50": 308,
+      "p95": 417,
+      "p99": 546,
+      "max": 627
+    },
+    {
+      "label": "GET /contracts/:id/history",
+      "count": 40,
+      "errors": 0,
+      "statuses": {
+        "200": 40
+      },
+      "p50": 68,
+      "p95": 84,
+      "p99": 95,
+      "max": 95
+    },
+    {
+      "label": "POST /treaties/:id/renew",
+      "count": 40,
+      "errors": 0,
+      "statuses": {
+        "201": 40
+      },
+      "p50": 109,
+      "p95": 152,
+      "p99": 154,
+      "max": 154
+    },
+    {
+      "label": "GET /quotes/:id (peer)",
+      "count": 40,
+      "errors": 0,
+      "statuses": {
+        "200": 40
+      },
+      "p50": 68,
+      "p95": 104,
+      "p99": 129,
+      "max": 138
+    },
+    {
+      "label": "PUT /quotes/:id (peer)",
+      "count": 40,
+      "errors": 0,
+      "statuses": {
+        "403": 40
+      },
+      "p50": 34,
+      "p95": 53,
+      "p99": 61,
+      "max": 64
+    },
+    {
+      "label": "POST /quotes/:id/renew",
+      "count": 40,
+      "errors": 0,
+      "statuses": {
+        "201": 40
+      },
+      "p50": 96,
+      "p95": 126,
+      "p99": 150,
+      "max": 156
+    },
+    {
+      "label": "POST /treaties/:id/non-prop/save",
+      "count": 30,
+      "errors": 0,
+      "statuses": {
+        "200": 30
+      },
+      "p50": 218,
+      "p95": 260,
+      "p99": 264,
+      "max": 264
+    },
+    {
+      "label": "GET /treaties/:id/non-prop",
+      "count": 30,
+      "errors": 0,
+      "statuses": {
+        "200": 30
+      },
+      "p50": 97,
+      "p95": 126,
+      "p99": 134,
+      "max": 136
+    },
+    {
+      "label": "PUT /treaties/:id/dev-factors/:type",
+      "count": 30,
+      "errors": 0,
+      "statuses": {
+        "200": 30
+      },
+      "p50": 97,
+      "p95": 111,
+      "p99": 117,
+      "max": 118
+    },
+    {
+      "label": "GET /treaties/:id/dev-factors/:type",
+      "count": 30,
+      "errors": 0,
+      "statuses": {
+        "200": 30
+      },
+      "p50": 69,
+      "p95": 98,
+      "p99": 99,
+      "max": 99
+    },
+    {
+      "label": "POST /quotes/:id/offer/submit-for-approval",
+      "count": 20,
+      "errors": 0,
+      "statuses": {
+        "200": 10,
+        "422": 10
+      },
+      "p50": 77,
+      "p95": 192,
+      "p99": 192,
+      "max": 192
+    },
+    {
+      "label": "POST /quotes/:id/decline",
+      "count": 20,
+      "errors": 0,
+      "statuses": {
+        "200": 20
+      },
+      "p50": 79,
+      "p95": 140,
+      "p99": 141,
+      "max": 142
+    },
+    {
+      "label": "DELETE /quotes/:id",
+      "count": 10,
+      "errors": 0,
+      "statuses": {
+        "200": 10
+      },
+      "p50": 86,
+      "p95": 130,
+      "p99": 133,
+      "max": 134
+    },
+    {
+      "label": "POST /quotes/:id/amend",
+      "count": 10,
+      "errors": 0,
+      "statuses": {
+        "201": 10
+      },
+      "p50": 284,
+      "p95": 316,
+      "p99": 327,
+      "max": 330
+    },
+    {
+      "label": "GET /quotes/:id/versions",
+      "count": 10,
+      "errors": 0,
+      "statuses": {
+        "200": 10
+      },
+      "p50": 41,
+      "p95": 54,
+      "p99": 57,
+      "max": 57
+    }
+  ],
+  "pool": {
+    "samples": 4,
+    "maxWaiting": 0
+  },
+  "checks": {
+    "total": 10187,
+    "passed": 10187,
+    "failed": 0,
+    "byCategory": {
+      "auth": {
+        "total": 41,
+        "failed": 0
+      },
+      "treaty-create": {
+        "total": 600,
+        "failed": 0
+      },
+      "treaty-get": {
+        "total": 210,
+        "failed": 0
+      },
+      "permissions": {
+        "total": 440,
+        "failed": 0
+      },
+      "treaty-put": {
+        "total": 198,
+        "failed": 0
+      },
+      "put-get-roundtrip": {
+        "total": 4355,
+        "failed": 0
+      },
+      "partial-save-safety": {
+        "total": 570,
+        "failed": 0
+      },
+      "triangles": {
+        "total": 330,
+        "failed": 0
+      },
+      "losses": {
+        "total": 420,
+        "failed": 0
+      },
+      "dev-factors": {
+        "total": 60,
+        "failed": 0
+      },
+      "optimistic-lock": {
+        "total": 320,
+        "failed": 0
+      },
+      "staleness": {
+        "total": 60,
+        "failed": 0
+      },
+      "workflow": {
+        "total": 440,
+        "failed": 0
+      },
+      "renewal": {
+        "total": 760,
+        "failed": 0
+      },
+      "quote-create": {
+        "total": 280,
+        "failed": 0
+      },
+      "quote-get": {
+        "total": 80,
+        "failed": 0
+      },
+      "quote-put": {
+        "total": 40,
+        "failed": 0
+      },
+      "quote-renewal": {
+        "total": 280,
+        "failed": 0
+      },
+      "quote-lifecycle": {
+        "total": 140,
+        "failed": 0
+      },
+      "lists": {
+        "total": 280,
+        "failed": 0
+      },
+      "validation": {
+        "total": 240,
+        "failed": 0
+      },
+      "lock-race": {
+        "total": 40,
+        "failed": 0
+      },
+      "portfolio": {
+        "total": 3,
+        "failed": 0
+      }
+    }
+  },
+  "lockRace": [
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    }
+  ],
+  "failures": []
+}

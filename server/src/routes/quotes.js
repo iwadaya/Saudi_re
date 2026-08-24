@@ -635,8 +635,11 @@ router.put("/quotes/:id", validateBody(quotePutBodySchema), asyncHandler(async (
       previousEventAt: auditRows[0]?.created_at || null,
     };
   }
-  await assertEntityUnchanged(cl, { table: 'public.quote', idColumn: 'quote_id', id, ifUnmodifiedSince });
   await cl.query("BEGIN");
+  // Inside the transaction so the FOR UPDATE lock holds until COMMIT —
+  // pre-BEGIN the lock released at statement end and two same-baseline
+  // concurrent saves could both land (lost update). Mirrors treaty PUT.
+  await assertEntityUnchanged(cl, { table: 'public.quote', idColumn: 'quote_id', id, ifUnmodifiedSince });
   const h=terms.header||{};
   const d0=terms.detail||{};
   // Inception/renewal can arrive in either slice; header is source of

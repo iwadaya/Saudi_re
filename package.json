@@ -29,6 +29,7 @@
     "test:client:coverage": "vitest run --config client/vitest.config.js --coverage",
     "test:watch": "vitest --config server/vitest.config.js",
     "loadtest": "k6 run load-test/k6/portfolio.js",
+    "loadtest:agents": "node load-test/agents/run.js",
     "loadtest:10vu": "k6 run load-test/k6/smoke-10vu.js",
     "loadtest:capacity": "k6 run load-test/k6/capacity.js",
     "loadtest:summarize": "node load-test/scripts/summarize-k6.mjs",
