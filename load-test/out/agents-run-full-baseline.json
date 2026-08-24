@@ -1,0 +1,1059 @@
+{
+  "startedAt": "2026-08-24T00:09:25.513Z",
+  "baseUrl": "http://127.0.0.1:4600",
+  "seed": 20260823,
+  "uwYear": 2027,
+  "agents": {
+    "requested": 40,
+    "authenticated": 40
+  },
+  "portfolio": {
+    "contractsPlanned": 100,
+    "contractsCreated": 100,
+    "baseContracts": 60,
+    "renewals": 40,
+    "quotes": 70,
+    "quoteListTotal": 80
+  },
+  "durations": {
+    "totalMs": 12494,
+    "concurrentWorkMs": 9895
+  },
+  "http": {
+    "calls": 3580,
+    "byStatus": {
+      "200": 2749,
+      "201": 190,
+      "400": 200,
+      "401": 60,
+      "403": 160,
+      "404": 50,
+      "409": 101,
+      "422": 70
+    }
+  },
+  "latency": [
+    {
+      "label": "GET /treaties/:id",
+      "count": 910,
+      "errors": 0,
+      "statuses": {
+        "200": 870,
+        "404": 40
+      },
+      "p50": 108,
+      "p95": 210,
+      "p99": 418,
+      "max": 544
+    },
+    {
+      "label": "PUT /treaties/:id",
+      "count": 328,
+      "errors": 0,
+      "statuses": {
+        "200": 228,
+        "400": 40,
+        "409": 60
+      },
+      "p50": 137,
+      "p95": 251,
+      "p99": 293,
+      "max": 461
+    },
+    {
+      "label": "POST /treaties/:id/triangles/:type",
+      "count": 230,
+      "errors": 0,
+      "statuses": {
+        "200": 150,
+        "400": 80
+      },
+      "p50": 113,
+      "p95": 161,
+      "p99": 183,
+      "max": 193
+    },
+    {
+      "label": "PUT /treaties/:id (workflow)",
+      "count": 180,
+      "errors": 0,
+      "statuses": {
+        "200": 120,
+        "422": 60
+      },
+      "p50": 126,
+      "p95": 186,
+      "p99": 197,
+      "max": 207
+    },
+    {
+      "label": "GET /quotes/:id",
+      "count": 180,
+      "errors": 0,
+      "statuses": {
+        "200": 170,
+        "404": 10
+      },
+      "p50": 66,
+      "p95": 107,
+      "p99": 128,
+      "max": 143
+    },
+    {
+      "label": "GET /treaties (list)",
+      "count": 121,
+      "errors": 0,
+      "statuses": {
+        "200": 121
+      },
+      "p50": 66,
+      "p95": 93,
+      "p99": 106,
+      "max": 119
+    },
+    {
+      "label": "PUT /treaties/:id/large-losses",
+      "count": 120,
+      "errors": 0,
+      "statuses": {
+        "200": 120
+      },
+      "p50": 134,
+      "p95": 169,
+      "p99": 194,
+      "max": 197
+    },
+    {
+      "label": "GET /treaties/:id/triangles/:type",
+      "count": 120,
+      "errors": 0,
+      "statuses": {
+        "200": 120
+      },
+      "p50": 79,
+      "p95": 124,
+      "p99": 134,
+      "max": 152
+    },
+    {
+      "label": "GET /treaties/:id/large-losses",
+      "count": 120,
+      "errors": 0,
+      "statuses": {
+        "200": 120
+      },
+      "p50": 90,
+      "p95": 137,
+      "p99": 155,
+      "max": 161
+    },
+    {
+      "label": "PUT /quotes/:id",
+      "count": 120,
+      "errors": 0,
+      "statuses": {
+        "200": 80,
+        "409": 40
+      },
+      "p50": 90,
+      "p95": 229,
+      "p99": 235,
+      "max": 247
+    },
+    {
+      "label": "POST /treaties",
+      "count": 100,
+      "errors": 0,
+      "statuses": {
+        "201": 60,
+        "400": 40
+      },
+      "p50": 64,
+      "p95": 326,
+      "p99": 537,
+      "max": 624
+    },
+    {
+      "label": "POST /quotes",
+      "count": 80,
+      "errors": 0,
+      "statuses": {
+        "201": 40,
+        "400": 40
+      },
+      "p50": 54,
+      "p95": 151,
+      "p99": 160,
+      "max": 162
+    },
+    {
+      "label": "PUT /treaties/:id (race)",
+      "count": 80,
+      "errors": 0,
+      "statuses": {
+        "200": 79,
+        "409": 1
+      },
+      "p50": 99,
+      "p95": 184,
+      "p99": 191,
+      "max": 201
+    },
+    {
+      "label": "PUT /treaties/:id/cat-losses",
+      "count": 60,
+      "errors": 0,
+      "statuses": {
+        "200": 60
+      },
+      "p50": 130,
+      "p95": 148,
+      "p99": 157,
+      "max": 167
+    },
+    {
+      "label": "GET /treaties/:id/cat-losses",
+      "count": 60,
+      "errors": 0,
+      "statuses": {
+        "200": 60
+      },
+      "p50": 81,
+      "p95": 106,
+      "p99": 118,
+      "max": 118
+    },
+    {
+      "label": "GET /treaties/:id/dev-factors/:type/staleness",
+      "count": 60,
+      "errors": 0,
+      "statuses": {
+        "200": 60
+      },
+      "p50": 54,
+      "p95": 83,
+      "p99": 89,
+      "max": 89
+    },
+    {
+      "label": "GET /treaties/:id (peer)",
+      "count": 60,
+      "errors": 0,
+      "statuses": {
+        "200": 60
+      },
+      "p50": 126,
+      "p95": 165,
+      "p99": 169,
+      "max": 173
+    },
+    {
+      "label": "PUT /treaties/:id (peer)",
+      "count": 60,
+      "errors": 0,
+      "statuses": {
+        "403": 60
+      },
+      "p50": 48,
+      "p95": 65,
+      "p99": 74,
+      "max": 84
+    },
+    {
+      "label": "DELETE /treaties/:id (peer)",
+      "count": 60,
+      "errors": 0,
+      "statuses": {
+        "403": 60
+      },
+      "p50": 52,
+      "p95": 66,
+      "p99": 77,
+      "max": 78
+    },
+    {
+      "label": "PUT /treaties/:id (anon)",
+      "count": 60,
+      "errors": 0,
+      "statuses": {
+        "401": 60
+      },
+      "p50": 21,
+      "p95": 31,
+      "p99": 33,
+      "max": 35
+    },
+    {
+      "label": "GET /quotes (list)",
+      "count": 41,
+      "errors": 0,
+      "statuses": {
+        "200": 41
+      },
+      "p50": 58,
+      "p95": 82,
+      "p99": 85,
+      "max": 86
+    },
+    {
+      "label": "POST /auth/name-login",
+      "count": 40,
+      "errors": 0,
+      "statuses": {
+        "200": 40
+      },
+      "p50": 398,
+      "p95": 1056,
+      "p99": 1088,
+      "max": 1097
+    },
+    {
+      "label": "GET /contracts/:id/history",
+      "count": 40,
+      "errors": 0,
+      "statuses": {
+        "200": 40
+      },
+      "p50": 70,
+      "p95": 100,
+      "p99": 111,
+      "max": 116
+    },
+    {
+      "label": "POST /treaties/:id/renew",
+      "count": 40,
+      "errors": 0,
+      "statuses": {
+        "201": 40
+      },
+      "p50": 113,
+      "p95": 156,
+      "p99": 160,
+      "max": 160
+    },
+    {
+      "label": "GET /quotes/:id (peer)",
+      "count": 40,
+      "errors": 0,
+      "statuses": {
+        "200": 40
+      },
+      "p50": 70,
+      "p95": 103,
+      "p99": 118,
+      "max": 124
+    },
+    {
+      "label": "PUT /quotes/:id (peer)",
+      "count": 40,
+      "errors": 0,
+      "statuses": {
+        "403": 40
+      },
+      "p50": 36,
+      "p95": 57,
+      "p99": 67,
+      "max": 73
+    },
+    {
+      "label": "POST /quotes/:id/renew",
+      "count": 40,
+      "errors": 0,
+      "statuses": {
+        "201": 40
+      },
+      "p50": 87,
+      "p95": 133,
+      "p99": 143,
+      "max": 146
+    },
+    {
+      "label": "POST /treaties/:id/non-prop/save",
+      "count": 30,
+      "errors": 0,
+      "statuses": {
+        "200": 30
+      },
+      "p50": 211,
+      "p95": 297,
+      "p99": 305,
+      "max": 306
+    },
+    {
+      "label": "GET /treaties/:id/non-prop",
+      "count": 30,
+      "errors": 0,
+      "statuses": {
+        "200": 30
+      },
+      "p50": 115,
+      "p95": 137,
+      "p99": 148,
+      "max": 152
+    },
+    {
+      "label": "PUT /treaties/:id/dev-factors/:type",
+      "count": 30,
+      "errors": 0,
+      "statuses": {
+        "200": 30
+      },
+      "p50": 114,
+      "p95": 136,
+      "p99": 137,
+      "max": 138
+    },
+    {
+      "label": "GET /treaties/:id/dev-factors/:type",
+      "count": 30,
+      "errors": 0,
+      "statuses": {
+        "200": 30
+      },
+      "p50": 74,
+      "p95": 128,
+      "p99": 140,
+      "max": 144
+    },
+    {
+      "label": "POST /quotes/:id/offer/submit-for-approval",
+      "count": 20,
+      "errors": 0,
+      "statuses": {
+        "200": 10,
+        "422": 10
+      },
+      "p50": 74,
+      "p95": 185,
+      "p99": 192,
+      "max": 193
+    },
+    {
+      "label": "POST /quotes/:id/decline",
+      "count": 20,
+      "errors": 0,
+      "statuses": {
+        "200": 20
+      },
+      "p50": 94,
+      "p95": 122,
+      "p99": 128,
+      "max": 129
+    },
+    {
+      "label": "DELETE /quotes/:id",
+      "count": 10,
+      "errors": 0,
+      "statuses": {
+        "200": 10
+      },
+      "p50": 84,
+      "p95": 162,
+      "p99": 174,
+      "max": 177
+    },
+    {
+      "label": "POST /quotes/:id/amend",
+      "count": 10,
+      "errors": 0,
+      "statuses": {
+        "201": 10
+      },
+      "p50": 290,
+      "p95": 330,
+      "p99": 338,
+      "max": 341
+    },
+    {
+      "label": "GET /quotes/:id/versions",
+      "count": 10,
+      "errors": 0,
+      "statuses": {
+        "200": 10
+      },
+      "p50": 46,
+      "p95": 52,
+      "p99": 53,
+      "max": 53
+    }
+  ],
+  "pool": {
+    "samples": 4,
+    "maxWaiting": 0
+  },
+  "checks": {
+    "total": 10187,
+    "passed": 10148,
+    "failed": 39,
+    "byCategory": {
+      "auth": {
+        "total": 41,
+        "failed": 0
+      },
+      "treaty-create": {
+        "total": 600,
+        "failed": 0
+      },
+      "treaty-get": {
+        "total": 210,
+        "failed": 0
+      },
+      "permissions": {
+        "total": 440,
+        "failed": 0
+      },
+      "treaty-put": {
+        "total": 198,
+        "failed": 0
+      },
+      "put-get-roundtrip": {
+        "total": 4355,
+        "failed": 0
+      },
+      "partial-save-safety": {
+        "total": 570,
+        "failed": 0
+      },
+      "losses": {
+        "total": 420,
+        "failed": 0
+      },
+      "triangles": {
+        "total": 330,
+        "failed": 0
+      },
+      "optimistic-lock": {
+        "total": 320,
+        "failed": 0
+      },
+      "dev-factors": {
+        "total": 60,
+        "failed": 0
+      },
+      "staleness": {
+        "total": 60,
+        "failed": 0
+      },
+      "workflow": {
+        "total": 440,
+        "failed": 0
+      },
+      "renewal": {
+        "total": 760,
+        "failed": 0
+      },
+      "quote-create": {
+        "total": 280,
+        "failed": 0
+      },
+      "quote-get": {
+        "total": 80,
+        "failed": 0
+      },
+      "quote-put": {
+        "total": 40,
+        "failed": 0
+      },
+      "quote-renewal": {
+        "total": 280,
+        "failed": 0
+      },
+      "quote-lifecycle": {
+        "total": 140,
+        "failed": 0
+      },
+      "lists": {
+        "total": 280,
+        "failed": 0
+      },
+      "validation": {
+        "total": 240,
+        "failed": 0
+      },
+      "lock-race": {
+        "total": 40,
+        "failed": 39
+      },
+      "portfolio": {
+        "total": 3,
+        "failed": 0
+      }
+    }
+  },
+  "lockRace": [
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    },
+    {
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window"
+    }
+  ],
+  "failures": [
+    {
+      "agent": "Akosua Frimpong",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "5d80c796-d2ae-4efe-b05d-ebe42495b5bb"
+    },
+    {
+      "agent": "Araba Sarpong",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "82e247d7-13fa-45a9-b042-30a4aebd4382"
+    },
+    {
+      "agent": "Adwoa Bediako",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "d879c70e-8c40-4ad8-a56d-920f7fc00410"
+    },
+    {
+      "agent": "Efua Quartey",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "f622f68d-09e0-4561-949f-3544b42a3d16"
+    },
+    {
+      "agent": "Akua Addo",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "bfc8500b-b066-402e-9b5e-e2c4dc78dc10"
+    },
+    {
+      "agent": "Serwa Gyasi",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "6d064578-3e05-4ef5-bc60-dddc8bdd339d"
+    },
+    {
+      "agent": "Aba Yeboah",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "f1fce176-d85b-44d3-9eb1-911494cdd57b"
+    },
+    {
+      "agent": "Yaa Asantewaa",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "3897e079-b743-4d77-a064-5e2d325477dc"
+    },
+    {
+      "agent": "Ekua Ansah",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "dc3e9de5-0489-44e6-ba2e-70d55b924144"
+    },
+    {
+      "agent": "Aya Tetteh",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "c0c6d37c-9fa8-4b03-bc75-24a23fa98998"
+    },
+    {
+      "agent": "Jelani Kamau",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "ee16d68c-ea49-4f7b-9947-8baf7a0b9e2d"
+    },
+    {
+      "agent": "Hamid Karimi",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "50075f63-7945-4843-b5ef-28710aec9e20"
+    },
+    {
+      "agent": "Faisal Zahrani",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "c501fe53-fee0-4af0-b0d5-388b8faaa39b"
+    },
+    {
+      "agent": "Musa Kone",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "e003e0c9-482a-4deb-87d4-d7ad8c3ee19b"
+    },
+    {
+      "agent": "Obi Nwosu",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "381dad14-fb03-4d07-b01c-80a2f48f1039"
+    },
+    {
+      "agent": "Baraka Juma",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "b0d43e60-aa82-48de-8d77-582273664736"
+    },
+    {
+      "agent": "Salim Farsi",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "bf8562e6-cac2-4a3a-9870-7c1dbf932315"
+    },
+    {
+      "agent": "Rafiq Aziz",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "ab05a50b-7d91-486d-95fd-1235ba6d2ddc"
+    },
+    {
+      "agent": "Tariq Amin",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "0c4f1893-1baf-4378-95e6-ac81472d425b"
+    },
+    {
+      "agent": "Zuberi Otieno",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "5a2605b3-3df0-4fc6-99c8-7ac5d2e26bf0"
+    },
+    {
+      "agent": "Esi Appiah",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "48acada1-ba96-4116-9efd-84bcf1851c92"
+    },
+    {
+      "agent": "Nana Agyeman",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "5359492c-d46e-480d-8e05-5d7d5a684fb0"
+    },
+    {
+      "agent": "Ekow Asante",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "ae63130a-1470-40e4-ad33-ed85d3b643dd"
+    },
+    {
+      "agent": "Kofi Mensah",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "e80390be-816f-45a0-8c5f-5d186ce07b81"
+    },
+    {
+      "agent": "Lamis Nasser",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "ec7f2c5f-e901-4f99-a02d-2b7feae6505c"
+    },
+    {
+      "agent": "Afia Osei",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "bdd3ea76-3142-4f94-bb0b-22fb18142656"
+    },
+    {
+      "agent": "Adjoa Owusu",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "b3fa181a-8759-4d8d-a0bc-21478b6c425d"
+    },
+    {
+      "agent": "Tunde Adeyemi",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "b2177b83-d350-410c-8f51-b6bd1c2455de"
+    },
+    {
+      "agent": "Yusuf Rahman",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "6d7ef7f1-6c17-471d-91be-45dfc323ae97"
+    },
+    {
+      "agent": "Abena Darko",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "a9bb6112-354f-4593-9f75-c9d39c70221e"
+    },
+    {
+      "agent": "Nia Okafor",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "85cf4f03-a3f8-4916-a58a-aa25f9776d4a"
+    },
+    {
+      "agent": "Amara Boateng",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "bda1e173-ff67-4ea5-8bbf-421c0dfece16"
+    },
+    {
+      "agent": "Kwame Ampofo",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "6e73c63d-7dee-42f9-bba5-07180a201319"
+    },
+    {
+      "agent": "Chidi Eze",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "2012635d-dae2-4f92-aa7a-effb30217c3c"
+    },
+    {
+      "agent": "Femi Balogun",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "2a6c4178-06cb-4d0a-8c28-04513ff06f3b"
+    },
+    {
+      "agent": "Kojo Antwi",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "c38ccf83-680c-4941-a220-10b758bc411a"
+    },
+    {
+      "agent": "Sefu Mwangi",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "892c213c-771b-46ad-b9d5-c732f46a88b7"
+    },
+    {
+      "agent": "Zainab Haddad",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "e53d665e-6108-4cdf-81f9-3723a4756ca0"
+    },
+    {
+      "agent": "Idris Diallo",
+      "category": "lock-race",
+      "name": "same-baseline concurrent PUTs: exactly one wins",
+      "pass": false,
+      "detail": "outcome 200+200 — 200+200 means the optimistic lock has a lost-update race window",
+      "entity": "a29277ff-1a2b-464a-8de5-551fb3e71446"
+    }
+  ]
+}

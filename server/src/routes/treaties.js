@@ -203,11 +203,17 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
         previousEventAt: auditRows[0]?.created_at || null,
       };
     }
+    await client.query("BEGIN");
     // Optimistic locking — if the caller supplied If-Unmodified-Since with
     // the updated_at they last saw, reject the write when the row has
     // moved on. No header = no check (backwards-compatible).
+    // MUST run after BEGIN: the helper's FOR UPDATE row lock only holds
+    // inside an open transaction. Pre-BEGIN it ran in an implicit
+    // single-statement transaction that released the lock immediately,
+    // so two concurrent saves with the same baseline could both pass the
+    // check and the second silently overwrote the first (lost update —
+    // reproduced 39/40 by the load-test/agents lock-race probe).
     await assertEntityUnchanged(client, { table: 'public.contract', idColumn: 'contract_id', id, ifUnmodifiedSince });
-    await client.query("BEGIN");
     const actor = actorFromReq(req);
 
     // ── Header (only if explicitly provided) ──

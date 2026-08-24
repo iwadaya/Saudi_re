@@ -21,7 +21,7 @@ import { useTreatyHeaderUnmountAutosave } from '../../../hooks/useTreatyHeaderUn
 
 const ROUTE_KEY = 'PROP_TREATY_DETAIL';
 
-import { DARCHVILLE_SIGNATURE_CODE, DARCHVILLE_SIGNATURE, ALLOWED_PROP_TYPES, NA_TYPE, PROP_SLIP_CURRENT_KEYS, pickKeys, numOrNull, clampPct, normalizeCommMode, cleanNum, extractLpSlides, getMissingRequiredFields, treatyModeFromType, addMonths, yearFromDateStr, canPersistTreatyHeader } from './propTreatyHelpers';
+import { ALLOWED_PROP_TYPES, NA_TYPE, PROP_SLIP_CURRENT_KEYS, pickKeys, numOrNull, clampPct, normalizeCommMode, cleanNum, extractLpSlides, getMissingRequiredFields, treatyModeFromType, addMonths, yearFromDateStr, canPersistTreatyHeader, DARCHVILLE_SIGNATURE_CODE, DARCHVILLE_SIGNATURE } from './propTreatyHelpers';
 import { useEscapeKey, FR, TogglePill, CommaInput, CobSelectModal, SlidingScaleModal, EpiSplitModal } from './PropTreatyModals';
 
 // Re-exported for the unit tests that import these helpers from this module.
