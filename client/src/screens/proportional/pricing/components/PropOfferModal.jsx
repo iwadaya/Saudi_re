@@ -288,7 +288,7 @@ export default function PropOfferModal({
                 <span style={{fontSize:11,color:'rgba(255,255,255,0.38)',whiteSpace:'nowrap'}}>Send to</span>
                 <select className="bbg-select" value={offerApprover} onChange={e=>setOfferApprover(e.target.value)} style={{maxWidth:220}}>
                   <option value="">Select approver…</option>
-                  {(eligibleApprovers||[]).map(a=><option key={a.user_id} value={a.user_id}>{a.role_name}</option>)}
+                  {(eligibleApprovers||[]).map(a=><option key={a.user_id} value={a.user_id}>{[a.display_name,a.role_name].filter(Boolean).join(' — ')||a.email||a.user_id}</option>)}
                 </select>
               </div>
             )}

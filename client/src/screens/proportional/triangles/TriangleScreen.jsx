@@ -5,6 +5,7 @@ import { useAppState } from '../../../context/AppContext';
 import WizardLayout from '../../../components/WizardLayout';
 import LoadErrorPanel from '../../../components/LoadErrorPanel';
 import { logger } from '../../../utils/logger';
+import { yearFromDateInput } from '../../../utils/format';
 
 const TYPE_MAP = {
   PROP_PREMIUM_TRIANGLES: 'PREMIUM',
@@ -31,7 +32,7 @@ function fmtCell(v) {
 
 export default function TriangleScreen({ routeKey, title, headerPill }) {
   const contractId = useContractId();
-  const { state: appState } = useAppState();
+  const { state: appState, setSlice } = useAppState();
   const triType = TYPE_MAP[routeKey] || 'PREMIUM';
   // Incurred is derived (paid + OS); the cells are not stored.
   const isDerived = triType === 'INCURRED';
@@ -72,7 +73,34 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
   // Retry button re-run the load effects.
   const [loadError, setLoadError] = useState(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [metaError, setMetaError] = useState(null);
   const [dirty, setDirty] = useState({ MODIFIED: false, ACTUAL: false });
+
+  // ── Deep-link fallback: hydrate triangleMeta from the contract bundle ──
+  // triangleMeta is normally seeded by PropTreatyDetail's meta-sync effect;
+  // on a direct URL load / refresh that screen never mounts, so without this
+  // the !startYear guard below shows "Loading triangle…" forever. The slice
+  // is the fast path — skip when startYear is already known. Mirrors the
+  // derivation in PropTreatyDetail (experience start → inception-10 →
+  // uw-10 → 2015) so the year window is identical on both paths.
+  useEffect(() => {
+    if (startYear || !contractId) return;
+    let cancelled = false;
+    setMetaError(null);
+    api.getContract(contractId, apiOpts)
+      .then((data) => {
+        if (cancelled) return;
+        const h = data?.header || {}, d = data?.detail || {};
+        const uwYr = Number(h.uw_year || h.start_year) || null;
+        const inceptionYr = yearFromDateInput(d.inception_date);
+        const expStartYr = Number(d.experience_start_year || d.start_year) || null;
+        const triStart = expStartYr || (inceptionYr ? inceptionYr - 10 : (uwYr ? uwYr - 10 : 2015));
+        const triEnd = inceptionYr || uwYr || new Date().getFullYear();
+        setSlice('triangleMeta', { startYear: triStart, renewalYear: triEnd, inceptionYear: inceptionYr, version: Date.now() });
+      })
+      .catch((e) => { if (!cancelled) { logger.warn('Load contract for triangle meta:', e); setMetaError(e); } });
+    return () => { cancelled = true; };
+  }, [startYear, contractId, apiOpts, setSlice, reloadNonce]);
   // MODIFIED is the projected triangle the tool prices off — default-active.
   // ACTUAL is the gross reference triangle the underwriter also enters.
   const [variant, setVariant] = useState('MODIFIED');
@@ -82,7 +110,7 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
   // tab is instant and never refetches or clears unsaved edits. `variant` is
   // deliberately NOT a dep here.
   useEffect(() => {
-    if (!contractId || isDerived) return;
+    if (!contractId || isDerived || !startYear) return;
     setLoading(true);
     setLoadError(null);
     setDirty({ MODIFIED: false, ACTUAL: false });
@@ -130,7 +158,7 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
   // server-side incurred-combine stays pinned to MODIFIED — this is a
   // display-only derivation.
   useEffect(() => {
-    if (!contractId || !isDerived) return;
+    if (!contractId || !isDerived || !startYear) return;
     setLoading(true);
     setLoadError(null);
     const buildFromCells = (cells, target) => {
@@ -250,7 +278,14 @@ export default function TriangleScreen({ routeKey, title, headerPill }) {
   // triangleMeta not yet loaded (e.g. just after a hard reset, before
   // PropTreatyDetail re-fetches the contract). Avoid rendering with a bogus year range.
   // Guard must stay after all hooks — Rules of Hooks.
-  if (!startYear) return <div className="tri-loading-msg">Loading triangle…</div>;
+  if (!startYear) {
+    return metaError ? (
+      <LoadErrorPanel
+        message="Couldn’t load the contract details needed to size this triangle."
+        onRetry={() => setReloadNonce(n => n + 1)}
+      />
+    ) : <div className="tri-loading-msg">Loading triangle…</div>;
+  }
 
   // The grid currently shown/edited. For INCURRED this is the derived sum in
   // the MODIFIED slot; otherwise it's whichever variant the tab selects.

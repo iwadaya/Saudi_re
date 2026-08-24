@@ -159,10 +159,10 @@ async function ensureTreatyTypes() {
   // category-less placeholder used by the "treaty detail not saved"
   // tests now that treaty_type_id is NOT NULL on contract/quote.
   await pool.query(
-    `INSERT INTO public.treaty_type (treaty_type, category) VALUES
-       ('Quota Share', 'PROPORTIONAL'),
-       ('Excess of Loss', 'NON_PROPORTIONAL'),
-       ('Renewal Pack Test Placeholder', NULL)
+    `INSERT INTO public.treaty_type (treaty_type, category, is_active) VALUES
+       ('Quota Share', 'PROPORTIONAL',false),
+       ('Excess of Loss', 'NON_PROPORTIONAL',false),
+       ('Renewal Pack Test Placeholder', NULL,false)
      ON CONFLICT DO NOTHING`,
   );
 }

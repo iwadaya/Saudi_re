@@ -5,7 +5,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import WizardLayout from './WizardLayout.jsx';
 
 const { navigateMock } = vi.hoisted(() => ({ navigateMock: vi.fn() }));
-vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock }));
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => navigateMock,
+  // useWizard → useContractId reads router state for the active-entity id.
+  useLocation: () => ({ state: null }),
+}));
 vi.mock('../context/AppContext', () => ({
   useAppState: () => ({ state: {}, setState: vi.fn(), appState: { settings: {} }, setApp: vi.fn() }),
 }));

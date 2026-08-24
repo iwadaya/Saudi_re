@@ -17,17 +17,19 @@ export const DEMO_USER_ID = '00000000-0000-0000-0000-000000000001';
  * Migration 104 made cedant/broker/currency/country/treaty_type NOT NULL on
  * BOTH contract and quote, so every create body must carry them — spread the
  * returned object into the POST body. Each call seeds fresh, uniquely-named rows
- * so parallel test files never collide.
+ * so parallel test files never collide. Rows are created is_active=false so a
+ * suite run against a shared database never surfaces them in the reference
+ * dropdowns (lookups.js filters; migration 141) — they stay valid FK targets.
  */
 export async function seedRefs({ category = 'PROPORTIONAL' } = {}) {
   const suffix = `${Date.now()}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
   const code = suffix.replace(/[^a-z0-9]/gi, '').slice(-10).toUpperCase();
   const [country, currency, broker, cedant, treatyType] = await Promise.all([
-    pool.query(`INSERT INTO public.country (country_code, country_name, region) VALUES ($1,$2,'R') RETURNING country_id`, [`Z${code}`, `IT Country ${suffix}`]),
-    pool.query(`INSERT INTO public.currency (currency_code, currency_name) VALUES ($1,$2) RETURNING currency_id`, [`X${code}`, `IT Currency ${suffix}`]),
-    pool.query(`INSERT INTO public.brokers (broker_name) VALUES ($1) RETURNING broker_id`, [`IT Broker ${suffix}`]),
-    pool.query(`INSERT INTO public.companies (company_name) VALUES ($1) RETURNING company_id`, [`IT Cedant ${suffix}`]),
-    pool.query(`INSERT INTO public.treaty_type (treaty_type, category) VALUES ($1,$2) RETURNING treaty_type_id`, [`IT TType ${suffix}`, category]),
+    pool.query(`INSERT INTO public.country (country_code, country_name, region, is_active) VALUES ($1,$2,'R',false) RETURNING country_id`, [`Z${code}`, `IT Country ${suffix}`]),
+    pool.query(`INSERT INTO public.currency (currency_code, currency_name, is_active) VALUES ($1,$2,false) RETURNING currency_id`, [`X${code}`, `IT Currency ${suffix}`]),
+    pool.query(`INSERT INTO public.brokers (broker_name, is_active) VALUES ($1,false) RETURNING broker_id`, [`IT Broker ${suffix}`]),
+    pool.query(`INSERT INTO public.companies (company_name, is_active) VALUES ($1,false) RETURNING company_id`, [`IT Cedant ${suffix}`]),
+    pool.query(`INSERT INTO public.treaty_type (treaty_type, category, is_active) VALUES ($1,$2,false) RETURNING treaty_type_id`, [`IT TType ${suffix}`, category]),
   ]);
   return {
     cedant_id: cedant.rows[0].company_id,

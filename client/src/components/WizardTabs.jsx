@@ -1,6 +1,8 @@
 // src/components/WizardTabs.jsx — Sidebar tabs for wizard navigation
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../context/AppContext';
+import { useContractId } from '../hooks/useContractId';
+import { useNpTreatyDetail } from '../hooks/useNpTreatyDetail';
 import { PROP_TAB_GROUPS, NP_TAB_GROUPS, FAC_TAB_GROUPS, STEP_LABELS, ROUTE_PATHS, facStepVisible } from '../config/wizard';
 import { isNpCatFlowDisabled, isNpRiskFlowDisabled, isNpStopLossTreaty } from '../utils/npTreatyType';
 
@@ -22,9 +24,16 @@ export default function WizardTabs({ activeKey, onNavigate }) {
   const mode = activeKey?.startsWith('FAC_') ? 'FAC' : activeKey?.startsWith('NP_') ? 'NP' : 'PROP';
   const groups = mode === 'FAC' ? FAC_TAB_GROUPS : mode === 'NP' ? NP_TAB_GROUPS : PROP_TAB_GROUPS;
   const triEnabled = state.propTreatyDetail?.triangulationsAvailable !== false;
-  const npCatDisabled  = mode === 'NP' && isNpCatFlowDisabled(state);   // RISK XL → hide CAT tabs
-  const npRiskDisabled = mode === 'NP' && isNpRiskFlowDisabled(state);  // CAT XL  → hide risk/large-loss tabs
-  const npStopLoss     = mode === 'NP' && isNpStopLossTreaty(state);    // Stop Loss / Agg XL only
+  // NP treaty-type gating with server fallback (audit F6): the raw slice is
+  // empty on a deep link, which used to show every tab (mode BOTH) on a
+  // single-peril treaty. Enabled only on NP routes — the fallback fetch would
+  // 409 on a proportional contract.
+  const contractId = useContractId();
+  const npDetail = useNpTreatyDetail(contractId, !!state.quoteMode, { enabled: mode === 'NP' });
+  const npShim = { npTreatyDetail: npDetail };
+  const npCatDisabled  = mode === 'NP' && isNpCatFlowDisabled(npShim);   // RISK XL → hide CAT tabs
+  const npRiskDisabled = mode === 'NP' && isNpRiskFlowDisabled(npShim);  // CAT XL  → hide risk/large-loss tabs
+  const npStopLoss     = mode === 'NP' && isNpStopLossTreaty(npShim);    // Stop Loss / Agg XL only
 
   function shouldShow(key) {
     // Sidebar visibility and Next/Back navigation must agree — this mirrors

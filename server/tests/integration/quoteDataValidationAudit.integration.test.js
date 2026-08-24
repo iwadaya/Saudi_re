@@ -48,7 +48,7 @@ describe.skipIf(shouldSkipDb)('integration: quote data saves — validation + lo
     harness = await bootApp();
     refs = await seedRefs({ category: 'PROPORTIONAL' });
     const { rows } = await pool.query(
-      `INSERT INTO public.class_of_business (class_of_business) VALUES ($1) RETURNING class_of_business_id`,
+      `INSERT INTO public.class_of_business (class_of_business, is_active) VALUES ($1,false) RETURNING class_of_business_id`,
       [`QDV COB ${Date.now()}-${process.pid}`],
     );
     cobId = rows[0].class_of_business_id;

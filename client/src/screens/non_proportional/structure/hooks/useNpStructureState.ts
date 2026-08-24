@@ -36,6 +36,7 @@ const handleStaleWriteTyped = handleStaleWrite as (
   },
 ) => Promise<{ handled: boolean; action?: string; result?: unknown }>;
 import { getNpTreatyTypeMode, isNpStopLossTreaty, isNpAggregateXlTreaty } from '../../../../utils/npTreatyType';
+import { useNpTreatyDetail } from '../../../../hooks/useNpTreatyDetail';
 import { toNum, rateToFloat, emptyLayer, emptyCoveredProp, parseClipboard } from '../NpStructureHelpers';
 import {
   structureReducer,
@@ -87,8 +88,13 @@ export function useNpStructureState() {
     try { return !!localStorage.getItem(ACTIVE_QUOTE_ID); } catch { return false; }
   })();
 
-  const npDetail = useMemo(() => appState.npTreatyDetail || {}, [appState.npTreatyDetail]);
-  const mode = getNpTreatyTypeMode(appState);
+  // npTreatyDetail with server fallback: a deep link lands here with an empty
+  // slice, which used to show SAR badges, unlock both peril pills (mode BOTH)
+  // and feed the deductible cascade an empty base (audit F6). The treaty-type
+  // utils only read .npTreatyDetail, so a shim keeps them compatible.
+  const npDetail = useNpTreatyDetail(contractId, quoteMode) as Record<string, any>;
+  const detailShim = useMemo(() => ({ npTreatyDetail: npDetail }), [npDetail]);
+  const mode = getNpTreatyTypeMode(detailShim);
   const currency: string = npDetail.currencyCode || npDetail.currency || 'SAR';
 
   // Keep expiringLayerCount in sync with Treaty Detail's expiringNumberOfLayers
@@ -741,8 +747,8 @@ export function useNpStructureState() {
   // Stop Loss + Aggregate XL each have their own structure surfaces
   // (different shapes from the Risk XL / Cat XL layer grid). The
   // orchestrator short-circuits the regular layout for them.
-  const stopLossTreaty = isNpStopLossTreaty(appState);
-  const aggregateXlTreaty = isNpAggregateXlTreaty(appState);
+  const stopLossTreaty = isNpStopLossTreaty(detailShim);
+  const aggregateXlTreaty = isNpAggregateXlTreaty(detailShim);
 
   return {
     // store state

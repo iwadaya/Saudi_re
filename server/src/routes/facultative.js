@@ -85,11 +85,23 @@ router.get('/fac/risks/:id/edit-permission', asyncHandler(async (req, res) => {
 // against. Both ship on the same row so a screen can group by one and price
 // by the other without a second round trip.
 router.get('/fac/lookups/classes', asyncHandler(async (_req, res) => {
-  const { rows } = await pool.query(
-    `SELECT fac_cob_id, class_name, category, code, is_project,
-            segment_code, rating_family, exposure_basis
-     FROM public.fac_class_of_business ORDER BY category, class_name`
-  );
+  // Filtered first (is_active from migration 142); the unfiltered retry only
+  // covers a pre-migration database — a real outage still throws to a 500.
+  let rows;
+  try {
+    ({ rows } = await pool.query(
+      `SELECT fac_cob_id, class_name, category, code, is_project,
+              segment_code, rating_family, exposure_basis
+       FROM public.fac_class_of_business
+       WHERE is_active IS NOT FALSE ORDER BY category, class_name`
+    ));
+  } catch {
+    ({ rows } = await pool.query(
+      `SELECT fac_cob_id, class_name, category, code, is_project,
+              segment_code, rating_family, exposure_basis
+       FROM public.fac_class_of_business ORDER BY category, class_name`
+    ));
+  }
   res.json(rows);
 }));
 

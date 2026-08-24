@@ -223,6 +223,13 @@ export function createLoginLimiter({ max = 5, windowMs = 15 * 60 * 1000, store =
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many login attempts. Please wait a few minutes and try again.', code: 'TOO_MANY_LOGINS' },
+    // Only actual credential submissions count. The SPA's public posture probe
+    // GET /api/auth/name-login/status (and any other non-POST or /status hit)
+    // must never consume the brute-force budget — the limiter is mounted with
+    // prefix-matching app.use, which would otherwise count it and lock users
+    // out from merely sitting on the login page (audit F3).
+    skip: (req) => req.method !== 'POST'
+      || (req.originalUrl || req.url || '').split('?')[0].endsWith('/status'),
     keyGenerator: (req) => {
       // Identity: username/email (password login) or first+surname (name login),
       // so one tester at a shared-office IP can't exhaust another's budget.
@@ -441,6 +448,8 @@ export function createApp() {
   // Strict brute-force limiter on login (after JSON parse so the identity is
   // available for keying; keyed on IP + identity). Covers both the password
   // login and the passwordless name login (Saudi Re pilot) with one budget.
+  // Only POST credential attempts count — the limiter skips non-POST and the
+  // public GET /name-login/status posture probe (audit F3).
   app.use(['/api/auth/login', '/api/auth/name-login'], createLoginLimiter());
 
   // ── Authentication ──

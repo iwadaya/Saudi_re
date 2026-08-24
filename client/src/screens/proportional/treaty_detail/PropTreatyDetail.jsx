@@ -4,6 +4,8 @@ import { api } from '../../../api';
 import { useAppState } from '../../../context/AppContext';
 import { useContractId, setActiveContractId } from '../../../hooks/useContractId';
 import { useResource } from '../../../hooks/useResource';
+import { useEditLock } from '../../../hooks/useEditLock';
+import EditLockBanner, { ReadOnlyWrap } from '../../../components/EditLockBanner.jsx';
 import WizardLayout from '../../../components/WizardLayout';
 import AsyncBoundary from '../../../components/AsyncBoundary';
 import PctInput from '../../../components/PctInput';
@@ -12,6 +14,10 @@ import ImportedFromPackBanner from '../../../components/ImportedFromPackBanner';
 import { logger } from '../../../utils/logger';
 import { dateInputValue } from '../../../utils/format';
 import { handleStaleWrite } from '../../../utils/handleStaleWrite';
+import { isReadOnlyError } from '../../../utils/readOnlyError';
+import { useGlobalToast } from '../../../hooks/useToast';
+import { useUnsavedChangesGuard } from '../../../hooks/useUnsavedChangesGuard';
+import { useTreatyHeaderUnmountAutosave } from '../../../hooks/useTreatyHeaderUnmountAutosave';
 
 const ROUTE_KEY = 'PROP_TREATY_DETAIL';
 
@@ -28,6 +34,10 @@ export { yearFromDateStr, addMonths, extractLpSlides, getMissingRequiredFields, 
 export default function PropTreatyDetail() {
   const { state: appState, setSlice } = useAppState();
   const contractId = useContractId();
+  const isQuote = !!appState.quoteMode;
+  const { readOnly, assignedToName: lockAssignedToName, refresh: refreshLock, markReadOnly } = useEditLock({
+    contractId: isQuote ? null : contractId, quoteId: isQuote ? contractId : null, isQuote,
+  });
 
   const [cedants, setCedants] = useState([]);
   const [brokers, setBrokers] = useState([]);
@@ -53,7 +63,13 @@ export default function PropTreatyDetail() {
   const [lookupsReady, setLookupsReady] = useState(false);
 
   const s = appState.propTreatyDetail || {};
+  const showToast = useGlobalToast();
+  /* Dirty since last successful save/hydration — same ref pattern as
+     useScreenSave. Set by every user-facing update(), cleared after
+     hydration and after each successful save (audit F4). */
+  const dirtyRef = React.useRef(false);
   const update = useCallback(patch => {
+    dirtyRef.current = true;
     setMissingFields(prev => prev.size ? new Set() : prev);
     setSlice('propTreatyDetail', patch);
   }, [setSlice]);
@@ -73,7 +89,7 @@ export default function PropTreatyDetail() {
         commissionMode: 'fixed', fixedCommissionQSPct: '', fixedCommissionSurplusPct: '',
         slidingMinLossRatio: '', slidingMaxLossRatio: '', slidingMinCommission: '', slidingMaxCommission: '',
         slidingTable: [], provisionalCommissionPct: '', mgmtExpensesPct: '', profitCommissionPct: '', lcfYears: '', lcfExtinction: false,
-        lossPartEnabled: true, minLossRatioPct: '', maxLossRatioPct: '', reinsurerSharePct: '', lpSlides: [{minLr:'',maxLr:'',share:''},{minLr:'',maxLr:'',share:''},{minLr:'',maxLr:'',share:''},{minLr:'',maxLr:'',share:''},{minLr:'',maxLr:'',share:''}],
+        lossPartEnabled: false, minLossRatioPct: '', maxLossRatioPct: '', reinsurerSharePct: '', lpSlides: [{minLr:'',maxLr:'',share:''},{minLr:'',maxLr:'',share:''},{minLr:'',maxLr:'',share:''},{minLr:'',maxLr:'',share:''},{minLr:'',maxLr:'',share:''}],
         quotaShareEpi: '', surplusEpi: '', epiSplit: [],
         brokeragePct: '', taxesPct: '', lossCapPct: '',
         _loadedFromServer: false,
@@ -90,10 +106,11 @@ export default function PropTreatyDetail() {
   const currencyCode = useMemo(() => currencies.find(x => String(x.id) === String(s.currencyId))?.code || currencies.find(x => String(x.id) === String(s.currencyId))?.name || '', [currencies, s.currencyId]);
   // Sync currencyCode into slice so PropPricing and other screens pick it up on currency change
   useEffect(() => {
+    // Derived sync, not a user edit — must not arm the unsaved-changes guard.
     if (currencyCode && currencyCode !== s.currencyCode) {
-      update({ currencyCode });
+      setSlice('propTreatyDetail', { currencyCode });
     }
-  }, [currencyCode, s.currencyCode, update]);
+  }, [currencyCode, s.currencyCode, setSlice]);
   const isQS = tMode === 'quota' || tMode === 'both';
   const isSurplus = tMode === 'surplus' || tMode === 'both';
   const epiSplitCount = (s.epiSplit || []).filter(r => String(r.premium || '').trim()).length;
@@ -117,8 +134,8 @@ export default function PropTreatyDetail() {
     if (cedantName && cedantName !== s.cedantName) patch.cedantName = cedantName;
     if (brokerName && brokerName !== s.brokerName) patch.brokerName = brokerName;
     if (countryName && countryName !== s.countryName) patch.countryName = countryName;
-    if (Object.keys(patch).length) update(patch);
-  }, [cedantName, brokerName, countryName, s.cedantName, s.brokerName, s.countryName, update]);
+    if (Object.keys(patch).length) setSlice('propTreatyDetail', patch);
+  }, [cedantName, brokerName, countryName, s.cedantName, s.brokerName, s.countryName, setSlice]);
 
   /* contract description auto-gen */
   const contractDescription = useMemo(() => {
@@ -135,9 +152,12 @@ export default function PropTreatyDetail() {
     const cPct = clampPct(s.cessionPct);
     const retAmt = qs > 0 ? String(Math.round((qs * rPct) / 100)) : '';
     const cesAmt = qs > 0 ? String(Math.round((qs * cPct) / 100)) : '';
+    // setSlice, not update(): a derived recompute on a merely-viewed treaty
+    // must not arm the unsaved-changes guard (the triggering user edit, if
+    // any, already did).
     if (retAmt !== String(s.retentionAmt || '') || cesAmt !== String(s.cessionAmt || ''))
-      update({ retentionAmt: retAmt, cessionAmt: cesAmt });
-  }, [s.qsLimit, s.retentionPct, s.cessionPct, isQS, loaded, s.treatyTypeId, treatyTypes, update, s.retentionAmt, s.cessionAmt]);
+      setSlice('propTreatyDetail', { retentionAmt: retAmt, cessionAmt: cesAmt });
+  }, [s.qsLimit, s.retentionPct, s.cessionPct, isQS, loaded, s.treatyTypeId, treatyTypes, setSlice, s.retentionAmt, s.cessionAmt]);
 
   /* auto-calc: total capacity (skip during hydration and until treaty type is resolved) */
   useEffect(() => {
@@ -145,24 +165,24 @@ export default function PropTreatyDetail() {
     const QS = numOrNull(s.qsLimit) || 0, MR = numOrNull(s.surplusMaxRetention) || 0, N = numOrNull(s.numLines) || 0;
     const cap = tMode === 'quota' ? QS : tMode === 'both' ? QS + MR * N : MR + MR * N;
     const capStr = cap ? String(Math.round(cap)) : '';
-    if (capStr !== String(s.totalCapacity || '')) update({ totalCapacity: capStr });
-  }, [s.qsLimit, s.surplusMaxRetention, s.numLines, tMode, loaded, treatyTypes, s.treatyTypeId, update, s.totalCapacity]);
+    if (capStr !== String(s.totalCapacity || '')) setSlice('propTreatyDetail', { totalCapacity: capStr });
+  }, [s.qsLimit, s.surplusMaxRetention, s.numLines, tMode, loaded, treatyTypes, s.treatyTypeId, setSlice, s.totalCapacity]);
 
   /* auto-calc: renewal = inception + 12 months (skip during hydration) */
   useEffect(() => {
     if (!loaded) return;
     if (s.inceptionDate && !s._renewalManual) {
       const auto = addMonths(s.inceptionDate, 12);
-      if (auto !== s.renewalDate) update({ renewalDate: auto });
+      if (auto !== s.renewalDate) setSlice('propTreatyDetail', { renewalDate: auto });
     }
-  }, [s.inceptionDate, loaded, update, s._renewalManual, s.renewalDate]);
+  }, [s.inceptionDate, loaded, setSlice, s._renewalManual, s.renewalDate]);
 
   /* auto-derive: UW year = year of inception date */
   useEffect(() => {
     if (!loaded) return;
     const yr = yearFromDateStr(s.inceptionDate);
-    if (yr && String(yr) !== String(s.startYear)) update({ startYear: String(yr) });
-  }, [s.inceptionDate, loaded, update, s.startYear]);
+    if (yr && String(yr) !== String(s.startYear)) setSlice('propTreatyDetail', { startYear: String(yr) });
+  }, [s.inceptionDate, loaded, setSlice, s.startYear]);
 
   const handleRetPctChange = v => update({ retentionPct: v, cessionPct: String(+(100 - clampPct(v)).toFixed(6)) });
   const handleCesPctChange = v => update({ cessionPct: v, retentionPct: String(+(100 - clampPct(v)).toFixed(6)) });
@@ -283,7 +303,7 @@ export default function PropTreatyDetail() {
         slidingTable: Array.isArray(cm.sliding_table) ? cm.sliding_table.map(r => ({ lossRatioPct: cleanNum(r.loss_ratio_pct ?? r.lossRatioPct), commissionPct: cleanNum(r.commission_pct ?? r.commissionPct) })) : [],
         provisionalCommissionPct: cleanNum(cm.provisional_commission_pct),
         mgmtExpensesPct: cleanNum(cm.mgmt_expenses_pct), profitCommissionPct: cleanNum(cm.profit_commission_pct), lcfYears: cm.lcf_extinction && !cm.lcf_years ? 'extinction' : (cm.lcf_years ? String(cm.lcf_years) : ''), lcfExtinction: !!cm.lcf_extinction,
-        lossPartEnabled: lp.enabled !== false, minLossRatioPct: cleanNum(lp.min_loss_ratio_pct),
+        lossPartEnabled: lp.enabled === true, minLossRatioPct: cleanNum(lp.min_loss_ratio_pct),
         maxLossRatioPct: cleanNum(lp.max_loss_ratio_pct), reinsurerSharePct: cleanNum(lp.reinsurer_share_pct),
         lpSlides: lp.slides?.length ? lp.slides.map(r=>({minLr:cleanNum(r.min_lr),maxLr:cleanNum(r.max_lr),share:cleanNum(r.share)})).concat(Array(Math.max(0,5-lp.slides.length)).fill({minLr:'',maxLr:'',share:''})) : [{minLr:'',maxLr:'',share:''},{minLr:'',maxLr:'',share:''},{minLr:'',maxLr:'',share:''},{minLr:'',maxLr:'',share:''},{minLr:'',maxLr:'',share:''}],
         quotaShareEpi: cleanNum(d.quota_share_epi), surplusEpi: cleanNum(d.surplus_epi),
@@ -303,6 +323,7 @@ export default function PropTreatyDetail() {
         update({ _renewalManual: true });
       }
       setActiveContractId(data.contract_id || contractId);
+      dirtyRef.current = false;
       setLoaded(true);
       return data;
     },
@@ -328,6 +349,9 @@ export default function PropTreatyDetail() {
   const save = useCallback(async () => {
     // Read the slice from the ref so save() stays referentially stable across
     // keystrokes — saveRef.current and the unmount effect both depend on this.
+    // Read-only (not the assignee): never POST. Returning true lets wizard
+    // navigation proceed without writing (mirrors usePropPricingState).
+    if (readOnly) return true;
     const cur = stateRef.current?.propTreatyDetail || {};
     const isSlidingNow = normalizeCommMode(cur.commissionMode) === 'sliding';
     // Allow save to proceed for new contracts (no contractId yet) if user has entered data
@@ -376,7 +400,7 @@ export default function PropTreatyDetail() {
         },
         commissions: { mode: isSlidingNow ? 'SLIDING' : 'FIXED', fixed_commission_qs_pct: numOrNull(cur.fixedCommissionQSPct), fixed_commission_surplus_pct: numOrNull(cur.fixedCommissionSurplusPct), sliding_min_loss_ratio: numOrNull(cur.slidingMinLossRatio), sliding_max_loss_ratio: numOrNull(cur.slidingMaxLossRatio), sliding_min_commission: numOrNull(cur.slidingMinCommission), sliding_max_commission: numOrNull(cur.slidingMaxCommission), sliding_table: cur.slidingTable || [], provisional_commission_pct: numOrNull(cur.provisionalCommissionPct), mgmt_expenses_pct: numOrNull(cur.mgmtExpensesPct), profit_commission_pct: numOrNull(cur.profitCommissionPct), lcf_years: cur.lcfYears === 'extinction' ? null : numOrNull(cur.lcfYears), lcf_extinction: cur.lcfYears === 'extinction' || cur.lcfExtinction || false },
         lossParticipation: {
-          enabled: cur.lossPartEnabled !== false,
+          enabled: cur.lossPartEnabled === true,
           min_loss_ratio_pct: numOrNull(cur.minLossRatioPct),
           max_loss_ratio_pct: numOrNull(cur.maxLossRatioPct),
           reinsurer_share_pct: numOrNull(cur.reinsurerSharePct),
@@ -420,8 +444,13 @@ export default function PropTreatyDetail() {
         }
       }
       lastExplicitSaveAtRef.current = Date.now();
+      dirtyRef.current = false;
       return true;
     } catch (e) {
+      // 403 READ_ONLY is an authz verdict, not a transient failure: flip the
+      // UI read-only and return true so navigation isn't blocked and the
+      // "Save failed · Retry" chip never shows (audit F10).
+      if (isReadOnlyError(e)) { markReadOnly(); return true; }
       const stale = await handleStaleWrite(e, {
         entityType: attemptedQm ? 'quote' : 'treaty',
         onRefresh: () => window.location.reload(),
@@ -430,6 +459,7 @@ export default function PropTreatyDetail() {
           const res = await api.saveContract(attemptedId, { terms: attemptedPayload }, { ...(attemptedQm || {}), ifUnmodifiedSince: '*' });
           if (res?.updated_at) update({ _updatedAt: res.updated_at });
           lastExplicitSaveAtRef.current = Date.now();
+          dirtyRef.current = false;
           return res;
         },
       });
@@ -437,38 +467,27 @@ export default function PropTreatyDetail() {
       logger.error('Save failed:', e); return false;
     }
     finally { setSaving(false); }
-  }, [contractId, update, contractDescription, treatyTypes]);
+  }, [contractId, update, contractDescription, treatyTypes, readOnly, markReadOnly]);
 
   /* Keep saveRef current so the unmount effect can call the latest save */
   useEffect(() => { saveRef.current = save; }, [save]);
+
+  /* F5 / tab close: the unmount autosave never runs on a hard unload, so
+     ask the browser for the native leave-warning while edits are unsaved. */
+  useUnsavedChangesGuard(dirtyRef);
 
   /* Close the inline LP Slides modal on Escape (other modals handle their
      own listener via useEscapeKey at component level). */
   const closeLpSlides = useCallback(() => setShowLpSlides(false), []);
   useEscapeKey(showLpSlides, closeLpSlides);
 
-  /* Auto-save on unmount (e.g. when navigating via sidebar tabs).
-     Fires for existing treaties (contractId set) AND for new treaties where
-     the user has filled at least one identifying field — otherwise sidebar
-     navigation silently discards their work. Respects the AppContext-level
-     autosave flag so a user who explicitly turned autosave off in
-     WizardLayout doesn't get a surprise save when they navigate away. */
-  useEffect(() => {
-    return () => {
-      const snap = stateRef.current || {};
-      const autosaveOn = snap.settings?.autosave !== false;
-      if (!autosaveOn) return;
-      const cur = snap.propTreatyDetail;
-      if (Date.now() - lastExplicitSaveAtRef.current < 2000) return;
-      // Only autosave a brand-new treaty when every NOT NULL header column is
-      // present (migration 104) — otherwise the create POST is rejected by the
-      // DB. An existing row (contractId set) can always be re-saved.
-      const persistable = cur?.contractId || canPersistTreatyHeader(cur);
-      if (persistable && saveRef.current) {
-        saveRef.current().catch(e => logger.error('[PropTreatyDetail] unmount save failed:', e));
-      }
-    };
-  }, []);
+  /* Auto-save on unmount (sidebar-tab navigation) — shared gates + skip
+     surfacing live in the hook (audits F4/F10). */
+  useTreatyHeaderUnmountAutosave({
+    stateRef, saveRef, dirtyRef, lastExplicitSaveAtRef, readOnly,
+    sliceKey: 'propTreatyDetail', canPersist: canPersistTreatyHeader,
+    showToast, logLabel: 'PropTreatyDetail',
+  });
 
   /* ─── input style ─── */
   const fi = "fi"; // className alias
@@ -487,6 +506,8 @@ export default function PropTreatyDetail() {
       {({ showToast }) => (<>
 
         <ImportedFromPackBanner quoteId={contractId} importedFromState={importedFromState} />
+        {readOnly && <EditLockBanner contractId={isQuote ? null : contractId} quoteId={isQuote ? contractId : null} isQuote={isQuote} assignedToName={lockAssignedToName} onAllocated={refreshLock} />}
+        <ReadOnlyWrap readOnly={readOnly}>
 
         {/* ── Summary bar ── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
@@ -674,12 +695,12 @@ export default function PropTreatyDetail() {
           <div className="card glass" style={{ display: 'flex', flexDirection: 'column' }}>
             <div className="card-head"><span className="card-header-label">LOSS PARTICIPATION</span>
               <TogglePill options={[{ value: true, label: 'YES' }, { value: false, label: 'NO' }]}
-                value={s.lossPartEnabled !== false} onChange={v => update({ lossPartEnabled: v })}
+                value={s.lossPartEnabled === true} onChange={v => update({ lossPartEnabled: v })}
                 ariaLabel="Loss participation enabled" />
             </div>
             <div style={{ padding: '10px 18px 18px', flex: 1 }}>
               <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),.7)', marginBottom: 12 }}>Capture loss participation corridors where the reinsurer share changes above a given loss ratio.</div>
-              <div style={{ opacity: s.lossPartEnabled !== false ? 1 : 0.35, pointerEvents: s.lossPartEnabled !== false ? 'auto' : 'none' }}>
+              <div style={{ opacity: s.lossPartEnabled === true ? 1 : 0.35, pointerEvents: s.lossPartEnabled === true ? 'auto' : 'none' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <FR label="Min Loss Ratio %" missing={missingFields.has('LP Min Loss Ratio %')}><PctInput className={fi} placeholder="e.g. 70%" value={s.minLossRatioPct || ''} onChange={v => update({ minLossRatioPct: v })} /></FR>
                   <FR label="Max Loss Ratio %" missing={missingFields.has('LP Max Loss Ratio %')}><PctInput className={fi} placeholder="e.g. 100%" value={s.maxLossRatioPct || ''} onChange={v => update({ maxLossRatioPct: v })} /></FR>
@@ -770,6 +791,7 @@ export default function PropTreatyDetail() {
           onSave={ids => { update({ classIds: ids, primaryClassOfBusinessId: ids[0] || null }); setShowCobModal(false); }}
           onClose={() => setShowCobModal(false)} />}
         </AsyncBoundary>
+        </ReadOnlyWrap>
       </>)}
     </WizardLayout>
   );
