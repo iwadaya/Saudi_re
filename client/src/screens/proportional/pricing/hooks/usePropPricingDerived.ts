@@ -134,6 +134,18 @@ export function usePropPricingDerived({
     return { premScore, margScore, aiLinePct, aiLimitLine, aiPremLine, aiWithinAuth, heatLabel, heatColor, reason };
   }, [marginAct, balanceRatio, limit, epi, getC, fxInverse]);
 
+  // ── Retro impact inputs (offer modal → RetroImpactModal) ─────────────────
+  // The retro optimiser needs the loss/expense split, not just the combined
+  // ratio: retro recoveries only touch the loss piece while acquisition
+  // costs stay with us. Both come off the actuarial column.
+  const retroInputs = useMemo(() => ({
+    grossPremium100: epi,
+    grossLimit100: limit,
+    expectedLossRatio: drvAtt + drvLL + drvCat,
+    expenseRatio: drvComm + drvBrok + drvTax,
+    authorityMaxLimit: Math.round(UW_MAX_LIMIT * (fxInverse > 0 ? fxInverse : 1)),
+  }), [epi, limit, drvAtt, drvLL, drvCat, drvComm, drvBrok, drvTax, fxInverse]);
+
   return {
     getC, calcResult, calcCR, calcMaxComm,
     hdr, det2, currency, fxRate, fxInverse, treatyType,
@@ -145,7 +157,7 @@ export function usePropPricingDerived({
     crAct, crUw, marginAct, marginUw,
     movingAvgTerms,
     safeCcy, displayCcy, toDisplay, money, fxLabel,
-    balance, drivers, aiCalc,
+    balance, drivers, aiCalc, retroInputs,
   };
 }
 

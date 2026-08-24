@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { fmtPct, UW_MAX_LIMIT } from './propPricingConstants.js';
 import { useGlobalToast } from '../../../../hooks/useToast';
 import PctInput from '../../../../components/PctInput';
+import RetroImpactModal from '../../../../components/retro/RetroImpactModal';
 
 /*
   PropOfferModal — the full-screen offer, approval & workflow modal.
@@ -30,6 +32,9 @@ export default function PropOfferModal({
   approvalTrail, isCU, actorName, isTerminal,
   marginAct, marginUw, crAct, crUw, epi, limit, eventLimit,
   fxInverse, safeCcy, money, aiCalc,
+  // Loss/expense split + authority cap for the Retro Impact modal
+  // (usePropPricingDerived.retroInputs).
+  retroInputs,
   onSubmitForApproval, onMarkApproved, onMarkSigned, onMarkNTU, onReturnToUW,
   onDecline, onRecall,
   eligibleApprovers,
@@ -47,6 +52,7 @@ export default function PropOfferModal({
   isQuote = false,
 }) {
   const showToast = useGlobalToast();
+  const [showRetro, setShowRetro] = useState(false);
   if(!show) return null;
 
   const stepIndex = offerStatus==='DRAFT'?0:offerStatus==='AWAITING_APPROVAL'?1:offerStatus==='AWAITING_SIGNED_LINE'?2:3;
@@ -150,6 +156,9 @@ export default function PropOfferModal({
                   <div className="off-ai-econ-item"><span className="off-ai-econ-k">Line Limit</span><span className={`off-ai-econ-v ${!aiCalc.aiWithinAuth?'bad':''}`}>{aiCalc.aiLimitLine?money(aiCalc.aiLimitLine):'—'}</span></div>
                   <div className="off-ai-econ-item"><span className="off-ai-econ-k">Authority</span><span className={`off-ai-econ-v ${aiCalc.aiWithinAuth?'ok':'bad'}`}>{aiCalc.aiWithinAuth?'✓ Within':'✗ Exceeds'}</span></div>
                 </div>
+                <button className="rim-launch rim-launch--block" type="button" onClick={()=>setShowRetro(true)}>
+                  ⛨ Retro Impact on Line Size
+                </button>
               </div>
               <div className="off-hm-wrap">
                 <div className="off-hm-title">Treaty Classification</div>
@@ -329,6 +338,17 @@ export default function PropOfferModal({
             </div>
           </div>
         </div>
+
+        {showRetro && (
+          <RetroImpactModal
+            onClose={()=>setShowRetro(false)}
+            subject={retroInputs || { grossPremium100: epi, grossLimit100: limit, expectedLossRatio: crAct, authorityMaxLimit: Math.round(UW_MAX_LIMIT*(fxInverse>0?fxInverse:1)) }}
+            currentLinePct={parseFloat(String(offerLine||'').replace(/%/g,'').trim())}
+            money={money}
+            contextLabel="Proportional"
+            onApplyLine={isTerminal ? null : (pct)=>{ setOfferLine(String(pct)); setShowRetro(false); }}
+          />
+        )}
       </div>
     </div>
   );

@@ -147,7 +147,7 @@ describe('NpFinalPricing golden master (treaty mode)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Offer Treaty/i }));
     const offModal = container.querySelector('.off-modal');
     expect(offModal.querySelector('.off-ai').textContent).toBe(
-      '✦ AI Suggested Line SizeApply to all →10.0%Run pricing engine to generate suggestion.Avg ROL8.50%Tech Ratio—Margin—',
+      '✦ AI Suggested Line SizeApply to all →10.0%Run pricing engine to generate suggestion.Avg ROL8.50%Tech Ratio—Margin—⛨ Retro Impact on Line Size',
     );
     expect(offModal.querySelector('.off-hm-scores').textContent).toBe(
       'Premium Score 0/100Margin Score 40/100Classification Balanced',

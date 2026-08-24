@@ -1,0 +1,100 @@
+/* ═══════════════════════════════════════════════
+   RETRO IMPACT MODAL (components/retro/RetroImpactModal.jsx)
+   Opened from the Offer Treaty modals — shows what the outwards
+   retro programme does to the line and the retro-adjusted AI line.
+   Sits above the fullscreen offer modal (z-index > backdrop 1300).
+   ═══════════════════════════════════════════════ */
+.rim-backdrop { z-index: 1400; }
+.rim-modal { font-family: var(--font-sans); color: #edf2f8; }
+
+.rim-body {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  grid-template-areas: 'programme ai' 'table table';
+  gap: 14px;
+  align-items: start;
+}
+.rim-programme  { grid-area: programme; }
+.rim-ai         { grid-area: ai; }
+.rim-table-card { grid-area: table; }
+@media (max-width: 900px) {
+  .rim-body { grid-template-columns: 1fr; grid-template-areas: 'programme' 'ai' 'table'; }
+}
+
+/* ── Programme inputs ── */
+.rim-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 8px; }
+.rim-field { display: flex; flex-direction: column; gap: 3px; }
+.rim-field-label {
+  font-size: 9px; font-weight: 700; letter-spacing: .10em;
+  text-transform: uppercase; color: rgba(255,255,255,0.38);
+}
+.rim-inp {
+  width: 100%; box-sizing: border-box; border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.05); color: #fff;
+  padding: 6px 8px; font-size: 12px; font-weight: 700;
+  font-family: inherit; outline: none;
+  font-variant-numeric: tabular-nums;
+}
+.rim-inp:focus { border-color: rgba(167,139,250,0.55); }
+.rim-inp:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.rim-xl-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 14px; padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.rim-xl-title { margin: 0; }
+.rim-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; color: rgba(255,255,255,0.6); cursor: pointer;
+}
+.rim-toggle input { accent-color: #a78bfa; cursor: pointer; }
+
+.rim-hint {
+  margin-top: 10px; font-size: 10px; line-height: 1.5;
+  color: rgba(255,255,255,0.35);
+}
+
+/* ── Sensitivity curve ── */
+.rim-curve { width: 100%; height: auto; margin-top: 10px; display: block; }
+.rim-curve-line    { stroke: #a78bfa; stroke-width: 2; }
+.rim-curve-zero    { stroke: rgba(255,255,255,0.18); stroke-width: 1; stroke-dasharray: 3 3; }
+.rim-curve-current { stroke: rgba(0,212,255,0.55); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.rim-curve-best    { fill: #4ade80; stroke: rgba(10,15,25,0.9); stroke-width: 1.5; }
+.rim-curve-caption { margin-top: 4px; font-size: 10px; color: rgba(255,255,255,0.35); }
+
+/* ── Gross → net table ── */
+.rim-table-scroll { overflow-x: auto; }
+.rim-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.rim-th {
+  padding: 7px 12px; font-size: 9px; font-weight: 700;
+  letter-spacing: .10em; text-transform: uppercase;
+  color: rgba(255,255,255,0.38); white-space: nowrap;
+  border-bottom: 1px solid rgba(255,255,255,0.10); text-align: right;
+}
+.rim-th-metric { text-align: left; }
+.rim-th-hot { color: #a78bfa; }
+.rim-td {
+  padding: 6px 12px; text-align: right; white-space: nowrap;
+  color: rgba(255,255,255,0.78); font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.rim-td-metric { text-align: left; color: rgba(255,255,255,0.5); font-weight: 600; }
+.rim-td.ok  { color: #4ade80; }
+.rim-td.bad { color: #f87171; }
+.rim-tr-sub .rim-td { font-size: 11px; color: rgba(255,255,255,0.45); }
+.rim-tr-sub .rim-td-metric { padding-left: 22px; font-weight: 400; }
+.rim-tr-strong .rim-td { font-weight: 800; background: rgba(255,255,255,0.025); }
+
+/* ── Launch button on the offer modals (no inline styles in screens) ── */
+.rim-launch {
+  appearance: none; display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid rgba(167,139,250,0.40);
+  background: rgba(167,139,250,0.10); color: #c4b5fd;
+  border-radius: 8px; padding: 5px 12px;
+  font-family: inherit; font-size: 11px; font-weight: 700;
+  letter-spacing: .04em; cursor: pointer; white-space: nowrap;
+}
+.rim-launch:hover { background: rgba(167,139,250,0.22); }
+.rim-launch--block { width: 100%; justify-content: center; margin-top: 10px; }
