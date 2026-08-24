@@ -1,6 +1,6 @@
 // src/components/Topbar.jsx
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { getSession, ROLE_LABELS, canAccessApprovals, isAtLeast } from '../utils/auth';
 import { performLogout } from '../utils/logout';
 import { useViewAllTreaties } from '../utils/prefs';
@@ -43,6 +43,12 @@ export function useViewingUser() {
 
 export default function Topbar({ title, subtitle, actions }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  // HOME stays inside the current module: anywhere in the facultative
+  // workflow (/fac, /fac/dashboard, the fac wizard) it returns to the fac
+  // home, matching WizardLayout's FAC-aware home; everywhere else it is the
+  // treaty home. Without this, HOME on a fac screen dropped into treaty.
+  const homeTarget = location?.pathname?.startsWith('/fac') ? '/fac' : '/';
   const session  = getSession();
   const rc = session?.roleCode;
   const sessionRoleCode = session?.roleCode;
@@ -292,7 +298,7 @@ export default function Topbar({ title, subtitle, actions }) {
         {isAtLeast(2) && (
           <button className="topbar-home" type="button" onClick={() => navigate('/admin/users')}>⚙ USERS</button>
         )}
-        <button className="topbar-home" type="button" onClick={() => navigate('/')}>↑ HOME</button>
+        <button className="topbar-home" type="button" onClick={() => navigate(homeTarget)}>↑ HOME</button>
       </div>
     </header>
   );

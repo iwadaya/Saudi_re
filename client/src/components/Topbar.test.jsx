@@ -6,17 +6,20 @@ import Topbar from './Topbar.jsx';
 import { setSession, clearSession } from '../utils/auth';
 import { getViewAllTreaties } from '../utils/prefs';
 
-const { apiMock, navigateMock } = vi.hoisted(() => ({
+const { apiMock, navigateMock, locationMock } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
+  // Mutable so a test can place the Topbar on a specific route (the HOME
+  // button targets the current module's home).
+  locationMock: { pathname: '/' },
   apiMock: {
     getViewableUsers: vi.fn().mockResolvedValue([]),
     changePassword: vi.fn().mockResolvedValue({ ok: true }),
   },
 }));
 vi.mock('../api', () => ({ api: apiMock }));
-vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock }));
+vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock, useLocation: () => locationMock }));
 
-afterEach(() => { cleanup(); localStorage.clear(); clearSession(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); localStorage.clear(); clearSession(); vi.clearAllMocks(); locationMock.pathname = '/'; });
 beforeEach(() => { setSession({ userId: 'me', roleCode: 'CU', hierarchyLevel: 2, displayName: 'Me' }); });
 
 describe('Topbar — View treaties preference', () => {
@@ -100,12 +103,28 @@ describe('Topbar — change password', () => {
   });
 });
 
+describe('Topbar — module-aware HOME button', () => {
+  it('goes to the treaty home from a treaty screen', () => {
+    locationMock.pathname = '/dashboard';
+    render(<Topbar title="X" />);
+    fireEvent.click(screen.getByRole('button', { name: /HOME/i }));
+    expect(navigateMock).toHaveBeenCalledWith('/');
+  });
+
+  it('stays inside the facultative module: goes to the fac home from a fac screen', () => {
+    locationMock.pathname = '/fac/dashboard';
+    render(<Topbar title="X" />);
+    fireEvent.click(screen.getByRole('button', { name: /HOME/i }));
+    expect(navigateMock).toHaveBeenCalledWith('/fac');
+  });
+});
+
 describe('Topbar — switching product', () => {
   // The module picker used to be reachable only from a pill on the treaty home
   // (and the Facultative home's own control). Moving it into Settings gives
   // every Topbar screen — Claims, Finance, Dashboard, Workbench — the same way
-  // out. Topbar's "HOME" button is not that: it navigates to '/', the treaty
-  // home itself.
+  // out. Topbar's "HOME" button is not that: it navigates to the current
+  // module's home (treaty '/', or '/fac' inside the fac workflow).
   const openSettings = () => {
     render(<Topbar title="X" />);
     fireEvent.click(screen.getByRole('button', { name: /SETTINGS/i }));
