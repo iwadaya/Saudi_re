@@ -65,7 +65,12 @@ export default function NpOfferModal({
 
                 const toN = v => { const x = parseFloat(String(v ?? '').replace(/[^0-9.-]/g, '')); return Number.isFinite(x) ? x : 0; };
                 const money = n => n > 0 ? `${currency} ${Math.round(n).toLocaleString()}` : '—';
-                const stepIndex = offerStatus === 'DRAFT' ? 0 : offerStatus === 'AWAITING_APPROVAL' ? 1 : offerStatus === 'AWAITING_SIGNED_LINE' ? 2 : 3;
+                // A RETURNED / RECALLED offer is reworkable draft state — the
+                // status loader normalizes these, but stay defensive here so a
+                // raw server status can never render the terminal step with no
+                // resubmit path.
+                const isDraftLike = offerStatus === 'DRAFT' || offerStatus === 'RETURNED' || offerStatus === 'RECALLED';
+                const stepIndex = isDraftLike ? 0 : offerStatus === 'AWAITING_APPROVAL' ? 1 : offerStatus === 'AWAITING_SIGNED_LINE' ? 2 : 3;
                 const steps = [
                   { k: 'Draft' }, { k: 'Awaiting Approval' },
                   { k: 'Awaiting Signed Line' },
@@ -429,8 +434,8 @@ export default function NpOfferModal({
                         {/* ── WORKFLOW CARDS ── */}
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, alignItems:'start' }}>
 
-                          {/* ── DRAFT: Submit for Approval ── */}
-                          {!isCU && !isTerminal && offerStatus === 'DRAFT' && (
+                          {/* ── DRAFT (incl. returned / recalled): Submit for Approval ── */}
+                          {!isCU && !isTerminal && isDraftLike && (
                             <div className="off-card" style={{ border:'1px solid rgba(0,212,255,0.22)', background:'rgba(0,212,255,0.03)' }}>
                               <div className="off-card-title" style={{ color:'rgba(0,212,255,0.85)' }}>Submit For Approval</div>
                               <div style={{ marginBottom:12 }}>
@@ -490,15 +495,25 @@ export default function NpOfferModal({
 
                           {/* ── AWAITING SIGNED LINE: Mark Signed / NTU ── */}
                           {/* Quote sign-off is disabled in this build — quotes terminate at APPROVED.
-                              Treaties (isQuote=false) keep the full Mark Signed / NTU flow. */}
-                          {!isCU && !isQuote && offerStatus === 'AWAITING_SIGNED_LINE' && (
+                              Treaties (isQuote=false) keep the full Mark Signed / NTU flow.
+                              Four-eyes: the server only lets an eligible APPROVER confirm signed
+                              lines (the submitter gets 403 SIGN_FORBIDDEN), so the confirm button
+                              is live for CU/CE and disabled with an explanation for the
+                              underwriter. NTU stays available to the owner. */}
+                          {!isQuote && offerStatus === 'AWAITING_SIGNED_LINE' && (
                             <div className="off-card" style={{ border:'1px solid rgba(96,165,250,0.25)', background:'rgba(96,165,250,0.04)' }}>
                               <div className="off-card-title" style={{ color:'#60a5fa' }}>✍ Record Signed Lines</div>
-                              <div style={{ fontSize:12, color:'rgba(255,255,255,0.42)', marginBottom:10 }}>Offer approved. Enter signed line % per layer above. Then confirm below.</div>
+                              <div style={{ fontSize:12, color:'rgba(255,255,255,0.42)', marginBottom:10 }}>
+                                {isCU
+                                  ? 'Offer approved. Enter signed line % per layer above, then confirm below.'
+                                  : 'Offer approved. Enter signed line % per layer above — your approver confirms them (four-eyes).'}
+                              </div>
                               {anyOverSigned && <div style={{ fontSize:11, color:'#f87171', padding:'6px 10px', borderRadius:6, background:'rgba(248,113,113,0.08)', marginBottom:8 }}>⚠ One or more signed lines exceed the written line</div>}
                               <div style={{ display:'flex', gap:8 }}>
-                                <button className="bbg-btn bbg-btn--offer" style={{ flex:2, justifyContent:'center', opacity:(!hasAnySigned||anyOverSigned)?0.45:1 }}
-                                  onClick={()=>{ if(!hasAnySigned){showToast('Enter at least one signed line first.');return;} if(anyOverSigned){showToast('Signed line cannot exceed written line on any layer.');return;} doMarkSigned(); }}>
+                                <button className="bbg-btn bbg-btn--offer" disabled={!isCU}
+                                  style={{ flex:2, justifyContent:'center', opacity:!isCU?0.4:(!hasAnySigned||anyOverSigned)?0.45:1, cursor:!isCU?'not-allowed':'pointer' }}
+                                  title={!isCU ? 'Only an eligible approver can confirm signed lines (four-eyes)' : undefined}
+                                  onClick={()=>{ if(!isCU){showToast('Only an eligible approver can confirm signed lines (four-eyes).');return;} if(!hasAnySigned){showToast('Enter at least one signed line first.');return;} if(anyOverSigned){showToast('Signed line cannot exceed written line on any layer.');return;} doMarkSigned(); }}>
                                   ✓ Mark Signed
                                 </button>
                                 <button className="bbg-btn bbg-btn--decline" style={{ flex:1, justifyContent:'center' }}
@@ -506,6 +521,11 @@ export default function NpOfferModal({
                                   🚫 NTU
                                 </button>
                               </div>
+                              {!isCU && (
+                                <div style={{ fontSize:11, color:'rgba(255,255,255,0.35)', marginTop:8 }}>
+                                  Signed lines are confirmed by the Chief Underwriter from their approvals view.
+                                </div>
+                              )}
                             </div>
                           )}
 

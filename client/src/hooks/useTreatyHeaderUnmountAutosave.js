@@ -37,10 +37,13 @@ export function useTreatyHeaderUnmountAutosave({
         return;
       }
       if (saveRef.current) {
-        // save() resolves false for ordinary failures (network/5xx — it
-        // swallows and logs internally) and only REJECTS for re-thrown
-        // required-field errors, so both shapes must reach the toast.
-        saveRef.current().then((ok) => {
+        // draft: true — never let the required-fields gate throw away a
+        // partially-filled form on navigation (screens whose save() has no
+        // draft mode simply ignore the option). save() resolves false for
+        // ordinary failures (network/5xx — it swallows and logs internally)
+        // and only REJECTS for re-thrown required-field errors, so both
+        // shapes must reach the toast.
+        saveRef.current({ draft: true }).then((ok) => {
           if (ok === false) showToast('Treaty Detail not saved — the save failed. Reopen the screen and try again.', 6000);
         }).catch(e => {
           logger.error(`[${logLabel}] unmount save failed:`, e);

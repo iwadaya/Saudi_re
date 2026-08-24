@@ -996,7 +996,7 @@ router.put("/quotes/:id/dev-factors/:type", validateBody(devFactorPutSchema), as
 router.get("/quotes/:id/large-losses", asyncHandler(async (req, res) => {
   const {rows:rr}=await pool.query(`SELECT * FROM public.contract_large_loss_report WHERE quote_id=$1`,[req.params.id]);
   if(!rr.length) return res.json({report:null,losses:[]});
-  const {rows:losses}=await pool.query(`SELECT * FROM public.contract_large_losses WHERE report_id=$1 ORDER BY uw_year`,[rr[0].report_id]);
+  const {rows:losses}=await pool.query(`SELECT *, ROUND(COALESCE(NULLIF(incurred,0), COALESCE(paid,0)+COALESCE(os,0)) * COALESCE(NULLIF(inflation_factor,0),1), 2) AS inflated_incurred FROM public.contract_large_losses WHERE report_id=$1 ORDER BY uw_year`,[rr[0].report_id]);
   res.json({report:rr[0],losses});
 }));
 router.put("/quotes/:id/large-losses", validateBody(lossesSaveSchema), asyncHandler(async (req, res) => {
@@ -1252,7 +1252,7 @@ router.post("/quotes/:id/documents", _multerQ.single('file'), validateBody(docum
 router.get("/quotes/:id/cat-losses", asyncHandler(async (req, res) => {
   const {rows:rr}=await pool.query(`SELECT * FROM public.contract_cat_loss_report WHERE quote_id=$1`,[req.params.id]);
   if(!rr.length) return res.json({report:null,losses:[]});
-  const {rows:losses}=await pool.query(`SELECT * FROM public.contract_cat_losses WHERE report_id=$1 ORDER BY uw_year`,[rr[0].report_id]);
+  const {rows:losses}=await pool.query(`SELECT *, ROUND(COALESCE(NULLIF(incurred,0), COALESCE(paid,0)+COALESCE(os,0)) * COALESCE(NULLIF(inflation_factor,0),1), 2) AS inflated_incurred FROM public.contract_cat_losses WHERE report_id=$1 ORDER BY uw_year`,[rr[0].report_id]);
   res.json({report:rr[0],losses});
 }));
 

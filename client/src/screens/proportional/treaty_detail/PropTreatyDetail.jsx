@@ -64,9 +64,8 @@ export default function PropTreatyDetail() {
 
   const s = appState.propTreatyDetail || {};
   const showToast = useGlobalToast();
-  /* Dirty since last successful save/hydration — same ref pattern as
-     useScreenSave. Set by every user-facing update(), cleared after
-     hydration and after each successful save (audit F4). */
+  /* Dirty since last successful save/hydration (audit F4): set by every
+     user-facing update(), cleared on hydration and successful saves. */
   const dirtyRef = React.useRef(false);
   const update = useCallback(patch => {
     dirtyRef.current = true;
@@ -346,11 +345,14 @@ export default function PropTreatyDetail() {
   const stateRef = React.useRef(appState);
   const lastExplicitSaveAtRef = React.useRef(0);
   useEffect(() => { stateRef.current = appState; }, [appState]);
-  const save = useCallback(async () => {
-    // Read the slice from the ref so save() stays referentially stable across
-    // keystrokes — saveRef.current and the unmount effect both depend on this.
-    // Read-only (not the assignee): never POST. Returning true lets wizard
-    // navigation proceed without writing (mirrors usePropPricingState).
+  const save = useCallback(async (opts = {}) => {
+    // draft: true — persist without the required-fields gate (unmount autosave:
+    // navigating away mid-form must not discard work; the NOT NULL header
+    // columns stay guarded by canPersistTreatyHeader). Explicit Next/Back
+    // still validates in full. The slice is read from stateRef so save() stays
+    // referentially stable across keystrokes.
+    const draft = opts?.draft === true;
+    // Read-only (not the assignee): never POST — let navigation proceed.
     if (readOnly) return true;
     const cur = stateRef.current?.propTreatyDetail || {};
     const isSlidingNow = normalizeCommMode(cur.commissionMode) === 'sliding';
@@ -361,7 +363,7 @@ export default function PropTreatyDetail() {
     // backend rejects with a generic 400. Only enforce when the user has
     // actually started the form — typed-Error message is rendered by
     // WizardLayout's runTrackedSave catch block.
-    if (hasContent) {
+    if (!draft && hasContent) {
       const selectedTypeName = treatyTypes.find(x => String(x.id) === String(cur.treatyTypeId))?.name || '';
       const missing = getMissingRequiredFields(cur, {
         tMode:    treatyModeFromType(selectedTypeName),
@@ -482,7 +484,9 @@ export default function PropTreatyDetail() {
   useEscapeKey(showLpSlides, closeLpSlides);
 
   /* Auto-save on unmount (sidebar-tab navigation) — shared gates + skip
-     surfacing live in the hook (audits F4/F10). */
+     surfacing live in the hook (audits F4/F10). The hook saves in draft mode
+     so the required-fields gate never throws away a partially-filled form on
+     navigation; explicit Next/Back still validates in full. */
   useTreatyHeaderUnmountAutosave({
     stateRef, saveRef, dirtyRef, lastExplicitSaveAtRef, readOnly,
     sliceKey: 'propTreatyDetail', canPersist: canPersistTreatyHeader,
