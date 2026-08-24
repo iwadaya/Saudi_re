@@ -1,5 +1,9 @@
 # Load test — k6 portfolio script
 
+> Looking for the **concurrent underwriter simulation** (N real sessions
+> modelling treaties end-to-end with PUT→GET verification of every save)?
+> That lives in [`agents/`](agents/README.md) — `npm run loadtest:agents`.
+
 Two k6 scripts exercise the hot paths of the reinsurance tool:
 
 * `k6/smoke-10vu.js` is the real operator smoke profile: 5-10
