@@ -338,4 +338,38 @@ describe('PropTreatyDetail integration', () => {
     expect(payload.terms.epi_split).toHaveLength(2);
     expect(payload.terms.epi_split.every(r => r.premium === 500_000)).toBe(true);
   });
+
+  // ── Read-only viewers (audit F10): a non-assignee gets the edit-lock
+  // banner + inert form, and NO save ever fires — not on unmount, not on nav.
+  describe('read-only viewer (edit lock)', () => {
+    it('shows the lock banner, disables the form, and never autosaves on unmount', async () => {
+      resetApi({
+        getEditPermission: vi.fn().mockResolvedValue({ canEdit: false, isOwner: false, assignedToName: 'Grace Hopper' }),
+      });
+      const { unmount, container } = renderScreen();
+      await screen.findByText('Retention %');
+      await screen.findByText(/Grace Hopper/);
+      expect(screen.getByRole('button', { name: /Allocate to me/i })).toBeInTheDocument();
+      expect(container.querySelector('[inert]')).toBeTruthy();
+
+      apiMock.saveContract.mockClear();
+      apiMock.createContract.mockClear();
+      unmount();
+      expect(apiMock.saveContract).not.toHaveBeenCalled();
+      expect(apiMock.createContract).not.toHaveBeenCalled();
+    });
+
+    it('a raced 403 READ_ONLY flips the screen read-only instead of showing the Save failed chip', async () => {
+      resetApi({
+        saveContract: vi.fn().mockRejectedValue(makeHttpError({ status: 403, code: 'READ_ONLY', message: 'This treaty is read-only.' })),
+      });
+      renderScreen();
+      await screen.findByText('Retention %');
+
+      fireEvent.click(screen.getByRole('button', { name: /go to next step/i }));
+      await waitFor(() => expect(apiMock.saveContract).toHaveBeenCalledTimes(1));
+      // No failure chip and no blocked navigation — the 403 became a read-only verdict.
+      expect(screen.queryByText(/Save failed/i)).not.toBeInTheDocument();
+    });
+  });
 });

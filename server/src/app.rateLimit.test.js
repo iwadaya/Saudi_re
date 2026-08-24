@@ -122,6 +122,27 @@ describe('login limiter (IP + identity)', () => {
     const other = await postJson(base, '/api/auth/login', { 'X-Forwarded-For': '7.7.7.7' }, { username: 'grace@x' });
     expect(other.status).toBe(200);
   });
+
+  it('does NOT count the public GET /name-login/status posture probe (audit F3)', async () => {
+    const limiter = track(createLoginLimiter({ max: 2 }));
+    const base = await boot((app) => {
+      app.use(['/api/auth/login', '/api/auth/name-login'], limiter);
+      app.get('/api/auth/name-login/status', (_req, res) => res.json({ enabled: true }));
+      app.post('/api/auth/name-login', (_req, res) => res.json({ ok: true }));
+    });
+    // Way past max:2 — status probes must never consume the login budget.
+    for (let i = 0; i < 5; i++) {
+      const r = await get(base, '/api/auth/name-login/status', { 'X-Forwarded-For': '8.8.8.8' });
+      expect(r.status).toBe(200);
+    }
+    // Actual POST attempts from the same IP still throttle at max:2.
+    const statuses = [];
+    for (let i = 0; i < 3; i++) {
+      const r = await postJson(base, '/api/auth/name-login', { 'X-Forwarded-For': '8.8.8.8' }, { first_name: 'Ishe', surname: 'Wadaya' });
+      statuses.push(r.status);
+    }
+    expect(statuses).toEqual([200, 200, 429]);
+  });
 });
 
 describe('load-test / demo bypass', () => {

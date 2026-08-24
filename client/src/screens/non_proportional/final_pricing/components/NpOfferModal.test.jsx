@@ -120,4 +120,16 @@ describe('NpOfferModal — quote submission summary', () => {
     fireEvent.click(submit);
     expect(doSubmitForApproval).toHaveBeenCalled();
   });
+
+  it('labels approver options with the person, not just the role (audit F7)', () => {
+    renderModal({}, {
+      eligibleApprovers: [
+        { user_id: 'u1', display_name: 'IT cu 1787', role_name: 'Chief Underwriter' },
+        { user_id: 'u2', display_name: 'Real CU', role_name: 'Chief Underwriter' },
+      ],
+    });
+    // Same role, two people — the labels must be distinguishable.
+    expect(screen.getByRole('option', { name: 'IT cu 1787 — Chief Underwriter' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Real CU — Chief Underwriter' })).toBeInTheDocument();
+  });
 });

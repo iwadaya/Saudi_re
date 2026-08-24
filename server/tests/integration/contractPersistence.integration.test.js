@@ -57,38 +57,38 @@ describe.skipIf(shouldSkipDb)('integration: contract save and rehydrate every ro
     const codeSuffix = suffix.replace(/[^a-z0-9]/gi, '').slice(-12).toUpperCase();
     const [country, currency, broker, cedant, treatyType, cob1, cob2] = await Promise.all([
       one(
-        `INSERT INTO public.country (country_code, country_name, region)
-         VALUES ($1, $2, $3) RETURNING country_id`,
+        `INSERT INTO public.country (country_code, country_name, region, is_active)
+         VALUES ($1, $2, $3,false) RETURNING country_id`,
         [`Z${codeSuffix}`, `Persist Country ${suffix}`, 'Audit Region'],
       ),
       one(
-        `INSERT INTO public.currency (currency_code, currency_name)
-         VALUES ($1, $2) RETURNING currency_id`,
+        `INSERT INTO public.currency (currency_code, currency_name, is_active)
+         VALUES ($1, $2,false) RETURNING currency_id`,
         [`X${codeSuffix}`, `Persist Currency ${suffix}`],
       ),
       one(
-        `INSERT INTO public.brokers (broker_name)
-         VALUES ($1) RETURNING broker_id`,
+        `INSERT INTO public.brokers (broker_name, is_active)
+         VALUES ($1,false) RETURNING broker_id`,
         [`Persist Broker ${suffix}`],
       ),
       one(
-        `INSERT INTO public.companies (company_name)
-         VALUES ($1) RETURNING company_id`,
+        `INSERT INTO public.companies (company_name, is_active)
+         VALUES ($1,false) RETURNING company_id`,
         [`Persist Cedant ${suffix}`],
       ),
       one(
-        `INSERT INTO public.treaty_type (treaty_type, category)
-         VALUES ($1, 'NON_PROPORTIONAL') RETURNING treaty_type_id`,
+        `INSERT INTO public.treaty_type (treaty_type, category, is_active)
+         VALUES ($1, 'NON_PROPORTIONAL',false) RETURNING treaty_type_id`,
         [`Persist Treaty Type ${suffix}`],
       ),
       one(
-        `INSERT INTO public.class_of_business (class_of_business, code)
-         VALUES ($1, $2) RETURNING class_of_business_id`,
+        `INSERT INTO public.class_of_business (class_of_business, code, is_active)
+         VALUES ($1, $2,false) RETURNING class_of_business_id`,
         [`Persist Property ${suffix}`, `P${codeSuffix}`],
       ),
       one(
-        `INSERT INTO public.class_of_business (class_of_business, code)
-         VALUES ($1, $2) RETURNING class_of_business_id`,
+        `INSERT INTO public.class_of_business (class_of_business, code, is_active)
+         VALUES ($1, $2,false) RETURNING class_of_business_id`,
         [`Persist Marine ${suffix}`, `M${codeSuffix}`],
       ),
     ]);
@@ -764,7 +764,7 @@ describe.skipIf(shouldSkipDb)('integration: contract save and rehydrate every ro
     // experience on a sibling proportional contract so both category-guarded
     // surfaces stay covered by this persistence test.
     const propTreatyType = await one(
-      `INSERT INTO public.treaty_type (treaty_type, category) VALUES ($1,'PROPORTIONAL') RETURNING treaty_type_id`,
+      `INSERT INTO public.treaty_type (treaty_type, category, is_active) VALUES ($1,'PROPORTIONAL',false) RETURNING treaty_type_id`,
       [`Persist Prop TType ${Date.now()}`],
     );
     const straightContract = await jsonOk(

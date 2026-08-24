@@ -46,6 +46,7 @@ import NpInsightModal from './components/NpInsightModal.jsx';
 // All screen state + data loads (typed reducer, Phase 4.1) and the
 // imperative handlers (engines, dual save, offer workflow).
 import { useNpPricingState } from './hooks/useNpPricingState';
+import { useNpTreatyDetail } from '../../../hooks/useNpTreatyDetail';
 import { useNpPricingActions } from './hooks/useNpPricingActions.js';
 
 export default function NpFinalPricing() {
@@ -58,10 +59,15 @@ export default function NpFinalPricing() {
     contractId: isQuote ? null : contractId, quoteId: isQuote ? contractId : null, isQuote,
   });
 
-  const npDetail = useMemo(() => appState.npTreatyDetail || {}, [appState.npTreatyDetail]);
-  const mode = getNpTreatyTypeMode(appState);
-  const catDisabled = isNpCatFlowDisabled(appState);
-  const riskDisabled = isNpRiskFlowDisabled(appState);
+  // npTreatyDetail with server fallback: on a deep link the slice is empty and
+  // the header/mode logic would render RISK & CAT XL + SAR with a phantom Risk
+  // XL section (audit F6). The treaty-type utils only read .npTreatyDetail, so
+  // a shim object keeps them signature-compatible with the merged detail.
+  const npDetail = useNpTreatyDetail(contractId, isQuote);
+  const detailShim = useMemo(() => ({ npTreatyDetail: npDetail }), [npDetail]);
+  const mode = getNpTreatyTypeMode(detailShim);
+  const catDisabled = isNpCatFlowDisabled(detailShim);
+  const riskDisabled = isNpRiskFlowDisabled(detailShim);
   const currency = npDetail.currencyCode || npDetail.currency || 'SAR';
   // Structure layers synced from NpStructure screen via AppContext
   const structureLayers = useMemo(
@@ -79,7 +85,7 @@ export default function NpFinalPricing() {
     quoteMode,
     isQuote,
     npDetail,
-    countryId: appState.npTreatyDetail?.countryId || null,
+    countryId: npDetail.countryId || null,
     mode,
     riskDisabled,
     catDisabled,
@@ -126,7 +132,7 @@ export default function NpFinalPricing() {
           <ReadOnlyWrap readOnly={readOnly}>
           {loading ? <div className="df-card df-card--notice"><div className="df-note">Loading...</div></div> : (
             <>
-              {isNpAggregateXlTreaty(appState) && (
+              {isNpAggregateXlTreaty(detailShim) && (
                 /* Aggregate XL treaties get the Bloomberg-style hero
                    at the top (populated from the structure slice)
                    followed by the structure read-only — edits
@@ -293,17 +299,17 @@ export default function NpFinalPricing() {
                 show={marketModalOpen}
                 onClose={() => setMarketModalOpen(false)}
                 contractId={contractId}
-                countryId={appState.npTreatyDetail?.countryId || null}
+                countryId={npDetail.countryId || null}
                 classOfBusinessId={
-                  (Array.isArray(appState.npTreatyDetail?.classOfBusinessIds)
-                    && appState.npTreatyDetail.classOfBusinessIds[0])
-                    || appState.npTreatyDetail?.primaryClassOfBusinessId
+                  (Array.isArray(npDetail.classOfBusinessIds)
+                    && npDetail.classOfBusinessIds[0])
+                    || npDetail.primaryClassOfBusinessId
                     || null
                 }
                 countryName={npDetail?.countryName || npDetail?.country || ''}
                 cobName={(() => {
-                  const list = appState.npTreatyDetail?.cobNames
-                    || appState.npTreatyDetail?.classOfBusinessNames
+                  const list = npDetail.cobNames
+                    || npDetail.classOfBusinessNames
                     || [];
                   return Array.isArray(list) ? (list[0] || '') : '';
                 })()}

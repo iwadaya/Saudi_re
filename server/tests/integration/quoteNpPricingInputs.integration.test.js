@@ -40,12 +40,12 @@ describe.skipIf(shouldSkipDb)('integration: quote-mode NP pricing inputs (engine
     const suffix = `${Date.now()}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
     const code = suffix.replace(/[^a-z0-9]/gi, '').slice(-10).toUpperCase();
     const [country, currency, broker, cedant, treatyType, cob] = await Promise.all([
-      pool.query(`INSERT INTO public.country (country_code, country_name, region) VALUES ($1,$2,'R') RETURNING country_id`, [`Z${code}`, `QP Country ${suffix}`]),
-      pool.query(`INSERT INTO public.currency (currency_code, currency_name) VALUES ($1,$2) RETURNING currency_id`, [`X${code}`, `QP Currency ${suffix}`]),
-      pool.query(`INSERT INTO public.brokers (broker_name) VALUES ($1) RETURNING broker_id`, [`QP Broker ${suffix}`]),
-      pool.query(`INSERT INTO public.companies (company_name) VALUES ($1) RETURNING company_id`, [`QP Cedant ${suffix}`]),
-      pool.query(`INSERT INTO public.treaty_type (treaty_type, category) VALUES ($1,'NON_PROPORTIONAL') RETURNING treaty_type_id`, [`QP TType ${suffix}`]),
-      pool.query(`INSERT INTO public.class_of_business (class_of_business, code) VALUES ($1,$2) RETURNING class_of_business_id`, [`QP Motor ${suffix}`, `M${code}`.slice(0, 10)]),
+      pool.query(`INSERT INTO public.country (country_code, country_name, region, is_active) VALUES ($1,$2,'R',false) RETURNING country_id`, [`Z${code}`, `QP Country ${suffix}`]),
+      pool.query(`INSERT INTO public.currency (currency_code, currency_name, is_active) VALUES ($1,$2,false) RETURNING currency_id`, [`X${code}`, `QP Currency ${suffix}`]),
+      pool.query(`INSERT INTO public.brokers (broker_name, is_active) VALUES ($1,false) RETURNING broker_id`, [`QP Broker ${suffix}`]),
+      pool.query(`INSERT INTO public.companies (company_name, is_active) VALUES ($1,false) RETURNING company_id`, [`QP Cedant ${suffix}`]),
+      pool.query(`INSERT INTO public.treaty_type (treaty_type, category, is_active) VALUES ($1,'NON_PROPORTIONAL',false) RETURNING treaty_type_id`, [`QP TType ${suffix}`]),
+      pool.query(`INSERT INTO public.class_of_business (class_of_business, code, is_active) VALUES ($1,$2,false) RETURNING class_of_business_id`, [`QP Motor ${suffix}`, `M${code}`.slice(0, 10)]),
     ]);
     cobId = cob.rows[0].class_of_business_id;
     return {

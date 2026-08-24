@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import TriangleScreen from './TriangleScreen.jsx';
 
-const { apiMock, appStateMock, contractIdRef, toastMock } = vi.hoisted(() => ({
+const { apiMock, appStateMock, contractIdRef, toastMock, setSliceMock } = vi.hoisted(() => ({
   apiMock: {
     getTriangle: vi.fn(),
     saveTriangle: vi.fn(),
+    getContract: vi.fn(),
   },
   appStateMock: {
     quoteMode: false,
@@ -13,11 +14,12 @@ const { apiMock, appStateMock, contractIdRef, toastMock } = vi.hoisted(() => ({
   },
   contractIdRef: { current: 'contract-1' },
   toastMock: vi.fn(),
+  setSliceMock: vi.fn(),
 }));
 
 vi.mock('../../../api', () => ({ api: apiMock }));
 vi.mock('../../../hooks/useContractId', () => ({ useContractId: () => contractIdRef.current }));
-vi.mock('../../../context/AppContext', () => ({ useAppState: () => ({ state: appStateMock }) }));
+vi.mock('../../../context/AppContext', () => ({ useAppState: () => ({ state: appStateMock, setSlice: setSliceMock }) }));
 vi.mock('../../../components/WizardLayout', () => ({
   default: ({ children }) => (
     <section>
@@ -277,6 +279,47 @@ describe('TriangleScreen', () => {
       await act(async () => { fireEvent.click(retry); });
       await screen.findByDisplayValue('1,000');
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('deep-link hydration (audit F5)', () => {
+    it('hydrates triangleMeta from the contract bundle when the slice is empty, without fetching triangles early', async () => {
+      appStateMock.triangleMeta = { startYear: null };
+      apiMock.getContract.mockResolvedValue({
+        header: { uw_year: 2026 },
+        detail: { experience_start_year: 2021, inception_date: '2026-01-01' },
+      });
+      render(
+        <TriangleScreen routeKey="PROP_PREMIUM_TRIANGLES" title="Premium Triangle" headerPill="X" />,
+      );
+      await waitFor(() => expect(setSliceMock).toHaveBeenCalledWith(
+        'triangleMeta',
+        expect.objectContaining({ startYear: 2021, renewalYear: 2026, inceptionYear: 2026 }),
+      ));
+      // The mocked slice never updates, so startYear stays null in this render —
+      // the triangle load must not have fired with a bogus year window.
+      expect(apiMock.getTriangle).not.toHaveBeenCalled();
+    });
+
+    it('shows a Retry panel when the contract fetch fails instead of loading forever', async () => {
+      appStateMock.triangleMeta = { startYear: null };
+      apiMock.getContract.mockRejectedValue(new Error('down'));
+      render(
+        <TriangleScreen routeKey="PROP_PREMIUM_TRIANGLES" title="Premium Triangle" headerPill="X" />,
+      );
+      const retry = await screen.findByRole('button', { name: 'Retry' });
+      expect(screen.getByRole('alert')).toHaveTextContent(/contract details needed to size this triangle/i);
+
+      // Recovery: fix the fetch, click Retry → hydration dispatches the slice write.
+      apiMock.getContract.mockResolvedValue({
+        header: { uw_year: 2026 },
+        detail: { experience_start_year: 2021, inception_date: '2026-01-01' },
+      });
+      await act(async () => { fireEvent.click(retry); });
+      await waitFor(() => expect(setSliceMock).toHaveBeenCalledWith(
+        'triangleMeta',
+        expect.objectContaining({ startYear: 2021 }),
+      ));
     });
   });
 });

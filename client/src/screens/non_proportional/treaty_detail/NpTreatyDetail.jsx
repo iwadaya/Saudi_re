@@ -8,6 +8,8 @@ import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import SlipIngestButton from '../../../components/SlipIngestButton';
 import ImportedFromPackBanner from '../../../components/ImportedFromPackBanner';
+import { useEditLock } from '../../../hooks/useEditLock';
+import EditLockBanner, { ReadOnlyWrap } from '../../../components/EditLockBanner.jsx';
 import { logger } from '../../../utils/logger';
 import {
   addMonthsClamped,
@@ -19,6 +21,10 @@ import {
   cleanNum,
 } from '../../../utils/format';
 import { handleStaleWrite } from '../../../utils/handleStaleWrite';
+import { isReadOnlyError } from '../../../utils/readOnlyError';
+import { useGlobalToast } from '../../../hooks/useToast';
+import { useUnsavedChangesGuard } from '../../../hooks/useUnsavedChangesGuard';
+import { useTreatyHeaderUnmountAutosave } from '../../../hooks/useTreatyHeaderUnmountAutosave';
 
 const ROUTE_KEY = 'NP_TREATY_DETAIL';
 
@@ -130,6 +136,9 @@ export default function NpTreatyDetail() {
   const quoteMode = !!(appState.quoteMode) || (() => {
     try { return !!localStorage.getItem(ACTIVE_QUOTE_ID); } catch { return false; }
   })();
+  const { readOnly, assignedToName: lockAssignedToName, refresh: refreshLock, markReadOnly } = useEditLock({
+    contractId: quoteMode ? null : contractId, quoteId: quoteMode ? contractId : null, isQuote: quoteMode,
+  });
 
   const [cedants, setCedants] = useState([]);
   const [brokers, setBrokers] = useState([]);
@@ -144,7 +153,14 @@ export default function NpTreatyDetail() {
   const [lookupsReady, setLookupsReady] = useState(false);
 
   const s = appState.npTreatyDetail || {};
-  const update = useCallback((patch) => setSlice('npTreatyDetail', patch), [setSlice]);
+  const showToast = useGlobalToast();
+  /* Dirty since last successful save/hydration — same ref pattern as
+     useScreenSave and PropTreatyDetail (audit F4). */
+  const dirtyRef = React.useRef(false);
+  const update = useCallback((patch) => {
+    dirtyRef.current = true;
+    setSlice('npTreatyDetail', patch);
+  }, [setSlice]);
 
   /* ── Clean slate: when there is no contractId, reset the slice so old data
      doesn't bleed through. Reads s.contractId / s._loadedFromServer
@@ -170,17 +186,18 @@ export default function NpTreatyDetail() {
 
   // Sync treatyTypeName into the state slice so other screens (Structure) can read it
   useEffect(() => {
+    // Derived sync, not a user edit — must not arm the unsaved-changes guard.
     if (selectedTypeName && selectedTypeName !== s.treatyTypeName) {
-      update({ treatyTypeName: selectedTypeName });
+      setSlice('npTreatyDetail', { treatyTypeName: selectedTypeName });
     }
-  }, [selectedTypeName, s.treatyTypeName, update]);
+  }, [selectedTypeName, s.treatyTypeName, setSlice]);
   const currencyCode = useMemo(() => currencies.find(x => String(x.id) === String(s.currencyId))?.code || currencies.find(x => String(x.id) === String(s.currencyId))?.name || '', [currencies, s.currencyId]);
   // Sync currencyCode into slice so Structure, Pricing etc. can read it without refetching
   useEffect(() => {
     if (currencyCode && currencyCode !== s.currencyCode) {
-      update({ currencyCode });
+      setSlice('npTreatyDetail', { currencyCode });
     }
-  }, [currencyCode, s.currencyCode, update]);
+  }, [currencyCode, s.currencyCode, setSlice]);
   const countryName = useMemo(() => countries.find(c => String(c.id) === String(s.countryId))?.name || '', [countries, s.countryId]);
   const cedantName = useMemo(() => cedants.find(c => String(c.id) === String(s.cedantId))?.name || '', [cedants, s.cedantId]);
   const brokerName = useMemo(() => brokers.find(b => String(b.id) === String(s.brokerId))?.name || '', [brokers, s.brokerId]);
@@ -211,24 +228,26 @@ export default function NpTreatyDetail() {
   const cobNamesKey = cobNames.join(',');
   const savedCobNamesKey = (s.lineOfBusinessLabels || []).join(',');
   useEffect(() => {
-    if (cobNamesKey !== savedCobNamesKey) update({ lineOfBusinessLabels: cobNames });
-  }, [cobNamesKey, savedCobNamesKey, cobNames, update]);
+    if (cobNamesKey !== savedCobNamesKey) setSlice('npTreatyDetail', { lineOfBusinessLabels: cobNames });
+  }, [cobNamesKey, savedCobNamesKey, cobNames, setSlice]);
 
   /* auto-calc: renewal = inception + 12 months (matches proportional) */
   useEffect(() => {
     if (!loaded) return;
     if (s.inceptionDate && !s._renewalManual) {
       const auto = addMonths(s.inceptionDate, 12);
-      if (auto !== s.renewalDate) update({ renewalDate: auto });
+      // setSlice, not update(): derived recompute must not arm the
+      // unsaved-changes guard on a merely-viewed treaty.
+      if (auto !== s.renewalDate) setSlice('npTreatyDetail', { renewalDate: auto });
     }
-  }, [s.inceptionDate, loaded, update, s._renewalManual, s.renewalDate]);
+  }, [s.inceptionDate, loaded, setSlice, s._renewalManual, s.renewalDate]);
 
   /* auto-derive: UW year = year of inception date */
   useEffect(() => {
     if (!loaded) return;
     const yr = yearFromDateStr(s.inceptionDate);
-    if (yr && String(yr) !== String(s.startYear)) update({ startYear: String(yr) });
-  }, [s.inceptionDate, loaded, update, s.startYear]);
+    if (yr && String(yr) !== String(s.startYear)) setSlice('npTreatyDetail', { startYear: String(yr) });
+  }, [s.inceptionDate, loaded, setSlice, s.startYear]);
 
   /* ── Load lookups (mount-only) ── */
   useEffect(() => {
@@ -318,6 +337,7 @@ export default function NpTreatyDetail() {
         _loadedFromServer: true,
       });
       (quoteMode ? setActiveQuoteId : setActiveContractId)(data.contract_id || data.quote_id || contractId);
+      dirtyRef.current = false;
       setLoaded(true);
     });
   }, [contractId, loaded, quoteMode, s.contractId, s._loadedFromServer, update]);
@@ -330,6 +350,9 @@ export default function NpTreatyDetail() {
   const save = useCallback(async () => {
     // Read the slice from the ref so save() stays referentially stable across
     // keystrokes — saveRef.current and the unmount effect both depend on this.
+    // Read-only (not the assignee): never POST — no-op that lets navigation
+    // proceed (audit F10).
+    if (readOnly) return true;
     const cur = stateRef.current?.npTreatyDetail || {};
     const qm = (stateRef.current?.quoteMode || quoteMode) ? { quote: true } : undefined;
     const hasContent = !!(cur.cedantId || cur.treatyTypeId || cur.countryId);
@@ -440,11 +463,15 @@ export default function NpTreatyDetail() {
         }
       }
       lastExplicitSaveAtRef.current = Date.now();
+      dirtyRef.current = false;
       return true;
     } catch (e) {
       // Re-throw typed errors (e.g. required-field gate) so WizardLayout's
       // SaveStateIndicator banner can show the missing list.
       if (e instanceof Error && /^Required:/.test(e.message)) throw e;
+      // 403 READ_ONLY: authz verdict, not a transient failure — flip the UI
+      // read-only and let navigation proceed without the failure chip.
+      if (isReadOnlyError(e)) { markReadOnly(); return true; }
       const stale = await handleStaleWrite(e, {
         entityType: attemptedQm ? 'quote' : 'treaty',
         onRefresh: () => window.location.reload(),
@@ -453,6 +480,7 @@ export default function NpTreatyDetail() {
           const res = await api.saveContract(attemptedId, attemptedHeaderPayload, { ...(attemptedQm || {}), ifUnmodifiedSince: '*' });
           if (res?.updated_at) update({ _updatedAt: res.updated_at });
           lastExplicitSaveAtRef.current = Date.now();
+          dirtyRef.current = false;
           return res;
         },
       });
@@ -460,9 +488,13 @@ export default function NpTreatyDetail() {
       logger.error('Save:', e);
       return false;
     }
-  }, [contractId, update, contractDescription, quoteMode]);
+  }, [contractId, update, contractDescription, quoteMode, readOnly, markReadOnly]);
 
   useEffect(() => { saveRef.current = save; }, [save]);
+
+  /* F5 / tab close: the unmount autosave never runs on a hard unload, so
+     ask the browser for the native leave-warning while edits are unsaved. */
+  useUnsavedChangesGuard(dirtyRef);
 
   const quoteIdentifier = quoteMode
     ? (s.quoteRef || (s.contractId
@@ -470,22 +502,14 @@ export default function NpTreatyDetail() {
       : 'Auto-generated on first save'))
     : (s.contractId || '(new)');
 
-  /* Auto-save on unmount (e.g. sidebar nav). Gate on any meaningful field —
-     for a brand-new treaty there is no contractId yet, so the original
-     contractId-only gate silently dropped the form contents. */
-  useEffect(() => {
-    return () => {
-      const cur = stateRef.current?.npTreatyDetail;
-      if (Date.now() - lastExplicitSaveAtRef.current < 2000) return;
-      // Only autosave a brand-new treaty when every NOT NULL header column is
-      // present (migration 104) — otherwise the create POST is rejected by the
-      // DB. An existing row (contractId set) can always be re-saved.
-      const persistable = cur?.contractId || canPersistTreatyHeader(cur);
-      if (persistable && saveRef.current) {
-        saveRef.current().catch(e => logger.error('[NpTreatyDetail] unmount save failed:', e));
-      }
-    };
-  }, []);
+  /* Auto-save on unmount (sidebar nav) — shared gates + skip surfacing in
+     the hook (audits F4/F10). Also now respects the topbar autosave toggle,
+     matching the proportional screen. */
+  useTreatyHeaderUnmountAutosave({
+    stateRef, saveRef, dirtyRef, lastExplicitSaveAtRef, readOnly,
+    sliceKey: 'npTreatyDetail', canPersist: canPersistTreatyHeader,
+    showToast, logLabel: 'NpTreatyDetail',
+  });
 
   // Same import-flow nav state read as PropTreatyDetail.
   const location = useLocation();
@@ -501,6 +525,8 @@ export default function NpTreatyDetail() {
       {() => (<>
 
         <ImportedFromPackBanner quoteId={contractId} importedFromState={importedFromState} />
+        {readOnly && <EditLockBanner contractId={quoteMode ? null : contractId} quoteId={quoteMode ? contractId : null} isQuote={quoteMode} assignedToName={lockAssignedToName} onAllocated={refreshLock} />}
+        <ReadOnlyWrap readOnly={readOnly}>
 
         {/* ── Summary bar (matches proportional) ── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
@@ -711,6 +737,7 @@ export default function NpTreatyDetail() {
         {showCobModal && <CobSelectModal selected={s.classIds || []} classList={classes}
           onSave={ids => { update({ classIds: ids }); setShowCobModal(false); }}
           onClose={() => setShowCobModal(false)} />}
+        </ReadOnlyWrap>
       </>)}
     </WizardLayout>
   );

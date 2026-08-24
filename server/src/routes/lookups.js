@@ -25,10 +25,15 @@ router.delete('/ref/cache', (_req, res) => { invalidateJsonCache('ref:'); res.js
 router.get("/cedants", asyncHandler(async (req, res) => {
   const {country_id}=req.query;
   await sendRef(req, res, `cedants:${country_id || 'all'}`, async () => {
+    // is_active filter hides soft-deleted rows + test fixtures (migration 141);
+    // the unfiltered fallback keeps pre-migration databases serving.
     const sql=country_id
+      ? "SELECT company_id AS id, company_name AS name, country_id FROM public.companies WHERE country_id=$1 AND is_active IS NOT FALSE ORDER BY company_name"
+      : "SELECT company_id AS id, company_name AS name, country_id FROM public.companies WHERE is_active IS NOT FALSE ORDER BY company_name";
+    const fallback=country_id
       ? "SELECT company_id AS id, company_name AS name, country_id FROM public.companies WHERE country_id=$1 ORDER BY company_name"
       : "SELECT company_id AS id, company_name AS name, country_id FROM public.companies ORDER BY company_name";
-    return tryQuery(sql,country_id?[country_id]:[]);
+    return tryQuery(sql,country_id?[country_id]:[],fallback);
   });
 }));
 
@@ -280,7 +285,10 @@ router.get("/cedants/:cedantId/np-layers", asyncHandler(async (req, res) => {
 // Brokers
 router.get("/brokers", asyncHandler(async (req, res) => {
   await sendRef(req, res, 'brokers', async () => {
+    // Filtered variant first (is_active from migration 141); the unfiltered
+    // forms remain as fallbacks for pre-migration databases.
     for (const sql of [
+      "SELECT broker_id AS id, broker_name AS name FROM public.brokers WHERE is_active IS NOT FALSE ORDER BY broker_name",
       "SELECT broker_id AS id, broker_name AS name FROM public.brokers ORDER BY broker_name",
       "SELECT broker_id AS id, name FROM public.brokers ORDER BY name",
       "SELECT id, name FROM public.brokers ORDER BY name",
@@ -302,10 +310,21 @@ router.get("/reinsurers", asyncHandler(async (req, res) => {
 // Treaty Types — canonical table (treaty_type singular, has FK constraints)
 router.get("/treaty-types", asyncHandler(async (req, res) => {
   await sendRef(req, res, 'treaty-types', async () => {
-    const {rows} = await pool.query(
-      "SELECT treaty_type_id AS id, treaty_type AS name, category FROM public.treaty_type ORDER BY category, treaty_type"
-    );
-    return rows;
+    // Filtered first (is_active from migration 141); the unfiltered retry only
+    // covers a pre-migration database. A real DB outage must THROW so the
+    // failure surfaces as a 500 instead of caching an empty dropdown for the
+    // ref TTL — which is why this is not tryQuery.
+    try {
+      const {rows} = await pool.query(
+        "SELECT treaty_type_id AS id, treaty_type AS name, category FROM public.treaty_type WHERE is_active IS NOT FALSE ORDER BY category, treaty_type"
+      );
+      return rows;
+    } catch {
+      const {rows} = await pool.query(
+        "SELECT treaty_type_id AS id, treaty_type AS name, category FROM public.treaty_type ORDER BY category, treaty_type"
+      );
+      return rows;
+    }
   });
 }));
 
@@ -347,10 +366,12 @@ router.get("/class-of-business", asyncHandler(async (req, res) => {
 
     const codeCol = cols.find(c => c === 'code') || null;
     const selectCode = codeCol ? `, ${codeCol} AS code` : '';
+    const whereActive = cols.includes('is_active') ? 'WHERE is_active IS NOT FALSE' : '';
 
     const { rows } = await pool.query(
       `SELECT ${idCol} AS id, ${nameCol} AS name${selectCode}
          FROM public.class_of_business
+        ${whereActive}
         ORDER BY ${nameCol}`
     );
     return rows;
@@ -372,18 +393,18 @@ router.get("/ref/lists/:key/items", asyncHandler(async (req, res) => {
 
     // Direct table fallback
     if(key==="country"){
-      try{
-        const{rows}=await pool.query("SELECT country_id AS id, country_name AS name, country_code AS code FROM public.country ORDER BY country_name");
-        return rows;
-      }catch(e){}
-      return [];
+      const rows=await tryQuery(
+        "SELECT country_id AS id, country_name AS name, country_code AS code FROM public.country WHERE is_active IS NOT FALSE ORDER BY country_name",
+        [],
+        "SELECT country_id AS id, country_name AS name, country_code AS code FROM public.country ORDER BY country_name");
+      return rows;
     }
     if(key==="currency"){
-      try{
-        const{rows}=await pool.query("SELECT currency_id AS id, currency_code AS name, currency_code AS code FROM public.currency ORDER BY currency_code");
-        return rows;
-      }catch(e){}
-      return [];
+      const rows=await tryQuery(
+        "SELECT currency_id AS id, currency_code AS name, currency_code AS code FROM public.currency WHERE is_active IS NOT FALSE ORDER BY currency_code",
+        [],
+        "SELECT currency_id AS id, currency_code AS name, currency_code AS code FROM public.currency ORDER BY currency_code");
+      return rows;
     }
     return [];
   });

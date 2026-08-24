@@ -443,7 +443,7 @@ export default function NpOfferModal({
                                 <select value={offerApprover} onChange={e=>setOfferApprover(e.target.value)}
                                   style={{ width:'100%', boxSizing:'border-box', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(0,212,255,0.32)', borderRadius:8, color:offerApprover?'#fff':'rgba(255,255,255,0.32)', padding:'9px 12px', fontSize:13, fontFamily:'inherit', outline:'none', cursor:'pointer' }}>
                                   <option value="">Select approver…</option>
-                                  {(eligibleApprovers||[]).map(a=><option key={a.user_id} value={a.user_id} style={{background:'#0b1526'}}>{a.role_name}</option>)}
+                                  {(eligibleApprovers||[]).map(a=><option key={a.user_id} value={a.user_id} style={{background:'#0b1526'}}>{[a.display_name,a.role_name].filter(Boolean).join(' — ')||a.email||a.user_id}</option>)}
                                 </select>
                               </div>
                               <div style={{ marginBottom:14 }}>
@@ -469,7 +469,7 @@ export default function NpOfferModal({
                               <div style={{ fontSize:24, marginBottom:8 }}>⏳</div>
                               <div style={{ fontSize:13, fontWeight:700, color:'#60a5fa', marginBottom:5 }}>Awaiting CU Review</div>
                               <div style={{ fontSize:11, color:'rgba(255,255,255,0.38)', marginBottom:14 }}>
-                                Submitted to <b style={{ color:'rgba(255,255,255,0.6)' }}>{(eligibleApprovers.find(a=>a.user_id===offerApprover)?.role_name)||'approver'}</b>
+                                Submitted to <b style={{ color:'rgba(255,255,255,0.6)' }}>{(()=>{const ap=eligibleApprovers.find(a=>a.user_id===offerApprover);return [ap?.display_name,ap?.role_name].filter(Boolean).join(' — ')||'approver';})()}</b>
                               </div>
                               <button className="bbg-btn" style={{ borderColor:'rgba(0,212,255,0.45)', color:'#00d4ff' }}
                                 onClick={async ()=>{if(window.confirm('Recall this submission? The contract will return to Draft.')){try{await api.recallOffer(contractId,{reason:'Recalled by underwriter',_actor:actorName},quoteMode?{quote:true}:undefined);}catch(e){showToast('Recall failed: '+(e?.message||'Server error'));return;}setOfferStatus('DRAFT');}}}>

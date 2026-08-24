@@ -83,7 +83,7 @@ describe('getMissingRequiredFields', () => {
     lossPartEnabled: false,
   };
 
-  it('empty slice in fixed/QS mode lists every always-required label + QS fields + fixed QS commission + LP scalars (LP defaults YES)', () => {
+  it('empty slice in fixed/QS mode lists every always-required label + QS fields + fixed QS commission, without LP scalars (LP defaults NO)', () => {
     const missing = getMissingRequiredFields({}, { tMode: 'quota', commMode: 'fixed' });
     // Always-required identifiers
     expect(missing).toEqual(expect.arrayContaining([
@@ -96,12 +96,30 @@ describe('getMissingRequiredFields', () => {
     ]));
     // Fixed-commission side
     expect(missing).toContain('Fixed QS Commission %');
-    // LP scalars (lossPartEnabled defaults to true via `!== false`)
+    // LP defaults to NO on an untouched form (audit F9) — the trio is only
+    // required when the toggle is explicitly YES.
+    expect(missing).not.toContain('LP Min Loss Ratio %');
+    expect(missing).not.toContain('LP Max Loss Ratio %');
+    expect(missing).not.toContain('LP Reinsurer Share %');
+    // Surplus-only fields are NOT in the list — QS treaty
+    expect(missing).not.toContain('Surplus Max Retention');
+  });
+
+  it('an untouched LP toggle (undefined) never requires the LP trio (audit F9)', () => {
+    expect(getMissingRequiredFields(
+      { ...fullQsFixed, lossPartEnabled: undefined },
+      { tMode: 'quota', commMode: 'fixed' },
+    )).toEqual([]);
+  });
+
+  it('LP explicitly YES still requires the trio', () => {
+    const missing = getMissingRequiredFields(
+      { ...fullQsFixed, lossPartEnabled: true },
+      { tMode: 'quota', commMode: 'fixed' },
+    );
     expect(missing).toEqual(expect.arrayContaining([
       'LP Min Loss Ratio %', 'LP Max Loss Ratio %', 'LP Reinsurer Share %',
     ]));
-    // Surplus-only fields are NOT in the list — QS treaty
-    expect(missing).not.toContain('Surplus Max Retention');
   });
 
   it('fully-filled QS + fixed + LP=NO returns []', () => {

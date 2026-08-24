@@ -66,7 +66,7 @@ describe.skipIf(shouldSkipDb)('integration: quote → contract bind lifecycle', 
   beforeAll(async () => {
     harness = await bootApp();
     refs = await seedRefs({ category: 'PROPORTIONAL' });
-    const c = await pool.query(`INSERT INTO public.class_of_business (class_of_business) VALUES ($1) RETURNING class_of_business_id`,
+    const c = await pool.query(`INSERT INTO public.class_of_business (class_of_business, is_active) VALUES ($1,false) RETURNING class_of_business_id`,
       [`Bind COB ${Date.now()}-${process.pid}`]);
     cobId = c.rows[0].class_of_business_id;
   });
