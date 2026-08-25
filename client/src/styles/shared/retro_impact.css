@@ -21,6 +21,20 @@
   .rim-body { grid-template-columns: 1fr; grid-template-areas: 'programme' 'ai' 'table'; }
 }
 
+/* Fullscreen: the programme panel keeps the left rail for the whole height,
+   with the AI suggestion and the gross → net walk stacked beside it — no
+   below-the-fold table. Wider gaps + a roomier programme grid to match. */
+@media (min-width: 901px) {
+  .rim-modal.bbg-modal--fullscreen .rim-body {
+    grid-template-columns: 360px 1fr;
+    grid-template-areas: 'programme ai' 'programme table';
+    grid-template-rows: auto 1fr;
+    gap: 18px;
+  }
+  .rim-modal.bbg-modal--fullscreen .rim-fields { grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+  .rim-modal.bbg-modal--fullscreen .rim-table-card { align-self: stretch; }
+}
+
 /* ── Programme inputs ── */
 .rim-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 8px; }
 .rim-field { display: flex; flex-direction: column; gap: 3px; }

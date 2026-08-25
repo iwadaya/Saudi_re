@@ -188,7 +188,7 @@ export default function RetroImpactModal({
   return (
     <div className="bbg-modal-backdrop rim-backdrop" role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bbg-modal bbg-modal--wide rim-modal">
+      <div className="bbg-modal bbg-modal--fullscreen rim-modal">
         <div className="bbg-modal-head">
           <span className="bbg-modal-title">⛨ Retro Impact on Line Size{contextLabel ? ` — ${contextLabel}` : ''}</span>
           <button className="bbg-modal-x" onClick={onClose}>✕</button>
