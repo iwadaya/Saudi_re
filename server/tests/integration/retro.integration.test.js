@@ -235,6 +235,38 @@ describe.skipIf(shouldSkipDb)('integration: retro module', () => {
     const catXl = body.programmes.find((p) => p.programme_name === 'Property Cat XL');
     expect(Number(catXl.occurrence_limit)).toBe(25000000);
     expect(Number(catXl.attachment)).toBe(5000000);
+    // Share-of-book data: our 80m contract is the whole in-scope book here.
+    expect(Number(body.subject_exposure)).toBe(80000000);
+    expect(body.subject_in_book).toBe(true);
+    expect(Number(catXl.book_exposure)).toBe(80000000);
+    expect(catXl.book_contracts).toBe(1);
+  });
+
+  it('applicable: book_exposure grows with every in-scope contract, so the client can scale to the treaty share', async () => {
+    // A 240m sibling in the same (country × class) cell → book 320m, our share 25%.
+    const sib = await harness.fetchApp('POST', '/api/treaties', {
+      body: { ...refs, uw_year: UW_YEAR, status: 'DRAFT', experience_source: 'TRIANGLE', inception_date: `${UW_YEAR}-01-01` },
+    }).then((r) => r.json());
+    try {
+      await pool.query(
+        'UPDATE public.contract SET primary_class_of_business_id=$2 WHERE contract_id=$1',
+        [sib.contract_id, cobA]);
+      await pool.query(
+        'INSERT INTO public.contract_prop_details (contract_id, total_capacity) VALUES ($1, 240000000)',
+        [sib.contract_id]);
+
+      const body = await harness.fetchApp('GET', `/api/retro/applicable?contract_id=${contractId}`).then((r) => r.json());
+      const catXl = body.programmes.find((p) => p.programme_name === 'Property Cat XL');
+      expect(Number(body.subject_exposure)).toBe(80000000);
+      expect(Number(catXl.book_exposure)).toBe(320000000);
+      expect(catXl.book_contracts).toBe(2);
+      // The covers-all programme sees the same book in this isolated year.
+      const wa = body.programmes.find((p) => p.programme_name === 'WA Stop Loss');
+      expect(Number(wa.book_exposure)).toBe(320000000);
+    } finally {
+      await pool.query('DELETE FROM public.contract_prop_details WHERE contract_id=$1', [sib.contract_id]);
+      await pool.query('DELETE FROM public.contract WHERE contract_id=$1', [sib.contract_id]);
+    }
   });
 
   it('applicable: a contract outside the scoped country only sees covers-all programmes', async () => {

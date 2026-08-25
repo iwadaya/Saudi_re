@@ -12,6 +12,7 @@ import {
   normaliseProgramme,
   normaliseSubject,
   optimiseRetroLine,
+  bookShareFrac,
   programmeFromStored,
 } from './retroImpact.js';
 
@@ -254,5 +255,87 @@ describe('programmeFromStored', () => {
       expect(out.programme).toEqual({ ...DEFAULT_RETRO_PROGRAMME });
       expect(out.sourceNames).toEqual([]);
     }
+  });
+});
+
+describe('bookShareFrac', () => {
+  it('is subject ÷ book for a contract already inside the book', () => {
+    expect(bookShareFrac({ subjectExposure: 80e6, bookExposure: 320e6 })).toBeCloseTo(0.25, 12);
+  });
+  it('adds a quote to the denominator (not yet written into the book)', () => {
+    expect(bookShareFrac({ subjectExposure: 80e6, bookExposure: 240e6, subjectInBook: false })).toBeCloseTo(0.25, 12);
+  });
+  it('caps at 1 and treats degenerate exposures as no scaling', () => {
+    expect(bookShareFrac({ subjectExposure: 500e6, bookExposure: 100e6 })).toBe(1);
+    expect(bookShareFrac({ subjectExposure: 0, bookExposure: 100e6 })).toBe(1);
+    expect(bookShareFrac({ subjectExposure: 100e6, bookExposure: 0 })).toBe(1);
+    expect(bookShareFrac({})).toBe(1);
+  });
+});
+
+describe('programmeFromStored — whole-account scaling', () => {
+  const XL = {
+    programme_type: 'WHOLE_ACCOUNT_XL', programme_name: 'WA Cat XL',
+    attachment: 20_000_000, occurrence_limit: 80_000_000,
+    rol_pct: 12, reinstatements: 1, book_exposure: 320_000_000,
+  };
+
+  it('scales attachment and limit to the treaty share; rates pass through', () => {
+    const out = programmeFromStored([XL], { subjectExposure: 80_000_000 });
+    expect(out.shareFrac).toBeCloseTo(0.25, 12);
+    expect(out.scaled).toBe(true);
+    expect(out.programme.xlAttachment).toBe(5_000_000);   // 20m × 25%
+    expect(out.programme.xlLimit).toBe(20_000_000);       // 80m × 25%
+    expect(out.programme.xlRolPct).toBe(12);              // rate — unscaled
+    expect(out.programme.xlReinstatements).toBe(1);
+    expect(out.bookExposure).toBe(320_000_000);
+    expect(out.subjectExposure).toBe(80_000_000);
+  });
+
+  it('rounds scaled amounts to quotable figures (3 significant digits)', () => {
+    const out = programmeFromStored(
+      [{ ...XL, attachment: 17_777_777, occurrence_limit: 53_333_333 }],
+      { subjectExposure: 80_000_000 },
+    );
+    expect(out.programme.xlAttachment).toBe(4_440_000);   // 4,444,444.25 → 3 s.f.
+    expect(out.programme.xlLimit).toBe(13_300_000);       // 13,333,333.25 → 3 s.f.
+  });
+
+  it('a quote joins the book denominator before scaling', () => {
+    const out = programmeFromStored(
+      [{ ...XL, book_exposure: 240_000_000 }],
+      { subjectExposure: 80_000_000, subjectInBook: false },
+    );
+    expect(out.shareFrac).toBeCloseTo(0.25, 12);
+    expect(out.bookExposure).toBe(320_000_000); // effective denominator shown to the user
+  });
+
+  it('does not scale when the treaty IS the whole in-scope book', () => {
+    const out = programmeFromStored(
+      [{ ...XL, book_exposure: 80_000_000 }],
+      { subjectExposure: 80_000_000 },
+    );
+    expect(out.shareFrac).toBe(1);
+    expect(out.scaled).toBe(false);
+    expect(out.programme.xlAttachment).toBe(20_000_000);  // raw stored terms
+    expect(out.programme.xlLimit).toBe(80_000_000);
+  });
+
+  it('does not scale without exposure data (opts omitted / zero exposures)', () => {
+    for (const opts of [undefined, { subjectExposure: 0 }, {}]) {
+      const out = programmeFromStored([XL], opts);
+      expect(out.scaled).toBe(false);
+      expect(out.programme.xlAttachment).toBe(20_000_000);
+      expect(out.programme.xlLimit).toBe(80_000_000);
+    }
+  });
+
+  it('QS cession is never scaled — it is already proportional to the line', () => {
+    const out = programmeFromStored(
+      [{ programme_type: 'QUOTA_SHARE', programme_name: 'WA QS', cession_pct: 25, commission_pct: 30 }, XL],
+      { subjectExposure: 80_000_000 },
+    );
+    expect(out.programme.qsCessionPct).toBe(25);
+    expect(out.programme.qsCommissionPct).toBe(30);
   });
 });

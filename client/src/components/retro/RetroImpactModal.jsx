@@ -111,7 +111,10 @@ export default function RetroImpactModal({
           isQuote ? { quoteId: contractId } : { contractId },
         );
         if (cancelled) return;
-        const seed = programmeFromStored(res?.programmes);
+        const seed = programmeFromStored(res?.programmes, {
+          subjectExposure: res?.subject_exposure,
+          subjectInBook: res?.subject_in_book !== false,
+        });
         setStored(seed);
         if (seed.hasStored) {
           // Edited before the fetch landed → keep the edits, offer the reset.
@@ -197,6 +200,12 @@ export default function RetroImpactModal({
             {source === 'stored' && stored?.hasStored && (
               <div className="rim-source rim-source--stored">
                 ⛨ Seeded from stored programme{stored.sourceNames.length === 1 ? '' : 's'}: <b>{stored.sourceNames.join(', ')}</b>
+                {stored.scaled && (
+                  <span className="rim-source-sub">
+                    · XL scaled to this treaty&apos;s {(stored.shareFrac * 100).toFixed(1)}% share of the protected book
+                    ({fmtM(stored.subjectExposure)} of {fmtM(stored.bookExposure)})
+                  </span>
+                )}
                 {stored.unusedNames.length > 0 && (
                   <span className="rim-source-sub"> · also covering (not modelled): {stored.unusedNames.join(', ')}</span>
                 )}

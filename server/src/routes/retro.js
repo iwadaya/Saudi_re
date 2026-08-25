@@ -526,6 +526,13 @@ router.get('/retro/summary', asyncHandler(async (req, res) => {
 // This is what seeds the offer modals' Retro Impact view, so the same
 // matching rule as /retro/coverage applies — an entity with no recorded
 // class/country only matches covers-all programmes.
+//
+// Each programme also carries `book_exposure` — the Σ 100% limit of every
+// in-scope contract in the book that programme protects — and the response
+// carries `subject_exposure` (this treaty's 100% limit) plus
+// `subject_in_book` (contracts are already in the book; quotes are not).
+// Together these let the client scale a whole-account programme's XL terms
+// down to the treaty's share of the protected book.
 router.get('/retro/applicable', asyncHandler(async (req, res) => {
   const contractId = String(req.query.contract_id || '');
   const quoteId = String(req.query.quote_id || '');
@@ -555,13 +562,70 @@ router.get('/retro/applicable', asyncHandler(async (req, res) => {
   }
   if (!subject) return res.status(404).json({ error: 'Treaty not found' });
 
+  const subjectIsContract = UUID_RE.test(contractId);
+  // This treaty's own 100% limit — the numerator of its share of any
+  // whole-account programme's protected book (same COALESCE the coverage
+  // grid uses: prop total capacity, else Σ NP layer limits).
+  const { rows: expRows } = subjectIsContract
+    ? await pool.query(`
+        SELECT COALESCE(pd.total_capacity, np.total_limit, 0) AS subject_exposure
+          FROM public.contract c
+          LEFT JOIN LATERAL (
+            SELECT d.total_capacity FROM public.contract_prop_details d
+             WHERE d.contract_id = c.contract_id
+             ORDER BY d.updated_at DESC NULLS LAST LIMIT 1) pd ON true
+          LEFT JOIN LATERAL (
+            SELECT SUM(l.layer_limit) AS total_limit FROM public.contract_np_layers l
+             WHERE l.contract_id = c.contract_id) np ON true
+         WHERE c.contract_id = $1`, [contractId])
+    : await pool.query(`
+        SELECT COALESCE(pd.total_capacity, np.total_limit, 0) AS subject_exposure
+          FROM public.quote q
+          LEFT JOIN LATERAL (
+            SELECT d.total_capacity FROM public.quote_prop_details d
+             WHERE d.quote_id = q.quote_id LIMIT 1) pd ON true
+          LEFT JOIN LATERAL (
+            SELECT SUM(l.layer_limit) AS total_limit FROM public.quote_np_layers l
+             WHERE l.quote_id = q.quote_id) np ON true
+         WHERE q.quote_id = $1`, [quoteId]);
+  const subjectExposure = Number(expRows[0]?.subject_exposure || 0);
+
   const { rows: programmes } = await pool.query(`
     SELECT p.retro_programme_id, p.programme_name, p.programme_type, p.status,
            p.reinsurer, p.currency_code, p.cession_pct, p.commission_pct,
            p.attachment, p.occurrence_limit, p.aggregate_limit,
            p.reinstatements, p.rol_pct, p.premium,
-           p.covers_all_classes, p.covers_all_countries
+           p.covers_all_classes, p.covers_all_countries,
+           book.book_exposure, book.book_contracts
       FROM public.retro_programme p
+      -- The protected book: every in-scope contract in the programme's year
+      -- (same status filter + scope matching as /retro/coverage).
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(SUM(COALESCE(pd.total_capacity, np.total_limit, 0)), 0) AS book_exposure,
+               COUNT(*)::int AS book_contracts
+          FROM public.contract c
+          LEFT JOIN LATERAL (
+            SELECT d.total_capacity FROM public.contract_prop_details d
+             WHERE d.contract_id = c.contract_id
+             ORDER BY d.updated_at DESC NULLS LAST LIMIT 1) pd ON true
+          LEFT JOIN LATERAL (
+            SELECT SUM(l.layer_limit) AS total_limit FROM public.contract_np_layers l
+             WHERE l.contract_id = c.contract_id) np ON true
+         WHERE c.uw_year = p.uw_year
+           AND c.status NOT IN ('DECLINED','NTU','CANCELLED')
+           AND (p.covers_all_countries OR EXISTS (
+                  SELECT 1 FROM public.retro_programme_country pcy
+                   WHERE pcy.retro_programme_id = p.retro_programme_id
+                     AND pcy.country_id = c.country_id))
+           AND (p.covers_all_classes OR EXISTS (
+                  SELECT 1 FROM public.retro_programme_class pc
+                   WHERE pc.retro_programme_id = p.retro_programme_id
+                     AND (pc.class_of_business_id = c.primary_class_of_business_id
+                          OR EXISTS (
+                               SELECT 1 FROM public.contract_class_of_business ccb
+                                WHERE ccb.contract_id = c.contract_id
+                                  AND ccb.class_of_business_id = pc.class_of_business_id))))
+      ) book ON true
      WHERE p.uw_year = $1 AND p.status = 'ACTIVE'
        AND (p.covers_all_classes OR EXISTS (
               SELECT 1 FROM public.retro_programme_class pc
@@ -574,7 +638,12 @@ router.get('/retro/applicable', asyncHandler(async (req, res) => {
      ORDER BY p.programme_type, p.programme_name`,
   [subject.uw_year, subject.class_ids || [], subject.country_id]);
 
-  res.json({ uw_year: subject.uw_year, programmes });
+  res.json({
+    uw_year: subject.uw_year,
+    subject_exposure: subjectExposure,
+    subject_in_book: subjectIsContract,
+    programmes,
+  });
 }));
 
 export default router;

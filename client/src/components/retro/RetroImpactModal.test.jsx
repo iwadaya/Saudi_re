@@ -153,6 +153,24 @@ describe('RetroImpactModal', () => {
     expect(screen.getByText(/Seeded from stored programmes/)).toBeInTheDocument();
   });
 
+  it('scales a whole-account XL to the treaty share of the protected book and says so', async () => {
+    apiMock.getApplicableRetroProgrammes.mockResolvedValue({
+      subject_exposure: 80_000_000,
+      subject_in_book: true,
+      programmes: [{
+        programme_type: 'WHOLE_ACCOUNT_XL', programme_name: 'WA Cat XL',
+        attachment: 20_000_000, occurrence_limit: 80_000_000,
+        rol_pct: 12, reinstatements: 1, book_exposure: 320_000_000,
+      }],
+    });
+    renderModal({ contractId: 'c-1' });
+    await screen.findByText(/Seeded from stored programme/);
+    // 80m / 320m book → 25% share: 80m xs 20m becomes 20m xs 5m.
+    expect(screen.getByText(/XL scaled to this treaty's 25\.0% share of the protected book/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Retro XL attachment')).toHaveValue('5000000');
+    expect(screen.getByLabelText('Retro XL limit')).toHaveValue('20000000');
+  });
+
   it('says when no stored programme covers the treaty and keeps the defaults', async () => {
     apiMock.getApplicableRetroProgrammes.mockResolvedValue({ programmes: [] });
     renderModal({ contractId: 'c-1' });

@@ -384,6 +384,33 @@ export function optimiseRetroLine({ subject, programme, currentLinePct, step } =
 const PROPORTIONAL_RETRO_TYPES = new Set(['QUOTA_SHARE', 'SURPLUS']);
 
 /**
+ * The treaty's share of a stored programme's protected book, in (0, 1].
+ *
+ * `subjectExposure` is this treaty's 100% limit; `bookExposure` is the Σ
+ * 100% limit of every in-scope contract the programme protects (both from
+ * GET /api/retro/applicable). A quote is not yet in the written book, so
+ * `subjectInBook: false` adds it to the denominator. Degenerate inputs —
+ * either exposure missing or zero — return 1 (no scaling), because zeroing
+ * the XL on missing data would silently model the treaty as unprotected.
+ *
+ * @param {{subjectExposure?: number, bookExposure?: number, subjectInBook?: boolean}} params
+ * @returns {number} share fraction in (0, 1].
+ */
+export function bookShareFrac({ subjectExposure, bookExposure, subjectInBook = true } = {}) {
+  const subj = num(subjectExposure);
+  const book = num(bookExposure) + (subjectInBook ? 0 : num(subjectExposure));
+  if (!(subj > 0) || !(book > 0)) return 1;
+  return clamp(subj / book, 0, 1) || 1;
+}
+
+/** Round a scaled currency amount to a quotable figure (3 significant digits). */
+function roundAmount(n) {
+  if (!(n > 0)) return 0;
+  const mag = 10 ** Math.max(0, Math.floor(Math.log10(n)) - 2);
+  return Math.round(n / mag) * mag;
+}
+
+/**
  * Map the STORED retro programmes covering a treaty (rows from
  * GET /api/retro/applicable — snake_case DB fields) onto the single
  * QS + XL programme this engine models:
@@ -392,33 +419,55 @@ const PROPORTIONAL_RETRO_TYPES = new Set(['QUOTA_SHARE', 'SURPLUS']);
  *     QS cession + commission; with none stored, cession is 0 — a stored
  *     book with no proportional retro genuinely cedes nothing pro-rata.
  *   • The first non-proportional programme (any XL / stop loss) supplies the
- *     XL terms; with none stored, the XL is off.
+ *     XL terms; with none stored, the XL is off. A programme protecting a
+ *     wider book than this one treaty has its attachment and limit SCALED
+ *     to the treaty's share of that book ({@link bookShareFrac}) — the
+ *     programme-level tower applied unscaled against a single treaty's
+ *     aggregate would massively overstate the attachment and the cover.
+ *     ROL, reinstatements and the QS cession are rates, so they pass
+ *     through unscaled.
  *
  * Extra programmes beyond the first of each kind are reported in
  * `unusedNames` so the UI can say what the single-layer model left out.
  *
  * @param {Array<Object>} rows  Stored programme rows (may be empty).
+ * @param {{subjectExposure?: number, subjectInBook?: boolean}} [opts]
+ *        The treaty's own 100% limit (response `subject_exposure`) and
+ *        whether it is already inside the book totals (`subject_in_book`).
+ *        Omitted → no scaling (share 1), preserving the raw stored terms.
  * @returns {{programme: RetroProgramme, sourceNames: string[],
- *            unusedNames: string[], hasStored: boolean}}
+ *            unusedNames: string[], hasStored: boolean,
+ *            shareFrac: number, bookExposure: number, subjectExposure: number,
+ *            scaled: boolean}}
  */
-export function programmeFromStored(rows) {
+export function programmeFromStored(rows, { subjectExposure, subjectInBook = true } = {}) {
   const list = Array.isArray(rows) ? rows : [];
   if (!list.length) {
     return {
       programme: { ...DEFAULT_RETRO_PROGRAMME },
       sourceNames: [], unusedNames: [], hasStored: false,
+      shareFrac: 1, bookExposure: 0, subjectExposure: num(subjectExposure), scaled: false,
     };
   }
   const prop = list.filter((r) => PROPORTIONAL_RETRO_TYPES.has(r.programme_type));
   const xls = list.filter((r) => !PROPORTIONAL_RETRO_TYPES.has(r.programme_type));
   const qs = prop[0] || null;
   const xl = xls[0] || null;
+  // Effective book = the share denominator: a quote is not yet in the
+  // written book, so its own exposure joins the total (mirrors bookShareFrac).
+  const bookExposure = xl
+    ? num(xl.book_exposure) + (subjectInBook ? 0 : num(subjectExposure))
+    : 0;
+  const shareFrac = xl
+    ? bookShareFrac({ subjectExposure, bookExposure, subjectInBook: true })
+    : 1;
+  const scaled = !!xl && shareFrac < 1;
   const programme = normaliseProgramme({
     qsCessionPct: qs ? num(qs.cession_pct) : 0,
     qsCommissionPct: qs ? num(qs.commission_pct) : 0,
     xlEnabled: !!xl,
-    xlAttachment: xl ? num(xl.attachment) : 0,
-    xlLimit: xl ? num(xl.occurrence_limit) : 0,
+    xlAttachment: xl ? (scaled ? roundAmount(num(xl.attachment) * shareFrac) : num(xl.attachment)) : 0,
+    xlLimit: xl ? (scaled ? roundAmount(num(xl.occurrence_limit) * shareFrac) : num(xl.occurrence_limit)) : 0,
     xlRolPct: xl ? num(xl.rol_pct, DEFAULT_RETRO_PROGRAMME.xlRolPct) : DEFAULT_RETRO_PROGRAMME.xlRolPct,
     xlReinstatements: xl ? num(xl.reinstatements) : 0,
     xlReinstatementPct: DEFAULT_RETRO_PROGRAMME.xlReinstatementPct,
@@ -429,5 +478,6 @@ export function programmeFromStored(rows) {
     sourceNames: [qs?.programme_name, xl?.programme_name].filter(Boolean),
     unusedNames: [...prop.slice(1), ...xls.slice(1)].map((r) => r.programme_name),
     hasStored: true,
+    shareFrac, bookExposure, subjectExposure: num(subjectExposure), scaled,
   };
 }
