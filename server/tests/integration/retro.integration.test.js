@@ -195,6 +195,64 @@ describe.skipIf(shouldSkipDb)('integration: retro module', () => {
     expect(Number(s.active_occurrence_limit)).toBe(35000000);
   });
 
+  it('captures a layered NP tower and a region scope; both round-trip and REPLACE on update', async () => {
+    // The seeded IT country carries region 'R' (helpers.seedRefs).
+    const create = await harness.fetchApp('POST', '/api/retro/programmes', {
+      headers: rm,
+      body: {
+        uw_year: UW_YEAR, programme_name: 'Layered Cat Tower', programme_type: 'XL_CAT',
+        status: 'ACTIVE', covers_all_classes: true, regions: ['R'],
+        layers: [
+          { attachment: 5_000_000, occurrence_limit: 10_000_000, rol_pct: 18, reinstatements: 2, reinstatement_pct: 100 },
+          { attachment: 15_000_000, occurrence_limit: 25_000_000, rol_pct: 9, reinstatements: 1, reinstatement_pct: 100 },
+        ],
+      },
+    });
+    expect(create.status).toBe(201);
+    const progIdLayered = (await create.json()).retro_programme_id;
+    try {
+      const detail = await harness.fetchApp('GET', `/api/retro/programmes/${progIdLayered}`).then((r) => r.json());
+      expect(detail.regions).toEqual(['R']);
+      expect(detail.layers.map((l) => l.layer_number)).toEqual([1, 2]);
+      expect(Number(detail.layers[0].occurrence_limit)).toBe(10000000);
+      expect(Number(detail.layers[1].attachment)).toBe(15000000);
+
+      // Region scope matches the contract (its country's region is 'R') even
+      // though no country is listed; the tower limit (Σ layers) rolls up in
+      // coverage and the layers ride along on /applicable.
+      const cov = await harness.fetchApp('GET', `/api/retro/coverage?year=${UW_YEAR}`).then((r) => r.json());
+      const cell = cov.cells.find((x) => x.country_id === refs.country_id && x.class_of_business_id === cobA);
+      const towerRow = cell.programmes.find((x) => x.programme_name === 'Layered Cat Tower');
+      expect(towerRow).toBeTruthy();
+      expect(cell.retro_limit).toBeGreaterThanOrEqual(35000000);
+
+      const app = await harness.fetchApp('GET', `/api/retro/applicable?contract_id=${contractId}`).then((r) => r.json());
+      const towerProg = app.programmes.find((x) => x.programme_name === 'Layered Cat Tower');
+      expect(towerProg).toBeTruthy();
+      expect(towerProg.layers.length).toBe(2);
+      expect(Number(towerProg.layers[0].attachment)).toBe(5000000);
+
+      // Update REPLACES the tower (one wider layer) and clears the region scope.
+      const upd = await harness.fetchApp('PUT', `/api/retro/programmes/${progIdLayered}`, {
+        headers: rm,
+        body: { regions: [], covers_all_countries: true, layers: [{ attachment: 2_000_000, occurrence_limit: 40_000_000, rol_pct: 12 }] },
+      });
+      expect(upd.status).toBe(200);
+      const after = await harness.fetchApp('GET', `/api/retro/programmes/${progIdLayered}`).then((r) => r.json());
+      expect(after.regions).toEqual([]);
+      expect(after.layers.length).toBe(1);
+      expect(Number(after.layers[0].occurrence_limit)).toBe(40000000);
+    } finally {
+      await harness.fetchApp('DELETE', `/api/retro/programmes/${progIdLayered}`, { headers: rm });
+    }
+  });
+
+  it('serves the distinct region list for the scope editor', async () => {
+    const regions = await harness.fetchApp('GET', '/api/retro/regions').then((r) => r.json());
+    expect(Array.isArray(regions)).toBe(true);
+    expect(regions).toContain('R'); // seeded IT countries carry region 'R'
+  });
+
   it('retro packs: upload → listed on detail → download → non-manager blocked → delete', async () => {
     const form = new FormData();
     form.append('file', new Blob(['placement slip body'], { type: 'text/plain' }), 'slip.txt');

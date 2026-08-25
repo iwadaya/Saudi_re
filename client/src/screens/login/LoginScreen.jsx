@@ -259,7 +259,7 @@ export default function LoginScreen() {
 
   // Already authenticated — skip login
   useEffect(() => {
-    if (getSession()) navigate(canAccessApprovals() ? '/approvals' : '/select', { replace: true });
+    if (getSession()) navigate(getSession()?.roleCode === 'RM' ? '/retro' : canAccessApprovals() ? '/approvals' : '/select', { replace: true });
   }, [navigate]);
 
   // Load ALL active users for the people dropdown. Demo fallback covers the
@@ -319,7 +319,7 @@ export default function LoginScreen() {
       // Forced first-login change: flip the gate so the mandatory "Set your
       // password" modal appears immediately (the AppShell overlay reads this).
       if (session.mustChangePassword) requirePasswordChange();
-      navigate(canAccessApprovals() ? '/approvals' : '/select');
+      navigate(session.roleCode === 'RM' ? '/retro' : canAccessApprovals() ? '/approvals' : '/select');
     } catch (err) {
       setError(err.message || 'Login failed.');
     } finally { setLoading(false); }
@@ -338,7 +338,7 @@ export default function LoginScreen() {
       const { session } = await api.nameLogin({ first_name: first, surname: last });
       setSession(session);
       if (session.mustChangePassword) requirePasswordChange();
-      navigate(canAccessApprovals() ? '/approvals' : '/select');
+      navigate(session.roleCode === 'RM' ? '/retro' : canAccessApprovals() ? '/approvals' : '/select');
     } catch (err) {
       setError(err.message || 'Login failed.');
     } finally { setLoading(false); }

@@ -453,13 +453,36 @@ export function programmeFromStored(rows, { subjectExposure, subjectInBook = tru
       sourceNames: [], unusedNames: [], hasStored: false,
       shareFrac: 1, bookExposure: 0, subjectExposure: num(subjectExposure), scaled: false,
       converted: false, fxToSubject: 1, fromCurrency: null, fxMissing: false,
-      bookFxMissing: 0,
+      bookFxMissing: 0, layerCount: 0,
     };
   }
   const prop = list.filter((r) => PROPORTIONAL_RETRO_TYPES.has(r.programme_type));
   const xls = list.filter((r) => !PROPORTIONAL_RETRO_TYPES.has(r.programme_type));
   const qs = prop[0] || null;
-  const xl = xls[0] || null;
+  const xlRaw = xls[0] || null;
+  // A programme captured as a layered tower flattens to one cover for this
+  // single-layer engine: bottom attachment, Σ layer limits, limit-weighted
+  // ROL, and the most conservative (minimum) reinstatement count. The layer
+  // structure itself is reported via layerCount so the UI can say so.
+  const xl = (() => {
+    if (!xlRaw) return null;
+    const layers = Array.isArray(xlRaw.layers) ? xlRaw.layers.filter((l) => num(l.occurrence_limit) > 0) : [];
+    if (!layers.length) return xlRaw;
+    const totalLimit = layers.reduce((s, l) => s + num(l.occurrence_limit), 0);
+    const attach = Math.min(...layers.map((l) => num(l.attachment)));
+    const wRol = totalLimit > 0
+      ? layers.reduce((s, l) => s + num(l.rol_pct) * num(l.occurrence_limit), 0) / totalLimit
+      : num(xlRaw.rol_pct);
+    const minReinst = Math.min(...layers.map((l) => num(l.reinstatements)));
+    return {
+      ...xlRaw,
+      attachment: attach,
+      occurrence_limit: totalLimit,
+      rol_pct: wRol,
+      reinstatements: minReinst,
+      layer_count: layers.length,
+    };
+  })();
   // Effective book = the share denominator: a quote is not yet in the
   // written book, so its own exposure joins the total (mirrors bookShareFrac).
   const bookExposure = xl
@@ -497,6 +520,7 @@ export function programmeFromStored(rows, { subjectExposure, subjectInBook = tru
     hasStored: true,
     shareFrac, bookExposure, subjectExposure: num(subjectExposure), scaled,
     converted, fxToSubject, fromCurrency: xl?.currency_code || null, fxMissing,
+    layerCount: xl?.layer_count || 0,
     // In-scope contracts whose currency had no stored rate — their limits
     // entered the book total at par, so the share is approximate.
     bookFxMissing: xl ? Math.max(0, Math.round(num(xl.book_fx_missing))) : 0,

@@ -15,6 +15,11 @@ export const PROGRAMME_TYPES = [
 ];
 export const PROGRAMME_STATUSES = ['DRAFT', 'ACTIVE', 'EXPIRED', 'CANCELLED'];
 
+/** Types that price as a layered non-proportional tower. */
+const NP_TYPES = new Set(['XL_PER_RISK', 'XL_CAT', 'XL_AGGREGATE', 'STOP_LOSS', 'WHOLE_ACCOUNT_XL']);
+
+const emptyLayer = () => ({ attachment: '', occurrence_limit: '', rol_pct: '', reinstatements: '', reinstatement_pct: '' });
+
 const emptyForm = (year) => ({
   uw_year: String(year),
   programme_name: '', programme_type: 'XL_PER_RISK', status: 'DRAFT',
@@ -24,7 +29,8 @@ const emptyForm = (year) => ({
   reinstatements: '', rol_pct: '', premium: '',
   inception_date: '', expiry_date: '', notes: '',
   covers_all_classes: false, covers_all_countries: false,
-  class_of_business_ids: [], country_ids: [],
+  class_of_business_ids: [], country_ids: [], regions: [],
+  layers: [],
 });
 
 const fromProgramme = (p) => ({
@@ -41,6 +47,12 @@ const fromProgramme = (p) => ({
   covers_all_classes: !!p.covers_all_classes, covers_all_countries: !!p.covers_all_countries,
   class_of_business_ids: (p.classes || []).map((c) => c.class_of_business_id),
   country_ids: (p.countries || []).map((c) => c.country_id),
+  regions: Array.isArray(p.regions) ? [...p.regions] : [],
+  layers: (p.layers || []).map((l) => ({
+    attachment: l.attachment ?? '', occurrence_limit: l.occurrence_limit ?? '',
+    rol_pct: l.rol_pct ?? '', reinstatements: l.reinstatements ?? '',
+    reinstatement_pct: l.reinstatement_pct ?? '',
+  })),
 });
 
 function ScopeBox({ label, allLabel, coversAll, onCoversAll, options, selected, onToggle }) {
@@ -69,7 +81,7 @@ function ScopeBox({ label, allLabel, coversAll, onCoversAll, options, selected, 
 export default function RetroProgrammeModal({
   open, onClose, onSave,       // onSave(body) → Promise; parent reloads on success
   programme,                   // null = create; else the row being edited
-  defaultYear, classes, countries,
+  defaultYear, classes, countries, regions: regionOptions = [],
 }) {
   const [form, setForm] = useState(() => emptyForm(defaultYear));
   const [error, setError] = useState('');
@@ -89,6 +101,13 @@ export default function RetroProgrammeModal({
     ...f,
     [key]: f[key].includes(id) ? f[key].filter((x) => x !== id) : [...f[key], id],
   }));
+  const setLayer = (idx, key) => (e) => setForm((f) => ({
+    ...f,
+    layers: f.layers.map((l, i) => (i === idx ? { ...l, [key]: e.target.value } : l)),
+  }));
+  const addLayer = () => setForm((f) => ({ ...f, layers: [...f.layers, emptyLayer()] }));
+  const removeLayer = (idx) => setForm((f) => ({ ...f, layers: f.layers.filter((_, i) => i !== idx) }));
+  const isNp = NP_TYPES.has(form.programme_type);
 
   const save = async () => {
     if (!form.programme_name.trim()) { setError('Programme name is required.'); return; }
@@ -99,6 +118,9 @@ export default function RetroProgrammeModal({
         programme_name: form.programme_name.trim(),
         class_of_business_ids: form.covers_all_classes ? [] : form.class_of_business_ids,
         country_ids: form.covers_all_countries ? [] : form.country_ids,
+        regions: form.covers_all_countries ? [] : form.regions,
+        // Drop empty layer rows; a fully blank tower means "no layers".
+        layers: form.layers.filter((l) => String(l.occurrence_limit).trim() !== '' || String(l.attachment).trim() !== ''),
       });
       onClose();
     } catch (e) {
@@ -170,6 +192,42 @@ export default function RetroProgrammeModal({
           <NumberInput value={form.premium} onChange={set('premium')} placeholder="0" />
         </Field>
 
+        {isNp && (
+          <div className="rt-span-3">
+            <div className="rt-scope-head">
+              <span className="ui-field__label">Tower layers — different coverages per layer</span>
+              <Button size="sm" onClick={addLayer}>+ Add layer</Button>
+            </div>
+            {!form.layers.length && (
+              <div className="rt-layers-hint">
+                No layers captured — the programme-level attachment / limit above applies as a single cover.
+                Add layers to record a tower (each with its own attachment, limit, rate and reinstatements).
+              </div>
+            )}
+            {form.layers.map((l, i) => (
+              <div key={i} className="rt-layer-row">
+                <span className="rt-layer-no">L{i + 1}</span>
+                <input className="ui-input rt-layer-inp" aria-label={`Layer ${i + 1} attachment`}
+                  placeholder="Attachment" inputMode="decimal"
+                  value={l.attachment} onChange={setLayer(i, 'attachment')} />
+                <input className="ui-input rt-layer-inp" aria-label={`Layer ${i + 1} occurrence limit`}
+                  placeholder="Occ. limit" inputMode="decimal"
+                  value={l.occurrence_limit} onChange={setLayer(i, 'occurrence_limit')} />
+                <input className="ui-input rt-layer-inp rt-layer-inp--sm" aria-label={`Layer ${i + 1} rate on line %`}
+                  placeholder="ROL %" inputMode="decimal"
+                  value={l.rol_pct} onChange={setLayer(i, 'rol_pct')} />
+                <input className="ui-input rt-layer-inp rt-layer-inp--sm" aria-label={`Layer ${i + 1} reinstatements`}
+                  placeholder="Reinst." inputMode="numeric"
+                  value={l.reinstatements} onChange={setLayer(i, 'reinstatements')} />
+                <input className="ui-input rt-layer-inp rt-layer-inp--sm" aria-label={`Layer ${i + 1} reinstatement %`}
+                  placeholder="Reinst %" inputMode="decimal"
+                  value={l.reinstatement_pct} onChange={setLayer(i, 'reinstatement_pct')} />
+                <Button size="sm" variant="danger" onClick={() => removeLayer(i)}>✕</Button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <Field label="Inception">
           <Input type="date" value={form.inception_date} onChange={set('inception_date')} />
         </Field>
@@ -183,6 +241,12 @@ export default function RetroProgrammeModal({
         <ScopeBox label="Classes of business covered" allLabel="All classes"
           coversAll={form.covers_all_classes} onCoversAll={(v) => setForm((f) => ({ ...f, covers_all_classes: v }))}
           options={classes} selected={form.class_of_business_ids} onToggle={toggleIn('class_of_business_ids')} />
+        {regionOptions.length > 0 && (
+          <ScopeBox label="Regions covered (in addition to listed countries)" allLabel="All countries"
+            coversAll={form.covers_all_countries} onCoversAll={(v) => setForm((f) => ({ ...f, covers_all_countries: v }))}
+            options={regionOptions.map((r) => ({ id: r, name: r }))}
+            selected={form.regions} onToggle={toggleIn('regions')} />
+        )}
         <ScopeBox label="Countries covered" allLabel="All countries"
           coversAll={form.covers_all_countries} onCoversAll={(v) => setForm((f) => ({ ...f, covers_all_countries: v }))}
           options={countries} selected={form.country_ids} onToggle={toggleIn('country_ids')} />

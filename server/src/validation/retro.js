@@ -30,14 +30,16 @@ const money = z.preprocess(
   z.number().min(0, 'must be ≥ 0').max(1e18).optional(),
 );
 
-const pct = z.preprocess(
+const pctBase = (max) => z.preprocess(
   (v) => {
     if (v === '' || v == null) return undefined;
     const n = Number(String(v).replace(/[%,\s]/g, ''));
     return Number.isFinite(n) ? n : v;
   },
-  z.number().min(0).max(100).optional(),
+  z.number().min(0).max(max).optional(),
 );
+const pct = pctBase(100);
+const pct200 = pctBase(200);
 
 const intNonNeg = z.preprocess(
   (v) => {
@@ -54,6 +56,24 @@ const optionalText = (max) => z.preprocess(
 );
 
 const uuidArray = z.array(uuid).max(500).default([]);
+
+const regionArray = z.array(z.preprocess(
+  (v) => (typeof v === 'string' ? v.trim() : v),
+  z.string().min(1).max(120),
+)).max(100).default([]);
+
+// One layer of a non-proportional retro tower. layer_number is assigned
+// server-side from array order, so the client sends terms only.
+const layerSchema = z.object({
+  attachment: money,
+  occurrence_limit: money,
+  aggregate_limit: money,
+  reinstatements: intNonNeg,
+  reinstatement_pct: pct200,
+  rol_pct: pct,
+  premium: money,
+  notes: optionalText(1000),
+}).strict();
 
 // ── POST /api/retro/programmes ───────────────────────────────────────────────
 export const retroProgrammeCreateSchema = z.object({
@@ -84,6 +104,8 @@ export const retroProgrammeCreateSchema = z.object({
   notes: optionalText(4000),
   class_of_business_ids: uuidArray,
   country_ids: uuidArray,
+  regions: regionArray,
+  layers: z.array(layerSchema).max(30).default([]),
 }).strict();
 
 // ── PUT /api/retro/programmes/:id ────────────────────────────────────────────

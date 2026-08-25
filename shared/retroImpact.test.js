@@ -404,3 +404,40 @@ describe('programmeFromStored — book FX flags', () => {
     expect(programmeFromStored([]).bookFxMissing).toBe(0);
   });
 });
+
+describe('programmeFromStored — layered towers', () => {
+  const TOWER = {
+    programme_type: 'XL_CAT', programme_name: 'Cat Tower',
+    attachment: null, occurrence_limit: null, rol_pct: null, reinstatements: null,
+    layers: [
+      { layer_number: 1, attachment: 5_000_000, occurrence_limit: 10_000_000, rol_pct: 18, reinstatements: 2 },
+      { layer_number: 2, attachment: 15_000_000, occurrence_limit: 25_000_000, rol_pct: 9, reinstatements: 1 },
+    ],
+  };
+
+  it('flattens a tower: bottom attachment, Σ limits, limit-weighted ROL, min reinstatements', () => {
+    const out = programmeFromStored([TOWER]);
+    expect(out.layerCount).toBe(2);
+    expect(out.programme.xlAttachment).toBe(5_000_000);
+    expect(out.programme.xlLimit).toBe(35_000_000);
+    expect(out.programme.xlRolPct).toBeCloseTo((18 * 10 + 9 * 25) / 35, 10);
+    expect(out.programme.xlReinstatements).toBe(1);
+  });
+
+  it('flattened tower still converts and scales like a single cover', () => {
+    const out = programmeFromStored(
+      [{ ...TOWER, fx_to_subject: 2, fx_missing: false, book_exposure: 320_000_000 }],
+      { subjectExposure: 80_000_000 },
+    );
+    // (5m att, 35m lim) × fx 2 × share 25% → 2.5m xs …, limit 17.5m.
+    expect(out.programme.xlAttachment).toBe(2_500_000);
+    expect(out.programme.xlLimit).toBe(17_500_000);
+  });
+
+  it('ignores blank layers and falls back to programme-level terms when none are usable', () => {
+    const out = programmeFromStored([{ ...TOWER, layers: [{ occurrence_limit: 0 }], attachment: 1_000_000, occurrence_limit: 4_000_000, rol_pct: 12 }]);
+    expect(out.layerCount).toBe(0);
+    expect(out.programme.xlAttachment).toBe(1_000_000);
+    expect(out.programme.xlLimit).toBe(4_000_000);
+  });
+});
