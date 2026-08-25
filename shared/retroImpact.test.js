@@ -339,3 +339,53 @@ describe('programmeFromStored — whole-account scaling', () => {
     expect(out.programme.qsCommissionPct).toBe(30);
   });
 });
+
+describe('programmeFromStored — currency conversion', () => {
+  const EUR_XL = {
+    programme_type: 'XL_CAT', programme_name: 'EUR Cat XL', currency_code: 'EUR',
+    attachment: 10_000_000, occurrence_limit: 40_000_000,
+    rol_pct: 12, reinstatements: 1,
+  };
+
+  it('converts XL amounts into treaty currency via fx_to_subject; rates untouched', () => {
+    const out = programmeFromStored([{ ...EUR_XL, fx_to_subject: 4, fx_missing: false }]);
+    expect(out.converted).toBe(true);
+    expect(out.fxToSubject).toBe(4);
+    expect(out.fromCurrency).toBe('EUR');
+    expect(out.programme.xlAttachment).toBe(40_000_000);
+    expect(out.programme.xlLimit).toBe(160_000_000);
+    expect(out.programme.xlRolPct).toBe(12);            // a rate — no conversion
+  });
+
+  it('applies FX then the book share as one multiplier with one rounding pass', () => {
+    const out = programmeFromStored(
+      [{ ...EUR_XL, fx_to_subject: 4.05, fx_missing: false, book_exposure: 320_000_000 }],
+      { subjectExposure: 80_000_000 },
+    );
+    // 10m × 4.05 × 25% = 10.125m → 10.1m at 3 s.f.; 40m × 4.05 × 25% = 40.5m.
+    expect(out.programme.xlAttachment).toBe(10_100_000);
+    expect(out.programme.xlLimit).toBe(40_500_000);
+    expect(out.converted).toBe(true);
+    expect(out.scaled).toBe(true);
+  });
+
+  it('same currency (fx 1) leaves amounts untouched and unflagged', () => {
+    const out = programmeFromStored([{ ...EUR_XL, fx_to_subject: 1, fx_missing: false }]);
+    expect(out.converted).toBe(false);
+    expect(out.programme.xlAttachment).toBe(10_000_000);
+  });
+
+  it('a missing exchange rate is surfaced, amounts left unconverted', () => {
+    const out = programmeFromStored([{ ...EUR_XL, fx_to_subject: 1, fx_missing: true }]);
+    expect(out.fxMissing).toBe(true);
+    expect(out.converted).toBe(false);
+    expect(out.programme.xlAttachment).toBe(10_000_000);
+  });
+
+  it('rows without fx fields behave as fx 1 (back-compat)', () => {
+    const out = programmeFromStored([EUR_XL]);
+    expect(out.fxToSubject).toBe(1);
+    expect(out.converted).toBe(false);
+    expect(out.fxMissing).toBe(false);
+  });
+});

@@ -419,13 +419,16 @@ function roundAmount(n) {
  *     QS cession + commission; with none stored, cession is 0 — a stored
  *     book with no proportional retro genuinely cedes nothing pro-rata.
  *   • The first non-proportional programme (any XL / stop loss) supplies the
- *     XL terms; with none stored, the XL is off. A programme protecting a
- *     wider book than this one treaty has its attachment and limit SCALED
- *     to the treaty's share of that book ({@link bookShareFrac}) — the
- *     programme-level tower applied unscaled against a single treaty's
- *     aggregate would massively overstate the attachment and the cover.
- *     ROL, reinstatements and the QS cession are rates, so they pass
- *     through unscaled.
+ *     XL terms; with none stored, the XL is off. Its currency amounts are
+ *     first CONVERTED into the treaty's currency (`fx_to_subject`, the
+ *     server-supplied cross rate; 1 when the currencies already match) and
+ *     then SCALED to the treaty's share of the protected book
+ *     ({@link bookShareFrac}) — the programme-level tower applied raw
+ *     against a single treaty's aggregate would misstate both the units
+ *     and the size of the cover. ROL, reinstatements and the QS cession
+ *     are rates, so they pass through untouched by either step. A missing
+ *     exchange rate (`fx_missing`) leaves the amounts unconverted and is
+ *     surfaced so the UI can warn instead of guessing.
  *
  * Extra programmes beyond the first of each kind are reported in
  * `unusedNames` so the UI can say what the single-layer model left out.
@@ -438,7 +441,8 @@ function roundAmount(n) {
  * @returns {{programme: RetroProgramme, sourceNames: string[],
  *            unusedNames: string[], hasStored: boolean,
  *            shareFrac: number, bookExposure: number, subjectExposure: number,
- *            scaled: boolean}}
+ *            scaled: boolean, converted: boolean, fxToSubject: number,
+ *            fromCurrency: string|null, fxMissing: boolean}}
  */
 export function programmeFromStored(rows, { subjectExposure, subjectInBook = true } = {}) {
   const list = Array.isArray(rows) ? rows : [];
@@ -447,6 +451,7 @@ export function programmeFromStored(rows, { subjectExposure, subjectInBook = tru
       programme: { ...DEFAULT_RETRO_PROGRAMME },
       sourceNames: [], unusedNames: [], hasStored: false,
       shareFrac: 1, bookExposure: 0, subjectExposure: num(subjectExposure), scaled: false,
+      converted: false, fxToSubject: 1, fromCurrency: null, fxMissing: false,
     };
   }
   const prop = list.filter((r) => PROPORTIONAL_RETRO_TYPES.has(r.programme_type));
@@ -462,12 +467,22 @@ export function programmeFromStored(rows, { subjectExposure, subjectInBook = tru
     ? bookShareFrac({ subjectExposure, bookExposure, subjectInBook: true })
     : 1;
   const scaled = !!xl && shareFrac < 1;
+  // Currency first, then share: fx re-denominates the tower into treaty
+  // currency, the share then sizes it to this treaty. One combined multiplier,
+  // one rounding pass — never round twice.
+  const fxToSubject = xl ? (num(xl.fx_to_subject, 1) || 1) : 1;
+  const converted = !!xl && fxToSubject !== 1;
+  const fxMissing = !!xl && xl.fx_missing === true;
+  const adjust = (v) => {
+    const raw = num(v) * fxToSubject * shareFrac;
+    return (converted || scaled) ? roundAmount(raw) : raw;
+  };
   const programme = normaliseProgramme({
     qsCessionPct: qs ? num(qs.cession_pct) : 0,
     qsCommissionPct: qs ? num(qs.commission_pct) : 0,
     xlEnabled: !!xl,
-    xlAttachment: xl ? (scaled ? roundAmount(num(xl.attachment) * shareFrac) : num(xl.attachment)) : 0,
-    xlLimit: xl ? (scaled ? roundAmount(num(xl.occurrence_limit) * shareFrac) : num(xl.occurrence_limit)) : 0,
+    xlAttachment: xl ? adjust(xl.attachment) : 0,
+    xlLimit: xl ? adjust(xl.occurrence_limit) : 0,
     xlRolPct: xl ? num(xl.rol_pct, DEFAULT_RETRO_PROGRAMME.xlRolPct) : DEFAULT_RETRO_PROGRAMME.xlRolPct,
     xlReinstatements: xl ? num(xl.reinstatements) : 0,
     xlReinstatementPct: DEFAULT_RETRO_PROGRAMME.xlReinstatementPct,
@@ -479,5 +494,6 @@ export function programmeFromStored(rows, { subjectExposure, subjectInBook = tru
     unusedNames: [...prop.slice(1), ...xls.slice(1)].map((r) => r.programme_name),
     hasStored: true,
     shareFrac, bookExposure, subjectExposure: num(subjectExposure), scaled,
+    converted, fxToSubject, fromCurrency: xl?.currency_code || null, fxMissing,
   };
 }

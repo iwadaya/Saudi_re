@@ -121,3 +121,4 @@
   border: 1px solid rgba(251,191,36,0.40); border-radius: 8px; padding: 2px 8px;
 }
 .rim-source-reset:hover { background: rgba(251,191,36,0.18); }
+.rim-source-warn { color: rgba(251,113,133,0.9); font-size: 10.5px; font-weight: 600; }

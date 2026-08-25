@@ -565,11 +565,14 @@ router.get('/retro/applicable', asyncHandler(async (req, res) => {
   const subjectIsContract = UUID_RE.test(contractId);
   // This treaty's own 100% limit — the numerator of its share of any
   // whole-account programme's protected book (same COALESCE the coverage
-  // grid uses: prop total capacity, else Σ NP layer limits).
+  // grid uses: prop total capacity, else Σ NP layer limits) — plus its
+  // currency, so programme amounts can be converted into treaty terms.
   const { rows: expRows } = subjectIsContract
     ? await pool.query(`
-        SELECT COALESCE(pd.total_capacity, np.total_limit, 0) AS subject_exposure
+        SELECT COALESCE(pd.total_capacity, np.total_limit, 0) AS subject_exposure,
+               cur.currency_code AS subject_currency
           FROM public.contract c
+          LEFT JOIN public.currency cur ON cur.currency_id = c.currency_id
           LEFT JOIN LATERAL (
             SELECT d.total_capacity FROM public.contract_prop_details d
              WHERE d.contract_id = c.contract_id
@@ -579,8 +582,10 @@ router.get('/retro/applicable', asyncHandler(async (req, res) => {
              WHERE l.contract_id = c.contract_id) np ON true
          WHERE c.contract_id = $1`, [contractId])
     : await pool.query(`
-        SELECT COALESCE(pd.total_capacity, np.total_limit, 0) AS subject_exposure
+        SELECT COALESCE(pd.total_capacity, np.total_limit, 0) AS subject_exposure,
+               cur.currency_code AS subject_currency
           FROM public.quote q
+          LEFT JOIN public.currency cur ON cur.currency_id = q.currency_id
           LEFT JOIN LATERAL (
             SELECT d.total_capacity FROM public.quote_prop_details d
              WHERE d.quote_id = q.quote_id LIMIT 1) pd ON true
@@ -589,6 +594,7 @@ router.get('/retro/applicable', asyncHandler(async (req, res) => {
              WHERE l.quote_id = q.quote_id) np ON true
          WHERE q.quote_id = $1`, [quoteId]);
   const subjectExposure = Number(expRows[0]?.subject_exposure || 0);
+  const subjectCurrency = String(expRows[0]?.subject_currency || '').trim() || 'USD';
 
   const { rows: programmes } = await pool.query(`
     SELECT p.retro_programme_id, p.programme_name, p.programme_type, p.status,
@@ -638,9 +644,43 @@ router.get('/retro/applicable', asyncHandler(async (req, res) => {
      ORDER BY p.programme_type, p.programme_name`,
   [subject.uw_year, subject.class_ids || [], subject.country_id]);
 
+  // FX: programme amounts are stored in the programme's currency; the modal
+  // models in treaty currency. Cross the latest rate_to_usd pair —
+  // fx_to_subject = rate(programme ccy → USD) / rate(treaty ccy → USD) — so
+  // the client multiplies once. USD needs no row (rate 1); a missing rate on
+  // either side is flagged (fx_missing) rather than silently left at 1.
+  const currencies = [...new Set(
+    [subjectCurrency, ...programmes.map((prog) => prog.currency_code)]
+      .filter((ccy) => ccy && ccy !== 'USD'),
+  )];
+  const rates = new Map([['USD', 1]]);
+  if (currencies.length) {
+    const { rows: rateRows } = await pool.query(`
+      SELECT DISTINCT ON (currency_code) currency_code, rate_to_usd
+        FROM public.ref_exchange_rate
+       WHERE currency_code = ANY($1::text[])
+       ORDER BY currency_code, effective_date DESC`, [currencies]);
+    for (const r of rateRows) rates.set(r.currency_code, Number(r.rate_to_usd));
+  }
+  const subjRate = rates.get(subjectCurrency);
+  for (const prog of programmes) {
+    const progRate = rates.get(prog.currency_code || 'USD');
+    if (prog.currency_code === subjectCurrency) {
+      prog.fx_to_subject = 1;
+      prog.fx_missing = false;
+    } else if (progRate > 0 && subjRate > 0) {
+      prog.fx_to_subject = progRate / subjRate;
+      prog.fx_missing = false;
+    } else {
+      prog.fx_to_subject = 1;
+      prog.fx_missing = true;
+    }
+  }
+
   res.json({
     uw_year: subject.uw_year,
     subject_exposure: subjectExposure,
+    subject_currency: subjectCurrency,
     subject_in_book: subjectIsContract,
     programmes,
   });

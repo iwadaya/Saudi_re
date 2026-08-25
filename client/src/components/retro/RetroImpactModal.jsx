@@ -115,6 +115,7 @@ export default function RetroImpactModal({
           subjectExposure: res?.subject_exposure,
           subjectInBook: res?.subject_in_book !== false,
         });
+        seed.toCurrency = res?.subject_currency || null;
         setStored(seed);
         if (seed.hasStored) {
           // Edited before the fetch landed → keep the edits, offer the reset.
@@ -200,10 +201,21 @@ export default function RetroImpactModal({
             {source === 'stored' && stored?.hasStored && (
               <div className="rim-source rim-source--stored">
                 ⛨ Seeded from stored programme{stored.sourceNames.length === 1 ? '' : 's'}: <b>{stored.sourceNames.join(', ')}</b>
+                {stored.converted && (
+                  <span className="rim-source-sub">
+                    · converted {stored.fromCurrency || 'programme ccy'} → {stored.toCurrency || 'treaty ccy'} at
+                    {' '}1 {stored.fromCurrency || ''} = {stored.fxToSubject.toFixed(4)} {stored.toCurrency || ''}
+                  </span>
+                )}
                 {stored.scaled && (
                   <span className="rim-source-sub">
                     · XL scaled to this treaty&apos;s {(stored.shareFrac * 100).toFixed(1)}% share of the protected book
                     ({fmtM(stored.subjectExposure)} of {fmtM(stored.bookExposure)})
+                  </span>
+                )}
+                {stored.fxMissing && (
+                  <span className="rim-source-warn">
+                    ⚠ No exchange rate stored for {stored.fromCurrency || 'the programme currency'} — XL amounts left unconverted.
                   </span>
                 )}
                 {stored.unusedNames.length > 0 && (

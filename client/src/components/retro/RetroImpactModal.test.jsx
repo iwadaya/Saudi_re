@@ -171,6 +171,40 @@ describe('RetroImpactModal', () => {
     expect(screen.getByLabelText('Retro XL limit')).toHaveValue('20000000');
   });
 
+  it('converts programme currency to treaty currency and shows the rate; warns on a missing rate', async () => {
+    apiMock.getApplicableRetroProgrammes.mockResolvedValue({
+      subject_exposure: 0,           // no scaling — isolate the FX step
+      subject_currency: 'SAR',
+      subject_in_book: true,
+      programmes: [{
+        programme_type: 'XL_CAT', programme_name: 'EUR Cat XL', currency_code: 'EUR',
+        attachment: 10_000_000, occurrence_limit: 40_000_000,
+        rol_pct: 12, reinstatements: 1, fx_to_subject: 4.05, fx_missing: false,
+      }],
+    });
+    renderModal({ contractId: 'c-1' });
+    await screen.findByText(/converted EUR → SAR at/);
+    expect(screen.getByText(/1 EUR = 4\.0500 SAR/)).toBeInTheDocument();
+    // 10m × 4.05 = 40.5m; 40m × 4.05 = 162m — in treaty currency.
+    expect(screen.getByLabelText('Retro XL attachment')).toHaveValue('40500000');
+    expect(screen.getByLabelText('Retro XL limit')).toHaveValue('162000000');
+    expect(screen.queryByText(/No exchange rate stored/)).toBeNull();
+  });
+
+  it('warns when the exchange rate is missing and leaves amounts unconverted', async () => {
+    apiMock.getApplicableRetroProgrammes.mockResolvedValue({
+      subject_currency: 'SAR', subject_in_book: true,
+      programmes: [{
+        programme_type: 'XL_CAT', programme_name: 'EUR Cat XL', currency_code: 'EUR',
+        attachment: 10_000_000, occurrence_limit: 40_000_000,
+        rol_pct: 12, reinstatements: 1, fx_to_subject: 1, fx_missing: true,
+      }],
+    });
+    renderModal({ contractId: 'c-1' });
+    await screen.findByText(/No exchange rate stored for EUR/);
+    expect(screen.getByLabelText('Retro XL attachment')).toHaveValue('10000000');
+  });
+
   it('says when no stored programme covers the treaty and keeps the defaults', async () => {
     apiMock.getApplicableRetroProgrammes.mockResolvedValue({ programmes: [] });
     renderModal({ contractId: 'c-1' });

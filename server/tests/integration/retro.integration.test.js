@@ -281,6 +281,37 @@ describe.skipIf(shouldSkipDb)('integration: retro module', () => {
     }
   });
 
+  it('applicable: crosses programme currency into the treaty currency (fx_to_subject)', async () => {
+    // The treaty's currency is the seeded IT currency (X<code>); the Cat XL
+    // programme is USD. Store rates for both: 1 treaty-ccy = 0.25 USD →
+    // fx_to_subject for a USD programme = 1 / 0.25 = 4.
+    const { rows: curRows } = await pool.query(
+      'SELECT currency_code FROM public.currency WHERE currency_id=$1', [refs.currency_id]);
+    const treatyCcy = curRows[0].currency_code;
+    await pool.query(
+      `INSERT INTO public.ref_exchange_rate (currency_code, rate_to_usd, source) VALUES ($1, 0.25, 'IT')`,
+      [treatyCcy]);
+    try {
+      const body = await harness.fetchApp('GET', `/api/retro/applicable?contract_id=${contractId}`).then((r) => r.json());
+      expect(body.subject_currency).toBe(treatyCcy);
+      const catXl = body.programmes.find((p) => p.programme_name === 'Property Cat XL');
+      expect(catXl.currency_code).toBe('USD');
+      expect(catXl.fx_missing).toBe(false);
+      expect(Number(catXl.fx_to_subject)).toBeCloseTo(4, 10);
+    } finally {
+      await pool.query(`DELETE FROM public.ref_exchange_rate WHERE currency_code=$1 AND source='IT'`, [treatyCcy]);
+    }
+  });
+
+  it('applicable: a missing rate flags fx_missing and leaves fx at 1', async () => {
+    // No rate stored for the IT treaty currency → the USD programme cannot be
+    // crossed into it.
+    const body = await harness.fetchApp('GET', `/api/retro/applicable?contract_id=${contractId}`).then((r) => r.json());
+    const catXl = body.programmes.find((p) => p.programme_name === 'Property Cat XL');
+    expect(catXl.fx_missing).toBe(true);
+    expect(Number(catXl.fx_to_subject)).toBe(1);
+  });
+
   it('applicable: 400 without an id, 404 for an unknown contract', async () => {
     expect((await harness.fetchApp('GET', '/api/retro/applicable')).status).toBe(400);
     expect((await harness.fetchApp('GET', '/api/retro/applicable?contract_id=00000000-0000-4000-8000-000000000000')).status).toBe(404);
