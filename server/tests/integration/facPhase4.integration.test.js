@@ -396,7 +396,7 @@ describe.skipIf(shouldSkipDb)('integration: fac Phase 4 families, capacity and p
     it('reports committed exposure and says when no budget is set', async () => {
       const par = cobFor('PAR');
       const id = await newRisk({
-        fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 0.5,
+        fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 50,
       });
       await harness.fetchApp('PUT', `/api/fac/risks/${id}/locations`, {
         body: {
@@ -422,7 +422,7 @@ describe.skipIf(shouldSkipDb)('integration: fac Phase 4 families, capacity and p
         [SRC],
       );
       const par = cobFor('PAR');
-      const id = await newRisk({ fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 1 });
+      const id = await newRisk({ fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 100 });
       await harness.fetchApp('PUT', `/api/fac/risks/${id}/locations`, {
         body: {
           locations: [{
@@ -440,7 +440,7 @@ describe.skipIf(shouldSkipDb)('integration: fac Phase 4 families, capacity and p
 
     it('refuses a bind that breaches, and allows it with a recorded override', async () => {
       const par = cobFor('PAR');
-      const id = await newRisk({ fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 1 });
+      const id = await newRisk({ fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 100 });
       await harness.fetchApp('PUT', `/api/fac/risks/${id}/locations`, {
         body: {
           locations: [{
@@ -491,7 +491,7 @@ describe.skipIf(shouldSkipDb)('integration: fac Phase 4 families, capacity and p
       // The bind above refreshed the view; a new risk in the same zone must
       // now see that committed exposure.
       const par = cobFor('PAR');
-      const id = await newRisk({ fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 1 });
+      const id = await newRisk({ fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 100 });
       await harness.fetchApp('PUT', `/api/fac/risks/${id}/locations`, {
         body: {
           locations: [{
