@@ -4,10 +4,11 @@
 // document/treaty content to EXTERNAL providers, so these controls are the
 // guard rails around that egress:
 //
-//   1. A feature gate (AI_FEATURES_ENABLED), ON by default in every environment.
-//      Set it to false and NO external LLM call is made — assertAiEnabled /
-//      requireAiEnabled throw 403 before any provider request. The gate also
-//      requires a configured provider; a missing provider key fails closed.
+//   1. A feature gate (AI_FEATURES_ENABLED). Production/test are fail-closed by
+//      default; development defaults on for local feature testing. When the gate
+//      is off, NO external LLM call is made — assertAiEnabled / requireAiEnabled
+//      throw 403 before any provider request. The gate also requires a
+//      configured provider; a missing provider key fails closed.
 //   2. A tenant/customer opt-out (AI_CUSTOMER_OPTOUT global, plus a per-request
 //      hook) honoured by the gate.
 //   3. A pluggable redaction/classification hook applied to text BEFORE it leaves
@@ -15,12 +16,12 @@
 //   4. A per-call audit record (actor, subject entity, provider, document, purpose,
 //      ts) for compliance.
 //
-// IMPORTANT: the gate is open by default, so running this app calls external
-// providers with treaty/document content as soon as a provider key is present.
-// Securing the customer/legal approval and an enterprise (no-retention /
-// zero-data-retention) provider route is the deployment owner's responsibility;
-// AI_FEATURES_ENABLED=false (or AI_CUSTOMER_OPTOUT=true per tenant) closes it.
-// This module only builds the controls — it never hard-codes a provider key.
+// IMPORTANT: in production/test this gate is off unless explicitly enabled, so
+// a deployment must opt in before sending treaty/document content to external
+// providers. Securing customer/legal approval and an enterprise (no-retention /
+// zero-data-retention) provider route is still the deployment owner's
+// responsibility. AI_CUSTOMER_OPTOUT=true can still hard-block a tenant.
+// This module only builds controls — it never hard-codes a provider key.
 
 import { env } from '../config/env.js';
 import { logger } from './logger.js';
@@ -60,9 +61,9 @@ export function aiConfigStatus() {
 }
 
 /**
- * Gate decision. AI is on by default; this returns false when it has been
- * explicitly disabled, when no provider is configured, or when the global or
- * per-request opt-out is set. Never throws — use assertAiEnabled to enforce.
+ * Gate decision. Returns false when AI is not enabled in this environment, when
+ * no provider is configured, or when the global/per-request opt-out is set.
+ * Never throws — use assertAiEnabled to enforce.
  */
 export function isAiEnabled(ctx = {}) {
   const s = aiConfigStatus();
@@ -74,14 +75,14 @@ export function isAiEnabled(ctx = {}) {
 }
 
 /**
- * Enforce the gate before any LLM call. Throws AiDisabledError (403) when AI has
- * been disabled / is unconfigured / is opted-out. The distinct codes let callers
- * and tests tell the cases apart.
+ * Enforce the gate before any LLM call. Throws AiDisabledError (403) when AI is
+ * disabled / unconfigured / opted-out. Distinct codes let callers and tests
+ * tell the cases apart.
  */
 export function assertAiEnabled(ctx = {}) {
   const s = aiConfigStatus();
   if (!s.enabled) {
-    throw new AiDisabledError('AI features are disabled (AI_FEATURES_ENABLED=false).', 'AI_DISABLED');
+    throw new AiDisabledError('AI features are disabled (AI_FEATURES_ENABLED is not enabled).', 'AI_DISABLED');
   }
   if (!s.hasProvider) {
     throw new AiDisabledError('AI features are enabled but no provider is configured.', 'AI_NOT_CONFIGURED');
@@ -112,14 +113,14 @@ export function requireAiEnabled(req, res, next) {
 }
 
 /**
- * Boot-time provider-config validation. Logs the posture (on by default) and
- * flags an enabled-but-unconfigured misconfiguration. Returns the config
- * status; never throws (a bad AI config must not take down non-AI APIs).
+ * Boot-time provider-config validation. Logs the gate posture and flags an
+ * enabled-but-unconfigured misconfiguration. Returns the config status; never
+ * throws (a bad AI config must not take down non-AI APIs).
  */
 export function validateAiProviderConfig({ log = logger } = {}) {
   const s = aiConfigStatus();
   if (!s.enabled) {
-    log.info('[ai-gov] AI features DISABLED by AI_FEATURES_ENABLED=false — no external LLM calls will be made.');
+    log.info('[ai-gov] AI features DISABLED — no external LLM calls will be made.');
     return s;
   }
   if (!s.hasProvider) {
