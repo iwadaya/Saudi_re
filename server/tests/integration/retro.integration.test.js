@@ -260,6 +260,10 @@ describe.skipIf(shouldSkipDb)('integration: retro module', () => {
       expect(Number(body.subject_exposure)).toBe(80000000);
       expect(Number(catXl.book_exposure)).toBe(320000000);
       expect(catXl.book_contracts).toBe(2);
+      // Both contracts carry the seeded IT currency with no stored rate —
+      // summed at par and flagged.
+      expect(catXl.book_fx_missing).toBe(2);
+      expect(body.subject_fx_missing).toBe(true);
       // The covers-all programme sees the same book in this isolated year.
       const wa = body.programmes.find((p) => p.programme_name === 'WA Stop Loss');
       expect(Number(wa.book_exposure)).toBe(320000000);
@@ -278,6 +282,41 @@ describe.skipIf(shouldSkipDb)('integration: retro module', () => {
       expect(body.programmes.map((p) => p.programme_name)).toEqual(['WA Stop Loss']);
     } finally {
       await pool.query('DELETE FROM public.contract WHERE contract_id=$1', [stray.contract_id]);
+    }
+  });
+
+  it('applicable: sums a multi-currency book in a common currency (served in treaty terms)', async () => {
+    // Sibling in the SAME scope cell but a different currency: 240m in a
+    // currency worth 0.5 USD, while the treaty currency is worth 0.25 USD.
+    // Book = (80m × 0.25 + 240m × 0.5) USD = 140m USD → 560m in treaty ccy.
+    const { rows: curRows } = await pool.query(
+      'SELECT currency_id, currency_code FROM public.currency WHERE currency_id IN ($1,$2)',
+      [refs.currency_id, otherRefs.currency_id]);
+    const byId = new Map(curRows.map((r) => [r.currency_id, r.currency_code]));
+    await pool.query(
+      `INSERT INTO public.ref_exchange_rate (currency_code, rate_to_usd, source) VALUES ($1, 0.25, 'IT'), ($2, 0.5, 'IT')`,
+      [byId.get(refs.currency_id), byId.get(otherRefs.currency_id)]);
+    const sib = await harness.fetchApp('POST', '/api/treaties', {
+      body: { ...refs, currency_id: otherRefs.currency_id, uw_year: UW_YEAR, status: 'DRAFT', experience_source: 'TRIANGLE', inception_date: `${UW_YEAR}-01-01` },
+    }).then((r) => r.json());
+    try {
+      await pool.query(
+        'UPDATE public.contract SET primary_class_of_business_id=$2 WHERE contract_id=$1',
+        [sib.contract_id, cobA]);
+      await pool.query(
+        'INSERT INTO public.contract_prop_details (contract_id, total_capacity) VALUES ($1, 240000000)',
+        [sib.contract_id]);
+
+      const body = await harness.fetchApp('GET', `/api/retro/applicable?contract_id=${contractId}`).then((r) => r.json());
+      const catXl = body.programmes.find((p) => p.programme_name === 'Property Cat XL');
+      expect(Number(body.subject_exposure)).toBe(80000000);        // native treaty ccy
+      expect(body.subject_fx_missing).toBe(false);
+      expect(Number(catXl.book_exposure)).toBeCloseTo(560000000, 2); // common-ccy sum, in treaty ccy
+      expect(catXl.book_fx_missing).toBe(0);
+    } finally {
+      await pool.query('DELETE FROM public.contract_prop_details WHERE contract_id=$1', [sib.contract_id]);
+      await pool.query('DELETE FROM public.contract WHERE contract_id=$1', [sib.contract_id]);
+      await pool.query(`DELETE FROM public.ref_exchange_rate WHERE source='IT'`);
     }
   });
 

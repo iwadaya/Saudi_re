@@ -218,6 +218,11 @@ export default function RetroImpactModal({
                     ⚠ No exchange rate stored for {stored.fromCurrency || 'the programme currency'} — XL amounts left unconverted.
                   </span>
                 )}
+                {stored.bookFxMissing > 0 && (
+                  <span className="rim-source-warn">
+                    ⚠ {stored.bookFxMissing} in-scope treat{stored.bookFxMissing === 1 ? 'y has' : 'ies have'} no stored exchange rate — book share is approximate.
+                  </span>
+                )}
                 {stored.unusedNames.length > 0 && (
                   <span className="rim-source-sub"> · also covering (not modelled): {stored.unusedNames.join(', ')}</span>
                 )}

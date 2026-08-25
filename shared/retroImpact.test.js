@@ -389,3 +389,18 @@ describe('programmeFromStored — currency conversion', () => {
     expect(out.fxMissing).toBe(false);
   });
 });
+
+describe('programmeFromStored — book FX flags', () => {
+  it('surfaces the count of in-scope treaties missing an exchange rate', () => {
+    const out = programmeFromStored([{
+      programme_type: 'XL_CAT', programme_name: 'Cat XL',
+      attachment: 1, occurrence_limit: 2, book_exposure: 100, book_fx_missing: 3,
+    }]);
+    expect(out.bookFxMissing).toBe(3);
+  });
+  it('defaults to 0 without the field or without an XL', () => {
+    expect(programmeFromStored([{ programme_type: 'XL_CAT', programme_name: 'X', occurrence_limit: 1 }]).bookFxMissing).toBe(0);
+    expect(programmeFromStored([{ programme_type: 'QUOTA_SHARE', programme_name: 'Q', cession_pct: 10 }]).bookFxMissing).toBe(0);
+    expect(programmeFromStored([]).bookFxMissing).toBe(0);
+  });
+});

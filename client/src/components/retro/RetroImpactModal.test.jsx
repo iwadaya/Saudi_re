@@ -205,6 +205,22 @@ describe('RetroImpactModal', () => {
     expect(screen.getByLabelText('Retro XL attachment')).toHaveValue('10000000');
   });
 
+  it('warns when part of the protected book has no exchange rate (approximate share)', async () => {
+    apiMock.getApplicableRetroProgrammes.mockResolvedValue({
+      subject_exposure: 80_000_000, subject_currency: 'SAR', subject_in_book: true,
+      programmes: [{
+        programme_type: 'XL_CAT', programme_name: 'Cat XL', currency_code: 'SAR',
+        attachment: 20_000_000, occurrence_limit: 80_000_000,
+        rol_pct: 12, reinstatements: 1, fx_to_subject: 1, fx_missing: false,
+        book_exposure: 320_000_000, book_fx_missing: 2,
+      }],
+    });
+    renderModal({ contractId: 'c-1' });
+    await screen.findByText(/2 in-scope treaties have no stored exchange rate — book share is approximate/);
+    // The share still applies (25%): 80m xs 20m → 20m xs 5m.
+    expect(screen.getByLabelText('Retro XL attachment')).toHaveValue('5000000');
+  });
+
   it('says when no stored programme covers the treaty and keeps the defaults', async () => {
     apiMock.getApplicableRetroProgrammes.mockResolvedValue({ programmes: [] });
     renderModal({ contractId: 'c-1' });

@@ -442,7 +442,8 @@ function roundAmount(n) {
  *            unusedNames: string[], hasStored: boolean,
  *            shareFrac: number, bookExposure: number, subjectExposure: number,
  *            scaled: boolean, converted: boolean, fxToSubject: number,
- *            fromCurrency: string|null, fxMissing: boolean}}
+ *            fromCurrency: string|null, fxMissing: boolean,
+ *            bookFxMissing: number}}
  */
 export function programmeFromStored(rows, { subjectExposure, subjectInBook = true } = {}) {
   const list = Array.isArray(rows) ? rows : [];
@@ -452,6 +453,7 @@ export function programmeFromStored(rows, { subjectExposure, subjectInBook = tru
       sourceNames: [], unusedNames: [], hasStored: false,
       shareFrac: 1, bookExposure: 0, subjectExposure: num(subjectExposure), scaled: false,
       converted: false, fxToSubject: 1, fromCurrency: null, fxMissing: false,
+      bookFxMissing: 0,
     };
   }
   const prop = list.filter((r) => PROPORTIONAL_RETRO_TYPES.has(r.programme_type));
@@ -495,5 +497,8 @@ export function programmeFromStored(rows, { subjectExposure, subjectInBook = tru
     hasStored: true,
     shareFrac, bookExposure, subjectExposure: num(subjectExposure), scaled,
     converted, fxToSubject, fromCurrency: xl?.currency_code || null, fxMissing,
+    // In-scope contracts whose currency had no stored rate — their limits
+    // entered the book total at par, so the share is approximate.
+    bookFxMissing: xl ? Math.max(0, Math.round(num(xl.book_fx_missing))) : 0,
   };
 }

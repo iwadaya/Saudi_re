@@ -602,14 +602,27 @@ router.get('/retro/applicable', asyncHandler(async (req, res) => {
            p.attachment, p.occurrence_limit, p.aggregate_limit,
            p.reinstatements, p.rol_pct, p.premium,
            p.covers_all_classes, p.covers_all_countries,
-           book.book_exposure, book.book_contracts
+           book.book_exposure_usd, book.book_contracts, book.book_fx_missing
       FROM public.retro_programme p
       -- The protected book: every in-scope contract in the programme's year
-      -- (same status filter + scope matching as /retro/coverage).
+      -- (same status filter + scope matching as /retro/coverage). Limits are
+      -- stored in each contract's own currency, so they are crossed to USD at
+      -- the latest stored rate before summing (USD needs no row; a non-USD
+      -- contract with no stored rate is summed at par and counted in
+      -- book_fx_missing so the caller can flag the approximation).
       LEFT JOIN LATERAL (
-        SELECT COALESCE(SUM(COALESCE(pd.total_capacity, np.total_limit, 0)), 0) AS book_exposure,
-               COUNT(*)::int AS book_contracts
+        SELECT COALESCE(SUM(COALESCE(pd.total_capacity, np.total_limit, 0)
+                            * COALESCE(cfx.rate_to_usd, 1)), 0) AS book_exposure_usd,
+               COUNT(*)::int AS book_contracts,
+               COUNT(*) FILTER (WHERE ccur.currency_code IS NOT NULL
+                                  AND ccur.currency_code <> 'USD'
+                                  AND cfx.rate_to_usd IS NULL)::int AS book_fx_missing
           FROM public.contract c
+          LEFT JOIN public.currency ccur ON ccur.currency_id = c.currency_id
+          LEFT JOIN LATERAL (
+            SELECT r.rate_to_usd FROM public.ref_exchange_rate r
+             WHERE r.currency_code = ccur.currency_code
+             ORDER BY r.effective_date DESC LIMIT 1) cfx ON true
           LEFT JOIN LATERAL (
             SELECT d.total_capacity FROM public.contract_prop_details d
              WHERE d.contract_id = c.contract_id
@@ -663,6 +676,11 @@ router.get('/retro/applicable', asyncHandler(async (req, res) => {
     for (const r of rateRows) rates.set(r.currency_code, Number(r.rate_to_usd));
   }
   const subjRate = rates.get(subjectCurrency);
+  // Effective subject rate for re-denominating the USD book total into the
+  // treaty's currency — par when the treaty's own rate is missing, flagged
+  // below so nothing is silently guessed.
+  const subjectFxMissing = subjectCurrency !== 'USD' && !(subjRate > 0);
+  const subjRateEff = subjRate > 0 ? subjRate : 1;
   for (const prog of programmes) {
     const progRate = rates.get(prog.currency_code || 'USD');
     if (prog.currency_code === subjectCurrency) {
@@ -675,12 +693,18 @@ router.get('/retro/applicable', asyncHandler(async (req, res) => {
       prog.fx_to_subject = 1;
       prog.fx_missing = true;
     }
+    // book_exposure is served in the SUBJECT's currency so the share against
+    // subject_exposure (native treaty currency) is currency-consistent and
+    // the client can format both with the treaty's money formatter.
+    prog.book_exposure = Number(prog.book_exposure_usd || 0) / subjRateEff;
+    delete prog.book_exposure_usd;
   }
 
   res.json({
     uw_year: subject.uw_year,
     subject_exposure: subjectExposure,
     subject_currency: subjectCurrency,
+    subject_fx_missing: subjectFxMissing,
     subject_in_book: subjectIsContract,
     programmes,
   });
