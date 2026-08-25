@@ -1,0 +1,97 @@
+/* ═══════════════════════════════════════════════
+   RETRO MODULE (screens/retro/*)
+   Outwards retrocession programmes by UW year — programme ledger,
+   editor + packs modals, and the country × class coverage matrix.
+   Built on the cf-* claims/finance layout + the ui kit; rt-* adds
+   only what those don't cover. Class-based throughout (screens-layer
+   inline-style budget is frozen).
+   ═══════════════════════════════════════════════ */
+
+.rt-scope-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.rt-scope-tag {
+  font-size: 10px; font-weight: 700; letter-spacing: .03em;
+  padding: 2px 7px; border-radius: 12px; white-space: nowrap;
+  color: var(--text-subtle); background: var(--surface-hover);
+  border: 1px solid var(--hairline-strong);
+}
+.rt-scope-tag--all {
+  color: #a78bfa; background: rgba(167, 139, 250, 0.10);
+  border-color: rgba(167, 139, 250, 0.35);
+}
+
+/* ── Editor modal ── */
+.rt-form-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 14px;
+}
+.rt-form-grid .rt-span-2 { grid-column: span 2; }
+.rt-form-grid .rt-span-3 { grid-column: span 3; }
+@media (max-width: 760px) { .rt-form-grid { grid-template-columns: 1fr; }
+  .rt-form-grid .rt-span-2, .rt-form-grid .rt-span-3 { grid-column: span 1; } }
+
+.rt-scope-box {
+  border: 1px solid var(--hairline-strong); border-radius: 10px;
+  max-height: 168px; overflow-y: auto; padding: 8px 10px;
+  background: var(--surface-hover);
+}
+.rt-scope-box--disabled { opacity: 0.45; pointer-events: none; }
+.rt-check {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--text); padding: 3px 0; cursor: pointer;
+}
+.rt-check input { accent-color: #a78bfa; cursor: pointer; flex-shrink: 0; }
+.rt-scope-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 4px;
+}
+.rt-all-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: var(--text-subtle); cursor: pointer;
+}
+.rt-all-toggle input { accent-color: #a78bfa; cursor: pointer; }
+
+/* ── Packs modal ── */
+.rt-pack-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 4px; border-bottom: 1px solid var(--hairline);
+}
+.rt-pack-row:last-child { border-bottom: none; }
+.rt-pack-main { flex: 1; min-width: 0; }
+.rt-pack-name { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rt-pack-sub  { font-size: 11px; color: var(--text-subtle); }
+.rt-pack-upload { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+
+/* ── Coverage matrix ── */
+.rt-matrix-wrap { overflow-x: auto; border: 1px solid var(--hairline-strong); border-radius: 12px; }
+.rt-matrix { width: 100%; border-collapse: collapse; font-size: 12px; }
+.rt-matrix th, .rt-matrix td {
+  padding: 8px 12px; border-bottom: 1px solid var(--hairline);
+  border-right: 1px solid var(--hairline); text-align: right; white-space: nowrap;
+}
+.rt-matrix th {
+  font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-subtle); background: var(--surface-hover);
+  position: sticky; top: 0;
+}
+.rt-matrix .rt-matrix-country {
+  text-align: left; font-weight: 700; color: var(--text);
+  position: sticky; left: 0; background: var(--surface-2);
+}
+.rt-matrix tr:last-child td { border-bottom: none; }
+.rt-cell-limit { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; }
+.rt-cell-sub { font-size: 10px; color: var(--text-subtle); }
+.rt-cell-empty { color: var(--text-subtle); opacity: 0.4; }
+
+.rt-retro-badge {
+  display: inline-block; font-size: 9.5px; font-weight: 800; letter-spacing: .05em;
+  padding: 1px 7px; border-radius: 10px; margin-left: 6px; vertical-align: middle;
+}
+.rt-retro-badge--yes { color: rgb(35,209,139); background: rgba(35,209,139,0.10); border: 1px solid rgba(35,209,139,0.35); }
+.rt-retro-badge--no  { color: var(--accent-rose, #fb7185); background: rgba(251,113,133,0.08); border: 1px solid rgba(251,113,133,0.30); }
+
+.rt-matrix-legend {
+  display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+  font-size: 11.5px; color: var(--text-subtle); margin-top: 8px;
+}
+
+/* Wider editor modal (three-column form) */
+.ui-modal--lg { width: min(880px, 100%); }

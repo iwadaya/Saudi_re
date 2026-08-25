@@ -62,6 +62,7 @@ const QuickBenchmark    = lazy(() => import('../screens/benchmark/QuickBenchmark
 const ClaimsHomeScreen  = lazy(() => import('../screens/claims/ClaimsHomeScreen'));
 const ClaimDetailScreen = lazy(() => import('../screens/claims/ClaimDetailScreen'));
 const FinanceHomeScreen = lazy(() => import('../screens/finance/FinanceHomeScreen'));
+const RetroHomeScreen   = lazy(() => import('../screens/retro/RetroHomeScreen'));
 const UserManagementScreen = lazy(() => import('../screens/admin/UserManagementScreen'));
 const FormulaWorkbench     = lazy(() => import('../screens/workbench/FormulaWorkbench'));
 const FormulaDetail        = lazy(() => import('../screens/workbench/FormulaDetail'));
@@ -84,6 +85,7 @@ export const appRoutes = [
   { path: '/claims', component: ClaimsHomeScreen },
   { path: '/claims/:id', component: ClaimDetailScreen },
   { path: '/finance', component: FinanceHomeScreen },
+  { path: '/retro', component: RetroHomeScreen },
   { path: '/', component: HomeScreen },
   { path: '/fac', component: FacHomeScreen },
   { path: '/dashboard', component: DashboardScreen },

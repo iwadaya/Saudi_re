@@ -31,6 +31,12 @@ const MODULES = [
     tags: ['Signed Treaties', 'EPI', 'Setup', 'Cashflow'],
     cta: 'Open Finance', rgb: '35,209,139', color: 'rgb(35,209,139)',
   },
+  {
+    key: 'retro', to: '/retro', icon: '⛨', title: 'Retro',
+    blurb: 'Outwards retrocession programmes by year, class and country — limits, retro packs, and coverage analysis for underwriters.',
+    tags: ['Programmes', 'Limits', 'Retro Packs', 'Coverage'],
+    cta: 'Open Retro', rgb: '167,139,250', color: 'rgb(167,139,250)',
+  },
 ];
 
 function ModuleCard({ m, onOpen }) {

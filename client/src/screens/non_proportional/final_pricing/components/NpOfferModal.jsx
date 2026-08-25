@@ -8,8 +8,10 @@
 // callbacks out, no logic changes (including the modal-local toN
 // shadow).
 
+import { useState } from 'react';
 import { api } from '../../../../api';
 import PctInput from '../../../../components/PctInput';
+import RetroImpactModal from '../../../../components/retro/RetroImpactModal';
 import { fmtC, capPct2 } from '../formatters.js';
 import { structureCombinedTotals, layerCombinedPricing } from '../fqQuoteMath.js';
 
@@ -61,6 +63,7 @@ export default function NpOfferModal({
     offerComment, setOfferComment, returnReason, setReturnReason,
     approvalTrail, setShowOfferModal, setOfferStatus,
   } = pricing;
+  const [showRetro, setShowRetro] = useState(false);
   if (!open) return null;
 
                 const toN = v => { const x = parseFloat(String(v ?? '').replace(/[^0-9.-]/g, '')); return Number.isFinite(x) ? x : 0; };
@@ -102,6 +105,22 @@ export default function NpOfferModal({
                   const sOver   = slFrac > 0 && wlFrac > 0 && slFrac > wlFrac;
                   return { layer: l.layer || `L${i+1}`, limit, attach, egnpi, ep100, rolPct, wlRaw, wlNum, wlFrac, linePrem, lineLimit, peril, perilColor, slRaw, slNum, slFrac, sLinePrem, sLineLimit, sOver, isRisk, isCat };
                 });
+
+                // ── Retro Impact inputs (treaty offer only) ──
+                // Premium at 100% = Σ layer premium; expected loss ratio vs
+                // premium = technical ROL ÷ UW ROL (the tech ratio is struck
+                // against limit, the UW price funds it). Written line context
+                // = limit-weighted average of the entered lines.
+                const retroTotEp    = layerData.reduce((s, r) => s + r.ep100, 0);
+                const retroTotLim   = layerData.reduce((s, r) => s + r.limit, 0);
+                const retroRolRows  = layerData.filter(r => r.rolPct > 0);
+                const retroAvgRol   = retroRolRows.length ? retroRolRows.reduce((s, r) => s + r.rolPct, 0) / retroRolRows.length : 0;
+                const retroElr      = retroAvgRol > 0 && techRatioAvg > 0 ? Math.min(1.5, techRatioAvg / retroAvgRol) : 0.6;
+                const retroSubject  = { grossPremium100: retroTotEp, grossLimit100: retroTotLim, expectedLossRatio: retroElr, expenseRatio: 0, authorityMaxLimit: 0 };
+                const retroWlRows   = layerData.filter(r => r.wlFrac > 0 && r.limit > 0);
+                const retroCurrent  = retroWlRows.length
+                  ? retroWlRows.reduce((s, r) => s + r.wlNum * r.limit, 0) / retroWlRows.reduce((s, r) => s + r.limit, 0)
+                  : 0;
 
                 const hasApprovedQuoteStructure = isQuote && approvedStructures.some(Boolean);
                 const hasAnyWritten  = isQuote
@@ -297,6 +316,9 @@ export default function NpOfferModal({
                                   <div className="off-ai-econ-item"><span className="off-ai-econ-k">Tech Ratio</span><span className="off-ai-econ-v">{techRatioAvg>0?techRatioAvg.toFixed(2)+'%':'—'}</span></div>
                                   <div className="off-ai-econ-item"><span className="off-ai-econ-k">Margin</span><span className="off-ai-econ-v" style={{color:mActB>=0.08?'#4ade80':mActB>0?'#00d4ff':'#f87171'}}>{mActB>0?(mActB*100).toFixed(1)+'%':'—'}</span></div>
                                 </div>
+                                <button className="rim-launch rim-launch--block" type="button" onClick={()=>setShowRetro(true)}>
+                                  ⛨ Retro Impact on Line Size
+                                </button>
                               </div>
                               <div className="off-hm-wrap">
                                 <div className="off-hm-title">Treaty Classification</div>
@@ -623,6 +645,24 @@ export default function NpOfferModal({
                         </div>
 
                       </div>
+
+                      {showRetro && !isQuote && (
+                        <RetroImpactModal
+                          onClose={()=>setShowRetro(false)}
+                          subject={retroSubject}
+                          currentLinePct={retroCurrent}
+                          money={money}
+                          contextLabel="Non-Proportional"
+                          contractId={contractId}
+                          isQuote={false}
+                          onApplyLine={isTerminal ? null : (pct)=>{
+                            const next = {};
+                            layers.forEach((_, i) => { next[i] = String(pct); });
+                            setLayerWrittenLines(next);
+                            setShowRetro(false);
+                          }}
+                        />
+                      )}
                     </div>
                   </div>
                 );

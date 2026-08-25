@@ -25,6 +25,7 @@ import renewalPackRouter from './renewalPack.js';
 import ldfBlendingRouter from './ldfBlending.js';
 import claimsRouter from './claims.js';
 import financeRouter from './finance.js';
+import retroRouter from './retro.js';
 
 const routers = [
   lookupsRouter,
@@ -54,6 +55,7 @@ const routers = [
   ldfBlendingRouter,
   claimsRouter,
   financeRouter,
+  retroRouter,
 ];
 
 export function registerApiRoutes(app) {

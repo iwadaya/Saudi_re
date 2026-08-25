@@ -8,6 +8,7 @@ const TEST_USER_UUID = '00000000-0000-0000-0000-000000000002';
 export const ROLE_LABELS = {
   CE:'Chief Executive', CU:'Chief Underwriter',
   TD:'Treaty Director', TM:'Treaty Manager', TUW:'Treaty Underwriter',
+  RM:'Retro Manager',
 };
 export const APPROVALS_ROLES = new Set(['CE', 'CU', 'TD', 'TM']);
 

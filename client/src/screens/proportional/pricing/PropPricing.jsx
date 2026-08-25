@@ -71,7 +71,7 @@ export default function PropPricing() {
     commissionPctVal, profitCommPct, mgmtExpPct, taxesPctVal, brokeragePctVal,
     uwYear, cedant, country, broker, crAct, crUw, marginAct, marginUw,
     movingAvgTerms, safeCcy, displayCcy, toDisplay, money, fxLabel, fxInverse,
-    balance, drivers, aiCalc,
+    balance, drivers, aiCalc, retroInputs,
     // save + snapshots + offer workflow
     save, handleSaveSnapshot, handleDeleteSnapshot, isTerminal, isReadOnly,
     doSubmitForApproval, doMarkApproved, doMarkSigned, doMarkNTU,
@@ -293,6 +293,7 @@ export default function PropPricing() {
             isTerminal={isTerminal} marginAct={marginAct} marginUw={marginUw}
             crAct={crAct} crUw={crUw} epi={epi} limit={limit} eventLimit={eventLimit}
             fxInverse={fxInverse} safeCcy={safeCcy} money={money} aiCalc={aiCalc}
+            retroInputs={retroInputs}
             contractId={cid} mandateCheck={mandateCheck}
             onSubmitForApproval={doSubmitForApproval}
             onMarkApproved={doMarkApproved} onReturnToUW={doReturnToUW}

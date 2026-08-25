@@ -442,3 +442,64 @@ export function compoundPoissonMoments(lambda, severityMean, severitySecondMomen
   const variance = lambda * severitySecondMoment;
   return { mean, variance, std: Math.sqrt(variance) };
 }
+
+/**
+ * Closed-form expected stop-loss premium E[(X − K)+] for X ~ Lognormal(μ, σ²):
+ *   E[(X − K)+] = e^{μ+σ²/2}·Φ((μ + σ² − ln K)/σ) − K·Φ((μ − ln K)/σ)
+ *
+ * A non-positive retention is a no-op on a strictly positive variate, so
+ * K ≤ 0 collapses to E[X] − K. σ = 0 degenerates to the deterministic
+ * max(0, e^μ − K).
+ *
+ * @param {number} mu     Location of the underlying Normal.
+ * @param {number} sigma  Scale of the underlying Normal (≥ 0).
+ * @param {number} K      Retention (priority), in the same units as X.
+ * @returns {number} expected excess; 0 for invalid input.
+ */
+export function lognormalStopLoss(mu, sigma, K) {
+  if (!Number.isFinite(mu) || !Number.isFinite(sigma) || sigma < 0) return 0;
+  if (!Number.isFinite(K)) return 0;
+  const mean = Math.exp(mu + (sigma * sigma) / 2);
+  if (K <= 0) return mean - K;
+  if (sigma === 0) return Math.max(0, Math.exp(mu) - K);
+  const lnK = Math.log(K);
+  return mean * normalCdf((mu + sigma * sigma - lnK) / sigma) - K * normalCdf((mu - lnK) / sigma);
+}
+
+/**
+ * Expected loss ceded to an aggregate layer [D, D+L] when the subject
+ * aggregate is Lognormal(μ, σ²):
+ *   E[min(max(S − D, 0), L)] = π(D) − π(D + L)
+ * with π(K) = E[(S − K)+] from {@link lognormalStopLoss}.
+ *
+ * Lognormal (rather than the Normal approximation in
+ * {@link normalLayerMean}) keeps the layer cost positive and
+ * right-skewed, which matters for the high attachments a retro
+ * programme sits at.
+ *
+ * @param {number} mu     Location of the underlying Normal.
+ * @param {number} sigma  Scale of the underlying Normal (≥ 0).
+ * @param {number} D      Attachment / priority.
+ * @param {number} L      Layer width.
+ * @returns {number} expected layer loss; 0 for invalid input or L ≤ 0.
+ */
+export function lognormalLayerMean(mu, sigma, D, L) {
+  if (!Number.isFinite(L) || L <= 0) return 0;
+  if (!Number.isFinite(mu) || !Number.isFinite(sigma) || !Number.isFinite(D)) return 0;
+  return Math.max(0, lognormalStopLoss(mu, sigma, D) - lognormalStopLoss(mu, sigma, D + L));
+}
+
+/**
+ * Quantile (inverse CDF) of a Lognormal(μ, σ²): exp(μ + σ·Φ⁻¹(p)).
+ * Used for return-period views — the 1-in-100 aggregate is p = 0.99.
+ *
+ * @param {number} mu
+ * @param {number} sigma
+ * @param {number} p  Exceedance-free probability in (0, 1).
+ * @returns {number} the p-quantile; 0 for invalid input.
+ */
+export function lognormalQuantile(mu, sigma, p) {
+  if (!Number.isFinite(mu) || !Number.isFinite(sigma) || sigma < 0) return 0;
+  if (!Number.isFinite(p) || p <= 0 || p >= 1) return 0;
+  return Math.exp(mu + sigma * invNormalCdf(p));
+}

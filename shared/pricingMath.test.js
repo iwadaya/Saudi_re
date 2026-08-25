@@ -23,6 +23,9 @@ import {
   lognormalMoments,
   paretoMoments,
   compoundPoissonMoments,
+  lognormalStopLoss,
+  lognormalLayerMean,
+  lognormalQuantile,
 } from './pricingMath.js';
 
 describe('layerHit', () => {
@@ -403,5 +406,78 @@ describe('end-to-end: compound Poisson stop-loss premium', () => {
     expect(agg.std).toBeCloseTo(Math.sqrt(1.25e11), -3);
     const layer = normalLayerMean(agg.mean, agg.std, agg.mean, 10_000_000);
     expect(layer).toBeCloseTo(agg.std / Math.sqrt(2 * Math.PI), -1);
+  });
+});
+
+describe('lognormalStopLoss', () => {
+  it('K ≤ 0 collapses to E[X] − K', () => {
+    const { mu, sigma } = lognormalFromMeanCv(100, 0.8);
+    expect(lognormalStopLoss(mu, sigma, 0)).toBeCloseTo(100, 6);
+    expect(lognormalStopLoss(mu, sigma, -50)).toBeCloseTo(150, 6);
+  });
+
+  it('σ = 0 degenerates to max(0, e^μ − K)', () => {
+    expect(lognormalStopLoss(Math.log(100), 0, 40)).toBeCloseTo(60, 9);
+    expect(lognormalStopLoss(Math.log(100), 0, 140)).toBe(0);
+  });
+
+  it('is decreasing in K and bounded by the mean', () => {
+    const { mu, sigma } = lognormalFromMeanCv(1_000_000, 1.2);
+    const a = lognormalStopLoss(mu, sigma, 500_000);
+    const b = lognormalStopLoss(mu, sigma, 2_000_000);
+    expect(a).toBeGreaterThan(b);
+    expect(a).toBeLessThan(1_000_000);
+    expect(b).toBeGreaterThan(0);
+  });
+
+  it('matches a numeric integral of the survival function', () => {
+    // E[(X−K)+] = ∫_K^∞ P(X > x) dx — trapezoid over a wide grid.
+    const { mu, sigma } = lognormalFromMeanCv(100, 0.6);
+    const K = 120;
+    let integral = 0;
+    const stepW = 0.5;
+    for (let x = K; x < 5_000; x += stepW) {
+      const sf = (y) => 1 - normalCdf((Math.log(y) - mu) / sigma);
+      integral += stepW * (sf(x) + sf(x + stepW)) / 2;
+    }
+    expect(lognormalStopLoss(mu, sigma, K)).toBeCloseTo(integral, 2);
+  });
+
+  it('returns 0 for invalid input', () => {
+    expect(lognormalStopLoss(NaN, 1, 10)).toBe(0);
+    expect(lognormalStopLoss(0, -1, 10)).toBe(0);
+    expect(lognormalStopLoss(0, 1, NaN)).toBe(0);
+  });
+});
+
+describe('lognormalLayerMean', () => {
+  it('splits the ground-up mean across a tower exactly', () => {
+    const { mu, sigma } = lognormalFromMeanCv(500, 0.9);
+    const whole = lognormalLayerMean(mu, sigma, 0, 1e9);
+    const l1 = lognormalLayerMean(mu, sigma, 0, 400);
+    const l2 = lognormalLayerMean(mu, sigma, 400, 1e9 - 400);
+    expect(whole).toBeCloseTo(500, 4);
+    expect(l1 + l2).toBeCloseTo(whole, 6);
+  });
+
+  it('returns 0 for L ≤ 0 or invalid input', () => {
+    expect(lognormalLayerMean(1, 1, 10, 0)).toBe(0);
+    expect(lognormalLayerMean(1, 1, 10, -5)).toBe(0);
+    expect(lognormalLayerMean(NaN, 1, 10, 5)).toBe(0);
+  });
+});
+
+describe('lognormalQuantile', () => {
+  it('median is e^μ and quantiles bracket it', () => {
+    const mu = Math.log(200), sigma = 0.7;
+    expect(lognormalQuantile(mu, sigma, 0.5)).toBeCloseTo(200, 6);
+    expect(lognormalQuantile(mu, sigma, 0.99)).toBeGreaterThan(200);
+    expect(lognormalQuantile(mu, sigma, 0.01)).toBeLessThan(200);
+  });
+
+  it('returns 0 outside (0,1) or for invalid params', () => {
+    expect(lognormalQuantile(0, 1, 0)).toBe(0);
+    expect(lognormalQuantile(0, 1, 1)).toBe(0);
+    expect(lognormalQuantile(0, -1, 0.5)).toBe(0);
   });
 });
