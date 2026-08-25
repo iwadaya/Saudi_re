@@ -23,6 +23,44 @@
 -- Audit: writes log to the generic public.audit_log (entity_type
 -- 'RETRO_PROGRAMME') via services/audit.logAudit — no new audit tables.
 
+-- ── Legacy reconciliation ────────────────────────────────────────────────────
+-- Long-lived databases (production) can carry pre-app tables from the legacy
+-- import era under these names. CREATE TABLE IF NOT EXISTS would silently
+-- keep such a table, and the index/constraint statements below then fail on
+-- missing columns — exactly how the first production run of this migration
+-- died ('column "status" does not exist'). Detect a table that exists but is
+-- NOT ours (missing this module's signature columns) and move it aside with
+-- its data intact; the app never referenced these names before this
+-- migration, so nothing can be depending on the old ones.
+
+DO $$
+DECLARE
+  t record;
+BEGIN
+  FOR t IN
+    SELECT * FROM (VALUES
+      ('retro_programme',         ARRAY['retro_programme_id','status','uw_year']),
+      ('retro_programme_class',   ARRAY['retro_programme_id','class_of_business_id']),
+      ('retro_programme_country', ARRAY['retro_programme_id','country_id']),
+      ('retro_pack_document',     ARRAY['document_id','retro_programme_id','storage_path'])
+    ) AS v(tbl, required_cols)
+  LOOP
+    IF EXISTS (SELECT 1 FROM information_schema.tables
+                WHERE table_schema='public' AND table_name=t.tbl)
+       AND EXISTS (SELECT 1 FROM unnest(t.required_cols) rc
+                    WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                       WHERE table_schema='public' AND table_name=t.tbl
+                                         AND column_name=rc)) THEN
+      IF EXISTS (SELECT 1 FROM information_schema.tables
+                  WHERE table_schema='public' AND table_name=t.tbl || '_legacy') THEN
+        RAISE EXCEPTION 'both % and %_legacy exist with a non-module schema — resolve manually before re-running migration 143', t.tbl, t.tbl;
+      END IF;
+      EXECUTE format('ALTER TABLE public.%I RENAME TO %I', t.tbl, t.tbl || '_legacy');
+      RAISE NOTICE 'migration 143: renamed pre-existing legacy table % to %_legacy', t.tbl, t.tbl;
+    END IF;
+  END LOOP;
+END $$;
+
 -- ── retro_programme ──────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS public.retro_programme (
