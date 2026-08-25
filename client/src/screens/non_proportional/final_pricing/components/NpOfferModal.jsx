@@ -653,6 +653,8 @@ export default function NpOfferModal({
                           currentLinePct={retroCurrent}
                           money={money}
                           contextLabel="Non-Proportional"
+                          contractId={contractId}
+                          isQuote={false}
                           onApplyLine={isTerminal ? null : (pct)=>{
                             const next = {};
                             layers.forEach((_, i) => { next[i] = String(pct); });

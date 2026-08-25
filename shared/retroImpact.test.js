@@ -12,6 +12,7 @@ import {
   normaliseProgramme,
   normaliseSubject,
   optimiseRetroLine,
+  programmeFromStored,
 } from './retroImpact.js';
 
 // A realistic proportional subject: USD 40m EPI at 100%, USD 500m
@@ -197,5 +198,61 @@ describe('optimiseRetroLine', () => {
     expect(r.suggestedLinePct).toBeGreaterThanOrEqual(0);
     expect(Number.isFinite(r.uplift)).toBe(true);
     expect(typeof r.reason).toBe('string');
+  });
+});
+
+describe('programmeFromStored', () => {
+  it('maps a stored QS + XL pair onto the single-layer model', () => {
+    const { programme, sourceNames, unusedNames, hasStored } = programmeFromStored([
+      { programme_type: 'QUOTA_SHARE', programme_name: 'WA QS', cession_pct: '25', commission_pct: '30' },
+      { programme_type: 'XL_CAT', programme_name: 'Cat XL', attachment: '5,000,000', occurrence_limit: '20000000', rol_pct: 12.5, reinstatements: 2 },
+    ]);
+    expect(hasStored).toBe(true);
+    expect(programme.qsCessionPct).toBe(25);
+    expect(programme.qsCommissionPct).toBe(30);
+    expect(programme.xlEnabled).toBe(true);
+    expect(programme.xlAttachment).toBe(5_000_000);
+    expect(programme.xlLimit).toBe(20_000_000);
+    expect(programme.xlRolPct).toBe(12.5);
+    expect(programme.xlReinstatements).toBe(2);
+    expect(sourceNames).toEqual(['WA QS', 'Cat XL']);
+    expect(unusedNames).toEqual([]);
+  });
+
+  it('with only an XL stored, the QS cession is 0 (no pro-rata retro exists)', () => {
+    const { programme } = programmeFromStored([
+      { programme_type: 'STOP_LOSS', programme_name: 'SL', attachment: 1, occurrence_limit: 2, rol_pct: 5, reinstatements: 0 },
+    ]);
+    expect(programme.qsCessionPct).toBe(0);
+    expect(programme.xlEnabled).toBe(true);
+  });
+
+  it('with only a QS stored, the XL is off', () => {
+    const { programme } = programmeFromStored([
+      { programme_type: 'SURPLUS', programme_name: 'Surp', cession_pct: 40, commission_pct: 25 },
+    ]);
+    expect(programme.qsCessionPct).toBe(40);
+    expect(programme.xlEnabled).toBe(false);
+    expect(programme.xlLimit).toBe(0);
+  });
+
+  it('reports extra programmes beyond the first of each kind as unused', () => {
+    const { sourceNames, unusedNames } = programmeFromStored([
+      { programme_type: 'XL_PER_RISK', programme_name: 'Risk XL', occurrence_limit: 1 },
+      { programme_type: 'XL_CAT', programme_name: 'Cat XL', occurrence_limit: 1 },
+      { programme_type: 'QUOTA_SHARE', programme_name: 'QS 1', cession_pct: 10 },
+      { programme_type: 'QUOTA_SHARE', programme_name: 'QS 2', cession_pct: 5 },
+    ]);
+    expect(sourceNames).toEqual(['QS 1', 'Risk XL']);
+    expect(unusedNames).toEqual(['QS 2', 'Cat XL']);
+  });
+
+  it('empty / missing input falls back to the illustrative default, flagged hasStored=false', () => {
+    for (const input of [[], null, undefined]) {
+      const out = programmeFromStored(input);
+      expect(out.hasStored).toBe(false);
+      expect(out.programme).toEqual({ ...DEFAULT_RETRO_PROGRAMME });
+      expect(out.sourceNames).toEqual([]);
+    }
   });
 });

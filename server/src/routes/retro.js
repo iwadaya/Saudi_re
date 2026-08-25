@@ -519,4 +519,62 @@ router.get('/retro/summary', asyncHandler(async (req, res) => {
   res.json({ year, ...rows[0] });
 }));
 
+// ── GET /api/retro/applicable?contract_id=|quote_id= ─────────────────────────
+// The stored programmes that actually protect one inwards treaty (or quote):
+// ACTIVE programmes for the entity's UW year whose scope covers its country
+// and at least one of its classes of business (covers_all_* short-circuits).
+// This is what seeds the offer modals' Retro Impact view, so the same
+// matching rule as /retro/coverage applies — an entity with no recorded
+// class/country only matches covers-all programmes.
+router.get('/retro/applicable', asyncHandler(async (req, res) => {
+  const contractId = String(req.query.contract_id || '');
+  const quoteId = String(req.query.quote_id || '');
+  let subject = null;
+  if (UUID_RE.test(contractId)) {
+    const { rows } = await pool.query(`
+      SELECT c.uw_year, c.country_id,
+             ARRAY_REMOVE(ARRAY_AGG(DISTINCT ccb.class_of_business_id)
+                          || c.primary_class_of_business_id, NULL) AS class_ids
+        FROM public.contract c
+        LEFT JOIN public.contract_class_of_business ccb ON ccb.contract_id = c.contract_id
+       WHERE c.contract_id = $1
+       GROUP BY c.contract_id`, [contractId]);
+    subject = rows[0] || null;
+  } else if (UUID_RE.test(quoteId)) {
+    const { rows } = await pool.query(`
+      SELECT q.uw_year, q.country_id,
+             ARRAY_REMOVE(ARRAY_AGG(DISTINCT qcb.class_of_business_id)
+                          || q.primary_class_of_business_id, NULL) AS class_ids
+        FROM public.quote q
+        LEFT JOIN public.quote_class_of_business qcb ON qcb.quote_id = q.quote_id
+       WHERE q.quote_id = $1
+       GROUP BY q.quote_id`, [quoteId]);
+    subject = rows[0] || null;
+  } else {
+    return res.status(400).json({ error: 'Pass contract_id or quote_id.', code: 'BAD_REQUEST' });
+  }
+  if (!subject) return res.status(404).json({ error: 'Treaty not found' });
+
+  const { rows: programmes } = await pool.query(`
+    SELECT p.retro_programme_id, p.programme_name, p.programme_type, p.status,
+           p.reinsurer, p.currency_code, p.cession_pct, p.commission_pct,
+           p.attachment, p.occurrence_limit, p.aggregate_limit,
+           p.reinstatements, p.rol_pct, p.premium,
+           p.covers_all_classes, p.covers_all_countries
+      FROM public.retro_programme p
+     WHERE p.uw_year = $1 AND p.status = 'ACTIVE'
+       AND (p.covers_all_classes OR EXISTS (
+              SELECT 1 FROM public.retro_programme_class pc
+               WHERE pc.retro_programme_id = p.retro_programme_id
+                 AND pc.class_of_business_id = ANY($2::uuid[])))
+       AND (p.covers_all_countries OR ($3::uuid IS NOT NULL AND EXISTS (
+              SELECT 1 FROM public.retro_programme_country pcy
+               WHERE pcy.retro_programme_id = p.retro_programme_id
+                 AND pcy.country_id = $3)))
+     ORDER BY p.programme_type, p.programme_name`,
+  [subject.uw_year, subject.class_ids || [], subject.country_id]);
+
+  res.json({ uw_year: subject.uw_year, programmes });
+}));
+
 export default router;

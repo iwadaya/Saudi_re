@@ -248,6 +248,7 @@ const PATHS = {
   retroPackDownload: (docId: string) => `/api/retro/packs/${enc(docId)}/download`,
   retroPackDelete: (docId: string) => `/api/retro/packs/${enc(docId)}`,
   retroCoverage: '/api/retro/coverage',
+  retroApplicable: '/api/retro/applicable',
   retroSummary: '/api/retro/summary',
   // Finance module
   financeTreaties: '/api/finance/treaties',
@@ -565,6 +566,12 @@ export const api = {
   uploadRetroPack(id: string, formData: FormData, opts?: RequestOpts): Promise<unknown> { return request(PATHS.retroProgrammePacks(id), { ...opts, method: 'POST', body: formData }); },
   deleteRetroPack(docId: string, opts?: RequestOpts): Promise<unknown> { return request(PATHS.retroPackDelete(docId), { ...opts, method: 'DELETE' }); },
   getRetroPackDownloadUrl(docId: string): string { return `${API_BASE}${PATHS.retroPackDownload(docId)}`; },
+  getApplicableRetroProgrammes(params: { contractId?: string; quoteId?: string }, opts?: RequestOpts): Promise<unknown> {
+    const qs = new URLSearchParams();
+    if (params.contractId) qs.set('contract_id', params.contractId);
+    if (params.quoteId) qs.set('quote_id', params.quoteId);
+    return request(`${PATHS.retroApplicable}?${qs.toString()}`, opts);
+  },
   getRetroCoverage(year?: string | number, opts?: RequestOpts): Promise<unknown> {
     return request(year ? `${PATHS.retroCoverage}?year=${enc(String(year))}` : PATHS.retroCoverage, opts);
   },

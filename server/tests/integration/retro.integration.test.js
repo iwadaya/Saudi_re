@@ -223,6 +223,37 @@ describe.skipIf(shouldSkipDb)('integration: retro module', () => {
     expect(await auditCount(progId, 'RETRO_PACK_DELETED')).toBe(1);
   });
 
+  it('applicable: returns the ACTIVE programmes covering a contract (scope + covers-all), never DRAFT', async () => {
+    const res = await harness.fetchApp('GET', `/api/retro/applicable?contract_id=${contractId}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.uw_year).toBe(UW_YEAR);
+    const names = body.programmes.map((p) => p.programme_name).sort();
+    // 'Property Cat XL' matches on (cobA, refs.country); 'WA Stop Loss' via
+    // covers-all; 'Draft WA XL' is DRAFT and must not appear.
+    expect(names).toEqual(['Property Cat XL', 'WA Stop Loss']);
+    const catXl = body.programmes.find((p) => p.programme_name === 'Property Cat XL');
+    expect(Number(catXl.occurrence_limit)).toBe(25000000);
+    expect(Number(catXl.attachment)).toBe(5000000);
+  });
+
+  it('applicable: a contract outside the scoped country only sees covers-all programmes', async () => {
+    const stray = await harness.fetchApp('POST', '/api/treaties', {
+      body: { ...otherRefs, uw_year: UW_YEAR, status: 'DRAFT', experience_source: 'TRIANGLE', inception_date: `${UW_YEAR}-01-01` },
+    }).then((r) => r.json());
+    try {
+      const body = await harness.fetchApp('GET', `/api/retro/applicable?contract_id=${stray.contract_id}`).then((r) => r.json());
+      expect(body.programmes.map((p) => p.programme_name)).toEqual(['WA Stop Loss']);
+    } finally {
+      await pool.query('DELETE FROM public.contract WHERE contract_id=$1', [stray.contract_id]);
+    }
+  });
+
+  it('applicable: 400 without an id, 404 for an unknown contract', async () => {
+    expect((await harness.fetchApp('GET', '/api/retro/applicable')).status).toBe(400);
+    expect((await harness.fetchApp('GET', '/api/retro/applicable?contract_id=00000000-0000-4000-8000-000000000000')).status).toBe(404);
+  });
+
   it('delete removes the programme and its scope rows (cascade)', async () => {
     const res = await harness.fetchApp('DELETE', `/api/retro/programmes/${progId}`, { headers: rm });
     expect(res.status).toBe(200);

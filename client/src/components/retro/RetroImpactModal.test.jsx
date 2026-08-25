@@ -4,10 +4,27 @@
 // net walk shows spend/recoveries, and editing the programme re-runs
 // the optimisation live.
 
-import { render, screen, fireEvent, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const apiMock = vi.hoisted(() => ({
+  getApplicableRetroProgrammes: vi.fn(),
+}));
+vi.mock('../../api', () => ({ api: apiMock }));
+vi.mock('../../utils/logger', () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
+
 import RetroImpactModal from './RetroImpactModal.jsx';
-import { optimiseRetroLine } from '../../../../shared/retroImpact.js';
+import { optimiseRetroLine, programmeFromStored } from '../../../../shared/retroImpact.js';
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  apiMock.getApplicableRetroProgrammes.mockResolvedValue({ programmes: [] });
+});
+
+const STORED = [
+  { programme_type: 'QUOTA_SHARE', programme_name: 'WA QS 2026', cession_pct: 25, commission_pct: 30 },
+  { programme_type: 'XL_CAT', programme_name: 'Cat XL 2026', attachment: 5_000_000, occurrence_limit: 20_000_000, rol_pct: 11, reinstatements: 1 },
+];
 
 const SUBJECT = {
   grossPremium100: 40_000_000,
@@ -94,5 +111,51 @@ describe('RetroImpactModal', () => {
     const { onClose } = renderModal();
     fireEvent.click(screen.getByRole('button', { name: '✕' }));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fetch stored programmes without a contractId', () => {
+    renderModal();
+    expect(apiMock.getApplicableRetroProgrammes).not.toHaveBeenCalled();
+  });
+
+  it('seeds from the stored programmes covering the treaty and says so', async () => {
+    apiMock.getApplicableRetroProgrammes.mockResolvedValue({ uw_year: 2026, programmes: STORED });
+    renderModal({ contractId: 'c-1' });
+    expect(apiMock.getApplicableRetroProgrammes).toHaveBeenCalledWith({ contractId: 'c-1' });
+    await screen.findByText(/Seeded from stored programmes/);
+    expect(screen.getByText('WA QS 2026, Cat XL 2026')).toBeInTheDocument();
+    // Fields carry the stored terms, and the suggestion is the optimiser run
+    // on exactly that stored programme.
+    expect(screen.getByLabelText('Retro XL attachment')).toHaveValue('5000000');
+    expect(screen.getByLabelText('Retro XL limit')).toHaveValue('20000000');
+    const expected = optimiseRetroLine({
+      subject: { ...SUBJECT, lossCv: 0.9 },
+      programme: programmeFromStored(STORED).programme,
+      currentLinePct: 5,
+    });
+    const pct = screen.getByText((_, el) => el?.className === 'off-ai-pct').textContent;
+    expect(parseFloat(pct)).toBeCloseTo(expected.suggestedLinePct, 5);
+  });
+
+  it('queries by quoteId in quote mode', async () => {
+    renderModal({ contractId: 'q-1', isQuote: true });
+    await waitFor(() => expect(apiMock.getApplicableRetroProgrammes).toHaveBeenCalledWith({ quoteId: 'q-1' }));
+  });
+
+  it('flips to "Edited" with a working Reset to stored after an edit', async () => {
+    apiMock.getApplicableRetroProgrammes.mockResolvedValue({ programmes: STORED });
+    renderModal({ contractId: 'c-1' });
+    await screen.findByText(/Seeded from stored programmes/);
+    fireEvent.change(screen.getByLabelText('Retro XL limit'), { target: { value: '99000000' } });
+    expect(screen.getByText(/Edited — differs from the stored programme/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Reset to stored/ }));
+    expect(screen.getByLabelText('Retro XL limit')).toHaveValue('20000000');
+    expect(screen.getByText(/Seeded from stored programmes/)).toBeInTheDocument();
+  });
+
+  it('says when no stored programme covers the treaty and keeps the defaults', async () => {
+    apiMock.getApplicableRetroProgrammes.mockResolvedValue({ programmes: [] });
+    renderModal({ contractId: 'c-1' });
+    await screen.findByText(/No stored retro programme covers this treaty/);
   });
 });

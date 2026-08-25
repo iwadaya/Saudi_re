@@ -35,6 +35,9 @@ export default function PropOfferModal({
   // Loss/expense split + authority cap for the Retro Impact modal
   // (usePropPricingDerived.retroInputs).
   retroInputs,
+  // Names the treaty (or quote) so Retro Impact can seed from the STORED
+  // programmes that cover it (GET /api/retro/applicable).
+  contractId,
   onSubmitForApproval, onMarkApproved, onMarkSigned, onMarkNTU, onReturnToUW,
   onDecline, onRecall,
   eligibleApprovers,
@@ -346,6 +349,8 @@ export default function PropOfferModal({
             currentLinePct={parseFloat(String(offerLine||'').replace(/%/g,'').trim())}
             money={money}
             contextLabel="Proportional"
+            contractId={contractId}
+            isQuote={isQuote}
             onApplyLine={isTerminal ? null : (pct)=>{ setOfferLine(String(pct)); setShowRetro(false); }}
           />
         )}

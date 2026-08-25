@@ -379,3 +379,55 @@ export function optimiseRetroLine({ subject, programme, currentLinePct, step } =
     reason: describe(best, noRetro, capPct, num(currentLinePct)),
   };
 }
+
+/** Stored programme_type values that behave as proportional (QS-style) retro. */
+const PROPORTIONAL_RETRO_TYPES = new Set(['QUOTA_SHARE', 'SURPLUS']);
+
+/**
+ * Map the STORED retro programmes covering a treaty (rows from
+ * GET /api/retro/applicable — snake_case DB fields) onto the single
+ * QS + XL programme this engine models:
+ *
+ *   • The first proportional programme (QUOTA_SHARE / SURPLUS) supplies the
+ *     QS cession + commission; with none stored, cession is 0 — a stored
+ *     book with no proportional retro genuinely cedes nothing pro-rata.
+ *   • The first non-proportional programme (any XL / stop loss) supplies the
+ *     XL terms; with none stored, the XL is off.
+ *
+ * Extra programmes beyond the first of each kind are reported in
+ * `unusedNames` so the UI can say what the single-layer model left out.
+ *
+ * @param {Array<Object>} rows  Stored programme rows (may be empty).
+ * @returns {{programme: RetroProgramme, sourceNames: string[],
+ *            unusedNames: string[], hasStored: boolean}}
+ */
+export function programmeFromStored(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) {
+    return {
+      programme: { ...DEFAULT_RETRO_PROGRAMME },
+      sourceNames: [], unusedNames: [], hasStored: false,
+    };
+  }
+  const prop = list.filter((r) => PROPORTIONAL_RETRO_TYPES.has(r.programme_type));
+  const xls = list.filter((r) => !PROPORTIONAL_RETRO_TYPES.has(r.programme_type));
+  const qs = prop[0] || null;
+  const xl = xls[0] || null;
+  const programme = normaliseProgramme({
+    qsCessionPct: qs ? num(qs.cession_pct) : 0,
+    qsCommissionPct: qs ? num(qs.commission_pct) : 0,
+    xlEnabled: !!xl,
+    xlAttachment: xl ? num(xl.attachment) : 0,
+    xlLimit: xl ? num(xl.occurrence_limit) : 0,
+    xlRolPct: xl ? num(xl.rol_pct, DEFAULT_RETRO_PROGRAMME.xlRolPct) : DEFAULT_RETRO_PROGRAMME.xlRolPct,
+    xlReinstatements: xl ? num(xl.reinstatements) : 0,
+    xlReinstatementPct: DEFAULT_RETRO_PROGRAMME.xlReinstatementPct,
+    costOfCapitalPct: DEFAULT_RETRO_PROGRAMME.costOfCapitalPct,
+  });
+  return {
+    programme,
+    sourceNames: [qs?.programme_name, xl?.programme_name].filter(Boolean),
+    unusedNames: [...prop.slice(1), ...xls.slice(1)].map((r) => r.programme_name),
+    hasStored: true,
+  };
+}

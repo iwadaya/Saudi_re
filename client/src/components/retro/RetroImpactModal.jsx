@@ -11,15 +11,18 @@
 // until they hit "Apply" on the suggested line, which hands the % back to
 // the host modal exactly like the existing AI-apply buttons do.
 
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 // (Mounted only while open — the host renders {showRetro && <RetroImpactModal/>}
 // so the programme re-seeds from the live treaty numbers on every open.)
+import { api } from '../../api';
 import PctInput from '../PctInput';
+import { logger } from '../../utils/logger';
 import {
   defaultRetroProgramme,
   evaluateRetroAtLine,
   normaliseProgramme,
   optimiseRetroLine,
+  programmeFromStored,
 } from '../../../../shared/retroImpact.js';
 
 const numOr = (v, fallback = 0) => {
@@ -73,10 +76,13 @@ function Field({ label, children }) {
  *   money: (n: number) => string,
  *   onApplyLine?: ((pct: number) => void) | null,
  *   contextLabel?: string,
+ *   contractId?: string | null,
+ *   isQuote?: boolean,
  * }} props
  */
 export default function RetroImpactModal({
   onClose, subject, currentLinePct, money, onApplyLine, contextLabel,
+  contractId = null, isQuote = false,
 }) {
   const uid = useId();
   // Seed once per mount from the live treaty; edits take over from there.
@@ -87,7 +93,49 @@ export default function RetroImpactModal({
   }));
   const [lossCv, setLossCv] = useState(String(subject?.lossCv ?? 0.9));
 
-  const setP = (key) => (v) => setProg((p) => ({ ...p, [key]: v }));
+  // ── Stored programmes (the Retro module) ──────────────────────────────────
+  // When the host names the treaty, seed the programme from the stored ACTIVE
+  // programmes that cover it (year × class × country — GET /api/retro/
+  // applicable) instead of the illustrative default. Edits flip the source to
+  // 'custom'; "Reset to stored" re-applies the stored seed. Without a
+  // contractId (or when nothing matches) the heuristic default stands.
+  const [stored, setStored] = useState(null);          // programmeFromStored() output once loaded
+  const [source, setSource] = useState('default');     // 'default' | 'stored' | 'custom'
+  const touchedRef = useRef(false);
+  useEffect(() => {
+    if (!contractId) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.getApplicableRetroProgrammes(
+          isQuote ? { quoteId: contractId } : { contractId },
+        );
+        if (cancelled) return;
+        const seed = programmeFromStored(res?.programmes);
+        setStored(seed);
+        if (seed.hasStored) {
+          // Edited before the fetch landed → keep the edits, offer the reset.
+          if (touchedRef.current) setSource('custom');
+          else { setProg(seed.programme); setSource('stored'); }
+        }
+      } catch (e) {
+        logger.warn('retro applicable-programmes load failed', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [contractId, isQuote]);
+
+  const setP = (key) => (v) => {
+    touchedRef.current = true;
+    setSource((s) => (s === 'stored' ? 'custom' : s));
+    setProg((p) => ({ ...p, [key]: v }));
+  };
+  const resetToStored = () => {
+    if (!stored?.hasStored) return;
+    touchedRef.current = false;
+    setProg(stored.programme);
+    setSource('stored');
+  };
 
   const result = useMemo(() => optimiseRetroLine({
     subject: { ...subject, lossCv: numOr(lossCv, 0.9) || 0.9 },
@@ -146,6 +194,25 @@ export default function RetroImpactModal({
           {/* ── Programme inputs ── */}
           <div className="off-card rim-programme">
             <div className="off-card-title">Outwards Retro Programme</div>
+            {source === 'stored' && stored?.hasStored && (
+              <div className="rim-source rim-source--stored">
+                ⛨ Seeded from stored programme{stored.sourceNames.length === 1 ? '' : 's'}: <b>{stored.sourceNames.join(', ')}</b>
+                {stored.unusedNames.length > 0 && (
+                  <span className="rim-source-sub"> · also covering (not modelled): {stored.unusedNames.join(', ')}</span>
+                )}
+              </div>
+            )}
+            {source === 'custom' && stored?.hasStored && (
+              <div className="rim-source rim-source--custom">
+                Edited — differs from the stored programme.
+                <button type="button" className="rim-source-reset" onClick={resetToStored}>↺ Reset to stored</button>
+              </div>
+            )}
+            {contractId && stored && !stored.hasStored && (
+              <div className="rim-source rim-source--none">
+                No stored retro programme covers this treaty — showing illustrative defaults. Programmes are maintained in the Retro module.
+              </div>
+            )}
             <div className="rim-fields">
               <Field label="QS cession">
                 <PctInput className="rim-inp" value={String(prog.qsCessionPct ?? '')} onChange={setP('qsCessionPct')} placeholder="0%" />
