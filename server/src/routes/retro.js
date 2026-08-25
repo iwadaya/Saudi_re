@@ -72,6 +72,8 @@ const PROGRAMME_SELECT = `
     creator.display_name AS created_by_name,
     COALESCE(cls.classes, '[]'::json)     AS classes,
     COALESCE(ctry.countries, '[]'::json)  AS countries,
+    COALESCE(rg.regions, '{}')            AS regions,
+    COALESCE(ly.layers, '[]'::json)       AS layers,
     COALESCE(pk.packs_count, 0)::int      AS packs_count
   FROM public.retro_programme p
   LEFT JOIN public.uw_user creator ON creator.user_id = p.created_by_user_id
@@ -97,7 +99,28 @@ const PROGRAMME_SELECT = `
     SELECT COUNT(*)::int AS packs_count
       FROM public.retro_pack_document d
      WHERE d.retro_programme_id = p.retro_programme_id
-  ) pk ON true`;
+  ) pk ON true
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(array_agg(pr.region ORDER BY pr.region), '{}') AS regions
+      FROM public.retro_programme_region pr
+     WHERE pr.retro_programme_id = p.retro_programme_id
+  ) rg ON true
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(json_agg(json_build_object(
+             'layer_id', l.layer_id,
+             'layer_number', l.layer_number,
+             'attachment', l.attachment,
+             'occurrence_limit', l.occurrence_limit,
+             'aggregate_limit', l.aggregate_limit,
+             'reinstatements', l.reinstatements,
+             'reinstatement_pct', l.reinstatement_pct,
+             'rol_pct', l.rol_pct,
+             'premium', l.premium,
+             'notes', l.notes
+           ) ORDER BY l.layer_number), '[]'::json) AS layers
+      FROM public.retro_programme_layer l
+     WHERE l.retro_programme_id = p.retro_programme_id
+  ) ly ON true`;
 
 // ── GET /api/retro/programmes?year=&status= ──────────────────────────────────
 router.get('/retro/programmes', asyncHandler(async (req, res) => {
@@ -139,8 +162,8 @@ router.get('/retro/programmes/:id', asyncHandler(async (req, res) => {
   res.json({ ...rows[0], packs });
 }));
 
-/** Replace a programme's scope rows inside the caller's transaction. */
-async function writeScope(client, programmeId, { classIds, countryIds }) {
+/** Replace a programme's scope + layer rows inside the caller's transaction. */
+async function writeScope(client, programmeId, { classIds, countryIds, regions, layers }) {
   if (classIds) {
     await client.query('DELETE FROM public.retro_programme_class WHERE retro_programme_id=$1', [programmeId]);
     for (const cid of classIds) {
@@ -155,6 +178,29 @@ async function writeScope(client, programmeId, { classIds, countryIds }) {
       await client.query(
         `INSERT INTO public.retro_programme_country (retro_programme_id, country_id)
          VALUES ($1,$2) ON CONFLICT DO NOTHING`, [programmeId, cid]);
+    }
+  }
+  if (regions) {
+    await client.query('DELETE FROM public.retro_programme_region WHERE retro_programme_id=$1', [programmeId]);
+    for (const region of regions) {
+      await client.query(
+        `INSERT INTO public.retro_programme_region (retro_programme_id, region)
+         VALUES ($1,$2) ON CONFLICT DO NOTHING`, [programmeId, region]);
+    }
+  }
+  if (layers) {
+    // layer_number comes from array order — the tower reads bottom-up.
+    await client.query('DELETE FROM public.retro_programme_layer WHERE retro_programme_id=$1', [programmeId]);
+    for (let i = 0; i < layers.length; i++) {
+      const l = layers[i];
+      await client.query(
+        `INSERT INTO public.retro_programme_layer
+           (retro_programme_id, layer_number, attachment, occurrence_limit, aggregate_limit,
+            reinstatements, reinstatement_pct, rol_pct, premium, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [programmeId, i + 1, l.attachment ?? null, l.occurrence_limit ?? null,
+          l.aggregate_limit ?? null, l.reinstatements ?? null, l.reinstatement_pct ?? null,
+          l.rol_pct ?? null, l.premium ?? null, l.notes ?? null]);
     }
   }
 }
@@ -186,6 +232,7 @@ router.post('/retro/programmes',
         const prog = rows[0];
         await writeScope(client, prog.retro_programme_id, {
           classIds: b.class_of_business_ids, countryIds: b.country_ids,
+          regions: b.regions, layers: b.layers,
         });
         await logAudit(client, {
           entityType: 'RETRO_PROGRAMME', entityId: prog.retro_programme_id,
@@ -223,7 +270,8 @@ router.put('/retro/programmes/:id',
         for (const c of PROGRAMME_COLS) {
           if (b[c] !== undefined) { params.push(b[c]); sets.push(`${c} = $${params.length}`); }
         }
-        const touchingScope = b.class_of_business_ids !== undefined || b.country_ids !== undefined;
+        const touchingScope = b.class_of_business_ids !== undefined || b.country_ids !== undefined
+          || b.regions !== undefined || b.layers !== undefined;
         if (!sets.length && !touchingScope) {
           const e = new Error('No updatable fields supplied'); e.status = 400; throw e;
         }
@@ -235,6 +283,7 @@ router.put('/retro/programmes/:id',
         if (!rows.length) { const e = new Error('Programme not found'); e.status = 404; throw e; }
         await writeScope(client, id, {
           classIds: b.class_of_business_ids, countryIds: b.country_ids,
+          regions: b.regions, layers: b.layers,
         });
         await logAudit(client, {
           entityType: 'RETRO_PROGRAMME', entityId: id, eventType: 'RETRO_PROGRAMME_UPDATED',
@@ -440,6 +489,7 @@ router.get('/retro/coverage', asyncHandler(async (req, res) => {
       SELECT
         i.country_id,
         co.country_name,
+        co.region AS country_region,
         i.class_of_business_id,
         cob.class_of_business AS class_name,
         COUNT(DISTINCT i.contract_id)::int AS contract_count,
@@ -448,20 +498,28 @@ router.get('/retro/coverage', asyncHandler(async (req, res) => {
       FROM inward i
       LEFT JOIN public.country co            ON co.country_id = i.country_id
       LEFT JOIN public.class_of_business cob ON cob.class_of_business_id = i.class_of_business_id
-      GROUP BY i.country_id, co.country_name, i.class_of_business_id, cob.class_of_business
+      GROUP BY i.country_id, co.country_name, co.region, i.class_of_business_id, cob.class_of_business
       ORDER BY co.country_name NULLS LAST, cob.class_of_business NULLS LAST`, [year]),
-    // Active programmes for the year with their scope sets.
+    // Active programmes for the year with their scope sets. tower_limit is
+    // Σ layer occurrence limits when the programme is captured as a tower,
+    // else the programme-level occurrence limit.
     pool.query(`
       SELECT
         p.retro_programme_id, p.programme_name, p.programme_type, p.status,
         p.currency_code, p.cession_pct, p.attachment, p.occurrence_limit,
         p.aggregate_limit, p.covers_all_classes, p.covers_all_countries,
+        COALESCE((SELECT SUM(l.occurrence_limit) FROM public.retro_programme_layer l
+                   WHERE l.retro_programme_id = p.retro_programme_id),
+                 p.occurrence_limit) AS tower_limit,
         COALESCE(ARRAY(
           SELECT pc.class_of_business_id FROM public.retro_programme_class pc
            WHERE pc.retro_programme_id = p.retro_programme_id), '{}') AS class_ids,
         COALESCE(ARRAY(
           SELECT pcy.country_id FROM public.retro_programme_country pcy
-           WHERE pcy.retro_programme_id = p.retro_programme_id), '{}') AS country_ids
+           WHERE pcy.retro_programme_id = p.retro_programme_id), '{}') AS country_ids,
+        COALESCE(ARRAY(
+          SELECT pr.region FROM public.retro_programme_region pr
+           WHERE pr.retro_programme_id = p.retro_programme_id), '{}') AS regions
       FROM public.retro_programme p
       WHERE p.uw_year = $1 AND p.status = 'ACTIVE'
       ORDER BY p.programme_name`, [year]),
@@ -471,14 +529,15 @@ router.get('/retro/coverage', asyncHandler(async (req, res) => {
     const classOk = prog.covers_all_classes
       || (cell.class_of_business_id && prog.class_ids.includes(cell.class_of_business_id));
     const countryOk = prog.covers_all_countries
-      || (cell.country_id && prog.country_ids.includes(cell.country_id));
+      || (cell.country_id && prog.country_ids.includes(cell.country_id))
+      || (cell.country_region && prog.regions.includes(cell.country_region));
     return classOk && countryOk;
   };
 
   const out = cells.map((cell) => {
     const matching = programmes.filter((p) => covers(p, cell));
     const retroLimit = matching.reduce(
-      (s, p) => s + Number(p.occurrence_limit || 0), 0);
+      (s, p) => s + Number(p.tower_limit ?? p.occurrence_limit ?? 0), 0);
     return {
       ...cell,
       gross_limit_100: Number(cell.gross_limit_100),
@@ -500,6 +559,17 @@ router.get('/retro/coverage', asyncHandler(async (req, res) => {
     cells: out,
     programme_count: programmes.length,
   });
+}));
+
+// ── GET /api/retro/regions ───────────────────────────────────────────────────
+// Distinct regions from the country reference table — the options for a
+// programme's region scope.
+router.get('/retro/regions', asyncHandler(async (_req, res) => {
+  const { rows } = await pool.query(`
+    SELECT DISTINCT region FROM public.country
+     WHERE region IS NOT NULL AND btrim(region) <> ''
+     ORDER BY region`);
+  res.json(rows.map((r) => r.region));
 }));
 
 // ── GET /api/retro/summary?year= ─────────────────────────────────────────────
@@ -539,23 +609,25 @@ router.get('/retro/applicable', asyncHandler(async (req, res) => {
   let subject = null;
   if (UUID_RE.test(contractId)) {
     const { rows } = await pool.query(`
-      SELECT c.uw_year, c.country_id,
+      SELECT c.uw_year, c.country_id, co.region AS country_region,
              ARRAY_REMOVE(ARRAY_AGG(DISTINCT ccb.class_of_business_id)
                           || c.primary_class_of_business_id, NULL) AS class_ids
         FROM public.contract c
+        LEFT JOIN public.country co ON co.country_id = c.country_id
         LEFT JOIN public.contract_class_of_business ccb ON ccb.contract_id = c.contract_id
        WHERE c.contract_id = $1
-       GROUP BY c.contract_id`, [contractId]);
+       GROUP BY c.contract_id, co.region`, [contractId]);
     subject = rows[0] || null;
   } else if (UUID_RE.test(quoteId)) {
     const { rows } = await pool.query(`
-      SELECT q.uw_year, q.country_id,
+      SELECT q.uw_year, q.country_id, co.region AS country_region,
              ARRAY_REMOVE(ARRAY_AGG(DISTINCT qcb.class_of_business_id)
                           || q.primary_class_of_business_id, NULL) AS class_ids
         FROM public.quote q
+        LEFT JOIN public.country co ON co.country_id = q.country_id
         LEFT JOIN public.quote_class_of_business qcb ON qcb.quote_id = q.quote_id
        WHERE q.quote_id = $1
-       GROUP BY q.quote_id`, [quoteId]);
+       GROUP BY q.quote_id, co.region`, [quoteId]);
     subject = rows[0] || null;
   } else {
     return res.status(400).json({ error: 'Pass contract_id or quote_id.', code: 'BAD_REQUEST' });
@@ -602,8 +674,21 @@ router.get('/retro/applicable', asyncHandler(async (req, res) => {
            p.attachment, p.occurrence_limit, p.aggregate_limit,
            p.reinstatements, p.rol_pct, p.premium,
            p.covers_all_classes, p.covers_all_countries,
+           lyr.layers,
            book.book_exposure_usd, book.book_contracts, book.book_fx_missing
       FROM public.retro_programme p
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(json_agg(json_build_object(
+                 'layer_number', l.layer_number,
+                 'attachment', l.attachment,
+                 'occurrence_limit', l.occurrence_limit,
+                 'reinstatements', l.reinstatements,
+                 'reinstatement_pct', l.reinstatement_pct,
+                 'rol_pct', l.rol_pct
+               ) ORDER BY l.layer_number), '[]'::json) AS layers
+          FROM public.retro_programme_layer l
+         WHERE l.retro_programme_id = p.retro_programme_id
+      ) lyr ON true
       -- The protected book: every in-scope contract in the programme's year
       -- (same status filter + scope matching as /retro/coverage). Limits are
       -- stored in each contract's own currency, so they are crossed to USD at
@@ -632,10 +717,16 @@ router.get('/retro/applicable', asyncHandler(async (req, res) => {
              WHERE l.contract_id = c.contract_id) np ON true
          WHERE c.uw_year = p.uw_year
            AND c.status NOT IN ('DECLINED','NTU','CANCELLED')
-           AND (p.covers_all_countries OR EXISTS (
+           AND (p.covers_all_countries
+                OR EXISTS (
                   SELECT 1 FROM public.retro_programme_country pcy
                    WHERE pcy.retro_programme_id = p.retro_programme_id
-                     AND pcy.country_id = c.country_id))
+                     AND pcy.country_id = c.country_id)
+                OR EXISTS (
+                  SELECT 1 FROM public.retro_programme_region pr
+                   JOIN public.country cco ON cco.country_id = c.country_id
+                  WHERE pr.retro_programme_id = p.retro_programme_id
+                    AND pr.region = cco.region))
            AND (p.covers_all_classes OR EXISTS (
                   SELECT 1 FROM public.retro_programme_class pc
                    WHERE pc.retro_programme_id = p.retro_programme_id
@@ -650,12 +741,17 @@ router.get('/retro/applicable', asyncHandler(async (req, res) => {
               SELECT 1 FROM public.retro_programme_class pc
                WHERE pc.retro_programme_id = p.retro_programme_id
                  AND pc.class_of_business_id = ANY($2::uuid[])))
-       AND (p.covers_all_countries OR ($3::uuid IS NOT NULL AND EXISTS (
+       AND (p.covers_all_countries
+            OR ($3::uuid IS NOT NULL AND EXISTS (
               SELECT 1 FROM public.retro_programme_country pcy
                WHERE pcy.retro_programme_id = p.retro_programme_id
-                 AND pcy.country_id = $3)))
+                 AND pcy.country_id = $3))
+            OR ($4::text IS NOT NULL AND EXISTS (
+              SELECT 1 FROM public.retro_programme_region pr
+               WHERE pr.retro_programme_id = p.retro_programme_id
+                 AND pr.region = $4)))
      ORDER BY p.programme_type, p.programme_name`,
-  [subject.uw_year, subject.class_ids || [], subject.country_id]);
+  [subject.uw_year, subject.class_ids || [], subject.country_id, subject.country_region || null]);
 
   // FX: programme amounts are stored in the programme's currency; the modal
   // models in treaty currency. Cross the latest rate_to_usd pair —

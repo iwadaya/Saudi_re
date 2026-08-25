@@ -13,6 +13,7 @@ const apiMock = vi.hoisted(() => ({
   getRetroCoverage: vi.fn(),
   listClassOfBusiness: vi.fn(),
   getRefListItems: vi.fn(),
+  getRetroRegions: vi.fn(),
   createRetroProgramme: vi.fn(),
   updateRetroProgramme: vi.fn(),
   deleteRetroProgramme: vi.fn(),
@@ -70,6 +71,7 @@ beforeEach(() => {
   apiMock.getRetroCoverage.mockResolvedValue(COVERAGE);
   apiMock.listClassOfBusiness.mockResolvedValue([{ id: 'cob1', name: 'Property' }, { id: 'cob2', name: 'Motor' }]);
   apiMock.getRefListItems.mockResolvedValue([{ id: 'c1', name: 'Saudi Arabia' }, { id: 'c2', name: 'Kenya' }]);
+  apiMock.getRetroRegions.mockResolvedValue(['Middle East', 'Africa']);
   apiMock.createRetroProgramme.mockResolvedValue({ ok: true });
   apiMock.deleteRetroProgramme.mockResolvedValue({ ok: true });
 });
@@ -121,6 +123,29 @@ describe('RetroHomeScreen', () => {
     });
     // Reload after save (initial load + post-create).
     await waitFor(() => expect(apiMock.listRetroProgrammes).toHaveBeenCalledTimes(2));
+  });
+
+  it('captures tower layers and a region scope on create', async () => {
+    render(<RetroHomeScreen />);
+    await screen.findByText('Property Cat XL');
+    fireEvent.click(screen.getByRole('button', { name: '+ New Programme' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    fireEvent.change(dialog.getByLabelText(/Programme name/), { target: { value: 'Layered Tower' } });
+    // Region scope (options come from api.getRetroRegions).
+    fireEvent.click(dialog.getByLabelText('Middle East'));
+    // Two layers with different coverages.
+    fireEvent.click(dialog.getByRole('button', { name: '+ Add layer' }));
+    fireEvent.click(dialog.getByRole('button', { name: '+ Add layer' }));
+    fireEvent.change(dialog.getByLabelText('Layer 1 attachment'), { target: { value: '5000000' } });
+    fireEvent.change(dialog.getByLabelText('Layer 1 occurrence limit'), { target: { value: '10000000' } });
+    fireEvent.change(dialog.getByLabelText('Layer 2 attachment'), { target: { value: '15000000' } });
+    fireEvent.change(dialog.getByLabelText('Layer 2 occurrence limit'), { target: { value: '25000000' } });
+    fireEvent.click(dialog.getByRole('button', { name: 'Create Programme' }));
+    await waitFor(() => expect(apiMock.createRetroProgramme).toHaveBeenCalledTimes(1));
+    const body = apiMock.createRetroProgramme.mock.calls[0][0];
+    expect(body.regions).toEqual(['Middle East']);
+    expect(body.layers).toHaveLength(2);
+    expect(body.layers[1]).toMatchObject({ attachment: '15000000', occurrence_limit: '25000000' });
   });
 
   it('hides all write controls for a read-only user (underwriter view)', async () => {

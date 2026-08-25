@@ -53,6 +53,7 @@ export default function RetroHomeScreen() {
   const [coverage, setCoverage] = useState(null);
   const [classes, setClasses] = useState([]);
   const [countries, setCountries] = useState([]);
+  const [regions, setRegions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editor, setEditor] = useState(null);        // {programme|null} while open
@@ -63,15 +64,17 @@ export default function RetroHomeScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const [perm, cobs, ctrys] = await Promise.all([
+        const [perm, cobs, ctrys, regs] = await Promise.all([
           api.getRetroPermissions().catch(() => null),
           api.listClassOfBusiness().catch(() => []),
           api.getRefListItems('country').catch(() => []),
+          api.getRetroRegions().catch(() => []),
         ]);
         if (cancelled) return;
         setCanManage(!!perm?.can_manage);
         setClasses((Array.isArray(cobs) ? cobs : []).map((c) => ({ id: c.id, name: c.name })));
         setCountries((Array.isArray(ctrys) ? ctrys : []).map((c) => ({ id: c.id, name: c.name })));
+        setRegions(Array.isArray(regs) ? regs : []);
       } catch (e) { logger.error('retro ref load failed', e); }
     })();
     return () => { cancelled = true; };
@@ -171,10 +174,22 @@ export default function RetroHomeScreen() {
                   <td className="cf-cell-muted">{TYPE_LABEL[p.programme_type] || p.programme_type}</td>
                   <td>
                     <div><ScopeTags all={p.covers_all_classes} items={p.classes} allLabel="All classes" /></div>
-                    <div><ScopeTags all={p.covers_all_countries} items={p.countries} allLabel="All countries" /></div>
+                    <div><ScopeTags all={p.covers_all_countries}
+                      items={[...(p.regions || []).map((r) => ({ name: `⊕ ${r}` })), ...(p.countries || [])]}
+                      allLabel="All countries" /></div>
                   </td>
                   <td className="cf-num">{money(p.attachment, p.currency_code)}</td>
-                  <td className="cf-num cf-num--strong">{money(p.occurrence_limit, p.currency_code)}</td>
+                  <td className="cf-num cf-num--strong">
+                    {(() => {
+                      const layers = Array.isArray(p.layers) ? p.layers : [];
+                      if (!layers.length) return money(p.occurrence_limit, p.currency_code);
+                      const tower = layers.reduce((s, l) => s + (Number(l.occurrence_limit) || 0), 0);
+                      return (<>
+                        {money(tower, p.currency_code)}
+                        <div className="cf-cell-sub">{layers.length}-layer tower</div>
+                      </>);
+                    })()}
+                  </td>
                   <td className="cf-num">{p.cession_pct != null ? `${Number(p.cession_pct)}%` : '–'}</td>
                   <td className="cf-num">{p.rol_pct != null ? `${Number(p.rol_pct)}%` : '–'}</td>
                   <td className="cf-num">{money(p.premium, p.currency_code)}</td>
@@ -206,7 +221,7 @@ export default function RetroHomeScreen() {
       <RetroProgrammeModal
         open={!!editor} onClose={() => setEditor(null)} onSave={saveProgramme}
         programme={editor?.programme || null} defaultYear={year}
-        classes={classes} countries={countries} />
+        classes={classes} countries={countries} regions={regions} />
       <RetroPacksModal
         open={!!packsFor} onClose={() => setPacksFor(null)}
         programme={packsFor} canManage={canManage} onChanged={load} />

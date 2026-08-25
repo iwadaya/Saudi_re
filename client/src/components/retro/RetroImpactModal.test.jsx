@@ -221,6 +221,24 @@ describe('RetroImpactModal', () => {
     expect(screen.getByLabelText('Retro XL attachment')).toHaveValue('5000000');
   });
 
+  it('flattens a stored layered tower and says so in the banner', async () => {
+    apiMock.getApplicableRetroProgrammes.mockResolvedValue({
+      subject_currency: 'USD', subject_in_book: true,
+      programmes: [{
+        programme_type: 'XL_CAT', programme_name: 'Cat Tower', currency_code: 'USD',
+        fx_to_subject: 1, fx_missing: false,
+        layers: [
+          { layer_number: 1, attachment: 5_000_000, occurrence_limit: 10_000_000, rol_pct: 18, reinstatements: 2 },
+          { layer_number: 2, attachment: 15_000_000, occurrence_limit: 25_000_000, rol_pct: 9, reinstatements: 1 },
+        ],
+      }],
+    });
+    renderModal({ contractId: 'c-1' });
+    await screen.findByText(/2-layer tower flattened to one cover/);
+    expect(screen.getByLabelText('Retro XL attachment')).toHaveValue('5000000');
+    expect(screen.getByLabelText('Retro XL limit')).toHaveValue('35000000');
+  });
+
   it('says when no stored programme covers the treaty and keeps the defaults', async () => {
     apiMock.getApplicableRetroProgrammes.mockResolvedValue({ programmes: [] });
     renderModal({ contractId: 'c-1' });

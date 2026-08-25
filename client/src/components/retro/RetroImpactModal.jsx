@@ -201,6 +201,11 @@ export default function RetroImpactModal({
             {source === 'stored' && stored?.hasStored && (
               <div className="rim-source rim-source--stored">
                 ⛨ Seeded from stored programme{stored.sourceNames.length === 1 ? '' : 's'}: <b>{stored.sourceNames.join(', ')}</b>
+                {stored.layerCount > 1 && (
+                  <span className="rim-source-sub">
+                    · {stored.layerCount}-layer tower flattened to one cover
+                  </span>
+                )}
                 {stored.converted && (
                   <span className="rim-source-sub">
                     · converted {stored.fromCurrency || 'programme ccy'} → {stored.toCurrency || 'treaty ccy'} at

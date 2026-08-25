@@ -248,6 +248,7 @@ const PATHS = {
   retroPackDownload: (docId: string) => `/api/retro/packs/${enc(docId)}/download`,
   retroPackDelete: (docId: string) => `/api/retro/packs/${enc(docId)}`,
   retroCoverage: '/api/retro/coverage',
+  retroRegions: '/api/retro/regions',
   retroApplicable: '/api/retro/applicable',
   retroSummary: '/api/retro/summary',
   // Finance module
@@ -572,6 +573,7 @@ export const api = {
     if (params.quoteId) qs.set('quote_id', params.quoteId);
     return request(`${PATHS.retroApplicable}?${qs.toString()}`, opts);
   },
+  getRetroRegions(opts?: RequestOpts): Promise<unknown> { return request(PATHS.retroRegions, opts); },
   getRetroCoverage(year?: string | number, opts?: RequestOpts): Promise<unknown> {
     return request(year ? `${PATHS.retroCoverage}?year=${enc(String(year))}` : PATHS.retroCoverage, opts);
   },

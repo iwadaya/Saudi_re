@@ -95,3 +95,22 @@
 
 /* Wider editor modal (three-column form) */
 .ui-modal--lg { width: min(880px, 100%); }
+
+/* ── Tower layer editor (programme modal) ── */
+.rt-layer-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+}
+.rt-layer-no {
+  flex-shrink: 0; min-width: 26px; text-align: center;
+  font-size: 11px; font-weight: 800; color: #a78bfa;
+  padding: 3px 4px; border-radius: 8px;
+  background: rgba(167,139,250,0.10); border: 1px solid rgba(167,139,250,0.30);
+}
+.rt-layer-inp { flex: 2; min-width: 0; }
+.rt-layer-inp--sm { flex: 1; }
+.rt-layers-hint {
+  font-size: 11.5px; color: var(--text-subtle); line-height: 1.5;
+  padding: 8px 10px; border-radius: 8px;
+  background: var(--surface-hover); border: 1px dashed var(--hairline-strong);
+  margin-bottom: 6px;
+}
