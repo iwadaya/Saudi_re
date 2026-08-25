@@ -57,7 +57,7 @@ const fromProgramme = (p) => ({
 
 function ScopeBox({ label, allLabel, coversAll, onCoversAll, options, selected, onToggle }) {
   return (
-    <div className="ui-field rt-span-3">
+    <div className="ui-field rt-span-3 rt-scope-cell">
       <div className="rt-scope-head">
         <span className="ui-field__label">{label}</span>
         <label className="rt-all-toggle">
@@ -130,7 +130,7 @@ export default function RetroProgrammeModal({
 
   if (!open) return null;
   return (
-    <Modal open={open} onClose={onClose} className="ui-modal--lg"
+    <Modal open={open} onClose={onClose} className="ui-modal--full"
       title={programme ? `Edit — ${programme.programme_name}` : 'New Retro Programme'}
       footer={(
         <>
