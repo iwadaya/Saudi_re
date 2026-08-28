@@ -54,8 +54,10 @@ export function buildNpPricingSheets(data) {
     const rows = riskLayers.map(l => [
       l.layer, fmtNum(l.limit), fmtNum(l.deductible),
       pct(l.riskPureBurn), pct(l.riskPareto), pct(l.riskAvgBurnPareto),
-      pct(l.riskExposure), toNum(l.riskWeightBurn), toNum(l.riskWeightExposure),
-      toNum(l.riskLoading), pct(l.riskTotalPrice), pct(l.riskUwPrice || l.riskTotalPrice),
+      // Wt/Loading columns are % like their neighbours — emit pct() strings so
+      // the workbook's integer numFmt can't round 12.5 to 13.
+      pct(l.riskExposure), pct(l.riskWeightBurn), pct(l.riskWeightExposure),
+      pct(l.riskLoading), pct(l.riskTotalPrice), pct(l.riskUwPrice || l.riskTotalPrice),
     ]);
     rows.push(['TOTAL', riskLayers.reduce((s,l) => s+(toNum(l.limit)||0), 0), ...Array(10).fill('')]);
     sheets.push({ name: 'Risk XL Layers', aoa: [headers, ...rows] });
@@ -69,8 +71,9 @@ export function buildNpPricingSheets(data) {
     const rows = catLayers.map(l => [
       l.layer, fmtNum(l.limit), fmtNum(l.deductible),
       pct(l.catPureBurn), pct(l.catPareto), pct(l.catAvgBurnPareto),
-      pct(l.catExposure), toNum(l.catWeightBurn), toNum(l.catWeightExposure),
-      toNum(l.catLoading), pct(l.catTotalPrice), pct(l.catUwPrice || l.catTotalPrice),
+      // Same as the Risk XL sheet: % columns go out as pct() strings.
+      pct(l.catExposure), pct(l.catWeightBurn), pct(l.catWeightExposure),
+      pct(l.catLoading), pct(l.catTotalPrice), pct(l.catUwPrice || l.catTotalPrice),
     ]);
     rows.push(['TOTAL', catLayers.reduce((s,l) => s+(toNum(l.limit)||0), 0), ...Array(10).fill('')]);
     sheets.push({ name: 'Cat XL Layers', aoa: [headers, ...rows] });

@@ -58,10 +58,15 @@ const fmtBareInt = n => {
   return v.toLocaleString('en-US', { maximumFractionDigits: 0 });
 };
 
+// Plain FRACTION formatter (0.0863 → '8.63%'). Every value fed here must be
+// a fraction: lookups.js cedant-summary serves PROP and NP margins that way
+// (NP whole-percent columns are divided by 100 server-side), and the two
+// whole-percent call sites (NP layer rol, PROP cession_pct) normalize /100
+// where they call this. No magnitude guessing — a thin 1.2% NP margin must
+// never render as 120.00%.
 const pctCell = v => {
   if (v == null) return '—';
-  const n = num(v);
-  const frac = Math.abs(n) > 1.5 ? n / 100 : n;
+  const frac = num(v);
   const d = (frac * 100).toFixed(2) + '%';
   const c = frac < 0 ? '#f87171' : frac > 0.08 ? '#4ade80' : '#facc15';
   return <span style={{ color: c, fontWeight: 600 }}>{d}</span>;
@@ -819,7 +824,8 @@ function NpSection({ currency, groups, contractId, driverShares, pctOfPortfolio 
                             {fmtBareInt(l.layer_limit)} <span style={{ color: 'rgba(255,255,255,0.4)' }}>xs</span> {fmtBareInt(l.layer_deductible)}
                           </td>
                           <td style={{ ...tdS, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }} title={cob}>{cob}</td>
-                          <td style={{ ...tdS, textAlign: 'right' }}>{pctCell(l.rol)}</td>
+                          {/* contract_np_layers.rol is a WHOLE percent (5 = 5%) — normalize to a fraction */}
+                          <td style={{ ...tdS, textAlign: 'right' }}>{pctCell(l.rol != null ? num(l.rol) / 100 : null)}</td>
                           <td style={{ ...tdS, textAlign: 'right' }}>{l.reinstatements != null ? l.reinstatements : '—'}</td>
                           <td style={{ ...tdS, textAlign: 'right' }}>{fmtMoney(currency, l.earned_premium)}</td>
                           <td style={{ ...tdS, textAlign: 'right' }}>{signedNtrCell(currency, l.net_technical_result)}</td>
@@ -904,7 +910,8 @@ function PropSection({ currency, rows, contractId, driverShares, pctOfPortfolio 
                     <td style={{ ...tdS, textAlign: 'right' }}>{fmtMoney(currency, limit)}</td>
                     <td style={{ ...tdS, textAlign: 'right' }}>{fmtMoney(currency, r.event_limit)}</td>
                     <td style={{ ...tdS, textAlign: 'right' }}>{fmtMoney(currency, r.aal)}</td>
-                    <td style={{ ...tdS, textAlign: 'right' }}>{pctCell(r.cession_pct)}</td>
+                    {/* contract_prop_details.cession_pct is a WHOLE percent (50 = 50%) — normalize to a fraction */}
+                    <td style={{ ...tdS, textAlign: 'right' }}>{pctCell(r.cession_pct != null ? num(r.cession_pct) / 100 : null)}</td>
                     <td style={{ ...tdS, textAlign: 'right' }}>{fmtMoney(currency, premium)}</td>
                     <td style={{ ...tdS, textAlign: 'right' }}>{signedNtrCell(currency, r.net_technical_result)}</td>
                     <td style={{ ...tdS, textAlign: 'right', color: 'rgba(255,255,255,0.7)' }}>{pctOfPortfolio(premium)}</td>
@@ -1551,8 +1558,17 @@ function RecommendationCard({ rec, currency, contract, onStage, onEditStage, onR
           <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>
             Impact on return:{' '}
             <span style={{ color: impactColor, fontWeight: 700 }}>
-              {currency} {Math.abs(impact).toLocaleString('en-US', { maximumFractionDigits: 0 })}
-              {impact < 0 ? ' (loss)' : ''}
+              {Math.abs(impact) > 0 && Math.abs(impact) < 1 ? (
+                // Defensive: a sub-1 magnitude is a fractional return (the
+                // AI's sibling fields are fractions), not a currency amount —
+                // show it as a percent rather than a misleading '{currency} 0'.
+                `${impact > 0 ? '+' : ''}${fmtPctFraction(impact)}`
+              ) : (
+                <>
+                  {currency} {Math.abs(impact).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                  {impact < 0 ? ' (loss)' : ''}
+                </>
+              )}
             </span>
           </div>
         </div>

@@ -59,7 +59,7 @@ const SYSTEM_PROMPT = `You are a reinsurance portfolio analyst. Given a cedant's
       recommended_line_pct: number,
       rationale: string (<= 200 chars),
       confidence: number (0..1),
-      impact_on_return: number
+      impact_on_return: number   // expected ANNUAL result change from this line-size move, as an ABSOLUTE amount in the cedant's currency (e.g. 125000) — never a fraction or percent
     }
   ]
 }

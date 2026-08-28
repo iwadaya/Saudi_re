@@ -350,8 +350,11 @@ export function InternalMetricsPanel({ contractId, td: tdProp, yearly: yearlyPro
                   )}
                   {allLosses.map((l,i)=>{
                     const missingInUw=!l.in_uw_data, missingInInt=!l.in_internal;
-                    const sharePct=l.our_share_pct||(signedLinePct||null);
-                    const ourPaid=sharePct?l.paid*sharePct:null, ourOs=sharePct?l.os*sharePct:null;
+                    // Normalize once to a FRACTION: our_share_pct is stored as a
+                    // whole percent (25 = 25%) while signedLinePct is already
+                    // divided by 100 above — never mix the two units.
+                    const shareFrac=l.our_share_pct!=null?cn(l.our_share_pct)/100:(signedLinePct||null);
+                    const ourPaid=shareFrac?l.paid*shareFrac:null, ourOs=shareFrac?l.os*shareFrac:null;
                     const typeTones={REPORTED:'info',PROVISIONAL:'warn',CASH_CALL:'warn'};
                     const srcBadge=l.source==='CAT'?{tone:'danger',t:'CAT'}:l.source==='INTERNAL'?{tone:'neutral',t:'INT'}:{tone:'info',t:'LG'};
                     return(
@@ -370,7 +373,7 @@ export function InternalMetricsPanel({ contractId, td: tdProp, yearly: yearlyPro
                         <td className="ta-r c-neg">{fmt(l.paid)}</td>
                         <td className="ta-r c-orange">{fmt(l.os)}</td>
                         <td className="ta-r fw7 c-orange2">{fmt(l.incurred)}</td>
-                        <td className="ta-r imp-share">{sharePct?`${(sharePct*100).toFixed(2)}%`:'—'}</td>
+                        <td className="ta-r imp-share">{shareFrac?`${(shareFrac*100).toFixed(2)}%`:'—'}</td>
                         <td className="ta-r c-neg">{ourPaid!=null?fmt(ourPaid):'—'}</td>
                         <td className="ta-r c-orange">{ourOs!=null?fmt(ourOs):'—'}</td>
                       </tr>

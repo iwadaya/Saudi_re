@@ -619,7 +619,7 @@ export default function NpExpiringStructure() {
                                       <td>L{i + 1}</td>
                                       <td>{fmtC(String(ded))}</td>
                                       <td>{fmtC(String(ded + lim))}</td>
-                                      <td style={{ color: '#00d4ff', fontWeight: 700 }}>{rol}%</td>
+                                      <td style={{ color: '#00d4ff', fontWeight: 700 }}>{rol}{rol !== '—' ? '%' : ''}</td>
                                       <td style={{ color: 'rgba(255,255,255,0.5)' }}>{fitted}{fitted !== '—' ? '%' : ''}</td>
                                     </tr>
                                   );

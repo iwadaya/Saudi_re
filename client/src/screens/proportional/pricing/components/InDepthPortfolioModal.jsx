@@ -10,7 +10,15 @@ import './InDepthPortfolioModal.css';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const rawNum   = v => { if (v == null || v === '') return null; const n = Number(String(v).replace(/,/g,'').replace(/%/g,'')); return Number.isFinite(n) ? n : null; };
-const toDisplay = v => { const n = rawNum(v); if (n == null) return null; return n > 1.5 ? n : n * 100; }; // normalize to % display
+// Normalize to % display, mirroring propPricingConstants.parsePct: a
+// '%'-suffixed string is ALREADY a percent (a 1% Taxes row must not become
+// 100.00%); the >1.5 magnitude heuristic applies only to bare numbers.
+const toDisplay = v => {
+  const n = rawNum(v);
+  if (n == null) return null;
+  if (typeof v === 'string' && v.includes('%')) return n;
+  return n > 1.5 ? n : n * 100;
+};
 const fmt1    = v => v != null ? v.toFixed(2) + '%' : '—';
 const diff    = (a, b) => { if (a == null || b == null) return null; return a - b; };
 const diffFmt = v => { if (v == null) return '—'; return (v >= 0 ? '+' : '') + v.toFixed(2) + '%'; };

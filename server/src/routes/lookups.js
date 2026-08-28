@@ -152,16 +152,21 @@ router.get("/cedants/:cedantId/cedant-summary", asyncHandler(async (req, res) =>
       --   actuarial_margin = modelled margin (MARGIN col: (expiring-reinsurer)/expiring)
       --   actual_margin    = historical margin (HIST. MARGIN col: burn-cost based)
       -- Fallback: if modelled_margin not yet saved, approximate from uw_price (reinsurer ROL)
+      -- Units: modelled_margin / hist_margin are stored as WHOLE percents
+      -- (12.34 = 12.34%, written by the NP screen's pctToNum save path), so
+      -- divide by 100 — every margin this endpoint serves is a FRACTION,
+      -- matching the PROP rows' contract_pricing_outputs columns and the
+      -- uw_price fallback branch below.
       CASE
         WHEN nl.total_earned_premium > 0 AND nl.weighted_modelled IS NOT NULL
-          THEN nl.weighted_modelled / nl.total_earned_premium
+          THEN nl.weighted_modelled / nl.total_earned_premium / 100.0
         WHEN nl.total_earned_premium > 0 AND nl.weighted_uw_price IS NOT NULL
           THEN 1.0 - (nl.weighted_uw_price / nl.total_earned_premium / 100.0)
         ELSE NULL
       END                                                             AS actuarial_margin,
       CASE
         WHEN nl.total_earned_premium > 0 AND nl.weighted_hist IS NOT NULL
-          THEN nl.weighted_hist / nl.total_earned_premium
+          THEN nl.weighted_hist / nl.total_earned_premium / 100.0
         ELSE NULL
       END                                                             AS actual_margin,
       NULL::numeric                                                   AS uw_margin,
@@ -172,7 +177,7 @@ router.get("/cedants/:cedantId/cedant-summary", asyncHandler(async (req, res) =>
         nl.total_earned_premium * (
           CASE
             WHEN nl.total_earned_premium > 0 AND nl.weighted_modelled IS NOT NULL
-              THEN nl.weighted_modelled / nl.total_earned_premium
+              THEN nl.weighted_modelled / nl.total_earned_premium / 100.0
             WHEN nl.total_earned_premium > 0 AND nl.weighted_uw_price IS NOT NULL
               THEN 1.0 - (nl.weighted_uw_price / nl.total_earned_premium / 100.0)
             ELSE 0
@@ -264,9 +269,12 @@ router.get("/cedants/:cedantId/np-layers", asyncHandler(async (req, res) => {
       l.earned_premium,
       l.modelled_margin,
       l.hist_margin,
+      -- modelled_margin is a WHOLE percent (12.34 = 12.34%) — divide by 100
+      -- so both branches yield currency via a fractional margin, matching
+      -- the cedant-summary endpoint above.
       CASE
         WHEN l.modelled_margin IS NOT NULL
-          THEN l.earned_premium * l.modelled_margin
+          THEN l.earned_premium * l.modelled_margin / 100.0
         WHEN l.uw_price IS NOT NULL
           THEN l.earned_premium * (1.0 - l.uw_price / 100.0)
         ELSE NULL
