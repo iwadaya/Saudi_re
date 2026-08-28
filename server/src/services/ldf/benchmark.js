@@ -57,7 +57,11 @@ export async function getBenchmarkLdfForClass(client, {
     }
   }
 
-  // Final fallback: global
+  // Final fallback: global. The SAME per-dev-month threshold applies here
+  // (F69): without it, a class whose country dominated its global pool got
+  // the very same sparse-tailed curve back — including the thin row that
+  // caused the COUNTRY/REGION rejection — merely relabelled 'GLOBAL', and
+  // the B7 guard was fully bypassed.
   const global = await client.query(
     `SELECT dev_month, weighted_ldf, simple_ldf, n_contracts, total_premium, stddev_ldf
        FROM public.mv_ldf_benchmark_global
@@ -65,11 +69,13 @@ export async function getBenchmarkLdfForClass(client, {
       ORDER BY dev_month`,
     [classOfBusinessId, triangleType, treatyCategory],
   );
-  if (global.rows.length > 0) {
+  if (scopeHasEnoughContracts(global.rows)) {
     return { scope: 'GLOBAL', countryId: null, region: null, rows: global.rows };
   }
 
-  // Nothing — class has zero contributing contracts anywhere
+  // Nothing usable — either the class has zero contributing contracts
+  // anywhere, or every scope (global included) has at least one dev-month
+  // row below the contract-count threshold. NONE, not a sparse curve.
   return { scope: 'NONE', countryId: null, region: null, rows: [] };
 }
 

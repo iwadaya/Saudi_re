@@ -203,20 +203,46 @@ export async function hitRatio(filters = {}) {
  * @returns {Promise<object>}
  */
 export async function capacityUtilisation({ uwYear = null } = {}) {
+  // Committed exposure is aggregated per zone FIRST, and then exactly one
+  // budget row is attached per zone via a LATERAL pick (F75). The old shape
+  // LEFT JOINed fac_zone_budget before grouping and grouped by the budget
+  // columns, so a zone with more than one active budget row (a NULL-uw_year
+  // default plus a year- or peril-specific row — expressly allowed by the
+  // UNIQUE(cresta_zone, peril, uw_year) schema) appeared once per budget,
+  // each row carrying the zone's FULL committed exposure — double-counting
+  // committed and inflating over_budget.
+  //
+  // Budget precedence (deterministic): the most specific uw_year first — a
+  // budget whose uw_year equals the filter (or the all-years NULL budget when
+  // no filter is given), then the all-years default, then the latest
+  // year-specific row; within a year, the zone-wide 'ALL'-peril budget
+  // before per-peril ones, then peril alphabetically as a final tiebreak.
   const { rows } = await pool.query(
-    `SELECT a.cresta_zone,
-            SUM(a.committed_si)  AS committed_si,
-            SUM(a.committed_pml) AS committed_pml,
-            SUM(a.risk_count)    AS risk_count,
+    `SELECT z.cresta_zone, z.committed_si, z.committed_pml, z.risk_count,
             b.budget_si, b.budget_pml, b.source AS budget_source
-       FROM public.mv_fac_accumulation a
-       LEFT JOIN public.fac_zone_budget b
-              ON b.cresta_zone = a.cresta_zone
-             AND b.active = true
-             AND (b.uw_year IS NULL OR b.uw_year = a.uw_year)
-      WHERE ($1::int IS NULL OR a.uw_year IS NULL OR a.uw_year = $1)
-      GROUP BY a.cresta_zone, b.budget_si, b.budget_pml, b.source
-      ORDER BY 3 DESC NULLS LAST, 2 DESC`,
+       FROM (
+              SELECT a.cresta_zone,
+                     SUM(a.committed_si)  AS committed_si,
+                     SUM(a.committed_pml) AS committed_pml,
+                     SUM(a.risk_count)    AS risk_count
+                FROM public.mv_fac_accumulation a
+               WHERE ($1::int IS NULL OR a.uw_year IS NULL OR a.uw_year = $1)
+               GROUP BY a.cresta_zone
+            ) z
+       LEFT JOIN LATERAL (
+              SELECT b.budget_si, b.budget_pml, b.source
+                FROM public.fac_zone_budget b
+               WHERE b.cresta_zone = z.cresta_zone
+                 AND b.active = true
+                 AND ($1::int IS NULL OR b.uw_year IS NULL OR b.uw_year = $1)
+               ORDER BY (b.uw_year IS NOT DISTINCT FROM $1::int) DESC,
+                        (b.uw_year IS NULL) DESC,
+                        b.uw_year DESC,
+                        (b.peril = 'ALL') DESC,
+                        b.peril
+               LIMIT 1
+            ) b ON true
+      ORDER BY z.committed_pml DESC NULLS LAST, z.committed_si DESC`,
     [uwYear],
   );
 

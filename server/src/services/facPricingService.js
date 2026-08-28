@@ -507,6 +507,15 @@ export async function computeFacPricing(riskId, overrides = {}) {
     commission_pct:     num(pick('commission_pct')),
     margin_pct:         num(pick('margin_pct')),
     other_expenses_pct: num(pick('other_expenses_pct')),
+    // Brokerage and taxes belong in the technical gross-up denominator
+    // (1 - comm - brok - tax - margin; shared/fac/pipeline.js) and were
+    // never passed before (F76), so the gross rate silently omitted them on
+    // all brokered business. They are captured on the Coverage Structure
+    // screen and stored on fac_risk as WHOLE percent (0-100, validation
+    // pct100); the engine wants fractions, hence the /100 — unlike
+    // fac_pricing.commission_pct above, which is already a fraction.
+    brokerage_pct: num(risk.brokerage_pct) != null ? num(risk.brokerage_pct) / 100 : null,
+    tax_pct:       num(risk.taxes_pct)     != null ? num(risk.taxes_pct)     / 100 : null,
     market_rate_pm:     num(pick('market_rate_pm')),
     extra_cover_loadings: pick('extra_cover_loadings', []) || [],
   };
@@ -544,7 +553,15 @@ export async function computeFacPricing(riskId, overrides = {}) {
     benchmarkScope: benchmark.scope,
     loads: {
       catLoadPm: num(pick('cat_load_pm')),
-      riskLoadPct: num(pick('risk_load_pct')),
+      // Explicitly 0, not pick('risk_load_pct') (F109): no fac_pricing
+      // column holds a percentage risk load (the SELECT above fetches
+      // risk_load_pm, an engine OUTPUT in per-mille) and the client posts
+      // risk_load_pm only, so the old pick could never resolve from stored
+      // state — it was dead wiring that also let an undocumented,
+      // unpersisted override slip in through a posted body. The pipeline's
+      // riskLoadPct is only the fallback when σ is unmeasurable; until a
+      // real input column exists it is deliberately zero.
+      riskLoadPct: 0,
       internalExpensePct: num(pick('internal_expense_pct')),
     },
     weightOverride,

@@ -64,6 +64,30 @@ describe('getBenchmarkLdfForClass — scope threshold (per dev-month)', () => {
     expect(out.scope).toBe('GLOBAL');
   });
 
+  it('GLOBAL is held to the SAME per-dev-month threshold — a sparse tail row means NONE (F69)', async () => {
+    // The audit repro: a single-market class whose country dominates its
+    // global pool. Country is rejected because its dev-36 row has only 4
+    // contracts — and the global rows are the IDENTICAL dataset. The old
+    // code accepted any non-empty GLOBAL result, handing the very same
+    // sparse-tailed curve back relabelled 'GLOBAL'; it must now be NONE.
+    const client = makeClient({
+      country: [row(12, 6), row(24, 6), row(36, 4)],
+      global: [row(12, 6), row(24, 6), row(36, 4)],
+    });
+    const out = await getBenchmarkLdfForClass(client, args);
+    expect(out.scope).toBe('NONE');
+    expect(out.rows).toEqual([]);
+  });
+
+  it('GLOBAL still qualifies when every dev-month row meets the threshold', async () => {
+    const client = makeClient({
+      global: [row(12, 5), row(24, 5), row(36, 5)],
+    });
+    const out = await getBenchmarkLdfForClass(client, args);
+    expect(out.scope).toBe('GLOBAL');
+    expect(out.rows).toHaveLength(3);
+  });
+
   it('returns NONE when nothing is available anywhere', async () => {
     const client = makeClient({});
     const out = await getBenchmarkLdfForClass(client, args);

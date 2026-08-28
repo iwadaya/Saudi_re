@@ -54,15 +54,25 @@ export async function computeBlendedLdfCurve(client, {
       classOfBusinessId: e.classOfBusinessId,
       countryId, region, triangleType, treatyCategory,
     });
+    const curve = bench.rows.map((r) => ({
+      devMonth: Number(r.dev_month),
+      ldf: Number(r.weighted_ldf),
+    }));
     return {
       classOfBusinessId: e.classOfBusinessId,
       weight: weights[e.classOfBusinessId] ?? 0,
       scope: bench.scope,
-      nContracts: bench.rows.length > 0 ? Number(bench.rows[0].n_contracts) : 0,
-      curve: bench.rows.map((r) => ({
-        devMonth: Number(r.dev_month),
-        ldf: Number(r.weighted_ldf),
-      })),
+      // The MINIMUM contract count across the curve's dev months — not
+      // rows[0]'s (F108): the earliest dev month almost always has the most
+      // contributing contracts, so reporting it overstated the support the
+      // sparse tail actually has.
+      nContracts: bench.rows.length > 0
+        ? Math.min(...bench.rows.map((r) => Number(r.n_contracts)))
+        : 0,
+      // The last dev month the class's benchmark curve reaches. Beyond it
+      // the class is fully developed (see the blend loop below).
+      maxDevMonth: curve.length > 0 ? Math.max(...curve.map((p) => p.devMonth)) : null,
+      curve,
     };
   }));
 
@@ -76,14 +86,26 @@ export async function computeBlendedLdfCurve(client, {
     let weightedSum = 0;
     let weightAccountedFor = 0;
     for (const cls of perClass) {
+      if (!(cls.weight > 0)) continue;
       const pt = cls.curve.find((p) => p.devMonth === dm);
-      if (pt && cls.weight > 0) {
+      if (pt) {
         weightedSum += pt.ldf * cls.weight;
         weightAccountedFor += cls.weight;
+      } else if (cls.maxDevMonth != null && dm > cls.maxDevMonth) {
+        // The class HAS a benchmark curve but it ends before this dev month:
+        // a selected-LDF curve that stops means the business is fully
+        // developed from there on, so the class contributes an implicit
+        // factor of 1.0 (F70). Renormalising its weight away instead — as
+        // for a class with no data at all — silently applied the long-tail
+        // classes' development to the whole book, overstating tail LDFs and
+        // IBNR for any mixed short-tail/long-tail blend.
+        weightedSum += 1.0 * cls.weight;
+        weightAccountedFor += cls.weight;
       }
+      // Otherwise the class has no curve at all (scope NONE) or no point at
+      // a dev month within/before its curve — renormalise across the classes
+      // that do have data, so missing-data classes don't drag the blend to 0.
     }
-    // Renormalise across classes that have data at this dev_month
-    // — so missing-data classes don't drag the blend to 0.
     const ldf = weightAccountedFor > 0 ? weightedSum / weightAccountedFor : 1.0;
     return { devMonth: dm, ldf };
   });

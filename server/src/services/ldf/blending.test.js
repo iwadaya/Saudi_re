@@ -60,6 +60,94 @@ describe('computeBlendedLdfCurve — normal (has-weight) path', () => {
   });
 });
 
+describe('computeBlendedLdfCurve — a curve that ENDS is fully developed, not missing (F70)', () => {
+  // Mock with a full multi-point curve per class.
+  function benchWithCurves(rowsByClass) {
+    return async (_client, { classOfBusinessId }) => {
+      const rows = rowsByClass[classOfBusinessId] || [];
+      return {
+        scope: rows.length > 0 ? 'COUNTRY' : 'NONE',
+        countryId: rows.length > 0 ? 'c1' : null,
+        region: null,
+        rows,
+      };
+    };
+  }
+
+  it('contributes an implicit LDF 1.0 beyond a class\'s last dev month (audit hand example)', async () => {
+    // X weight 0.75, curve {12: 1.41875, 24: 1.16};
+    // Y weight 0.25, curve ending at 12 (1.15) — Y is fully developed at 24.
+    getBenchmarkLdfForClass.mockImplementation(benchWithCurves({
+      X: [
+        { dev_month: 12, weighted_ldf: 1.41875, n_contracts: 6 },
+        { dev_month: 24, weighted_ldf: 1.16, n_contracts: 6 },
+      ],
+      Y: [{ dev_month: 12, weighted_ldf: 1.15, n_contracts: 8 }],
+    }));
+
+    const out = await computeBlendedLdfCurve({}, {
+      ...baseArgs,
+      epiSplit: [
+        { classOfBusinessId: 'X', premium: 75 },
+        { classOfBusinessId: 'Y', premium: 25 },
+      ],
+    });
+
+    // Hand-derived:
+    //   dev 12: 0.75·1.41875 + 0.25·1.15 = 1.0640625 + 0.2875 = 1.3515625
+    //   dev 24: 0.75·1.16    + 0.25·1.0  = 1.12   (NOT the old renormalised 1.16)
+    //   CDF 24 = 1.12
+    //   CDF 12 = 1.3515625 · 1.12 = 1.51375  (old code: 1.567812 — +3.6%)
+    expect(out.blended).toHaveLength(2);
+    expect(out.blended[0]).toMatchObject({ devMonth: 12 });
+    expect(out.blended[0].ldf).toBeCloseTo(1.3515625, 10);
+    expect(out.blended[1]).toMatchObject({ devMonth: 24 });
+    expect(out.blended[1].ldf).toBeCloseTo(1.12, 10);
+    expect(out.blended[1].cdf).toBeCloseTo(1.12, 6);
+    expect(out.blended[0].cdf).toBeCloseTo(1.51375, 6);
+  });
+
+  it('still renormalises for a class with NO curve at all (scope NONE)', async () => {
+    getBenchmarkLdfForClass.mockImplementation(benchWithCurves({
+      X: [{ dev_month: 12, weighted_ldf: 2, n_contracts: 6 }],
+      Y: [], // no benchmark anywhere — its weight is renormalised away
+    }));
+
+    const out = await computeBlendedLdfCurve({}, {
+      ...baseArgs,
+      epiSplit: [
+        { classOfBusinessId: 'X', premium: 75 },
+        { classOfBusinessId: 'Y', premium: 25 },
+      ],
+    });
+
+    // Y has no data at any dev month, so dev 12 is pure X: 2.0 — not
+    // 0.75·2 + 0.25·1 = 1.75. The implicit-1.0 rule only applies BEYOND a
+    // curve that exists.
+    expect(out.blended).toHaveLength(1);
+    expect(out.blended[0].ldf).toBeCloseTo(2.0, 10);
+  });
+
+  it('reports the MINIMUM n_contracts across the curve, not rows[0]\'s (F108)', async () => {
+    getBenchmarkLdfForClass.mockImplementation(benchWithCurves({
+      X: [
+        { dev_month: 12, weighted_ldf: 1.4, n_contracts: 6 },
+        { dev_month: 24, weighted_ldf: 1.1, n_contracts: 6 },
+        { dev_month: 36, weighted_ldf: 1.05, n_contracts: 4 },
+      ],
+    }));
+
+    const out = await computeBlendedLdfCurve({}, {
+      ...baseArgs,
+      epiSplit: [{ classOfBusinessId: 'X', premium: 100 }],
+    });
+
+    // The modal-facing count must reflect the weakest dev month (4), not the
+    // well-populated first row (6).
+    expect(out.classes[0].nContracts).toBe(4);
+  });
+});
+
 describe('computeBlendedLdfCurve — degenerate (no weight) path', () => {
   it('flags degenerate + warns when all class premiums are 0', async () => {
     getBenchmarkLdfForClass.mockImplementation(benchFor({ A: 2 }));
