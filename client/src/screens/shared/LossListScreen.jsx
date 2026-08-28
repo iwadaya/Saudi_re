@@ -518,7 +518,10 @@ export default function LossListScreen({ routeKey, title, headerPill, lossType =
                   {/* Totals */}
                   <tr className="ll-total">
                     <td className="ll-td ll-td--num"></td>
-                    <td className="ll-td" colSpan={6}><span className="ll-total-label">Total</span></td>
+                    {/* # + 7 data cols + Incurred + Saved = 10 columns; the label
+                        spans the 5 non-numeric data cols so the three totals land
+                        under Paid / O/S / Incurred. */}
+                    <td className="ll-td" colSpan={5}><span className="ll-total-label">Total</span></td>
                     <td className="ll-td ll-td--calc">{fmtN(totalPaid)}</td>
                     <td className="ll-td ll-td--calc">{fmtN(totalOS)}</td>
                     <td className="ll-td ll-td--calc ll-td--total">{fmtN(totalInc)}</td>

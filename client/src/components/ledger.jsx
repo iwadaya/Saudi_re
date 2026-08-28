@@ -85,5 +85,10 @@ export const fmtMoney = (v) => {
 /** yyyy-mm-dd slice of a date/timestamp, or en-dash. */
 export const fmtDate = (v) => (v ? String(v).slice(0, 10) : '–');
 
-/** Percent with unit, or en-dash for null/undefined. */
-export const fmtPct = (v) => (v == null ? '–' : `${Number(v)}%`);
+/** Percent with unit (max 2 dp), or en-dash for null/undefined/non-numeric. */
+export const fmtPct = (v) => {
+  if (v == null) return '–';
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '–';
+  return `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+};

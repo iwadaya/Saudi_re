@@ -28,6 +28,9 @@ import { parseSheet, SHEET_MAP, pushSheet } from './excelParsers';
 // ── tiny helpers ──────────────────────────────────────────────────────────────
 const fmt  = v => (v != null && v !== '') ? formatWithCommas(Math.round(Number(v))) : '–';
 const fmtP = v => (v != null && v !== '') ? (Number(v) * (Number(v) < 1.5 ? 100 : 1)).toFixed(2) + '%' : '–';
+// Value already in percent points (the app convention for NP layer rates) —
+// no fraction-vs-percent guessing, which read a 1.2% rate as 120%.
+const fmtPts = v => (v != null && v !== '') ? `${Number(v).toFixed(2)}%` : '–';
 
 // ── Preview renderers ─────────────────────────────────────────────────────────
 function TrianglePreview({ data }) {
@@ -164,7 +167,7 @@ function NpLayersPreview({ data }) {
               <td className="ia-td-num">{fmt(r.limit)}</td>
               <td className="ia-td-num">{fmt(r.deductible)}</td>
               <td className="ia-td-num">{fmt(r.egnpi)}</td>
-              <td className="ia-td-num">{fmtP(r.rate)}</td>
+              <td className="ia-td-num">{fmtPts(r.rate)}</td>
               <td className="ia-td-num">{fmt(r.earned_premium)}</td>
               <td className="ia-td-num">{r.num_reinstatements}@{r.reinstatement_pct}%</td>
             </tr>

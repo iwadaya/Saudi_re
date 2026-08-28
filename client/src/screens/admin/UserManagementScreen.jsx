@@ -15,7 +15,10 @@ const ROLE_COLORS = {
 function fmtLimit(usd) {
   if (usd === null || usd === undefined) return '∞ Unlimited';
   const n = Number(usd);
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(0)}M`;
+  if (n >= 1e6) {
+    const m = n / 1e6;
+    return `$${m % 1 ? m.toFixed(1) : m.toFixed(0)}M`;
+  }
   return `$${n.toLocaleString()}`;
 }
 

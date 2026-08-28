@@ -622,7 +622,7 @@ export default function QuickBenchmark(){
                 <table className="bm-table">
                   <thead>
                     <tr>
-                      <th>#</th><th>Limit</th><th>Attachment</th><th>Premium</th>
+                      <th>#</th><th>Limit</th><th>Attachment</th><th>EGNPI</th>
                       <th>Geomean</th><th>x=G/E</th>
                       <th style={{color}}>ROL % ↗</th>
                       <th style={{color}}>Premium ↗</th>

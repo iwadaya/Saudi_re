@@ -5,7 +5,7 @@
 // onToggle/onSetOepRow callbacks.
 
 import { fmt } from '../format.js';
-import { formatWithCommas, sanitizeNumber } from '../../../../utils/format';
+import { formatWithCommasDecimal, sanitizeNumber } from '../../../../utils/format';
 
 export default function OepCard({ showOep, onToggle, oepRows, onSetOepRow, oepLayerRols, oepPts }) {
   return (
@@ -63,8 +63,8 @@ export default function OepCard({ showOep, onToggle, oepRows, onSetOepRow, oepLa
                     <td>
                       <input
                         type="text"
-                        inputMode="numeric"
-                        value={formatWithCommas(row.loss)}
+                        inputMode="decimal"
+                        value={formatWithCommasDecimal(row.loss)}
                         placeholder="0"
                         onChange={e => onSetOepRow(i, 'loss', sanitizeNumber(e.target.value))}
                         style={{

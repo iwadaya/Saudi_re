@@ -104,6 +104,9 @@ function SortTh({ tableKey, colKey, label, sort, onSort }) {
 function PivotTable({ title, data, cellFmt, rowLabel = 'Row' }) {
   if (!data?.columns?.length) return (<div className="glass dash-block"><div className="dash-block-title">{title}</div><div className="muted">No data.</div></div>);
   const { columns: cols, rows = [], totals = { values: {}, total: 0 } } = data;
+  // Server-null cells are deliberate N/A (den 0 → NULL, never 0) — surface
+  // them as '—' rather than coercing to 0, matching the Excel export's blank.
+  const cell = (v) => (v == null ? '—' : cellFmt(v));
   return (
     <div className="glass dash-block">
       <div className="dash-block-title">{title}</div>
@@ -114,12 +117,12 @@ function PivotTable({ title, data, cellFmt, rowLabel = 'Row' }) {
             {rows.map((r, i) => {
               const key = r.region ?? r.lob ?? r.key ?? String(i);
               return (<tr key={key}><td className="dash-td">{key}</td>
-                {cols.map(c => <td key={c} className="dash-td">{cellFmt(r.values?.[c] ?? 0)}</td>)}
-                <td className="dash-td"><b>{cellFmt(r.total ?? 0)}</b></td></tr>);
+                {cols.map(c => <td key={c} className="dash-td">{cell(r.values?.[c])}</td>)}
+                <td className="dash-td"><b>{cell(r.total)}</b></td></tr>);
             })}
             <tr><td className="dash-td"><b>Total</b></td>
-              {cols.map(c => <td key={c} className="dash-td"><b>{cellFmt(totals.values?.[c] ?? 0)}</b></td>)}
-              <td className="dash-td"><b>{cellFmt(totals.total ?? 0)}</b></td></tr>
+              {cols.map(c => <td key={c} className="dash-td"><b>{cell(totals.values?.[c])}</b></td>)}
+              <td className="dash-td"><b>{cell(totals.total)}</b></td></tr>
           </tbody>
         </table>
       </div>

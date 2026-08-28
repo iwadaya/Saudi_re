@@ -12,18 +12,13 @@ import WizardLayout from '../../../components/WizardLayout';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import { useFacRiskId } from '../../../hooks/useContractId';
 import { logger } from '../../../utils/logger';
-import { numOrNull } from '../../../utils/format';
+import { cleanNum, formatWithCommasDecimal, numOrNull, sanitizeNumber } from '../../../utils/format';
 
 const ROUTE_KEY = 'FAC_LOCATIONS';
 
 const MAX_LOCATIONS = 50;
 const WARN_LOCATIONS = 20;
 
-const fmtComma = (v) => {
-  const n = numOrNull(v);
-  if (n == null) return '';
-  return Math.round(n).toLocaleString('en-US');
-};
 const stripCommas = (v) => String(v ?? '').replace(/,/g, '');
 const fmt0 = (n) => (Number.isFinite(n) ? Math.round(n).toLocaleString('en-US') : '—');
 
@@ -86,7 +81,7 @@ function FieldCell({ value, onChange, align = 'right', placeholder, width }) {
   return (
     <input className="fi" type="text" inputMode="decimal"
       style={{ textAlign: align, fontSize: 11, width: width || '100%', minWidth: 90 }}
-      value={value || ''} onChange={(e) => onChange(stripCommas(e.target.value))}
+      value={value || ''} onChange={(e) => onChange(sanitizeNumber(e.target.value))}
       placeholder={placeholder} />
   );
 }
@@ -133,7 +128,7 @@ function LocationCard({
         <td style={{ padding: '6px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '.08em',
                      textTransform: 'uppercase', color: accent }}>{label}</td>
         <td style={{ padding: '4px 4px' }}>
-          <FieldCell value={fmtComma(si)} onChange={(v) => set(kind === 'PD' ? 'original_pd_si' : 'original_bi_si', v)} />
+          <FieldCell value={formatWithCommasDecimal(si)} onChange={(v) => set(kind === 'PD' ? 'original_pd_si' : 'original_bi_si', v)} />
         </td>
         <td style={{ padding: '4px 4px', width: 80 }}>
           <FieldCell value={fracToPctStr(pmlPct)}
@@ -256,8 +251,10 @@ export default function FacLocations() {
           occupancy_code: r.occupancy_code == null ? '' : String(r.occupancy_code),
           original_ccy: r.original_ccy || '',
           fx_to_sar: r.fx_to_sar == null ? '' : String(r.fx_to_sar),
-          original_pd_si: r.original_pd_si == null ? '' : String(r.original_pd_si),
-          original_bi_si: r.original_bi_si == null ? '' : String(r.original_bi_si),
+          // cleanNum drops the numeric(18,2) trailing ".00" on integers but
+          // keeps genuine cents for the decimal-aware SI inputs.
+          original_pd_si: cleanNum(r.original_pd_si),
+          original_bi_si: cleanNum(r.original_bi_si),
           pd_pml_pct: r.pd_pml_pct == null ? '' : String(r.pd_pml_pct),
           bi_pml_pct: r.bi_pml_pct == null ? '' : String(r.bi_pml_pct),
           carrier_share_pct: persistedShare == null ? '1' : String(persistedShare),

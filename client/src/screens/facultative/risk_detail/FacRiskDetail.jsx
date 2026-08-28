@@ -12,17 +12,17 @@ import { useFacRiskId } from '../../../hooks/useContractId';
 import { useAppState } from '../../../context/AppContext';
 import { FR, SectionTitle } from './FacRiskDetail.parts.jsx';
 import RelatedTreatiesSection from './RelatedTreatiesSection.jsx';
-import { numOrNull, fmtComma, stripDigits, cleanNum } from '../../../utils/format';
+import { numOrNull, formatWithCommasDecimal, sanitizeNumber, cleanNum } from '../../../utils/format';
 
 const ROUTE_KEY = 'FAC_RISK_DETAIL';
 
 const fmt = v => { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—'; };
 
 function CommaInput({ value, onChange, placeholder, readOnly }) {
-  const [display, setDisplay] = useState(fmtComma(value));
-  useEffect(() => { setDisplay(fmtComma(value)); }, [value]);
-  const handleChange = e => { const raw = stripDigits(e.target.value); setDisplay(fmtComma(raw)); onChange(raw); };
-  return <input className="fi" type="text" inputMode="numeric" placeholder={placeholder} value={display} onChange={handleChange} readOnly={readOnly} />;
+  const [display, setDisplay] = useState(formatWithCommasDecimal(value));
+  useEffect(() => { setDisplay(formatWithCommasDecimal(value)); }, [value]);
+  const handleChange = e => { const raw = sanitizeNumber(e.target.value); setDisplay(formatWithCommasDecimal(raw)); onChange(raw); };
+  return <input className="fi" type="text" inputMode="decimal" placeholder={placeholder} value={display} onChange={handleChange} readOnly={readOnly} />;
 }
 
 const CATEGORY_COLORS = {
