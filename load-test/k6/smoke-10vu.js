@@ -13,6 +13,7 @@ import http from 'k6/http';
 import { check, group, sleep } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
 import { login, authHeaders } from './lib/auth.js';
+import { discoverQuoteTemplate, quoteCreateBody } from './lib/quoteTemplate.js';
 
 const BASE_URL = __ENV.BASE_URL || 'http://127.0.0.1:4000';
 
@@ -85,10 +86,12 @@ export function setup() {
   if (r.status !== 200) {
     throw new Error(`App not reachable at ${BASE_URL}/api/health (status ${r.status})`);
   }
-  return { startedAt: Date.now() };
+  // Valid reference ids for the synthetic quote create (all NOT NULL in the
+  // DB). Null when the target has no quotes — the CRUD flow is then skipped.
+  return { startedAt: Date.now(), quoteTemplate: discoverQuoteTemplate(BASE_URL, headers()) };
 }
 
-export default function () {
+export default function (data) {
   const h = headers();
 
   group('health', () => {
@@ -116,10 +119,10 @@ export default function () {
     check(r, { 'quote list 200': (x) => x.status === 200 });
   });
 
-  if (Math.random() < 0.2) {
+  if (data.quoteTemplate && Math.random() < 0.2) {
     group('quote_crud', () => {
       const started = Date.now();
-      const create = http.post(url('/api/quotes'), JSON.stringify({ uw_year: 2026, status: 'DRAFT' }), {
+      const create = http.post(url('/api/quotes'), quoteCreateBody(data.quoteTemplate), {
         headers: h,
         tags: { endpoint: 'quote_crud', op: 'create' },
       });

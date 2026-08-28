@@ -27,17 +27,19 @@
 //   http.post(url, body, { headers: authHeaders(csrf) }); // + X-CSRF-Token
 
 import http from 'k6/http';
+import { sleep } from 'k6';
 
 /** The username this VU should log in as: a pool member when LOAD_USER_PREFIX
- *  is set (VU N → prefix + zero-padded 1+((N-1) % count); setup() runs as
- *  __VU 0 and maps to the first account), else the shared LOAD_USER. */
+ *  is set (VU N → prefix + zero-padded 1+((N-1) % count)), else the shared
+ *  LOAD_USER. setup()/teardown() run as __VU 0 and get the reserved account
+ *  ..000, so a setup login never spends a VU identity's 5-per-15-min budget. */
 function resolveUser() {
   const prefix = __ENV.LOAD_USER_PREFIX;
   if (!prefix) return __ENV.LOAD_USER;
   const count = Math.max(1, Number(__ENV.LOAD_USER_COUNT || 100));
   const pad = Math.max(1, Number(__ENV.LOAD_USER_PAD || 3));
-  const vu = Number(__VU) > 0 ? Number(__VU) : 1;
-  const n = 1 + ((vu - 1) % count);
+  const vu = Number(__VU) > 0 ? Number(__VU) : 0;
+  const n = vu === 0 ? 0 : 1 + ((vu - 1) % count);
   return `${prefix}${String(n).padStart(pad, '0')}`;
 }
 
@@ -62,6 +64,11 @@ export function login(baseUrl) {
     tags: { endpoint: 'login' },
   });
   if (res.status !== 200) {
+    // Back off before throwing. The throw aborts the iteration BEFORE its
+    // think-time sleep, so without this a failed login retries in a tight
+    // loop — hundreds of attempts/sec that instantly exhaust the identity's
+    // login-limiter budget (5 per 15 min) and flood http_req_failed.
+    sleep(5);
     throw new Error(`Login failed (HTTP ${res.status}) for "${user}" at ${baseUrl}. `
       + 'Check the credentials and that the target is reachable with the prod-auth build.');
   }

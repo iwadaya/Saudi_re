@@ -28,6 +28,7 @@ import { check, group, sleep } from 'k6';
 import { Trend, Counter } from 'k6/metrics';
 import { randomIntBetween } from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
 import { login, authHeaders } from './lib/auth.js';
+import { discoverQuoteTemplate, quoteCreateBody } from './lib/quoteTemplate.js';
 
 const BASE_URL = __ENV.BASE_URL || 'http://127.0.0.1:3001';
 
@@ -93,7 +94,10 @@ export function setup() {
   if (r.status !== 200) {
     throw new Error(`App not reachable at ${BASE_URL}/api/health (status ${r.status})`);
   }
-  return { baseUrl: BASE_URL, startedAt: Date.now() };
+  // Valid reference ids for the synthetic quote create (all NOT NULL in the
+  // DB). Null when the target has no quotes — the CRUD flow is then skipped.
+  const quoteTemplate = discoverQuoteTemplate(BASE_URL, userHeaders());
+  return { baseUrl: BASE_URL, startedAt: Date.now(), quoteTemplate };
 }
 
 export default function (data) {
@@ -124,13 +128,13 @@ export default function (data) {
   // ── 3. Quote CRUD — only ~30% of iterations. A real underwriter
   //     doesn't create-patch-delete every second; this matches a
   //     realistic 3:1 read/write mix without over-inflating write load.
-  if (Math.random() < 0.30) {
+  if (data.quoteTemplate && Math.random() < 0.30) {
     group('quote_crud', () => {
       const t0 = Date.now();
 
-      const create = http.post(url('/api/quotes'), JSON.stringify({
-        uw_year: 2026, status: 'DRAFT',
-      }), { headers, tags: { endpoint: 'quote_crud', op: 'create' } });
+      const create = http.post(url('/api/quotes'), quoteCreateBody(data.quoteTemplate), {
+        headers, tags: { endpoint: 'quote_crud', op: 'create' },
+      });
       tag429(create);
       if (create.status !== 201) {
         crudTrend.add(Date.now() - t0);

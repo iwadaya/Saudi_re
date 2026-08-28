@@ -47,7 +47,10 @@ async function main() {
 
   let created = 0;
   let updated = 0;
-  for (let i = 1; i <= COUNT; i += 1) {
+  // Account 0 (e.g. loadtest000) is reserved for k6's setup()/teardown()
+  // context (__VU 0), so a setup login never spends a VU identity's
+  // login-limiter budget; VUs use 1..COUNT.
+  for (let i = 0; i <= COUNT; i += 1) {
     const username = `${PREFIX}${String(i).padStart(PAD, '0')}`;
     const email = `${username}@loadtest.local`;
     const res = await pool.query(
@@ -65,7 +68,7 @@ async function main() {
     if (res.rows[0]?.inserted) created += 1; else updated += 1;
   }
 
-  console.log(`[seed-load-users] pool ready: ${COUNT} accounts (${PREFIX}${'1'.padStart(PAD, '0')}…${PREFIX}${String(COUNT).padStart(PAD, '0')}) — ${created} created, ${updated} refreshed`);
+  console.log(`[seed-load-users] pool ready: ${COUNT} VU accounts + setup account (${PREFIX}${'0'.padStart(PAD, '0')}…${PREFIX}${String(COUNT).padStart(PAD, '0')}) — ${created} created, ${updated} refreshed`);
 }
 
 main()

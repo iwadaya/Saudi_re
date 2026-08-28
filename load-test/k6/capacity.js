@@ -43,6 +43,7 @@ import http from 'k6/http';
 import { check, group, sleep } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
 import { login, authHeaders } from './lib/auth.js';
+import { discoverQuoteTemplate, quoteCreateBody } from './lib/quoteTemplate.js';
 
 const BASE_URL = __ENV.BASE_URL || 'http://127.0.0.1:4000';
 const VUS = Number(__ENV.K6_VUS || 10);
@@ -200,6 +201,10 @@ export function setup() {
     throw new Error('No treaty or quote IDs discovered. Seed staging first or pass CONTRACT_IDS/QUOTE_IDS.');
   }
 
+  // Valid reference ids for the synthetic quote create (all NOT NULL in the
+  // DB). Null when nothing to copy from — the CRUD flow is then skipped.
+  const quoteTemplate = discoverQuoteTemplate(BASE_URL, headers());
+
   return {
     startedAt: Date.now(),
     contractIds,
@@ -207,6 +212,7 @@ export function setup() {
     npContractIds,
     npQuoteIds,
     countryIds,
+    quoteTemplate,
   };
 }
 
@@ -223,9 +229,9 @@ function sampleDeepHealth(h) {
   if (waiting > 0) pgPoolWaitingNonzero.add(1);
 }
 
-function quoteCrudFlow(h) {
+function quoteCrudFlow(h, quoteTemplate) {
   const started = Date.now();
-  const create = http.post(url('/api/quotes'), JSON.stringify({ uw_year: 2026, status: 'DRAFT' }), {
+  const create = http.post(url('/api/quotes'), quoteCreateBody(quoteTemplate), {
     headers: h,
     tags: { endpoint: 'quote_crud', op: 'create' },
   });
@@ -382,8 +388,8 @@ export default function (seed) {
     });
   }
 
-  if (WRITE_CRUD && Math.random() < 0.1) {
-    group('quote_crud', () => quoteCrudFlow(h));
+  if (WRITE_CRUD && seed.quoteTemplate && Math.random() < 0.1) {
+    group('quote_crud', () => quoteCrudFlow(h, seed.quoteTemplate));
   }
 
   sleep(randInt(1000, 4000) / 1000);
