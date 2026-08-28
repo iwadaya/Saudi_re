@@ -12,6 +12,9 @@ import {
   markNotTakenUp,
   recallOffer,
   getTerminalPermissions,
+  getUserMandate,
+  getRequiredApproverRole,
+  getRoleLevel,
 } from '../../../services/approvals.js';
 import { logAudit } from '../../../services/audit.js';
 import { withTransaction } from '../../../db/withTransaction.js';
@@ -85,7 +88,23 @@ export async function getApprovalStateAction(contractId) {
 }
 
 export async function getEligibleApproversAction({ submitterUserId, breachType, epiUsd }) {
-  return getEligibleApprovers({ submitterUserId, breachType, epiUsd });
+  const list = await getEligibleApprovers({ submitterUserId, breachType, epiUsd });
+  // The picker must only offer nominees submitForApproval will accept: filter
+  // by the breach-tier approver role for THIS submitter, resolved against the
+  // live uw_role hierarchy — the same rule (and the same source of truth) the
+  // submit validation applies to a nominated peer. Candidates carry their live
+  // hierarchy_level from v_user_mandate; a missing level falls back to the
+  // role-code lookup.
+  const submitter = await getUserMandate(submitterUserId);
+  const submitterLevel = Number.isFinite(Number(submitter?.hierarchy_level)) ? Number(submitter.hierarchy_level) : 5;
+  const requiredRole = getRequiredApproverRole(submitterLevel, breachType || 'NONE');
+  const requiredLevel = await getRoleLevel(requiredRole);
+  const out = [];
+  for (const c of list) {
+    const lvl = Number.isFinite(Number(c.hierarchy_level)) ? Number(c.hierarchy_level) : await getRoleLevel(c.role_code);
+    if (lvl <= requiredLevel) out.push(c);
+  }
+  return out;
 }
 
 export async function getArbiterOptionsAction(contractId) {

@@ -114,6 +114,8 @@ function mockDb(cfg = {}) {
     const s = String(sql);
     const isSelect = /^\s*SELECT/i.test(s);
     if (isSelect && s.includes('created_by_user_id')) return { rows: cfg.quoteRow ? [cfg.quoteRow] : [] };
+    // quoteSubmittedBy — the latest SUBMITTED_FOR_APPROVAL workflow event actor.
+    if (isSelect && s.includes('offer_approval_event')) return { rows: cfg.submitEventActor ? [{ actor_user_id: cfg.submitEventActor }] : [] };
     if (isSelect && s.includes('assigned_to_user_id') && /FROM\s+public\.contract\s+WHERE/i.test(s)) return { rows: cfg.contractRow ? [cfg.contractRow] : [] };
     if (isSelect && s.includes('uw_status AS status')) return { rows: cfg.contractStatus ? [{ status: cfg.contractStatus }] : [] };
     if (isSelect && /SELECT\s+status\s+FROM\s+public\.quote/i.test(s)) return { rows: cfg.quoteStatus ? [{ status: cfg.quoteStatus }] : [] };
@@ -257,6 +259,54 @@ describe('markContractSigned (markSignedAction path) — state AND signer author
   });
 });
 
+describe('markContractSigned — server-side signed-line validation', () => {
+  // signed_line_pct feeds claims share snapshots + the finance push, so the
+  // client-side guard alone is not enough: the service must reject a negative
+  // line, a line over 100%, and a line above the approved written line.
+  const signableAt = (writtenLinePct) => ({
+    contractStatus: 'AWAITING_SIGNED_LINE',
+    offer: offer({ written_line_pct: writtenLinePct, approver_options: [{ user_id: 'u-cu', role_code: 'CU' }] }),
+    submitter: submitter(),
+    candidates: [cand('u-cu', 'CU', 2, null)],
+  });
+
+  it('422s a negative signed line', async () => {
+    poolMock.query = mockDb(signableAt(30));
+    await expectStatus(
+      markContractSigned({ contractId: 'c1', actorUserId: 'u-cu', actorRole: 'CU', signedLinePct: -5 }),
+      422, 'INVALID_SIGNED_LINE',
+    );
+  });
+
+  it('422s a signed line above 100%', async () => {
+    poolMock.query = mockDb(signableAt(30));
+    await expectStatus(
+      markContractSigned({ contractId: 'c1', actorUserId: 'u-cu', actorRole: 'CU', signedLinePct: 150 }),
+      422, 'INVALID_SIGNED_LINE',
+    );
+  });
+
+  it('422s a signed line exceeding the approved written line', async () => {
+    poolMock.query = mockDb(signableAt(30));
+    await expectStatus(
+      markContractSigned({ contractId: 'c1', actorUserId: 'u-cu', actorRole: 'CU', signedLinePct: 40 }),
+      422, 'SIGNED_LINE_EXCEEDS_WRITTEN',
+    );
+  });
+
+  it('accepts a signed line at or below the written line', async () => {
+    poolMock.query = mockDb(signableAt(30));
+    const r = await markContractSigned({ contractId: 'c1', actorUserId: 'u-cu', actorName: 'CU', actorRole: 'CU', signedLinePct: 30 });
+    expect(r.nextStatus).toBe('SIGNED');
+  });
+
+  it('a null written line skips the written-line comparison but keeps the 0–100 bounds', async () => {
+    poolMock.query = mockDb(signableAt(null));
+    const r = await markContractSigned({ contractId: 'c1', actorUserId: 'u-cu', actorName: 'CU', actorRole: 'CU', signedLinePct: 12 });
+    expect(r.nextStatus).toBe('SIGNED');
+  });
+});
+
 describe('getTerminalPermissions — the client-facing mirror of the SIGN/NTU/RECALL authority', () => {
   const cfg = (over = {}) => ({
     contractStatus: 'AWAITING_SIGNED_LINE',
@@ -346,7 +396,11 @@ describe('markNotTakenUp (NTU) — assignee OR eligible senior, treaty + quote',
       quoteStatus: 'AWAITING_SIGNED_LINE',
       quoteRow: { created_by_user_id: 'u-sub', assigned_to_user_id: 'u-owner', next_approver: null },
     });
-    await expectStatus(markNotTakenUp({ quoteId: 'q1', actorUserId: 'u-rando', actorRole: 'UW', reason: 'x' }), 403, 'NTU_FORBIDDEN');
+    // AN (Analyst, hierarchy level 5) holds no approval authority. NOTE: an
+    // Underwriter is level 4 in the DB uw_role hierarchy — the approver tier —
+    // so a UW non-assignee IS an eligible senior here (the old in-code map
+    // wrongly put UW at level 5).
+    await expectStatus(markNotTakenUp({ quoteId: 'q1', actorUserId: 'u-rando', actorRole: 'AN', reason: 'x' }), 403, 'NTU_FORBIDDEN');
   });
 });
 
@@ -460,6 +514,31 @@ describe('approveQuote (quotes mark-approved path)', () => {
   it('allows the nominated approver even without a senior role', async () => {
     poolMock.query = mockDb({ quoteRow: quoteRow({ next_approver: 'u-nom' }), quoteStatus: 'AWAITING_APPROVAL' });
     const r = await approveQuote({ quoteId: 'q1', actorUserId: 'u-nom', actorName: 'Nom', actorRole: 'TUW' });
+    expect(r.nextStatus).toBe('AWAITING_SIGNED_LINE');
+  });
+
+  it('an Underwriter (level 4 in the DB uw_role hierarchy) is an eligible approver', async () => {
+    // The old in-code map put UW at level 5 (no authority) — the DB seed says 4.
+    poolMock.query = mockDb({ quoteRow: quoteRow(), quoteStatus: 'AWAITING_APPROVAL' });
+    const r = await approveQuote({ quoteId: 'q1', actorUserId: 'u-peer', actorName: 'Peer', actorRole: 'UW' });
+    expect(r.nextStatus).toBe('AWAITING_SIGNED_LINE');
+  });
+
+  it('rejects the ACTUAL submitter of a reassigned quote (submit-event actor ≠ creator)', async () => {
+    // Quote created by u-sub, later reassigned: u-b submitted it for approval
+    // (the SUBMITTED_FOR_APPROVAL event records u-b). u-b must not be able to
+    // approve their own submission even though created_by_user_id is u-sub.
+    poolMock.query = mockDb({
+      quoteRow: quoteRow(), quoteStatus: 'AWAITING_APPROVAL', submitEventActor: 'u-b',
+    });
+    await expectStatus(approveQuote({ quoteId: 'q1', actorUserId: 'u-b', actorRole: 'CU' }), 403);
+  });
+
+  it('a different senior still approves a reassigned quote (submit event present)', async () => {
+    poolMock.query = mockDb({
+      quoteRow: quoteRow(), quoteStatus: 'AWAITING_APPROVAL', submitEventActor: 'u-b',
+    });
+    const r = await approveQuote({ quoteId: 'q1', actorUserId: 'u-cu', actorName: 'CU', actorRole: 'CU' });
     expect(r.nextStatus).toBe('AWAITING_SIGNED_LINE');
   });
 });

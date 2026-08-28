@@ -5,6 +5,7 @@ import { api } from '../../api';
 import { useAppState } from '../../context/AppContext';
 import { useGlobalToast } from '../../hooks/useToast';
 import { setActiveContractId, setActiveQuoteId } from '../../hooks/useContractId';
+import { getUserDisplayName } from '../../utils/auth';
 
 export default function ApprovalsScreen() {
   const navigate = useNavigate();
@@ -103,6 +104,8 @@ export default function ApprovalsScreen() {
 
   const rawId = (item) => String(item.contract_id || item.quote_id || item.id || item.contractId || '');
 
+  // Move a row into the DECIDED column with the status the SERVER reported —
+  // never a fabricated one — attributed to the authenticated user who acted.
   const moveToDecided = useCallback((item, status, reason = '') => {
     const id = item.contractId;
     const decidedAt = new Date().toISOString();
@@ -112,7 +115,7 @@ export default function ApprovalsScreen() {
       status,
       uw_status: status,
       updated_at: decidedAt,
-      decisionBy: 'Chief Underwriter',
+      decisionBy: getUserDisplayName(),
       decisionComment: reason,
     };
     setServerPending(prev => prev.filter(row => rawId(row) !== id));
@@ -123,8 +126,24 @@ export default function ApprovalsScreen() {
     const key = `approve:${item.contractId}`;
     setDecisionBusy(key);
     try {
-      await api.markOfferApproved(item.contractId, { _actor: 'Chief Underwriter' }, item.isQuote ? { quote: true } : undefined);
-      moveToDecided(item, 'APPROVED');
+      const res = await api.markOfferApproved(item.contractId, { _actor: getUserDisplayName() }, item.isQuote ? { quote: true } : undefined);
+      // The server reports where the offer actually landed: a peer approval on
+      // a two-approver offer is NOT final (nextStatus stays AWAITING_APPROVAL),
+      // and a split decision raises a dispute. Only a finalized decision moves
+      // the row to DECIDED — with the server's status, not a hardcoded one.
+      const nextStatus = String(res?.nextStatus || res?.next_status || '').toUpperCase();
+      if (nextStatus === 'AWAITING_APPROVAL') {
+        showToast('Approval recorded — awaiting a second approval.');
+        setTick(n => n + 1);
+      } else if (nextStatus === 'DISPUTE_PENDING') {
+        showToast('Split decision — this offer now requires arbitration.');
+        setTick(n => n + 1);
+      } else {
+        // Final outcome (AWAITING_SIGNED_LINE, or DECLINED when a senior split
+        // resolved against approval). Older single-approver endpoints return no
+        // nextStatus — an accepted approval there means awaiting signed line.
+        moveToDecided(item, nextStatus || 'AWAITING_SIGNED_LINE');
+      }
     } catch (e) {
       showToast(`Approval failed: ${e?.message || 'Server error'}`);
     } finally {
@@ -143,7 +162,8 @@ export default function ApprovalsScreen() {
     const key = `decline:${item.contractId}`;
     setDecisionBusy(key);
     try {
-      await api.declineContract(item.contractId, reason, item.isQuote ? { quote: true, body: { reason, _actor: 'Chief Underwriter' } } : { body: { reason, _actor: 'Chief Underwriter' } });
+      const actorName = getUserDisplayName();
+      await api.declineContract(item.contractId, reason, item.isQuote ? { quote: true, body: { reason, _actor: actorName } } : { body: { reason, _actor: actorName } });
       moveToDecided(item, 'DECLINED', reason);
       setDeclineTarget(null);
       setDeclineReason('');
@@ -263,7 +283,7 @@ export default function ApprovalsScreen() {
                 <div className="approval-main">
                   <div className="approval-title" style={{ fontWeight: 700, fontSize: 14 }}>{x.title}</div>
                   <div className="approval-meta muted" style={{ marginTop: 3 }}>
-                    {x.product} · {x.decisionBy || 'Chief Underwriter'}{x.linePct ? ` · Line ${x.linePct}%` : ''}
+                    {x.product}{x.decisionBy ? ` · ${x.decisionBy}` : ''}{x.linePct ? ` · Line ${x.linePct}%` : ''}
                   </div>
                   {x.decisionComment && <div className="approval-comment" style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 3, fontStyle: 'italic' }}>"{x.decisionComment}"</div>}
                 </div>

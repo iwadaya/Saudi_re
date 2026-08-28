@@ -18,9 +18,68 @@ import { assertLegalTransition, InvalidTransitionError } from '../lib/statusMach
 import { refreshBenchmarks } from './ldf/benchmark.js';
 import { pushContractToFinance } from './financePush.js';
 
-const LEVEL = { CE:1, CU:2, CA:2, TD:3, UM:3, TM:4, TUW:5, UW:5, AN:6 };
-const ROLE_NAME = { CE:'Chief Executive', CU:'Chief Underwriter', CA:'Chief Actuary', TD:'Treaty Director', UM:'Underwriting Manager', TM:'Treaty Manager', TUW:'Treaty Underwriter', UW:'Underwriter', AN:'Analyst' };
+// ── Role hierarchy — public.uw_role is the single source of truth ────────────
+// The DB seed (migrations 118/143) is: CE=1; CU=2, CA=2; RM=3, TD=3, UM=3;
+// TM=4, UW=4; AN=5. FALLBACK_ROLE_LEVEL mirrors that seed and is used ONLY when
+// uw_role is unreachable (unit tests with a mocked pool, unseeded dev DBs).
+// TUW is the legacy pre-migration-049 alias for the junior Treaty Underwriter
+// persona and stays junior. An unknown title resolves to UNKNOWN_ROLE_LEVEL and
+// therefore fails every authority check (fail closed).
+const FALLBACK_ROLE_LEVEL = Object.freeze({ CE:1, CU:2, CA:2, RM:3, TD:3, UM:3, TM:4, UW:4, TUW:5, AN:5 });
+const UNKNOWN_ROLE_LEVEL = 99;
+const ROLE_NAME = { CE:'Chief Executive', CU:'Chief Underwriter', CA:'Chief Actuary', RM:'Retro Manager', TD:'Treaty Director', UM:'Underwriting Manager', TM:'Treaty Manager', TUW:'Treaty Underwriter', UW:'Underwriter', AN:'Analyst' };
 const FINAL_AUTH = new Set([1,2]); // CE, CU have override power
+
+// Approval authority stops at hierarchy level 4 (Treaty Manager / Underwriter
+// tier) — the same threshold requestContext.js exposes as `canApprove`
+// (hierarchyLevel <= 4). Analysts (5) and unknown titles hold no authority.
+export const APPROVAL_AUTHORITY_MAX_LEVEL = 4;
+
+let roleLevelCache = { at: 0, map: null };
+const ROLE_LEVEL_TTL_MS = 60_000;
+
+/**
+ * role_code → hierarchy_level, loaded from public.uw_role (cached briefly).
+ * Falls back to the seeded FALLBACK_ROLE_LEVEL map when the DB is unavailable;
+ * DB rows always win over the fallback for codes present in both.
+ */
+export async function getRoleLevelMap() {
+  const now = Date.now();
+  if (roleLevelCache.map && (now - roleLevelCache.at) < ROLE_LEVEL_TTL_MS) return roleLevelCache.map;
+  try {
+    const { rows } = await pool.query(
+      `SELECT role_code, hierarchy_level FROM public.uw_role WHERE role_code IS NOT NULL`
+    );
+    if (rows.length) {
+      const map = { ...FALLBACK_ROLE_LEVEL };
+      for (const r of rows) {
+        const lvl = Number(r.hierarchy_level);
+        if (Number.isFinite(lvl)) map[String(r.role_code).toUpperCase()] = lvl;
+      }
+      roleLevelCache = { at: now, map: Object.freeze(map) };
+      return roleLevelCache.map;
+    }
+  } catch (e) {
+    logger.warn('getRoleLevelMap: uw_role unavailable — using seeded fallback hierarchy', { error: e.message });
+  }
+  return FALLBACK_ROLE_LEVEL;
+}
+
+/** Hierarchy level for a role code (lower = more senior). Unknown → 99 (fail closed). */
+export async function getRoleLevel(roleCode) {
+  const map = await getRoleLevelMap();
+  const lvl = map[String(roleCode || '').toUpperCase()];
+  return Number.isFinite(lvl) ? lvl : UNKNOWN_ROLE_LEVEL;
+}
+
+/** Level for a resolved user/mandate row: its live hierarchy_level when present
+ *  (v_user_mandate joins uw_role, so this IS the DB hierarchy), else the
+ *  role-code lookup. Unknown → 99 (fail closed). */
+async function mandateLevel(mandate) {
+  const direct = Number(mandate?.hierarchy_level);
+  if (Number.isFinite(direct)) return direct;
+  return getRoleLevel(mandate?.role_code);
+}
 
 // ── Mandate limit basis ──────────────────────────────────────────────────────
 // The gated amount is WRITTEN-LINE EXPOSURE by default: the reinsurer's
@@ -192,6 +251,10 @@ export async function getEligibleApprovers(params = {}) {
   const eligible = candidatePool.filter((c) => {
     if (c.can_approve === false) return false;                                  // can_approve gate
     if (submitterId && String(c.user_id) === String(submitterId)) return false; // four-eyes
+    // Approval-authority gate: titles below the TM/UW tier (Analysts, legacy
+    // TUW) hold no approval authority and must never be offered/eligible.
+    const lvl = Number(c.hierarchy_level);
+    if (Number.isFinite(lvl) && lvl > APPROVAL_AUTHORITY_MAX_LEVEL) return false;
     const lim = c.effective_limit_usd;
     if (lim != null && Number(lim) < Number(writtenExposureUsd)) return false;   // limit gate (null = unlimited)
     const excl = excludedCobs(c);
@@ -307,6 +370,66 @@ export async function detectBreach(submitter, opts = {}) {
   return { type, reasons, writtenExposureUsd, limitBreach, classBreach };
 }
 
+/**
+ * Derive the mandate-gate inputs for a CONTRACT submission from the stored
+ * contract itself — the client is never trusted for them:
+ *   • programLimit100Usd — PROP: qs_limit (fallback total_capacity) from
+ *     contract_prop_details; NP: Σ layer_limit over contract_np_layers.
+ *     FX-converted to USD via the latest ref_exchange_rate (the same
+ *     latest-rate-per-currency pattern routes/dashboard.js exports as fxSub).
+ *   • epiUsd            — PROP: quota_share_epi + surplus_epi; NP: Σ layer
+ *     earned_premium. FX-converted to USD.
+ *   • cobIds            — contract_class_of_business ids.
+ *   • isNp              — treaty_type.category (mirrors dashboard's isNp).
+ * Returns null when the contract is missing or the DB is unavailable, so
+ * callers fall back to their legacy inputs instead of failing the submit.
+ * A missing/zero programme limit comes back null (unknown), never 0 — a zero
+ * base would silently zero the exposure and disable the limit gate.
+ */
+export async function deriveContractSubmissionInputs(contractId) {
+  if (!contractId) return null;
+  try {
+    const { rows } = await pool.query(
+      `SELECT (COALESCE(tt.category,'') ILIKE '%NP%' OR COALESCE(tt.category,'') ILIKE '%NON%') AS is_np,
+              COALESCE(fx.rate_to_usd, 1.0) AS rate_to_usd,
+              CASE WHEN (COALESCE(tt.category,'') ILIKE '%NP%' OR COALESCE(tt.category,'') ILIKE '%NON%')
+                THEN (SELECT SUM(COALESCE(l.layer_limit,0)) FROM public.contract_np_layers l WHERE l.contract_id=c.contract_id)
+                ELSE COALESCE(pd.qs_limit, pd.total_capacity)
+              END AS program_limit_100,
+              CASE WHEN (COALESCE(tt.category,'') ILIKE '%NP%' OR COALESCE(tt.category,'') ILIKE '%NON%')
+                THEN (SELECT SUM(COALESCE(l.earned_premium,0)) FROM public.contract_np_layers l WHERE l.contract_id=c.contract_id)
+                ELSE (COALESCE(pd.quota_share_epi,0) + COALESCE(pd.surplus_epi,0))
+              END AS epi_100,
+              (SELECT COALESCE(array_agg(ccob.class_of_business_id::text), ARRAY[]::text[])
+                 FROM public.contract_class_of_business ccob WHERE ccob.contract_id=c.contract_id) AS cob_ids
+         FROM public.contract c
+         LEFT JOIN public.treaty_type tt ON tt.treaty_type_id=c.treaty_type_id
+         LEFT JOIN public.contract_prop_details pd ON pd.contract_id=c.contract_id
+         LEFT JOIN public.currency cur ON cur.currency_id=c.currency_id
+         LEFT JOIN (SELECT DISTINCT ON (currency_code) currency_code, COALESCE(rate_to_usd,1.0) AS rate_to_usd
+                      FROM public.ref_exchange_rate ORDER BY currency_code, effective_date DESC) fx
+                ON fx.currency_code=cur.currency_code
+        WHERE c.contract_id=$1 LIMIT 1`,
+      [contractId]
+    );
+    const r = rows[0];
+    if (!r) return null;
+    const fxToUsd = Number(r.rate_to_usd);
+    const fxv = Number.isFinite(fxToUsd) && fxToUsd > 0 ? fxToUsd : 1;
+    const limit100 = Number(r.program_limit_100);
+    const epi100 = Number(r.epi_100);
+    return {
+      isNp: r.is_np === true,
+      programLimit100Usd: Number.isFinite(limit100) && limit100 > 0 ? limit100 * fxv : null,
+      epiUsd: Number.isFinite(epi100) && epi100 > 0 ? epi100 * fxv : null,
+      cobIds: Array.isArray(r.cob_ids) ? r.cob_ids.map(String) : [],
+    };
+  } catch (e) {
+    logger.warn('deriveContractSubmissionInputs failed — falling back to caller-supplied inputs', { contractId, error: e.message });
+    return null;
+  }
+}
+
 export function getRequiredApproverRole(submitterLevel, breachType) {
   if (breachType==='CLASS'||breachType==='BOTH') return 'CU';
   if (breachType==='LIMIT') {
@@ -369,28 +492,48 @@ export async function planSubmission({
 export async function submitForApproval({ contractId, quoteId, submittedByUserId, submittedByName, submittedByRole, epiUsd, cobIds, isNp, peer1UserId, breachType, writtenLinePct, programLimit100Usd, comment }) {
   const submitter=await getUserMandate(submittedByUserId);
 
+  // Server-derived mandate-gate inputs. The client never supplies the 100%
+  // programme limit or the COB set, so without this the limit/class gates could
+  // never fire (exposure = pct × undefined → 0). Explicit caller values win;
+  // the derived USD EPI beats the client's (contract-currency, mislabeled) one.
+  const derived = contractId ? await deriveContractSubmissionInputs(contractId) : null;
+  const effProgramLimit100Usd = programLimit100Usd ?? derived?.programLimit100Usd ?? null;
+  const effEpiUsd = derived?.epiUsd ?? epiUsd ?? null;
+  const effCobIds = (Array.isArray(cobIds) && cobIds.length) ? cobIds : (derived?.cobIds || []);
+  const effIsNp = isNp != null ? isNp : (derived?.isNp || false);
+
   // Plan the route: capture (Analyst→UW), within-mandate, or breach-escalation.
   // Best-effort — a planning failure must not block the submit.
   let plan=null;
   try {
-    plan=await planSubmission({ submitter, submittedByRole, writtenLinePct, programLimit100Usd, epiUsd, cobIds, isNp });
+    plan=await planSubmission({ submitter, submittedByRole, writtenLinePct, programLimit100Usd: effProgramLimit100Usd, epiUsd: effEpiUsd, cobIds: effCobIds, isNp: effIsNp });
   } catch (e) { logger.warn('planSubmission failed, falling back to legacy routing', { error: e.message }); }
 
-  const resolvedBreachType=breachType || plan?.breach?.type || 'NONE';
-  const submitterLevel=submitter?.hierarchy_level||5;
+  // The COMPUTED breach is authoritative; the client-supplied breach_type is
+  // only a fallback for the (logged) case where planning itself failed.
+  const resolvedBreachType=plan ? (plan.breach?.type || 'NONE') : (breachType || 'NONE');
+  const submitterLevel=Number.isFinite(Number(submitter?.hierarchy_level))?Number(submitter.hierarchy_level):5;
   // Analyst capture hands to the Underwriter; everyone else uses the breach-tier role.
   const requiredRole=plan?.kind==='CAPTURE' ? 'UW' : getRequiredApproverRole(submitterLevel,resolvedBreachType);
   const approverOptions=Array.isArray(plan?.approverOptions)?plan.approverOptions:[];
 
   if (peer1UserId) {
+    if (peer1UserId === submittedByUserId)
+      throw Object.assign(new Error('Cannot approve own submission'), {status:403});
     // getUserMandate now has fallbacks — only hard-fail if truly unknown
     const peer1 = await getUserMandate(peer1UserId);
     if (!peer1) throw Object.assign(new Error('Approver not found — user does not exist in the system'), {status:400});
-    const peer1Level = LEVEL[peer1.role_code] || 5;
-    if (peer1Level > (LEVEL[requiredRole] || 5))
-      throw Object.assign(new Error(`Requires ${ROLE_NAME[requiredRole]||requiredRole} or above`), {status:400});
-    if (peer1UserId === submittedByUserId)
-      throw Object.assign(new Error('Cannot approve own submission'), {status:403});
+    // A nominee inside the planned eligible set is always acceptable; anyone
+    // else must hold the breach-tier role (or above) per the LIVE uw_role
+    // hierarchy — the same source the eligible-approvers picker filters on, so
+    // the picker can never offer a nominee this validation rejects.
+    const nominatedInPlan = approverOptions.some((o) => String(o?.user_id) === String(peer1UserId));
+    if (!nominatedInPlan) {
+      const peer1Level = await mandateLevel(peer1);
+      const requiredLevel = await getRoleLevel(requiredRole);
+      if (peer1Level > requiredLevel)
+        throw Object.assign(new Error(`Requires ${ROLE_NAME[requiredRole]||requiredRole} or above`), {status:400});
+    }
   }
 
   // Upsert offer — approver_options carries the ordered nearest-sufficient list.
@@ -409,10 +552,10 @@ export async function submitForApproval({ contractId, quoteId, submittedByUserId
          peer2_at=NULL,arbiter_required=false,arbiter_user_id=NULL,arbiter_decision=NULL,updated_at=now()
        RETURNING offer_id`,
       [contractId||null,quoteId||null,resolvedBreachType,submittedByUserId,writtenLinePct||null,
-       epiUsd||null,peer1UserId||null,requiredRole,JSON.stringify(approverOptions)]
+       effEpiUsd||null,peer1UserId||null,requiredRole,JSON.stringify(approverOptions)]
     );
     if (contractId) await changeUwStatus(client, { contractId, to:'AWAITING_APPROVAL', actor:{ id:submittedByUserId, name:submittedByName, role:submittedByRole }, comment });
-    await logOfferEvent({contractId,quoteId,eventType:'SUBMITTED',actorUserId:submittedByUserId,actorName:submittedByName,actorRole:submittedByRole,payload:{breachType:resolvedBreachType,requiredRole,epiUsd,peer1UserId},comment,client});
+    await logOfferEvent({contractId,quoteId,eventType:'SUBMITTED',actorUserId:submittedByUserId,actorName:submittedByName,actorRole:submittedByRole,payload:{breachType:resolvedBreachType,requiredRole,epiUsd:effEpiUsd,programLimit100Usd:effProgramLimit100Usd,peer1UserId},comment,client});
     return res.rows[0]?.offer_id;
   });
   return { offerId, breachType:resolvedBreachType, requiredRole, requiredRoleName:ROLE_NAME[requiredRole]||requiredRole };
@@ -588,21 +731,47 @@ export async function assertWorkflowTransition({ entityType, entityId, from, to,
 // uses (deriveLiveApproverOptions), so "can approve" and "can sign" stay in lock-step.
 
 /**
+ * The user who actually SUBMITTED a quote for approval: the actor of the latest
+ * SUBMITTED_FOR_APPROVAL workflow event (quoteWorkflow.submitQuoteForApprovalAction
+ * writes one on every submit). The quote tables carry no submitted_by column, so
+ * this event record is the source of truth — created_by_user_id alone misses a
+ * reassigned quote whose submitter is not its creator. Null when never submitted
+ * (or the event actor was anonymous).
+ */
+async function quoteSubmittedBy(quoteId) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT actor_user_id FROM public.offer_approval_event
+        WHERE quote_id=$1 AND event_type IN ('SUBMITTED_FOR_APPROVAL','SUBMITTED')
+          AND actor_user_id IS NOT NULL
+        ORDER BY created_at DESC LIMIT 1`,
+      [quoteId]
+    );
+    return rows[0]?.actor_user_id || null;
+  } catch { return null; }
+}
+
+/**
  * Load the authority context for a terminal transition: the assignee (owner),
  * the originator (submitter), the live offer, and the nominated next approver.
  * Works for both contracts (rich contract_offer) and quotes (lighter model).
  */
 async function loadTerminalContext(entityType, entityId) {
   if (entityType === 'QUOTE') {
-    const { rows } = await pool.query(
-      `SELECT created_by_user_id, assigned_to_user_id, next_approver FROM public.quote WHERE quote_id=$1`,
-      [entityId]
-    );
+    const [{ rows }, submittedBy] = await Promise.all([
+      pool.query(
+        `SELECT created_by_user_id, assigned_to_user_id, next_approver FROM public.quote WHERE quote_id=$1`,
+        [entityId]
+      ),
+      quoteSubmittedBy(entityId),
+    ]);
     const q = rows[0] || {};
     return {
       entityType,
       ownerId: q.assigned_to_user_id || null,
-      submitterId: q.created_by_user_id || null,
+      // The real submitter (workflow event) wins; created_by is the fallback
+      // for quotes submitted before the event trail existed.
+      submitterId: submittedBy || q.created_by_user_id || null,
       nextApproverId: q.next_approver || null,
       offer: null,
     };
@@ -630,12 +799,13 @@ async function isEligibleContractApprover(offer, actorUserId) {
 }
 
 /** Quote eligibility mirrors approveQuote: the nominated approver, or any senior
- *  (Treaty Manager and above), and never the submitter (four-eyes). */
-function isEligibleQuoteApprover(ctx, { actorUserId, actorRole }) {
+ *  (Treaty Manager tier and above per the live uw_role hierarchy), and never
+ *  the submitter (four-eyes). */
+async function isEligibleQuoteApprover(ctx, { actorUserId, actorRole }) {
   if (!actorUserId) return false;
   if (ctx.submitterId && String(ctx.submitterId) === String(actorUserId)) return false;
   if (ctx.nextApproverId && String(ctx.nextApproverId) === String(actorUserId)) return true;
-  return (LEVEL[actorRole] || 5) <= 4;
+  return (await getRoleLevel(actorRole)) <= APPROVAL_AUTHORITY_MAX_LEVEL;
 }
 
 /**
@@ -650,7 +820,7 @@ async function authorizeTerminalAction({ action, entityType, entityId, actorUser
   const isActor = (id) => id != null && String(id) === String(actorUserId);
   const isEligibleApprover = () => (entityType === 'CONTRACT'
     ? isEligibleContractApprover(ctx.offer, actorUserId)
-    : Promise.resolve(isEligibleQuoteApprover(ctx, { actorUserId, actorRole })));
+    : isEligibleQuoteApprover(ctx, { actorUserId, actorRole }));
 
   switch (action) {
     case 'SIGN':
@@ -689,7 +859,7 @@ export async function getTerminalPermissions({ entityType, entityId, actorUserId
   const eligible = actorUserId
     ? (entityType === 'CONTRACT'
       ? await isEligibleContractApprover(ctx.offer, actorUserId)
-      : isEligibleQuoteApprover(ctx, { actorUserId, actorRole }))
+      : await isEligibleQuoteApprover(ctx, { actorUserId, actorRole }))
     : false;
   return {
     can_sign: eligible,
@@ -733,11 +903,18 @@ async function deriveLiveApproverOptions(offer) {
   const submitter = await getUserMandate(offer.submitted_by_id);
   if (!submitter) return [];
   const candidates = await fetchApproverCandidates();
+  // Same server-side derivation submitForApproval used (programme limit, COB
+  // set, NP flag, USD EPI) so the live set is computed from identical inputs —
+  // any divergence from the stored snapshot then means the DATA changed.
+  const derived = offer.contract_id ? await deriveContractSubmissionInputs(offer.contract_id) : null;
   const plan = await planSubmission({
     submitter,
     submittedByRole: submitter.role_code,
     writtenLinePct: offer.written_line_pct,
-    epiUsd: offer.epi_usd,
+    programLimit100Usd: derived?.programLimit100Usd ?? null,
+    epiUsd: derived?.epiUsd ?? offer.epi_usd,
+    cobIds: derived?.cobIds || [],
+    isNp: derived?.isNp || false,
     candidates,
   });
   return Array.isArray(plan.approverOptions) ? plan.approverOptions : [];
@@ -825,7 +1002,7 @@ async function claimPeerSlot({ offerId, slot, actorUserId, decision, comment, cl
  *  Ports the 5-tier final-authority / split-decision rules verbatim. */
 async function applyPeerOutcome({ offer, slot, actorUserId, actorName, actorRole, decision, comment, contractId, quoteId, client }) {
   const db = client || pool;
-  const actorLevel = LEVEL[actorRole] || 5;
+  const actorLevel = await getRoleLevel(actorRole);
   const isFinalAuth = FINAL_AUTH.has(actorLevel);
   let nextStatus = 'AWAITING_APPROVAL', finalDecision = null, arbiterRequired = false, eventType;
 
@@ -845,7 +1022,7 @@ async function applyPeerOutcome({ offer, slot, actorUserId, actorName, actorRole
       nextStatus = decision === 'APPROVED' ? 'AWAITING_SIGNED_LINE' : 'DECLINED';
     } else {
       // Split decision: a CU/CE on either side decides; otherwise → arbiter.
-      const p1Level = LEVEL[offer.peer1_role_code] || 5;
+      const p1Level = await getRoleLevel(offer.peer1_role_code);
       const higherLevel = Math.min(p1Level, actorLevel);
       if (FINAL_AUTH.has(higherLevel)) {
         const cuDecision = p1Level <= 2 ? p1d : decision;
@@ -882,7 +1059,7 @@ async function recordArbiterSlot({ offer, contractId, quoteId, actorUserId, acto
   const db = client || pool;
   if (offer.status !== 'DISPUTE_PENDING') throw httpError(400, 'No active dispute');
   if (String(offer.submitted_by_id) === String(actorUserId)) throw httpError(403, 'Cannot arbitrate own submission');
-  const level = LEVEL[actorRole] || 5;
+  const level = await getRoleLevel(actorRole);
   if (level > 3) throw httpError(403, 'Only Treaty Director, Chief Underwriter or Chief Executive can resolve disputes');
   const nextStatus = decision === 'APPROVED' ? 'AWAITING_SIGNED_LINE' : 'DECLINED';
   const { rows } = await db.query(
@@ -1040,6 +1217,24 @@ export async function approveContract({ contractId, actorUserId, actorName, acto
  */
 export async function markContractSigned({ contractId, actorUserId, actorName, actorRole, signedLinePct }) {
   const ctx = await assertWorkflowTransition({ entityType: 'CONTRACT', entityId: contractId, to: 'SIGNED', action: 'SIGN', actorUserId, actorRole });
+  // Server-side signed-line validation — signed_line_pct feeds claims share
+  // snapshots and the finance push, so the client-side guard is not enough.
+  // A signed line must be a sane percentage and can never exceed the approved
+  // written line (when one is recorded; a null written line skips that check).
+  if (signedLinePct != null) {
+    const pct = Number(signedLinePct);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+      throw httpError(422, 'Signed line must be a percentage between 0 and 100', 'INVALID_SIGNED_LINE');
+    }
+    const { rows: offRows } = await pool.query(
+      `SELECT written_line_pct FROM public.contract_offer WHERE contract_id=$1 ORDER BY updated_at DESC NULLS LAST LIMIT 1`,
+      [contractId]
+    );
+    const written = Number(offRows[0]?.written_line_pct);
+    if (offRows[0]?.written_line_pct != null && Number.isFinite(written) && pct > written) {
+      throw httpError(422, `Signed line ${pct}% cannot exceed the approved written line ${written}%`, 'SIGNED_LINE_EXCEEDS_WRITTEN');
+    }
+  }
   await withTxn(async (client) => {
     // changeUwStatus writes uw_status/status='SIGNED' + signed_at + the workflow
     // event + STATUS_CHANGED audit; signed_line_pct is the only extra column.
@@ -1115,13 +1310,20 @@ export async function approveQuote({ quoteId, actorUserId, actorName, actorRole,
     [quoteId]
   );
   if (!rows.length) throw httpError(404, 'Quote not found', 'QUOTE_NOT_FOUND');
-  const submitterId = rows[0].created_by_user_id;
-  if (actorUserId && submitterId && String(actorUserId) === String(submitterId)) {
+  // Four-eyes against BOTH identities: the creator AND whoever actually
+  // submitted it (the latest SUBMITTED_FOR_APPROVAL workflow event) — on a
+  // reassigned quote they differ, and the submitter must never self-approve.
+  const creatorId = rows[0].created_by_user_id;
+  const submittedById = await quoteSubmittedBy(quoteId);
+  if (actorUserId && creatorId && String(actorUserId) === String(creatorId)) {
     throw httpError(403, 'Cannot approve own submission');
   }
-  const actorLevel = LEVEL[actorRole] || 5;
+  if (actorUserId && submittedById && String(actorUserId) === String(submittedById)) {
+    throw httpError(403, 'Cannot approve own submission');
+  }
+  const actorLevel = await getRoleLevel(actorRole);
   const isNominee = rows[0].next_approver && actorUserId && String(rows[0].next_approver) === String(actorUserId);
-  if (actorLevel > 4 && !isNominee) {
+  if (actorLevel > APPROVAL_AUTHORITY_MAX_LEVEL && !isNominee) {
     throw httpError(403, 'Not an eligible approver for this quote');
   }
   await assertWorkflowTransition({ entityType: 'QUOTE', entityId: quoteId, to: 'AWAITING_SIGNED_LINE', actorUserId, decision: ENGINE_TOKEN });

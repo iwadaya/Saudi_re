@@ -96,6 +96,13 @@ describe('getEligibleApprovers (nearest-sufficient, including-COB, four-eyes)', 
     const list = await getEligibleApprovers({ submitter: UW, writtenLinePct: 30, programLimit100Usd: PROG, cobIds: [PROP], candidates: [...CANDIDATES, AN] });
     expect(codes(list)).not.toContain('AN');
   });
+  it('excludes titles below approval authority (hierarchy level > 4) even when can_approve is unset', async () => {
+    // A legacy Treaty Underwriter (level 5) holds no approval authority per the
+    // uw_role hierarchy — an unlimited mandate must not make them eligible.
+    const TUW = { user_id: 'u-tuw', role_code: 'TUW', role_name: 'Treaty Underwriter', hierarchy_level: 5, effective_limit_usd: null, excluded_cob_ids: [], can_approve: true };
+    const list = await getEligibleApprovers({ submitter: UW, writtenLinePct: 5, programLimit100Usd: PROG, cobIds: [PROP], candidates: [...CANDIDATES, TUW] });
+    expect(codes(list)).not.toContain('TUW');
+  });
 });
 
 describe('normalRoute / planSubmission routing', () => {
