@@ -40,6 +40,10 @@ const dashboardTrend = new Trend('t_dashboard', true);
 const rateLimited    = new Counter('c_rate_limited');
 
 export const options = {
+  // Keep each VU's cookie jar across iterations — k6's default per-iteration
+  // jar reset drops the auth_token cookie after the login iteration (see
+  // capacity.js note).
+  noCookiesReset: true,
   // Three ramping stages matched to a "real" traffic pattern. Each
   // stage is held long enough (1 min) for p95 to stabilise.
   stages: [

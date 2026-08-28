@@ -25,6 +25,10 @@ const pgPoolWaiting = new Trend('pg_pool_waiting', false);
 const rateLimited = new Counter('c_rate_limited');
 
 export const options = {
+  // Keep each VU's cookie jar across iterations — k6's default per-iteration
+  // jar reset drops the auth_token cookie after the login iteration (see
+  // capacity.js note).
+  noCookiesReset: true,
   stages: [
     { duration: '30s', target: 5 },
     { duration: '2m', target: 5 },

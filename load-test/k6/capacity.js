@@ -71,6 +71,11 @@ const missingSeed = new Counter('c_seed_missing');
 const pgPoolWaitingNonzero = new Counter('c_pg_pool_waiting_nonzero');
 
 export const options = {
+  // Keep each VU's cookie jar across iterations. k6 resets the jar per
+  // iteration by default, which silently drops the httpOnly auth_token cookie
+  // after the login iteration — every later request 401s while the cached CSRF
+  // token stops the VU from re-logging-in.
+  noCookiesReset: true,
   stages: [
     { duration: WARMUP_DURATION, target: VUS },
     { duration: HOLD_DURATION, target: VUS },
