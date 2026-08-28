@@ -15,11 +15,14 @@
 //   treaty capacity    = 10,000,000 (detail.qs_limit), event limit = 3,000,000
 //   PROJECTED yearly   = 10,000,000 prem / 5,500,000 loss
 //   ACTUAL yearly      =  9,000,000 prem / 5,000,000 loss
-//   large losses (raw) = 1,200,000 (700k + 500k; one is_selected:false row excluded)
+//   large losses (raw) = 2,199,999 (700k + 500k + 999,999; is_selected does NOT
+//                        gate the strip basis — the server strips ALL large/CAT
+//                        losses from the attritional triangle, and the client
+//                        subtraction mirrors that population)
 //   cat losses (raw)   =   800,000 (paid 500k + os 300k fallback)
-//   strip flag ON      → actuarial attritional = (5.5M − 1.2M − 0.8M) / 10M = 35.00%
-//                        actual attritional    = (5.0M − 1.2M − 0.8M) /  9M = 33.33%
-//                        actual large = 1.2M/9M = 13.33%, actual cat = 0.8M/9M = 8.89%
+//   strip flag ON      → actuarial attritional = (5.5M − 2,199,999 − 0.8M) / 10M = 25.00%
+//                        actual attritional    = (5.0M − 2,199,999 − 0.8M) /  9M = 22.22%
+//                        actual large = 2,199,999/9M = 24.44%, actual cat = 0.8M/9M = 8.89%
 //   large Pareto snap  α=2,   xm=500k, n=10, years=5 → layer xm→capacity
 //                        = (10/5)·(LEV(10M) − LEV(500k)) = 2·475,000 = 950,000
 //                        → 950,000 / 6M = 15.83%
@@ -177,16 +180,16 @@ describe('PropPricing golden master (money path)', () => {
     // Settle: the final auto-calc pass writes the attritional actuarial cell
     // and the market column in the same state update.
     await waitFor(() => {
-      expect(readEditableRow('Attritional Loss Ratio').actuarial).toBe('35.00%');
+      expect(readEditableRow('Attritional Loss Ratio').actuarial).toBe('25.00%');
       expect(readEditableRow('Taxes').market).toBe('2.50%');
     });
 
     // ── Golden grid: every displayed cell, hard-coded ──
     expect(readEditableRow('Attritional Loss Ratio')).toEqual({
-      actuarial: '35.00%', actual: '33.33%', market: '41.00%', uw: '35.00%', downside: '250.00%',
+      actuarial: '25.00%', actual: '22.22%', market: '41.00%', uw: '25.00%', downside: '250.00%',
     });
     expect(readEditableRow('Large Loss Loading')).toEqual({
-      actuarial: '15.83%', actual: '13.33%', market: '12.00%', uw: '15.83%', downside: '15.83%',
+      actuarial: '15.83%', actual: '24.44%', market: '12.00%', uw: '15.83%', downside: '15.83%',
     });
     expect(readEditableRow('Cat Loss Loading')).toEqual({
       actuarial: '7.04%', actual: '8.89%', market: '5.00%', uw: '7.04%', downside: '7.04%',
@@ -203,10 +206,10 @@ describe('PropPricing golden master (money path)', () => {
 
     // ── Downstream totals: technical result + reinsurer max commission ──
     expect(readCalcRow('Result')).toEqual({
-      actuarial: '8.63%', actual: '10.95%', market: '9.50%', uw: '8.63%', downside: '-206.37%',
+      actuarial: '18.63%', actual: '10.95%', market: '9.50%', uw: '18.63%', downside: '-206.37%',
     });
     expect(readCalcRow('Maximum Commissions (Reinsurer)')).toEqual({
-      actuarial: '22.63%', actual: '24.95%', market: '25.50%', uw: '22.63%', downside: '-192.37%',
+      actuarial: '32.63%', actual: '24.95%', market: '25.50%', uw: '32.63%', downside: '-192.37%',
     });
 
     // This fixture has real factors/losses — no placeholder or staleness banners.
@@ -242,8 +245,8 @@ describe('PropPricing golden master (money path)', () => {
     expect(payload.contract_id).toBe(bindIds.contract);
 
     expect(payload.components).toEqual([
-      { component_name: 'Attritional Loss Ratio', actuarial_value: '35.00%', uw_value: '35.00%', market_value: '41.00%', actual_stats_value: '33.33%', exposure_value: '52.34%', comment: '' },
-      { component_name: 'Large Loss Loading', actuarial_value: '15.83%', uw_value: '15.83%', market_value: '12.00%', actual_stats_value: '13.33%', exposure_value: '15.83%', comment: '' },
+      { component_name: 'Attritional Loss Ratio', actuarial_value: '25.00%', uw_value: '25.00%', market_value: '41.00%', actual_stats_value: '22.22%', exposure_value: '52.34%', comment: '' },
+      { component_name: 'Large Loss Loading', actuarial_value: '15.83%', uw_value: '15.83%', market_value: '12.00%', actual_stats_value: '24.44%', exposure_value: '15.83%', comment: '' },
       { component_name: 'Cat Loss Loading', actuarial_value: '7.04%', uw_value: '7.04%', market_value: '5.00%', actual_stats_value: '8.89%', exposure_value: '7.04%', comment: '' },
       { component_name: 'Commissions', actuarial_value: '24.00%', uw_value: '24.00%', market_value: '26.00%', actual_stats_value: '24.00%', exposure_value: '24.00%', comment: '' },
       { component_name: 'Brokerage', actuarial_value: '7.50%', uw_value: '7.50%', market_value: '4.00%', actual_stats_value: '7.50%', exposure_value: '7.50%', comment: '' },
@@ -254,9 +257,9 @@ describe('PropPricing golden master (money path)', () => {
     ]);
 
     expect(payload.outputs).toMatchObject({ status: 'DRAFT', epi: 6000000 });
-    expect(payload.outputs.actuarial_margin).toBeCloseTo(0.0863, 10);
+    expect(payload.outputs.actuarial_margin).toBeCloseTo(0.1863, 10);
     expect(payload.outputs.actual_margin).toBeCloseTo(0.1095, 10);
-    expect(payload.outputs.uw_margin).toBeCloseTo(0.0863, 10);
+    expect(payload.outputs.uw_margin).toBeCloseTo(0.1863, 10);
 
     expect(payload.share_scenarios).toEqual([
       { share_label: '1%' },
