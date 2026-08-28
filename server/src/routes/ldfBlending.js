@@ -6,6 +6,7 @@ import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { asyncHandler } from '../helpers.js';
 import { validateBody } from '../lib/validate.js';
+import { assertCanEdit } from '../services/permissions.js';
 import {
   computeBlendedLdfCurve,
   saveContractLdfBlend,
@@ -109,13 +110,18 @@ router.post(
 
 // ── PUT /api/contracts/:contractId/ldf-blend/:triangleType ───────────────
 // Persist the chosen blend. Wipes the prior blend (header is updated,
-// child rows replaced) inside one transaction.
+// child rows replaced) inside one transaction — saveContractLdfBlend checks
+// out a dedicated client from the pool for the duration of the save.
+// guardApiMutations only matches /treaties/:id paths, so this contract-scoped
+// pricing mutation takes the assignee edit-lock explicitly.
 router.put(
   '/contracts/:contractId/ldf-blend/:triangleType',
   validateBody(ldfBlendSaveSchema),
   asyncHandler(async (req, res) => {
     const triangleType = parseTriangleType(req.params.triangleType, res);
     if (!triangleType) return;
+
+    await assertCanEdit(req, 'CONTRACT', req.params.contractId);
 
     const ctx = await loadContractContext(req.params.contractId);
     if (!ctx) return res.status(404).json({ error: 'Contract not found' });

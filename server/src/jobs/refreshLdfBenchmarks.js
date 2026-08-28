@@ -16,19 +16,29 @@ import { logger } from '../lib/logger.js';
 import { refreshBenchmarks } from '../services/ldf/benchmark.js';
 
 export async function runRefreshLdfBenchmarks(client = pool) {
-  await refreshBenchmarks(client);
+  return refreshBenchmarks(client);
 }
 
 // When invoked directly via `node src/jobs/refreshLdfBenchmarks.js`,
 // run once and exit. When imported as a module (tests, future scheduler
 // wiring), only the exported function is used.
+//
+// refreshBenchmarks never throws — it reports the outcome via { refreshed }
+// (so the opportunistic in-process callers stay non-fatal). The JOB is the
+// safety net, so unlike them it must fail loudly: exit 1 whenever the
+// refresh did not actually happen, same as refreshFacAccumulation.js.
 const isDirectInvocation = import.meta.url === `file://${process.argv[1]}`;
 if (isDirectInvocation) {
   (async () => {
     try {
-      await runRefreshLdfBenchmarks(pool);
-      logger.info('[refresh-ldf-benchmarks] done');
-      process.exitCode = 0;
+      const out = await runRefreshLdfBenchmarks(pool);
+      if (out?.refreshed) {
+        logger.info('[refresh-ldf-benchmarks] done');
+        process.exitCode = 0;
+      } else {
+        logger.error('[refresh-ldf-benchmarks] failed', { error: out?.error });
+        process.exitCode = 1;
+      }
     } catch (err) {
       logger.error('[refresh-ldf-benchmarks] failed', { error: err?.message, stack: err?.stack });
       process.exitCode = 1;

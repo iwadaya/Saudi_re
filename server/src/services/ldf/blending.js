@@ -110,59 +110,95 @@ export async function computeBlendedLdfCurve(client, {
   return { classes: perClass, blended, allDevMonths, degenerate };
 }
 
+// A checked-out transaction client has a .query and a .release; the Pool has
+// .query but no .release. Same guard as pricingOfferRepository.js — used to
+// decide whether we must check out a dedicated connection ourselves.
+function isTxClient(db) {
+  return Boolean(db) && typeof db.query === 'function' && typeof db.release === 'function';
+}
+
+// The wipe-and-reinsert statements, run on a single dedicated client whose
+// transaction is managed by saveContractLdfBlend (or by the caller, when a
+// transaction client is passed in).
+async function saveBlendStatements(client, {
+  contractId, triangleType, overridden, classes, blended,
+}) {
+  const existing = await client.query(
+    `SELECT blend_id FROM public.contract_ldf_blend
+      WHERE contract_id = $1 AND triangle_type = $2`,
+    [contractId, triangleType],
+  );
+  let blendId;
+  if (existing.rows.length > 0) {
+    blendId = existing.rows[0].blend_id;
+    await client.query(
+      `UPDATE public.contract_ldf_blend
+          SET overridden = $1, updated_at = now()
+        WHERE blend_id = $2`,
+      [overridden, blendId],
+    );
+    await client.query('DELETE FROM public.contract_ldf_blend_weight WHERE blend_id = $1', [blendId]);
+    await client.query('DELETE FROM public.contract_ldf_blend_curve  WHERE blend_id = $1', [blendId]);
+  } else {
+    const ins = await client.query(
+      `INSERT INTO public.contract_ldf_blend (contract_id, triangle_type, overridden)
+       VALUES ($1, $2, $3) RETURNING blend_id`,
+      [contractId, triangleType, overridden],
+    );
+    blendId = ins.rows[0].blend_id;
+  }
+  for (const cls of classes) {
+    await client.query(
+      `INSERT INTO public.contract_ldf_blend_weight
+         (blend_id, class_of_business_id, weight, benchmark_scope, n_contracts)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [blendId, cls.classOfBusinessId, cls.weight, cls.scope, cls.nContracts],
+    );
+  }
+  for (const pt of blended) {
+    await client.query(
+      `INSERT INTO public.contract_ldf_blend_curve (blend_id, dev_month, weighted_ldf, weighted_cdf)
+       VALUES ($1, $2, $3, $4)`,
+      [blendId, pt.devMonth, pt.ldf, pt.cdf],
+    );
+  }
+  return blendId;
+}
+
 /**
  * Persist the blend selection (used after the underwriter clicks "Save" in the modal).
  * Wipes existing rows for (contract_id, triangle_type) then inserts fresh.
+ *
+ * `db` may be the shared Pool or an already-checked-out transaction client:
+ *   - Pool: a dedicated client is checked out and the whole wipe-and-reinsert
+ *     runs as ONE transaction on that connection (BEGIN/COMMIT/ROLLBACK,
+ *     release in finally). Issuing BEGIN/COMMIT through the Pool itself is
+ *     NOT a transaction — each statement can land on a different pooled
+ *     connection, so a mid-save failure could persist a truncated curve and
+ *     leak an aborted transaction onto a shared connection.
+ *   - Transaction client (per the withTransaction contract, already inside
+ *     BEGIN): statements run on it directly so they commit or roll back with
+ *     the caller's transaction; no nested BEGIN/COMMIT is issued.
  */
-export async function saveContractLdfBlend(client, {
+export async function saveContractLdfBlend(db, {
   contractId, triangleType, overridden, classes, blended,
 }) {
-  await client.query('BEGIN');
+  if (isTxClient(db)) {
+    return saveBlendStatements(db, { contractId, triangleType, overridden, classes, blended });
+  }
+  const client = await db.connect();
   try {
-    const existing = await client.query(
-      `SELECT blend_id FROM public.contract_ldf_blend
-        WHERE contract_id = $1 AND triangle_type = $2`,
-      [contractId, triangleType],
-    );
-    let blendId;
-    if (existing.rows.length > 0) {
-      blendId = existing.rows[0].blend_id;
-      await client.query(
-        `UPDATE public.contract_ldf_blend
-            SET overridden = $1, updated_at = now()
-          WHERE blend_id = $2`,
-        [overridden, blendId],
-      );
-      await client.query('DELETE FROM public.contract_ldf_blend_weight WHERE blend_id = $1', [blendId]);
-      await client.query('DELETE FROM public.contract_ldf_blend_curve  WHERE blend_id = $1', [blendId]);
-    } else {
-      const ins = await client.query(
-        `INSERT INTO public.contract_ldf_blend (contract_id, triangle_type, overridden)
-         VALUES ($1, $2, $3) RETURNING blend_id`,
-        [contractId, triangleType, overridden],
-      );
-      blendId = ins.rows[0].blend_id;
-    }
-    for (const cls of classes) {
-      await client.query(
-        `INSERT INTO public.contract_ldf_blend_weight
-           (blend_id, class_of_business_id, weight, benchmark_scope, n_contracts)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [blendId, cls.classOfBusinessId, cls.weight, cls.scope, cls.nContracts],
-      );
-    }
-    for (const pt of blended) {
-      await client.query(
-        `INSERT INTO public.contract_ldf_blend_curve (blend_id, dev_month, weighted_ldf, weighted_cdf)
-         VALUES ($1, $2, $3, $4)`,
-        [blendId, pt.devMonth, pt.ldf, pt.cdf],
-      );
-    }
+    await client.query('BEGIN');
+    const blendId = await saveBlendStatements(client, {
+      contractId, triangleType, overridden, classes, blended,
+    });
     await client.query('COMMIT');
     return blendId;
   } catch (e) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     throw e;
+  } finally {
+    client.release();
   }
 }
 
