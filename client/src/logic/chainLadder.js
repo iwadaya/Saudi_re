@@ -100,9 +100,14 @@ export function calculatePattern(matrix, factors, method = 'weighted', { exclude
  *   cdf[i]      = pattern[i] * cdf[i + 1]   (i = N-1 .. 0)
  *   cdf[N]      = tailFactor
  *
+ * The array is AGE-indexed: cdf[i] is the factor to ultimate from dev age
+ * (i+1)*12 months. cdf[0] = product of ALL LDFs × tail — the LARGEST
+ * factor, applied to the LEAST-developed (newest) origin year; cdf[N] =
+ * tailFactor, applied to the most-developed (oldest) year.
+ *
  * @param {number[]} pattern    age-to-age LDFs (length N)
  * @param {number}   tailFactor factor from the last triangle column to ultimate
- * @returns {number[]}          length N+1, cdf[0] is the most-developed CDF
+ * @returns {number[]}          length N+1, indexed by dev age (see above)
  */
 export function calculateCdfs(pattern, tailFactor = 1.0) {
   const cdfs = new Array(pattern.length + 1).fill(1.0);

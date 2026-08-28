@@ -62,12 +62,19 @@ export function calcComm(prem, claims, t) {
 
 // Stateful PC calculator with FIFO loss carry-forward. Caller must invoke in
 // chronological order; returns one closure per stream (projected vs actual).
+//
+// LCF term encoding (PropTreatyDetail.jsx save payload):
+//   'Extinction' → { lcf_years: null, lcf_extinction: true }
+//       deficits carry forward PERPETUALLY until absorbed by profits.
+//   'N years'    → { lcf_years: N, lcf_extinction: false }
+//       a year-Y deficit can offset profits in years Y+1 .. Y+N, then expires.
+//   Neither set  → no carry-forward: PC is paid on each profitable year alone.
 export function makePCCalc(t) {
   const pct = cn(t.profit_commission_pct) / 100;
   const mgmtPct = cn(t.mgmt_expenses_pct) / 100;
   const lcfYears = cn(t.lcf_years);
   const extinction = !!t.lcf_extinction;
-  const lcfActive = lcfYears > 0;
+  const lcfActive = extinction || lcfYears > 0;
   const deficits = [];
   return function pcForYear(year, prem, claims, comm) {
     if (!prem || prem <= 0 || pct <= 0) return 0;
@@ -75,7 +82,9 @@ export function makePCCalc(t) {
     const mgmt = prem * mgmtPct;
     const yearProfit = prem - cappedClaims - comm - mgmt;
     if (!lcfActive) return yearProfit > 0 ? yearProfit * pct : 0;
-    if (extinction) {
+    // Time-limited carry-forward: purge deficits older than the N-year
+    // window. Extinction never purges — deficits persist until absorbed.
+    if (!extinction && lcfYears > 0) {
       while (deficits.length && (year - deficits[0].year) > lcfYears) deficits.shift();
     }
     if (yearProfit <= 0) {

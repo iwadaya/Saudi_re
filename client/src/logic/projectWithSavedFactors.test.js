@@ -113,6 +113,31 @@ describe('loadProjectedRows — attritional projection', () => {
     expect(r.ultLoss).toBe(1500);
   });
 
+  it('reports triangle-recalc when only PREMIUM factors are saved (loss fell back)', async () => {
+    // PREMIUM has saved factors but INCURRED/CLAIMS_PAID have none, so the
+    // loss projection is a triangle recalculation. `source` reports the LOSS
+    // provenance — it must NOT claim 'saved-factors' here.
+    apiMock.getTriangle.mockImplementation((_id, type) => {
+      if (type === 'PREMIUM') return Promise.resolve({ cells: [cell(2021, 12, 2000)] });
+      if (type === 'CLAIMS_PAID') return Promise.resolve({ cells: [cell(2021, 12, 1000)] });
+      if (type === 'CLAIMS_OS') return Promise.resolve({ cells: [cell(2021, 12, 0)] });
+      return Promise.resolve({ cells: [] });
+    });
+    apiMock.getTriangleWithExclusions.mockResolvedValue(null);
+    apiMock.getDevFactors.mockImplementation((_id, type) =>
+      Promise.resolve(type === 'PREMIUM' ? { factors: [{ dev_month: 12, chosen_cdf: 2.0 }] } : []),
+    );
+    apiMock.getContract.mockResolvedValue({ detail: { strip_large_cat_losses: false } });
+
+    const { rows, source } = await loadProjectedRows('c1');
+    expect(source).toBe('triangle-recalc');
+    const r = rows.find(x => x.year === 2021);
+    // Saved PREMIUM factors are still applied: 2000 * 2.0 = 4000.
+    expect(r.ultPrem).toBe(4000);
+    // Loss side recalculated from the (single-column) triangle: CDF 1.0 -> 1000.
+    expect(r.ultLoss).toBe(1000);
+  });
+
   it('flags usedPlaceholderLdfs when it falls back to benchmark curves', async () => {
     // No triangle, no saved factors, no saved LDF blend → straight-benchmark.
     apiMock.getTriangle.mockResolvedValue({ cells: [] });
@@ -130,5 +155,91 @@ describe('loadProjectedRows — attritional projection', () => {
     const { source, usedPlaceholderLdfs } = await loadProjectedRows('c1');
     expect(source).toBe('straight-benchmark');
     expect(usedPlaceholderLdfs).toBe(true);
+  });
+});
+
+describe('loadProjectedRows — saved LDF blend orientation', () => {
+  // Server convention (server/src/services/ldf/blending.js): the CDF is the
+  // LDF product accumulated back-to-front, so the dev_month-12 row carries the
+  // FULL product (largest CDF) and the last dev_month is the ~1.0 tail. The
+  // newest origin year (age 12) must therefore get the dev_month-12 CDF.
+  const CLAIMS_BLEND = [
+    { devMonth: 12, ldf: 1.5,  cdf: 1.89 },
+    { devMonth: 24, ldf: 1.2,  cdf: 1.26 },
+    { devMonth: 36, ldf: 1.05, cdf: 1.05 },
+    { devMonth: 48, ldf: 1.0,  cdf: 1.0 },
+  ];
+
+  function primeBlendApi({ years, claimsBlend = CLAIMS_BLEND, premBlend = null }) {
+    apiMock.getTriangle.mockResolvedValue({ cells: [] }); // no triangles → straight-stats path
+    apiMock.getStraightStats.mockResolvedValue({
+      stats: years.map(y => ({ underwriting_year: y, premium: 200, paid_claims: 100, os_claims: 0 })),
+      primary_class_key: 'X',
+    });
+    apiMock.getContract.mockResolvedValue({ detail: { strip_large_cat_losses: false } });
+    apiMock.getLdfBlend.mockImplementation((_id, type) => Promise.resolve(
+      type === 'CLAIMS_PAID'
+        ? (claimsBlend ? { blended: claimsBlend } : null)
+        : (premBlend ? { blended: premBlend } : null),
+    ));
+  }
+
+  it('maps the newest year to the dev_month-12 CDF (hand-computed chain ladder)', async () => {
+    primeBlendApi({ years: [2021, 2022, 2023] });
+    const { rows, source, usedPlaceholderLdfs } = await loadProjectedRows('c1');
+    expect(source).toBe('straight-blend');
+    expect(usedPlaceholderLdfs).toBe(false);
+
+    // Incurred 100 per year. Hand-computed chain ladder:
+    //   2023 (newest, age 12) → CDF 1.89 → ultimate 189
+    //   2022 (age 24)         → CDF 1.26 → ultimate 126
+    //   2021 (age 36)         → CDF 1.05 → ultimate 105
+    // The pre-fix inversion returned 100 / 105 / 126 instead.
+    const byYear = Object.fromEntries(rows.map(r => [r.year, r]));
+    expect(byYear[2023].devFactor).toBeCloseTo(1.89, 9);
+    expect(byYear[2023].ultLoss).toBeCloseTo(189, 9);
+    expect(byYear[2022].devFactor).toBeCloseTo(1.26, 9);
+    expect(byYear[2022].ultLoss).toBeCloseTo(126, 9);
+    expect(byYear[2021].devFactor).toBeCloseTo(1.05, 9);
+    expect(byYear[2021].ultLoss).toBeCloseTo(105, 9);
+
+    // Total ultimate = 189 + 126 + 105 = 420 (pre-fix total was 331).
+    const total = rows.reduce((s, r) => s + r.ultLoss, 0);
+    expect(total).toBeCloseTo(420, 9);
+
+    // No premium blend saved → premiums undeveloped (CDF 1.0).
+    rows.forEach(r => expect(r.ultPrem).toBe(200));
+  });
+
+  it('clamps years older than the curve to the ~1.0 tail end, not the largest CDF', async () => {
+    primeBlendApi({ years: [2018, 2019, 2020, 2021, 2022, 2023] });
+    const { rows } = await loadProjectedRows('c1');
+    const byYear = Object.fromEntries(rows.map(r => [r.year, r]));
+    // Curve covers ages 12/24/36/48 (devIdx 0..3). 2019 (devIdx 4) and
+    // 2018 (devIdx 5) are beyond it → clamp to the last CDF (1.0), i.e.
+    // fully developed — NOT the dev_month-12 factor.
+    expect(byYear[2018].ultLoss).toBe(100);
+    expect(byYear[2019].ultLoss).toBe(100);
+    expect(byYear[2020].ultLoss).toBe(100);        // devIdx 3 → CDF 1.0
+    expect(byYear[2021].ultLoss).toBeCloseTo(105, 9);
+    expect(byYear[2022].ultLoss).toBeCloseTo(126, 9);
+    expect(byYear[2023].ultLoss).toBeCloseTo(189, 9);
+  });
+
+  it('applies the same orientation to a saved PREMIUM blend', async () => {
+    primeBlendApi({
+      years: [2021, 2022, 2023],
+      premBlend: [
+        { devMonth: 12, ldf: 1.0784, cdf: 1.10 },
+        { devMonth: 24, ldf: 1.02,   cdf: 1.02 },
+        { devMonth: 36, ldf: 1.0,    cdf: 1.0 },
+      ],
+    });
+    const { rows } = await loadProjectedRows('c1');
+    const byYear = Object.fromEntries(rows.map(r => [r.year, r]));
+    // Premium 200 per year: 2023 → 200×1.10 = 220, 2022 → 204, 2021 → 200.
+    expect(byYear[2023].ultPrem).toBeCloseTo(220, 9);
+    expect(byYear[2022].ultPrem).toBeCloseTo(204, 9);
+    expect(byYear[2021].ultPrem).toBeCloseTo(200, 9);
   });
 });
