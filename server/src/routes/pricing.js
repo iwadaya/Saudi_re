@@ -62,9 +62,16 @@ const contractIdFromBody = (req) => req.body?.contractId || req.body?.contract_i
 
 router.get('/treaties/:id/pricing', asyncHandler(getTreatyPricingController));
 router.get('/treaties/:id/pricing-outputs', asyncHandler(getPricingOutputsController));
-router.put('/treaties/:id/pricing-outputs', validateBody(pricingOutputsPutSchema), asyncHandler(putPricingOutputsController));
+// The two standalone PUTs take the assignee edit-lock EXPLICITLY (F60), like
+// /pricing/save below: guardApiMutations also covers /treaties/:id/* app-side,
+// but the route-level lock keeps the guarantee even if the route is ever
+// mounted without the app guard. Both controllers additionally honour the
+// opt-in If-Unmodified-Since stale-write guard (409 STALE_WRITE), matching the
+// composite save — the yearly PUT DELETEs-then-reinserts every row, so a stale
+// tab must not be able to wipe another underwriter's projections silently.
+router.put('/treaties/:id/pricing-outputs', validateBody(pricingOutputsPutSchema), lockContract((req) => req.params.id), asyncHandler(putPricingOutputsController));
 router.get('/treaties/:id/pricing-yearly', asyncHandler(getPricingYearlyController));
-router.put('/treaties/:id/pricing-yearly', validateBody(pricingYearlyPutSchema), asyncHandler(putPricingYearlyController));
+router.put('/treaties/:id/pricing-yearly', validateBody(pricingYearlyPutSchema), lockContract((req) => req.params.id), asyncHandler(putPricingYearlyController));
 router.post('/pricing/save', validateBody(compositePricingSaveSchema), lockContract(contractIdFromBody), asyncHandler(saveCompositePricingController));
 
 // Straight-line UW statistics are a proportional-only pricing input; fence
@@ -107,7 +114,10 @@ router.get('/aggregates/country/:countryId', asyncHandler(countryAggregatesContr
 router.get('/pricing/agg-cob-breakdown/:contractId', asyncHandler(aggCobBreakdownController));
 router.get('/pricing/agg-drilldown/:contractId', asyncHandler(aggDrilldownController));
 router.get('/pricing/market-average/:countryId', asyncHandler(marketAverageController));
-router.post('/pricing/:id/component-snapshot', asyncHandler(createComponentSnapshotController));
+// Snapshot create takes the explicit assignee edit-lock (F61); the delete
+// resolves the snapshot's owning contract inside its controller (the route only
+// carries the integer snapId) and edit-locks + contract-scopes the DELETE there.
+router.post('/pricing/:id/component-snapshot', lockContract((req) => req.params.id), asyncHandler(createComponentSnapshotController));
 router.get('/pricing/:id/component-snapshots', asyncHandler(listComponentSnapshotsController));
 router.delete('/pricing/component-snapshot/:snapId', asyncHandler(deleteComponentSnapshotController));
 

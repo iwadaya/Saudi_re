@@ -23,6 +23,27 @@ describe('parseOfferLinePct', () => {
     expect(parseOfferLinePct({ written_line_pct: '42', line_pct: '{"L1":0,"L2":30}' })).toBe(42);
   });
 
+  // F103: an explicitly written 0% line is a real decision ("declined to
+  // zero") and must persist as 0, not collapse to NULL ("no line entered").
+  it('keeps an explicit 0% written line — 0 / "0" / "0%" → 0 (not null)', () => {
+    expect(parseOfferLinePct({ written_line_pct: 0 })).toBe(0);
+    expect(parseOfferLinePct({ written_line_pct: '0' })).toBe(0);
+    expect(parseOfferLinePct({ written_line_pct: '0%' })).toBe(0);
+  });
+
+  it('0% written line wins over a non-zero line_pct in the same payload', () => {
+    expect(parseOfferLinePct({ written_line_pct: 0, line_pct: '{"L1":30}' })).toBe(0);
+  });
+
+  it('unparseable written_line_pct falls back to line_pct instead of null', () => {
+    expect(parseOfferLinePct({ written_line_pct: 'abc', line_pct: '25%' })).toBe(25);
+    expect(parseOfferLinePct({ written_line_pct: 'abc', line_pct: '{"L1":0,"L2":30}' })).toBe(15);
+  });
+
+  it('unparseable written_line_pct with no usable line_pct → null', () => {
+    expect(parseOfferLinePct({ written_line_pct: 'abc' })).toBe(null);
+  });
+
   it('plain %-string line_pct parses directly', () => {
     expect(parseOfferLinePct({ line_pct: '25%' })).toBe(25);
   });

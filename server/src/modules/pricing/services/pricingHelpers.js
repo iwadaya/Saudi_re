@@ -7,7 +7,14 @@ import { numOrNull } from '../../../helpers.js';
 export { resolveAuditActor as resolveActor } from '../../../services/audit.js';
 
 export function parseOfferLinePct({ line_pct, written_line_pct }) {
-  if (written_line_pct != null) return parseFloat(String(written_line_pct)) || null;
+  if (written_line_pct != null) {
+    // Null-safe parse: an explicitly written 0% line is a real decision
+    // ("declined to zero") and must be kept — the old `|| null` coerced it to
+    // NULL, indistinguishable from "no line entered". An unparseable
+    // written_line_pct falls through to line_pct instead of short-circuiting.
+    const direct = parseFloat(String(written_line_pct).replace(/%/g, ''));
+    if (Number.isFinite(direct)) return direct;
+  }
   if (line_pct == null) return null;
 
   const direct = parseFloat(String(line_pct).replace(/%/g, ''));

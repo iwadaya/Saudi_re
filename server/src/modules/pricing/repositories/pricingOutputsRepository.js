@@ -66,11 +66,29 @@ export async function getPricingOutputs(contractId) {
   return rows[0] || null;
 }
 
-export async function upsertPricingOutputs(contractId, data) {
+export async function upsertPricingOutputs(contractId, data, { ifUnmodifiedSince } = {}) {
   // pg's Pool and PoolClient share the query(text, params) interface, so the
   // client-parameterized upsert in repositoryUtils is the single source of
   // the SQL — no second copy to drift.
-  await upsertPricingOutputsWithClient(pool, contractId, data);
+  //
+  // Same opt-in optimistic lock as the composite save (and the quote-side
+  // subresource PUTs): only enforced when the client sends If-Unmodified-Since;
+  // a concurrent parent edit → 409 STALE_WRITE. The parent updated_at is bumped
+  // so the caller gets a fresh token back.
+  return await withTransaction(async (client) => {
+    await assertParentEntityUnchanged(client, {
+      parentTable: 'contract',
+      idColumn: 'contract_id',
+      id: contractId,
+      ifUnmodifiedSince,
+    });
+    await upsertPricingOutputsWithClient(client, contractId, data);
+    return touchParentEntity(client, {
+      parentTable: 'contract',
+      idColumn: 'contract_id',
+      id: contractId,
+    });
+  });
 }
 
 export async function saveCompositePricing(payload) {

@@ -1,6 +1,7 @@
 import { pool } from '../../../db/pool.js';
 import { numOrNull, withTransaction } from './repositoryUtils.js';
 import { buildBatchInsert } from '../../../db/batchInsert.js';
+import { assertParentEntityUnchanged, touchParentEntity } from '../../../lib/parentEntityPersistence.js';
 
 export async function getPricingYearly(contractId) {
   const { rows } = await pool.query('SELECT * FROM public.contract_pricing_yearly WHERE contract_id=$1 ORDER BY uw_year', [contractId]);
@@ -33,8 +34,23 @@ export async function replacePricingYearlyWithClient(client, contractId, rows = 
   if (insert) await client.query(insert.sql, insert.params);
 }
 
-export async function replacePricingYearly(contractId, rows = []) {
-  await withTransaction(async (client) => {
+export async function replacePricingYearly(contractId, rows = [], { ifUnmodifiedSince } = {}) {
+  // Delete-and-reinsert of ALL yearly rows is exactly the shape a stale tab
+  // silently clobbers, so the standalone save takes the same opt-in
+  // If-Unmodified-Since guard as the composite save (409 STALE_WRITE inside
+  // the txn) and bumps the parent updated_at for the caller's next token.
+  return await withTransaction(async (client) => {
+    await assertParentEntityUnchanged(client, {
+      parentTable: 'contract',
+      idColumn: 'contract_id',
+      id: contractId,
+      ifUnmodifiedSince,
+    });
     await replacePricingYearlyWithClient(client, contractId, rows);
+    return touchParentEntity(client, {
+      parentTable: 'contract',
+      idColumn: 'contract_id',
+      id: contractId,
+    });
   });
 }

@@ -17,6 +17,26 @@ export async function listComponentSnapshots(contractId) {
   return rows;
 }
 
-export async function deleteComponentSnapshot(snapshotId) {
-  await pool.query('DELETE FROM public.pricing_component_snapshots WHERE id=$1', [snapshotId]);
+/** Resolve a snapshot's owning contract so the controller can edit-lock it. */
+export async function getComponentSnapshotById(snapshotId) {
+  const { rows } = await pool.query(
+    'SELECT id, contract_id FROM public.pricing_component_snapshots WHERE id=$1',
+    [snapshotId]
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Delete ONE snapshot, always scoped to its owning contract. The id column is a
+ * plain integer sequence, so an unscoped `WHERE id=$1` would let any caller who
+ * can reach this function erase another contract's pricing-iteration history by
+ * enumerating small integers — the contract predicate makes the row identity
+ * (contract, snapshot), not a global guessable integer.
+ */
+export async function deleteComponentSnapshot(snapshotId, contractId) {
+  const { rowCount } = await pool.query(
+    'DELETE FROM public.pricing_component_snapshots WHERE id=$1 AND contract_id=$2',
+    [snapshotId, contractId]
+  );
+  return rowCount;
 }
