@@ -55,6 +55,10 @@ const GUARDED = [
   ['POST', '/api/quotes/q1/triangles/large'],
   ['POST', '/api/quotes/q1/documents'],
   ['PUT', '/api/quotes/q1/pricing-outputs'],
+  // F81: amend MUTATES the source quote (flips it to SUPERSEDED — even out of
+  // AWAITING_APPROVAL), so it takes the assignee edit-lock, not the old
+  // 'create' free pass that let anyone supersede anyone's quote.
+  ['POST', '/api/quotes/q1/amend'],
   ['DELETE', '/api/fac/documents/d1'],
   ['POST', '/api/fac/recommendation/r1/accept'],
   ['POST', '/api/fac/risks/f1/clauses-checklist'],
@@ -79,12 +83,24 @@ describe('guardApiMutations — assignee + reads + workflow pass', () => {
     // assignee edits
     expect((await send(base, 'PUT', '/api/quotes/q1/dev-factors/risk', {})).status).toBe(200);
     expect((await send(base, 'DELETE', '/api/fac/documents/d1')).status).toBe(200);
+    // the assignee may amend their own quote (F81 — the edit-lock, not a 403 wall)
+    expect((await send(base, 'POST', '/api/quotes/q1/amend', {})).status).toBe(200);
     // reads never gated (even for a non-owner)
     const ro = await boot('attacker');
     expect((await send(ro, 'GET', '/api/quotes/q1/dev-factors/risk')).status).toBe(200);
     // approval-workflow decision is an approver action — not assignee-gated
     expect((await send(ro, 'POST', '/api/treaties/c1/offer/peer-decision', {})).status).toBe(200);
     expect((await send(ro, 'POST', '/api/quotes/q1/renew', {})).status).toBe(200); // create
+  });
+});
+
+describe('classifyMutationPath — amend is entity-scoped, renew/bind stay create (F81)', () => {
+  it('classifies /quotes/:id/amend against the SOURCE quote', () => {
+    expect(classifyMutationPath('/quotes/q1/amend')).toEqual({ entityType: 'QUOTE', entityId: 'q1' });
+  });
+  it('renew and bind keep their create classification (bind takes assertCanEdit in its handler)', () => {
+    expect(classifyMutationPath('/quotes/q1/renew')).toBe('create');
+    expect(classifyMutationPath('/quotes/q1/bind')).toBe('create');
   });
 });
 

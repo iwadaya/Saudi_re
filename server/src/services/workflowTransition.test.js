@@ -344,6 +344,50 @@ describe('getTerminalPermissions — the client-facing mirror of the SIGN/NTU/RE
     const r = await markContractSigned({ contractId: 'c1', actorUserId: 'u-cu', actorName: 'CU', actorRole: 'CU', signedLinePct: 12 });
     expect(r.nextStatus).toBe('SIGNED');
   });
+
+  // F77 — can_arbitrate mirrors recordArbiterSlot: an open dispute, TD-tier
+  // authority, and a THIRD party (never the submitter or a disputing peer).
+  describe('can_arbitrate (dispute-resolution mirror)', () => {
+    const disputedCfg = (over = {}) => cfg({
+      contractStatus: 'DISPUTE_PENDING',
+      offer: offer({
+        status: 'DISPUTE_PENDING',
+        peer1_user_id: 'u-td-peer', peer1_decision: 'APPROVED',
+        peer2_user_id: 'u-um-peer', peer2_decision: 'DECLINED',
+      }),
+      ...over,
+    });
+
+    it('a third-party Treaty Director may arbitrate', async () => {
+      poolMock.query = mockDb(disputedCfg());
+      const p = await getTerminalPermissions({ entityType: 'CONTRACT', entityId: 'c1', actorUserId: 'u-td-third', actorRole: 'TD' });
+      expect(p.can_arbitrate).toBe(true);
+    });
+
+    it('a disputing peer may NOT arbitrate, even at TD tier', async () => {
+      poolMock.query = mockDb(disputedCfg());
+      const p = await getTerminalPermissions({ entityType: 'CONTRACT', entityId: 'c1', actorUserId: 'u-td-peer', actorRole: 'TD' });
+      expect(p.can_arbitrate).toBe(false);
+    });
+
+    it('the submitter may NOT arbitrate their own dispute', async () => {
+      poolMock.query = mockDb(disputedCfg());
+      const p = await getTerminalPermissions({ entityType: 'CONTRACT', entityId: 'c1', actorUserId: 'u-sub', actorRole: 'CU' });
+      expect(p.can_arbitrate).toBe(false);
+    });
+
+    it('a Treaty Manager (below the TD tier) may NOT arbitrate', async () => {
+      poolMock.query = mockDb(disputedCfg());
+      const p = await getTerminalPermissions({ entityType: 'CONTRACT', entityId: 'c1', actorUserId: 'u-tm-third', actorRole: 'TM' });
+      expect(p.can_arbitrate).toBe(false);
+    });
+
+    it('no dispute → can_arbitrate is false for everyone', async () => {
+      poolMock.query = mockDb(cfg()); // offer still AWAITING_APPROVAL
+      const p = await getTerminalPermissions({ entityType: 'CONTRACT', entityId: 'c1', actorUserId: 'u-td-third', actorRole: 'TD' });
+      expect(p.can_arbitrate).toBe(false);
+    });
+  });
 });
 
 describe('markNotTakenUp (NTU) — assignee OR eligible senior, treaty + quote', () => {

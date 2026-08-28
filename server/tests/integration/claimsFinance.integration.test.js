@@ -434,4 +434,76 @@ describe.skipIf(shouldSkipDb)('integration: claims + finance modules', () => {
       { body: { reason: 'evidence freeze check' } })).status).toBe(200);
     expect((await harness.fetchApp('DELETE', `/api/claims/documents/${doc.document_id}`)).status).toBe(200);
   });
+
+  // ── F82 — the FINALISED stamp must never survive a closure that changes the
+  // position. Close/decline books a CLOSURE movement that zeroes OS; on a
+  // FINALISED claim with OS ≠ 0 that restates figures the reviewer never saw,
+  // so it is blocked (422 CLAIM_FINALISED_POSITION) until a movement restates
+  // the position — which itself drops the approval to DRAFT for re-review.
+  it('F82 — close/decline on a FINALISED claim with outstanding reserve is blocked with the path named', async () => {
+    const created = await harness.fetchApp('POST', '/api/claims', {
+      body: { contract_id: contractId, loss_date: '2026-04-01', loss_type: 'LARGE',
+              insured_name: 'F82 Insured', gross_paid_100: 400_000, gross_os_100: 600_000 },
+    }).then((r) => r.json());
+    const c2 = created.claim_id;
+
+    // Submit (default demo CU) + approve by a DIFFERENT approver → FINALISED.
+    expect((await harness.fetchApp('POST', `/api/claims/${c2}/submit`, { body: {} })).status).toBe(200);
+    expect((await harness.fetchApp('POST', `/api/claims/${c2}/approve`, {
+      body: { reason: 'Position agreed' }, headers: { 'x-user-id': APPROVER_ID, 'x-user-role': 'CU' },
+    })).status).toBe(200);
+
+    // Closing (or declining) would zero the 600k OS behind that approval → 422.
+    for (const action of ['close', 'decline']) {
+      const res = await harness.fetchApp('POST', `/api/claims/${c2}/${action}`, { body: { reason: 'wrap up' } });
+      expect(res.status, action).toBe(422);
+      const body = await res.json();
+      expect(body.code).toBe('CLAIM_FINALISED_POSITION');
+      expect(body.error).toMatch(/restating the position/i); // the error names the path out
+    }
+
+    // Untouched: still OPEN, still FINALISED, no CLOSURE movement booked.
+    let detail = await harness.fetchApp('GET', `/api/claims/${c2}`).then((r) => r.json());
+    expect(detail.status).toBe('OPEN');
+    expect(detail.approval_status).toBe('FINALISED');
+    expect(detail.movements.some((m) => m.movement_type === 'CLOSURE')).toBe(false);
+
+    // The named path: book a movement restating the position to nil OS — the
+    // ledger accepts it and the stale approval drops to DRAFT…
+    expect((await harness.fetchApp('POST', `/api/claims/${c2}/movements`, {
+      body: { movement_type: 'PAYMENT', gross_paid_100: 400_000, gross_os_100: 0, comment: 'Settled in full' },
+    })).status).toBe(201);
+    detail = await harness.fetchApp('GET', `/api/claims/${c2}`).then((r) => r.json());
+    expect(detail.approval_status).toBe('DRAFT');
+
+    // …and the close now proceeds, restating the same figures (paid preserved, OS 0).
+    expect((await harness.fetchApp('POST', `/api/claims/${c2}/close`, { body: { reason: 'Settled' } })).status).toBe(200);
+    detail = await harness.fetchApp('GET', `/api/claims/${c2}`).then((r) => r.json());
+    expect(detail.status).toBe('CLOSED');
+    const closure = detail.movements.at(-1);
+    expect(closure.movement_type).toBe('CLOSURE');
+    expect(num(closure.gross_paid_100)).toBe(400_000);
+    expect(num(closure.gross_os_100)).toBe(0);
+  });
+
+  it('F82 — closing a FINALISED claim already at nil outstanding keeps the approval (identical restatement)', async () => {
+    const created = await harness.fetchApp('POST', '/api/claims', {
+      body: { contract_id: contractId, loss_date: '2026-05-01', loss_type: 'ATTRITIONAL',
+              insured_name: 'F82 Nil-OS Insured', gross_paid_100: 120_000, gross_os_100: 0 },
+    }).then((r) => r.json());
+    const c3 = created.claim_id;
+
+    expect((await harness.fetchApp('POST', `/api/claims/${c3}/submit`, { body: {} })).status).toBe(200);
+    expect((await harness.fetchApp('POST', `/api/claims/${c3}/approve`, {
+      body: { reason: 'Final position, fully paid' }, headers: { 'x-user-id': APPROVER_ID, 'x-user-role': 'CU' },
+    })).status).toBe(200);
+
+    // OS is already 0: the closure restates the exact figures the reviewer
+    // approved, so the FINALISED stamp still describes the position.
+    expect((await harness.fetchApp('POST', `/api/claims/${c3}/close`, { body: { reason: 'Administrative close' } })).status).toBe(200);
+    const detail = await harness.fetchApp('GET', `/api/claims/${c3}`).then((r) => r.json());
+    expect(detail.status).toBe('CLOSED');
+    expect(detail.approval_status).toBe('FINALISED');
+    expect(detail.reviewed_at).toBeTruthy();
+  });
 });

@@ -236,6 +236,7 @@ export const approvalRows = {
       updated_at: '2026-05-01T10:30:00.000Z',
     },
   ],
+  disputed: [],
   decided: [],
   quotes: [],
 };
@@ -320,8 +321,11 @@ export function makeBindPathApiMock(fn, overrides = {}) {
     returnToUnderwriter: fn().mockResolvedValue({ ok: true }),
     recallOffer: fn().mockResolvedValue({ ok: true }),
     declineContract: fn().mockResolvedValue({ ok: true }),
+    arbiterDecision: fn().mockResolvedValue({ ok: true, nextStatus: 'AWAITING_SIGNED_LINE', decision: 'APPROVED', complete: true }),
+    getArbiterOptions: fn().mockResolvedValue([{ user_id: 'td-bind-test', display_name: 'Treaty Director', role_code: 'TD' }]),
     listContracts: fn((params = {}) => {
       const status = String(params.status || '');
+      if (status.includes('DISPUTE_PENDING')) return Promise.resolve(copy(approvalRows.disputed));
       if (status.includes('AWAITING_APPROVAL')) return Promise.resolve(copy(approvalRows.pending));
       return Promise.resolve(copy(approvalRows.decided));
     }),

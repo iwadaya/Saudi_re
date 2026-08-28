@@ -36,6 +36,12 @@ const FINAL_AUTH = new Set([1,2]); // CE, CU have override power
 // (hierarchyLevel <= 4). Analysts (5) and unknown titles hold no authority.
 export const APPROVAL_AUTHORITY_MAX_LEVEL = 4;
 
+// Dispute arbitration stops at hierarchy level 3 (Treaty Director tier and
+// above: TD/CU/CE per the DB hierarchy). Shared by recordArbiterSlot (the
+// enforcement) and getTerminalPermissions.can_arbitrate (the client mirror)
+// so the two can never drift.
+export const ARBITER_MAX_LEVEL = 3;
+
 let roleLevelCache = { at: 0, map: null };
 const ROLE_LEVEL_TTL_MS = 60_000;
 
@@ -106,18 +112,41 @@ export function resolveLimitBasis(raw) {
   return LIMIT_BASIS.SIGNED_EXPOSURE;
 }
 
-// ── Normal routing legs (mirrors migration 118 approval_route seed) ──────────
+// ── Normal routing legs (mirrors the approval_route seed, migrations 118+152) ─
 // Used as the in-memory default when no DB-backed route is supplied. AN is a
 // capture that always hands to the Underwriter first; the Underwriter then
 // escalates on its own written line.
+//
+// F80 policy (migration 152): TM / TD / RM submitters route to the titles
+// STRICTLY SENIOR to them in the DB uw_role hierarchy — TM (4) → TD/CU/CE,
+// TD (3) → CU/CE, RM (3) → CU/CE — and the legacy TUW alias routes exactly
+// like UW. Before this, those originators produced an empty approver set that
+// nobody could ever approve, return or sign.
 export const DEFAULT_APPROVAL_ROUTE = Object.freeze({
   AN: ['UW'],
   UW: ['CU'],
+  TUW: ['CU'], // legacy pre-migration-049 alias of UW
   UM: ['CU'],
+  TM: ['TD', 'CU', 'CE'],
+  TD: ['CU', 'CE'],
+  RM: ['CU', 'CE'],
   CU: ['CA', 'CE'],
   CA: ['CU', 'CE'],
   CE: [],
 });
+
+// ── Underwriting approver roles (breach-escalation candidate filter) ─────────
+// F80 policy: escalation eligibility used to be purely limit-based, so the
+// Retro Manager (unlimited retro mandate) surfaced as an eligible approver of
+// inward-treaty limit breaches. Escalation candidates are now restricted to
+// the underwriting approval chain. Explicit ALLOWLIST (fail closed: a future
+// role code must be added here deliberately before it can approve treaties).
+// RM is deliberately absent — its mandate covers retrocession programmes, not
+// inward treaty business. AN/TUW are absent too, though the hierarchy-level
+// authority gate already excludes them. CA stays: the CU route names it.
+export const UNDERWRITING_APPROVER_ROLES = Object.freeze(
+  new Set(['CE', 'CU', 'CA', 'TD', 'UM', 'TM', 'UW'])
+);
 
 const CAPTURE_ROLES = new Set(['AN']);
 
@@ -252,6 +281,13 @@ export async function getEligibleApprovers(params = {}) {
   const eligible = candidatePool.filter((c) => {
     if (c.can_approve === false) return false;                                  // can_approve gate
     if (submitterId && String(c.user_id) === String(submitterId)) return false; // four-eyes
+    // Underwriting-chain gate (F80): only the underwriting approval titles may
+    // approve treaty/quote submissions — the Retro Manager's unlimited retro
+    // mandate must not make it a treaty-limit escalation target. Applied HERE
+    // (not just in the escalation branch) so the picker, the nominee
+    // validation and the decision-time live re-derivation all stay in
+    // lock-step on the same candidate set.
+    if (!UNDERWRITING_APPROVER_ROLES.has(String(c.role_code || '').toUpperCase())) return false;
     // Approval-authority gate: titles below the TM/UW tier (Analysts, legacy
     // TUW) hold no approval authority and must never be offered/eligible.
     const lvl = Number(c.hierarchy_level);
@@ -473,7 +509,22 @@ export async function planSubmission({
   const roleCode = (submitter && submitter.role_code) || submittedByRole;
 
   if (isCaptureSubmission(roleCode)) {
-    return { kind: 'CAPTURE', breach: { type: 'NONE', reasons: [] }, writtenExposureUsd: 0, routeRoleCodes: normalRoute('AN', routes), approverOptions: [] };
+    // F80: the capture used to store approverOptions: [] while stamping
+    // next_approver_role='UW' — so the very Underwriter the capture was
+    // "handed to" was rejected as ineligible by recordDecision's live check.
+    // The options are now the ELIGIBLE UNDERWRITER SET (four-eyes vs the
+    // analyst, active, COB-cleared; exposure 0 — the breach evaluation stays
+    // the receiving UW's call on its own written line, not computed here).
+    const routeRoleCodes = normalRoute('AN', routes);
+    const routeSet = new Set(routeRoleCodes.map(String));
+    const all = await getEligibleApprovers({ submitter, writtenExposureUsd: 0, cobIds, candidates });
+    return {
+      kind: 'CAPTURE',
+      breach: { type: 'NONE', reasons: [] },
+      writtenExposureUsd: 0,
+      routeRoleCodes,
+      approverOptions: all.filter((c) => routeSet.has(String(c.role_code))),
+    };
   }
 
   const breach = await detectBreach(submitter, { writtenLinePct, programLimit100Usd, cobIds, isNp, epiUsd });
@@ -862,11 +913,22 @@ export async function getTerminalPermissions({ entityType, entityId, actorUserId
       ? await isEligibleContractApprover(ctx.offer, actorUserId)
       : await isEligibleQuoteApprover(ctx, { actorUserId, actorRole }))
     : false;
+  // Arbitration mirror (F77): true iff recordArbiterSlot would accept this
+  // actor — an open dispute, TD-tier-or-above authority, and a THIRD party
+  // (never the submitter or either disputing peer).
+  let canArbitrate = false;
+  const offer = ctx.offer;
+  if (actorUserId && offer && String(offer.status).toUpperCase() === 'DISPUTE_PENDING') {
+    const isParty = [offer.submitted_by_id, offer.peer1_user_id, offer.peer2_user_id]
+      .some((id) => id != null && String(id) === String(actorUserId));
+    canArbitrate = !isParty && (await getRoleLevel(actorRole)) <= ARBITER_MAX_LEVEL;
+  }
   return {
     can_sign: eligible,
     can_ntu: isActor(ctx.ownerId) || eligible,
     can_return: eligible,
     can_recall: isActor(ctx.submitterId),
+    can_arbitrate: canArbitrate,
     is_owner: isActor(ctx.ownerId),
     is_submitter: isActor(ctx.submitterId),
   };
@@ -1069,7 +1131,7 @@ async function recordArbiterSlot({ offer, contractId, quoteId, actorUserId, acto
     }
   }
   const level = await getRoleLevel(actorRole);
-  if (level > 3) throw httpError(403, 'Only Treaty Director, Chief Underwriter or Chief Executive can resolve disputes');
+  if (level > ARBITER_MAX_LEVEL) throw httpError(403, 'Only Treaty Director, Chief Underwriter or Chief Executive can resolve disputes');
   const nextStatus = decision === 'APPROVED' ? 'AWAITING_SIGNED_LINE' : 'DECLINED';
   const { rows } = await db.query(
     `UPDATE public.contract_offer

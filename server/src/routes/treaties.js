@@ -68,7 +68,10 @@ router.post("/treaties", asyncHandler(async (req, res) => {
 router.get("/treaties", asyncHandler(async (req, res) => {
   const {status,uw_year,cedant_id,country_id,category,limit,offset,page}=req.query;const conds=[];const params=[];let i=1;
   if(status){
-    const VALID_STATUSES = new Set(['DRAFT','AWAITING_APPROVAL','APPROVED','AWAITING_SIGNED_LINE','SIGNED','NTU','DECLINED']);
+    // DISPUTE_PENDING included (F77): the approvals dashboard lists disputed
+    // offers so an arbiter can resolve a split decision; it is a real
+    // uw_workflow_status enum value (migration 040).
+    const VALID_STATUSES = new Set(['DRAFT','AWAITING_APPROVAL','APPROVED','AWAITING_SIGNED_LINE','SIGNED','NTU','DECLINED','DISPUTE_PENDING']);
     const statuses = status.split(',').map(s=>s.trim().toUpperCase()).filter(s=>VALID_STATUSES.has(s));
     if(statuses.length === 1){ conds.push(`c.uw_status=$${i++}`); params.push(statuses[0]); }
     else if(statuses.length > 1){ conds.push(`c.uw_status=ANY($${i++}::public.uw_workflow_status[])`); params.push(statuses); }

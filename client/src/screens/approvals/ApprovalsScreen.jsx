@@ -12,18 +12,25 @@ export default function ApprovalsScreen() {
   const showToast = useGlobalToast();
   const { resetFlow } = useAppState();
   const [serverPending, setServerPending] = useState([]);
+  const [serverDisputed, setServerDisputed] = useState([]);
   const [serverDecided, setServerDecided] = useState([]);
   const [loadingServer, setLoadingServer] = useState(true);
   const [tick, setTick] = useState(0);
   const [decisionBusy, setDecisionBusy] = useState('');
   const [declineTarget, setDeclineTarget] = useState(null);
   const [declineReason, setDeclineReason] = useState('');
+  const [arbitrateTarget, setArbitrateTarget] = useState(null);
+  const [arbitrateComment, setArbitrateComment] = useState('');
 
   const fetchFromServer = useCallback(async () => {
     setLoadingServer(true);
     try {
-      const [pendingContracts, decidedContracts, allQuotes] = await Promise.all([
+      const [pendingContracts, disputedContracts, decidedContracts, allQuotes] = await Promise.all([
         api.listContracts({ status: 'AWAITING_APPROVAL' }).catch(() => []),
+        // Disputed offers (split peer decisions) surface in their own section
+        // so an arbiter can resolve them — they are in neither the pending nor
+        // the decided status set.
+        api.listContracts({ status: 'DISPUTE_PENDING' }).catch(() => []),
         api.listContracts({ status: 'APPROVED,DECLINED,SIGNED,NTU,BOUND,AWAITING_SIGNED_LINE' }).catch(() => []),
         api.listQuotes({}).catch(() => []),
       ]);
@@ -34,7 +41,15 @@ export default function ApprovalsScreen() {
 
       // Quotes awaiting approval
       const pendingQuotes = quotes.filter(q =>
-        ['AWAITING_APPROVAL','DISPUTE_PENDING'].includes(String(q.status || '').toUpperCase())
+        String(q.status || '').toUpperCase() === 'AWAITING_APPROVAL'
+      ).map(q => ({ ...q, _isQuote: true }));
+
+      // Disputed quotes: shown for visibility, but the arbitrate action is
+      // treaty-only — quotes run a single-approver model with no server-side
+      // quote arbitration endpoint, so a disputed quote (legacy data) is
+      // opened and resolved from its review screen instead.
+      const disputedQuotes = quotes.filter(q =>
+        String(q.status || '').toUpperCase() === 'DISPUTE_PENDING'
       ).map(q => ({ ...q, _isQuote: true }));
 
       // Quotes in terminal/decided states
@@ -42,7 +57,19 @@ export default function ApprovalsScreen() {
         ['AWAITING_SIGNED_LINE','APPROVED','SIGNED','DECLINED','NTU','BOUND'].includes(String(q.status || '').toUpperCase())
       ).map(q => ({ ...q, _isQuote: true }));
 
+      // Per-item arbitration rights from the server's permissions mirror
+      // (getTerminalPermissions.can_arbitrate) — the server enforces the same
+      // rule on the decision itself; a failed lookup leaves the controls
+      // visible and lets the endpoint be the judge.
+      const disputedWithPerms = await Promise.all(toArr(disputedContracts).map(async (c) => {
+        try {
+          const p = await api.getOfferPermissions(String(c.contract_id || c.id || ''));
+          return { ...c, _canArbitrate: p?.can_arbitrate !== false };
+        } catch { return { ...c, _canArbitrate: true }; }
+      }));
+
       setServerPending([...contracts, ...pendingQuotes]);
+      setServerDisputed([...disputedWithPerms, ...disputedQuotes]);
       setServerDecided([...decided, ...decidedQuotes]);
     } catch {}
     setLoadingServer(false);
@@ -76,11 +103,13 @@ export default function ApprovalsScreen() {
       linePct: item.written_line_pct || item.offer_line || null,
       decisionBy: item.decisionBy || item.decision_by || '',
       decisionComment: item.decisionComment || item.decision_comment || '',
+      canArbitrate: !isQuote && item._canArbitrate !== false,
     };
   };
 
-  const pending = serverPending.map(enrich);
-  const decided = serverDecided.map(enrich);
+  const pending  = serverPending.map(enrich);
+  const disputed = serverDisputed.map(enrich);
+  const decided  = serverDecided.map(enrich);
 
   const open = async (item) => {
     try {
@@ -119,6 +148,7 @@ export default function ApprovalsScreen() {
       decisionComment: reason,
     };
     setServerPending(prev => prev.filter(row => rawId(row) !== id));
+    setServerDisputed(prev => prev.filter(row => rawId(row) !== id));
     setServerDecided(prev => [decidedRow, ...prev.filter(row => rawId(row) !== id)]);
   }, []);
 
@@ -174,6 +204,36 @@ export default function ApprovalsScreen() {
     }
   };
 
+  // Arbitration: resolve a split peer decision. The server (recordArbiterSlot)
+  // enforces authority — TD/CU/CE only, never the submitter or a disputing
+  // peer — and the decision is always final. A comment is required for both
+  // outcomes: the arbiter is overriding one of the two split decisions, so the
+  // rationale must be on the record.
+  const confirmArbitrate = async (decision) => {
+    if (!arbitrateTarget) return;
+    const comment = arbitrateComment.trim();
+    if (!comment) {
+      showToast('Enter an arbitration comment — the rationale is recorded with the decision.');
+      return;
+    }
+    const item = arbitrateTarget;
+    const key = `arbitrate:${item.contractId}`;
+    setDecisionBusy(key);
+    try {
+      const res = await api.arbiterDecision(item.contractId, { decision, comment, _actor: getUserDisplayName() });
+      const nextStatus = String(res?.nextStatus || res?.next_status || '').toUpperCase()
+        || (decision === 'APPROVED' ? 'AWAITING_SIGNED_LINE' : 'DECLINED');
+      moveToDecided(item, nextStatus, comment);
+      setArbitrateTarget(null);
+      setArbitrateComment('');
+      showToast(decision === 'APPROVED' ? 'Dispute resolved — offer approved.' : 'Dispute resolved — offer declined.');
+    } catch (e) {
+      showToast(`Arbitration failed: ${e?.message || 'Server error'}`);
+    } finally {
+      setDecisionBusy('');
+    }
+  };
+
   const statusColor = (s) => ({
     DISPUTE_PENDING: '#a78bfa',
     AWAITING_APPROVAL: '#fbbf24',
@@ -202,6 +262,51 @@ export default function ApprovalsScreen() {
           <button className="topbar-pill" onClick={async () => { await performLogout(); navigate('/login'); }}>Log out</button>
         </div>
       </div>
+
+      {disputed.length > 0 && (
+        <section className="panel glass" style={{ marginBottom: 16, borderLeft: '3px solid rgba(167,139,250,0.55)' }}>
+          <div className="panel-head">
+            <div className="panel-title">DISPUTED — ARBITRATION REQUIRED</div>
+            <div className="pill-mini" style={{ background: 'rgba(167,139,250,0.20)', color: '#a78bfa' }}>{disputed.length}</div>
+          </div>
+          <div className="panel-body approvals-list">
+            {disputed.map(x => (
+              <div key={x.contractId} className="approval-row" role="button" tabIndex={0}
+                onClick={() => open(x)}
+                onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(x); }
+                }}
+                style={{ cursor: 'pointer', borderLeft: '3px solid rgba(167,139,250,0.50)', paddingLeft: 12 }}>
+                <div className="approval-main">
+                  <div className="approval-title" style={{ fontWeight: 700, fontSize: 14 }}>{x.title}</div>
+                  <div className="approval-meta muted" style={{ marginTop: 3 }}>
+                    {x.product} · Submitted by <b style={{ color: 'rgba(255,255,255,0.70)' }}>{x.submittedBy}</b>
+                    {x.linePct ? ` · Line ${x.linePct}%` : ''}
+                    {' · Split peer decision — a Treaty Director, Chief Underwriter or Chief Executive must arbitrate.'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <div className="approval-pill" style={{ background: 'rgba(167,139,250,0.12)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.30)' }}>
+                    {statusLabel(x.status)}
+                  </div>
+                  {x.canArbitrate && (
+                    <button
+                      type="button"
+                      className="topbar-pill"
+                      disabled={decisionBusy === `arbitrate:${x.contractId}`}
+                      onClick={(e) => { e.stopPropagation(); setArbitrateTarget(x); setArbitrateComment(''); }}
+                    >
+                      Arbitrate
+                    </button>
+                  )}
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Review →</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="grid-2">
         <section className="panel glass">
@@ -327,6 +432,44 @@ export default function ApprovalsScreen() {
             <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:12 }}>
               <button type="button" className="topbar-pill" onClick={() => setDeclineTarget(null)}>Cancel</button>
               <button type="button" className="topbar-pill" onClick={confirmDecline} disabled={decisionBusy === `decline:${declineTarget.contractId}`}>Confirm Decline</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {arbitrateTarget && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          style={{ position:'fixed', inset:0, background:'rgba(2,6,23,0.72)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}
+          onClick={(e) => { if (e.target === e.currentTarget) setArbitrateTarget(null); }}
+        >
+          <div
+            className="panel glass"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="approval-arbitrate-title"
+            style={{ width:'min(460px, calc(100vw - 32px))', padding:18 }}
+          >
+            <div className="modal-title" style={{ padding:0, marginBottom:8, borderBottom:0 }}>
+              <span id="approval-arbitrate-title" className="panel-title">Arbitrate Dispute</span>
+              <button type="button" className="modal-close" onClick={() => setArbitrateTarget(null)} aria-label="Close">✕</button>
+            </div>
+            <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+              The peer approvers split on this offer. Your decision is final and is recorded with your comment.
+            </div>
+            <textarea
+              className="fi"
+              aria-label="Arbitration comment"
+              value={arbitrateComment}
+              onChange={e => setArbitrateComment(e.target.value)}
+              placeholder="Rationale for the arbitration decision"
+              rows={4}
+              style={{ width:'100%', minHeight:96, resize:'vertical' }}
+            />
+            <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:12 }}>
+              <button type="button" className="topbar-pill" onClick={() => setArbitrateTarget(null)}>Cancel</button>
+              <button type="button" className="topbar-pill" onClick={() => confirmArbitrate('DECLINED')} disabled={decisionBusy === `arbitrate:${arbitrateTarget.contractId}`}>Decline Offer</button>
+              <button type="button" className="topbar-pill" onClick={() => confirmArbitrate('APPROVED')} disabled={decisionBusy === `arbitrate:${arbitrateTarget.contractId}`}>Approve Offer</button>
             </div>
           </div>
         </div>

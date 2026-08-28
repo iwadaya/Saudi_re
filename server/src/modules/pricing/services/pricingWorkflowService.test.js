@@ -228,14 +228,17 @@ describe('getEligibleApproversAction — the picker only offers nominees submit 
     expect(list.map((c) => c.role_code)).toEqual(['CU']);
   });
 
-  it('within mandate (NONE) the TM/UW tier and above are all offerable', async () => {
+  it('within mandate (NONE) the underwriting TM/UW tier and above are offerable — RM is not', async () => {
     poolMock.query = mockDb({
       mandates: { 'u-uw': uwMandate('u-uw') },
       candidates: [cand('u-cu', 'CU', 2, null), cand('u-rm', 'RM', 3, null), cand('u-uw2', 'UW', 4, 25 * M), cand('u-an', 'AN', 5, null)],
     });
     const list = await getEligibleApproversAction({ submitterUserId: 'u-uw', breachType: null, epiUsd: 5 * M });
     // UW peers are level 4 (approver tier) per the DB hierarchy; AN (5) is not.
-    expect(list.map((c) => c.role_code).sort()).toEqual(['CU', 'RM', 'UW']);
+    // F80: the Retro Manager is excluded — its mandate covers retrocession
+    // programmes, not inward treaty business, so the picker never offers it
+    // (the same UNDERWRITING_APPROVER_ROLES filter the decision engine applies).
+    expect(list.map((c) => c.role_code).sort()).toEqual(['CU', 'UW']);
     expect(list.map((c) => c.user_id)).not.toContain('u-uw'); // four-eyes
   });
 });

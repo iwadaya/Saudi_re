@@ -21,6 +21,9 @@ const AGRI = 'cob-agriculture';
 // The six-title roster (limits per the acceptance scenarios). UW and UM both
 // exclude Agriculture; CU/CA/CE carry no class exclusions; CE is unlimited.
 const UW = { user_id: 'u-uw', role_code: 'UW', role_name: 'Underwriter',          hierarchy_level: 4, effective_limit_usd: 25 * M,  excluded_cob_ids: [AGRI], can_approve: true, limit_basis: LIMIT_BASIS.SIGNED_EXPOSURE };
+const TM = { user_id: 'u-tm', role_code: 'TM', role_name: 'Treaty Manager',       hierarchy_level: 4, effective_limit_usd: 25 * M,  excluded_cob_ids: [],     can_approve: true };
+const TD = { user_id: 'u-td', role_code: 'TD', role_name: 'Treaty Director',      hierarchy_level: 3, effective_limit_usd: 50 * M,  excluded_cob_ids: [],     can_approve: true };
+const RM = { user_id: 'u-rm', role_code: 'RM', role_name: 'Retro Manager',        hierarchy_level: 3, effective_limit_usd: null,    excluded_cob_ids: [],     can_approve: true };
 const UM = { user_id: 'u-um', role_code: 'UM', role_name: 'Underwriting Manager', hierarchy_level: 3, effective_limit_usd: 50 * M,  excluded_cob_ids: [AGRI], can_approve: true };
 const CU = { user_id: 'u-cu', role_code: 'CU', role_name: 'Chief Underwriter',    hierarchy_level: 2, effective_limit_usd: 100 * M, excluded_cob_ids: [],     can_approve: true };
 const CA = { user_id: 'u-ca', role_code: 'CA', role_name: 'Chief Actuary',        hierarchy_level: 2, effective_limit_usd: 100 * M, excluded_cob_ids: [],     can_approve: true };
@@ -121,13 +124,82 @@ describe('normalRoute / planSubmission routing', () => {
   });
 });
 
+describe('F80 — routes for TM / TD / RM / TUW submitters (migration 152 policy)', () => {
+  it('normalRoute covers every submitter title with strictly-senior approvers', () => {
+    expect(normalRoute('TM')).toEqual(['TD', 'CU', 'CE']);
+    expect(normalRoute('TD')).toEqual(['CU', 'CE']);
+    expect(normalRoute('RM')).toEqual(['CU', 'CE']);
+    expect(normalRoute('TUW')).toEqual(['CU']); // legacy alias routes like UW
+  });
+
+  it('a within-mandate TM submission routes to TD/CU/CE with a non-empty approver set', async () => {
+    // 20M ≤ the TM's 25M mandate → WITHIN_MANDATE, not the old empty dead-end.
+    const plan = await planSubmission({ submitter: TM, writtenLinePct: 20, programLimit100Usd: PROG, cobIds: [PROP], candidates: [...CANDIDATES, TD] });
+    expect(plan.kind).toBe('WITHIN_MANDATE');
+    expect(plan.routeRoleCodes).toEqual(['TD', 'CU', 'CE']);
+    expect(codes(plan.approverOptions)).toEqual(['TD', 'CU', 'CE']); // nearest-sufficient, unlimited CE last
+  });
+
+  it('a within-mandate RM submission routes to CU/CE (never back to underwriting juniors)', async () => {
+    // The RM mandate is unlimited, so RM submissions are always within mandate;
+    // the route leg is what guarantees somebody can actually approve them.
+    const plan = await planSubmission({ submitter: RM, writtenLinePct: 40, programLimit100Usd: PROG, cobIds: [PROP], candidates: [...CANDIDATES, TD] });
+    expect(plan.kind).toBe('WITHIN_MANDATE');
+    expect(plan.routeRoleCodes).toEqual(['CU', 'CE']);
+    expect(codes(plan.approverOptions)).toEqual(['CU', 'CE']);
+  });
+
+  it('a legacy TUW submitter routes exactly like UW (to CU)', async () => {
+    const TUW_SUB = { ...UW, user_id: 'u-tuw', role_code: 'TUW', hierarchy_level: 5 };
+    const plan = await planSubmission({ submitter: TUW_SUB, writtenLinePct: 20, programLimit100Usd: PROG, cobIds: [PROP], candidates: CANDIDATES });
+    expect(plan.kind).toBe('WITHIN_MANDATE');
+    expect(plan.routeRoleCodes).toEqual(['CU']);
+    expect(codes(plan.approverOptions)).toEqual(['CU']);
+  });
+});
+
+describe('F80 — breach escalation is restricted to underwriting approver roles', () => {
+  it('the Retro Manager (unlimited retro mandate) is never a treaty-limit escalation target', async () => {
+    const list = await getEligibleApprovers({ submitter: UW, writtenLinePct: 30, programLimit100Usd: PROG, cobIds: [PROP], candidates: [...CANDIDATES, RM] });
+    expect(codes(list)).not.toContain('RM');
+    expect(codes(list)).toEqual(['UM', 'CU', 'CA', 'CE']); // unchanged underwriting chain
+  });
+
+  it('planSubmission ESCALATE inherits the underwriting-role filter', async () => {
+    const plan = await planSubmission({ submitter: UW, writtenLinePct: 30, programLimit100Usd: PROG, cobIds: [PROP], candidates: [...CANDIDATES, RM] });
+    expect(plan.kind).toBe('ESCALATE');
+    expect(codes(plan.approverOptions)).not.toContain('RM');
+  });
+});
+
 describe('Analyst hand-off (capture → {UW}, then UW escalates on its own line)', () => {
   it('an Analyst submission is a capture routing to {UW} — no escalation yet', async () => {
     expect(isCaptureSubmission('AN')).toBe(true);
-    const plan = await planSubmission({ submitter: AN, writtenLinePct: 30, programLimit100Usd: PROG, cobIds: [AGRI], candidates: CANDIDATES });
+    const plan = await planSubmission({ submitter: AN, writtenLinePct: 30, programLimit100Usd: PROG, cobIds: [PROP], candidates: CANDIDATES });
     expect(plan.kind).toBe('CAPTURE');
     expect(plan.routeRoleCodes).toEqual(['UW']);
-    expect(plan.approverOptions).toEqual([]); // breach is the UW's call, not computed here
+    // F80: the options are the ELIGIBLE UNDERWRITER SET (the old empty list
+    // meant the very UW the capture was handed to could never act on it).
+    // Breach evaluation still stays the receiving UW's call.
+    expect(codes(plan.approverOptions)).toEqual(['UW']);
+    expect(plan.breach.type).toBe('NONE');
+  });
+
+  it('capture options honor the COB gate — an Agri capture skips the Agri-excluded UW', async () => {
+    // The only UW candidate excludes Agriculture, so an Agriculture capture
+    // has no eligible underwriter to hand to (surfaced, not silently empty-set
+    // at decision time).
+    const plan = await planSubmission({ submitter: AN, writtenLinePct: 30, programLimit100Usd: PROG, cobIds: [AGRI], candidates: CANDIDATES });
+    expect(plan.kind).toBe('CAPTURE');
+    expect(plan.approverOptions).toEqual([]);
+  });
+
+  it('capture options exclude the submitting analyst (four-eyes)', async () => {
+    const AN_UW = { ...AN, user_id: 'u-an2', role_code: 'UW', hierarchy_level: 4, effective_limit_usd: 25 * M, can_approve: true };
+    const plan = await planSubmission({ submitter: { ...AN, user_id: 'u-an2' }, writtenLinePct: 10, programLimit100Usd: PROG, cobIds: [PROP], candidates: [...CANDIDATES, AN_UW] });
+    expect(plan.kind).toBe('CAPTURE');
+    expect(plan.approverOptions.map((c) => c.user_id)).not.toContain('u-an2');
+    expect(codes(plan.approverOptions)).toEqual(['UW']); // the real UW remains
   });
   it('the underwriter who receives the capture escalates on its OWN written line', async () => {
     // Same 30M line the analyst captured, now evaluated against the UW mandate.

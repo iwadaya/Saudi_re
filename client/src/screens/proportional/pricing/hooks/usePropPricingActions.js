@@ -25,6 +25,7 @@ import { logger } from '../../../../utils/logger';
  *   calcResult: (col: string) => number,
  *   calcMaxComm: (col: string) => number,
  *   epi: number,
+ *   fxRate: number,
  *   offerStatus: string,
  *   offerLine: string,
  *   offerComment: string,
@@ -47,6 +48,7 @@ export function usePropPricingActions({
   calcResult,
   calcMaxComm,
   epi,
+  fxRate = 1,
   offerStatus,
   offerLine,
   offerComment,
@@ -92,10 +94,17 @@ export function usePropPricingActions({
     if (!selectedPeer) { showToast('Please select who to send the offer to.'); return; }
     const ok = await save();
     if (!ok) { showToast('Cannot submit: the latest pricing failed to save. Retry save first.'); return; }
+    // epi_usd must actually be USD (F79): `epi` is in the TREATY currency, so
+    // convert with the same local→USD fxRate the screen already uses for its
+    // USD display toggle. The server derives its own USD EPI from the stored
+    // contract and that value wins; this converted figure is only the fallback
+    // when derivation finds nothing — it must not be an FX-factor-off local
+    // amount compared against USD mandate limits.
+    const epiUsd = Number.isFinite(epi) && epi > 0 ? epi * (Number.isFinite(fxRate) && fxRate > 0 ? fxRate : 1) : null;
     try {
       await api.submitOfferForApproval(cid, {
         line_pct: offerLine, peer1_user_id: selectedPeer,
-        breach_type: breachType || null, epi_usd: epi || null,
+        breach_type: breachType || null, epi_usd: epiUsd,
         comment: comment || offerComment, _actor: actorName,
       });
       setOfferStatusState('AWAITING_APPROVAL');

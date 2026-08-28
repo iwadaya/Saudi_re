@@ -167,8 +167,10 @@ export async function assertCanAccessDocument(req, documentId, action = 'read') 
 //     • sign/ntu/return/recall     → assertWorkflowTransition per-action authority
 //     • decline                    → statusMachine legal-transition guard
 //
-//   CREATE — bare creates (and renew/amend/bind): there is no prior entity to
-//   edit-lock; the creation INSERT sets the creator as assignee.
+//   CREATE — bare creates (and renew/bind): there is no prior entity to
+//   edit-lock; the creation INSERT sets the creator as assignee. Amend is NOT
+//   create-classified (F81): it supersedes the source quote, so it takes the
+//   assignee edit-lock on that quote like any other edit.
 
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -179,7 +181,15 @@ const WORKFLOW_SUFFIXES = [
   '/offer/return-to-underwriter', '/offer/recall', '/offer/mark-signed', '/offer/ntu',
 ];
 // Create-style actions: the creator becomes the assignee (or the route is disabled).
-const CREATE_SUFFIXES = ['/renew', '/amend', '/bind'];
+// NOT here (F81): '/amend' — POST /quotes/:id/amend MUTATES the source quote
+// (it flips it to SUPERSEDED, pulling it out of any state including
+// AWAITING_APPROVAL), so it is an entity-scoped edit that must take the
+// assignee edit-lock; classifying it 'create' let ANY authenticated user
+// supersede anyone's quote. It now falls through to the /quotes/:id matcher
+// below and assertCanEdit runs on the source quote. '/bind' stays here only
+// because its handler (quoteLifecycle.js) takes assertCanEdit on the quote
+// EXPLICITLY — the classification is not its authority.
+const CREATE_SUFFIXES = ['/renew', '/bind'];
 
 // Operational routes that belong to no entity and so cannot take an
 // entity-scoped edit lock — recomputing a book-wide materialised view is not
