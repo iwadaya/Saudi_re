@@ -3,6 +3,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { getCobColumnNames, hasPricingMarginColumns } from '../lib/cobCols.js';
 import { asyncHandler } from "../helpers.js";
+import { requireMinLevel } from "../middleware/requestContext.js";
 import { invalidateJsonCache, jsonCache, sendCached } from "../middleware/httpCache.js";
 const router = Router();
 
@@ -471,16 +472,28 @@ router.get("/ref/exchange-rates/:code", asyncHandler(async (req, res) => {
 
 // PUT update/insert a rate — invalidates the ref cache so the next GET
 // sees the new value without waiting for the 5-min TTL.
-router.put("/ref/exchange-rates/:code", asyncHandler(async (req, res) => {
+// FX rates feed every USD conversion (fac capacity, retro, dashboards,
+// renewal packs), so writes are restricted to CU-and-above and validated.
+router.put("/ref/exchange-rates/:code", requireMinLevel(2), asyncHandler(async (req, res) => {
   const code = req.params.code.toUpperCase();
   const { rate_to_usd, effective_date } = req.body;
+  if (!/^[A-Z]{3}$/.test(code)) {
+    return res.status(400).json({ error: 'currency code must be a 3-letter ISO code' });
+  }
+  const rate = Number(rate_to_usd);
+  if (!Number.isFinite(rate) || rate <= 0) {
+    return res.status(400).json({ error: 'rate_to_usd must be a positive number' });
+  }
+  if (effective_date != null && !/^\d{4}-\d{2}-\d{2}$/.test(String(effective_date))) {
+    return res.status(400).json({ error: 'effective_date must be YYYY-MM-DD' });
+  }
   const dt = effective_date || new Date().toISOString().slice(0, 10);
   const { rows } = await pool.query(
     `INSERT INTO public.ref_exchange_rate (currency_code, rate_to_usd, effective_date, source)
      VALUES ($1, $2, $3, 'MANUAL')
      ON CONFLICT (currency_code, effective_date) DO UPDATE SET
        rate_to_usd = EXCLUDED.rate_to_usd, source = 'MANUAL', updated_at = now()
-     RETURNING *`, [code, rate_to_usd, dt]
+     RETURNING *`, [code, rate, dt]
   );
   // Drop cached exchange-rate reads so clients see the new value promptly
   invalidateJsonCache('ref:exchange-rate');
