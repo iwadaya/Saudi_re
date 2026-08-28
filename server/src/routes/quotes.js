@@ -512,10 +512,16 @@ router.post("/quotes", validateBody(quoteCreateSchema), asyncHandler(async (req,
   const cl = await pool.connect();
   try {
     await cl.query("BEGIN");
+    // POLICY: a quote is always born DRAFT. quoteCreateSchema already rejects
+    // any other requested status (it used to accept the full enum, so a create
+    // could mint a SIGNED quote and skip the approval gates); DRAFT is
+    // hard-coded here as well so the route can never insert a caller-supplied
+    // lifecycle state. Later states are reached only through the quote
+    // workflow/approval engine (services/quoteWorkflow.js, approvals.js).
     const { rows } = await cl.query(
       `INSERT INTO public.quote (uw_year,cedant_id,broker_id,currency_id,country_id,treaty_type_id,status,experience_source,renewal_date,inception_date,contract_description,created_by_user_id,assigned_to_user_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12) RETURNING *`,
-      [uw_year, b.cedant_id || null, b.broker_id || null, b.currency_id || null, b.country_id || null, b.treaty_type_id || null, b.status || 'DRAFT', b.experience_source || 'TRIANGLE', dateOrNull(b.renewal_date), inception_date, b.contract_description || null, creatorUserId]
+       VALUES ($1,$2,$3,$4,$5,$6,'DRAFT',$7,$8,$9,$10,$11,$11) RETURNING *`,
+      [uw_year, b.cedant_id || null, b.broker_id || null, b.currency_id || null, b.country_id || null, b.treaty_type_id || null, b.experience_source || 'TRIANGLE', dateOrNull(b.renewal_date), inception_date, b.contract_description || null, creatorUserId]
     );
 
     // Auto-assign human-readable quote reference: QT-YYYY-NNNN.

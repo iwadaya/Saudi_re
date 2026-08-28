@@ -197,6 +197,18 @@ router.get('/fac/risks/:id', asyncHandler(async (req, res) => {
 // CREATE new risk
 router.post('/fac/risks', validateBody(facRiskSaveSchema), asyncHandler(async (req, res) => {
   const b = req.body;
+  // POLICY: a fac risk is always born DRAFT. Every later state is owned by a
+  // dedicated workflow route (submit-for-approval → QUOTED/REFERRED, decline →
+  // DECLINED, bind → BOUND — each with its own legality + capacity checks), and
+  // no caller creates non-DRAFT (FacHomeScreen sends status:'DRAFT'; the Excel
+  // import agent only writes data slices into existing entities). A requested
+  // non-DRAFT birth is therefore rejected instead of skipping those gates.
+  if (b.status != null && String(b.status).toUpperCase() !== 'DRAFT') {
+    return res.status(400).json({
+      error: `New fac risks are always created in DRAFT — status "${b.status}" cannot be set at creation`,
+      code: 'VALIDATION_FAILED',
+    });
+  }
   const { rows } = await pool.query(`
     INSERT INTO public.fac_risk (
       cedant_id, broker_id, country_id, currency_id,
@@ -239,7 +251,8 @@ router.post('/fac/risks', validateBody(facRiskSaveSchema), asyncHandler(async (r
     // immediately editable by them — the edit-lock guard requires ownership, and
     // an unassigned risk would otherwise be read-only the moment it's created.
     req.user?.userId || null, b.assigned_to_user_id || req.user?.userId || null,
-    b.linked_contract_id || null, b.underwriter_notes || null, b.status || 'DRAFT',
+    // status is pinned — see the DRAFT-birth policy at the top of this handler.
+    b.linked_contract_id || null, b.underwriter_notes || null, 'DRAFT',
     b.cedant_region || null, b.renewal_or_new || null, b.expiring_reference || null, b.risk_country_zone || null,
     b.multi_location_flag ?? false, b.multi_occupancy_flag ?? false, b.risk_location_top_address || null,
     numOrNull(b.occupancy_code), b.occupancy_name || null, numOrNull(b.hazard_grade_override),
@@ -310,7 +323,8 @@ const RISK_UPDATE_COLUMNS = {
   assigned_to_user_id: (b, req) => b.assigned_to_user_id || req.user?.userId || null,
   linked_contract_id: (b) => b.linked_contract_id || null,
   underwriter_notes:  (b) => b.underwriter_notes || null,
-  status:         (b) => b.status || 'DRAFT',
+  // `status` is deliberately NOT in this map: the raw merge PUT can never move
+  // the workflow state (see the fence in the handler below).
   cedant_region:  (b) => b.cedant_region || null,
   renewal_or_new: (b) => b.renewal_or_new || null,
   expiring_reference: (b) => b.expiring_reference || null,
@@ -354,6 +368,28 @@ router.put('/fac/risks/:id', captureSentKeys, validateBody(facRiskSaveSchema), a
       error: 'insured_name cannot be blank.',
       code: 'VALIDATION_FAILED',
     });
+  }
+
+  // POLICY: the raw merge PUT never CHANGES fac_risk.status. Every transition
+  // is owned by a dedicated workflow route with its own legality/capacity
+  // checks (submit-for-approval, decline, bind) — merging a caller-supplied
+  // status here would let a risk jump straight to BOUND and skip them all.
+  // A round-trip of the CURRENT value stays a no-op (FacRiskDetail's full-form
+  // save spreads the loaded state back, status included), and a sent-null is
+  // treated as "leave it alone" — status is NOT NULL and "cleared" is not a
+  // meaningful intent for a workflow state.
+  if (req.sentKeys.has('status') && b.status != null && String(b.status).trim() !== '') {
+    const { rows: curRows } = await pool.query(
+      'SELECT status FROM public.fac_risk WHERE fac_risk_id = $1', [id]);
+    if (!curRows.length) return res.status(404).json({ error: 'Risk not found' });
+    const current = String(curRows[0].status || '').toUpperCase();
+    if (String(b.status).toUpperCase() !== current) {
+      return res.status(409).json({
+        error: `Cannot change status from "${current}" to "${b.status}" through a risk save. `
+          + 'Use submit-for-approval, decline or bind.',
+        code: 'INVALID_STATE',
+      });
+    }
   }
 
   const params = [id];

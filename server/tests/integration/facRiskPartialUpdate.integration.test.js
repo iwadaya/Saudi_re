@@ -24,7 +24,9 @@ d('fac risk — partial update merges', () => {
   beforeAll(async () => { app = await bootApp(); refs = await seedRefs({ category: 'PROPORTIONAL' }); }, 60_000);
   afterAll(async () => { await app?.close(); await closePools(); });
 
-  /** A fully-populated risk to save slices against. */
+  /** A fully-populated risk to save slices against. Creates are pinned to
+   *  DRAFT (born-SIGNED fence), so the QUOTED state the slice tests exercise
+   *  is set via direct SQL — the same setup idiom the other fac tests use. */
   async function seedRisk(extra = {}) {
     const r = await (await app.fetchApp('POST', '/api/fac/risks', {
       body: {
@@ -37,13 +39,31 @@ d('fac risk — partial update merges', () => {
         pml_amount: 50_000_000,
         deductible_description: 'USD 1m each and every loss',
         uw_year: 2026,
-        status: 'QUOTED',
         ...refs, ...extra,
       },
     })).json();
     expect(r.fac_risk_id).toBeTruthy();
+    await pool.query(
+      `UPDATE public.fac_risk SET status='QUOTED' WHERE fac_risk_id = $1`, [r.fac_risk_id]);
+    r.status = 'QUOTED';
     return r;
   }
+
+  it('POST refuses a non-DRAFT birth (workflow states are route-owned)', async () => {
+    for (const status of ['QUOTED', 'BOUND', 'DECLINED']) {
+      const res = await app.fetchApp('POST', '/api/fac/risks', {
+        body: { insured_name: 'IT Born Privileged', status, ...refs },
+      });
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe('VALIDATION_FAILED');
+    }
+    // An explicit DRAFT (what FacHomeScreen sends) is still accepted.
+    const ok = await app.fetchApp('POST', '/api/fac/risks', {
+      body: { insured_name: 'IT Born Draft', status: 'DRAFT', ...refs },
+    });
+    expect(ok.status).toBe(201);
+    expect((await ok.json()).status).toBe('DRAFT');
+  }, 30_000);
 
   it('accepts the Coverage Structure slice — the reported 500', async () => {
     const risk = await seedRisk();
@@ -115,14 +135,16 @@ d('fac risk — partial update merges', () => {
     expect((await res.json()).insured_name).toBe('IT Full Risk');
   }, 30_000);
 
-  it('still applies a full-form save from the risk detail screen', async () => {
+  it('still applies a full-form save from the risk detail screen (status round-trips as a no-op)', async () => {
+    // FacRiskDetail spreads the loaded state back on save, current status
+    // included — sending the UNCHANGED status must keep working.
     const risk = await seedRisk();
     const res = await app.fetchApp('PUT', `/api/fac/risks/${risk.fac_risk_id}`, {
       body: {
         insured_name: 'IT Renamed Risk',
         insured_address: 'New address',
         total_sum_insured: 900_000_000,
-        status: 'BOUND',
+        status: 'QUOTED', // the risk's current status — a round-trip, not a move
         ...refs,
       },
     });
@@ -130,7 +152,21 @@ d('fac risk — partial update merges', () => {
     const body = await res.json();
     expect(body.insured_name).toBe('IT Renamed Risk');
     expect(Number(body.total_sum_insured)).toBe(900_000_000);
-    expect(body.status).toBe('BOUND');
+    expect(body.status).toBe('QUOTED');
+  }, 30_000);
+
+  it('rejects a status CHANGE through the raw save — bind/decline own the transitions', async () => {
+    const risk = await seedRisk(); // QUOTED
+    const res = await app.fetchApp('PUT', `/api/fac/risks/${risk.fac_risk_id}`, {
+      body: { insured_name: 'IT Smuggled Bind', status: 'BOUND', ...refs },
+    });
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe('INVALID_STATE');
+    // Nothing in the payload landed — the save was rejected whole.
+    const { rows } = await pool.query(
+      'SELECT status, insured_name FROM public.fac_risk WHERE fac_risk_id = $1', [risk.fac_risk_id]);
+    expect(rows[0].status).toBe('QUOTED');
+    expect(rows[0].insured_name).toBe('IT Full Risk');
   }, 30_000);
 
   it('404s for a risk that does not exist', async () => {

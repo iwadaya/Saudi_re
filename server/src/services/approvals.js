@@ -7,7 +7,8 @@
 // Class breach:    Goes to CU by default, option to escalate to CE.
 // Split decision:  If neither approver is CU/CE → dispute → arbiter (TD+) required.
 //                  If one IS CU/CE → their decision is FINAL immediately.
-// Arbiter:         TD, CU, or CE. Decision always final.
+// Arbiter:         TD, CU, or CE — and a THIRD party: never the submitter and
+//                  never either disputing peer. Decision always final.
 
 import { pool } from '../db/pool.js';
 import { logger } from '../lib/logger.js';
@@ -1059,6 +1060,14 @@ async function recordArbiterSlot({ offer, contractId, quoteId, actorUserId, acto
   const db = client || pool;
   if (offer.status !== 'DISPUTE_PENDING') throw httpError(400, 'No active dispute');
   if (String(offer.submitted_by_id) === String(actorUserId)) throw httpError(403, 'Cannot arbitrate own submission');
+  // The arbiter must be a THIRD party at the required tier: neither disputing
+  // peer may resolve the very split they created (a TD peer would otherwise be
+  // judge in their own cause), and the submitter stays excluded above.
+  for (const peerId of [offer.peer1_user_id, offer.peer2_user_id]) {
+    if (peerId != null && String(peerId) === String(actorUserId)) {
+      throw httpError(403, 'A disputing approver cannot arbitrate their own split decision');
+    }
+  }
   const level = await getRoleLevel(actorRole);
   if (level > 3) throw httpError(403, 'Only Treaty Director, Chief Underwriter or Chief Executive can resolve disputes');
   const nextStatus = decision === 'APPROVED' ? 'AWAITING_SIGNED_LINE' : 'DECLINED';

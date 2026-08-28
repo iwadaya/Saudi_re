@@ -90,6 +90,7 @@ vi.mock('./ldf/benchmark.js', () => ({ refreshBenchmarks: vi.fn(() => Promise.re
 const {
   assertWorkflowTransition, approveContract, markContractSigned, approveQuote,
   markNotTakenUp, returnToUnderwriter, recallOffer, getTerminalPermissions,
+  recordDecision,
 } = await import('./approvals.js');
 
 const M = 1_000_000;
@@ -540,5 +541,66 @@ describe('approveQuote (quotes mark-approved path)', () => {
     });
     const r = await approveQuote({ quoteId: 'q1', actorUserId: 'u-cu', actorName: 'CU', actorRole: 'CU' });
     expect(r.nextStatus).toBe('AWAITING_SIGNED_LINE');
+  });
+});
+
+describe('arbiter slot — the arbiter must be a third party (recordDecision)', () => {
+  // A split between peer1 (a Treaty Director) and peer2 (an Underwriting
+  // Manager): neither side is CU/CE, so the offer sits in DISPUTE_PENDING
+  // awaiting a TD+ arbiter. The TD peer holds the required tier — the ONLY
+  // thing keeping them out of the arbiter seat is the disputing-peer
+  // exclusion, which is exactly what these tests pin.
+  const disputedOffer = () => offer({
+    status: 'DISPUTE_PENDING', arbiter_required: true,
+    peer1_user_id: 'u-td-peer', peer1_decision: 'APPROVED', peer1_role_code: 'TD',
+    peer2_user_id: 'u-um-peer', peer2_decision: 'DECLINED', peer2_role_code: 'UM',
+  });
+  // Self-contained SQL-text mock: serves the offer load and lets the atomic
+  // arbiter claim win; everything else (decision record, events, audits)
+  // falls through to rows:[].
+  const arbiterDb = (off = disputedOffer()) => vi.fn(async (sql) => {
+    const s = String(sql);
+    if (/^\s*SELECT/i.test(s) && (s.includes('v_offer_approval') || s.includes('contract_offer'))) {
+      return { rows: [off] };
+    }
+    if (s.includes('SET arbiter_user_id=$2')) return { rows: [{ offer_id: off.offer_id }] };
+    return { rows: [] };
+  });
+  const claimedArbiter = () =>
+    poolMock.query.mock.calls.some(([sql]) => String(sql).includes('SET arbiter_user_id=$2'));
+
+  it('403s peer1 (a TD, tier-sufficient) arbitrating the split they are part of', async () => {
+    poolMock.query = arbiterDb();
+    await expectStatus(
+      recordDecision({ offerId: 'o1', actorUserId: 'u-td-peer', actorRole: 'TD', slot: 'arbiter', decision: 'APPROVED' }),
+      403,
+    );
+    expect(claimedArbiter()).toBe(false); // rejected before the atomic claim
+  });
+
+  it('403s peer2 arbitrating the same dispute', async () => {
+    poolMock.query = arbiterDb();
+    await expectStatus(
+      recordDecision({ offerId: 'o1', actorUserId: 'u-um-peer', actorRole: 'UM', slot: 'arbiter', decision: 'DECLINED' }),
+      403,
+    );
+    expect(claimedArbiter()).toBe(false);
+  });
+
+  it('403s the submitter arbitrating their own submission (exclusion retained)', async () => {
+    poolMock.query = arbiterDb();
+    await expectStatus(
+      recordDecision({ offerId: 'o1', actorUserId: 'u-sub', actorRole: 'TD', slot: 'arbiter', decision: 'APPROVED' }),
+      403,
+    );
+    expect(claimedArbiter()).toBe(false);
+  });
+
+  it('a third-party Treaty Director resolves the dispute', async () => {
+    poolMock.query = arbiterDb();
+    const r = await recordDecision({ offerId: 'o1', actorUserId: 'u-td-third', actorName: 'TD3', actorRole: 'TD', slot: 'arbiter', decision: 'APPROVED' });
+    expect(claimedArbiter()).toBe(true);
+    expect(r.nextStatus).toBe('AWAITING_SIGNED_LINE');
+    expect(r.complete).toBe(true);
   });
 });
