@@ -220,9 +220,15 @@ export function paretoLEV(alpha, xm, cap) {
  */
 export function paretoLayerExpectedLoss(alpha, xm, deductible, limit, n, years) {
   if (alpha <= 0 || years <= 0 || n <= 0) return 0;
-  const D = Math.max(deductible, xm);   // Pareto only models X ≥ xm
-  const levTop = paretoLEV(alpha, xm, D + limit);
-  const levBot = paretoLEV(alpha, xm, D);
+  // Do NOT clamp the attachment up to xm. Every modeled tail loss X ≥ xm
+  // pierces a deductible d < xm in full, and paretoLEV already returns the
+  // exact limited value for caps ≤ xm (E[min(X,c)] = c when X ≥ xm ≥ c), so
+  // the unclamped LEV difference is the exact per-tail-loss layer severity.
+  // The old D = max(deductible, xm) clamp understated layers attaching below
+  // the fit threshold by ~30-40% (e.g. α=2, xm=100k, 100k xs 50k: 50,000
+  // instead of the closed-form 83,333.33).
+  const levTop = paretoLEV(alpha, xm, deductible + limit);
+  const levBot = paretoLEV(alpha, xm, deductible);
   return (n / years) * (levTop - levBot);
 }
 
@@ -270,7 +276,7 @@ export function paretoExhaustion(alpha, xm, deductible, limit) {
  * @param {number} egnpi       - Current-year EGNPI (fallback when no per-year data)
  * @param {number} obsYears    - Number of observation years (covers zero-loss years)
  * @param {Record<string|number, unknown>} [egnpiByYear] - Map of { year: egnpi } from NpPremiumsTable (optional)
- * @returns {{ rol: number, avgAnnualLayerLoss: number, avgLossCost?: number, avgEgnpi?: number, totalLayerLoss?: number, years?: number }}
+ * @returns {{ rol: number, avgAnnualLayerLoss: number, avgLossCost?: number, avgEgnpi?: number, totalLayerLoss?: number, years?: number, warnings?: string[] }}
  */
 export function calcPureBurningCost(losses, deductible, limit, egnpi, obsYears, egnpiByYear) {
   if (!losses?.length || limit <= 0) return { rol: 0, avgAnnualLayerLoss: 0 };
@@ -300,6 +306,8 @@ export function calcPureBurningCost(losses, deductible, limit, egnpi, obsYears, 
   const hasPerYearEgnpi = egnpiByYear && Object.keys(egnpiByYear).length > 0;
 
   let avgLossCost, avgEgnpi, years;
+  /** @type {string[]} */
+  const warnings = [];
 
   if (hasPerYearEgnpi) {
     // Collect all observation years: union of loss years and egnpi years
@@ -309,17 +317,30 @@ export function calcPureBurningCost(losses, deductible, limit, egnpi, obsYears, 
     ]);
     years = obsYears || allYears.size || 1;
 
-    // Sum loss costs across years that have EGNPI; zero-loss years contribute 0
+    // Sum loss costs across years that have EGNPI; zero-loss years contribute 0.
+    // A loss year MISSING from the EGNPI table must not lose its layer losses:
+    // the old code dropped such years from the numerator while still counting
+    // them in the denominator, silently understating the burn cost. Fall back
+    // to the prospective EGNPI as that year's denominator (the same Step-6
+    // convention used below) and surface a warning.
     let totalLossCost = 0;
     let egnpiSum = 0;
     let egnpiCount = 0;
     for (const y of allYears) {
       const yEgnpi = cn(egnpiByYear[y]);
+      const yLayerLoss = byYear[y] || 0;
       if (yEgnpi > 0) {
-        const yLayerLoss = byYear[y] || 0;
         totalLossCost += yLayerLoss / yEgnpi;
         egnpiSum += yEgnpi;
         egnpiCount++;
+      } else if (yLayerLoss > 0) {
+        const fallbackEgnpi = cn(egnpi);
+        if (fallbackEgnpi > 0) {
+          totalLossCost += yLayerLoss / fallbackEgnpi;
+          warnings.push(`Loss year ${y} has no EGNPI row — its layer losses were rated against the prospective EGNPI instead.`);
+        } else {
+          warnings.push(`Loss year ${y} has no EGNPI row and no prospective EGNPI — its layer losses could not be included in the burn cost.`);
+        }
       }
     }
     avgLossCost = years > 0 ? totalLossCost / years : 0;
@@ -351,7 +372,7 @@ export function calcPureBurningCost(losses, deductible, limit, egnpi, obsYears, 
   const avgAnnualLayerLoss = avgLossCost * prospectiveEgnpi;
   const rol = limit > 0 ? avgAnnualLayerLoss / limit : 0;
 
-  return { rol, avgLossCost, avgAnnualLayerLoss, avgEgnpi, totalLayerLoss, years };
+  return { rol, avgLossCost, avgAnnualLayerLoss, avgEgnpi, totalLayerLoss, years, warnings };
 }
 
 // ── Pareto Pricing ─────────────────────────────────────────────────

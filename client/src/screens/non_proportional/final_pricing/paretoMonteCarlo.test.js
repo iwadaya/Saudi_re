@@ -121,6 +121,26 @@ describe('runParetoMonteCarlo — reconciliation gate', () => {
     expect(r.reconciliation.withinTolerance).toBe(true);
     expect(Math.abs(r.reconciliation.zScore)).toBeLessThan(4);
   });
+
+  it('gate passes for a layer attaching BELOW the fit threshold (no attachment clamp)', () => {
+    // Attachment 500k < threshold 1M. The simulation cedes from the TRUE
+    // attachment, so the analytic side must too: with the old
+    // max(attachment, xm) clamp the analytic mean was understated and this
+    // gate failed (|z| >> 4).
+    const r = runParetoMonteCarlo(baseParams({
+      nSims: 30000,
+      resampleParams: false,
+      severity: { family: 'PARETO', params: { alpha: 2 } },
+      layer: { ...baseLayer, attachment: 500_000, limit: 1_000_000 },
+    }));
+    // Analytic per-loss severity, hand-computed for Pareto(α=2, xm=1M):
+    // every X ≥ 1M pierces 500k in full →
+    //   ∫_{500k}^{1M} 1 dx + ∫_{1M}^{1.5M} (1M/x)² dx = 500,000 + 333,333.33
+    // → per-loss 833,333.33 × λ=4 → 3,333,333.33 annual.
+    expect(r.reconciliation.analyticExpectedLoss).toBeCloseTo(4 * 833_333.3333, 0);
+    expect(r.reconciliation.withinTolerance).toBe(true);
+    expect(Math.abs(r.reconciliation.zScore)).toBeLessThan(4);
+  });
 });
 
 describe('runParetoMonteCarlo — distribution outputs', () => {
@@ -168,14 +188,44 @@ describe('runParetoMonteCarlo — layer + reinstatement terms', () => {
     expect(r.layer.aggLimit).toBe(aggLimit);
     expect(r.aggregate.histogram.max).toBeLessThanOrEqual(aggLimit + 1e-6);
     expect(r.aggregate.eReinstUsed).toBeLessThanOrEqual(baseLayer.reinstatements + 1e-9);
-    // Reinstatement premium accrues once the cap region is reached.
+    // Pro-rata reinstatement premium: at most n·L/L × premium × pct per
+    // trial (= premium here), so the mean is bounded by the layer premium.
+    // The exact level is pinned in the dedicated E[Reinst Prem] test below.
     expect(r.aggregate.eReinstPremium).toBeGreaterThan(0);
+    expect(r.aggregate.eReinstPremium).toBeLessThanOrEqual(baseLayer.premium * baseLayer.reinstatements);
   });
   it('UNLIMITED reinstatements ⇒ no cap, no exhaustion', () => {
     const r = runParetoMonteCarlo(baseParams({ nSims: 20000, layer: { ...baseLayer, reinstatements: 'UNLIMITED' } }));
     expect(r.layer.aggLimit).toBeNull();
     expect(r.layer.reinstatements).toBe('UNLIMITED');
     expect(r.aggregate.pExhaust).toBe(0);
+  });
+
+  it('E[Reinst Prem] uses the pro-rata basis min(S, n·L)/L — pinned against an independent MC', () => {
+    // Layer 1M xs 1M, 1 reinstatement @ 100%, premium 250k, N ~ Poisson(1),
+    // X ~ Pareto(α = 2, xm = 1M). Standard convention (Sundt / Mata):
+    //   E[RP] = c · P · E[min(S, n·L)] / L.
+    // Independently hand-computed with a separate 20M-trial simulation
+    // (xorshift128+, no engine code): E[min(S, L)] = 403,634 →
+    // E[RP] = 100,909 ± 24 (MC s.e.). The old max(0, S/L − 1) basis gave
+    // 21,019 on the same trials — 4.8× understated (a year ceding exactly
+    // one full limit paid ZERO reinstatement premium).
+    const r = runParetoMonteCarlo(baseParams({
+      nSims: 40000,
+      resampleParams: false,
+      severity: { family: 'PARETO', params: { alpha: 2 } },
+      frequency: { type: 'POISSON', lambda: 1, years: 10 },
+      layer: { attachment: 1_000_000, limit: 1_000_000, reinstatements: 1, reinstPct: 1, premium: 250_000 },
+    }));
+    // 40k engine trials ⇒ s.e. ≈ 530 on the mean; ±3,000 is > 5 s.e. wide
+    // while still ruling out both wrong conventions (21,019 and any
+    // uncapped-S variant drifting far above).
+    expect(r.aggregate.eReinstPremium).toBeGreaterThan(100_909 - 3_000);
+    expect(r.aggregate.eReinstPremium).toBeLessThan(100_909 + 3_000);
+    // The separate "reinstatements used" count keeps its consumption basis
+    // E[max(0, S_capped/L − 1)] = 21,019 / 250,000 ≈ 0.0841.
+    expect(r.aggregate.eReinstUsed).toBeGreaterThan(0.0841 - 0.012);
+    expect(r.aggregate.eReinstUsed).toBeLessThan(0.0841 + 0.012);
   });
 });
 

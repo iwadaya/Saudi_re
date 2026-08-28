@@ -107,6 +107,41 @@ describe('Tab 4A — LPC single band (70%-100%, share 50%)', () => {
   ])('%s', (_n, claims, expCredit) => close(calcLPC(1_000_000, claims, t), expCredit));
 });
 
+// ============== Tab 4C — LPC single-corridor slide table ==============
+// The LP modal saves corridor rows into lp_slides (legacy single-band fields
+// left empty). A table with exactly ONE corridor must price through the same
+// band-stacking loop — the old `slides.length > 1` guard sent it down the
+// legacy fallback, which needs lp_reinsurer_share_pct and returned a 0 credit.
+describe('Tab 4C — LPC single-corridor slide (70%-100%, share 50%)', () => {
+  const t = {
+    lp_enabled: true,
+    lp_slides: [{ min_lr: 70, max_lr: 100, share: 50 }],
+    loss_cap_pct: 0,
+  };
+  it.each([
+    // credit = max(0, min(LR, 100%) − 70%) × premium × 50%  (hand-computed)
+    ['LR 60%',    600_000,       0],
+    ['LR 70%',    700_000,       0],
+    ['LR 85%',    850_000,  75_000],   // 0.15 × 1,000,000 × 0.5
+    ['LR 100%', 1_000_000, 150_000],
+    ['LR 120%', 1_200_000, 150_000],
+  ])('%s', (_n, claims, expCredit) => close(calcLPC(1_000_000, claims, t), expCredit));
+
+  it('matches the identical terms expressed as two stacked corridors', () => {
+    const split = {
+      lp_enabled: true,
+      lp_slides: [
+        { min_lr: 70, max_lr: 85, share: 50 },
+        { min_lr: 85, max_lr: 100, share: 50 },
+      ],
+      loss_cap_pct: 0,
+    };
+    for (const claims of [600_000, 700_000, 850_000, 1_000_000, 1_200_000]) {
+      close(calcLPC(1_000_000, claims, t), calcLPC(1_000_000, claims, split));
+    }
+  });
+});
+
 // ============== Tab 4B — LPC multi-slide stack ==============
 describe('Tab 4B — LPC multi-slide (3 bands)', () => {
   const t = {

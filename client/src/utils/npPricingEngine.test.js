@@ -223,10 +223,27 @@ describe('paretoLayerExpectedLoss', () => {
     expect(double).toBeCloseTo(base * 2, 6);
   });
 
-  it('deductible below xm gets clamped to xm', () => {
-    const a = paretoLayerExpectedLoss(2, 100, 50, 500, 10, 10);  // D below xm
-    const b = paretoLayerExpectedLoss(2, 100, 100, 500, 10, 10); // D = xm
-    expect(a).toBeCloseTo(b, 6);
+  it('deductible below xm is NOT clamped — the sub-threshold layer slice is exact', () => {
+    // α=2, xm=100,000, layer 100,000 xs 50,000, n/years = 1.
+    // Every tail loss X ≥ xm pierces the 50k deductible in full, so
+    //   E[layer] = ∫_{50k}^{100k} 1 dx + ∫_{100k}^{150k} (100k/x)² dx
+    //            = 50,000 + 100,000²·(1/100k − 1/150k)
+    //            = 50,000 + 33,333.33… = 83,333.33  (hand-computed closed form;
+    //              verified independently by numeric integration of S(x)).
+    // The old max(deductible, xm) clamp returned 50,000 — 40% understated.
+    const a = paretoLayerExpectedLoss(2, 100_000, 50_000, 100_000, 10, 10);
+    expect(a).toBeCloseTo(83_333.3333, 2);
+
+    // Attaching below the threshold must cost strictly MORE than attaching
+    // at it (the clamp made them equal).
+    const b = paretoLayerExpectedLoss(2, 100_000, 100_000, 100_000, 10, 10);
+    expect(a).toBeGreaterThan(b);
+  });
+
+  it('deductible + limit entirely below xm: every tail loss eats the whole layer', () => {
+    // X ≥ xm = 100k always exceeds D+L = 80k → per-loss severity = L exactly.
+    const v = paretoLayerExpectedLoss(2, 100_000, 30_000, 50_000, 10, 10);
+    expect(v).toBeCloseTo(50_000, 6);
   });
 });
 
@@ -343,6 +360,52 @@ describe('calcPureBurningCost', () => {
     // rol ≈ 232,929 / 500_000 ≈ 0.466 (expected)
     expect(r.rol).toBeGreaterThan(0);
     expect(r.years).toBe(3);
+  });
+
+  it('loss years missing from the EGNPI table fall back to the prospective EGNPI (not dropped)', () => {
+    // 2018 loss 500k → layer hit 400k; 2019 loss 300k → layer hit 200k
+    // (layer 500k xs 100k). EGNPI table covers 2019–2021 only (all 10M);
+    // obsYears = 4; prospective EGNPI = 10M.
+    //
+    // Hand-computed: loss costs 400k/10M (prospective fallback for 2018)
+    // + 200k/10M = 0.06 → avgLossCost = 0.06 / 4 = 0.015
+    // → avgAnnualLayerLoss = 0.015 × 10M = 150,000
+    // → rol = 150,000 / 500,000 = 0.30.
+    // The old code dropped the 2018 numerator (2/3 of the burn) while
+    // keeping the year in the denominator → rol = 0.10.
+    const losses = [
+      { uw_year: 2018, inflated_incurred: 500_000 },
+      { uw_year: 2019, inflated_incurred: 300_000 },
+    ];
+    const egnpiByYear = { 2019: 10_000_000, 2020: 10_000_000, 2021: 10_000_000 };
+    const r = calcPureBurningCost(losses, 100_000, 500_000, 10_000_000, 4, egnpiByYear);
+    expect(r.rol).toBeCloseTo(0.30, 10);
+    expect(r.avgAnnualLayerLoss).toBeCloseTo(150_000, 6);
+    expect(r.years).toBe(4);
+    // The fallback is surfaced, naming the year.
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toMatch(/2018/);
+    expect(r.warnings[0]).toMatch(/prospective EGNPI/);
+  });
+
+  it('emits no warning when every loss year has an EGNPI row', () => {
+    const losses = [{ uw_year: 2019, inflated_incurred: 500_000 }];
+    const egnpiByYear = { 2019: 10_000_000, 2020: 10_000_000 };
+    const r = calcPureBurningCost(losses, 100_000, 500_000, 10_000_000, 2, egnpiByYear);
+    expect(r.warnings).toEqual([]);
+    // 400k/10M / 2 years × 10M / 500k = 0.40
+    expect(r.rol).toBeCloseTo(0.40, 10);
+  });
+
+  it('warns and excludes when a loss year has no EGNPI row AND no prospective EGNPI', () => {
+    const losses = [{ uw_year: 2018, inflated_incurred: 500_000 }];
+    const egnpiByYear = { 2019: 10_000_000 };
+    const r = calcPureBurningCost(losses, 100_000, 500_000, 0, 2, egnpiByYear);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toMatch(/2018/);
+    // No prospective EGNPI → Step 6 produces 0 regardless; the warning is
+    // the observable contract here.
+    expect(r.rol).toBe(0);
   });
 });
 

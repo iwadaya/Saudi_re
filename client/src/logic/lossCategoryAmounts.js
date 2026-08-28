@@ -1,13 +1,20 @@
 import { api } from '../api';
 import { toN as cn } from '../utils/format';
 
-/* Sum raw (non-inflated) incurred of selected loss records, grouped by UW year.
-   Falls back to paid + OS when an explicit incurred figure is absent. */
+/* Sum raw (non-inflated) incurred of ALL loss records, grouped by UW year.
+   Falls back to paid + OS when an explicit incurred figure is absent.
+
+   NO is_selected filter here — the server strips ALL large/CAT losses from
+   the attritional triangle regardless of their selection flag (see
+   server/src/lib/triangleStripping.js: "selection only drives the Pareto /
+   loss-selection curves, not the triangle basis"). The add-back below must
+   therefore cover exactly the same population the stripping removed;
+   filtering deselected losses out silently dropped them from projected
+   ultimates (the projection could even land below the actual diagonal). */
 function sumByYear(payload) {
   const list = payload?.losses || payload?.rows || (Array.isArray(payload) ? payload : []);
   const map = new Map();
   for (const l of list) {
-    if (l.is_selected === false) continue;
     const yr = Number(l.uw_year);
     if (!Number.isFinite(yr)) continue;
     const inc = cn(l.incurred) || (cn(l.paid) + cn(l.os));

@@ -74,7 +74,11 @@ export function calcLayerPrice(alpha,xm,freq,ret,lim){
     const m=(alpha*xm)/(alpha-1);
     return m*(1-Math.pow(xm/L,alpha-1))+L*Math.pow(xm/L,alpha);
   };
-  const att=Math.max(xm,ret),sev=LEV(att+lim)-LEV(att);return{severity:sev,rpp:freq*sev};
+  // No clamp of the retention up to xm: every fitted tail loss X ≥ xm
+  // pierces a retention below the threshold in full, and LEV(c) = c for
+  // c ≤ xm, so the unclamped LEV difference is exact. Clamping (the old
+  // att = max(xm, ret)) understated layers attaching below xm by ~30-40%.
+  const att=Math.max(0,ret),sev=LEV(att+lim)-LEV(att);return{severity:sev,rpp:freq*sev};
 }
 
 /**

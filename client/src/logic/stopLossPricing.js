@@ -437,10 +437,13 @@ function resolveAttachmentAndLimit(args, warnings) {
  *   blend it in (otherwise MC is null and its weight is ignored).
  * @param {{nTrials?: number, seed?: number}} [args.monteCarlo]
  * @param {number} [args.loading=0]            % loading (0..99).
+ * @param {string[]} [args.warnings]  Pre-flight warnings from the caller's
+ *   input assembly (e.g. years dropped while building yearlyAggregates);
+ *   carried through into the result's warnings so the UI surfaces them.
  * @returns {StopLossPricingResult}
  */
 export function priceStopLoss(args) {
-  const warnings = [];
+  const warnings = Array.isArray(args.warnings) ? [...args.warnings] : [];
   const { attachment, limit } = resolveAttachmentAndLimit(args, warnings);
 
   const burningCost = Array.isArray(args.yearlyAggregates) && args.yearlyAggregates.length > 0

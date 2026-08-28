@@ -265,8 +265,13 @@ export function severityLayerMean(family, params, threshold, attachment, limit) 
   if (family === 'PARETO') {
     const { alpha, xm } = params;
     if (!(alpha > 0) || !(xm > 0)) return 0;
-    const D = Math.max(attachment, xm);       // Pareto only models X ≥ xm
-    return paretoLEV(alpha, xm, D + limit) - paretoLEV(alpha, xm, D);
+    // No clamp of the attachment up to xm: the simulation cedes from the
+    // TRUE attachment (every sampled X ≥ xm pierces a lower attachment in
+    // full), and paretoLEV(c) = c for c ≤ xm, so the unclamped LEV
+    // difference matches the simulated mean exactly. The old
+    // D = max(attachment, xm) clamp made the analytic-vs-MC reconciliation
+    // gate (|z| ≤ 4) fail for layers attaching below the fit threshold.
+    return paretoLEV(alpha, xm, attachment + limit) - paretoLEV(alpha, xm, attachment);
   }
   if (family === 'LOGNORMAL') {
     return lognormalLEV(params.mu, params.sigma, attachment + limit) - lognormalLEV(params.mu, params.sigma, attachment);
@@ -451,12 +456,20 @@ export function runParetoMonteCarlo(params = /** @type {any} */ ({})) {
     }
     const capped = unlimited ? aggCeded : Math.min(aggCeded, aggLimit);
     const reinstUsed = limit > 0 ? Math.max(0, capped / limit - 1) : 0;
+    // Reinstatement premium on the standard pro-rata-capita basis
+    // (Sundt / Mata): premium is charged on the amount of cover REINSTATED,
+    // min(S, n·L) / L per unit of layer premium × reinstatement %. The old
+    // reinstUsed basis max(0, S/L − 1) charged only on consumption of the
+    // second-and-later limits, understating E[Reinst Prem] ~4.8× (a year
+    // ceding exactly one full limit pays a full reinstatement premium, not
+    // zero). reinstUsed is kept unchanged as the "reinstatements used" count.
+    const reinstCover = limit > 0 ? Math.min(capped, numReinst * limit) / limit : 0;
 
     agg[t] = capped;
     sumUncapped += aggCeded;
     sumUncappedSq += aggCeded * aggCeded;
     sumReinstUsed += reinstUsed;
-    sumReinstPrem += reinstUsed * layerPremium * reinstPct;
+    sumReinstPrem += reinstCover * layerPremium * reinstPct;
     if (aggCeded > 0) nAttach += 1;
     if (!unlimited && aggCeded >= aggLimit) nExhaust += 1;
   }

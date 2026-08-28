@@ -113,7 +113,11 @@ export function calcLPC(prem, claims, t) {
       share: cn(r.share) / 100,
     }))
     .filter(r => r.share > 0 && r.maxLr > r.minLr);
-  if (slides.length > 1) {
+  // A SINGLE corridor row is a valid LP table (the LP modal allows it) and
+  // must price through the band-stacking loop — the legacy single-band
+  // fallback below reads lp_reinsurer_share_pct, which is empty when terms
+  // were entered as slides, so a `> 1` guard silently returned a 0 credit.
+  if (slides.length >= 1) {
     let credit = 0;
     for (const c of slides) {
       const top = Math.min(lr, c.maxLr);
