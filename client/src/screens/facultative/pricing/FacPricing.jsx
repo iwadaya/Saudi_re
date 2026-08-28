@@ -530,7 +530,18 @@ export default function FacPricing() {
     try {
       await api.facSavePricing(riskId, payload);
       if (quoted.premium != null) {
-        await api.facUpdateRisk(riskId, { ri_premium: quoted.premium, original_rate: quoted.rate });
+        // ri_premium is the OUR-SHARE premium everywhere it is consumed — the
+        // coverage-structure form labels it "RI Premium (Our Share)", and the
+        // fac dashboard, the bound-premium KPI and class accumulation all sum
+        // it raw. quoted.premium is the 100% figure (rate × full schedule
+        // TSI ÷ 1000), shown as such on screen; scale it by our written share
+        // before writing it back to the risk header (F28). Share columns are
+        // whole percent 0..100 (validation/facultative.js pct100); a risk with
+        // no share recorded is treated as 100%, matching the dashboard's
+        // COALESCE(our_share_pct, ri_share_pct, 100) convention.
+        const sharePct = numOrNull(risk?.our_share_pct) ?? numOrNull(risk?.ri_share_pct);
+        const shareFraction = sharePct != null ? sharePct / 100 : 1;
+        await api.facUpdateRisk(riskId, { ri_premium: quoted.premium * shareFraction, original_rate: quoted.rate });
       }
       dirty.current = false;
       return uwOk;
@@ -547,6 +558,7 @@ export default function FacPricing() {
   }, [
     riskId, readOnly, markReadOnly, selectedExtensions, customExtensions, eng,
     coverLoadings, engineOutput, technical, quoted, family, rateVersion, exposure, showToast,
+    risk,
   ]);
 
   const extCheckbox = (ext, catColor) => {

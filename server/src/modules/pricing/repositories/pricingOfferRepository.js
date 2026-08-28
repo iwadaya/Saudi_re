@@ -43,6 +43,14 @@ export async function getOffer(contractId) {
   return rows[0] || null;
 }
 
+// Offer-table statuses that a fresh save may legitimately overwrite: a fresh
+// PENDING offer, or one the approval engine has already reset via return /
+// recall (RESET_CONTRACT_OFFER writes 'RETURNED', approval_step=0). Anything
+// else — AWAITING_APPROVAL / DISPUTE_PENDING (in flight) or a decided
+// AWAITING_SIGNED_LINE / SIGNED / NTU / DECLINED — is approval state that must
+// never be silently destroyed by the DELETE below.
+const REPLACEABLE_OFFER_STATUSES = new Set(['PENDING', 'RETURNED']);
+
 export async function replaceOffer(contractId, offer, client) {
   // Multi-statement write (DELETE + INSERT + UPDATE contract). It MUST run on a
   // caller-supplied transaction client so the three statements commit together;
@@ -51,6 +59,30 @@ export async function replaceOffer(contractId, offer, client) {
   // falling back to the pool.
   if (!isTxClient(client)) throw new Error('replaceOffer requires a transaction client');
   const db = client;
+  // ── State guards (F23) ────────────────────────────────────────────────────
+  // 1. The contract must still be at the drafting stage. The OFFERED flip below
+  //    is a contract_status marker, not a uw_status, so the machine gate is
+  //    expressed as "this contract could still legally be submitted for
+  //    approval": legal from DRAFT, a 422 INVALID_TRANSITION from APPROVED /
+  //    AWAITING_SIGNED_LINE and every terminal state (SIGNED / NTU / DECLINED)
+  //    — the same error shape the other workflow endpoints return.
+  const current = await loadCurrentStatus(contractId, client);
+  assertLegalTransition(current, 'AWAITING_APPROVAL');
+  // 2. Never destroy an approval in flight: the DELETE below would erase
+  //    approval_step, peer decisions, breach_type and submitted_by. FOR UPDATE
+  //    so a submit racing this save cannot slip between check and delete.
+  const { rows: existingRows } = await db.query(
+    'SELECT status, approval_step FROM public.contract_offer WHERE contract_id=$1 FOR UPDATE',
+    [contractId]
+  );
+  const existing = existingRows[0];
+  if (existing && (Number(existing.approval_step) > 0
+      || (existing.status != null && !REPLACEABLE_OFFER_STATUSES.has(existing.status)))) {
+    const err = new Error('This offer is in (or past) approval and cannot be replaced. Recall it or have it returned before re-offering.');
+    err.status = 409;
+    err.code = 'APPROVAL_IN_FLIGHT';
+    throw err;
+  }
   await db.query('DELETE FROM public.contract_offer WHERE contract_id=$1', [contractId]);
   const { rows } = await db.query(
     `INSERT INTO public.contract_offer

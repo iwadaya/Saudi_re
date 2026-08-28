@@ -79,7 +79,15 @@ router.get('/straight-stats/load/:id', loadTreatyCategory, requireTreatyCategory
 // in the body will get a 409 on mismatch instead of silently approving
 // the wrong contract.
 router.get('/treaties/:id/offer', asyncHandler(getOfferController));
-router.post('/treaties/:id/offer', loadTreatyCategory, assertBodyCategoryMatches, asyncHandler(saveOfferController));
+// saveOffer takes the assignee edit-lock EXPLICITLY (F23): it deletes and
+// rewrites the contract_offer row, which is an edit, not a workflow action.
+// guardApiMutations also covers this path app-side; the route-level lock keeps
+// the guarantee even if the route is ever mounted without the app guard.
+router.post('/treaties/:id/offer', lockContract((req) => req.params.id), loadTreatyCategory, assertBodyCategoryMatches, asyncHandler(saveOfferController));
+// decline is a terminal workflow action: authority (assignee OR eligible
+// approver — the NTU rule) is enforced inside declineTreatyAction via the
+// approval service's getTerminalPermissions, NOT by the assignee edit-lock,
+// which would wrongly reject a legitimate approver (F22/F29).
 router.post('/treaties/:id/decline', loadTreatyCategory, assertBodyCategoryMatches, asyncHandler(declineTreatyController));
 router.post('/treaties/:id/offer/submit-for-approval', lockContract((req) => req.params.id), loadTreatyCategory, assertBodyCategoryMatches, asyncHandler(submitForApprovalController));
 router.post('/treaties/:id/offer/peer-decision', loadTreatyCategory, assertBodyCategoryMatches, asyncHandler(peerDecisionController));

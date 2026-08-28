@@ -156,6 +156,17 @@ async function zoneExposure(zones, uwYear, excludeRiskId = null) {
 /**
  * What the bound book already carries on each of a set of cyber vendors.
  *
+ * Dependencies live where the quoted side reads them: in the section JSON
+ * (fac_risk_section.exposure_detail.dependencies — the same values
+ * checkFacCapacity extracts for the risk being quoted), as either bare
+ * vendor-key strings or { vendor_key | vendorKey, criticality? } objects.
+ * The committed side is aggregated from the SAME source, exactly the pattern
+ * warRegionExposure uses below — reading the fac_cyber_dependency table here
+ * (which nothing ever writes) made this check always answer "not carried
+ * anywhere else in the bound book" (F27). An object tag whose criticality
+ * says otherwise is excluded; a bare string defaults to CRITICAL, matching
+ * the fac_cyber_dependency column default.
+ *
  * @param {Array<string>} vendorKeys
  * @param {string|null} excludeRiskId
  * @returns {Promise<Array<{vendor_key: string, committed_limit: number, risk_count: number}>>}
@@ -163,17 +174,29 @@ async function zoneExposure(zones, uwYear, excludeRiskId = null) {
 export async function vendorExposure(vendorKeys, excludeRiskId = null) {
   if (!vendorKeys || vendorKeys.length === 0) return [];
   const { rows } = await pool.query(
-    // fac_risk shares are whole percent 0..100, hence the /100.
-    `SELECT d.vendor_key,
-            COALESCE(SUM(s.limit_amount * COALESCE(r.our_share_pct / 100.0, r.ri_share_pct / 100.0, 1)), 0)
-              AS committed_limit,
+    // fac_risk shares are whole percent 0..100, hence the /100. The committed
+    // quantity is the section's limit (the cyber rating basis — cyberLimit.js
+    // readExposure), falling back to sum_insured / exposure_base like the war
+    // check. DISTINCT in the lateral dedupes a vendor tagged twice on one
+    // section; the same vendor on two sections of one risk sums both limits.
+    `SELECT dep.vendor_key,
+            COALESCE(SUM(
+              COALESCE(s.limit_amount, s.sum_insured, s.exposure_base, 0)
+              * COALESCE(r.our_share_pct / 100.0, r.ri_share_pct / 100.0, 1)
+            ), 0) AS committed_limit,
             COUNT(DISTINCT r.fac_risk_id) AS risk_count
-       FROM public.fac_cyber_dependency d
-       JOIN public.fac_risk r ON r.fac_risk_id = d.fac_risk_id
-       LEFT JOIN public.fac_risk_section s ON s.fac_risk_id = r.fac_risk_id
+       FROM public.fac_risk_section s
+       JOIN public.fac_risk r ON r.fac_risk_id = s.fac_risk_id
+       CROSS JOIN LATERAL (
+         SELECT DISTINCT
+                UPPER(CASE WHEN jsonb_typeof(d.elem) = 'string' THEN d.elem #>> '{}'
+                           ELSE COALESCE(d.elem->>'vendor_key', d.elem->>'vendorKey') END) AS vendor_key
+           FROM jsonb_array_elements(s.exposure_detail->'dependencies') AS d(elem)
+          WHERE COALESCE(UPPER(d.elem->>'criticality'), 'CRITICAL') = 'CRITICAL'
+       ) dep
       WHERE r.status = 'BOUND'
-        AND d.criticality = 'CRITICAL'
-        AND d.vendor_key = ANY($1::text[])
+        AND jsonb_typeof(s.exposure_detail->'dependencies') = 'array'
+        AND dep.vendor_key = ANY($1::text[])
         AND ($2::uuid IS NULL OR r.fac_risk_id <> $2)
       GROUP BY 1`,
     [vendorKeys.map((v) => String(v).toUpperCase()), excludeRiskId],

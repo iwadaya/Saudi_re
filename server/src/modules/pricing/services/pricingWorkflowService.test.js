@@ -18,7 +18,7 @@ const { poolMock } = vi.hoisted(() => {
 });
 vi.mock('../../../db/pool.js', () => ({ pool: poolMock }));
 
-const { submitForApprovalAction, getEligibleApproversAction } = await import('./pricingWorkflowService.js');
+const { submitForApprovalAction, getEligibleApproversAction, declineTreatyAction } = await import('./pricingWorkflowService.js');
 
 const M = 1_000_000;
 
@@ -54,6 +54,14 @@ function mockDb(cfg = {}) {
     }
     if (isSelect && s.includes('v_user_mandate')) return { rows: cfg.candidates || [] };
     if (isSelect && s.includes('SELECT uw_status FROM public.contract')) return { rows: [{ uw_status: 'DRAFT' }] };
+    // loadTerminalContext (decline/NTU authority): the contract's assignee and
+    // its latest offer row.
+    if (isSelect && s.includes('SELECT assigned_to_user_id FROM public.contract')) {
+      return { rows: [{ assigned_to_user_id: cfg.assignedTo ?? null }] };
+    }
+    if (isSelect && s.includes('FROM public.contract_offer')) {
+      return { rows: cfg.offerRow ? [cfg.offerRow] : [] };
+    }
     if (s.includes('INSERT INTO public.contract_offer')) return { rows: [{ offer_id: 'o-1' }] };
     return { rows: [] };
   });
@@ -163,6 +171,48 @@ describe('submitForApprovalAction — server-derived mandate gates', () => {
     });
     await expect(submitForApprovalAction('c1', actor, { line_pct: 30, peer1_user_id: 'u-uw' }))
       .rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe('declineTreatyAction — authority (F22/F29): assignee OR eligible approver, mirroring NTU', () => {
+  it('403s a stranger — not assignee, not approver — and writes nothing', async () => {
+    poolMock.query = mockDb({ assignedTo: 'u-owner', offerRow: null });
+    await expect(declineTreatyAction('c1', { actorUserId: 'u-stranger', actorName: 'X', actorRole: 'UW' }, 'I felt like it'))
+      .rejects.toMatchObject({ status: 403, code: 'DECLINE_FORBIDDEN' });
+    const writes = poolMock.query.mock.calls.filter(([sql]) => /^\s*(UPDATE|INSERT|DELETE)/i.test(String(sql)));
+    expect(writes).toHaveLength(0);
+  });
+
+  it('403s an anonymous actor', async () => {
+    poolMock.query = mockDb({ assignedTo: 'u-owner' });
+    await expect(declineTreatyAction('c1', { actorUserId: null, actorName: 'SYSTEM', actorRole: null }, 'r'))
+      .rejects.toMatchObject({ status: 403 });
+  });
+
+  it('lets the assignee decline', async () => {
+    poolMock.query = mockDb({ assignedTo: 'u-owner', offerRow: null });
+    await expect(declineTreatyAction('c1', { actorUserId: 'u-owner', actorName: 'Owner', actorRole: 'UW' }, 'dup submission'))
+      .resolves.toBeUndefined();
+    // The DECLINED transition actually ran (uw_status write through changeUwStatus).
+    const statusWrite = poolMock.query.mock.calls.find(([sql, params]) =>
+      String(sql).includes('UPDATE public.contract') && Array.isArray(params) && params.includes('DECLINED'));
+    expect(statusWrite).toBeTruthy();
+  });
+
+  it('lets a live eligible approver decline (not the assignee)', async () => {
+    poolMock.query = mockDb({
+      assignedTo: 'u-owner',
+      // A submitted offer by u-uw; the live re-plan must find u-cu eligible.
+      offerRow: {
+        offer_id: 'o-1', contract_id: 'c1', submitted_by_id: 'u-uw',
+        written_line_pct: 10, epi_usd: 1 * M, status: 'AWAITING_APPROVAL', approval_step: 1,
+      },
+      derivationRow: { is_np: false, rate_to_usd: 1, program_limit_100: 10 * M, epi_100: 1 * M, cob_ids: [] },
+      mandates: { 'u-uw': uwMandate('u-uw'), 'u-cu': cuMandate('u-cu') },
+      candidates: [cand('u-cu', 'CU', 2, null)],
+    });
+    await expect(declineTreatyAction('c1', { actorUserId: 'u-cu', actorName: 'Chief', actorRole: 'CU' }, 'declined on review'))
+      .resolves.toBeUndefined();
   });
 });
 

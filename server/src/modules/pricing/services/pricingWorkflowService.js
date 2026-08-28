@@ -37,6 +37,25 @@ export async function saveOfferAction(contractId, offer, actor) {
 }
 
 export async function declineTreatyAction(contractId, actor, reason) {
+  // DECLINED is terminal (statusMachine: no outbound edges), so it takes the
+  // same authority rule as NTU — the other "kill it" terminal action: the
+  // contract's assignee (owner) OR a live eligible approver for its offer.
+  // Enforced with the approval service's own primitives (getTerminalPermissions
+  // wraps loadTerminalContext + isEligibleContractApprover) so this can never
+  // drift from what the engine's other terminal actions accept (F22/F29).
+  const perms = await getTerminalPermissions({
+    entityType: 'CONTRACT',
+    entityId: contractId,
+    actorUserId: actor?.actorUserId || null,
+    actorRole: actor?.actorRole || null,
+  });
+  // can_ntu is exactly "assignee OR eligible approver" (approvals.js).
+  if (!perms.can_ntu) {
+    const err = new Error('Not authorised to decline this treaty — only the assignee or an eligible approver may decline it.');
+    err.status = 403;
+    err.code = 'DECLINE_FORBIDDEN';
+    throw err;
+  }
   // DECLINED: status change, offer_approval_event and the (critical) audit row
   // are one atomic unit.
   await withTransaction(async (client) => {

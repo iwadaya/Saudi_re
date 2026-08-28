@@ -94,6 +94,10 @@ const RISK = {
   total_sum_insured: '500000000.00',
   pd_sum_insured: '400000000.00',
   bi_sum_insured: '100000000.00',
+  // Written share (whole percent). The engine and every displayed figure stay
+  // on the 100% basis; ONLY the ri_premium written back to the risk header is
+  // share-scaled (F28) — pinned in the save-lifecycle test below.
+  our_share_pct: '15.00',
   occupancy_code: 4002,
   risk_country_zone: 'SA-Z2',
   cedant_region: 'GCC',
@@ -480,10 +484,16 @@ describe('FacPricing save lifecycle', () => {
     expect(payload.final_rate_per_mille).toBeCloseTo(2.35791, 4);
     expect(payload.final_premium).toBeCloseTo(1178956.8, 1);
     expect(payload.engine_warnings.length).toBeGreaterThan(0);
-    // Quoted premium syncs to the risk header.
-    expect(apiMock.facUpdateRisk).toHaveBeenCalledWith('R-1', expect.objectContaining({
-      ri_premium: expect.any(Number), original_rate: expect.any(Number),
-    }));
+    // Quoted premium syncs to the risk header AT OUR SHARE (F28): ri_premium
+    // is "RI Premium (Our Share)" to every consumer (fac dashboard, bound-
+    // premium KPI, class accumulation), so the 100% quoted premium
+    // (1,178,956.8, still displayed and saved as final_premium above) is
+    // scaled by our_share_pct 15% → 176,843.52. The rate stays 100%-basis.
+    expect(apiMock.facUpdateRisk).toHaveBeenCalledTimes(1);
+    const [updId, updBody] = apiMock.facUpdateRisk.mock.calls[0];
+    expect(updId).toBe('R-1');
+    expect(updBody.ri_premium).toBeCloseTo(1178956.8 * 0.15, 1);
+    expect(updBody.original_rate).toBeCloseTo(2.35791, 4);
 
     // Second Next is a no-op (state no longer dirty).
     fireEvent.click(screen.getByRole('button', { name: 'WIZ-NEXT' }));
