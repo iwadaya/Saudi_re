@@ -1,0 +1,1077 @@
+{
+  "startedAt": "2026-08-28T14:49:34.902Z",
+  "baseUrl": "http://127.0.0.1:4600",
+  "seed": 20260828,
+  "uwYear": 2027,
+  "agents": {
+    "requested": 100,
+    "authenticated": 100
+  },
+  "portfolio": {
+    "contractsPlanned": 250,
+    "contractsCreated": 250,
+    "baseContracts": 150,
+    "renewals": 100,
+    "quotes": 175,
+    "quoteListTotal": 200
+  },
+  "durations": {
+    "totalMs": 32402,
+    "concurrentWorkMs": 26867
+  },
+  "http": {
+    "calls": 10648,
+    "byStatus": {
+      "200": 7623,
+      "201": 775,
+      "400": 500,
+      "401": 250,
+      "403": 500,
+      "404": 275,
+      "409": 350,
+      "415": 100,
+      "422": 275
+    }
+  },
+  "latency": [
+    {
+      "label": "GET /treaties/:id",
+      "count": 2275,
+      "errors": 0,
+      "statuses": {
+        "200": 2175,
+        "404": 100
+      },
+      "p50": 244,
+      "p95": 333,
+      "p99": 607,
+      "max": 2242
+    },
+    {
+      "label": "PUT /treaties/:id",
+      "count": 821,
+      "errors": 0,
+      "statuses": {
+        "200": 571,
+        "400": 100,
+        "409": 150
+      },
+      "p50": 324,
+      "p95": 487,
+      "p99": 536,
+      "max": 726
+    },
+    {
+      "label": "POST /treaties/:id/triangles/:type",
+      "count": 575,
+      "errors": 0,
+      "statuses": {
+        "200": 375,
+        "400": 200
+      },
+      "p50": 279,
+      "p95": 351,
+      "p99": 374,
+      "max": 386
+    },
+    {
+      "label": "GET /documents/:docId/download",
+      "count": 450,
+      "errors": 0,
+      "statuses": {
+        "200": 300,
+        "404": 150
+      },
+      "p50": 248,
+      "p95": 380,
+      "p99": 408,
+      "max": 431
+    },
+    {
+      "label": "PUT /treaties/:id (workflow)",
+      "count": 450,
+      "errors": 0,
+      "statuses": {
+        "200": 300,
+        "422": 150
+      },
+      "p50": 363,
+      "p95": 518,
+      "p99": 553,
+      "max": 574
+    },
+    {
+      "label": "GET /quotes/:id",
+      "count": 450,
+      "errors": 0,
+      "statuses": {
+        "200": 425,
+        "404": 25
+      },
+      "p50": 151,
+      "p95": 255,
+      "p99": 278,
+      "max": 306
+    },
+    {
+      "label": "GET /treaties/:id/documents",
+      "count": 400,
+      "errors": 0,
+      "statuses": {
+        "200": 400
+      },
+      "p50": 110,
+      "p95": 163,
+      "p99": 182,
+      "max": 204
+    },
+    {
+      "label": "GET /treaties (list)",
+      "count": 301,
+      "errors": 0,
+      "statuses": {
+        "200": 301
+      },
+      "p50": 151,
+      "p95": 228,
+      "p99": 241,
+      "max": 276
+    },
+    {
+      "label": "PUT /treaties/:id/large-losses",
+      "count": 300,
+      "errors": 0,
+      "statuses": {
+        "200": 300
+      },
+      "p50": 318,
+      "p95": 377,
+      "p99": 403,
+      "max": 417
+    },
+    {
+      "label": "GET /treaties/:id/large-losses",
+      "count": 300,
+      "errors": 0,
+      "statuses": {
+        "200": 300
+      },
+      "p50": 189,
+      "p95": 239,
+      "p99": 261,
+      "max": 310
+    },
+    {
+      "label": "GET /treaties/:id/triangles/:type",
+      "count": 300,
+      "errors": 0,
+      "statuses": {
+        "200": 300
+      },
+      "p50": 163,
+      "p95": 217,
+      "p99": 242,
+      "max": 243
+    },
+    {
+      "label": "POST /treaties/:id/documents",
+      "count": 300,
+      "errors": 0,
+      "statuses": {
+        "201": 300
+      },
+      "p50": 293,
+      "p95": 357,
+      "p99": 387,
+      "max": 418
+    },
+    {
+      "label": "PUT /quotes/:id",
+      "count": 300,
+      "errors": 0,
+      "statuses": {
+        "200": 200,
+        "409": 100
+      },
+      "p50": 247,
+      "p95": 598,
+      "p99": 643,
+      "max": 673
+    },
+    {
+      "label": "POST /treaties",
+      "count": 250,
+      "errors": 0,
+      "statuses": {
+        "201": 150,
+        "400": 100
+      },
+      "p50": 140,
+      "p95": 1729,
+      "p99": 2040,
+      "max": 2112
+    },
+    {
+      "label": "POST /treaties/:id/documents (probe)",
+      "count": 200,
+      "errors": 0,
+      "statuses": {
+        "415": 100,
+        "422": 100
+      },
+      "p50": 159,
+      "p95": 211,
+      "p99": 241,
+      "max": 243
+    },
+    {
+      "label": "POST /quotes",
+      "count": 200,
+      "errors": 0,
+      "statuses": {
+        "201": 100,
+        "400": 100
+      },
+      "p50": 128,
+      "p95": 390,
+      "p99": 407,
+      "max": 442
+    },
+    {
+      "label": "PUT /treaties/:id (race)",
+      "count": 200,
+      "errors": 0,
+      "statuses": {
+        "200": 100,
+        "409": 100
+      },
+      "p50": 255,
+      "p95": 453,
+      "p99": 473,
+      "max": 486
+    },
+    {
+      "label": "PUT /treaties/:id/cat-losses",
+      "count": 150,
+      "errors": 0,
+      "statuses": {
+        "200": 150
+      },
+      "p50": 317,
+      "p95": 369,
+      "p99": 399,
+      "max": 420
+    },
+    {
+      "label": "GET /treaties/:id/cat-losses",
+      "count": 150,
+      "errors": 0,
+      "statuses": {
+        "200": 150
+      },
+      "p50": 201,
+      "p95": 251,
+      "p99": 279,
+      "max": 300
+    },
+    {
+      "label": "GET /treaties/:id/dev-factors/:type/staleness",
+      "count": 150,
+      "errors": 0,
+      "statuses": {
+        "200": 150
+      },
+      "p50": 108,
+      "p95": 144,
+      "p99": 164,
+      "max": 176
+    },
+    {
+      "label": "DELETE /documents/:docId",
+      "count": 150,
+      "errors": 0,
+      "statuses": {
+        "200": 150
+      },
+      "p50": 281,
+      "p95": 355,
+      "p99": 372,
+      "max": 382
+    },
+    {
+      "label": "GET /treaties/:id (peer)",
+      "count": 150,
+      "errors": 0,
+      "statuses": {
+        "200": 150
+      },
+      "p50": 292,
+      "p95": 344,
+      "p99": 379,
+      "max": 380
+    },
+    {
+      "label": "PUT /treaties/:id (peer)",
+      "count": 150,
+      "errors": 0,
+      "statuses": {
+        "403": 150
+      },
+      "p50": 120,
+      "p95": 163,
+      "p99": 186,
+      "max": 208
+    },
+    {
+      "label": "DELETE /treaties/:id (peer)",
+      "count": 150,
+      "errors": 0,
+      "statuses": {
+        "403": 150
+      },
+      "p50": 110,
+      "p95": 157,
+      "p99": 170,
+      "max": 174
+    },
+    {
+      "label": "PUT /treaties/:id (anon)",
+      "count": 150,
+      "errors": 0,
+      "statuses": {
+        "401": 150
+      },
+      "p50": 49,
+      "p95": 62,
+      "p99": 71,
+      "max": 88
+    },
+    {
+      "label": "GET /quotes (list)",
+      "count": 101,
+      "errors": 0,
+      "statuses": {
+        "200": 101
+      },
+      "p50": 145,
+      "p95": 227,
+      "p99": 257,
+      "max": 269
+    },
+    {
+      "label": "POST /auth/name-login",
+      "count": 100,
+      "errors": 0,
+      "statuses": {
+        "200": 100
+      },
+      "p50": 446,
+      "p95": 668,
+      "p99": 696,
+      "max": 1575
+    },
+    {
+      "label": "GET /documents/:docId/download (anon)",
+      "count": 100,
+      "errors": 0,
+      "statuses": {
+        "401": 100
+      },
+      "p50": 50,
+      "p95": 66,
+      "p99": 67,
+      "max": 76
+    },
+    {
+      "label": "DELETE /documents/:docId (peer)",
+      "count": 100,
+      "errors": 0,
+      "statuses": {
+        "403": 100
+      },
+      "p50": 137,
+      "p95": 182,
+      "p99": 186,
+      "max": 193
+    },
+    {
+      "label": "GET /contracts/:id/history",
+      "count": 100,
+      "errors": 0,
+      "statuses": {
+        "200": 100
+      },
+      "p50": 162,
+      "p95": 228,
+      "p99": 270,
+      "max": 271
+    },
+    {
+      "label": "POST /treaties/:id/renew",
+      "count": 100,
+      "errors": 0,
+      "statuses": {
+        "201": 100
+      },
+      "p50": 258,
+      "p95": 347,
+      "p99": 367,
+      "max": 369
+    },
+    {
+      "label": "GET /quotes/:id (peer)",
+      "count": 100,
+      "errors": 0,
+      "statuses": {
+        "200": 100
+      },
+      "p50": 163,
+      "p95": 253,
+      "p99": 280,
+      "max": 287
+    },
+    {
+      "label": "PUT /quotes/:id (peer)",
+      "count": 100,
+      "errors": 0,
+      "statuses": {
+        "403": 100
+      },
+      "p50": 81,
+      "p95": 139,
+      "p99": 150,
+      "max": 150
+    },
+    {
+      "label": "POST /quotes/:id/renew",
+      "count": 100,
+      "errors": 0,
+      "statuses": {
+        "201": 100
+      },
+      "p50": 202,
+      "p95": 359,
+      "p99": 393,
+      "max": 402
+    },
+    {
+      "label": "POST /treaties/:id/non-prop/save",
+      "count": 75,
+      "errors": 0,
+      "statuses": {
+        "200": 75
+      },
+      "p50": 561,
+      "p95": 656,
+      "p99": 684,
+      "max": 684
+    },
+    {
+      "label": "GET /treaties/:id/non-prop",
+      "count": 75,
+      "errors": 0,
+      "statuses": {
+        "200": 75
+      },
+      "p50": 225,
+      "p95": 271,
+      "p99": 277,
+      "max": 280
+    },
+    {
+      "label": "PUT /treaties/:id/dev-factors/:type",
+      "count": 75,
+      "errors": 0,
+      "statuses": {
+        "200": 75
+      },
+      "p50": 261,
+      "p95": 310,
+      "p99": 326,
+      "max": 346
+    },
+    {
+      "label": "GET /treaties/:id/dev-factors/:type",
+      "count": 75,
+      "errors": 0,
+      "statuses": {
+        "200": 75
+      },
+      "p50": 156,
+      "p95": 187,
+      "p99": 194,
+      "max": 199
+    },
+    {
+      "label": "POST /quotes/:id/offer/submit-for-approval",
+      "count": 50,
+      "errors": 0,
+      "statuses": {
+        "200": 25,
+        "422": 25
+      },
+      "p50": 212,
+      "p95": 467,
+      "p99": 479,
+      "max": 485
+    },
+    {
+      "label": "POST /quotes/:id/decline",
+      "count": 50,
+      "errors": 0,
+      "statuses": {
+        "200": 50
+      },
+      "p50": 268,
+      "p95": 425,
+      "p99": 457,
+      "max": 478
+    },
+    {
+      "label": "DELETE /quotes/:id",
+      "count": 25,
+      "errors": 0,
+      "statuses": {
+        "200": 25
+      },
+      "p50": 229,
+      "p95": 312,
+      "p99": 315,
+      "max": 316
+    },
+    {
+      "label": "POST /quotes/:id/amend",
+      "count": 25,
+      "errors": 0,
+      "statuses": {
+        "201": 25
+      },
+      "p50": 942,
+      "p95": 1261,
+      "p99": 1310,
+      "max": 1321
+    },
+    {
+      "label": "GET /quotes/:id/versions",
+      "count": 25,
+      "errors": 0,
+      "statuses": {
+        "200": 25
+      },
+      "p50": 107,
+      "p95": 146,
+      "p99": 151,
+      "max": 152
+    }
+  ],
+  "pool": {
+    "samples": 13,
+    "maxWaiting": 0
+  },
+  "checks": {
+    "total": 28514,
+    "passed": 28514,
+    "failed": 0,
+    "byCategory": {
+      "auth": {
+        "total": 101,
+        "failed": 0
+      },
+      "treaty-create": {
+        "total": 1500,
+        "failed": 0
+      },
+      "treaty-get": {
+        "total": 525,
+        "failed": 0
+      },
+      "permissions": {
+        "total": 1100,
+        "failed": 0
+      },
+      "treaty-put": {
+        "total": 496,
+        "failed": 0
+      },
+      "put-get-roundtrip": {
+        "total": 10889,
+        "failed": 0
+      },
+      "partial-save-safety": {
+        "total": 1425,
+        "failed": 0
+      },
+      "losses": {
+        "total": 1050,
+        "failed": 0
+      },
+      "triangles": {
+        "total": 825,
+        "failed": 0
+      },
+      "documents": {
+        "total": 3050,
+        "failed": 0
+      },
+      "dev-factors": {
+        "total": 150,
+        "failed": 0
+      },
+      "staleness": {
+        "total": 150,
+        "failed": 0
+      },
+      "optimistic-lock": {
+        "total": 800,
+        "failed": 0
+      },
+      "workflow": {
+        "total": 1100,
+        "failed": 0
+      },
+      "renewal": {
+        "total": 1900,
+        "failed": 0
+      },
+      "quote-create": {
+        "total": 700,
+        "failed": 0
+      },
+      "quote-get": {
+        "total": 200,
+        "failed": 0
+      },
+      "quote-put": {
+        "total": 100,
+        "failed": 0
+      },
+      "quote-renewal": {
+        "total": 700,
+        "failed": 0
+      },
+      "quote-lifecycle": {
+        "total": 350,
+        "failed": 0
+      },
+      "lists": {
+        "total": 700,
+        "failed": 0
+      },
+      "validation": {
+        "total": 600,
+        "failed": 0
+      },
+      "lock-race": {
+        "total": 100,
+        "failed": 0
+      },
+      "portfolio": {
+        "total": 3,
+        "failed": 0
+      }
+    }
+  },
+  "lockRace": [
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    },
+    {
+      "pass": true,
+      "detail": null
+    }
+  ],
+  "failures": []
+}

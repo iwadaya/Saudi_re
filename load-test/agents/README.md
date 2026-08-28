@@ -95,6 +95,15 @@ pool max 50). Report: `load-test/out/agents-run-100uw.json`, seed 20260828.
   pool knee the k6 capacity runs found at 100 VUs (pool max 50). No
   failures resulted, but sizing `DB_POOL_MAX`/PgBouncer above expected
   concurrency remains the first lever before a real 100-user peak.
+* **Pool-sizing confirmation** (`agents-run-100uw-pool150.json`, Postgres
+  `max_connections=400` + `DB_POOL_MAX=150`, same seed): `pg_pool_waiting`
+  **79 → 0**, still 28,514/28,514 checks and zero 5xx. Wall clock is
+  unchanged (28.8s → 32.4s) while individual write p95s rise ~25%
+  (`PUT /treaties/:id` 365 → 487ms): with no app-side queue, the same
+  burst contends inside Postgres on this CPU-bound container instead.
+  Same work, different waiting room — on a real deployment, size the pool
+  to what the DB host's cores can actually serve (or front with
+  PgBouncer) rather than maximising it.
 
 ## Findings (August 2026, 40 agents × 100 treaties)
 

@@ -33,6 +33,23 @@ export: `out/2026-08-28-local-100vu.json`.
   queueing starts. The first lever is pool/PgBouncer sizing
   (`DB_POOL_MAX`), not hardware.
 
+### Pool-sizing confirmation run (same day)
+
+Identical run with Postgres `max_connections=400` and `DB_POOL_MAX=150`
+(raw export: `out/2026-08-28-local-100vu-pool150.json`): the queueing
+signal collapses — `pg_pool_waiting` max 59 → **5**, non-zero samples
+80 → **3** (all during pool ramp-up), p99 25 → **0** — again at 0.00%
+errors and ~338 req/s, with p99 tails tightening (treaty detail 127 →
+78ms, quote list 58 → 41ms). This confirms the knee is pool
+configuration with nothing behind it at this load. The residual
+multi-second max outliers appear in both runs and cluster at ramp: they
+are the 100-login scrypt burst saturating the 4-thread libuv pool, not
+the database. Note the companion agents run (write-heavy burst, same
+pool change) shows the flip side: on a CPU-bound single container a
+bigger pool trades app-side queueing for in-database contention — size
+the pool against the real DB host's cores (or use PgBouncer), don't
+just crank it.
+
 | endpoint | p50 ms | p95 ms | p99 ms | max ms |
 | --- | ---: | ---: | ---: | ---: |
 | health | 1 | 6 | 16 | 98 |
