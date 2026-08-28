@@ -240,6 +240,35 @@ describe('parseLooseNumber (canonical client/server parser)', () => {
     expect(parseLooseNumber('')).toBe(0);
     expect(parseLooseNumber('foo')).toBe(0);
   });
+
+  it('keeps scientific notation intact instead of mangling it (F91)', () => {
+    // Pre-fix the strip regex removed the exponent marker: '1e6' → 16.
+    expect(parseLooseNumber('1e6')).toBe(1_000_000);
+    expect(parseLooseNumber('2.5e6')).toBe(2_500_000);
+    expect(parseLooseNumber('1E6')).toBe(1_000_000);
+    expect(parseLooseNumber('1.5e-3')).toBeCloseTo(0.0015, 12);
+    expect(parseLooseNumber('-2e3')).toBe(-2000);
+    // …and agrees with retroImpact's num() on the same string (both keep
+    // [0-9.eE+-] when stripping), so the two shared parsers no longer
+    // return 16 vs 1,000,000 for the same pasted value.
+    expect(parseLooseNumber('2.5e6%')).toBe(2_500_000);   // formatted + exponent
+  });
+
+  it('parses parenthesised accounting negatives (F91)', () => {
+    expect(parseLooseNumber('(2,000)')).toBe(-2000);      // was +2000 — sign lost
+    expect(parseLooseNumber('($2,000)')).toBe(-2000);
+    expect(parseLooseNumber('(8.00%)')).toBeCloseTo(-8, 10);
+    expect(parseLooseNumber('(0)')).toBe(0);              // no negative zero
+  });
+
+  it('still accepts every format the legacy strip handled', () => {
+    // The last-resort [^\d.-] pass keeps previously-parsable strings
+    // (currency-code prefixes contain an "E" the eE-keeping pass trips on).
+    expect(parseLooseNumber('EUR 2,000')).toBe(2000);
+    expect(parseLooseNumber('AED 5')).toBe(5);
+    expect(parseLooseNumber('-$2,000')).toBe(-2000);
+    expect(parseLooseNumber('8.00 %')).toBeCloseTo(8, 10);
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────

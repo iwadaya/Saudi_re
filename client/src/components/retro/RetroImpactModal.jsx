@@ -228,6 +228,21 @@ export default function RetroImpactModal({
                     ⚠ {stored.bookFxMissing} in-scope treat{stored.bookFxMissing === 1 ? 'y has' : 'ies have'} no stored exchange rate — book share is approximate.
                   </span>
                 )}
+                {stored.incompleteLayers > 0 && (
+                  <span className="rim-source-warn">
+                    ⚠ {stored.incompleteLayers} stored layer{stored.incompleteLayers === 1 ? ' is' : 's are'} missing an attachment or limit and {stored.incompleteLayers === 1 ? 'is' : 'are'} not modelled.
+                  </span>
+                )}
+                {stored.xlAttachmentMissing && (
+                  <span className="rim-source-warn">
+                    ⚠ The stored XL has no attachment — modelled as attaching at 0.
+                  </span>
+                )}
+                {stored.xlRolDefaulted && (
+                  <span className="rim-source-warn">
+                    ⚠ No stored rate-on-line or premium for the XL — using the illustrative {'12%'} default.
+                  </span>
+                )}
                 {stored.unusedNames.length > 0 && (
                   <span className="rim-source-sub"> · also covering (not modelled): {stored.unusedNames.join(', ')}</span>
                 )}

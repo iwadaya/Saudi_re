@@ -78,6 +78,29 @@ const num = (v, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+// Like num(), but keeps "no value" distinguishable from 0: null / undefined /
+// blank / unparseable returns null. Stored retro columns are nullable, and a
+// NULL attachment coerced to 0 reads as "attaches at ground-up" — a very
+// different statement from "not entered yet" (audit F38).
+const numOrNull = (v) => {
+  if (v === null || v === undefined) return null;
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^0-9.eE+-]/g, ''));
+  return Number.isFinite(n) ? n : null;
+};
+
+// Rate on line for one stored row (programme-level or layer): the stored
+// rate when present, else derived from the stored premium — ROL = 100 ×
+// premium ÷ limit — so a row captured with premium-only terms is not
+// silently re-priced at an illustrative default (audit F40). Returns null
+// when neither is usable so the caller can apply ONE fallback and flag it.
+const rolFromRow = (row) => {
+  const direct = numOrNull(row.rol_pct);
+  if (direct !== null) return direct;
+  const premium = num(row.premium);
+  const limit = num(row.occurrence_limit);
+  return premium > 0 && limit > 0 ? (100 * premium) / limit : null;
+};
+
 /**
  * A sane starting programme for a treaty whose size we know. The XL is
  * sized off the expected loss at the seed line — a working layer
@@ -190,12 +213,20 @@ export function evaluateRetroAtLine({ linePct, subject, programme } = {}) {
   const xlRecovery = xlLive && netParams
     ? lognormalLayerMean(netParams.mu, netParams.sigma, p.xlAttachment, xlCover)
     : 0;
-  // Expected reinstatement premium, pro-rata to amount: each limit burnt
-  // beyond the first reinstates at `xlReinstatementPct` of the XL
-  // premium, capped at the number of reinstatements bought.
-  const xlReinstatementPremium = xlLive && p.xlLimit > 0
+  // Expected reinstatement premium, pro-rata to amount: each unit of limit
+  // burnt reinstates at `xlReinstatementPct` of the XL premium, capped at
+  // the `xlReinstatements` limits bought. The reinstated amount is a layer
+  // expectation of its own — E[min(layer loss, r·limit)], i.e. the loss to
+  // the sub-layer [attachment, attachment + r·limit] — NOT
+  // min(E[layer loss], r·limit): capping the expectation instead of
+  // capping inside it overstates the spend (Jensen's inequality) and the
+  // bias grows with layer volatility (audit F92).
+  const xlReinstatementPremium = xlLive && p.xlReinstatements > 0 && netParams
     ? xlPremium * (p.xlReinstatementPct / 100)
-      * Math.min(xlRecovery / p.xlLimit, p.xlReinstatements)
+      * lognormalLayerMean(
+        netParams.mu, netParams.sigma, p.xlAttachment,
+        Math.min(p.xlLimit * p.xlReinstatements, xlCover),
+      ) / p.xlLimit
     : 0;
   const xlSpend = xlPremium + xlReinstatementPremium;
 
@@ -443,7 +474,9 @@ function roundAmount(n) {
  *            shareFrac: number, bookExposure: number, subjectExposure: number,
  *            scaled: boolean, converted: boolean, fxToSubject: number,
  *            fromCurrency: string|null, fxMissing: boolean,
- *            bookFxMissing: number}}
+ *            bookFxMissing: number, layerCount: number,
+ *            incompleteLayers: number, xlAttachmentMissing: boolean,
+ *            xlRolDefaulted: boolean}}
  */
 export function programmeFromStored(rows, { subjectExposure, subjectInBook = true } = {}) {
   const list = Array.isArray(rows) ? rows : [];
@@ -453,7 +486,8 @@ export function programmeFromStored(rows, { subjectExposure, subjectInBook = tru
       sourceNames: [], unusedNames: [], hasStored: false,
       shareFrac: 1, bookExposure: 0, subjectExposure: num(subjectExposure), scaled: false,
       converted: false, fxToSubject: 1, fromCurrency: null, fxMissing: false,
-      bookFxMissing: 0, layerCount: 0,
+      bookFxMissing: 0, layerCount: 0, incompleteLayers: 0,
+      xlAttachmentMissing: false, xlRolDefaulted: false,
     };
   }
   const prop = list.filter((r) => PROPORTIONAL_RETRO_TYPES.has(r.programme_type));
@@ -462,25 +496,54 @@ export function programmeFromStored(rows, { subjectExposure, subjectInBook = tru
   const xlRaw = xls[0] || null;
   // A programme captured as a layered tower flattens to one cover for this
   // single-layer engine: bottom attachment, Σ layer limits, limit-weighted
-  // ROL, and the most conservative (minimum) reinstatement count. The layer
-  // structure itself is reported via layerCount so the UI can say so.
+  // ROL and reinstatement %, and the most conservative (minimum)
+  // reinstatement count. The layer structure itself is reported via
+  // layerCount so the UI can say so.
   const xl = (() => {
     if (!xlRaw) return null;
-    const layers = Array.isArray(xlRaw.layers) ? xlRaw.layers.filter((l) => num(l.occurrence_limit) > 0) : [];
-    if (!layers.length) return xlRaw;
+    const rawLayers = Array.isArray(xlRaw.layers) ? xlRaw.layers : [];
+    // A usable layer needs a positive limit AND a real attachment — every
+    // layer column is nullable, and num(null) → 0 fed into Math.min below
+    // would drag the whole tower's attachment to ground-up, massively
+    // overstating XL recoveries (audit F38). A stored attachment of 0 is a
+    // real value and stays usable; a missing one excludes the layer and is
+    // surfaced via incomplete_layers → incompleteLayers.
+    const layers = rawLayers.filter(
+      (l) => num(l.occurrence_limit) > 0 && numOrNull(l.attachment) !== null,
+    );
+    const incomplete = rawLayers.length - layers.length;
+    if (!layers.length) return { ...xlRaw, incomplete_layers: incomplete };
     const totalLimit = layers.reduce((s, l) => s + num(l.occurrence_limit), 0);
     const attach = Math.min(...layers.map((l) => num(l.attachment)));
-    const wRol = totalLimit > 0
-      ? layers.reduce((s, l) => s + num(l.rol_pct) * num(l.occurrence_limit), 0) / totalLimit
-      : num(xlRaw.rol_pct);
+    // Limit-weighted ROL over the stored (or premium-derived) layer rates;
+    // a layer with neither gets the illustrative default and is flagged.
+    let rolDefaulted = false;
+    const wRol = layers.reduce((s, l) => {
+      let rol = rolFromRow(l);
+      if (rol === null) {
+        rolDefaulted = true;
+        rol = DEFAULT_RETRO_PROGRAMME.xlRolPct;
+      }
+      return s + rol * num(l.occurrence_limit);
+    }, 0) / totalLimit;
+    // Limit-weighted stored reinstatement % (audit F39); a layer without one
+    // pays the conservative full-rate default.
+    const wReinstPct = layers.reduce(
+      (s, l) => s + (numOrNull(l.reinstatement_pct) ?? DEFAULT_RETRO_PROGRAMME.xlReinstatementPct)
+        * num(l.occurrence_limit),
+      0,
+    ) / totalLimit;
     const minReinst = Math.min(...layers.map((l) => num(l.reinstatements)));
     return {
       ...xlRaw,
       attachment: attach,
       occurrence_limit: totalLimit,
       rol_pct: wRol,
+      rol_defaulted: rolDefaulted,
       reinstatements: minReinst,
+      reinstatement_pct: wReinstPct,
       layer_count: layers.length,
+      incomplete_layers: incomplete,
     };
   })();
   // Effective book = the share denominator: a quote is not yet in the
@@ -502,15 +565,28 @@ export function programmeFromStored(rows, { subjectExposure, subjectInBook = tru
     const raw = num(v) * fxToSubject * shareFrac;
     return (converted || scaled) ? roundAmount(raw) : raw;
   };
+  // ROL comes from the stored terms (rate, or derived from the stored
+  // premium — see rolFromRow); the illustrative default only steps in when
+  // the row genuinely carries neither, and that substitution is surfaced
+  // via xlRolDefaulted so the UI can warn instead of silently modelling a
+  // 12% spend the contract never priced (audit F40). A flattened tower has
+  // already resolved its rate per layer and reports its own flag.
+  const xlStoredRol = xl ? rolFromRow(xl) : null;
+  const xlRolDefaulted = !!xl && (xl.rol_defaulted === true || xlStoredRol === null);
   const programme = normaliseProgramme({
     qsCessionPct: qs ? num(qs.cession_pct) : 0,
     qsCommissionPct: qs ? num(qs.commission_pct) : 0,
     xlEnabled: !!xl,
     xlAttachment: xl ? adjust(xl.attachment) : 0,
     xlLimit: xl ? adjust(xl.occurrence_limit) : 0,
-    xlRolPct: xl ? num(xl.rol_pct, DEFAULT_RETRO_PROGRAMME.xlRolPct) : DEFAULT_RETRO_PROGRAMME.xlRolPct,
+    xlRolPct: xlStoredRol !== null ? xlStoredRol : DEFAULT_RETRO_PROGRAMME.xlRolPct,
     xlReinstatements: xl ? num(xl.reinstatements) : 0,
-    xlReinstatementPct: DEFAULT_RETRO_PROGRAMME.xlReinstatementPct,
+    // The stored per-layer reinstatement % (free / discounted terms are
+    // real contract features — audit F39); the conservative full-rate
+    // default only when the stored row doesn't carry one.
+    xlReinstatementPct: xl
+      ? (numOrNull(xl.reinstatement_pct) ?? DEFAULT_RETRO_PROGRAMME.xlReinstatementPct)
+      : DEFAULT_RETRO_PROGRAMME.xlReinstatementPct,
     costOfCapitalPct: DEFAULT_RETRO_PROGRAMME.costOfCapitalPct,
   });
   return {
@@ -521,6 +597,13 @@ export function programmeFromStored(rows, { subjectExposure, subjectInBook = tru
     shareFrac, bookExposure, subjectExposure: num(subjectExposure), scaled,
     converted, fxToSubject, fromCurrency: xl?.currency_code || null, fxMissing,
     layerCount: xl?.layer_count || 0,
+    // Stored layer rows excluded from the flatten (missing attachment or
+    // limit) — partially-entered data the model is NOT reflecting.
+    incompleteLayers: xl ? Math.max(0, Math.round(num(xl.incomplete_layers))) : 0,
+    // The XL terms row itself has no attachment: modelled at 0 (ground-up)
+    // as before, but surfaced so the UI can warn like fxMissing.
+    xlAttachmentMissing: !!xl && numOrNull(xl.attachment) === null,
+    xlRolDefaulted,
     // In-scope contracts whose currency had no stored rate — their limits
     // entered the book total at par, so the share is approximate.
     bookFxMissing: xl ? Math.max(0, Math.round(num(xl.book_fx_missing))) : 0,
