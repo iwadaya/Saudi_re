@@ -21,7 +21,11 @@ function runLabel(file) {
 }
 
 function metricValues(summary, key) {
-  return summary.metrics?.[key]?.values || {};
+  const metric = summary.metrics?.[key];
+  if (!metric) return {};
+  // k6 --summary-export puts the values directly on the metric object; the
+  // handleSummary(data) shape nests them under .values. Support both.
+  return metric.values || metric;
 }
 
 const endpoints = [
@@ -42,7 +46,9 @@ const endpoints = [
 
 for (const file of files) {
   const summary = JSON.parse(fs.readFileSync(file, 'utf8'));
-  const errorRate = metricValues(summary, 'http_req_failed').rate;
+  // Rate metrics: .rate in the handleSummary shape, .value in --summary-export.
+  const failedValues = metricValues(summary, 'http_req_failed');
+  const errorRate = failedValues.rate ?? failedValues.value;
   const poolValues = metricValues(summary, 'pg_pool_waiting');
   const poolMax = poolValues.max ?? 0;
 

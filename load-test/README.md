@@ -13,6 +13,40 @@ Two k6 scripts exercise the hot paths of the reinsurance tool:
   30, and 50 VUs against production-shape data to answer "what user load
   can this support?"
 
+## Findings (August 2026) — 100 concurrent users, local
+
+`capacity.js` at 100 VUs for 5 minutes (`npm run loadtest:100vu`) against a
+local dev server (Node + local Postgres 16, `LOAD_TEST=true`, 1200 seeded
+contracts / 400 quotes, 100-account login pool, WRITE_CRUD on). Raw
+export: `out/2026-08-28-local-100vu.json`.
+
+* **102,868 requests at ~338 req/s, 0.00% errors, 100% of 95,335 checks
+  passed.** Every latency threshold cleared with a wide margin (overall
+  p95 31ms; dashboard, the heaviest read, p95 58ms).
+* **The only threshold crossed was `pg_pool_waiting max<1`** (max 59,
+  p99 25, non-zero on 80 of ~1,900 deep-health samples) — the same knee
+  the June staging runs found: at 100 concurrent users the Postgres
+  connection pool (`DB_POOL_MAX` default 50) queues briefly under
+  spikes, without producing request failures. The multi-second max
+  outliers on a few read endpoints line up with those queueing bursts.
+* Conclusion unchanged from June: ~100 concurrent users is where pool
+  queueing starts. The first lever is pool/PgBouncer sizing
+  (`DB_POOL_MAX`), not hardware.
+
+| endpoint | p50 ms | p95 ms | p99 ms | max ms |
+| --- | ---: | ---: | ---: | ---: |
+| health | 1 | 6 | 16 | 98 |
+| lookups | 3 | 11 | 31 | 4062 |
+| treaty_list | 15 | 36 | 67 | 4403 |
+| quote_list | 8 | 24 | 58 | 322 |
+| treaty_detail | 10 | 33 | 127 | 4452 |
+| prop_pricing | 5 | 20 | 74 | 342 |
+| quote_pricing | 4 | 17 | 60 | 304 |
+| np_structure | 7 | 28 | 83 | 4280 |
+| np_pricing | 5 | 22 | 54 | 455 |
+| dashboard | 29 | 58 | 95 | 284 |
+| agg_drilldown | 10 | 37 | 91 | 767 |
+
 ## Findings (June 2026)
 
 A full write-up of the latest capacity run (Render + Neon, tested from
