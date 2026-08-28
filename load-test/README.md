@@ -148,6 +148,28 @@ COUNTRY_IDS=<uuid>,<uuid>
 WRITE_CRUD=0        # disable create/update/delete quote flow
 ```
 
+### High-VU runs need a pool of login accounts
+
+The login brute-force limiter is keyed per IP + submitted identity
+(5 attempts / 15 min, `createLoginLimiter` in `server/src/app.js`) and is
+NOT covered by the `LOAD_TEST=true` bypass — so N VUs sharing one
+`LOAD_USER` from one address hit 429s on login after the fifth VU. For
+anything above ~5 VUs, seed a pool of accounts and fan the VUs across it
+(one login per identity):
+
+```bash
+# Seed loadtest001..loadtest100 (idempotent; local/staging only)
+DATABASE_URL=postgres://… LOAD_PASS=<password> npm run seed:loadusers
+
+# Run with the pool — VU N logs in as loadtest001..loadtest100
+LOAD_USER_PREFIX=loadtest LOAD_USER_COUNT=100 LOAD_PASS=<password> \
+  npm run loadtest:100vu
+```
+
+`LOAD_USER_PREFIX` takes precedence over `LOAD_USER`; `LOAD_USER_PAD`
+(default 3) controls the zero-padding. `npm run loadtest:100vu` is the
+capacity profile pinned at 100 VUs ("100 concurrent users").
+
 The run records `pg_pool_waiting` by sampling `/api/health/deep`. Any
 non-zero max is the knee unless it is a single-sample deploy blip.
 

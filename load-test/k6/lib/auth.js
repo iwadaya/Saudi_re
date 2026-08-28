@@ -12,6 +12,14 @@
 // Credentials come from env (a real account on the target — seed one in staging):
 //   LOAD_USER=<username|email>  LOAD_PASS=<password>
 //
+// High-VU runs: the login brute-force limiter is keyed per IP + submitted
+// identity (5 attempts / 15 min), so 100 VUs sharing one LOAD_USER from one
+// address get 429s after the fifth login. Seed a pool of accounts
+// (server/scripts/seedLoadTestUsers.js) and fan the VUs across it instead:
+//   LOAD_USER_PREFIX=loadtest LOAD_USER_COUNT=100 LOAD_PASS=<password>
+// VU N then logs in as loadtest001..loadtest100 (LOAD_USER_PAD digits, default
+// 3), one login per identity. LOAD_USER_PREFIX takes precedence over LOAD_USER.
+//
 // Usage:
 //   import { login, authHeaders } from './lib/auth.js';
 //   const csrf = login(BASE_URL);            // once per VU (and once in setup)
@@ -20,6 +28,19 @@
 
 import http from 'k6/http';
 
+/** The username this VU should log in as: a pool member when LOAD_USER_PREFIX
+ *  is set (VU N → prefix + zero-padded 1+((N-1) % count); setup() runs as
+ *  __VU 0 and maps to the first account), else the shared LOAD_USER. */
+function resolveUser() {
+  const prefix = __ENV.LOAD_USER_PREFIX;
+  if (!prefix) return __ENV.LOAD_USER;
+  const count = Math.max(1, Number(__ENV.LOAD_USER_COUNT || 100));
+  const pad = Math.max(1, Number(__ENV.LOAD_USER_PAD || 3));
+  const vu = Number(__VU) > 0 ? Number(__VU) : 1;
+  const n = 1 + ((vu - 1) % count);
+  return `${prefix}${String(n).padStart(pad, '0')}`;
+}
+
 /**
  * Log in against the real flow and return the CSRF token. Relies on the k6
  * cookie jar of the CURRENT context (VU or setup) to hold the auth cookie.
@@ -27,13 +48,13 @@ import http from 'k6/http';
  * run fails fast instead of silently measuring 401s.
  */
 export function login(baseUrl) {
-  const user = __ENV.LOAD_USER;
+  const user = resolveUser();
   const pass = __ENV.LOAD_PASS;
   if (!user || !pass) {
     throw new Error(
-      'LOAD_USER and LOAD_PASS are required: the production login flow needs a real account '
-      + '(x-user-* demo headers are ignored when ALLOW_DEMO_AUTH is off). '
-      + 'Seed a load-test user in staging and pass its credentials.',
+      'LOAD_USER (or LOAD_USER_PREFIX) and LOAD_PASS are required: the production login flow '
+      + 'needs a real account (x-user-* demo headers are ignored when ALLOW_DEMO_AUTH is off). '
+      + 'Seed load-test users (server/scripts/seedLoadTestUsers.js) and pass the credentials.',
     );
   }
   const res = http.post(`${baseUrl}/api/auth/login`, JSON.stringify({ username: user, password: pass }), {

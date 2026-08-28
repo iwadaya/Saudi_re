@@ -32,6 +32,8 @@
     "loadtest:agents": "node load-test/agents/run.js",
     "loadtest:10vu": "k6 run load-test/k6/smoke-10vu.js",
     "loadtest:capacity": "k6 run load-test/k6/capacity.js",
+    "loadtest:100vu": "k6 run -e K6_VUS=100 load-test/k6/capacity.js",
+    "seed:loadusers": "node server/scripts/seedLoadTestUsers.js",
     "loadtest:summarize": "node load-test/scripts/summarize-k6.mjs",
     "start:cluster": "pm2 start ecosystem.config.cjs --no-daemon",
     "cluster:reload": "pm2 reload ecosystem.config.cjs",
