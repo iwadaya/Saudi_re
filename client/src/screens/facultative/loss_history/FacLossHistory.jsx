@@ -82,6 +82,10 @@ export default function FacLossHistory() {
         loss_description: r.loss_description, cause_of_loss: r.cause_of_loss,
         fgu_paid: numOrNull(r.fgu_paid), fgu_outstanding: numOrNull(r.fgu_outstanding),
         mitigation_measures: r.mitigation_measures, is_open: r.is_open,
+        // Preserve section attribution loaded from the server — the save is a
+        // wipe-and-reinsert, so omitting this silently detached every loss
+        // from its section.
+        section_id: r.section_id ?? null,
       })),
     ),
     [],

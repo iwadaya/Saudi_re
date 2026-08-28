@@ -249,6 +249,18 @@ export function hullLossCost({ exposure, hullRates, hullFactors, inceptionDate =
   }
 
   const warnings = [];
+  // laid_up_return_pct is a 0..1 fraction (meta.js); a percent-scale entry
+  // (e.g. 80 for 80%) would return 80x the pro-rata premium — warn, and never
+  // let the return drive the loss cost negative.
+  if (laidUpPct !== null && Math.abs(laidUpPct) > 1) {
+    warnings.push(
+      `laid_up_return_pct ${laidUpPct} is outside the 0..1 fraction convention — value used as entered.`,
+    );
+  }
+  if (lossCost < 0) {
+    warnings.push('Laid-up return exceeds the loss cost — floored at nil.');
+    lossCost = 0;
+  }
   if (missing.length > 0) {
     warnings.push(
       `No factor loaded for ${missing.join(', ')} — treated as 1.00. A vessel's age and class `
