@@ -45,7 +45,11 @@ const LAST = ['Boateng', 'Mensah', 'Okafor', 'Adeyemi', 'Haddad', 'Asante', 'Bal
   'Amin', 'Sarpong', 'Otieno', 'Ansah', 'Karimi', 'Tetteh', 'Aziz', 'Gyasi'];
 
 export function underwriterName(i) {
-  return `${FIRST[i % FIRST.length]} ${LAST[i % LAST.length]}`;
+  // Walk the full FIRST x LAST grid, not the diagonal: equal-length arrays
+  // with `i % len` on both cycle after len names, so 100 agents collapsed to
+  // 40 distinct name-login identities (caught by the orchestrator's
+  // distinct-user-id check). This yields FIRST.length * LAST.length names.
+  return `${FIRST[i % FIRST.length]} ${LAST[Math.floor(i / FIRST.length) % LAST.length]}`;
 }
 
 const TREATY_DESCRIPTORS = ['Motor', 'Property', 'Marine Cargo', 'Engineering', 'General Accident',

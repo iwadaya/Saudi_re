@@ -31,6 +31,12 @@ exactly what the SPA does.
   SUPERSEDED original + copied terms), submit-for-approval, decline
   (+ re-decline self-transition, revive → 422), or delete (child gone,
   original survives)
+* work the **documents tab** on every base treaty: multipart-upload a seeded
+  PDF slip + CSV bordereau through the content-sniffing validator, list them,
+  download each back and compare **sha256 against the uploaded bytes**, delete
+  the bordereau and verify 404 + list removal; once per agent, upload probes:
+  blocked extension → 415, spoofed `.pdf` content → 422, anonymous download →
+  401, peer (non-assignee) delete → 403 with the document surviving
 * adversarial probes on every treaty: stale-baseline saves (409 STALE_WRITE +
   payload must NOT land), **same-baseline concurrent PUT races** (exactly one
   winner allowed), peer write/delete → 403, anonymous write → 401/403, peer
@@ -65,6 +71,30 @@ node load-test/agents/run.js --agents 40 --treaties 100 \
 
 Exit code is non-zero when any check fails. Runs are deterministic per seed.
 Use a **disposable database** — the run creates users, contracts and quotes.
+
+## Findings (August 2026, 100 underwriters × 250 treaties)
+
+The "can it take 100 underwriters at peak renewal" run: 100 **distinct**
+name-login accounts, fully concurrent, on a dev container (single process,
+pool max 50). Report: `load-test/out/agents-run-100uw.json`, seed 20260828.
+
+* **28,514 / 28,514 checks passed** — 10,889 PUT→GET field round-trips,
+  3,050 document checks, 1,425 partial-save-safety, 1,100 permission
+  probes, 100/100 same-baseline write races landing exactly one winner
+  (200+409). 10,648 HTTP calls, **zero 5xx, zero transport errors** (every
+  4xx in the status mix is a deliberate adversarial probe).
+* The whole 250-contract portfolio — slice saves, triangles, losses,
+  workflow to SIGNED, 100 renewals, 175 quotes, 300 document uploads with
+  byte-identical downloads — was modelled in a **23s concurrent burst**,
+  i.e. far denser traffic than 100 humans produce over a renewal morning.
+* Write-path latencies under that burst: `PUT /treaties/:id` p95 365ms,
+  triangle saves p95 317ms, document upload p95 277ms, download p95 322ms,
+  quote save p95 377ms. `POST /treaties` p95 1.3s is the outlier (create
+  contends on reference/audit writes at full parallelism).
+* `pg_pool_waiting` peaked at **79** — the write-heavy version of the same
+  pool knee the k6 capacity runs found at 100 VUs (pool max 50). No
+  failures resulted, but sizing `DB_POOL_MAX`/PgBouncer above expected
+  concurrency remains the first lever before a real 100-user peak.
 
 ## Findings (August 2026, 40 agents × 100 treaties)
 
@@ -114,5 +144,6 @@ Reports: `load-test/out/agents-run-full-baseline.json` (pre-fix),
 * the multi-approver engine (peer/arbiter decisions, mandates) — agents sign
   via the status-machine path, which enforces transition legality only
 * pricing computation endpoints (covered by the golden-master suites)
-* document upload/download and renewal-pack import (multipart flows)
+* renewal-pack import (multi-file AI-assisted flow; plain document
+  upload/download IS covered by the documents phase)
 * browser behaviour — this is the API surface only
