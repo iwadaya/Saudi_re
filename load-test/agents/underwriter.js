@@ -8,7 +8,8 @@
 // the agent GETs the entity back and field-checks the round trip, so the run
 // is simultaneously a load test and a data-fidelity audit.
 
-import { propTreatyPlan, npTreatyPlan, triangleCells, devFactors, largeLosses, quotePlan } from './lib/gen.js';
+import { createHash } from 'node:crypto';
+import { propTreatyPlan, npTreatyPlan, triangleCells, devFactors, largeLosses, quotePlan, pdfDocument, csvDocument } from './lib/gen.js';
 
 const TREATY = (id) => `/api/treaties/${id}`;
 const QUOTE = (id) => `/api/quotes/${id}`;
@@ -576,6 +577,97 @@ export class Underwriter {
     }
   }
 
+  // ── documents (multipart upload / download / delete) ─────────────────────
+
+  /**
+   * The documents tab: upload a PDF slip + CSV bordereau (real multipart
+   * bodies through the content-sniffing validator), list them, download each
+   * back and compare sha256 against the sent bytes, then delete the bordereau
+   * and verify it is gone. With `probes` on, also: blocked extension -> 415,
+   * spoofed .pdf content -> 422 CONTENT_TYPE_MISMATCH, anonymous download ->
+   * 401/403, peer (non-assignee) delete -> 403 with the document surviving.
+   */
+  async modelDocuments(rec, { probes = false } = {}) {
+    const { id } = rec;
+    const ref = id.slice(0, 8);
+    const uploads = [
+      { name: `slip-${ref}.pdf`, mime: 'application/pdf', doc_type: 'SLIP', bytes: pdfDocument(this.rng, `Placement slip ${ref}`) },
+      { name: `bordereau-${ref}.csv`, mime: 'text/csv', doc_type: 'BORDEREAU', bytes: csvDocument(this.rng, ref) },
+    ];
+    const stored = [];
+    for (const u of uploads) {
+      const form = new FormData();
+      form.append('file', new Blob([u.bytes], { type: u.mime }), u.name);
+      form.append('title', `${u.doc_type} ${this.uwYear}`);
+      form.append('description', `uploaded by ${this.name}`);
+      form.append('doc_type', u.doc_type);
+      const r = await this.s.postForm(`${TREATY(id)}/documents`, form, { label: 'POST /treaties/:id/documents' });
+      if (!this._status('documents', `upload ${u.doc_type}`, r, 201, id)) continue;
+      this._fields('documents', `uploaded.${u.doc_type}`, r.json, {
+        file_name: u.name, mime_type: u.mime, size_bytes: u.bytes.length,
+      }, { file_name: 'str', mime_type: 'str', size_bytes: 'num' }, id);
+      stored.push({ ...u, docId: r.json.document_id });
+    }
+
+    const list = await this.s.get(`${TREATY(id)}/documents`, { label: 'GET /treaties/:id/documents' });
+    if (this._status('documents', 'list documents', list, 200, id)) {
+      const names = (list.json || []).map((d) => d.file_name);
+      this._chk('documents', 'document list holds every upload',
+        stored.length === uploads.length && stored.every((u) => names.includes(u.name)),
+        `expected ${uploads.map((u) => u.name).join(', ')} got ${names.join(', ')}`, id);
+    }
+
+    for (const u of stored) {
+      const dl = await this.s.get(`/api/documents/${u.docId}/download`, {
+        label: 'GET /documents/:docId/download', binary: true,
+      });
+      if (!this._status('documents', `download ${u.doc_type}`, dl, 200, id)) continue;
+      const want = createHash('sha256').update(u.bytes).digest('hex');
+      const got = createHash('sha256').update(dl.bytes || Buffer.alloc(0)).digest('hex');
+      this._chk('documents', `download ${u.doc_type} bytes identical (sha256)`,
+        got === want,
+        `uploaded ${u.bytes.length}B ${want.slice(0, 12)}… downloaded ${dl.bytes?.length ?? 0}B ${got.slice(0, 12)}…`, id);
+    }
+
+    if (probes && stored.length) {
+      const exe = new FormData();
+      exe.append('file', new Blob([Buffer.from('MZ\x90\x00 not a document')], { type: 'application/octet-stream' }), `payload-${ref}.exe`);
+      const rExe = await this.s.postForm(`${TREATY(id)}/documents`, exe, { label: 'POST /treaties/:id/documents (probe)' });
+      this._status('documents', 'blocked extension rejected 415', rExe, 415, id);
+
+      const spoof = new FormData();
+      spoof.append('file', new Blob([Buffer.from('plain text wearing a .pdf name')], { type: 'application/pdf' }), `spoof-${ref}.pdf`);
+      const rSpoof = await this.s.postForm(`${TREATY(id)}/documents`, spoof, { label: 'POST /treaties/:id/documents (probe)' });
+      this._status('documents', 'content-sniff mismatch rejected 422', rSpoof, 422, id);
+
+      const anon = await this.anonSession?.get(`/api/documents/${stored[0].docId}/download`, {
+        label: 'GET /documents/:docId/download (anon)', binary: true,
+      });
+      if (anon) this._status('documents', 'anonymous download rejected', anon, [401, 403], id);
+
+      const pd = await this.peer.del(`/api/documents/${stored[0].docId}`, { label: 'DELETE /documents/:docId (peer)' });
+      this._status('documents', 'peer (non-assignee) delete rejected 403', pd, 403, id);
+      const still = await this.s.get(`${TREATY(id)}/documents`, { label: 'GET /treaties/:id/documents' });
+      this._chk('documents', 'document survived rejected peer delete',
+        still.status === 200 && (still.json || []).some((d) => d.document_id === stored[0].docId),
+        `list status ${still.status}`, id);
+    }
+
+    const bordereau = stored.find((u) => u.doc_type === 'BORDEREAU');
+    if (bordereau) {
+      const del = await this.s.del(`/api/documents/${bordereau.docId}`, { label: 'DELETE /documents/:docId' });
+      this._status('documents', 'delete own document', del, 200, id);
+      const gone = await this.s.get(`/api/documents/${bordereau.docId}/download`, {
+        label: 'GET /documents/:docId/download', binary: true,
+      });
+      this._status('documents', 'deleted document no longer downloadable', gone, 404, id);
+      const after = await this.s.get(`${TREATY(id)}/documents`, { label: 'GET /treaties/:id/documents' });
+      this._chk('documents', 'deleted document left the list',
+        after.status === 200 && !(after.json || []).some((d) => d.document_id === bordereau.docId),
+        `list status ${after.status}`, id);
+    }
+  }
+
   // ── renewal ──────────────────────────────────────────────────────────────
 
   async renewTreaty(rec) {
@@ -895,6 +987,9 @@ export class Underwriter {
       if (!rec) continue;
       if (kind === 'PROP') await this.modelPropTreaty(rec);
       else await this.modelNpTreaty(rec);
+      // Documents tab: multipart upload/download/delete on every base treaty;
+      // the adversarial upload probes only once per agent.
+      await this.modelDocuments(rec, { probes: i === 0 });
       await this.probeOptimisticLock(rec);
       await this.probePeerPermissions(rec);
     }

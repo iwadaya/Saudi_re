@@ -401,3 +401,48 @@ export function quotePlan(rng, refs, uwYear) {
     },
   };
 }
+
+// ── document files (upload flow) ────────────────────────────────────────────
+// Deterministic files for the documents tab. The server's upload validation
+// content-sniffs magic bytes (uploadValidation.js), so pdfDocument emits a
+// structurally valid single-page PDF (%PDF at offset 0, correct xref offsets)
+// with seeded text lines — sizes vary only with the seed.
+
+/** A small valid PDF whose page stream carries `lines` seeded text rows. */
+export function pdfDocument(rng, title) {
+  const lines = Array.from({ length: rng.int(30, 220) }, (_, i) => (
+    `(row ${i + 1}: EPI ${rng.money(100_000, 5_000_000)} USD, LR ${rng.pct(30, 130)}%) Tj 0 -12 Td`
+  ));
+  const stream = [
+    'BT /F1 10 Tf 40 780 Td',
+    `(${title.replace(/[()\\]/g, '')}) Tj 0 -14 Td`,
+    ...lines,
+    'ET',
+  ].join('\n');
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
+  ];
+  let body = '%PDF-1.4\n';
+  const offsets = [];
+  objects.forEach((obj, i) => {
+    offsets.push(Buffer.byteLength(body));
+    body += `${i + 1} 0 obj\n${obj}\nendobj\n`;
+  });
+  const xrefAt = Buffer.byteLength(body);
+  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const off of offsets) body += `${String(off).padStart(10, '0')} 00000 n \n`;
+  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefAt}\n%%EOF\n`;
+  return Buffer.from(body, 'latin1');
+}
+
+/** A seeded CSV bordereau (text-family upload, exercises the non-binary path). */
+export function csvDocument(rng, ref) {
+  const rows = Array.from({ length: rng.int(50, 400) }, (_, i) => (
+    `${ref}-${i + 1},${2020 + rng.int(0, 6)},${rng.money(10_000, 2_000_000)},${rng.money(0, 1_500_000)},${rng.pct(0, 100)}`
+  ));
+  return Buffer.from(`claim_ref,uw_year,gross_paid,outstanding,share_pct\n${rows.join('\n')}\n`, 'utf8');
+}

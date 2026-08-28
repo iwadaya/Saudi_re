@@ -56,14 +56,17 @@ export class AgentSession {
   /**
    * Perform one API call. `label` should be the route template (used for
    * latency bucketing); `path` the concrete URL path (with real ids).
-   * Returns { status, headers, json, text, ms }.
+   * `form` (a FormData) sends multipart instead of JSON — fetch supplies the
+   * boundary content-type. `binary: true` reads the response as bytes
+   * (Buffer) instead of text, for document downloads.
+   * Returns { status, headers, json, text, bytes, ms }.
    */
-  async call(method, path, { label, body, headers = {}, timeoutMs = 60000 } = {}) {
+  async call(method, path, { label, body, form, headers = {}, timeoutMs = 60000, binary = false } = {}) {
     const url = `${this.baseUrl}${path}`;
-    const h = { accept: 'application/json', ...headers };
+    const h = { accept: binary ? '*/*' : 'application/json', ...headers };
     const cookie = this._cookieHeader();
     if (cookie) h.cookie = cookie;
-    if (body !== undefined) h['content-type'] = 'application/json';
+    if (body !== undefined && form === undefined) h['content-type'] = 'application/json';
     // CSRF double-submit: mutations under cookie auth must echo the csrf cookie.
     const m = method.toUpperCase();
     if (!['GET', 'HEAD', 'OPTIONS'].includes(m)) {
@@ -71,7 +74,7 @@ export class AgentSession {
       if (csrf && !h['x-csrf-token']) h['x-csrf-token'] = csrf;
     }
     const started = performance.now();
-    let res, text = '', error = null;
+    let res, text = '', bytes = null, error = null;
     try {
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(new Error(`timeout after ${timeoutMs}ms`)), timeoutMs);
@@ -79,11 +82,12 @@ export class AgentSession {
         res = await fetch(url, {
           method: m,
           headers: h,
-          body: body === undefined ? undefined : JSON.stringify(body),
+          body: form !== undefined ? form : (body === undefined ? undefined : JSON.stringify(body)),
           redirect: 'manual',
           signal: ac.signal,
         });
-        text = await res.text();
+        if (binary && res.ok) bytes = Buffer.from(await res.arrayBuffer());
+        else text = await res.text();
       } finally {
         clearTimeout(timer);
       }
@@ -101,13 +105,15 @@ export class AgentSession {
       method: m, path, label: label || `${m} ${path}`,
       status, ms, ok: !!res && res.ok, error,
     }));
-    return { status, headers: res ? res.headers : new Map(), json, text, ms, error };
+    return { status, headers: res ? res.headers : new Map(), json, text, bytes, ms, error };
   }
 
   get(path, opts = {}) { return this.call('GET', path, opts); }
   post(path, body, opts = {}) { return this.call('POST', path, { ...opts, body }); }
   put(path, body, opts = {}) { return this.call('PUT', path, { ...opts, body }); }
   del(path, opts = {}) { return this.call('DELETE', path, opts); }
+  /** Multipart POST (document uploads): `form` is a FormData. */
+  postForm(path, form, opts = {}) { return this.call('POST', path, { ...opts, form }); }
 
   /**
    * Sign in through the real passwordless name-login flow (ALLOW_NAME_AUTH).
