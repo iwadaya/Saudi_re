@@ -395,8 +395,10 @@ describe.skipIf(shouldSkipDb)('integration: fac Phase 4 families, capacity and p
   describe('the capacity check', () => {
     it('reports committed exposure and says when no budget is set', async () => {
       const par = cobFor('PAR');
+      // our_share_pct is WHOLE PERCENT 0..100 (validation pct100): a half
+      // share is stored as 50, never 0.5. pd_pml_pct is a fraction 0..1.
       const id = await newRisk({
-        fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 0.5,
+        fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 50,
       });
       await harness.fetchApp('PUT', `/api/fac/risks/${id}/locations`, {
         body: {
@@ -411,8 +413,48 @@ describe.skipIf(shouldSkipDb)('integration: fac Phase 4 families, capacity and p
       expect(out.status).toBe('NO_BUDGET');
       const zone = out.checks.find((c) => c.level === 'ZONE_ACCUMULATION');
       expect(zone.zone).toBe('P4-TEST-ZONE');
-      expect(zone.adding).toBeCloseTo(100_000_000 * 0.4 * 0.5, 2);
+      expect(zone.adding).toBeCloseTo(100_000_000 * 0.4 * (50 / 100), 2);   // 20m
       expect(zone.message).toMatch(/load one in fac_zone_budget/i);
+    });
+
+    it('scales a whole-percent share to a fraction through the service and the view', async () => {
+      // The reviewer's reproduction of the ×100 bug: our_share_pct=25 (whole
+      // percent), pd_si=100m, pd_pml_pct=0.4 must add 100m × 0.4 × 0.25 =
+      // 10,000,000 — not 1,000,000,000, which is what the unscaled share
+      // produced before migration 145.
+      const par = cobFor('PAR');
+      const id = await newRisk({
+        fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 25,
+      });
+      await harness.fetchApp('PUT', `/api/fac/risks/${id}/locations`, {
+        body: {
+          locations: [{
+            location_name: 'Site Q', cresta_zone: 'P4-QUARTER-ZONE',
+            pd_si: 100_000_000, bi_si: 0, pd_pml_pct: 0.4,
+          }],
+        },
+      });
+
+      // Service path (riskZoneContributions).
+      const out = await harness.fetchApp('GET', `/api/fac/risks/${id}/accumulation`)
+        .then((r) => r.json());
+      const zone = out.checks.find((c) => c.level === 'ZONE_ACCUMULATION');
+      expect(zone.adding).toBeCloseTo(100_000_000 * 0.4 * 0.25, 2);   // 10,000,000
+
+      // View path: bind (no budget in this zone, so no referral) and read
+      // the refreshed mv_fac_accumulation directly.
+      await pool.query(
+        "UPDATE public.fac_risk SET status = 'QUOTED' WHERE fac_risk_id = $1", [id],
+      );
+      const bound = await harness.fetchApp('POST', `/api/fac/risks/${id}/bind`, { body: {} });
+      expect(bound.status).toBe(200);
+      const { rows } = await pool.query(
+        `SELECT committed_si, committed_pml FROM public.mv_fac_accumulation
+          WHERE cresta_zone = 'P4-QUARTER-ZONE' AND source_kind = 'FAC'`,
+      );
+      expect(rows).toHaveLength(1);
+      expect(Number(rows[0].committed_pml)).toBeCloseTo(10_000_000, 2);
+      expect(Number(rows[0].committed_si)).toBeCloseTo(100_000_000 * 0.25, 2);
     });
 
     it('breaches once a budget is loaded and the zone is full', async () => {
@@ -422,7 +464,8 @@ describe.skipIf(shouldSkipDb)('integration: fac Phase 4 families, capacity and p
         [SRC],
       );
       const par = cobFor('PAR');
-      const id = await newRisk({ fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 1 });
+      // A 100% share is stored as 100 (whole percent), not 1.
+      const id = await newRisk({ fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 100 });
       await harness.fetchApp('PUT', `/api/fac/risks/${id}/locations`, {
         body: {
           locations: [{
@@ -440,7 +483,7 @@ describe.skipIf(shouldSkipDb)('integration: fac Phase 4 families, capacity and p
 
     it('refuses a bind that breaches, and allows it with a recorded override', async () => {
       const par = cobFor('PAR');
-      const id = await newRisk({ fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 1 });
+      const id = await newRisk({ fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 100 });
       await harness.fetchApp('PUT', `/api/fac/risks/${id}/locations`, {
         body: {
           locations: [{
@@ -491,7 +534,7 @@ describe.skipIf(shouldSkipDb)('integration: fac Phase 4 families, capacity and p
       // The bind above refreshed the view; a new risk in the same zone must
       // now see that committed exposure.
       const par = cobFor('PAR');
-      const id = await newRisk({ fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 1 });
+      const id = await newRisk({ fac_cob_id: par.fac_cob_id, uw_year: 2026, our_share_pct: 100 });
       await harness.fetchApp('PUT', `/api/fac/risks/${id}/locations`, {
         body: {
           locations: [{

@@ -103,9 +103,11 @@ describe('freeCover', () => {
 });
 
 describe('priceTower', () => {
+  // our_share_pct is WHOLE PERCENT 0..100 — the layer tower screen saves a
+  // 25% line as 25, never 0.25 (same convention as fac_risk.our_share_pct).
   const layers = [
-    { layer_no: 2, attachment: 5_000_000, limit_amount: 5_000_000, our_share_pct: 0.10, reinstatements: 1 },
-    { layer_no: 1, attachment: 1_000_000, limit_amount: 4_000_000, our_share_pct: 0.25, reinstatements: 2 },
+    { layer_no: 2, attachment: 5_000_000, limit_amount: 5_000_000, our_share_pct: 10, reinstatements: 1 },
+    { layer_no: 1, attachment: 1_000_000, limit_amount: 4_000_000, our_share_pct: 25, reinstatements: 2 },
   ];
   const lossCostFor = (l) => (l.layer_no === 1 ? 200_000 : 50_000);
 
@@ -115,10 +117,24 @@ describe('priceTower', () => {
     expect(out.layers[0].premium).toBeCloseTo(250_000, 9);          // 200k / 0.8
     expect(out.layers[0].rol_pct).toBeCloseTo(250_000 / 4_000_000, 12);
     expect(out.layers[0].payback_years).toBeCloseTo(16, 9);
-    expect(out.layers[0].our_premium).toBeCloseTo(62_500, 9);       // × 25%
+    expect(out.layers[0].our_share_pct).toBe(25);                   // echoed as stored
+    expect(out.layers[0].our_premium).toBeCloseTo(62_500, 9);       // 250k × 25/100
+    expect(out.layers[1].our_premium).toBeCloseTo(6_250, 9);        // 62.5k × 10/100
     expect(out.total.premium).toBeCloseTo(312_500, 9);
-    expect(out.total.our_premium).toBeCloseTo(68_750, 9);
+    expect(out.total.our_premium).toBeCloseTo(68_750, 9);           // 62,500 + 6,250
     expect(out.total.layer_count).toBe(2);
+  });
+
+  it('treats our_share_pct as whole percent, not a fraction', () => {
+    // A 100% line takes the whole layer premium; treating 100 as a fraction
+    // would multiply it a hundredfold.
+    const out = priceTower({
+      layers: [{ layer_no: 1, attachment: 0, limit_amount: 1_000_000, our_share_pct: 100 }],
+      lossCostFor: () => 80_000,
+      grossUpDenominator: 0.8,
+    });
+    expect(out.layers[0].premium).toBeCloseTo(100_000, 9);
+    expect(out.layers[0].our_premium).toBeCloseTo(100_000, 9);
   });
 
   it('carries the reinstated cover through', () => {

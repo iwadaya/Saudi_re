@@ -146,6 +146,12 @@ export function freeCover({ attachment, limit, largestAsIfLoss }) {
  * The per-layer loss cost comes from whichever method the family used —
  * this only assembles the placement around it.
  *
+ * `fac_layer.our_share_pct` is WHOLE PERCENT 0..100 — a 25% line is stored
+ * as 25, not 0.25. That is what its only writer (the layer tower screen's
+ * "our share percent" input) saves, matching the fac_risk share convention
+ * (validation/facultative.js pct100). `our_premium` therefore divides by
+ * 100; the `our_share_pct` echoed on each priced layer stays whole percent.
+ *
  * @param {object} args
  * @param {Array<object>} args.layers            fac_layer rows
  * @param {(layer: object) => number|null} args.lossCostFor
@@ -175,7 +181,7 @@ export function priceTower({ layers, lossCostFor, grossUpDenominator, largestAsI
         payback_years: paybackYears(rol),
         total_cover: totalCover(layer),
         reinstatements: numOrNull(layer.reinstatements),
-        our_premium: premium !== null && share !== null ? premium * share : null,
+        our_premium: premium !== null && share !== null ? premium * (share / 100) : null,
         free_cover: fc.isFreeCover,
         exposed_portion: fc.exposedPortion,
       };
