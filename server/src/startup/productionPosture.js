@@ -74,6 +74,26 @@ export function checkProductionPosture({ log = logger } = {}) {
       + 'See app.js createCorsOptions / SECURITY.md.');
   }
 
+  // ── Dev/test auth + limiter bypass flags left on in production ──
+  // env.validateEnv hard-fails only ALLOW_DEMO_AUTH; these three are the same
+  // class of risk but may be enabled deliberately for demo/pilot flows, so they
+  // get a loud posture ERROR (alertable) rather than a boot refusal.
+  if (env.isProduction && process.env.ALLOW_NAME_AUTH === 'true') {
+    err('[posture] ALLOW_NAME_AUTH=true in production — passwordless login by display name '
+      + 'is enabled, so anyone who knows (or guesses) a user\'s name can sign into their '
+      + 'account. Unset ALLOW_NAME_AUTH unless a supervised pilot explicitly requires it.');
+  }
+  if (env.isProduction && process.env.ALLOW_OPEN_REGISTRATION === 'true') {
+    err('[posture] ALLOW_OPEN_REGISTRATION=true in production — anonymous account creation '
+      + 'is enabled on the login screen. Unset ALLOW_OPEN_REGISTRATION so accounts are '
+      + 'minted only by an authenticated CU/CE (or SSO).');
+  }
+  if (env.isProduction && process.env.LOAD_TEST === 'true') {
+    err('[posture] LOAD_TEST=true in production — the API rate limiters are BYPASSED '
+      + '(app.js rateLimitBypassed), leaving login brute-force and API flooding uncapped. '
+      + 'Unset LOAD_TEST outside load-test environments.');
+  }
+
   // ── Distributed rate limiting (P1 #3) ──
   if (env.isProduction && !rateLimitStoreEnabled()) {
     if (inClusterMode()) {

@@ -759,6 +759,25 @@ router.post('/auth/users', asyncHandler(async (req, res) => {
     mustChangePassword = true;
   }
 
+  // ── A5 privilege-escalation guard on CREATE (mirrors PATCH /auth/users/:id) ──
+  // (a) An authenticated creator may never mint an account whose role is senior
+  //     to (numerically below) their own level — a level-2 CU must not create a CE.
+  // (b) Open (login-screen) registration never honours the submitted role: the
+  //     new account is pinned to the LOWEST tier regardless of role_id/title, so
+  //     an anonymous caller cannot self-register straight into a senior role.
+  if (req.user) {
+    const actorLevel = Number(req.user.hierarchyLevel);
+    const newRoleLevel = await getRoleHierarchyLevel(roleId);
+    if (newRoleLevel != null && newRoleLevel < actorLevel) {
+      return res.status(403).json({ error: 'You cannot assign a role more senior than your own.', code: 'FORBIDDEN' });
+    }
+  } else {
+    const { rows: lowestRows } = await pool.query(
+      `SELECT role_id FROM public.uw_role ORDER BY hierarchy_level DESC, display_order DESC LIMIT 1`
+    );
+    if (lowestRows.length) roleId = lowestRows[0].role_id;
+  }
+
   const { rows } = await pool.query(
     `INSERT INTO public.uw_user
        (username, display_name, email, role_id, office, phone, company_id, password_hash, must_change_password)

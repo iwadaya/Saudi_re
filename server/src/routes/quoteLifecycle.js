@@ -7,6 +7,7 @@ import { logger } from '../lib/logger.js';
 import { resolveAuditActor } from '../services/audit.js';
 import { actorFromReq } from '../middleware/requestContext.js';
 import { bindQuoteToContract } from '../services/quoteBind.js';
+import { assertCanEdit } from '../services/permissions.js';
 
 const router = Router();
 
@@ -271,10 +272,14 @@ router.post('/quotes/:id/amend', asyncHandler(async (req, res) => {
 // frozen as-quoted snapshot, while contract-owned copies of every sub-table feed
 // the dashboard/portfolio going forward. One transaction — any failure rolls
 // back fully (no orphan rows); a double-bind is rejected. See services/quoteBind.js.
-// Authorization is enforced upstream by guardApiMutations (assertCanEdit on the
-// quote) before this handler runs.
+// Authorization is enforced HERE with assertCanEdit on the quote: guardApiMutations
+// classifies '/bind' as a create-style path (permissions.js CREATE_SUFFIXES) and
+// skips the assignee edit-lock, so this handler must take it explicitly — binding
+// a SIGNED quote into a live contract (with finance push) is not open to every
+// authenticated user, only to the quote's current assignee.
 router.post('/quotes/:id/bind', asyncHandler(async (req, res) => {
   try {
+    await assertCanEdit(req, 'QUOTE', req.params.id);
     const out = await bindQuoteToContract(pool, {
       quoteId: req.params.id,
       actor: actorFromReq(req),

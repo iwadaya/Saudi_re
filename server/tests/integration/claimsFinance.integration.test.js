@@ -193,6 +193,12 @@ describe.skipIf(shouldSkipDb)('integration: claims + finance modules', () => {
   });
 
   it('acknowledges once (PENDING_SETUP → ACTIVE) and 422s a second acknowledge', async () => {
+    // Below approver tier → 403 (same requireMinLevel(4) gate as /status): booking
+    // the treaty into the GL is not open to every authenticated user.
+    const junior = await harness.fetchApp('POST', `/api/finance/entries/${entryId}/acknowledge`,
+      { headers: { 'x-user-level': '5' } });
+    expect(junior.status).toBe(403);
+
     const ack = await harness.fetchApp('POST', `/api/finance/entries/${entryId}/acknowledge`);
     expect(ack.status).toBe(200);
     expect((await ack.json()).status).toBe('ACTIVE');

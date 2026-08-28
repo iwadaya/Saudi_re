@@ -167,7 +167,7 @@ router.put('/workbench/parameters/:id/approve', requireApprover, asyncHandler(as
     await client.query('BEGIN');
 
     const { rows: existingRows } = await client.query(
-      `SELECT id, current_value, pending_value, status
+      `SELECT id, current_value, pending_value, status, updated_by
          FROM public.formula_parameters
         WHERE id = $1
         FOR UPDATE`,
@@ -181,6 +181,17 @@ router.put('/workbench/parameters/:id/approve', requireApprover, asyncHandler(as
     if (existing.status !== 'PENDING' || existing.pending_value === null) {
       await client.query('ROLLBACK');
       return res.status(409).json({ error: 'No pending change to approve.' });
+    }
+    // No self-approval: the approver must be someone other than the proposer
+    // (updated_by is stamped on SUBMIT). Mirrors the claims four-eyes control
+    // (SELF_APPROVAL_FORBIDDEN) on financially material figures.
+    if (existing.updated_by != null && req.user?.userId != null
+      && String(existing.updated_by) === String(req.user.userId)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({
+        error: 'You cannot approve a change you proposed — approval needs a second person.',
+        code: 'SELF_APPROVAL_FORBIDDEN',
+      });
     }
 
     const { rows: updRows } = await client.query(

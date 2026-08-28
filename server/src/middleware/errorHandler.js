@@ -44,7 +44,14 @@ export function errorHandler(err, req, res, _next) {
   const status = resolveStatus(err);
   const code = resolveCode(err, status);
   const pg = pgMapping(err);
-  const message = (pg && pg.message) || err?.message || 'Internal server error';
+  let message = (pg && pg.message) || err?.message || 'Internal server error';
+  // 5xx in production: never echo the raw internal error (driver/stack details
+  // are an information leak). The full error is still logged server-side below
+  // and the requestId in the body correlates the two. 4xx keep their message —
+  // they are intentional client-facing errors.
+  if (status >= 500 && env.isProduction) {
+    message = 'Internal server error';
+  }
   const requestId = res.locals.requestId || req.id || null;
 
   const log = status >= 500 ? logger.error : logger.warn;

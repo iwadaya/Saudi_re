@@ -14,6 +14,10 @@ import { actorFromReq } from '../middleware/requestContext.js';
 import { saveCrestaSlice } from '../lib/crestaSave.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
+// The treaty-side financial mutations share their wire shape with the quote-side
+// twins (the loss registers even write to the same contract_large/cat_losses
+// tables), so they take the SAME Zod schemas the quote routes already apply.
+import { lossesSaveSchema, stripLargeCatSchema, riskProfileSaveSchema } from '../validation/quote.js';
 import { validateBody } from '../lib/validate.js';
 import { getWordingChecklist, runWordingChecklistAi, saveWordingChecklist } from '../services/wordingChecklist.js';
 import {
@@ -241,7 +245,7 @@ router.get("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
   const {rows:losses}=await pool.query(`SELECT *, ROUND(COALESCE(NULLIF(incurred,0), COALESCE(paid,0)+COALESCE(os,0)) * COALESCE(NULLIF(inflation_factor,0),1), 2) AS inflated_incurred FROM public.contract_large_losses WHERE report_id=$1 ORDER BY uw_year,date_of_loss`,[rr[0].report_id]);
   res.json({report:rr[0],losses});
 }));
-router.put("/treaties/:id/large-losses", asyncHandler(async (req, res) => {
+router.put("/treaties/:id/large-losses", validateBody(lossesSaveSchema), asyncHandler(async (req, res) => {
   const {id}=req.params;const {report_date,losses=[]}=req.body;const cl=await pool.connect();
   try{await cl.query("BEGIN");
   await assertExists(cl, 'public.contract', 'contract_id', id, 'Treaty');
@@ -305,7 +309,7 @@ router.get("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
   const {rows:losses}=await pool.query(`SELECT *, ROUND(COALESCE(NULLIF(incurred,0), COALESCE(paid,0)+COALESCE(os,0)) * COALESCE(NULLIF(inflation_factor,0),1), 2) AS inflated_incurred FROM public.contract_cat_losses WHERE report_id=$1 ORDER BY uw_year,date_of_loss`,[rr[0].report_id]);
   res.json({report:rr[0],losses});
 }));
-router.put("/treaties/:id/cat-losses", asyncHandler(async (req, res) => {
+router.put("/treaties/:id/cat-losses", validateBody(lossesSaveSchema), asyncHandler(async (req, res) => {
   const {id}=req.params;const {report_date,losses=[]}=req.body;const cl=await pool.connect();
   try{await cl.query("BEGIN");
   await assertExists(cl, 'public.contract', 'contract_id', id, 'Treaty');
@@ -385,7 +389,7 @@ router.get("/treaties/:id/portfolio-losses/:lossType", asyncHandler(async (req, 
 // Per-treaty choice of whether large + cat losses are stripped from the claims
 // triangle. Focused single-column update so it can be persisted from the Dev
 // Factors screen without overwriting the rest of the treaty detail.
-router.put("/treaties/:id/strip-large-cat", asyncHandler(async (req, res) => {
+router.put("/treaties/:id/strip-large-cat", validateBody(stripLargeCatSchema), asyncHandler(async (req, res) => {
   const strip = req.body?.strip_large_cat_losses === true;
   // Upsert so the toggle persists even if Dev Factors is reached before the
   // detail screen has created the prop-details row (no silent no-op).
@@ -661,7 +665,7 @@ router.get("/treaties/:id/risk-profiles/:cobId", asyncHandler(async (req, res) =
   const {rows:bands}=await pool.query(`SELECT * FROM public.contract_risk_profile_band WHERE profile_id=$1 ORDER BY from_amt`,[pr[0].profile_id]);
   res.json({profile:pr[0],bands});
 }));
-router.put("/treaties/:id/risk-profiles/:cobId", asyncHandler(async (req, res) => {
+router.put("/treaties/:id/risk-profiles/:cobId", validateBody(riskProfileSaveSchema), asyncHandler(async (req, res) => {
   const {id,cobId}=req.params;const {c_value,pml_percentage,selected_curve,custom_b,custom_g,gross_loss_ratio,bands=[]}=req.body;const cl=await pool.connect();
   try{await cl.query("BEGIN");
   const {rows}=await cl.query(`INSERT INTO public.contract_risk_profile (contract_id,class_of_business_id,c_value,pml_percentage,selected_curve,custom_b,custom_g,gross_loss_ratio) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (contract_id,class_of_business_id) DO UPDATE SET c_value=EXCLUDED.c_value,pml_percentage=EXCLUDED.pml_percentage,selected_curve=EXCLUDED.selected_curve,custom_b=EXCLUDED.custom_b,custom_g=EXCLUDED.custom_g,gross_loss_ratio=EXCLUDED.gross_loss_ratio RETURNING profile_id`,

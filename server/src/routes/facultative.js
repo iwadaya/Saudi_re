@@ -1749,10 +1749,27 @@ router.post(
       });
     }
 
-    const { rowCount: exists } = await pool.query(
-      `SELECT 1 FROM public.fac_risk WHERE fac_risk_id = $1`, [id],
+    const { rows: riskRows } = await pool.query(
+      `SELECT fac_risk_id, status FROM public.fac_risk WHERE fac_risk_id = $1`, [id],
     );
-    if (!exists) return res.status(404).json({ error: 'Risk not found' });
+    if (!riskRows.length) return res.status(404).json({ error: 'Risk not found' });
+
+    // Assignee edit-lock. guardApiMutations classifies '/decline' as a
+    // workflow path on the premise that the handler enforces its own
+    // authority + legal transition — so both live here explicitly.
+    await assertCanEdit(req, 'FAC_RISK', id);
+
+    // Legal-transition guard: only pre-bind, in-flight states may be
+    // declined. BOUND/RENEWED are on risk and DECLINED/NTU/CANCELLED are
+    // already terminal — mirroring the bind route's INVALID_STATE check.
+    const DECLINABLE_STATUSES = ['DRAFT', 'QUOTED', 'REFERRED'];
+    const currentStatus = riskRows[0].status;
+    if (!DECLINABLE_STATUSES.includes(currentStatus)) {
+      return res.status(409).json({
+        error: `Cannot decline from status "${currentStatus}". Only ${DECLINABLE_STATUSES.join('/')} risks can be declined.`,
+        code: 'INVALID_STATE',
+      });
+    }
 
     const actor = actorLabel(req);
     const { rows: updated } = await pool.query(
@@ -1768,7 +1785,7 @@ router.post(
       facRiskId: id,
       eventType: 'FAC_DECLINED',
       actor,
-      payload: { reason },
+      payload: { reason, previous_status: currentStatus },
     });
     res.json({ risk: updated[0], status: 'DECLINED' });
   }),
@@ -1966,6 +1983,12 @@ router.post(
     );
     if (!riskRows.length) return res.status(404).json({ error: 'Risk not found' });
 
+    // Assignee edit-lock. guardApiMutations classifies '/bind' as a
+    // create-style path (permissions.js CREATE_SUFFIXES) and skips the
+    // guard, so the handler takes it explicitly: only the risk's current
+    // assignee may bind it into the book.
+    await assertCanEdit(req, 'FAC_RISK', id);
+
     // Only QUOTED / APPROVED risks may be bound. The fac_status enum
     // doesn't carry APPROVED, so we treat QUOTED as the only ready
     // state right now — when the workflow grows peer/arbiter steps a
@@ -2003,6 +2026,19 @@ router.post(
         capacity,
       });
     }
+    // Exercising the override IS the referral authority, so the actor must
+    // actually hold it: approver tier (hierarchy level <= 4 — the same
+    // canApprove tier requireMinLevel(4) enforces on claims/finance). The
+    // check reads the VERIFIED req.user, never the body.
+    if (capacity?.referral && req.body?.capacity_override) {
+      if (!req.user || Number(req.user.hierarchyLevel) > 4) {
+        return res.status(403).json({
+          error: 'You do not have sufficient authority to override a capacity breach. '
+            + 'A capacity referral must be overridden by an approver (Treaty Manager or above).',
+          code: 'FORBIDDEN',
+        });
+      }
+    }
 
     // Generate FAC-YYYY-NNNNN. Year prefers explicit effective_date,
     // falls back to inception_date, then today.
@@ -2036,6 +2072,14 @@ router.post(
         capacity_status: capacity?.status ?? 'NOT_CHECKED',
         capacity_override: Boolean(req.body?.capacity_override),
         capacity_override_reason: req.body?.capacity_override_reason || null,
+        // The VERIFIED overrider (never a client-supplied label) so the audit
+        // trail names who exercised the referral authority.
+        capacity_override_by: req.body?.capacity_override ? {
+          user_id: actorUserUuid(req),
+          name: req.user?.displayName || null,
+          role: req.user?.roleCode || null,
+          hierarchy_level: req.user?.hierarchyLevel ?? null,
+        } : null,
         capacity_reasons: capacity?.reasons || [],
       },
     });

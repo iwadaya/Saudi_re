@@ -103,8 +103,11 @@ router.get('/finance/entries/:id', asyncHandler(async (req, res) => {
 }));
 
 // ── POST /api/finance/entries/:id/acknowledge ────────────────────────────────
-// Finance books the treaty in the GL: PENDING_SETUP → ACTIVE.
-router.post('/finance/entries/:id/acknowledge', asyncHandler(async (req, res) => {
+// Finance books the treaty in the GL: PENDING_SETUP → ACTIVE. A controlled
+// financial mutation exactly like /status below, so it takes the same
+// approver-tier gate (requireMinLevel(4)) — booking an entry into the GL must
+// not be open to every authenticated user.
+router.post('/finance/entries/:id/acknowledge', requireMinLevel(4), asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!UUID_RE.test(id)) return res.status(400).json({ error: 'Invalid entry id' });
   const actor = await resolveAuditActor(req);

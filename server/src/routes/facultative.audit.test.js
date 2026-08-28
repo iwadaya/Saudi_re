@@ -670,4 +670,46 @@ describe.skipIf(shouldSkipDb)('Phase 6: fac persistence round-trip audit', () =>
     expect(ok.status).toBe('DECLINED');
     await harness.fetchApp('DELETE', `/api/fac/risks/${riskId}`);
   });
+
+  it('11d. status: decline is rejected from terminal/bound states (409 INVALID_STATE)', async () => {
+    const riskId = await createRisk();
+    await jsonOk(harness, 'PUT', `/api/fac/risks/${riskId}/pricing`, {
+      underwriting_score: 96, capacity_grade: 'A', final_gross_rate_pm: 0.2,
+    });
+    await jsonOk(harness, 'POST', `/api/fac/risks/${riskId}/submit-for-approval`, {});
+    await jsonOk(harness, 'POST', `/api/fac/risks/${riskId}/bind`, { effective_date: '2026-06-01' });
+
+    const res = await harness.fetchApp('POST', `/api/fac/risks/${riskId}/decline`,
+      { body: { reason: 'too late to decline this one' } });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.code).toBe('INVALID_STATE');
+
+    const reload = await jsonNoBody(harness, 'GET', `/api/fac/risks/${riskId}`);
+    expect(reload.status).toBe('BOUND'); // untouched
+
+    await harness.fetchApp('DELETE', `/api/fac/risks/${riskId}`);
+  });
+
+  it('11e. status: decline and bind take the assignee edit-lock (403 READ_ONLY for a non-assignee)', async () => {
+    const riskId = await createRisk(); // assigned to the harness demo user
+    const stranger = { 'x-user-role': 'TUW', 'x-user-id': '00000000-0000-0000-0000-00000000dead' };
+
+    const decline = await harness.fetchApp('POST', `/api/fac/risks/${riskId}/decline`,
+      { headers: stranger, body: { reason: 'not my risk but declining anyway' } });
+    expect(decline.status).toBe(403);
+    expect((await decline.json()).code).toBe('READ_ONLY');
+
+    // Bind path: same lock, checked before any state/capacity logic.
+    const bind = await harness.fetchApp('POST', `/api/fac/risks/${riskId}/bind`,
+      { headers: stranger, body: {} });
+    expect(bind.status).toBe(403);
+    expect((await bind.json()).code).toBe('READ_ONLY');
+
+    // The risk is untouched.
+    const reload = await jsonNoBody(harness, 'GET', `/api/fac/risks/${riskId}`);
+    expect(reload.status).toBe('DRAFT');
+
+    await harness.fetchApp('DELETE', `/api/fac/risks/${riskId}`);
+  });
 });

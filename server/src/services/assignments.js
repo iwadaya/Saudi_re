@@ -67,13 +67,26 @@ export async function allocate({ entityType, entityId, requestingUserId, comment
 
 export async function reassign({ entityType, entityId, reassignedBy, newOwnerId, comment }) {
   const table=entityTable(entityType); const idCol=entityIdCol(entityType);
-  const { rows } = await pool.query(`SELECT assigned_to_user_id FROM ${table} WHERE ${idCol}=$1`,[entityId]);
+  const { rows } = await pool.query(`SELECT assigned_to_user_id, uw_status FROM ${table} WHERE ${idCol}=$1`,[entityId]);
   if (!rows.length) throw Object.assign(new Error('Not found'),{status:404});
   const fromUserId=rows[0].assigned_to_user_id;
+  // Same DRAFT-only rule as allocate()/selfAssign(): once an item has moved
+  // past DRAFT its ownership is frozen — nobody may seize a peer's in-flight
+  // or SIGNED work by reassigning it.
+  const status=(rows[0].uw_status||'DRAFT').toUpperCase();
+  if (status !== 'DRAFT') {
+    throw Object.assign(new Error(`Cannot reassign: item is ${status}. Only DRAFT items can be reassigned.`),{status:403});
+  }
   const reassignerLevel=await getHierarchyLevel(reassignedBy);
   if (fromUserId) {
     const ownerLevel=await getHierarchyLevel(fromUserId);
     if (reassignerLevel>ownerLevel) throw Object.assign(new Error('You can only reassign work from colleagues at your level or below.'),{status:403});
+  } else {
+    // Unassigned item: there is no current owner to measure against, so the
+    // hierarchy check applies to the NEW owner instead — you may hand
+    // unclaimed work only to colleagues at your level or below.
+    const newOwnerLevel=await getHierarchyLevel(newOwnerId);
+    if (reassignerLevel>newOwnerLevel) throw Object.assign(new Error('You can only assign work to colleagues at your level or below.'),{status:403});
   }
   await pool.query(`UPDATE ${table} SET assigned_to_user_id=$2, updated_at=now() WHERE ${idCol}=$1`,[entityId,newOwnerId]);
   await logHistory({entityType,entityId,fromUserId,toUserId:newOwnerId,assignedBy:reassignedBy,action:'ASSIGNED',comment});
