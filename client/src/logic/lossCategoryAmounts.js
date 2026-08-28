@@ -14,24 +14,39 @@ import { toN as cn } from '../utils/format';
 function sumByYear(payload) {
   const list = payload?.losses || payload?.rows || (Array.isArray(payload) ? payload : []);
   const map = new Map();
+  let skipped = 0;
   for (const l of list) {
+    // Missing uw_year must SKIP the loss, not bucket it under year 0:
+    // Number(null) === 0 and Number('') === 0, both of which pass
+    // Number.isFinite, so the finiteness guard alone let null/blank years
+    // through as a phantom year-0 entry no real-year lookup could ever
+    // reach (F99). Skipped losses are counted so callers can surface that
+    // amounts were left out of the add-back rather than vanishing silently.
+    if (l.uw_year == null || l.uw_year === '') { skipped++; continue; }
     const yr = Number(l.uw_year);
-    if (!Number.isFinite(yr)) continue;
+    if (!Number.isFinite(yr)) { skipped++; continue; }
     const inc = cn(l.incurred) || (cn(l.paid) + cn(l.os));
     map.set(yr, (map.get(yr) || 0) + inc);
   }
-  return map;
+  return { map, skipped };
 }
 
 /* Per-UW-year large-loss and CAT-loss amounts for a treaty, summed from the
-   saved loss grids using raw incurred values. Returns two Maps keyed by year. */
+   saved loss grids using raw incurred values. Returns two Maps keyed by year,
+   plus `skipped` counts of losses excluded for having no usable uw_year. */
 export async function loadLossCategoryByYear(contractId, opts) {
-  if (!contractId) return { large: new Map(), cat: new Map() };
+  if (!contractId) return { large: new Map(), cat: new Map(), skipped: { large: 0, cat: 0 } };
   const [largeData, catData] = await Promise.all([
     api.getLargeLosses(contractId, opts).catch(() => null),
     api.getCatLosses(contractId, opts).catch(() => null),
   ]);
-  return { large: sumByYear(largeData), cat: sumByYear(catData) };
+  const large = sumByYear(largeData);
+  const cat = sumByYear(catData);
+  return {
+    large: large.map,
+    cat: cat.map,
+    skipped: { large: large.skipped, cat: cat.skipped },
+  };
 }
 
 /* Single source of truth for the projected-summary loss model.

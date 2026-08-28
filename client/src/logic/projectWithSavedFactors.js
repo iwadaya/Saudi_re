@@ -361,6 +361,7 @@ async function projectFromSavedBlend(contractId, parsed, opts) {
 
   const n = parsed.length;
   const sorted = [...parsed].sort((a, b) => a.year - b.year);
+  const maxYear = Number(sorted[n - 1]?.year);
   const pickCdf = (cdfs, devIdx) => {
     if (!cdfs || cdfs.length === 0) return 1.0;
     // devIdx counts years since the newest (0 = newest year, age 12).
@@ -373,7 +374,14 @@ async function projectFromSavedBlend(contractId, parsed, opts) {
   };
 
   return sorted.map((row, i) => {
-    const devIdx  = n - 1 - i;
+    // Dev age from the year's DISTANCE to the newest year, not its array
+    // position — a gap in underwriting years must not shift every older
+    // year onto too-young (too-large) CDFs (F55, same fix as
+    // projectStraightStats). Positional fallback only for unparseable years.
+    const yr      = Number(row.year);
+    const devIdx  = Number.isFinite(maxYear) && Number.isFinite(yr)
+      ? maxYear - yr
+      : n - 1 - i;
     const lossCDF = pickCdf(claimsCdfs, devIdx);
     const premCDF = pickCdf(premCdfs, devIdx);
     const prem = parseFloat(row.premium) || 0;

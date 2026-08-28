@@ -55,6 +55,24 @@ export function fitWeibull(losses,xm){
 export function weibullCDF(x,k,lam,xm){const z=x-xm;return z<=0?0:1-Math.exp(-Math.pow(z/lam,k));}
 export function weibullQ(p,k,lam,xm){return xm+lam*Math.pow(-Math.log(1-p),1/k);}
 
+/**
+ * Threshold-condition a CDF: Fc(x) = (F(x) − F(xm)) / (1 − F(xm)) for x ≥ xm.
+ * calcKS compares every candidate against the CONDITIONAL empirical CDF of
+ * losses ≥ xm, and pareto/exp/weibull CDFs are naturally conditional
+ * (F(xm) = 0) — but the lognormal's support extends below the threshold, so
+ * its unconditional CDF scored the KS on a different basis and biased the
+ * min-KS ranking between the four families (F59). Wrap it with this before
+ * ranking. Degenerate fits with all mass below xm score as a total misfit.
+ * (Note: fitLognormal remains an UNTRUNCATED MLE applied to the truncated
+ * tail sample — a known approximation; only the scoring basis is aligned.)
+ */
+export function conditionalCDF(cdfFn, xm) {
+  const F0 = cdfFn(xm);
+  const denom = 1 - F0;
+  if (!(denom > 0)) return () => 1; // all mass below threshold — cannot fit the tail
+  return x => (x < xm ? 0 : (cdfFn(x) - F0) / denom);
+}
+
 export function calcKS(losses,cdfFn,xm){
   const v=losses.filter(x=>x>=xm).sort((a,b)=>a-b);const n=v.length;
   if(n===0)return{ks:1,pValue:0};let mx=0;
@@ -155,7 +173,9 @@ export function fitAll(losses,xm){
   const p=fitPareto(losses,xm),ln=fitLognormal(losses,xm),ex=fitExponential(losses,xm),wb=fitWeibull(losses,xm);
   return[
     {key:'pareto',params:p,ks:calcKS(losses,x=>paretoCDF(x,p.alpha,xm),xm),paramStr:`α=${fDec(p.alpha,3)}`,n:p.n},
-    {key:'lognormal',params:ln,ks:calcKS(losses,x=>lognormalCDF(x,ln.mu,ln.sigma),xm),paramStr:`μ=${fDec(ln.mu,2)} σ=${fDec(ln.sigma,2)}`,n:ln.n},
+    // Lognormal is scored on the threshold-conditional CDF so all four
+    // candidates rank on the same basis — see conditionalCDF (F59).
+    {key:'lognormal',params:ln,ks:calcKS(losses,conditionalCDF(x=>lognormalCDF(x,ln.mu,ln.sigma),xm),xm),paramStr:`μ=${fDec(ln.mu,2)} σ=${fDec(ln.sigma,2)}`,n:ln.n},
     {key:'exponential',params:ex,ks:calcKS(losses,x=>expCDF(x,ex.lambda,xm),xm),paramStr:`λ=${fDec(ex.lambda,6)}`,n:ex.n},
     {key:'weibull',params:wb,ks:calcKS(losses,x=>weibullCDF(x,wb.k,wb.lam,xm),xm),paramStr:`k=${fDec(wb.k,3)} λ=${fDec(wb.lam,0)}`,n:wb.n},
   ];

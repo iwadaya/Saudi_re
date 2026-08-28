@@ -58,6 +58,46 @@ describe('loadLossCategoryByYear — add-back population', () => {
     expect(large.get(2022)).toBe(150); // paid + os fallback
     expect(cat.get(2023)).toBe(120);   // deselected CAT still added back
   });
+
+  it('skips losses with no usable uw_year instead of bucketing them under year 0 (F99)', async () => {
+    // Number(null) === 0 and Number('') === 0 both pass Number.isFinite, so
+    // the pre-fix guard let null/blank years through as a phantom [0, amount]
+    // map entry no real-year lookup could reach — the amount silently
+    // vanished from every year's add-back.
+    apiMock.getLargeLosses.mockResolvedValue({
+      losses: [
+        { uw_year: 2021, incurred: 500 },
+        { uw_year: null, incurred: 999 },     // missing year → skipped
+        { uw_year: '', incurred: 77 },        // blank year → skipped
+        { uw_year: undefined, incurred: 55 }, // undefined → skipped
+        { uw_year: 'n/a', incurred: 33 },     // unparseable → skipped
+        { uw_year: 2022, incurred: 450 },
+      ],
+    });
+    apiMock.getCatLosses.mockResolvedValue({
+      losses: [{ uw_year: null, incurred: 120 }, { uw_year: 2021, incurred: 60 }],
+    });
+    const { large, cat, skipped } = await loadLossCategoryByYear('c1');
+    // Real years keep their exact sums.
+    expect(large.get(2021)).toBe(500);
+    expect(large.get(2022)).toBe(450);
+    expect(cat.get(2021)).toBe(60);
+    // No phantom year-0 bucket on either map.
+    expect(large.has(0)).toBe(false);
+    expect(cat.has(0)).toBe(false);
+    // The exclusions are surfaced, not silent: 4 large + 1 cat skipped.
+    expect(skipped).toEqual({ large: 4, cat: 1 });
+  });
+
+  it('a UW year of literal 0 is still a valid (finite) year key', async () => {
+    // Only MISSING years are skipped — an explicit numeric 0 passes through
+    // (garbage-in-garbage-out, but not silently dropped).
+    apiMock.getLargeLosses.mockResolvedValue({ losses: [{ uw_year: 0, incurred: 10 }] });
+    apiMock.getCatLosses.mockResolvedValue({ losses: [] });
+    const { large, skipped } = await loadLossCategoryByYear('c1');
+    expect(large.get(0)).toBe(10);
+    expect(skipped).toEqual({ large: 0, cat: 0 });
+  });
 });
 
 describe('end-to-end: real server stripping + real client projection', () => {

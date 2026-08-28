@@ -226,6 +226,25 @@ describe('loadProjectedRows — saved LDF blend orientation', () => {
     expect(byYear[2023].ultLoss).toBeCloseTo(189, 9);
   });
 
+  it('derives dev age from year DISTANCE to the newest year — a gap year does not shift older years (F55)', async () => {
+    // Years [2020, 2021, 2023] — 2022 missing. Newest = 2023. Incurred 100/yr.
+    //   2023: devIdx 2023−2023 = 0 → CDF 1.89 → ultimate 189
+    //   2021: devIdx 2023−2021 = 2 → CDF 1.05 → ultimate 105
+    //   2020: devIdx 2023−2020 = 3 → CDF 1.00 → ultimate 100
+    // The pre-fix positional devIdx (n−1−i) gave 2021 → 1.26 (ult 126) and
+    // 2020 → 1.05 (ult 105) — every year before the gap one dev period young.
+    primeBlendApi({ years: [2020, 2021, 2023] });
+    const { rows, source } = await loadProjectedRows('c1');
+    expect(source).toBe('straight-blend');
+    const byYear = Object.fromEntries(rows.map(r => [r.year, r]));
+    expect(byYear[2023].devFactor).toBeCloseTo(1.89, 9);
+    expect(byYear[2023].ultLoss).toBeCloseTo(189, 9);
+    expect(byYear[2021].devFactor).toBeCloseTo(1.05, 9);
+    expect(byYear[2021].ultLoss).toBeCloseTo(105, 9);
+    expect(byYear[2020].devFactor).toBeCloseTo(1.0, 9);
+    expect(byYear[2020].ultLoss).toBeCloseTo(100, 9);
+  });
+
   it('applies the same orientation to a saved PREMIUM blend', async () => {
     primeBlendApi({
       years: [2021, 2022, 2023],

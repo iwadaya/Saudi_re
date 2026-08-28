@@ -132,10 +132,20 @@ export function projectStraightStats(stats, classKey = DEFAULT_LDF_KEY) {
   const lossCDFs = resolveCdfs(classKey);
   const sorted   = [...stats].sort((a, b) => a.year - b.year);
   const n        = sorted.length;
+  const maxYear  = Number(sorted[n - 1].year);
 
   return sorted.map((row, i) => {
-    // devIdx: newest year = 0 (largest CDF), oldest = n-1
-    const devIdx    = n - 1 - i;
+    // devIdx: the year's DISTANCE to the newest year — newest = 0 (largest
+    // CDF), a year k calendar-years older = k. Derived from the year VALUE,
+    // not the array position: with a gap in underwriting years (e.g.
+    // [2019, 2020, 2023]) the positional n-1-i assigned too-young dev ages
+    // to every year before the gap and over-projected them (F55). Duplicate
+    // year rows now also share one dev age. Falls back to the positional
+    // index only when years are unparseable.
+    const yr        = Number(row.year);
+    const devIdx    = Number.isFinite(maxYear) && Number.isFinite(yr)
+      ? maxYear - yr
+      : n - 1 - i;
     const lossCDF   = getCDF(lossCDFs, devIdx);
     const premCDF   = getCDF(PREM_CDFS, devIdx);
 

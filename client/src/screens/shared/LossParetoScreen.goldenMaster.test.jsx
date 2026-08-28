@@ -122,7 +122,11 @@ describe('golden master — large losses, Pareto fit restored from snapshot', ()
   it('renders the goodness-of-fit table with all four fitted distributions', async () => {
     await renderLarge();
     expect(rowWith('α=1.284')).toBe('Paretoα=1.284180.19140.4877Good');
-    expect(rowWith('μ=14.59 σ=0.47')).toBe('Lognormalμ=14.59 σ=0.47180.12461.0000Good');
+    // Lognormal KS is scored on the threshold-conditional CDF (F59 fix):
+    // F0 = lognormalCDF(1e6, 14.5944, 0.4682) = 0.048098, so
+    // Fc(x) = (F(x) − F0)/(1 − F0) → D = 0.1397, p = 0.9436 (was the
+    // mixed-basis unconditional D = 0.1246, p capped at 1.0000).
+    expect(rowWith('μ=14.59 σ=0.47')).toBe('Lognormalμ=14.59 σ=0.47180.13970.9436Good');
     expect(rowWith('λ=0.000001')).toBe('ExponentialBESTλ=0.000001180.10761.0000Good');
     expect(rowWith('k=1.135 λ=1489039')).toBe('Weibullk=1.135 λ=1489039180.11491.0000Good');
   });

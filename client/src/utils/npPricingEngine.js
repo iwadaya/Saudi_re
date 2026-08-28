@@ -393,12 +393,14 @@ export function calcPureBurningCost(losses, deductible, limit, egnpi, obsYears, 
  * @param {number} egnpi
  * @param {LossSelectionSnapshot} [savedParams] - Optional saved {pareto_xm, pareto_alpha, observation_years}
  *                               from the loss selection screen (takes precedence if present)
- * @returns {{ rol: number, alpha: number, xm: number, prAttach: number, prExhaust: number, expLayerLoss?: number }}
+ * @returns {{ rol: number, alpha: number, xm: number, prAttach: number, prExhaust: number, expLayerLoss?: number, warnings?: string[] }}
  */
 export function calcParetoROL(losses, deductible, limit, egnpi, savedParams) {
   if (limit <= 0 || egnpi <= 0) return { rol: 0, alpha: 0, xm: 0, prAttach: 0, prExhaust: 0 };
 
   let alpha, xm, n, years;
+  /** @type {string[]} */
+  const warnings = [];
 
   // Prefer saved fitted params from loss selection screen.
   // (NUMERIC columns arrive as strings — coerce before comparing, otherwise
@@ -406,8 +408,33 @@ export function calcParetoROL(losses, deductible, limit, egnpi, savedParams) {
   if (savedParams && cn(savedParams.pareto_alpha) > 0 && cn(savedParams.pareto_xm) > 0) {
     alpha = cn(savedParams.pareto_alpha);
     xm    = cn(savedParams.pareto_xm);
-    n     = cn(savedParams.selected_count) || 10;
-    years = cn(savedParams.observation_years) || 10;
+    // Frequency inputs: the snapshot save path always writes selected_count
+    // and observation_years today (useLossParetoSave.buildSnapshotPayload),
+    // but a legacy/partial snapshot may lack them. Never fabricate n=10 or
+    // 10 years (that silently invented a 1.0 losses/year frequency — F102):
+    // fall back to the same honest derivation the no-snapshot branch uses
+    // (real tail count from the raw losses, real distinct loss years), and
+    // if even that is impossible, refuse to price with a warning.
+    n = cn(savedParams.selected_count);
+    const selected = (losses || []).filter(l => l.is_selected !== false);
+    if (!(n > 0)) {
+      n = selected.map(lossValue).filter(v => v >= xm).length;
+      if (n > 0) {
+        warnings.push(`Saved Pareto snapshot has no selected_count — using ${n} tail losses ≥ threshold from the raw loss data instead.`);
+      }
+    }
+    years = cn(savedParams.observation_years);
+    if (!(years > 0)) {
+      const distinctYears = new Set(selected.map(l => l.uw_year)).size;
+      years = distinctYears > 0 ? Math.max(5, distinctYears) : 0;
+      if (years > 0) {
+        warnings.push(`Saved Pareto snapshot has no observation_years — using ${years} years derived from the raw loss data instead.`);
+      }
+    }
+    if (!(n > 0) || !(years > 0)) {
+      warnings.push('Saved Pareto snapshot lacks selected_count/observation_years and no raw losses are available to derive a frequency — Pareto ROL not calculated.');
+      return { rol: 0, alpha, xm, prAttach: 0, prExhaust: 0, warnings };
+    }
   } else {
     // Fit from raw losses
     const selected = (losses || []).filter(l => l.is_selected !== false);
@@ -433,7 +460,9 @@ export function calcParetoROL(losses, deductible, limit, egnpi, savedParams) {
   const prAttach  = Math.min(1, paretoAttachment(alpha, xm, deductible));
   const prExhaust = Math.min(1, paretoExhaustion(alpha, xm, deductible, limit));
 
-  return { rol, alpha, xm, prAttach, prExhaust, expLayerLoss };
+  return warnings.length
+    ? { rol, alpha, xm, prAttach, prExhaust, expLayerLoss, warnings }
+    : { rol, alpha, xm, prAttach, prExhaust, expLayerLoss };
 }
 
 // ── Swiss Re band-size → curve mapping (brochure p.17) ────────────
@@ -587,6 +616,14 @@ export function calcCatExposureRating(crestaRows, deductible, limit, egnpi, catS
     if (rp10 > 0 || rp50 > 0) {
       // Trapezoidal integration over the OEP curve
       // Layer hit at each RP = max(0, min(event_loss - D, L))
+      // The (rp=1, loss=0) point anchors the trapezoid at annual frequency
+      // 1 with zero loss — it is part of the intended geometry, carrying
+      // the whole frequency band between RP1 and the first curve point
+      // (and letting interpOEP return attachment probabilities above 1/5
+      // for low attachments). The filter removes only interior fabricated
+      // points that are truly absent (loss 0), so it must KEEP the anchor:
+      // dropping it deleted the RP1→RP5 band from the AEP integral and
+      // capped prAttach at 1/rp of the first surviving point (F57).
       const points = [
         { rp: 1,   loss: 0 },
         { rp: 5,   loss: rp10  > 0 ? rp10  * 0.4 : 0 },  // interpolate RP5
@@ -596,7 +633,7 @@ export function calcCatExposureRating(crestaRows, deductible, limit, egnpi, catS
         { rp: 100, loss: rp100 || (rp50  ? rp50  * 1.5 : 0) },
         { rp: 200, loss: rp200 || (rp100 ? rp100 * 1.4 : 0) },
         { rp: 500, loss: rp200 ? rp200 * 1.5 : 0 },
-      ].filter(p => p.loss > 0);
+      ].filter(p => p.rp === 1 || p.loss > 0);
 
       let aep = 0; // Annual Expected Loss from layer
       for (let i = 0; i < points.length - 1; i++) {
@@ -645,8 +682,13 @@ export function calcCatExposureRating(crestaRows, deductible, limit, egnpi, catS
       s + cn(r.eq_agg) + cn(r.ws_agg) + cn(r.flood_agg) + cn(r.srcc_agg) + cn(r.others_agg), 0);
     if (totalExposure > 0 && egnpi > 0) {
       const impliedLoss = egnpi * 0.15; // base: 15% expected annual loss ratio as seed
+      // impliedLoss is already an ANNUAL quantity, so the ROL is simply the
+      // layered annual loss over the limit — the same ÷limit basis as every
+      // other method here. The old denominator limit × obsYears divided an
+      // annual loss by (currency × years), understating the stated 15%
+      // assumption by obsYears× (F58).
       const rol = limit > 0
-        ? layerHit(impliedLoss, deductible, limit) / (limit * (obsYears || 10))
+        ? layerHit(impliedLoss, deductible, limit) / limit
         : 0;
       return { rol, totalExposure, method: 'flat_loss_ratio_fallback' };
     }
