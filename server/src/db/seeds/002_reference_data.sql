@@ -1,8 +1,14 @@
 -- Seed 002: Reference data aligned to actual schema tables
 -- Tables: treaty_type, class_of_business, brokers, companies, country, currency
--- Safe to run multiple times (ON CONFLICT DO NOTHING).
-
-BEGIN;
+-- Safe to run multiple times: every INSERT targets the table's natural key
+-- (full uniques on currency/treaty_type/reinsurers; the partial
+-- `... WHERE is_active IS NOT FALSE` uniques from migration 150 on
+-- country/class_of_business/brokers/companies) so a re-run is a no-op.
+--
+-- No BEGIN/COMMIT here: seeds/run.js sends this whole file as ONE query, so
+-- PostgreSQL already executes it atomically in a single implicit transaction.
+-- A file-level COMMIT would (and did) terminate any transaction a caller
+-- wrapped around the file, committing partial state mid-run.
 
 -- ═══════════════════════════════════════════════════════════════════
 -- Treaty Types (actual table: treaty_type with columns treaty_type, category)
@@ -19,7 +25,7 @@ INSERT INTO public.treaty_type (treaty_type, category) VALUES
   ('Risk & CAT XL',         'NON_PROPORTIONAL'),
   ('Stop Loss',             'NON_PROPORTIONAL'),
   ('Aggregate XL',          'NON_PROPORTIONAL')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (treaty_type) DO NOTHING;
 
 -- ═══════════════════════════════════════════════════════════════════
 -- Class of Business (actual columns: class_of_business, code)
@@ -40,7 +46,7 @@ INSERT INTO public.class_of_business (class_of_business, code) VALUES
   ('Liability',        'LIABILITY'),
   ('Workers Comp',     'WORKERS_COMP'),
   ('Misc Accident',    'MISC_ACCIDENT')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (class_of_business) WHERE is_active IS NOT FALSE DO NOTHING;
 
 -- ═══════════════════════════════════════════════════════════════════
 -- Countries (actual table: country with country_code, country_name)
@@ -66,7 +72,7 @@ INSERT INTO public.country (country_code, country_name) VALUES
   ('FR',  'France'),
   ('DE',  'Germany'),
   ('US',  'United States')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (country_code) WHERE is_active IS NOT FALSE DO NOTHING;
 
 -- ═══════════════════════════════════════════════════════════════════
 -- Currencies (actual table: currency with currency_code, currency_name)
@@ -86,7 +92,7 @@ INSERT INTO public.currency (currency_code, currency_name) VALUES
   ('ZAR', 'South African Rand'),
   ('NGN', 'Nigerian Naira'),
   ('TRY', 'Turkish Lira')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (currency_code) DO NOTHING;
 
 -- ═══════════════════════════════════════════════════════════════════
 -- Brokers (actual table: brokers with broker_name)
@@ -98,7 +104,7 @@ INSERT INTO public.brokers (broker_name) VALUES
   ('Willis Re'),
   ('Howden Re'),
   ('Direct - No Broker')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (broker_name) WHERE is_active IS NOT FALSE DO NOTHING;
 
 -- ═══════════════════════════════════════════════════════════════════
 -- Cedants (actual table: companies with company_name, country_id)
@@ -133,7 +139,7 @@ BEGIN
     ('GIG Egypt',                    v_eg),
     ('Dhofar Insurance',             v_om),
     ('National Life & General',      v_om)
-  ON CONFLICT DO NOTHING;
+  ON CONFLICT (company_name) WHERE is_active IS NOT FALSE DO NOTHING;
 END $$;
 
 -- ═══════════════════════════════════════════════════════════════════
@@ -148,6 +154,4 @@ INSERT INTO public.reinsurers (reinsurer_name) VALUES
   ('Berkshire Hathaway Re'),
   ('Lloyd''s'),
   ('Everest Re')
-ON CONFLICT DO NOTHING;
-
-COMMIT;
+ON CONFLICT (reinsurer_name) DO NOTHING;

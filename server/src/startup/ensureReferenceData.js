@@ -123,21 +123,35 @@ export async function ensureReferenceData() {
     treatyTypes,
   );
 
-  // Remove any non-canonical rows — remap FKs then delete
+  // Soft-deactivate non-canonical treaty types so they disappear from the
+  // reference dropdowns (lookups.js filters `is_active IS NOT FALSE`,
+  // migration 141) without destroying anything.
+  //
+  // This block used to hard-DELETE every non-canonical row on every boot —
+  // silently erasing user-created reference data — after attempting to NULL
+  // out contract/quote.treaty_type_id, which can never succeed because both
+  // columns are NOT NULL (so the only rows that "survived" were the ones a
+  // constraint violation happened to protect, and every error was swallowed).
+  // Boot must never delete reference rows; if canonical enforcement is ever
+  // wanted, it belongs in a reviewed migration.
+  //
+  // Only ACTIVE rows are touched (`is_active IS DISTINCT FROM false`) so rows
+  // already soft-deleted — by a user or by test fixtures — are left exactly
+  // as they are, and the statement is a no-op on an already-converged DB.
   try {
     const canonicalNames = treatyTypes.map(([name]) => name);
-    const orphanRows = await pool.query(
-      `SELECT treaty_type_id, treaty_type FROM public.treaty_type WHERE treaty_type <> ALL($1::text[])`,
+    const res = await pool.query(
+      `UPDATE public.treaty_type
+          SET is_active = false
+        WHERE treaty_type <> ALL($1::text[])
+          AND is_active IS DISTINCT FROM false`,
       [canonicalNames]
     );
-    for (const row of orphanRows.rows) {
-      // null out FKs rather than misassign
-      await pool.query('UPDATE public.contract SET treaty_type_id=NULL WHERE treaty_type_id=$1', [row.treaty_type_id]).catch(() => {});
-      await pool.query('UPDATE public.quote    SET treaty_type_id=NULL WHERE treaty_type_id=$1', [row.treaty_type_id]).catch(() => {});
-      await pool.query('DELETE FROM public.treaty_type WHERE treaty_type_id=$1', [row.treaty_type_id]).catch(() => {});
+    if (res.rowCount > 0) {
+      logger.info('ensureReferenceData: deactivated non-canonical treaty types', { count: res.rowCount });
     }
   } catch (e) {
-    logger.warn('ensureReferenceData: treaty_type cleanup skipped', { error: e.message?.split('\n')[0] });
+    logger.warn('ensureReferenceData: treaty_type deactivation failed', { error: e.message?.split('\n')[0] });
   }
 
 

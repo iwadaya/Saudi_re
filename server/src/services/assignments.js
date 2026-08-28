@@ -11,6 +11,7 @@
 import { pool } from '../db/pool.js';
 import { logAudit } from './audit.js';
 import { computeEditPermission } from './permissions.js';
+import { logger } from '../lib/logger.js';
 
 function entityTable(t) {
   if (t==='CONTRACT') return 'public.contract';
@@ -40,7 +41,16 @@ async function logHistory({ entityType, entityId, fromUserId, toUserId, assigned
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
       [entityType, entityId, fromUserId||null, toUserId, assignedBy||toUserId, action, comment||null]
     );
-  } catch {
+  } catch (err) {
+    // Never fail the assignment over a history write, but never hide the
+    // failure either: the silent catch here is what let migration 036's
+    // schema drift (missing `action` column, 42703) empty the audit trail
+    // for months without a single log line. Degrade to the generic
+    // audit_log AND say so.
+    logger.warn('assignment history insert failed; falling back to audit_log', {
+      entityType, entityId, action,
+      code: err?.code, error: err?.message?.split('\n')[0],
+    });
     await logAudit(pool,{entityType,entityId,eventType:action,actor:{id:assignedBy||toUserId},payload:{fromUserId,toUserId,comment}}).catch(()=>{});
   }
 }
