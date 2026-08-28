@@ -153,10 +153,36 @@ export function burningCostLossCost({
   }
 
   // ── Numerator ──────────────────────────────────────────────────────
+  // The numerator only counts the years the denominator counts. A loss
+  // listing routinely reaches further back than the exposure history an
+  // underwriter enters, and a loss from a year with no recorded exposure
+  // would inflate the burn rate: its money would land in the numerator
+  // while its year contributes nothing to the denominator.
+  const basisYearSet = new Set(basisRows.map((b) => Number(b.loss_year)));
+  const coversYear = denominatorSource === 'EXPERIENCE_BASIS'
+    ? (y) => basisYearSet.has(y)
+    // The fallback denominator is today's exposure across the last
+    // `exposureYears` years, so that window is what the numerator covers.
+    : (y) => y > year - exposureYears && y <= year;
+
   const restated = rows.map((l) => ({ loss: l, r: restateLoss(l, { asOfYear: year, trend, developmentFactor, attachment, limit }) }));
-  const included = restated.filter((x) => x.r.included);
+  const usable = restated.filter((x) => x.r.included);
+  const included = usable.filter((x) => coversYear(Number(x.loss.loss_year)));
+  const outOfWindow = usable.filter((x) => !coversYear(Number(x.loss.loss_year)));
   const hitting = included.filter((x) => x.r.layer > 0);
   const layerTotal = included.reduce((acc, x) => acc + x.r.layer, 0);
+  const outOfWindowLayerTotal = outOfWindow.reduce((acc, x) => acc + x.r.layer, 0);
+
+  if (outOfWindow.length > 0) {
+    const outYears = [...new Set(outOfWindow.map((x) => Number(x.loss.loss_year)))]
+      .sort((a, b) => a - b);
+    warnings.push(
+      `${outOfWindow.length} loss(es) from ${outYears.join(', ')} fall outside the `
+      + `${exposureYears}-year exposure window and are excluded from the burn rate — the `
+      + 'denominator has no exposure for those years, so counting them would overstate it. '
+      + 'Enter the exposure for those years on Loss Experience to bring them back in.',
+    );
+  }
 
   if (included.length === 0) {
     warnings.push('No usable losses in the period — the burn rate is nil, which is a result, not an absence of one.');
@@ -164,12 +190,16 @@ export function burningCostLossCost({
 
   // Per-year layer losses — the denominator years included, at nil. The
   // spread of these is what a standard-deviation risk load is loaded on,
-  // so a year with no claims has to appear as a zero, not be absent.
-  const byYear = new Map(basisRows.map((b) => [Number(b.loss_year), 0]));
+  // so a year with no claims has to appear as a zero, not be absent —
+  // and a year the denominator does not cover must not appear at all.
+  const byYear = new Map(
+    denominatorSource === 'EXPERIENCE_BASIS'
+      ? basisRows.map((b) => [Number(b.loss_year), 0])
+      : Array.from({ length: exposureYears }, (_, i) => [year - exposureYears + 1 + i, 0]),
+  );
   for (const { loss, r } of included) {
     const y = Number(loss.loss_year);
-    if (byYear.has(y)) byYear.set(y, byYear.get(y) + r.layer);
-    else byYear.set(y, r.layer);
+    byYear.set(y, (byYear.get(y) ?? 0) + r.layer);
   }
   const annualSeries = [...byYear.entries()]
     .sort((a, b) => a[0] - b[0])
@@ -185,7 +215,10 @@ export function burningCostLossCost({
   const withPremium = basisRows.filter((b) => num(b.premium) > 0);
   if (withPremium.length > 0) {
     const years = withPremium.map((b) => Number(b.loss_year));
-    const rateByYear = Object.fromEntries(withPremium.map((b) => [Number(b.loss_year), num(b.rate_change_pct)]));
+    // Rate changes come from EVERY basis year, not only the years with a
+    // premium: a year whose premium is missing still moved the rate level,
+    // and its recorded rate change must stay in the on-level chain (F7).
+    const rateByYear = Object.fromEntries(basisRows.map((b) => [Number(b.loss_year), num(b.rate_change_pct)]));
     const factors = computeOnLevelFactors(years, rateByYear);
     const onLevelled = withPremium.reduce(
       (acc, b) => acc + num(b.premium) * (factors.get(Number(b.loss_year)) ?? 1), 0,
@@ -212,7 +245,9 @@ export function burningCostLossCost({
       total_in_layer: layerTotal,
       annual_layer_losses: annualSeries,
       claims_in_layer: hitting.length,
-      claims_excluded: restated.length - included.length,
+      claims_excluded: restated.length - usable.length,
+      out_of_window_claims: outOfWindow.length,
+      out_of_window_layer_total: outOfWindowLayerTotal,
       on_levelled_loss_ratio: lossRatio,
       warnings,
     },

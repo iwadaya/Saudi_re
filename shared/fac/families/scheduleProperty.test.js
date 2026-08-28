@@ -4,8 +4,10 @@ import {
   computeScoreAndDecision,
   computePremiums,
   computeFacQuote,
+  computeCandidates,
   SCORE_COMPLETENESS_MIN,
 } from './scheduleProperty.js';
+import { buildExposureProfile } from '../exposure.js';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Hospital example (occupancy 102) — Pricing_TOOL.xlsx Premium Calculator
@@ -580,5 +582,49 @@ describe('computeFacQuote (wrapper)', () => {
     }
     // Combined warnings array
     expect(Array.isArray(result.warnings)).toBe(true);
+  });
+});
+
+describe('computeCandidates — the exposure curve uses the recorded PML (F9/F12)', () => {
+  // MBBEFD(b=3, g=7): G(x) = ln(10·3^x − 9) / ln(21). The docstring's own
+  // convention: MPL = SI × PML, with PML a 0..1 fraction on the profile.
+  const CURVE_BANDS = [{
+    min_exposure: 0, max_exposure: null,
+    curve: { curve_code: 'TEST-MBBEFD', kind: 'MBBEFD', params: { b: 3, g: 7 } },
+  }];
+  // Ground-up expected loss: 20m SI × 1‰ = 20,000.
+  const engine = { final_net_rate_pm: 1.0, technical_rate_no_natcat_pm: 1.0 };
+  const priceLayer = (exposure, structure) => computeCandidates({
+    engine, exposure, structure, rates: { curveBands: CURVE_BANDS },
+  }).find((c) => c.code === 'EXPOSURE_CURVE').result;
+
+  const PML_50 = buildExposureProfile({
+    risk: { pd_sum_insured: 20_000_000, bi_sum_insured: 0, pml_pct: 50 },
+  });
+
+  it('prices a layer attaching above SI × PML at nil', () => {
+    // True MPL = 20m × 0.5 = 10m, so a 10m xs 10m layer sits entirely above
+    // the maximum possible loss and must cost nothing.
+    const out = priceLayer(PML_50, { attachment: 10_000_000, limit: 10_000_000 });
+    expect(out.available).toBe(true);
+    expect(out.diagnostics.bands[0].pml_pct).toBeCloseTo(0.5, 12);
+    expect(out.lossCost).toBeCloseTo(0, 9);
+  });
+
+  it('gives the working layer the whole ground-up cost when it spans the MPL', () => {
+    const out = priceLayer(PML_50, { attachment: 0, limit: 10_000_000 });
+    // The 10m primary layer contains the entire 10m MPL: G(1) − G(0) = 1.
+    expect(out.lossCost).toBeCloseTo(20_000, 6);
+  });
+
+  it('falls back to MPL = SI, with a warning, when no PML is recorded', () => {
+    const noPml = buildExposureProfile({
+      risk: { pd_sum_insured: 20_000_000, bi_sum_insured: 0 },
+    });
+    const out = priceLayer(noPml, { attachment: 10_000_000, limit: 10_000_000 });
+    const G = (x) => Math.log(10 * 3 ** x - 9) / Math.log(21);
+    expect(out.diagnostics.bands[0].pml_pct).toBe(1);
+    expect(out.lossCost).toBeCloseTo(20_000 * (1 - G(0.5)), 6);   // ≈ 6,080.82
+    expect(out.diagnostics.warnings.join(' ')).toMatch(/MPL = full sum insured/);
   });
 });

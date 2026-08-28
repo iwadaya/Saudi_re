@@ -127,6 +127,7 @@ export function motorLossCost({ exposure, rates = {} }) {
     territory: exposure.territory, familyCode: FAMILY_CODE,
   });
 
+  const tplOnly = exposure.coverBasis === 'TPL_ONLY';
   const priced = [];
   const unpriced = [];
   let lossCost = 0;
@@ -148,7 +149,10 @@ export function motorLossCost({ exposure, rates = {} }) {
     }
     if (fellBackToWorldwide) fallbacks += 1;
 
-    const odCost = count * num(rate.od_cost_per_vehicle_year);
+    // A TPL-only fleet carries no own-damage exposure, so the OD component
+    // is nil — charging it would overstate the quote by the whole OD cost
+    // per vehicle-year (F11).
+    const odCost = tplOnly ? 0 : count * num(rate.od_cost_per_vehicle_year);
     const step = tplLimitFactor({
       limit: exposure.tplLimit, basicLimit: rate.tpl_basic_limit, curve,
     });
@@ -220,6 +224,7 @@ export function motorLossCost({ exposure, rates = {} }) {
     diagnostics: {
       total_vehicles: exposure.totalVehicles,
       rated_vehicles: pricedVehicles,
+      cover_basis: exposure.coverBasis,
       total_sum_insured: exposure.totalSumInsured,
       cost_per_vehicle_year: lossCost / (pricedVehicles || 1),
       groups: priced,

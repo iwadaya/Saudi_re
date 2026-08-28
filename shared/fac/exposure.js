@@ -27,12 +27,13 @@
 // and any disagreement between the sources is surfaced as a warning rather
 // than silently resolved.
 
+import { num, numOrNull } from './num.js';
+
 /** Sections and the header may differ by this much before we warn. */
 const RECONCILE_TOLERANCE = 0.01; // 1%
 
-function num(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
+function clamp01(v) {
+  return Math.min(Math.max(num(v), 0), 1);
 }
 
 /**
@@ -43,6 +44,12 @@ function num(v) {
  * @property {number} total_si         pd_si + bi_si — the ONLY premium basis.
  * @property {number} pd_si_share      pd_si / total_si, clamped to 0..1 (1 when there is no BI).
  * @property {boolean} bi_included     Whether BI exposure is present.
+ * @property {number|null} pml_pct     Maximum possible loss as a share of total_si,
+ *   ALWAYS a 0..1 fraction (0.4 = 40%). The schema stores it two ways —
+ *   fac_location.pd_pml_pct / bi_pml_pct are 0..1 fractions, fac_risk.pml_pct
+ *   is a 0..100 percentage — and this profile converts once, here, so no
+ *   consumer ever sees the percent scale. Null when no PML is recorded
+ *   anywhere; consumers then fall back to MPL = total SI and should say so.
  * @property {number|null} top_location_si  Largest single-site exposure, for the line-size cap.
  * @property {number} location_count
  * @property {number} section_count
@@ -129,6 +136,30 @@ export function buildExposureProfile({ risk, sections = [], locations = [] } = {
 
   const pd_si_share = total_si > 0 ? Math.min(Math.max(pd_si / total_si, 0), 1) : 1;
 
+  // ── PML, as a 0..1 fraction of total_si ────────────────────────────────
+  // Locations first: the weighted MPL over the schedule, with an unstated
+  // location PML contributing its full value — absent means "no relief",
+  // never "no loss". The risk-header pml_pct (stored 0..100) is the
+  // fallback, converted to a fraction exactly once, at this boundary.
+  // Null means no PML is recorded anywhere.
+  let pml_pct = null;
+  if (basis === 'LOCATIONS' && total_si > 0) {
+    let mpl = 0;
+    let stated = false;
+    for (const l of locs) {
+      const pdPml = numOrNull(l.pd_pml_pct);
+      const biPml = numOrNull(l.bi_pml_pct);
+      if (pdPml !== null || biPml !== null) stated = true;
+      mpl += num(l.pd_si) * (pdPml === null ? 1 : clamp01(pdPml))
+        + num(l.bi_si) * (biPml === null ? 1 : clamp01(biPml));
+    }
+    if (stated && mpl > 0) pml_pct = clamp01(mpl / total_si);
+  }
+  if (pml_pct === null) {
+    const riskPml = numOrNull(risk?.pml_pct);
+    if (riskPml !== null && riskPml > 0) pml_pct = clamp01(riskPml / 100);
+  }
+
   return {
     basis,
     pd_si,
@@ -136,6 +167,7 @@ export function buildExposureProfile({ risk, sections = [], locations = [] } = {
     total_si,
     pd_si_share,
     bi_included: bi_si > 0,
+    pml_pct,
     top_location_si,
     location_count: locs.length,
     section_count: secs.length,

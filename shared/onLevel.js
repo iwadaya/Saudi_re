@@ -14,20 +14,27 @@
 //
 //     adjusted(y) = original(y) × Π over i > y of (1 + r_i / 100)
 //
-// The latest year's on-level factor is 1.0 (no adjustment); earlier
-// years scale up by the cumulative subsequent rate movement.
+// The product runs over EVERY year a rate change is known for, not just
+// the years a factor is requested for — a year missing from `years`
+// (say, a year with no premium recorded) still moved the rate level,
+// and dropping its rate change would under-adjust every earlier year.
+// The latest chained year's on-level factor is 1.0 (no adjustment);
+// earlier years scale up by the cumulative subsequent rate movement.
 //
 // Lives alongside pricingMath.js so the client (Stop Loss Pricing
 // screen, Premiums Table rate-change modal) and any future server
 // validation use the same arithmetic.
 
 /**
- * @param {number[]} years      sorted-or-unsorted list of UW years
+ * @param {number[]} years      sorted-or-unsorted list of UW years to
+ *   return factors for
  * @param {Map<number, number>|Object<number, number>} rateByYear
  *   per-year rate change percentages (e.g. {2022: 5, 2023: -3}).
  *   Accepts both Map and plain-object shapes; missing/NaN entries
- *   are treated as 0% (no change).
- * @returns {Map<number, number>}  factor per year
+ *   are treated as 0% (no change). Years present here but absent from
+ *   `years` still contribute their rate change to the chain — only the
+ *   returned factors are limited to the requested years.
+ * @returns {Map<number, number>}  factor per requested year
  */
 export function computeOnLevelFactors(years, rateByYear) {
   const factors = new Map();
@@ -39,11 +46,27 @@ export function computeOnLevelFactors(years, rateByYear) {
     const n = Number(v);
     return Number.isFinite(n) ? n : 0;
   };
-  const sorted = [...years].filter((y) => Number.isFinite(y)).sort((a, b) => a - b);
+  const requested = new Set(years.filter((y) => Number.isFinite(y)));
+  if (requested.size === 0) return factors;
+
+  // Chain over the union of the requested years and every year carrying a
+  // rate change. A requested list with gaps ([2020, 2024]) must still pick
+  // up the 2021–2023 movements, or the documented contract above is
+  // violated for every year before the gap.
+  const chainYears = new Set(requested);
+  const rateKeys = rateByYear instanceof Map
+    ? rateByYear.keys()
+    : Object.keys(rateByYear ?? {});
+  for (const k of rateKeys) {
+    const y = Number(k);
+    if (Number.isFinite(y)) chainYears.add(y);
+  }
+
+  const sorted = [...chainYears].sort((a, b) => a - b);
   let factor = 1.0;
   for (let i = sorted.length - 1; i >= 0; i--) {
     const y = sorted[i];
-    factors.set(y, factor);
+    if (requested.has(y)) factors.set(y, factor);
     factor *= 1 + getRate(y) / 100;
   }
   return factors;

@@ -157,6 +157,31 @@ describe('motorLossCost', () => {
     expect(out.diagnostics.warnings.join(' ')).toMatch(/60 vehicles/);
   });
 
+  it('charges no own damage on a TPL-only fleet (F11)', () => {
+    // 200 PRIVATE vehicles at od 900 / tpl 400 per vehicle-year:
+    // comprehensive = 200 × 1,300 = 260,000; TPL-only = 200 × 400 = 80,000.
+    const comp = price({ cover_basis: 'COMPREHENSIVE' }, { exposure_base: 200 });
+    const tpl = price({ cover_basis: 'TPL_ONLY' }, { exposure_base: 200 });
+    expect(comp.lossCost).toBeCloseTo(260_000, 6);
+    expect(tpl.lossCost).toBeCloseTo(80_000, 6);
+    expect(tpl.diagnostics.groups[0].od_cost).toBe(0);
+    expect(tpl.diagnostics.groups[0].tpl_cost).toBeCloseTo(80_000, 6);
+    expect(comp.diagnostics.cover_basis).toBe('COMPREHENSIVE');
+    expect(tpl.diagnostics.cover_basis).toBe('TPL_ONLY');
+  });
+
+  it('defaults an unstated cover basis to comprehensive, and says which it used', () => {
+    const out = price();
+    expect(out.diagnostics.cover_basis).toBe('COMPREHENSIVE');
+    expect(out.lossCost).toBeCloseTo(500 * 1_300, 6);
+  });
+
+  it('still steps the TPL limit on a TPL-only fleet', () => {
+    const out = price({ cover_basis: 'TPL_ONLY' }, { exposure_base: 200, limit_amount: 4_000_000 });
+    const step = 4 ** Math.log2(1.15);
+    expect(out.lossCost).toBeCloseTo(200 * 400 * step, 6);
+  });
+
   it('expresses a rate per mille of the fleet values where there are any', () => {
     const out = price();
     expect(out.ratePm).toBeCloseTo((out.lossCost / 60_000_000) * 1000, 9);

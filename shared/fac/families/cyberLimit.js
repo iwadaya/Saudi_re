@@ -253,12 +253,28 @@ export function cyberLossCost({ exposure, rates = {} }) {
 }
 
 /**
+ * @param {object} args
+ * @param {object|null} args.section
+ * @param {object} [args.structure] {attachment, limit} — the placement being
+ *   priced. On a non-proportional placement this is the reinsured layer, and
+ *   it overrides the section's own attachment and limit exactly as
+ *   liabilityLimit does: the burning-cost candidate in the same blend is
+ *   already cut to this layer, and blending a whole-tower exposure rate
+ *   against a layered experience rate averages incompatible quantities (F13).
  * @returns {Array<{code: string, result: object}>}
  */
-export function computeCandidates({ section, rates = {} }) {
+export function computeCandidates({ section, structure = {}, rates = {} }) {
+  const exposure = readExposure(section);
   return [{
     code: 'CYBER_RATE',
-    result: cyberLossCost({ exposure: readExposure(section), rates }),
+    result: cyberLossCost({
+      exposure: {
+        ...exposure,
+        attachment: numOrNull(structure.attachment) ?? exposure.attachment,
+        limit: numOrNull(structure.limit) ?? exposure.limit,
+      },
+      rates,
+    }),
   }];
 }
 

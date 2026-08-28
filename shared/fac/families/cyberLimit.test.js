@@ -201,6 +201,39 @@ describe('computeCandidates and the descriptor', () => {
     expect(c.map((x) => x.code)).toEqual(['CYBER_RATE']);
   });
 
+  it('lets the placement structure override the section limit (F13)', () => {
+    // An XL placement prices its own layer, not the original 4m tower —
+    // otherwise the exposure candidate is whole-tower money blended against
+    // a burning cost that IS cut to the layer.
+    const sec = section({}, { limit_amount: 4_000_000, attachment: 0 });
+    const full = computeCandidates({ section: sec, rates: rates() })[0].result;
+    const layered = computeCandidates({
+      section: sec,
+      structure: { attachment: 2_000_000, limit: 2_000_000, isNonProportional: true },
+      rates: rates(),
+    })[0].result;
+    // Basic-limit cost = 5m ÷ 1m × 12,000 = 60,000 (no controls scored);
+    // full tower = 60,000 × ILF(4m); the 2m xs 2m layer is the ILF difference.
+    const alpha = Math.log2(1.45);
+    expect(full.lossCost).toBeCloseTo(60_000 * (4 / 5) ** alpha, 4);          // ≈ 53,235.62
+    expect(layered.lossCost)
+      .toBeCloseTo(60_000 * ((4 / 5) ** alpha - (2 / 5) ** alpha), 4);        // ≈ 16,521.40
+    expect(layered.lossCost).toBeLessThan(full.lossCost);
+    expect(layered.diagnostics.attachment).toBe(2_000_000);
+    expect(layered.diagnostics.limit).toBe(2_000_000);
+  });
+
+  it('leaves the section structure alone on a proportional placement', () => {
+    const bare = computeCandidates({ section: section(), rates: rates() })[0].result;
+    const prop = computeCandidates({
+      section: section(),
+      structure: { attachment: 0, limit: Infinity, isNonProportional: false },
+      rates: rates(),
+    })[0].result;
+    expect(prop.lossCost).toBeCloseTo(bare.lossCost, 9);
+    expect(prop.diagnostics.limit).toBe(10_000_000);
+  });
+
   it('caps credibility at half — cyber experience ages badly', () => {
     expect(cyberLimit.credibility.maxZ).toBe(0.50);
     expect(cyberLimit.implemented).toBe(true);

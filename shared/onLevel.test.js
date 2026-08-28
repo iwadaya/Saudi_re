@@ -52,6 +52,44 @@ describe('computeOnLevelFactors', () => {
     expect(a.get(2022)).toBeCloseTo(b.get(2022), 10);
   });
 
+  it('chains the rate changes of years missing from the years array (F7)', () => {
+    // Only 2020 and 2024 are requested, but 2021-2023 still moved the rate
+    // level. 2020's factor is the full chain:
+    //   1.10 × 1.05 × 0.98 × 1.04 = 1.177176
+    const factors = computeOnLevelFactors(
+      [2020, 2024],
+      { 2021: 10, 2022: 5, 2023: -2, 2024: 4 },
+    );
+    expect(factors.get(2020)).toBeCloseTo(1.177176, 9);
+    expect(factors.get(2024)).toBeCloseTo(1.0, 12);
+    // Factors are assigned only to the requested years.
+    expect(factors.size).toBe(2);
+  });
+
+  it('a gapped year list gives the same answer as the contiguous one', () => {
+    const rates = { 2021: 10, 2022: 5, 2023: -2, 2024: 4 };
+    const gapped = computeOnLevelFactors([2020, 2024], rates);
+    const contiguous = computeOnLevelFactors([2020, 2021, 2022, 2023, 2024], rates);
+    expect(gapped.get(2020)).toBeCloseTo(contiguous.get(2020), 12);
+    expect(gapped.get(2024)).toBeCloseTo(contiguous.get(2024), 12);
+  });
+
+  it('chains a rate change recorded after the latest requested year', () => {
+    // The chain on-levels to the latest KNOWN rate level: a 2025 movement
+    // adjusts a 2024 premium even when 2025 itself is not requested.
+    const factors = computeOnLevelFactors([2023, 2024], { 2024: 5, 2025: 10 });
+    expect(factors.get(2024)).toBeCloseTo(1.10, 12);
+    expect(factors.get(2023)).toBeCloseTo(1.10 * 1.05, 12);
+  });
+
+  it('accepts a Map with rate years outside the requested list', () => {
+    const factors = computeOnLevelFactors(
+      [2020, 2024],
+      new Map([[2021, 10], [2022, 5], [2023, -2], [2024, 4]]),
+    );
+    expect(factors.get(2020)).toBeCloseTo(1.177176, 9);
+  });
+
   it('empty / invalid years → empty map', () => {
     expect(computeOnLevelFactors([], {}).size).toBe(0);
     expect(computeOnLevelFactors([NaN, 'foo'], {}).size).toBe(0);
