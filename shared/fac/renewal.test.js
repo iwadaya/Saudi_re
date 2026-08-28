@@ -30,6 +30,26 @@ describe('renewalSnapshot', () => {
     expect(snap({}, {}, { total_si: 140_000_000 }).premium_base).toBe(140_000_000);
   });
 
+  it('falls back to the header total when the profile found no exposure (F48)', () => {
+    // buildExposureProfile returns total_si 0 (basis NONE) for a risk with
+    // no locations, no section SI and pd/bi of zero — that is "nothing
+    // recorded", not an exposure of zero, and it must not smother the
+    // header's total_sum_insured or the renewal decomposition loses its
+    // exposure factor.
+    expect(snap({}, {}, { total_si: 0, basis: 'NONE' }).premium_base).toBe(100_000_000);
+  });
+
+  it('decomposes a header-only renewal instead of reporting it unsplittable (F48)', () => {
+    const empty = { total_si: 0, basis: 'NONE' };
+    const d = decomposeChange(
+      snap({}, { final_rate_per_mille: 2.00 }, empty),
+      snap({ total_sum_insured: 120_000_000 }, { final_rate_per_mille: 2.00 }, empty),
+    );
+    expect(d.measurable).toBe(true);
+    expect(d.exposure_factor).toBeCloseTo(1.2, 12);
+    expect(d.premium_factor).toBeCloseTo(1.2, 12);
+  });
+
   it('is null for a risk that is not there', () => {
     expect(renewalSnapshot(null, null, null)).toBeNull();
   });

@@ -430,6 +430,51 @@ describe('computeCandidates', () => {
     expect(plain.diagnostics.defence_costs_factor).toBe(1);
   });
 
+  it('says out loud that an entered aggregate limit is not priced (F54)', () => {
+    const withAgg = computeCandidates({
+      risk: { fac_cob_id: 41 },
+      section: section({ exposure_detail: { aggregate_limit: 10_000_000 } }),
+      structure: {},
+      rates: rates(),
+    })[0].result;
+    const without = computeCandidates({
+      risk: { fac_cob_id: 41 }, section: section(), structure: {}, rates: rates(),
+    })[0].result;
+    // The price genuinely does not move — and the warning says so instead of
+    // letting the entry silently do nothing.
+    expect(withAgg.lossCost).toBeCloseTo(without.lossCost, 9);
+    expect(withAgg.diagnostics.warnings.join(' ')).toMatch(/aggregate limit is recorded for information/i);
+    expect(without.diagnostics.warnings.join(' ')).not.toMatch(/aggregate limit/i);
+  });
+
+  it('puts both aggregate fields on the exposure form honestly (F54)', () => {
+    const agg = liabilityLimit.exposureFields.find((f) => f.key === 'aggregate_limit');
+    const reinst = liabilityLimit.exposureFields.find((f) => f.key === 'aggregate_reinstatements');
+    // The recorded-only field is marked informational; the field that
+    // multiplies the price is enterable rather than JSON-only.
+    expect(agg.informational).toBe(true);
+    expect(reinst).toBeTruthy();
+    expect(reinst.type).toBe('integer');
+    // Marine liability shares the form.
+    expect(marineLiability.exposureFields.some((f) => f.key === 'aggregate_reinstatements')).toBe(true);
+  });
+
+  it('refuses a curve whose basic limit disagrees with the rate\'s (F52)', () => {
+    // A WW curve normalised at 5m paired with a 1m-basic US rate under-
+    // priced a 5m primary by 34.5% with clean diagnostics. Now it refuses
+    // with both numbers named.
+    const fiveMil = { ...POWER_CURVE_WW, curve_code: 'GL-WW-5M', basic_limit: 5_000_000 };
+    const [candidate] = computeCandidates({
+      risk: { fac_cob_id: 41 },
+      section: section(),
+      structure: {},
+      rates: rates({ ilfCurves: [fiveMil] }),
+    });
+    expect(candidate.result.available).toBe(false);
+    expect(candidate.result.unavailableReason).toMatch(/1,000,000/);
+    expect(candidate.result.unavailableReason).toMatch(/5,000,000/);
+  });
+
   it('charges each reinstated aggregate as another limit of exposure', () => {
     const one = computeCandidates({
       risk: { fac_cob_id: 41 }, section: section(), structure: {}, rates: rates(),

@@ -99,6 +99,27 @@ describe('ilfEvaluator — tabulated', () => {
     expect(() => ilfEvaluator({ kind: 'TABULATED', basic_limit: 1e6, points: [{ limit_amount: 1e6, ilf: 1 }] }))
       .toThrow(/at least two points/);
   });
+
+  it('refuses a table that is not normalised at its own basic limit (F43)', () => {
+    // The contract is ILF(basic_limit) = 1; a table interpolating to 1.25
+    // there would scale every price by 25%.
+    expect(() => ilfEvaluator({ ...TAB, basic_limit: 2_000_000 }))
+      .toThrow(/not normalised/);
+  });
+
+  it('accepts a basic limit that interpolates to 1 between points', () => {
+    // Normalisation is checked by interpolation, not by requiring a listed
+    // point: a basic limit sitting on the interpolated 1.0 is fine.
+    const shifted = {
+      kind: 'TABULATED', basic_limit: 1_000_000,
+      points: [
+        { limit_amount: 500_000, ilf: 0.75 },
+        { limit_amount: 1_500_000, ilf: 1.25 },
+        { limit_amount: 5_000_000, ilf: 1.60 },
+      ],
+    };
+    expect(ilfEvaluator(shifted)(1_000_000)).toBeCloseTo(1, 12);
+  });
 });
 
 describe('ilfLayerLossCost', () => {
@@ -210,6 +231,47 @@ describe('ilfLossCost — the candidate', () => {
     const one = ilfLossCost(args);
     const two = ilfLossCost({ ...args, aggregateReinstatements: 1 });
     expect(two.lossCost).toBeCloseTo(one.lossCost * 2, 9);
+  });
+
+  it('refuses to step a rate through a curve with a different basic limit (F43/F52)', () => {
+    // Rate quoted at a 1m basic limit; curve normalised at 500k. Stepping
+    // one through the other silently mis-prices by (1m/500k)^α — the module
+    // ran the numbers anyway and reported the RATE's basic limit in the
+    // diagnostics while using the curve's.
+    const out = ilfLossCost({
+      exposureBase: 300_000_000,
+      baseRate: BASE_RATE,                        // basic_limit 1,000,000
+      curve: POWER(0.20, 500_000),                // basic_limit 500,000
+      attachment: 0, limit: 5_000_000,
+    });
+    expect(out.available).toBe(false);
+    expect(out.unavailableReason).toMatch(/1,000,000/);
+    expect(out.unavailableReason).toMatch(/500,000/);
+    expect(out.unavailableReason).toMatch(/basic limit/i);
+    expect(out.lossCost).toBeUndefined();
+    expect(out.diagnostics.basic_limit).toBe(1_000_000);
+    expect(out.diagnostics.curve_basic_limit).toBe(500_000);
+  });
+
+  it('prices normally when the rate and the curve agree on the basic limit', () => {
+    const out = ilfLossCost({
+      exposureBase: 50_000_000, baseRate: BASE_RATE, curve: POWER(0.20, 1_000_000),
+      attachment: 0, limit: 5_000_000,
+    });
+    expect(out.available).toBe(true);
+    // 50m ÷ 1m × 500 = 25,000 at basic; × 5^log₂(1.2) — hand-derived.
+    expect(out.lossCost).toBeCloseTo(25_000 * 5 ** Math.log2(1.2), 6);
+  });
+
+  it('does not refuse when the rate carries no basic limit to compare', () => {
+    // A rate row with no basic_limit cannot be cross-checked; the curve's
+    // own normalisation is all there is, and refusing would refuse every
+    // legacy row. The diagnostics still show what was used.
+    const { basic_limit, ...bare } = BASE_RATE;
+    const out = ilfLossCost({
+      exposureBase: 50_000_000, baseRate: bare, curve: POWER(0.20), limit: 5_000_000,
+    });
+    expect(out.available).toBe(true);
   });
 
   it('says exactly what is missing rather than pricing at zero', () => {

@@ -193,6 +193,30 @@ describe('cyberLossCost', () => {
     expect(price({}, {}, rates({ cyberBaseRates: [] })).unavailableReason)
       .toMatch(/cyber base rate/i);
   });
+
+  it('refuses a curve whose basic limit disagrees with the rate\'s (F52)', () => {
+    // The rate quotes 12,000 per million AT a 5m basic limit; a curve
+    // normalised at 1m is a different animal, and stepping through it
+    // mis-prices by the ratio.
+    const oneMil = { ...CYBER_CURVE, curve_code: 'CY-1M', basic_limit: 1_000_000 };
+    const out = price({}, {}, rates({ ilfCurves: [oneMil] }));
+    expect(out.available).toBe(false);
+    expect(out.unavailableReason).toMatch(/5,000,000/);
+    expect(out.unavailableReason).toMatch(/1,000,000/);
+    expect(out.diagnostics.basic_limit).toBe(5_000_000);
+    expect(out.diagnostics.curve_basic_limit).toBe(1_000_000);
+  });
+
+  it('echoes records held in the diagnostics without letting it move the price (F98)', () => {
+    const withRecords = price({ records_held: 50_000_000 });
+    const without = price();
+    expect(withRecords.diagnostics.records_held).toBe(50_000_000);
+    expect(without.diagnostics.records_held).toBeNull();
+    // Informational: the price does not respond to it, and the form says so.
+    expect(withRecords.lossCost).toBeCloseTo(without.lossCost, 9);
+    const field = cyberLimit.exposureFields.find((f) => f.key === 'records_held');
+    expect(field.informational).toBe(true);
+  });
 });
 
 describe('computeCandidates and the descriptor', () => {
@@ -238,6 +262,16 @@ describe('computeCandidates and the descriptor', () => {
     expect(cyberLimit.credibility.maxZ).toBe(0.50);
     expect(cyberLimit.implemented).toBe(true);
     expect(cyberLimit.ratingBasis).toBe('LIMIT_ILF');
+  });
+
+  it('advertises only methods that can actually run (F42)', () => {
+    // FREQ_SEVERITY is implemented but wired into no computeCandidates; the
+    // pipeline DOES add BURNING_COST (and BENCHMARK) for every family. The
+    // served metadata now matches what actually prices.
+    expect(cyberLimit.methods).not.toContain('FREQ_SEVERITY');
+    expect(cyberLimit.methods).toEqual(
+      expect.arrayContaining(['CYBER_RATE', 'BURNING_COST', 'BENCHMARK']),
+    );
   });
 
   it('marks the dependency tags as required on the exposure form', () => {

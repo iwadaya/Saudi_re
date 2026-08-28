@@ -57,7 +57,13 @@ export const STRUCTURE_FIELDS = [
  */
 export function renewalSnapshot(risk, pricing, exposure) {
   if (!risk) return null;
-  const premiumBase = numOrNull(exposure?.total_si)
+  // buildExposureProfile returns a NUMERIC total_si even when it found
+  // nothing (0, basis NONE), so a bare null-check made the header fallback
+  // dead code and a header-only risk decomposed with no exposure base
+  // (F48). A non-positive profile total is "no exposure recorded", not an
+  // exposure of zero — fall through to the risk's own total_sum_insured.
+  const profileSi = numOrNull(exposure?.total_si);
+  const premiumBase = (profileSi !== null && profileSi > 0 ? profileSi : null)
     ?? numOrNull(risk.total_sum_insured)
     ?? null;
   return {

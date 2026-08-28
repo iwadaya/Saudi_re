@@ -371,9 +371,12 @@ export const FAMILY_META = [
         "type": "integer"
       },
       {
+        // A FRACTION (0.5 = 50% return), which is how hullValue.js consumes
+        // it — the type said "percent" and invited 50, which multiplied the
+        // return fifty-fold (F53).
         "key": "laid_up_return_pct",
-        "label": "Laid-up return",
-        "type": "percent"
+        "label": "Laid-up return (fraction, 0.5 = 50%)",
+        "type": "fraction"
       },
       {
         "key": "war_region",
@@ -523,9 +526,21 @@ export const FAMILY_META = [
         "type": "money"
       },
       {
+        // Recorded for the slip, NOT priced: capping the aggregate needs a
+        // frequency view this engine does not hold, and inventing one would
+        // be worse than saying so. The engine warns when it is entered (F54).
         "key": "aggregate_limit",
-        "label": "Aggregate limit",
-        "type": "money"
+        "label": "Aggregate limit (recorded, not priced)",
+        "type": "money",
+        "informational": true
+      },
+      {
+        // This one IS priced — each reinstated aggregate is another full
+        // limit of exposure (× (1 + n) in ilfCurve.js) — and was previously
+        // reachable only by hand-editing exposure_detail JSON (F54).
+        "key": "aggregate_reinstatements",
+        "label": "Aggregate reinstatements",
+        "type": "integer"
       },
       {
         "key": "claims_made",
@@ -602,9 +617,21 @@ export const FAMILY_META = [
         "type": "money"
       },
       {
+        // Recorded for the slip, NOT priced: capping the aggregate needs a
+        // frequency view this engine does not hold, and inventing one would
+        // be worse than saying so. The engine warns when it is entered (F54).
         "key": "aggregate_limit",
-        "label": "Aggregate limit",
-        "type": "money"
+        "label": "Aggregate limit (recorded, not priced)",
+        "type": "money",
+        "informational": true
+      },
+      {
+        // This one IS priced — each reinstated aggregate is another full
+        // limit of exposure (× (1 + n) in ilfCurve.js) — and was previously
+        // reachable only by hand-editing exposure_detail JSON (F54).
+        "key": "aggregate_reinstatements",
+        "label": "Aggregate reinstatements",
+        "type": "integer"
       },
       {
         "key": "claims_made",
@@ -629,9 +656,16 @@ export const FAMILY_META = [
     "segment": "FINANCIAL_SPECIALTY",
     "ratingBasis": "LIMIT_ILF",
     "periodBasis": "ANNUAL",
+    // These lists are served to the UI as "how this family prices", so they
+    // carry only methods the pipeline actually runs. FREQ_SEVERITY is
+    // implemented (methods/freqSeverity.js) but wired into no family's
+    // computeCandidates yet — advertising it here told underwriters cyber
+    // prices by frequency × severity when it never does (F42). Put it back
+    // when a computeCandidates emits it. BURNING_COST and BENCHMARK are
+    // added by the pipeline for every family (index.js).
     "methods": [
       "CYBER_RATE",
-      "FREQ_SEVERITY",
+      "BURNING_COST",
       "BENCHMARK"
     ],
     // Cyber experience ages badly: a clean five years before ransomware
@@ -673,9 +707,15 @@ export const FAMILY_META = [
         "type": "money"
       },
       {
+        // Informational: shown on the risk and echoed in the pricing
+        // diagnostics, but no rate key or factor consumes it. Marked so the
+        // form does not imply it moves the price (F98) — do not invent a
+        // rating factor for it; wire it into selectCyberRate if a carrier
+        // ever loads record-count-banded rates.
         "key": "records_held",
-        "label": "Records held",
-        "type": "integer"
+        "label": "Records held (informational)",
+        "type": "integer",
+        "informational": true
       },
       {
         "key": "controls",
@@ -704,10 +744,11 @@ export const FAMILY_META = [
     "segment": "MOTOR",
     "ratingBasis": "PER_UNIT",
     "periodBasis": "ANNUAL",
+    // FREQ_SEVERITY is implemented but not yet wired into any
+    // computeCandidates, so it is not advertised — see CYBER_LIMIT (F42).
     "methods": [
       "MOTOR_RATE",
-      "BURNING_COST",
-      "FREQ_SEVERITY"
+      "BURNING_COST"
     ],
     // The one family where the risk's own record is usually the best evidence
     // there is.
@@ -746,9 +787,12 @@ export const FAMILY_META = [
         ]
       },
       {
+        // A FRACTION (0.15 = 15% discount), which is how motorFleet.js
+        // consumes it — the type said "percent" and invited 20, which turned
+        // a discount into a −1900% rewrite of the price (F53).
         "key": "ncd_pct",
-        "label": "Fleet-rating / NCD adjustment",
-        "type": "percent"
+        "label": "Fleet-rating / NCD adjustment (fraction, 0.15 = 15%)",
+        "type": "fraction"
       }
     ]
   },
@@ -758,10 +802,11 @@ export const FAMILY_META = [
     "segment": "ACCIDENT_HEALTH",
     "ratingBasis": "PER_UNIT",
     "periodBasis": "ANNUAL",
+    // FREQ_SEVERITY is implemented but not yet wired into any
+    // computeCandidates, so it is not advertised — see CYBER_LIMIT (F42).
     "methods": [
       "PA_RATE",
       "BURNING_COST",
-      "FREQ_SEVERITY",
       "BENCHMARK"
     ],
     // A large scheme develops credible experience quickly, and PA claims

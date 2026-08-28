@@ -764,17 +764,33 @@ router.put('/fac/risks/:id/losses', validateBody(facLossesSaveSchema), asyncHand
     await client.query('BEGIN');
     await assertExists(client, 'public.fac_risk', 'fac_risk_id', riskId, 'Risk');
     await assertParentEntityUnchanged(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
+    // Migration 135 also gave each loss an optional section_id so the pipeline
+    // can price a section-attributed loss inside that section's group. The
+    // delete-and-reinsert has to carry it — omitting the column meant every
+    // save wiped the attribution (F46). The FK only proves the section exists
+    // SOMEWHERE, so ownership by this risk is checked here.
+    const { rows: sectionRows } = await client.query(
+      `SELECT section_id FROM public.fac_risk_section WHERE fac_risk_id = $1`, [riskId]
+    );
+    const riskSectionIds = new Set(sectionRows.map((s) => s.section_id));
+    const foreignSection = losses.find((l) => l.section_id && !riskSectionIds.has(l.section_id));
+    if (foreignSection) {
+      const e = new Error(`Loss row references section ${foreignSection.section_id}, which does not belong to this risk`);
+      e.status = 400;
+      throw e;
+    }
     await client.query(`DELETE FROM public.fac_loss_history WHERE fac_risk_id = $1`, [riskId]);
     const lossesInsert = buildBatchInserts({
       table: 'public.fac_loss_history',
       columns: [
-        'fac_risk_id', 'loss_year', 'loss_date', 'loss_description',
+        'fac_risk_id', 'section_id', 'loss_year', 'loss_date', 'loss_description',
         'cause_of_loss', 'fgu_paid', 'fgu_outstanding', 'ri_paid', 'ri_outstanding',
         'mitigation_measures', 'is_open',
         'indexed_incurred', 'as_if_incurred', 'development_factor',
         'exclude_from_rating', 'exclusion_reason',
       ],
       rows: losses.map((l) => [
+        l.section_id || null,
         numOrNull(l.loss_year), dateOrNull(l.loss_date), l.loss_description || null,
         l.cause_of_loss || null, numOrNull(l.fgu_paid), numOrNull(l.fgu_outstanding),
         numOrNull(l.ri_paid), numOrNull(l.ri_outstanding),

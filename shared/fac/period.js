@@ -124,6 +124,19 @@ export function earnedPremium({ premium, from, to, asOf, pattern = 'STRAIGHT_LIN
  * The project period in months, from the dates if they are set and from
  * `policy_period_months` otherwise.
  *
+ * Two conventions matter here (F49, F97):
+ *
+ *   • The expiry date on a slip is usually the LAST COVERED DAY, so the pair
+ *     is measured as [inception, expiry + 1 day) and then truncated. An
+ *     annual policy written 2026-01-01 to 2026-12-31 is 12 months, not 11 —
+ *     and one already stated exclusively (to 2027-01-01) still reads 12,
+ *     because the extra day truncates away. A leap-day anniversary
+ *     (2024-02-29 to 2025-02-28) rolls to 1 March and reads 12 as well.
+ *
+ *   • ISO date strings parse as UTC midnight, so they are read back with the
+ *     UTC getters. Local getters made the answer depend on the server's
+ *     timezone — off by a month for month-boundary dates west of UTC.
+ *
  * @param {object} risk fac_risk row
  * @returns {number|null}
  */
@@ -132,9 +145,12 @@ export function periodMonths(risk) {
   const from = risk?.inception_date ? new Date(risk.inception_date) : null;
   const to = risk?.expiry_date ? new Date(risk.expiry_date) : null;
   if (from && to && !Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime()) && to > from) {
-    const months = (to.getFullYear() - from.getFullYear()) * 12
-      + (to.getMonth() - from.getMonth())
-      + (to.getDate() >= from.getDate() ? 0 : -1);
+    // Expiry is the last covered day: the exclusive end is one day later.
+    // Adding 24h is exact in UTC — there is no DST there.
+    const end = new Date(to.getTime() + 24 * 60 * 60 * 1000);
+    const months = (end.getUTCFullYear() - from.getUTCFullYear()) * 12
+      + (end.getUTCMonth() - from.getUTCMonth())
+      + (end.getUTCDate() >= from.getUTCDate() ? 0 : -1);
     if (months > 0) return months;
   }
   return stated;

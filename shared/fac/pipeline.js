@@ -161,19 +161,8 @@ export function buildTechnicalPremium({
   const experience = list.find((c) => c.role === 'EXPERIENCE' && c.available);
   const volume = num(experience?.claimCount);
   const mech = mechanicalWeights(list, credibility, volume);
-  const applied = applyWeightOverride(mech.weights, weightOverride);
+  const applied = applyWeightOverride(mech.weights, weightOverride, list);
   if (applied.error) warnings.push(applied.error);
-
-  const blendedLossCostPm = blendRates(list, applied.weights);
-  if (blendedLossCostPm == null) {
-    return {
-      priced: false,
-      reason: 'No loss-cost method produced a rate.',
-      candidates: list,
-      weights: applied.weights,
-      warnings,
-    };
-  }
 
   // ── Additive sections ────────────────────────────────────────────
   // A separately-rated section — war & strikes, a cat model's own output —
@@ -196,6 +185,38 @@ export function buildTechnicalPremium({
     }
     additiveLoadPm += pm;
     additiveDetail.push({ code: c.code, label: c.label, ratePm: pm, lossCost });
+  }
+
+  let blendedLossCostPm = blendRates(list, applied.weights);
+  if (blendedLossCostPm == null) {
+    // Nothing blended — but a separately-rated section may still have priced
+    // (a war table loaded before the hull table, say). That rate is real and
+    // must not be silently discarded with the refusal: the price is the
+    // additive sections alone, said out loud (F51).
+    if (additiveDetail.length > 0) {
+      blendedLossCostPm = 0;
+      warnings.push(
+        'No experience or exposure method produced a rate — the price below is the '
+        + `separately-rated section${additiveDetail.length > 1 ? 's' : ''} alone `
+        + `(${additiveDetail.map((a) => a.label).join(', ')}). The main cover is NOT priced; `
+        + 'load its rate table or enter its experience before relying on this figure.',
+      );
+    } else {
+      // Name what failed, so a refusal is a to-do list rather than a shrug.
+      const failed = list.filter(
+        (c) => (c.role === 'EXPERIENCE' || c.role === 'EXPOSURE') && !c.available,
+      );
+      const detail = failed.length > 0
+        ? ` ${failed.map((c) => `${c.label}: ${c.unavailableReason || 'not available.'}`).join(' ')}`
+        : '';
+      return {
+        priced: false,
+        reason: `No loss-cost method produced a rate.${detail}`,
+        candidates: list,
+        weights: applied.weights,
+        warnings,
+      };
+    }
   }
 
   // ── Loads ────────────────────────────────────────────────────────

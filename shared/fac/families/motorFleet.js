@@ -191,6 +191,25 @@ export function motorLossCost({ exposure, rates = {} }) {
 
   const pricedVehicles = priced.reduce((t, g) => t + g.vehicle_count, 0);
   const warnings = [];
+  // The F8 discipline (see scheduleProperty's fraction()): a value outside
+  // ±1 is almost always a percentage typed into a fraction field. Say so
+  // loudly, use the value as entered — silently dividing by 100 is how a
+  // legitimate 150% loading becomes 1.5% — but never hand back a negative
+  // premium: the floor at nil keeps the mistake visible without turning the
+  // quote into a payment to the cedant (F53).
+  if (Math.abs(ncd) > 1) {
+    warnings.push(
+      `ncd_pct = ${ncd} reads as ${(ncd * 100).toFixed(2)}% — this field is a fraction `
+      + '(enter 0.15 for 15%). Value used as entered.',
+    );
+  }
+  if (lossCost < 0) {
+    warnings.push(
+      `The fleet-rating adjustment drives the loss cost negative (${lossCost.toFixed(2)}); `
+      + 'it is floored at nil. Check ncd_pct — a discount cannot exceed the premium.',
+    );
+    lossCost = 0;
+  }
   if (unpriced.length > 0) {
     warnings.push(
       `${unpriced.length} of ${exposure.fleet.length} fleet groups could not be rated, covering `

@@ -26,21 +26,14 @@
 // is a default, not an opinion the tool insists on.
 
 import { computeOnLevelFactors } from '../../onLevel.js';
+// The shared coercion helpers, not local copies: num.js documents the
+// ''-vs-0 hazard that bit this module once already (F95).
+import { num, numOrNull } from '../num.js';
 
 export const METHOD_CODE = 'BURNING_COST';
 
 /** Open claims are grossed up by this much when nothing better is known. */
 export const DEFAULT_DEVELOPMENT_FACTOR = 1.15;
-
-function num(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-function numOrNull(v) {
-  if (v == null || v === '') return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
 
 /**
  * Restate one historic loss onto today's values and today's structure.
@@ -57,7 +50,10 @@ function numOrNull(v) {
  */
 export function restateLoss(loss, { asOfYear, trend, developmentFactor, attachment, limit }) {
   const year = numOrNull(loss.loss_year);
-  const incurred = num(loss.fgu_incurred ?? (num(loss.fgu_paid) + num(loss.fgu_outstanding)));
+  // numOrNull, not ??: an fgu_incurred of '' (a cleared screen input) is
+  // absent, not zero — it must fall through to paid + outstanding (F95).
+  const incurred = numOrNull(loss.fgu_incurred)
+    ?? (num(loss.fgu_paid) + num(loss.fgu_outstanding));
 
   if (loss.exclude_from_rating) {
     return {
@@ -79,10 +75,13 @@ export function restateLoss(loss, { asOfYear, trend, developmentFactor, attachme
   const explicitIndexed = numOrNull(loss.indexed_incurred);
   const indexed = explicitIndexed ?? incurred * (1 + trend) ** years;
 
-  // 2. Develop, open claims only.
+  // 2. Develop. The DEFAULT factor applies to open claims only, but an
+  //    explicitly recorded development_factor wins regardless of status —
+  //    a closed claim expected to reopen is exactly what the override is
+  //    for, and the header promises the override gets used (F94).
   const isOpen = loss.is_open !== false;
   const ldf = numOrNull(loss.development_factor) ?? (isOpen ? developmentFactor : 1);
-  const developed = indexed * (isOpen ? ldf : 1);
+  const developed = indexed * ldf;
 
   // 3. As-if. Again, an explicit restatement wins outright.
   const asIf = numOrNull(loss.as_if_incurred) ?? developed;
@@ -92,7 +91,7 @@ export function restateLoss(loss, { asOfYear, trend, developmentFactor, attachme
   const cap = Number.isFinite(limit) ? Math.max(num(limit), 0) : Infinity;
   const layer = Math.min(Math.max(asIf - d, 0), cap);
 
-  return { included: true, incurred, indexed, developed, asIf, layer, years, ldf: isOpen ? ldf : 1 };
+  return { included: true, incurred, indexed, developed, asIf, layer, years, ldf };
 }
 
 /**
@@ -210,8 +209,13 @@ export function burningCostLossCost({
   const ratePm = avgExposure > 0 ? (annualLoss / avgExposure) * 1000 : null;
 
   // On-levelled loss ratio, when premiums were recorded. Not the rate the
-  // engine uses — a cross-check an underwriter recognises.
+  // engine uses — a cross-check an underwriter recognises. Numerator and
+  // denominator cover the SAME years: only the years with a premium divide,
+  // so only those years' layer losses count. A loss from a premium-less year
+  // divided by other years' premium is not a loss ratio, it is an
+  // overstatement (F47).
   let lossRatio = null;
+  let lossRatioYears = [];
   const withPremium = basisRows.filter((b) => num(b.premium) > 0);
   if (withPremium.length > 0) {
     const years = withPremium.map((b) => Number(b.loss_year));
@@ -223,7 +227,21 @@ export function burningCostLossCost({
     const onLevelled = withPremium.reduce(
       (acc, b) => acc + num(b.premium) * (factors.get(Number(b.loss_year)) ?? 1), 0,
     );
-    if (onLevelled > 0) lossRatio = layerTotal / onLevelled;
+    const premiumYearSet = new Set(years);
+    const layerInPremiumYears = [...byYear.entries()]
+      .filter(([y]) => premiumYearSet.has(y))
+      .reduce((acc, [, v]) => acc + v, 0);
+    if (onLevelled > 0) {
+      lossRatio = layerInPremiumYears / onLevelled;
+      lossRatioYears = [...years].sort((a, b) => a - b);
+      if (withPremium.length < basisRows.length) {
+        warnings.push(
+          `The on-levelled loss ratio covers the ${withPremium.length} of ${basisRows.length} `
+          + `year(s) with a premium recorded (${lossRatioYears.join(', ')}) — losses and premium `
+          + 'over the same years. Enter the missing premiums on Loss Experience for the full period.',
+        );
+      }
+    }
   }
 
   return {
@@ -249,6 +267,7 @@ export function burningCostLossCost({
       out_of_window_claims: outOfWindow.length,
       out_of_window_layer_total: outOfWindowLayerTotal,
       on_levelled_loss_ratio: lossRatio,
+      on_levelled_loss_ratio_years: lossRatioYears,
       warnings,
     },
   };

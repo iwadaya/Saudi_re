@@ -145,6 +145,34 @@ describe('motorLossCost', () => {
     expect(out.diagnostics.warnings.join(' ')).toMatch(/negotiated number, not a table value/i);
   });
 
+  it('flags a percent-scale NCD entry and never returns a negative premium (F53)', () => {
+    // 20 typed into a fraction field reads as a 2000% discount. The F8
+    // discipline applies: say so loudly, use the value as entered — but the
+    // loss cost is floored at nil rather than handed back as a payment to
+    // the cedant (it was −4.94m on a 200-vehicle fleet).
+    const out = price({ ncd_pct: 20 }, { exposure_base: 200 });
+    expect(out.available).toBe(true);
+    expect(out.lossCost).toBe(0);
+    const text = out.diagnostics.warnings.join(' ');
+    expect(text).toMatch(/ncd_pct = 20 reads as 2000\.00%/);
+    expect(text).toMatch(/fraction/i);
+    expect(text).toMatch(/floored at nil/i);
+  });
+
+  it('leaves a legitimate loading above 100% alone apart from the warning', () => {
+    // −1.5 is a 150% LOADING (negative NCD): outside ±1 so it draws the
+    // fraction warning, but the result is positive and must not be touched.
+    const out = price({ ncd_pct: -1.5 }, { exposure_base: 200 });
+    expect(out.lossCost).toBeCloseTo(200 * 1_300 * 2.5, 6);
+    expect(out.diagnostics.warnings.join(' ')).toMatch(/Value used as entered/);
+  });
+
+  it('does not warn on an in-range fraction', () => {
+    const out = price({ ncd_pct: 0.15 });
+    expect(out.diagnostics.warnings.join(' ')).not.toMatch(/reads as/);
+    expect(out.lossCost).toBeCloseTo(500 * 1_300 * 0.85, 6);
+  });
+
   it('prices what it can and reports the vehicles it could not', () => {
     const out = price({
       fleet: [
@@ -206,5 +234,18 @@ describe('computeCandidates and the descriptor', () => {
     expect(motorFleet.credibility.k).toBe(4);
     expect(motorFleet.ratingBasis).toBe('PER_UNIT');
     expect(motorFleet.implemented).toBe(true);
+  });
+
+  it('advertises only methods that can actually run (F42)', () => {
+    // FREQ_SEVERITY is implemented but wired into no computeCandidates —
+    // the served metadata must not claim motor prices by it.
+    expect(motorFleet.methods).not.toContain('FREQ_SEVERITY');
+    expect(motorFleet.methods).toContain('MOTOR_RATE');
+    expect(motorFleet.methods).toContain('BURNING_COST');
+  });
+
+  it('declares the NCD field as the fraction the engine consumes (F53)', () => {
+    const field = motorFleet.exposureFields.find((f) => f.key === 'ncd_pct');
+    expect(field.type).toBe('fraction');
   });
 });
