@@ -2,6 +2,13 @@ import { pool } from '../db/pool.js';
 import { logger } from '../lib/logger.js';
 
 // ── Seed data ────────────────────────────────────────────────────────────────
+//
+// CANONICAL REFERENCE TAXONOMY (audit F114): the `classes`, `brokers` and
+// `reinsurers` lists below are the single source of truth — the live data
+// carries these exact values because boot re-seeds them on every start.
+// server/src/db/seeds/002_reference_data.sql mirrors them for the standalone
+// seed pipeline; when editing a list here, update 002 in the same change (a
+// diverging copy is how 'PROP' vs 'PROPERTY' happened).
 
 const countries = [
   ['United Arab Emirates','AE'],['Saudi Arabia','SA'],['Kuwait','KW'],['Bahrain','BH'],

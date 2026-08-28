@@ -92,3 +92,29 @@ describe('isSkippableMigrationError — 23505 scoped to seed INSERTs', () => {
     expect(isSkippableMigrationError({ code: '42703' }, 'SELECT bogus FROM foo')).toBe(false);
   });
 });
+
+describe('isSkippableMigrationError — 42P01/42704 scoped to DROP-shaped statements', () => {
+  const noTable = { code: '42P01' };  // undefined_table
+  const noObject = { code: '42704' }; // undefined_object
+
+  it('skips a legacy DROP without IF EXISTS (the intended case)', () => {
+    expect(isSkippableMigrationError(noTable, 'DROP TABLE legacy_table')).toBe(true);
+    expect(isSkippableMigrationError(noTable, '  drop view old_view;')).toBe(true);
+    expect(isSkippableMigrationError(noObject, 'DROP TRIGGER trg ON foo')).toBe(true);
+    expect(isSkippableMigrationError(noObject, 'DROP TYPE old_enum')).toBe(true);
+    expect(isSkippableMigrationError(noTable, '-- legacy\nDROP TABLE legacy_table')).toBe(true);
+  });
+
+  it('skips ALTER ... DROP shapes (dropping a constraint/column that is gone)', () => {
+    expect(isSkippableMigrationError(noObject, 'ALTER TABLE foo DROP CONSTRAINT old_uq')).toBe(true);
+    expect(isSkippableMigrationError(noTable, 'ALTER TABLE gone_table DROP COLUMN x')).toBe(true);
+  });
+
+  it('does NOT skip a typo\'d table name in a non-DROP statement (must surface)', () => {
+    expect(isSkippableMigrationError(noTable, 'UPDATE facultative_risk SET x = 1')).toBe(false);
+    expect(isSkippableMigrationError(noTable, 'CREATE INDEX ix ON typo_table (id)')).toBe(false);
+    expect(isSkippableMigrationError(noTable, 'INSERT INTO target SELECT * FROM typo_table')).toBe(false);
+    expect(isSkippableMigrationError(noObject, "COMMENT ON TYPE missing_enum IS 'x'")).toBe(false);
+    expect(isSkippableMigrationError(noObject, 'ALTER TYPE missing_enum ADD VALUE \'X\'')).toBe(false);
+  });
+});

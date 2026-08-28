@@ -29,6 +29,18 @@ const SKIPPABLE_PG_CODES = new Set([
   '42P01', // undefined_table (legacy DROP TABLE without IF EXISTS)
 ]);
 
+// 42P01/42704 are only legitimately idempotent when the statement was trying
+// to REMOVE the missing thing — a legacy `DROP ...` / `ALTER ... DROP ...`
+// without IF EXISTS. On any other statement kind (UPDATE, CREATE INDEX,
+// COMMENT, INSERT..SELECT against a typo'd name, ...) "does not exist" is a
+// programming error that must fail the migration, not be recorded as applied
+// — the mechanism that let 064's typo slip through and silently dropped
+// 012's and 036's intended shapes. Matches:
+//   DROP TABLE/VIEW/TRIGGER/FUNCTION/... x
+//   ALTER TABLE x DROP CONSTRAINT/COLUMN y   (and ALTER ... ALTER ... DROP
+//   DEFAULT / DROP NOT NULL on a missing table — still drop-shaped intent)
+const DROP_SHAPED_RE = /^(?:DROP\b|ALTER\b[\s\S]*?\bDROP\b)/i;
+
 export function isSkippableMigrationError(err, stmt = '') {
   const code = err?.code;
   if (!SKIPPABLE_PG_CODES.has(code)) return false;
@@ -38,6 +50,11 @@ export function isSkippableMigrationError(err, stmt = '') {
   // roll the migration back), not be silently recorded as applied.
   if (code === '23505') {
     return /^\s*(?:WITH\b[\s\S]*?\b)?INSERT\b/i.test(stripComments(stmt));
+  }
+  // 42P01/42704 (undefined table/object): skip only for DROP-shaped
+  // statements — see DROP_SHAPED_RE above.
+  if (code === '42P01' || code === '42704') {
+    return DROP_SHAPED_RE.test(stripComments(stmt));
   }
   return true;
 }
@@ -305,9 +322,10 @@ async function runOneMigration(file, stmts) {
           await client.query('ROLLBACK TO SAVEPOINT migration_stmt');
           await client.query('RELEASE SAVEPOINT migration_stmt');
           skippedCount++;
-          if (process.env.NODE_ENV !== 'production') {
-            logger.debug('migration stmt skipped', { file, code: err.code, error: err.message.split('\n')[0].slice(0, 120) });
-          }
+          // Warn (all environments): a skipped statement means the migration's
+          // literal text did NOT apply — usually a benign idempotent re-run,
+          // but it must leave a signal (see the 064 incident above).
+          logger.warn('migration stmt skipped', { file, code: err.code, error: err.message.split('\n')[0].slice(0, 120) });
           continue;
         }
         logger.error('migration fatal error', { file, code: err.code, error: err.message.split('\n')[0] });

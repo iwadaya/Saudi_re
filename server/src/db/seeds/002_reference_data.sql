@@ -29,23 +29,29 @@ ON CONFLICT (treaty_type) DO NOTHING;
 
 -- ═══════════════════════════════════════════════════════════════════
 -- Class of Business (actual columns: class_of_business, code)
+--
+-- CANONICAL TAXONOMY (audit F114): this list must stay identical to the
+-- `classes` constant in server/src/startup/ensureReferenceData.js — that is
+-- the set the live data uses (boot seeds it on every start). This file
+-- previously carried a divergent set ('Property'/'PROPERTY', 'Casualty',
+-- 'Cyber', 'Workers Comp'/'WORKERS_COMP', ...) so a DB seeded via
+-- seeds/run.js disagreed with one seeded by boot. Edit both files together.
 -- ═══════════════════════════════════════════════════════════════════
 INSERT INTO public.class_of_business (class_of_business, code) VALUES
-  ('Property',         'PROPERTY'),
-  ('Casualty',         'CASUALTY'),
-  ('Marine',           'MARINE'),
-  ('Aviation',         'AVIATION'),
-  ('Motor',            'MOTOR'),
-  ('Engineering',      'ENGINEERING'),
-  ('Energy',           'ENERGY'),
-  ('Agriculture',      'AGRICULTURE'),
-  ('Life',             'LIFE'),
-  ('Health',           'HEALTH'),
-  ('Cyber',            'CYBER'),
-  ('Financial Lines',  'FIN_LINES'),
-  ('Liability',        'LIABILITY'),
-  ('Workers Comp',     'WORKERS_COMP'),
-  ('Misc Accident',    'MISC_ACCIDENT')
+  ('Property',             'PROP'),
+  ('Motor',                'MOT'),
+  ('Marine',               'MAR'),
+  ('Engineering',          'ENG'),
+  ('Liability',            'LIA'),
+  ('Medical',              'MED'),
+  ('Aviation',             'AVI'),
+  ('Energy',               'ENE'),
+  ('Agriculture',          'AGR'),
+  ('Credit & Surety',      'CS'),
+  ('Miscellaneous',        'MISC'),
+  ('Life',                 'LIFE'),
+  ('Group Life',           'GL'),
+  ('Workers Compensation', 'WC')
 ON CONFLICT (class_of_business) WHERE is_active IS NOT FALSE DO NOTHING;
 
 -- ═══════════════════════════════════════════════════════════════════
@@ -96,14 +102,25 @@ ON CONFLICT (currency_code) DO NOTHING;
 
 -- ═══════════════════════════════════════════════════════════════════
 -- Brokers (actual table: brokers with broker_name)
+--
+-- CANONICAL TAXONOMY (audit F114): must stay identical to the `brokers`
+-- constant in server/src/startup/ensureReferenceData.js (the live set).
+-- The previous variants ('Aon Re', 'Direct - No Broker', ...) duplicated the
+-- same firms under different names, and 'Direct - No Broker' dodged
+-- seedTestTreaties' exact-name 'Direct' placing-broker filter.
 -- ═══════════════════════════════════════════════════════════════════
 INSERT INTO public.brokers (broker_name) VALUES
-  ('Aon Re'),
+  ('Aon'),
+  ('Marsh'),
+  ('Willis Towers Watson'),
   ('Guy Carpenter'),
   ('Gallagher Re'),
-  ('Willis Re'),
-  ('Howden Re'),
-  ('Direct - No Broker')
+  ('Lockton Re'),
+  ('Ed Broking'),
+  ('BMS Group'),
+  ('UIB'),
+  ('Howden'),
+  ('Direct')
 ON CONFLICT (broker_name) WHERE is_active IS NOT FALSE DO NOTHING;
 
 -- ═══════════════════════════════════════════════════════════════════
@@ -143,15 +160,24 @@ BEGIN
 END $$;
 
 -- ═══════════════════════════════════════════════════════════════════
--- Reinsurers
+-- Reinsurers — aligned to ensureReferenceData.js (audit F114). 'Lloyds' (not
+-- 'Lloyd''s') is the spelling the live panel and seed_1000's REINSURER_PANEL
+-- use; a second spelling would split one carrier across two rows.
 -- ═══════════════════════════════════════════════════════════════════
 INSERT INTO public.reinsurers (reinsurer_name) VALUES
-  ('Munich Re'),
   ('Swiss Re'),
+  ('Munich Re'),
   ('Hannover Re'),
   ('SCOR'),
-  ('RenaissanceRe'),
-  ('Berkshire Hathaway Re'),
-  ('Lloyd''s'),
-  ('Everest Re')
+  ('Lloyds'),
+  ('RGA'),
+  ('Everest Re'),
+  ('PartnerRe'),
+  ('Transatlantic Re'),
+  ('Korean Re'),
+  ('Africa Re'),
+  ('Trust Re'),
+  ('CCR Re'),
+  ('Qatar Re'),
+  ('Maiden Re')
 ON CONFLICT (reinsurer_name) DO NOTHING;

@@ -218,10 +218,13 @@ function propDetail(treatyTypeName) {
     surplus_epi: 0,
   };
   if (treatyTypeName === 'Quota Share') {
+    // One draw for the QS split so cession + retention always sum to 100
+    // (previously two independent RNG draws, e.g. cession 30 / retention 60).
+    const cession = roundTo(between(20, 80), 2);
     return {
       ...base,
-      cession_pct: roundTo(between(20, 80), 2),
-      retention_pct: 100 - roundTo(between(20, 80), 2),
+      cession_pct: cession,
+      retention_pct: roundTo(100 - cession, 2),
       quota_share_epi: epi,
       qs_limit: roundTo(epi * between(0.5, 2), 2),
     };
@@ -280,9 +283,15 @@ function npLayers(treatyTypeName) {
   for (let i = 0; i < count; i++) {
     const limit = roundTo(between(1_000_000, 25_000_000), 0);
     const peril = cfg.perils[i % cfg.perils.length];
-    const rol = roundTo(between(0.02, 0.18), 6);
+    // App/DB convention for rate / rol / uw_price / expiring_price is PERCENT
+    // points (1.5 = 1.5%), NOT fractions — see
+    // client/.../NpStructureHelpers.jsx:38 ("DB stores rate as plain number
+    // (1.5 = 1.5%)") and NpExpiringStructure.jsx rol = earned/limit*100.
+    // The tower is kept self-consistent: earned = limit × rol/100 and
+    // rate = earned / egnpi × 100.
+    const rol = roundTo(between(2, 18), 4);
     const egnpi = roundTo(between(3_000_000, 60_000_000), 2);
-    const earned = roundTo(egnpi * (0.9 + rand() * 0.2), 2);
+    const earned = roundTo(limit * rol / 100, 2);
     layers.push({
       layer_number: i + 1,
       attachment: attach,
@@ -290,7 +299,7 @@ function npLayers(treatyTypeName) {
       aggregate_limit: peril === 'BOTH' ? roundTo(limit * 1.5, 0) : null,
       egnpi,
       earned_premium: earned,
-      rate: roundTo(rol * (0.9 + rand() * 0.2), 8),
+      rate: roundTo((earned / egnpi) * 100, 6),
       rol,
       num_reinstatements: peril === 'CAT' ? intBetween(0, 2) : intBetween(1, 3),
       reinstatement_pct: roundTo(100, 2),
@@ -299,9 +308,9 @@ function npLayers(treatyTypeName) {
       hist_margin: roundTo(between(0.05, 0.35), 6),
       modelled_margin: roundTo(between(0.05, 0.35), 6),
       tech_ratio: roundTo(between(0.55, 0.85), 6),
-      uw_price: roundTo(rol, 8),
-      expiring_price: roundTo(rol * (0.9 + rand() * 0.2), 8),
-      lead_price: roundTo(rol, 8),
+      uw_price: roundTo(rol, 4),
+      expiring_price: roundTo(rol * (0.9 + rand() * 0.2), 4),
+      lead_price: roundTo(rol, 4),
     });
     attach += limit;
   }
@@ -657,7 +666,8 @@ async function insertPropPricing(contractId, detail, comm, epi) {
     ],
   );
 
-  // Pricing yearly: 8 historical years (HISTORICAL) + 1 projected
+  // Pricing yearly: 8 realised years (ACTUAL — the only record_type the
+  // client's metrics/moving-average charts read) + 1 projected
   const startYear = 2026 - 8;
   const yearValues = [];
   const yearParams = [contractId];
@@ -669,7 +679,7 @@ async function insertPropPricing(contractId, detail, comm, epi) {
     const commAmt = roundTo(grossPrem * (commissionRatio), 2);
     const brokAmt = roundTo(grossPrem * brokerage, 2);
     const techResult = roundTo(grossPrem - ultLoss - commAmt - brokAmt, 2);
-    yearValues.push(`($1, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, 'HISTORICAL')`);
+    yearValues.push(`($1, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, 'ACTUAL')`);
     yearParams.push(year, grossPrem, ultLoss, roundTo(ultLoss / grossPrem, 6), commAmt, brokAmt, techResult);
   }
   // One projection row for next UW year
@@ -700,7 +710,10 @@ async function insertNpPricing(contractId, layers) {
         swiss_re_curve_name, pareto_weight_pct
       ) VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (contract_id) DO NOTHING`,
-    [contractId, burnW, exposureW, loading, pick(['Property', 'Liability', 'Marine', 'Motor']), paretoW],
+    // Curve names must match the engine's SWISS_RE_C keys (Y1..Y4, see
+    // client/src/utils/npPricingEngine.js) — anything else silently falls
+    // back to c=3.0.
+    [contractId, burnW, exposureW, loading, pick(['Y1', 'Y2', 'Y3', 'Y4']), paretoW],
   );
 
   // Layer inputs row per layer
@@ -709,7 +722,8 @@ async function insertNpPricing(contractId, layers) {
   let p = 2;
   for (const l of layers) {
     liValues.push(`($1, $${p++}, $${p++})`);
-    liParams.push(l.layer_number, roundTo(Number(l.expiring_price) * 100, 6));
+    // expiring_price is already stored in percent points — no conversion.
+    liParams.push(l.layer_number, roundTo(Number(l.expiring_price), 6));
   }
   if (liValues.length) {
     await pool.query(
@@ -725,11 +739,15 @@ async function insertNpPricing(contractId, layers) {
   const outParams = [contractId];
   let q = 2;
   const buildOut = (l, section) => {
-    const pureBurn = roundTo(between(0.01, 0.12), 6);
+    // Component rates in percent points, anchored to the layer's ROL so the
+    // priced outputs and the tower tell one story.
+    const pureBurn = roundTo(l.rol * between(0.5, 0.9), 6);
     const paretoRate = roundTo(pureBurn * between(0.85, 1.25), 6);
     const exposureRate = roundTo(pureBurn * between(0.85, 1.25), 6);
-    const burnPlusPareto = roundTo((burnW * pureBurn + paretoW * paretoRate) / (burnW + paretoW), 6);
+    // Client convention (fqQuoteMath.js): burnPlusPareto = pureBurn + pareto.
+    const burnPlusPareto = roundTo(pureBurn + paretoRate, 6);
     const blended = (burnW * pureBurn + paretoW * paretoRate + exposureW * exposureRate) / (burnW + paretoW + exposureW);
+    // Canonical loading formula (shared/pricingMath.js deriveComponentTotal).
     const totalPrice = roundTo(blended / (1 - loading / 100), 8);
     return [
       l.layer_number, section, pureBurn, paretoRate, burnPlusPareto, exposureRate,
@@ -765,6 +783,12 @@ async function insertNpPricing(contractId, layers) {
 
 async function insertOffer(contractId, uwStatus) {
   const writtenLine = roundTo(between(2.5, 17.5), 4);
+  // Offer statuses use the approvals vocabulary (services/approvals.js /
+  // pricingOfferRepository.js): PENDING, AWAITING_APPROVAL,
+  // AWAITING_SIGNED_LINE, DISPUTE_PENDING, RETURNED, SIGNED, NTU, DECLINED —
+  // enforced by contract_offer_status_check (migration 157). The previous
+  // vocabulary (PENDING_APPROVAL / OFFERED / APPROVED) matched no reader:
+  // seeded "awaiting approval" offers never appeared in the approval queue.
   let status = 'PENDING';
   let signedAt = null;
   let ntuAt = null;
@@ -783,15 +807,16 @@ async function insertOffer(contractId, uwStatus) {
       declinedAt = new Date();
       break;
     case 'APPROVED':
-      status = 'APPROVED';
-      break;
     case 'AWAITING_SIGNED_LINE':
-      status = 'OFFERED';
+      // Approval landed; offer is out with the market awaiting a signed line.
+      status = 'AWAITING_SIGNED_LINE';
       break;
     case 'AWAITING_APPROVAL':
-      status = 'PENDING_APPROVAL';
+      status = 'AWAITING_APPROVAL';
       break;
   }
+  const approvedAt = ['AWAITING_SIGNED_LINE', 'SIGNED', 'NTU', 'DECLINED'].includes(status) ? new Date() : null;
+  const sentToMarketAt = ['AWAITING_SIGNED_LINE', 'SIGNED', 'NTU'].includes(status) ? new Date() : null;
   await pool.query(
     `INSERT INTO contract_offer (
         contract_id, written_line_pct, premium_driver, profit_driver,
@@ -804,8 +829,8 @@ async function insertOffer(contractId, uwStatus) {
       'Strategic cedant relationship; longstanding programme.',
       'Layer reattachment opportunity; competitive ROL.',
       status,
-      status !== 'PENDING' && status !== 'PENDING_APPROVAL' ? new Date() : null,
-      status === 'OFFERED' || status === 'SIGNED' || status === 'NTU' ? new Date() : null,
+      approvedAt,
+      sentToMarketAt,
       signedAt, ntuAt, declinedAt,
     ],
   );
@@ -840,7 +865,10 @@ async function insertQuoteFor(contract, idx) {
       ) RETURNING quote_id`,
     [
       r.cedant_id, r.broker_id, r.country_id, r.currency_id, r.treaty_type_id,
-      r.uw_year, 'BOUND', 'SIGNED', 'TRIANGLE',
+      // A bound quote's status is SIGNED in the app vocabulary (quoteBind.js
+      // requires status='SIGNED' to bind and never rewrites it; 'BOUND' is
+      // not a quote status and is rejected by quote_status_check).
+      r.uw_year, 'SIGNED', 'SIGNED', 'TRIANGLE',
       r.primary_class_of_business_id, `QUOTE: ${r.contract_description}`,
       r.inception_date, r.renewal_date, r.created_by_user_id,
       quoteRef, contract.contractId, new Date(), altQ,
