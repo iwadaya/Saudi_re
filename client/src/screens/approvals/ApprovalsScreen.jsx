@@ -264,30 +264,24 @@ export default function ApprovalsScreen() {
       </div>
 
       {disputed.length > 0 && (
-        <section className="panel glass" style={{ marginBottom: 16, borderLeft: '3px solid rgba(167,139,250,0.55)' }}>
+        <section className="panel glass panel--disputed">
           <div className="panel-head">
             <div className="panel-title">DISPUTED — ARBITRATION REQUIRED</div>
-            <div className="pill-mini" style={{ background: 'rgba(167,139,250,0.20)', color: '#a78bfa' }}>{disputed.length}</div>
+            <div className="pill-mini pill-mini--disputed">{disputed.length}</div>
           </div>
           <div className="panel-body approvals-list">
             {disputed.map(x => (
-              <div key={x.contractId} className="approval-row" role="button" tabIndex={0}
-                onClick={() => open(x)}
-                onKeyDown={(e) => {
-                  if (e.target !== e.currentTarget) return;
-                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(x); }
-                }}
-                style={{ cursor: 'pointer', borderLeft: '3px solid rgba(167,139,250,0.50)', paddingLeft: 12 }}>
+              <div key={x.contractId} className="approval-row approval-row--disputed">
                 <div className="approval-main">
-                  <div className="approval-title" style={{ fontWeight: 700, fontSize: 14 }}>{x.title}</div>
-                  <div className="approval-meta muted" style={{ marginTop: 3 }}>
-                    {x.product} · Submitted by <b style={{ color: 'rgba(255,255,255,0.70)' }}>{x.submittedBy}</b>
+                  <div className="approval-title approval-title--strong">{x.title}</div>
+                  <div className="approval-meta muted approval-meta--spaced">
+                    {x.product} · Submitted by <b className="approval-actor">{x.submittedBy}</b>
                     {x.linePct ? ` · Line ${x.linePct}%` : ''}
                     {' · Split peer decision — a Treaty Director, Chief Underwriter or Chief Executive must arbitrate.'}
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  <div className="approval-pill" style={{ background: 'rgba(167,139,250,0.12)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.30)' }}>
+                <div className="approval-actions">
+                  <div className="approval-pill approval-pill--disputed">
                     {statusLabel(x.status)}
                   </div>
                   {x.canArbitrate && (
@@ -295,12 +289,12 @@ export default function ApprovalsScreen() {
                       type="button"
                       className="topbar-pill"
                       disabled={decisionBusy === `arbitrate:${x.contractId}`}
-                      onClick={(e) => { e.stopPropagation(); setArbitrateTarget(x); setArbitrateComment(''); }}
+                      onClick={() => { setArbitrateTarget(x); setArbitrateComment(''); }}
                     >
                       Arbitrate
                     </button>
                   )}
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Review →</span>
+                  <button type="button" className="topbar-pill" onClick={() => open(x)}>Review →</button>
                 </div>
               </div>
             ))}
@@ -437,36 +431,29 @@ export default function ApprovalsScreen() {
         </div>
       )}
       {arbitrateTarget && (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          style={{ position:'fixed', inset:0, background:'rgba(2,6,23,0.72)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}
-          onClick={(e) => { if (e.target === e.currentTarget) setArbitrateTarget(null); }}
-        >
+        <div className="modal-backdrop modal-backdrop--center" role="presentation">
           <div
-            className="panel glass"
+            className="panel glass modal-panel--compact"
             role="dialog"
             aria-modal="true"
             aria-labelledby="approval-arbitrate-title"
-            style={{ width:'min(460px, calc(100vw - 32px))', padding:18 }}
           >
-            <div className="modal-title" style={{ padding:0, marginBottom:8, borderBottom:0 }}>
+            <div className="modal-title modal-title--plain">
               <span id="approval-arbitrate-title" className="panel-title">Arbitrate Dispute</span>
               <button type="button" className="modal-close" onClick={() => setArbitrateTarget(null)} aria-label="Close">✕</button>
             </div>
-            <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+            <div className="muted modal-note">
               The peer approvers split on this offer. Your decision is final and is recorded with your comment.
             </div>
             <textarea
-              className="fi"
+              className="fi fi--textarea"
               aria-label="Arbitration comment"
               value={arbitrateComment}
               onChange={e => setArbitrateComment(e.target.value)}
               placeholder="Rationale for the arbitration decision"
               rows={4}
-              style={{ width:'100%', minHeight:96, resize:'vertical' }}
             />
-            <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:12 }}>
+            <div className="modal-actions">
               <button type="button" className="topbar-pill" onClick={() => setArbitrateTarget(null)}>Cancel</button>
               <button type="button" className="topbar-pill" onClick={() => confirmArbitrate('DECLINED')} disabled={decisionBusy === `arbitrate:${arbitrateTarget.contractId}`}>Decline Offer</button>
               <button type="button" className="topbar-pill" onClick={() => confirmArbitrate('APPROVED')} disabled={decisionBusy === `arbitrate:${arbitrateTarget.contractId}`}>Approve Offer</button>

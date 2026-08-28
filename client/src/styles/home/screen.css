@@ -504,6 +504,21 @@
 .approval-meta{ font-size: 12px; margin-top: 3px; }
 .approval-pill{ font-size: 12px; padding: 6px 10px; border-radius: 999px; background: var(--surface-hover); }
 .approval-comment{ margin-top: 8px; font-size: 13px; opacity: .92; }
+/* Disputed-offer section + arbitrate modal */
+.panel--disputed{ margin-bottom: 16px; border-left: 3px solid rgba(167,139,250,0.55); }
+.pill-mini--disputed{ background: rgba(167,139,250,0.20); color: #a78bfa; }
+.approval-row--disputed{ cursor: default; border-left: 3px solid rgba(167,139,250,0.50); padding-left: 12px; }
+.approval-title--strong{ font-weight: 700; font-size: 14px; }
+.approval-meta--spaced{ margin-top: 3px; }
+.approval-actor{ color: rgba(255,255,255,0.70); }
+.approval-actions{ display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.approval-pill--disputed{ background: rgba(167,139,250,0.12); color: #a78bfa; border: 1px solid rgba(167,139,250,0.30); }
+.modal-backdrop--center{ position: fixed; inset: 0; background: rgba(2,6,23,0.72); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal-panel--compact{ width: min(460px, calc(100vw - 32px)); padding: 18px; }
+.modal-title--plain{ padding: 0; margin-bottom: 8px; border-bottom: 0; }
+.modal-note{ font-size: 12px; margin-bottom: 8px; }
+.fi--textarea{ width: 100%; min-height: 96px; resize: vertical; }
+.modal-actions{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 /* =========================================================
    HOME / FULL-WIDTH CONTAINER (OVERRIDES ALL 1280px CLAMPS)
    Put this at the very bottom of layout.css

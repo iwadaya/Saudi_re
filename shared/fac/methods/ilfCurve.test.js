@@ -267,7 +267,7 @@ describe('ilfLossCost — the candidate', () => {
     // A rate row with no basic_limit cannot be cross-checked; the curve's
     // own normalisation is all there is, and refusing would refuse every
     // legacy row. The diagnostics still show what was used.
-    const { basic_limit, ...bare } = BASE_RATE;
+    const { basic_limit: _basicLimit, ...bare } = BASE_RATE;
     const out = ilfLossCost({
       exposureBase: 50_000_000, baseRate: bare, curve: POWER(0.20), limit: 5_000_000,
     });

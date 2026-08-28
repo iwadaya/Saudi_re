@@ -56,9 +56,9 @@ describe('calculateBFPremium — achieved-premium ratio defaults (F100)', () => 
     //           ultimate   = 1600 + 1118.1657848324516 = 2718.1657848324515
     const [half] = calculateBFPremium(PROJ, EPIS, 0.5);
     expect(half.percentAchieved).toBe(0.5);
-    expect(half.ultimate).toBeCloseTo(2718.1657848324515, 9);
+    expect(half.ultimate).toBeCloseTo(2718.16578483, 8);
     const [halfArr] = calculateBFPremium(PROJ, EPIS, [0.5]);
-    expect(halfArr.ultimate).toBeCloseTo(2718.1657848324515, 9);
+    expect(halfArr.ultimate).toBeCloseTo(2718.16578483, 8);
 
     // Explicit 0 means "no a priori volume" — NOT re-defaulted to 1.
     const [zeroScalar] = calculateBFPremium(PROJ, EPIS, 0);

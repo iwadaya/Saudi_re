@@ -398,7 +398,7 @@ export function calcPureBurningCost(losses, deductible, limit, egnpi, obsYears, 
 export function calcParetoROL(losses, deductible, limit, egnpi, savedParams) {
   if (limit <= 0 || egnpi <= 0) return { rol: 0, alpha: 0, xm: 0, prAttach: 0, prExhaust: 0 };
 
-  let alpha, xm, n, years;
+  let alpha = 0, xm = 0, n = 0, years = 0;
   /** @type {string[]} */
   const warnings = [];
 
