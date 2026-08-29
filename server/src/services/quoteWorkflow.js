@@ -24,6 +24,7 @@
 import { withTransaction } from '../db/withTransaction.js';
 import { logAudit } from './audit.js';
 import { assertLegalTransition } from '../lib/statusMachine.js';
+import { getUserMandate, getRoleLevel, APPROVAL_AUTHORITY_MAX_LEVEL } from './approvals.js';
 
 const numOrNull = (v) => {
   if (v === null || v === undefined || v === '') return null;
@@ -127,6 +128,27 @@ export async function submitQuoteForApprovalAction(quoteId, actor, payload = {})
   const { comment, written_line_pct, line_pct } = payload;
   const approver = payload.approver || payload.peer1_user_id || null;
   const wlPct = parseQuoteLinePct({ written_line_pct, line_pct });
+
+  // Nominee validation — payload.approver used to be stored with ZERO checks
+  // (even a bogus UUID was accepted), and approveQuote trusts the recorded
+  // nominee. The nominee must (a) not be the submitting actor (four-eyes),
+  // (b) exist, and (c) hold approval authority per the live uw_role hierarchy
+  // (the same source approveQuote and the treaty engine resolve levels from).
+  if (approver) {
+    if (actor?.actorUserId && String(approver) === String(actor.actorUserId)) {
+      throw Object.assign(new Error('Cannot nominate yourself as the approver of your own submission'), { status: 403 });
+    }
+    const nominee = await getUserMandate(approver);
+    if (!nominee) {
+      throw Object.assign(new Error('Approver not found — user does not exist in the system'), { status: 400 });
+    }
+    const nomineeLevel = Number.isFinite(Number(nominee.hierarchy_level))
+      ? Number(nominee.hierarchy_level)
+      : await getRoleLevel(nominee.role_code);
+    if (nomineeLevel > APPROVAL_AUTHORITY_MAX_LEVEL) {
+      throw Object.assign(new Error('Nominated approver does not hold approval authority'), { status: 400 });
+    }
+  }
 
   return withTransaction(async (client) => {
     const from = await lockQuoteStatus(client, quoteId);

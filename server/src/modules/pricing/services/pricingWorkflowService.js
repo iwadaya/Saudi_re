@@ -12,6 +12,9 @@ import {
   markNotTakenUp,
   recallOffer,
   getTerminalPermissions,
+  getUserMandate,
+  getRequiredApproverRole,
+  getRoleLevel,
 } from '../../../services/approvals.js';
 import { logAudit } from '../../../services/audit.js';
 import { withTransaction } from '../../../db/withTransaction.js';
@@ -34,6 +37,25 @@ export async function saveOfferAction(contractId, offer, actor) {
 }
 
 export async function declineTreatyAction(contractId, actor, reason) {
+  // DECLINED is terminal (statusMachine: no outbound edges), so it takes the
+  // same authority rule as NTU — the other "kill it" terminal action: the
+  // contract's assignee (owner) OR a live eligible approver for its offer.
+  // Enforced with the approval service's own primitives (getTerminalPermissions
+  // wraps loadTerminalContext + isEligibleContractApprover) so this can never
+  // drift from what the engine's other terminal actions accept (F22/F29).
+  const perms = await getTerminalPermissions({
+    entityType: 'CONTRACT',
+    entityId: contractId,
+    actorUserId: actor?.actorUserId || null,
+    actorRole: actor?.actorRole || null,
+  });
+  // can_ntu is exactly "assignee OR eligible approver" (approvals.js).
+  if (!perms.can_ntu) {
+    const err = new Error('Not authorised to decline this treaty — only the assignee or an eligible approver may decline it.');
+    err.status = 403;
+    err.code = 'DECLINE_FORBIDDEN';
+    throw err;
+  }
   // DECLINED: status change, offer_approval_event and the (critical) audit row
   // are one atomic unit.
   await withTransaction(async (client) => {
@@ -85,7 +107,23 @@ export async function getApprovalStateAction(contractId) {
 }
 
 export async function getEligibleApproversAction({ submitterUserId, breachType, epiUsd }) {
-  return getEligibleApprovers({ submitterUserId, breachType, epiUsd });
+  const list = await getEligibleApprovers({ submitterUserId, breachType, epiUsd });
+  // The picker must only offer nominees submitForApproval will accept: filter
+  // by the breach-tier approver role for THIS submitter, resolved against the
+  // live uw_role hierarchy — the same rule (and the same source of truth) the
+  // submit validation applies to a nominated peer. Candidates carry their live
+  // hierarchy_level from v_user_mandate; a missing level falls back to the
+  // role-code lookup.
+  const submitter = await getUserMandate(submitterUserId);
+  const submitterLevel = Number.isFinite(Number(submitter?.hierarchy_level)) ? Number(submitter.hierarchy_level) : 5;
+  const requiredRole = getRequiredApproverRole(submitterLevel, breachType || 'NONE');
+  const requiredLevel = await getRoleLevel(requiredRole);
+  const out = [];
+  for (const c of list) {
+    const lvl = Number.isFinite(Number(c.hierarchy_level)) ? Number(c.hierarchy_level) : await getRoleLevel(c.role_code);
+    if (lvl <= requiredLevel) out.push(c);
+  }
+  return out;
 }
 
 export async function getArbiterOptionsAction(contractId) {

@@ -363,10 +363,10 @@ export default function PropQuickSummary() {
                   <div className="qs-metrics-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
                     <div className="qs-metric-card qs-metric--blue"><div className="qs-metric-title">Mean LR</div><div className="qs-metric-value">{stats.mean.toFixed(1)}%</div></div>
                     <div className="qs-metric-card qs-metric--green"><div className="qs-metric-title">Median LR</div><div className="qs-metric-value">{stats.median.toFixed(1)}%</div></div>
-                    <div className="qs-metric-card qs-metric--amber"><div className="qs-metric-title">Std. Deviation</div><div className="qs-metric-value">{stats.stdDev.toFixed(2)}</div></div>
+                    <div className="qs-metric-card qs-metric--amber"><div className="qs-metric-title">Std. Deviation</div><div className="qs-metric-value">{stats.stdDev.toFixed(2)}%</div></div>
                     <div className="qs-metric-card qs-metric--green"><div className="qs-metric-title">Min LR</div><div className="qs-metric-value">{stats.min.toFixed(1)}%</div></div>
                     <div className="qs-metric-card qs-metric--slate"><div className="qs-metric-title">Max LR</div><div className="qs-metric-value">{stats.max.toFixed(1)}%</div></div>
-                    <div className="qs-metric-card"><div className="qs-metric-title">Range</div><div className="qs-metric-value">{(stats.max - stats.min).toFixed(1)}</div></div>
+                    <div className="qs-metric-card"><div className="qs-metric-title">Range</div><div className="qs-metric-value">{(stats.max - stats.min).toFixed(1)}%</div></div>
                     <div className="qs-metric-card qs-metric--purple"><div className="qs-metric-title">Skewness</div><div className="qs-metric-value">{stats.skewness.toFixed(3)}</div><div className="qs-metric-desc">{stats.skewness > 0.5 ? 'Right-skewed' : stats.skewness < -0.5 ? 'Left-skewed' : 'Approx. symmetric'}</div></div>
                     <div className="qs-metric-card qs-metric--purple"><div className="qs-metric-title">Excess Kurtosis</div><div className="qs-metric-value">{stats.kurtosis.toFixed(3)}</div><div className="qs-metric-desc">{stats.kurtosis > 1 ? 'Heavy-tailed' : stats.kurtosis < -1 ? 'Light-tailed' : 'Near-normal'}</div></div>
                     <div className="qs-metric-card"><div className="qs-metric-title">Coeff. of Variation</div><div className="qs-metric-value">{stats.cv.toFixed(1)}%</div></div>
@@ -375,7 +375,7 @@ export default function PropQuickSummary() {
                   <div className="qs-metrics-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
                     <div className="qs-metric-card qs-metric--slate"><div className="qs-metric-title">VaR (95%)</div><div className="qs-metric-value">{stats.var95.toFixed(1)}%</div><div className="qs-metric-desc">1-in-20 year scenario</div></div>
                     <div className="qs-metric-card qs-metric--slate"><div className="qs-metric-title">VaR (99%)</div><div className="qs-metric-value">{stats.var99.toFixed(1)}%</div><div className="qs-metric-desc">1-in-100 year scenario</div></div>
-                    <div className="qs-metric-card"><div className="qs-metric-title">IQR</div><div className="qs-metric-value">{stats.iqr.toFixed(1)}</div><div className="qs-metric-desc">Interquartile range</div></div>
+                    <div className="qs-metric-card"><div className="qs-metric-title">IQR</div><div className="qs-metric-value">{stats.iqr.toFixed(1)}%</div><div className="qs-metric-desc">Interquartile range</div></div>
                   </div>
                 </div>
               ) : <div className="muted" style={{ padding: 20, textAlign: 'center' }}>No data for analysis.</div>

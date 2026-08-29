@@ -131,6 +131,61 @@ describe.skipIf(shouldSkipDb)('integration: fac experience, loss-cost methods an
     });
   });
 
+  // ── Loss-history section attribution (F46) ───────────────────────────
+  describe('loss-history save keeps section attribution', () => {
+    async function riskWithSection() {
+      // The sections insert JOINs fac_class_of_business, so the section
+      // must name a real class or it is silently skipped.
+      const id = await newRisk({ fac_cob_id: propertyCob.fac_cob_id });
+      await harness.fetchApp('PUT', `/api/fac/risks/${id}/sections`, {
+        body: {
+          sections: [{ section_no: 1, fac_cob_id: propertyCob.fac_cob_id, sum_insured: 10_000_000 }],
+        },
+      });
+      const sections = await harness.fetchApp('GET', `/api/fac/risks/${id}/sections`)
+        .then((r) => r.json());
+      return { id, sectionId: sections[0].section_id };
+    }
+
+    it('round-trips section_id through the delete-and-reinsert', async () => {
+      // The save used to drop the column, so every save wiped whatever
+      // attribution existed and the pipeline's per-section burning-cost
+      // split was unreachable (F46).
+      const { id, sectionId } = await riskWithSection();
+      await harness.fetchApp('PUT', `/api/fac/risks/${id}/losses`, {
+        body: {
+          losses: [
+            { loss_year: 2025, fgu_paid: 100_000, is_open: false, section_id: sectionId },
+            { loss_year: 2024, fgu_paid: 50_000, is_open: false },
+          ],
+        },
+      });
+      const out = await harness.fetchApp('GET', `/api/fac/risks/${id}/losses`).then((r) => r.json());
+      expect(out).toHaveLength(2);
+      expect(out.find((l) => l.loss_year === 2025).section_id).toBe(sectionId);
+      expect(out.find((l) => l.loss_year === 2024).section_id).toBeNull();
+
+      // And it SURVIVES a re-save that carries it — the wipe was the bug.
+      await harness.fetchApp('PUT', `/api/fac/risks/${id}/losses`, { body: { losses: out } });
+      const again = await harness.fetchApp('GET', `/api/fac/risks/${id}/losses`).then((r) => r.json());
+      expect(again.find((l) => l.loss_year === 2025).section_id).toBe(sectionId);
+    });
+
+    it('rejects a section that belongs to a different risk', async () => {
+      // The FK only proves the section exists somewhere; attribution across
+      // risks would feed one risk's losses into another's section split.
+      const { sectionId: foreign } = await riskWithSection();
+      const id = await newRisk();
+      const res = await harness.fetchApp('PUT', `/api/fac/risks/${id}/losses`, {
+        body: { losses: [{ loss_year: 2025, fgu_paid: 1_000, section_id: foreign }] },
+      });
+      expect(res.status).toBe(400);
+      // Nothing was replaced: the reject happened before the delete.
+      const out = await harness.fetchApp('GET', `/api/fac/risks/${id}/losses`).then((r) => r.json());
+      expect(out).toHaveLength(0);
+    });
+  });
+
   // ── The methods ──────────────────────────────────────────────────────
   describe('loss-cost methods through POST /price', () => {
     it('runs every method and reports the ones with no data as unavailable', async () => {

@@ -188,6 +188,51 @@ describe('workbench: role gating', () => {
   });
 });
 
+describe('workbench: self-approval forbidden (four-eyes)', () => {
+  it('rejects approval when the approver is the proposer (updated_by)', async () => {
+    const app = buildApp({
+      user: { userId: 'cu-1', role: 'CU', displayName: 'Chief UW',
+              hierarchyLevel: 2, canApprove: true, isSupervisor: true },
+    });
+    pushHandler('FROM public.formula_parameters', {
+      rows: [{ id: 'p-1', current_value: [1.0], pending_value: [1.3], status: 'PENDING', updated_by: 'cu-1' }],
+    });
+
+    const r = await call(app, {
+      method: 'PUT',
+      path: '/api/workbench/parameters/p-1/approve',
+      body: { comment: 'my own change' },
+    });
+    expect(r.status).toBe(403);
+    expect(r.body.code).toBe('SELF_APPROVAL_FORBIDDEN');
+    expect(r.body.error).toMatch(/second person/);
+    // Nothing was approved.
+    expect(queryLog.some((q) => q.sql.includes('UPDATE public.formula_parameters'))).toBe(false);
+  });
+
+  it('allows approval by a supervisor who is NOT the proposer', async () => {
+    const app = buildApp({
+      user: { userId: 'ce-9', role: 'CE', displayName: 'Chief Exec',
+              hierarchyLevel: 1, canApprove: true, isSupervisor: true },
+    });
+    pushHandler('FROM public.formula_parameters', {
+      rows: [{ id: 'p-1', current_value: [1.0], pending_value: [1.3], status: 'PENDING', updated_by: 'td-1' }],
+    });
+    pushHandler('UPDATE public.formula_parameters', {
+      rows: [{ id: 'p-1', current_value: [1.3] }],
+    });
+    pushHandler('INSERT INTO public.formula_change_log', { rows: [] });
+
+    const r = await call(app, {
+      method: 'PUT',
+      path: '/api/workbench/parameters/p-1/approve',
+      body: {},
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.id).toBe('p-1');
+  });
+});
+
 describe('workbench: approval workflow', () => {
   it('rejects approving a row with no pending value', async () => {
     const app = buildApp({

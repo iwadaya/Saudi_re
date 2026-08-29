@@ -85,17 +85,9 @@ export function ilfEvaluator(curve) {
       .filter((p) => p.limit > 0 && p.ilf > 0)
       .sort((a, b) => a.limit - b.limit);
     if (pts.length < 2) throw new Error('A tabulated ILF curve needs at least two points.');
-    return (limit) => {
-      const L = num(limit);
-      if (L <= 0) return 0;
-      if (L <= pts[0].limit) {
-        // Below the lowest tabulated point, fall back to proportionality —
-        // the only defensible reading without a point to interpolate to.
-        return pts[0].ilf * (L / pts[0].limit);
-      }
+    const evaluate = (L) => {
+      if (L <= pts[0].limit) return pts[0].ilf * (L / pts[0].limit);
       const last = pts[pts.length - 1];
-      // Above the table, hold flat. Extrapolating a severity tail past the
-      // data is exactly the guess this module refuses to make elsewhere.
       if (L >= last.limit) return last.ilf;
       let lo = 0;
       let hi = pts.length - 1;
@@ -106,6 +98,26 @@ export function ilfEvaluator(curve) {
       const a = pts[lo];
       const b = pts[hi];
       return a.ilf + ((L - a.limit) / (b.limit - a.limit)) * (b.ilf - a.ilf);
+    };
+    // The contract says the table is normalised so ILF(basic_limit) = 1.
+    // A table that interpolates to anything else at its own basic limit is
+    // mis-normalised reference data, and applying it would scale every
+    // price by the error — refuse it at the door (F43).
+    const atBasic = evaluate(basic);
+    if (!(Math.abs(atBasic - 1) <= 1e-3)) {
+      throw new Error(
+        `Tabulated ILF curve is not normalised at its basic limit: ILF(${basic}) `
+        + `interpolates to ${atBasic.toFixed(6)}, not 1. Fix the curve's points or its basic_limit.`,
+      );
+    }
+    return (limit) => {
+      const L = num(limit);
+      if (L <= 0) return 0;
+      // Below the lowest tabulated point, proportionality — the only
+      // defensible reading without a point to interpolate to. Above the
+      // table, hold flat: extrapolating a severity tail past the data is
+      // exactly the guess this module refuses to make elsewhere.
+      return evaluate(L);
     };
   }
 
@@ -237,6 +249,32 @@ export function ilfLossCost({
       unavailableReason: 'No policy limit. A liability loss cost is defined by its limit — set '
         + 'one on the section or the layer.',
       diagnostics: { exposure_base: exposure },
+    };
+  }
+
+  // The formula is only valid when the rate and the curve agree on the basic
+  // limit: the rate quotes the loss cost AT baseRate.basic_limit, and the
+  // curve is normalised to 1 AT curve.basic_limit. The two are loaded from
+  // separate tables and selected independently, so a mismatch is reachable —
+  // and stepping a 1m-basic cost through a 5m-normalised curve silently
+  // mis-prices by the ratio of the two. Refuse, the same way a basis-unit
+  // mismatch is refused, rather than guess which limit the carrier meant
+  // (F43/F52).
+  const rateBasic = numOrNull(baseRate.basic_limit);
+  const curveBasic = numOrNull(curve.basic_limit);
+  if (rateBasic !== null && curveBasic !== null && rateBasic !== curveBasic) {
+    return {
+      available: false,
+      unavailableReason: `The base rate is quoted at a basic limit of ${rateBasic.toLocaleString('en-US')} `
+        + `but the ILF curve${curve.curve_code ? ` (${curve.curve_code})` : ''} is normalised at `
+        + `${curveBasic.toLocaleString('en-US')}. Those are not interchangeable — stepping one from the `
+        + 'other mis-prices by the ratio of the two. Load a curve and a rate that share a basic limit.',
+      diagnostics: {
+        exposure_base: exposure,
+        basic_limit: rateBasic,
+        curve_basic_limit: curveBasic,
+        curve: curve.curve_code || null,
+      },
     };
   }
 

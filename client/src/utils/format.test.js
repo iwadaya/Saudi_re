@@ -3,6 +3,10 @@ import {
   addMonthsClamped,
   dateInputValue,
   fmtBal,
+  fmtComma,
+  fmtMoney,
+  fmtNum,
+  fmtPct,
   fmtPctPoints,
   fmtX,
   formatWithCommasDecimal,
@@ -67,6 +71,57 @@ describe('fmtPctPoints', () => {
     expect(fmtPctPoints(12.345)).toBe('12.35%');
     expect(fmtPctPoints(12.345, 1)).toBe('12.3%');
     expect(fmtPctPoints(NaN)).toBe('—');
+  });
+});
+
+describe('fmtNum / fmtPct — N/A-aware like fmtBal', () => {
+  it('formats finite values, including genuine zeros', () => {
+    expect(fmtNum(1234567)).toBe('1,234,567');
+    expect(fmtNum(0)).toBe('0');
+    expect(fmtPct(0.12345)).toBe('12.35%');
+    expect(fmtPct(0)).toBe('0.00%');
+  });
+  it('renders null/undefined/non-numeric as — (server null means N/A, not 0)', () => {
+    expect(fmtNum(null)).toBe('—');
+    expect(fmtNum(undefined)).toBe('—');
+    expect(fmtNum('abc')).toBe('—');
+    expect(fmtPct(null)).toBe('—');
+    expect(fmtPct(undefined)).toBe('—');
+    expect(fmtPct(NaN)).toBe('—');
+  });
+});
+
+describe('fmtMoney — scaled money display', () => {
+  it('scales with K/M/B units', () => {
+    expect(fmtMoney(2500000)).toBe('2.50M');
+    expect(fmtMoney(-1500)).toBe('-1.50K');
+    expect(fmtMoney(1.2e9)).toBe('1.20B');
+  });
+  it('keeps 0 for a genuine zero but — for missing/non-numeric', () => {
+    expect(fmtMoney(0)).toBe('0');
+    expect(fmtMoney(null)).toBe('—');
+    expect(fmtMoney(undefined)).toBe('—');
+    expect(fmtMoney(NaN)).toBe('—');
+    expect(fmtMoney('abc')).toBe('—');
+  });
+});
+
+describe('fmtComma — comma grouping for money inputs', () => {
+  it('groups integers exactly as before', () => {
+    expect(fmtComma('1234567')).toBe('1,234,567');
+    expect(fmtComma(2500000)).toBe('2,500,000');
+    expect(fmtComma('1,234,567')).toBe('1,234,567');
+  });
+  it('preserves up to 2 decimals instead of reading them as integer digits', () => {
+    expect(fmtComma('1234.56')).toBe('1,234.56');
+    expect(fmtComma(1234.5)).toBe('1,234.5');
+    expect(fmtComma('0.5')).toBe('0.5');
+  });
+  it('returns empty for blank / non-numeric input', () => {
+    expect(fmtComma('')).toBe('');
+    expect(fmtComma(null)).toBe('');
+    expect(fmtComma(undefined)).toBe('');
+    expect(fmtComma('abc')).toBe('');
   });
 });
 

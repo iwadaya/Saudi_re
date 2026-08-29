@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../../api';
 import WizardLayout from '../../../components/WizardLayout';
 import LoadErrorPanel from '../../../components/LoadErrorPanel';
+import PctInput from '../../../components/PctInput';
 import { useFacRiskId } from '../../../hooks/useContractId';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import { logger } from '../../../utils/logger';
@@ -161,6 +162,19 @@ export default function FacSummary() {
     setEdits((prev) => ({ ...prev, [key]: val }));
     markDirty();
   }, [markDirty]);
+
+  // PctInput speaks whole percents; fac_pricing.capacity_proposed_pct stores
+  // a 0..1 fraction. Convert at this single boundary, rounding on the way out
+  // (0.07 × 100 is 7.000000000000001 in binary floating point) — the same
+  // pattern as FacPricing's pctField/setPctField.
+  const capacityProposedWhole = (() => {
+    const n = numOrNull(edits.capacity_proposed_pct);
+    return n == null ? '' : String(Number((n * 100).toFixed(10)));
+  })();
+  const setCapacityProposedWhole = (whole) => {
+    const n = numOrNull(whole);
+    setEdit('capacity_proposed_pct', n == null ? '' : String(n / 100));
+  };
 
   // ── Derived figures ──────────────────────────────────────────────────
   const { topLocation, totalSar, totalPdSar, totalBiSar, carrierTopSi, carrierAllSi } = useMemo(() => {
@@ -402,10 +416,10 @@ export default function FacSummary() {
             <div className="fac-edit-label" style={{ color: 'color-mix(in srgb, #a855f7 75%, var(--text))' }}>
               Capacity Proposed %
             </div>
-            <input className="fi fac-edit-input" type="number" min={0} max={1} step={0.0001}
-                   value={edits.capacity_proposed_pct}
-                   onChange={(e) => setEdit('capacity_proposed_pct', e.target.value)}
-                   placeholder="e.g. 0.15 = 15% of the layer" />
+            <PctInput className="fi fac-edit-input" min={0} max={100}
+                      value={capacityProposedWhole}
+                      onChange={setCapacityProposedWhole}
+                      placeholder="e.g. 15 = 15% of the layer" />
           </div>
         </Sec>
 

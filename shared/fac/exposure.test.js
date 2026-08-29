@@ -73,6 +73,55 @@ describe('buildExposureProfile — the BI trap (F10)', () => {
   });
 });
 
+describe('buildExposureProfile — PML as a 0..1 fraction (F9/F12)', () => {
+  // Two storage conventions meet here: fac_location.pd_pml_pct / bi_pml_pct
+  // are 0..1 fractions, fac_risk.pml_pct is a 0..100 percentage. The profile
+  // converts once, at this boundary, and only ever carries the fraction.
+  it('weights the location PMLs into one fraction of total SI', () => {
+    const profile = buildExposureProfile({
+      risk: RISK,
+      locations: [
+        { pd_si: '300000000', bi_si: '100000000', pd_pml_pct: 0.5, bi_pml_pct: 0.25 },
+        { pd_si: '100000000', bi_si: 0 },   // no stated PML → full value, no relief
+      ],
+    });
+    // MPL = 300m×0.5 + 100m×0.25 + 100m×1 = 275m over 500m total SI.
+    expect(profile.pml_pct).toBeCloseTo(0.55, 9);
+  });
+
+  it('falls back to the risk header PML, converting 0..100 to a fraction once', () => {
+    const profile = buildExposureProfile({ risk: { ...RISK, pml_pct: 40 } });
+    expect(profile.basis).toBe('RISK_HEADER');
+    expect(profile.pml_pct).toBeCloseTo(0.4, 9);
+  });
+
+  it('uses the risk header PML when locations exist but state none', () => {
+    const profile = buildExposureProfile({
+      risk: { pml_pct: '40' },
+      locations: [{ pd_si: '100000000', bi_si: 0 }],
+    });
+    expect(profile.basis).toBe('LOCATIONS');
+    expect(profile.pml_pct).toBeCloseTo(0.4, 9);
+  });
+
+  it('is null — not 1 — when no PML is recorded anywhere', () => {
+    expect(buildExposureProfile({ risk: RISK }).pml_pct).toBeNull();
+    expect(buildExposureProfile({ risk: null }).pml_pct).toBeNull();
+  });
+
+  it('treats a zero header PML as absent, never as a nil MPL', () => {
+    expect(buildExposureProfile({ risk: { ...RISK, pml_pct: 0 } }).pml_pct).toBeNull();
+  });
+
+  it('clamps a percent-scale value typed into a location fraction field', () => {
+    const profile = buildExposureProfile({
+      risk: null,
+      locations: [{ pd_si: '100000000', bi_si: 0, pd_pml_pct: 40 }],
+    });
+    expect(profile.pml_pct).toBe(1);
+  });
+});
+
 describe('buildExposureProfile — reconciliation', () => {
   it('warns when the sections and the chosen basis disagree', () => {
     const profile = buildExposureProfile({

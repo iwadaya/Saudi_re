@@ -19,6 +19,7 @@
 
 import { useRef, useState } from 'react';
 import { api } from '../api';
+import { formatWithCommasDecimal } from '../utils/format';
 
 export function isBlankValue(value) {
   if (value == null) return true;
@@ -165,7 +166,13 @@ export default function SlipIngestButton({
     if (key === 'classIds' && Array.isArray(value)) {
       return value.map(id => labelForId(classes, id)).join(', ');
     }
-    return Array.isArray(value) ? value.join(', ') : String(value);
+    if (Array.isArray(value)) return value.join(', ');
+    // Money and other numeric fields read as comparison amounts — group with
+    // commas so the panel shows "25,000,000", not "25000000". Year-like keys
+    // stay ungrouped (2,026 is not a year).
+    const n = numericComparable(value);
+    if (n != null && !/year/i.test(key)) return formatWithCommasDecimal(n);
+    return String(value);
   };
 
   const handleFile = async (file) => {

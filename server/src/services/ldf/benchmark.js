@@ -57,7 +57,11 @@ export async function getBenchmarkLdfForClass(client, {
     }
   }
 
-  // Final fallback: global
+  // Final fallback: global. The SAME per-dev-month threshold applies here
+  // (F69): without it, a class whose country dominated its global pool got
+  // the very same sparse-tailed curve back — including the thin row that
+  // caused the COUNTRY/REGION rejection — merely relabelled 'GLOBAL', and
+  // the B7 guard was fully bypassed.
   const global = await client.query(
     `SELECT dev_month, weighted_ldf, simple_ldf, n_contracts, total_premium, stddev_ldf
        FROM public.mv_ldf_benchmark_global
@@ -65,13 +69,25 @@ export async function getBenchmarkLdfForClass(client, {
       ORDER BY dev_month`,
     [classOfBusinessId, triangleType, treatyCategory],
   );
-  if (global.rows.length > 0) {
+  if (scopeHasEnoughContracts(global.rows)) {
     return { scope: 'GLOBAL', countryId: null, region: null, rows: global.rows };
   }
 
-  // Nothing — class has zero contributing contracts anywhere
+  // Nothing usable — either the class has zero contributing contracts
+  // anywhere, or every scope (global included) has at least one dev-month
+  // row below the contract-count threshold. NONE, not a sparse curve.
   return { scope: 'NONE', countryId: null, region: null, rows: [] };
 }
+
+// Refresh order matters: the three benchmark views read from
+// mv_ldf_contributions, so it must refresh first. Names/order copied from
+// migration 108's public.refresh_ldf_benchmarks().
+const BENCHMARK_VIEWS = [
+  'public.mv_ldf_contributions',
+  'public.mv_ldf_benchmark_country',
+  'public.mv_ldf_benchmark_region',
+  'public.mv_ldf_benchmark_global',
+];
 
 /**
  * Trigger a synchronous refresh of all benchmark views.
@@ -79,12 +95,31 @@ export async function getBenchmarkLdfForClass(client, {
  * (SIGNED / DECLINED / NTU), since each of those changes the
  * benchmark dataset. Safe to call repeatedly — CONCURRENTLY refresh
  * won't lock readers.
+ *
+ * The four REFRESH ... CONCURRENTLY statements are issued as separate
+ * top-level queries, NOT via SELECT public.refresh_ldf_benchmarks():
+ * stock PostgreSQL forbids REFRESH ... CONCURRENTLY inside a function
+ * (PreventInTransactionBlock), so the migration-108 helper fails on
+ * standard managed Postgres even though some local builds allow it.
+ * The SQL function is left in place but deliberately unused.
+ *
+ * Never throws — opportunistic in-process callers (approvals.js,
+ * pricingOfferRepository.js) fire-and-forget and must not be taken down
+ * by a refresh failure. Callers that need to know the outcome (the
+ * nightly job) check the returned { refreshed } flag, mirroring
+ * facAccumulationService.refreshAccumulation().
+ *
+ * @returns {Promise<{refreshed: boolean, error?: string}>}
  */
 export async function refreshBenchmarks(client) {
   try {
-    await client.query('SELECT public.refresh_ldf_benchmarks()');
+    for (const view of BENCHMARK_VIEWS) {
+      await client.query(`REFRESH MATERIALIZED VIEW CONCURRENTLY ${view}`);
+    }
     logger.info('[ldf-benchmark] refreshed all views');
+    return { refreshed: true };
   } catch (e) {
     logger.warn('[ldf-benchmark] refresh failed; views may be stale', { err: e.message });
+    return { refreshed: false, error: e.message };
   }
 }

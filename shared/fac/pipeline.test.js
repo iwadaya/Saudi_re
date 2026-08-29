@@ -101,12 +101,80 @@ describe('buildTechnicalPremium — the blend', () => {
     expect(out.warnings.join(' ')).toMatch(/reason code/);
   });
 
-  it('does not price when nothing produced a rate', () => {
+  it('does not price when nothing produced a rate, and names what failed', () => {
     const out = buildTechnicalPremium({
-      candidates: [toCandidate('EXPOSURE_CURVE', { available: false, unavailableReason: 'x' })],
+      candidates: [toCandidate('EXPOSURE_CURVE', { available: false, unavailableReason: 'No curve set loaded.' })],
     });
     expect(out.priced).toBe(false);
     expect(out.reason).toMatch(/No loss-cost method/);
+    // The refusal is a to-do list, not a shrug (F51).
+    expect(out.reason).toMatch(/Exposure curve: No curve set loaded\./);
+  });
+
+  it('keeps override weight off the benchmark (F44)', () => {
+    // The stored override path used to bypass the reference invariant that
+    // mechanicalWeights enforces: {BENCHMARK: 1} blended at 9.0 with no
+    // warning.
+    const out = buildTechnicalPremium({
+      candidates: [
+        workbook(2.0), burn(4.0, { claimCount: 6 }),
+        toCandidate('BENCHMARK', { available: true, ratePm: 9 }),
+      ],
+      credibility: { k: 6, maxZ: 1 },              // 6 claims → Z = 0.5
+      weightOverride: { weights: { BENCHMARK: 1 }, reasonCode: 'UNDERWRITER_JUDGEMENT' },
+    });
+    // Falls back to the mechanical blend: 0.5 × 4 + 0.5 × 2 = 3.
+    expect(out.weightSource).toBe('MECHANICAL');
+    expect(out.blendedLossCostPm).toBeCloseTo(3.0, 12);
+    expect(out.warnings.join(' ')).toMatch(/BENCHMARK/);
+  });
+
+  it('falls back to the mechanical blend when an override names only dead methods (F45)', () => {
+    // A stored override that names EXPOSURE_CURVE keeps working after the
+    // curve set is deactivated — it must not un-price the risk.
+    const out = buildTechnicalPremium({
+      candidates: [workbook(2.0), burn(4.0, { claimCount: 6 })],
+      credibility: { k: 6, maxZ: 1 },
+      weightOverride: { weights: { EXPOSURE_CURVE: 1 }, reasonCode: 'DATA_QUALITY' },
+    });
+    expect(out.priced).toBe(true);
+    expect(out.weightSource).toBe('MECHANICAL');
+    expect(out.blendedLossCostPm).toBeCloseTo(3.0, 12);
+    expect(out.warnings.join(' ')).toMatch(/EXPOSURE_CURVE/);
+  });
+
+  it('prices on the additive sections alone when nothing blends, and says so (F51)', () => {
+    // Hull table empty, war table loaded: the war section produced a real
+    // rate and the placement must not be refused with that rate silently
+    // dropped.
+    const out = buildTechnicalPremium({
+      candidates: [
+        toCandidate('HULL_RATE', { available: false, unavailableReason: 'No hull rate loaded.' }),
+        toCandidate('WAR_SECTION', { available: true, ratePm: 0.75, lossCost: 22_500 }),
+      ],
+      exposureTotal: 30_000_000,
+    });
+    expect(out.priced).toBe(true);
+    expect(out.blendedLossCostPm).toBe(0);
+    // 22,500 over 30m expressed per mille = 0.75.
+    expect(out.additiveLoadPm).toBeCloseTo(0.75, 12);
+    expect(out.expectedLossPm).toBeCloseTo(0.75, 12);
+    expect(out.premiums.expectedLoss).toBeCloseTo(22_500, 6);
+    expect(out.warnings.join(' ')).toMatch(/separately-rated section/i);
+    expect(out.warnings.join(' ')).toMatch(/War & strikes/);
+    expect(out.warnings.join(' ')).toMatch(/main cover is NOT priced/i);
+  });
+
+  it('still refuses when neither the blend nor any additive section priced', () => {
+    const out = buildTechnicalPremium({
+      candidates: [
+        toCandidate('HULL_RATE', { available: false, unavailableReason: 'No hull rate loaded.' }),
+        toCandidate('WAR_SECTION', { available: false, unavailableReason: 'No war rate loaded.' }),
+      ],
+      exposureTotal: 30_000_000,
+    });
+    expect(out.priced).toBe(false);
+    expect(out.reason).toMatch(/Hull rate: No hull rate loaded\./);
   });
 
   it('shows a benchmark without letting it move the price', () => {

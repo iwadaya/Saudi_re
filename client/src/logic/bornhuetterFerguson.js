@@ -31,11 +31,21 @@ export function calculateBF(clProjections, premiums, ielrs) {
  */
 export function calculateBFPremium(clProjections, epis, percentAchieveds) {
   if (!clProjections || !Array.isArray(clProjections)) return [];
+  // Achieved-premium ratio default is 100% (see doc comment above) in BOTH
+  // argument shapes. Previously a missing ARRAY element defaulted to 1 but a
+  // missing/non-numeric SCALAR defaulted to 0, collapsing the a priori to 0
+  // so the ultimate silently degenerated to the undeveloped latest (F100).
+  // An explicit finite value — including 0 — is honoured in both shapes.
+  const toPa = (v) => {
+    if (v == null) return 1;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 1;
+  };
   return clProjections.map((row, i) => {
     const epi = epis?.[i] || 0;
     const pa = Array.isArray(percentAchieveds)
-      ? (percentAchieveds[i] ?? 1)
-      : (Number(percentAchieveds) || 0);
+      ? toPa(percentAchieveds[i])
+      : toPa(percentAchieveds);
     const aPrioriUltimate = epi * pa;
     const cdf = row.cdf || 1.0;
     const percentEarned = 1 / cdf;

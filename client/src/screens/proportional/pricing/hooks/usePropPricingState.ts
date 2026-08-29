@@ -530,7 +530,7 @@ export function usePropPricingState({ appState, contractId, readOnly = false, on
   // FX/display helpers, hero drivers and the AI line suggestion — moved
   // verbatim into hooks/usePropPricingDerived.ts (pure derivation, no effects).
   const derived = usePropPricingDerived({ contract, td, components, fxRates, showUSD });
-  const { getC, calcResult, calcCR, calcMaxComm, hdr, det2, epi, limit, eventLimit, marginAct, marginUw } = derived;
+  const { getC, calcResult, calcCR, calcMaxComm, hdr, det2, epi, limit, eventLimit, marginAct, marginUw, fxRate } = derived;
 
   const shareGridRef = useRef(shareGrid);
   shareGridRef.current = shareGrid;
@@ -690,6 +690,8 @@ export function usePropPricingState({ appState, contractId, readOnly = false, on
   const actions = usePropPricingActions({
     cid, actorName, showToast, save,
     getC, calcResult, calcMaxComm, epi,
+    // Local→USD rate for the treaty currency: submit sends epi_usd in real USD (F79).
+    fxRate,
     offerStatus, offerLine, offerComment, offerApprover, returnReason, signedLinePct,
     setSnapshots: setters.setSnapshots,
     setSnapLabel: setters.setSnapLabel,

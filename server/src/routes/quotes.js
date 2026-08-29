@@ -27,7 +27,7 @@ import { storeUploadedFile } from '../lib/uploadStorage.js';
 import { assertUploadSafe, ALLOWED_TYPES, UploadValidationError } from '../lib/uploadValidation.js';
 import { crestaSaveSchema } from '../validation/cresta.js';
 import { assertCanEdit } from '../services/permissions.js';
-import { approveQuote, returnToUnderwriter, recallOffer, markNotTakenUp } from '../services/approvals.js';
+import { approveQuote, returnToUnderwriter, recallOffer, markNotTakenUp, getTerminalPermissions } from '../services/approvals.js';
 import { declineQuoteAction, submitQuoteForApprovalAction } from '../services/quoteWorkflow.js';
 import { triangleCellsSchema, devFactorPutSchema, triangleTypeSchema } from '../validation/triangle.js';
 import { verifyNpPricingOutputs, summariseDrifts, isStrictMode, pricingDriftStats } from '../lib/pricingVerifier.js';
@@ -512,10 +512,16 @@ router.post("/quotes", validateBody(quoteCreateSchema), asyncHandler(async (req,
   const cl = await pool.connect();
   try {
     await cl.query("BEGIN");
+    // POLICY: a quote is always born DRAFT. quoteCreateSchema already rejects
+    // any other requested status (it used to accept the full enum, so a create
+    // could mint a SIGNED quote and skip the approval gates); DRAFT is
+    // hard-coded here as well so the route can never insert a caller-supplied
+    // lifecycle state. Later states are reached only through the quote
+    // workflow/approval engine (services/quoteWorkflow.js, approvals.js).
     const { rows } = await cl.query(
       `INSERT INTO public.quote (uw_year,cedant_id,broker_id,currency_id,country_id,treaty_type_id,status,experience_source,renewal_date,inception_date,contract_description,created_by_user_id,assigned_to_user_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12) RETURNING *`,
-      [uw_year, b.cedant_id || null, b.broker_id || null, b.currency_id || null, b.country_id || null, b.treaty_type_id || null, b.status || 'DRAFT', b.experience_source || 'TRIANGLE', dateOrNull(b.renewal_date), inception_date, b.contract_description || null, creatorUserId]
+       VALUES ($1,$2,$3,$4,$5,$6,'DRAFT',$7,$8,$9,$10,$11,$11) RETURNING *`,
+      [uw_year, b.cedant_id || null, b.broker_id || null, b.currency_id || null, b.country_id || null, b.treaty_type_id || null, b.experience_source || 'TRIANGLE', dateOrNull(b.renewal_date), inception_date, b.contract_description || null, creatorUserId]
     );
 
     // Auto-assign human-readable quote reference: QT-YYYY-NNNN.
@@ -1592,12 +1598,29 @@ router.put("/quotes/:id/np-pricing", ...npQuoteGuard, validateBody(quoteNpPricin
 
 // Offer workflow (decline, submit, approve, sign, NTU, return-to-UW)
 router.post("/quotes/:id/decline", validateBody(quoteWorkflowActionSchema), asyncHandler(async (req, res) => {
-  // Parity with treaty decline: one transaction (status + quote_offer + event +
-  // critical audit), legal-transition guard (422 on a terminal pre-state),
-  // authority via assertCanEdit. Actor identity is the verified req.user.
+  // Parity with treaty decline (routes/pricing.js + declineTreatyAction, F22/
+  // F29): DECLINED is terminal, so it takes the NTU authority rule — the
+  // quote's ASSIGNEE (owner) OR a LIVE ELIGIBLE APPROVER — enforced through
+  // the approval service's own getTerminalPermissions (can_ntu is exactly
+  // "assignee OR eligible approver"). The old assertCanEdit gate was
+  // assignee-only, which 403'd every reviewing approver: four-eyes means the
+  // reviewer is never the assignee, so a CU could approve a quote but never
+  // decline it (F78). Legal-transition + atomicity live in declineQuoteAction.
+  // Actor identity is the verified req.user (DB-resolved), never client input.
   const { id } = req.params;
-  await assertCanEdit(req, 'QUOTE', id);
+  const { rows: qRows } = await pool.query(`SELECT 1 FROM public.quote WHERE quote_id=$1`, [id]);
+  if (!qRows.length) return res.status(404).json({ error: 'Quote not found', code: 'NOT_FOUND' });
   const actor = await resolveAuditActor(req);
+  const perms = await getTerminalPermissions({
+    entityType: 'QUOTE', entityId: id,
+    actorUserId: actor.actorUserId, actorRole: actor.actorRole,
+  });
+  if (!perms.can_ntu) {
+    return res.status(403).json({
+      error: 'Not authorised to decline this quote — only the assignee or an eligible approver may decline it.',
+      code: 'DECLINE_FORBIDDEN',
+    });
+  }
   const result = await declineQuoteAction(id, actor, req.body?.reason);
   res.json({ ok: true, ...result });
 }));

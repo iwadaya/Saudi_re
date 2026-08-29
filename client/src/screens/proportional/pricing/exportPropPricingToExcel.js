@@ -7,10 +7,13 @@
  * Treaty-Detail -> Pricing sequence. No I/O here — the exporter owns
  * the workbook and download.
  */
-import { COMPONENT_ROWS, SHARE_COLS } from './components/propPricingConstants.js';
+import { COMPONENT_ROWS, SHARE_COLS, parsePct } from './components/propPricingConstants.js';
 import { toN as cn } from '../../../utils/format.js';
 
-function pct(v, d=2) { const n = cn(v); return n ? `${(n*100).toFixed(d)}%` : '–'; }
+// Component-grid values are ALREADY percent strings ('63.40%') — parse them
+// with the screen's own parsePct (fraction out; '%' strings never rescaled)
+// and re-format, instead of multiplying an already-percent number by 100.
+function pct(v, d=2) { const n = parsePct(v); return n ? `${(n*100).toFixed(d)}%` : '–'; }
 function fmtN(v) { const n = cn(v); return n ? Math.round(n) : null; }
 
 /**
@@ -51,7 +54,8 @@ export function buildPropPricingSheets(data) {
   const compHeaders = ['Component', 'Actuarial', 'UW', 'Market', 'Actual Stats'];
   const compRows = COMPONENT_ROWS.map(name => {
     const c = components[name] || {};
-    return [name, pct(c.actuarial), pct(c.uw), pct(c.market), pct(c.actual_stats)];
+    // Grid key is 'actual' (propPricingHydration maps actual_stats_value → 'actual').
+    return [name, pct(c.actuarial), pct(c.uw), pct(c.market), pct(c.actual)];
   });
   if (techResult !== null) compRows.push(['Technical Result', pct(techResult), '', '', '']);
   sheets.push({ name: 'Pricing Components', aoa: [compHeaders, ...compRows] });

@@ -118,6 +118,98 @@ describe('parseRenewalPack', () => {
     expect(hi).toBeLessThanOrEqual(2200);
   });
 
+  // ── triangle header handling (F71 / F72 / F73) ──────────────────
+  async function buildWorkbook(sheetName, rows) {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet(sheetName);
+    rows.forEach((r) => ws.addRow(r));
+    return Buffer.from(await wb.xlsx.writeBuffer());
+  }
+
+  it('keeps values aligned to their own header columns when a non-numeric column sits mid-triangle (F71)', async () => {
+    // A 'Total' column between the dev columns. Hand expectation:
+    // dev 12 → 1000, dev 24 → 800; the Total value (1800) must be ignored,
+    // NOT shifted onto dev 24 — the old positional read booked 1800 at 24
+    // and silently dropped the true 800.
+    const buf = await buildWorkbook('Premium Triangle', [
+      ['UW Year', 12, 'Total', 24],
+      [2020, 1000, 1800, 800],
+    ]);
+    const parsed = await parseRenewalPack(buf);
+    expect(parsed.sheets.premiumTriangle).toEqual({
+      uwYears: [2020],
+      devPeriods: [12, 24],
+      values: [[1000, 800]],
+    });
+    // ...and the skipped header is announced, never silent.
+    expect(parsed.warnings).toContain(
+      'Triangle in "Premium Triangle": ignored non-development column "Total"',
+    );
+  });
+
+  it('round-trips the tool\'s own export dev labels — \'DY 1\' style (F72)', async () => {
+    // renewalPackExport/builder.js devLabel writes 'DY n' for whole dev
+    // years and '<m>m' otherwise; a pack this system produced must come
+    // back with its triangle intact, not as devPeriods: [] with every
+    // value silently dropped.
+    const buf = await buildWorkbook('Premium Triangle', [
+      ['UW Year', 'DY 1', 'DY 2', '30m'],
+      [2020, 1000, 1800, 2100],
+      [2021, 1200, null, null],
+    ]);
+    const parsed = await parseRenewalPack(buf);
+    expect(parsed.sheets.premiumTriangle).toEqual({
+      uwYears: [2020, 2021],
+      devPeriods: [12, 24, 30], // DY 1 → 12, DY 2 → 24, '30m' → 30
+      values: [[1000, 1800, 2100], [1200, null, null]],
+    });
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  it('parses \'Dev 1\' / \'Year 2\' label variants and warns on a truly unparseable header', async () => {
+    const buf = await buildWorkbook('Claims Triangle', [
+      ['UW Year', 'Dev 1', 'Year 2', 'Ultimate'],
+      [2022, 500, 700, 900],
+    ]);
+    const parsed = await parseRenewalPack(buf);
+    expect(parsed.sheets.claimsTriangle).toEqual({
+      uwYears: [2022],
+      devPeriods: [12, 24],
+      values: [[500, 700]],
+    });
+    expect(parsed.warnings).toContain(
+      'Triangle in "Claims Triangle": ignored non-development column "Ultimate"',
+    );
+  });
+
+  it('classifies an \'Outstanding Claims Triangle\' sheet as OS, not paid (F73)', async () => {
+    const buf = await buildWorkbook('Outstanding Claims Triangle', [
+      ['UW Year', 12, 24],
+      [2020, 500, 300],
+    ]);
+    const parsed = await parseRenewalPack(buf);
+    expect(parsed.sheets.osClaimsTriangle).toEqual({
+      uwYears: [2020],
+      devPeriods: [12, 24],
+      values: [[500, 300]],
+    });
+    expect(parsed.sheets.claimsTriangle).toBeUndefined();
+  });
+
+  it('still classifies \'OS Claims Triangle\' as OS and \'Claims Triangle\' as paid', async () => {
+    const os = await parseRenewalPack(await buildWorkbook('OS Claims Triangle', [
+      ['UW Year', 12], [2020, 500],
+    ]));
+    expect(os.sheets.osClaimsTriangle).toBeDefined();
+    expect(os.sheets.claimsTriangle).toBeUndefined();
+
+    const paid = await parseRenewalPack(await buildWorkbook('Claims Triangle', [
+      ['UW Year', 12], [2020, 400],
+    ]));
+    expect(paid.sheets.claimsTriangle).toBeDefined();
+    expect(paid.sheets.osClaimsTriangle).toBeUndefined();
+  });
+
   // ── resource caps (I4) ──────────────────────────────────────────
   it('rejects a workbook that declares more worksheets than the cap', async () => {
     const wb = new ExcelJS.Workbook();

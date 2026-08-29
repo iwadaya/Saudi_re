@@ -5,6 +5,7 @@ import {
   quoteCommissionsSchema,
   quoteLossParticipationSchema,
   quotePutBodySchema,
+  quoteCreateSchema,
 } from './quote.js';
 
 describe('quoteHeaderSchema', () => {
@@ -54,6 +55,20 @@ describe('quoteHeaderSchema', () => {
 
   it('extracts the date from a longer ISO timestamp', () => {
     expect(quoteHeaderSchema.parse({ inception_date: '2026-04-22T13:00:00Z' }).inception_date).toBe('2026-04-22');
+  });
+});
+
+describe('quoteCreateSchema — status pinned to DRAFT at birth', () => {
+  it('accepts an absent, null, or explicit DRAFT status', () => {
+    expect(quoteCreateSchema.parse({ uw_year: 2026 }).status).toBeUndefined();
+    expect(quoteCreateSchema.parse({ uw_year: 2026, status: null }).status).toBeNull();
+    expect(quoteCreateSchema.parse({ uw_year: 2026, status: 'DRAFT' }).status).toBe('DRAFT');
+  });
+
+  it('rejects every non-DRAFT lifecycle status at creation (born-SIGNED fence)', () => {
+    for (const status of ['SIGNED', 'BOUND', 'AWAITING_SIGNED_LINE', 'AWAITING_APPROVAL', 'QUOTED', 'NTU']) {
+      expect(() => quoteCreateSchema.parse({ uw_year: 2026, status }), status).toThrow();
+    }
   });
 });
 

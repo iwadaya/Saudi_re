@@ -3,6 +3,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { getCobColumnNames, hasPricingMarginColumns } from '../lib/cobCols.js';
 import { asyncHandler } from "../helpers.js";
+import { requireMinLevel } from "../middleware/requestContext.js";
 import { invalidateJsonCache, jsonCache, sendCached } from "../middleware/httpCache.js";
 const router = Router();
 
@@ -152,16 +153,21 @@ router.get("/cedants/:cedantId/cedant-summary", asyncHandler(async (req, res) =>
       --   actuarial_margin = modelled margin (MARGIN col: (expiring-reinsurer)/expiring)
       --   actual_margin    = historical margin (HIST. MARGIN col: burn-cost based)
       -- Fallback: if modelled_margin not yet saved, approximate from uw_price (reinsurer ROL)
+      -- Units: modelled_margin / hist_margin are stored as WHOLE percents
+      -- (12.34 = 12.34%, written by the NP screen's pctToNum save path), so
+      -- divide by 100 — every margin this endpoint serves is a FRACTION,
+      -- matching the PROP rows' contract_pricing_outputs columns and the
+      -- uw_price fallback branch below.
       CASE
         WHEN nl.total_earned_premium > 0 AND nl.weighted_modelled IS NOT NULL
-          THEN nl.weighted_modelled / nl.total_earned_premium
+          THEN nl.weighted_modelled / nl.total_earned_premium / 100.0
         WHEN nl.total_earned_premium > 0 AND nl.weighted_uw_price IS NOT NULL
           THEN 1.0 - (nl.weighted_uw_price / nl.total_earned_premium / 100.0)
         ELSE NULL
       END                                                             AS actuarial_margin,
       CASE
         WHEN nl.total_earned_premium > 0 AND nl.weighted_hist IS NOT NULL
-          THEN nl.weighted_hist / nl.total_earned_premium
+          THEN nl.weighted_hist / nl.total_earned_premium / 100.0
         ELSE NULL
       END                                                             AS actual_margin,
       NULL::numeric                                                   AS uw_margin,
@@ -172,7 +178,7 @@ router.get("/cedants/:cedantId/cedant-summary", asyncHandler(async (req, res) =>
         nl.total_earned_premium * (
           CASE
             WHEN nl.total_earned_premium > 0 AND nl.weighted_modelled IS NOT NULL
-              THEN nl.weighted_modelled / nl.total_earned_premium
+              THEN nl.weighted_modelled / nl.total_earned_premium / 100.0
             WHEN nl.total_earned_premium > 0 AND nl.weighted_uw_price IS NOT NULL
               THEN 1.0 - (nl.weighted_uw_price / nl.total_earned_premium / 100.0)
             ELSE 0
@@ -264,9 +270,12 @@ router.get("/cedants/:cedantId/np-layers", asyncHandler(async (req, res) => {
       l.earned_premium,
       l.modelled_margin,
       l.hist_margin,
+      -- modelled_margin is a WHOLE percent (12.34 = 12.34%) — divide by 100
+      -- so both branches yield currency via a fractional margin, matching
+      -- the cedant-summary endpoint above.
       CASE
         WHEN l.modelled_margin IS NOT NULL
-          THEN l.earned_premium * l.modelled_margin
+          THEN l.earned_premium * l.modelled_margin / 100.0
         WHEN l.uw_price IS NOT NULL
           THEN l.earned_premium * (1.0 - l.uw_price / 100.0)
         ELSE NULL
@@ -463,16 +472,28 @@ router.get("/ref/exchange-rates/:code", asyncHandler(async (req, res) => {
 
 // PUT update/insert a rate — invalidates the ref cache so the next GET
 // sees the new value without waiting for the 5-min TTL.
-router.put("/ref/exchange-rates/:code", asyncHandler(async (req, res) => {
+// FX rates feed every USD conversion (fac capacity, retro, dashboards,
+// renewal packs), so writes are restricted to CU-and-above and validated.
+router.put("/ref/exchange-rates/:code", requireMinLevel(2), asyncHandler(async (req, res) => {
   const code = req.params.code.toUpperCase();
   const { rate_to_usd, effective_date } = req.body;
+  if (!/^[A-Z]{3}$/.test(code)) {
+    return res.status(400).json({ error: 'currency code must be a 3-letter ISO code' });
+  }
+  const rate = Number(rate_to_usd);
+  if (!Number.isFinite(rate) || rate <= 0) {
+    return res.status(400).json({ error: 'rate_to_usd must be a positive number' });
+  }
+  if (effective_date != null && !/^\d{4}-\d{2}-\d{2}$/.test(String(effective_date))) {
+    return res.status(400).json({ error: 'effective_date must be YYYY-MM-DD' });
+  }
   const dt = effective_date || new Date().toISOString().slice(0, 10);
   const { rows } = await pool.query(
     `INSERT INTO public.ref_exchange_rate (currency_code, rate_to_usd, effective_date, source)
      VALUES ($1, $2, $3, 'MANUAL')
      ON CONFLICT (currency_code, effective_date) DO UPDATE SET
        rate_to_usd = EXCLUDED.rate_to_usd, source = 'MANUAL', updated_at = now()
-     RETURNING *`, [code, rate_to_usd, dt]
+     RETURNING *`, [code, rate, dt]
   );
   // Drop cached exchange-rate reads so clients see the new value promptly
   invalidateJsonCache('ref:exchange-rate');

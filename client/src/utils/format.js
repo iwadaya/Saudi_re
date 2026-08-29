@@ -1,6 +1,9 @@
 // src/utils/format.js — Shared formatting utilities
 
 export function fmtNum(n, opts = {}) {
+  // Number(null) is 0, so a null (N/A from the server) would render as '0'
+  // without the explicit guard. A genuine 0 still renders as '0'.
+  if (n == null) return '—';
   const v = Number(n);
   if (!Number.isFinite(v)) return '—';
   const { decimals = 0 } = opts;
@@ -8,6 +11,7 @@ export function fmtNum(n, opts = {}) {
 }
 
 export function fmtPct(n, decimals = 2) {
+  if (n == null) return '—';
   const v = Number(n);
   if (!Number.isFinite(v)) return '—';
   return `${(v * 100).toFixed(decimals)}%`;
@@ -27,8 +31,9 @@ export const fmtBal = (v) => (v != null && Number.isFinite(Number(v))) ? `${Numb
 export const fmtPerMille = (v) => (v != null && Number.isFinite(Number(v))) ? `${Number(v).toFixed(2)}‰` : '—';
 
 export function fmtMoney(n) {
+  if (n == null) return '—';
   const v = Number(n);
-  if (!Number.isFinite(v)) return '0';
+  if (!Number.isFinite(v)) return '—';
   if (v === 0) return '0';
   const abs = Math.abs(v);
   const sign = v < 0 ? '-' : '';
@@ -117,8 +122,21 @@ export const numOrNull = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 
-/** Digits-only comma grouping for text inputs: "1234567" -> "1,234,567". */
-export const fmtComma = (v) => { const d = String(v ?? '').replace(/[^\d]/g, ''); return d ? Number(d).toLocaleString('en-US') : ''; };
+/**
+ * Comma grouping for text inputs: "1234567" -> "1,234,567". Decimal-aware —
+ * the backing columns are numeric(18,2), and values with cents reach these
+ * inputs via imports and document recommendations, so up to 2 fraction
+ * digits are preserved ("1234.56" -> "1,234.56") rather than being read as
+ * extra integer digits. Integers render exactly as before.
+ */
+export const fmtComma = (v) => {
+  const [intPart, ...rest] = String(v ?? '').split('.');
+  const d = intPart.replace(/[^\d]/g, '');
+  const frac = rest.join('').replace(/[^\d]/g, '').slice(0, 2);
+  if (!d && !frac) return '';
+  const grouped = d ? Number(d).toLocaleString('en-US') : '0';
+  return frac ? `${grouped}.${frac}` : grouped;
+};
 
 /** Strip everything but digits (paste/keystroke sanitizer for integer fields). */
 export const stripDigits = (v) => String(v ?? '').replace(/[^\d]/g, '');

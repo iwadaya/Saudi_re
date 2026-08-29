@@ -223,10 +223,27 @@ describe('paretoLayerExpectedLoss', () => {
     expect(double).toBeCloseTo(base * 2, 6);
   });
 
-  it('deductible below xm gets clamped to xm', () => {
-    const a = paretoLayerExpectedLoss(2, 100, 50, 500, 10, 10);  // D below xm
-    const b = paretoLayerExpectedLoss(2, 100, 100, 500, 10, 10); // D = xm
-    expect(a).toBeCloseTo(b, 6);
+  it('deductible below xm is NOT clamped — the sub-threshold layer slice is exact', () => {
+    // α=2, xm=100,000, layer 100,000 xs 50,000, n/years = 1.
+    // Every tail loss X ≥ xm pierces the 50k deductible in full, so
+    //   E[layer] = ∫_{50k}^{100k} 1 dx + ∫_{100k}^{150k} (100k/x)² dx
+    //            = 50,000 + 100,000²·(1/100k − 1/150k)
+    //            = 50,000 + 33,333.33… = 83,333.33  (hand-computed closed form;
+    //              verified independently by numeric integration of S(x)).
+    // The old max(deductible, xm) clamp returned 50,000 — 40% understated.
+    const a = paretoLayerExpectedLoss(2, 100_000, 50_000, 100_000, 10, 10);
+    expect(a).toBeCloseTo(83_333.3333, 2);
+
+    // Attaching below the threshold must cost strictly MORE than attaching
+    // at it (the clamp made them equal).
+    const b = paretoLayerExpectedLoss(2, 100_000, 100_000, 100_000, 10, 10);
+    expect(a).toBeGreaterThan(b);
+  });
+
+  it('deductible + limit entirely below xm: every tail loss eats the whole layer', () => {
+    // X ≥ xm = 100k always exceeds D+L = 80k → per-loss severity = L exactly.
+    const v = paretoLayerExpectedLoss(2, 100_000, 30_000, 50_000, 10, 10);
+    expect(v).toBeCloseTo(50_000, 6);
   });
 });
 
@@ -344,6 +361,52 @@ describe('calcPureBurningCost', () => {
     expect(r.rol).toBeGreaterThan(0);
     expect(r.years).toBe(3);
   });
+
+  it('loss years missing from the EGNPI table fall back to the prospective EGNPI (not dropped)', () => {
+    // 2018 loss 500k → layer hit 400k; 2019 loss 300k → layer hit 200k
+    // (layer 500k xs 100k). EGNPI table covers 2019–2021 only (all 10M);
+    // obsYears = 4; prospective EGNPI = 10M.
+    //
+    // Hand-computed: loss costs 400k/10M (prospective fallback for 2018)
+    // + 200k/10M = 0.06 → avgLossCost = 0.06 / 4 = 0.015
+    // → avgAnnualLayerLoss = 0.015 × 10M = 150,000
+    // → rol = 150,000 / 500,000 = 0.30.
+    // The old code dropped the 2018 numerator (2/3 of the burn) while
+    // keeping the year in the denominator → rol = 0.10.
+    const losses = [
+      { uw_year: 2018, inflated_incurred: 500_000 },
+      { uw_year: 2019, inflated_incurred: 300_000 },
+    ];
+    const egnpiByYear = { 2019: 10_000_000, 2020: 10_000_000, 2021: 10_000_000 };
+    const r = calcPureBurningCost(losses, 100_000, 500_000, 10_000_000, 4, egnpiByYear);
+    expect(r.rol).toBeCloseTo(0.30, 10);
+    expect(r.avgAnnualLayerLoss).toBeCloseTo(150_000, 6);
+    expect(r.years).toBe(4);
+    // The fallback is surfaced, naming the year.
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toMatch(/2018/);
+    expect(r.warnings[0]).toMatch(/prospective EGNPI/);
+  });
+
+  it('emits no warning when every loss year has an EGNPI row', () => {
+    const losses = [{ uw_year: 2019, inflated_incurred: 500_000 }];
+    const egnpiByYear = { 2019: 10_000_000, 2020: 10_000_000 };
+    const r = calcPureBurningCost(losses, 100_000, 500_000, 10_000_000, 2, egnpiByYear);
+    expect(r.warnings).toEqual([]);
+    // 400k/10M / 2 years × 10M / 500k = 0.40
+    expect(r.rol).toBeCloseTo(0.40, 10);
+  });
+
+  it('warns and excludes when a loss year has no EGNPI row AND no prospective EGNPI', () => {
+    const losses = [{ uw_year: 2018, inflated_incurred: 500_000 }];
+    const egnpiByYear = { 2019: 10_000_000 };
+    const r = calcPureBurningCost(losses, 100_000, 500_000, 0, 2, egnpiByYear);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toMatch(/2018/);
+    // No prospective EGNPI → Step 6 produces 0 regardless; the warning is
+    // the observable contract here.
+    expect(r.rol).toBe(0);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -390,6 +453,63 @@ describe('calcParetoROL', () => {
     });
     expect(r.prAttach).toBeLessThanOrEqual(1);
     expect(r.prExhaust).toBeLessThanOrEqual(1);
+  });
+
+  describe('snapshot missing selected_count / observation_years (F102)', () => {
+    // Layer 3M xs 2M against saved Pareto(α=2, xm=1M):
+    //   LEV(5M) = (2·1M/1)·(1 − 1M/5M) + 5M·(1M/5M)² = 1.6M + 0.2M = 1.8M
+    //   LEV(2M) = (2·1M/1)·(1 − 1M/2M) + 2M·(1M/2M)² = 1.0M + 0.5M = 1.5M
+    //   per-tail-loss layer severity = 0.3M
+    //   rol = (n/years) × 0.3M / 3M = (n/years) × 0.1
+    const saved = { pareto_alpha: 2, pareto_xm: 1_000_000, observation_years: 10 };
+
+    it('refuses to price (rol 0 + warning) when the count is missing and no raw losses exist', () => {
+      // Pre-fix: fabricated n=10 → rol (10/10) × 0.1 = 0.10, silently
+      // inventing a 1.0 losses/year frequency.
+      const r = calcParetoROL([], 2_000_000, 3_000_000, 20_000_000, saved);
+      expect(r.rol).toBe(0);
+      expect(r.alpha).toBe(2);           // saved severity params still reported
+      expect(r.xm).toBe(1_000_000);
+      expect(r.warnings).toHaveLength(1);
+      expect(r.warnings[0]).toMatch(/selected_count/);
+    });
+
+    it('derives an honest tail count from the raw losses when available, with a warning', () => {
+      const losses = [
+        { uw_year: 2020, incurred: 1_200_000 },
+        { uw_year: 2021, incurred: 2_500_000 },
+        { uw_year: 2022, incurred: 4_000_000 },
+        { uw_year: 2022, incurred: 500_000 },  // below xm → not a tail loss
+      ];
+      const r = calcParetoROL(losses, 2_000_000, 3_000_000, 20_000_000, saved);
+      // n = 3 real tail losses ≥ 1M, saved years = 10 → rol = (3/10) × 0.1 = 0.03
+      expect(r.rol).toBeCloseTo(0.03, 12);
+      expect(r.expLayerLoss).toBeCloseTo(90_000, 6);
+      expect(r.warnings).toHaveLength(1);
+      expect(r.warnings[0]).toMatch(/selected_count/);
+    });
+
+    it('derives observation years from distinct loss years when the snapshot lacks them', () => {
+      const losses = Array.from({ length: 6 }, (_, i) => ({
+        uw_year: 2018 + i, incurred: 1_500_000,
+      }));
+      const r = calcParetoROL(losses, 2_000_000, 3_000_000, 20_000_000, {
+        pareto_alpha: 2, pareto_xm: 1_000_000, selected_count: 6,
+      });
+      // years = max(5, 6 distinct uw years) = 6 → rol = (6/6) × 0.1 = 0.1
+      expect(r.rol).toBeCloseTo(0.1, 12);
+      expect(r.warnings).toHaveLength(1);
+      expect(r.warnings[0]).toMatch(/observation_years/);
+    });
+
+    it('a complete snapshot is priced exactly as before, with no warnings', () => {
+      const r = calcParetoROL([], 2_000_000, 3_000_000, 20_000_000, {
+        ...saved, selected_count: 10,
+      });
+      // rol = (10/10) × 0.3M / 3M = 0.10
+      expect(r.rol).toBeCloseTo(0.1, 12);
+      expect(r.warnings).toBeUndefined();
+    });
   });
 });
 
@@ -581,6 +701,42 @@ describe('calcCatExposureRating', () => {
     expect(r.xm).toBeGreaterThan(0);
   });
 
+  it('keeps the (rp=1, loss=0) trapezoid anchor — exact hand-computed AEP integral (F57)', () => {
+    // Key points rp10:4M rp25:6M rp50:8M rp100:10M rp200:12M, layer 3M xs 1M.
+    // Constructed curve (rp5 = 0.4×rp10 = 1.6M, rp500 = 1.5×rp200 = 18M) with
+    // layer hits h = max(0, min(loss − 1M, 3M)):
+    //   rp:    1      5      10   25   50   100   200   500
+    //   loss:  0      1.6M   4M   6M   8M   10M   12M   18M
+    //   h:     0      0.6M   3M   3M   3M   3M    3M    3M
+    // Trapezoid over exceedance frequency f = 1/rp:
+    //   1→5:    (1 − 0.2)·(0 + 0.6M)/2      = 240,000   ← the anchor band
+    //   5→10:   (0.2 − 0.1)·(0.6M + 3M)/2   = 180,000
+    //   10→25:  (0.1 − 0.04)·3M             = 180,000
+    //   25→50:  (0.04 − 0.02)·3M            =  60,000
+    //   50→100: (0.02 − 0.01)·3M            =  30,000
+    //   100→200:(0.01 − 0.005)·3M           =  15,000
+    //   200→500:(0.005 − 0.002)·3M          =   9,000
+    //   AEP = 714,000 → rol = 714,000 / 3M = 0.238
+    // The pre-fix .filter(p => p.loss > 0) deleted the anchor, dropping the
+    // whole 240,000 RP1→RP5 band (AEP 474,000, rol 0.158).
+    const catSnap = {
+      return_period_key_points: {
+        rp10: 4_000_000, rp25: 6_000_000, rp50: 8_000_000,
+        rp100: 10_000_000, rp200: 12_000_000,
+      },
+    };
+    const r = calcCatExposureRating([], 1_000_000, 3_000_000, 20_000_000, catSnap, null, 10);
+    expect(r.method).toBe('rp_curve');
+    expect(r.aep).toBeCloseTo(714_000, 6);
+    expect(r.rol).toBeCloseTo(0.238, 12);
+    // prAttach interpolates on the anchor→rp5 segment instead of being capped
+    // at 1/5: attachment 1M sits at t = 1M/1.6M = 0.625 → rp = 1 + 0.625×4
+    // = 3.5 → P = 1/3.5 = 2/7 ≈ 0.285714.
+    expect(r.prAttach).toBeCloseTo(2 / 7, 12);
+    // Exhaustion 4M is exactly the rp10 loss → P = 1/10.
+    expect(r.prExhaust).toBeCloseTo(0.1, 12);
+  });
+
   it('falls back to flat-loss-ratio when neither rp curve nor enough losses (method=flat_loss_ratio_fallback)', () => {
     const cresta = [
       { eq_agg: 100_000_000, ws_agg: 50_000_000, flood_agg: 30_000_000, srcc_agg: 10_000_000, others_agg: 5_000_000 },
@@ -588,6 +744,22 @@ describe('calcCatExposureRating', () => {
     const r = calcCatExposureRating(cresta, 1_000_000, 2_000_000, 20_000_000, null, null, 10);
     expect(r.method).toBe('flat_loss_ratio_fallback');
     expect(r.totalExposure).toBe(195_000_000);
+  });
+
+  it('flat-loss-ratio fallback prices the ANNUAL implied loss over the limit — no obsYears in the denominator (F58)', () => {
+    // egnpi 20M × 15% = 3M implied ANNUAL loss. Layer 3M xs 1M →
+    // layerHit(3M, 1M, 3M) = 2M → rol = 2M / 3M = 0.666667.
+    // Pre-fix the denominator was limit × obsYears, returning 0.0667 —
+    // obsYears× smaller than the method's own 15%-loss-ratio assumption
+    // (an annual quantity divided by currency × years).
+    const cresta = [{ eq_agg: 100_000_000, ws_agg: 0, flood_agg: 0, srcc_agg: 0, others_agg: 0 }];
+    const r = calcCatExposureRating(cresta, 1_000_000, 3_000_000, 20_000_000, null, null, 10);
+    expect(r.method).toBe('flat_loss_ratio_fallback');
+    expect(r.rol).toBeCloseTo(2 / 3, 12);
+    // Dimensional check: the observation window must not change an
+    // annual-loss-based rate.
+    const r5 = calcCatExposureRating(cresta, 1_000_000, 3_000_000, 20_000_000, null, null, 5);
+    expect(r5.rol).toBe(r.rol);
   });
 
   it('method=none when CRESTA rows are all empty', () => {

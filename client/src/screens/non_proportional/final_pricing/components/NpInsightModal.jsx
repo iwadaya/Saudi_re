@@ -12,6 +12,22 @@ import NpMarketAnalysis from '../NpMarketAnalysis';
 import NpChecklistPanel from './NpChecklistPanel.jsx';
 import GemDamageRatioPanel from '../../cat_exposure/GemDamageRatioPanel.jsx';
 import CedantSummaryTabs from '../../../../components/cedant/CedantSummaryTabs';
+import { cn, fmtRol, layerHit } from '../../../../utils/npPricingEngine.js';
+
+// GEM hands back a ground-up EQ loss in CURRENCY; catPureBurn is a percent
+// (ROL) string everywhere else — npPricingEngine writes fmtRol(rol) with
+// rol = annual layer loss / limit (calcPureBurningCost step 6). Cut the
+// scenario loss to the layer and rate it on the layer limit; never write a
+// raw currency amount into the percent field. Returns null when the layer
+// has no positive limit (no denominator — caller must skip the write).
+// Kept in sync with the same helper in FQEqDamageRatioTab.jsx.
+function eqLossToCatPureBurn(groundUpEqLoss, layer) {
+  const limit = cn(layer?.limit ?? layer?.layer_limit);
+  if (!(limit > 0)) return null;
+  const attach = cn(layer?.deductible ?? layer?.attachment);
+  const rol = layerHit(cn(groundUpEqLoss), attach, limit) / limit;
+  return rol > 0 ? fmtRol(rol) : '0.00%';
+}
 
 /**
  * @param {{
@@ -29,7 +45,9 @@ export default function NpInsightModal({ pricing, open, contractId, isQuote, isT
     insightKey, setInsightOpen, layers, updateLayer, treatyMetrics, quotePricing, portfolioTreaties,
   } = pricing;
   if (!open) return null;
-  const catLayers = layers.filter((l) => l.cat);
+  // Only cat layers with a positive limit can accept the converted burning
+  // cost — the panel's Apply button disables when none qualify.
+  const catLayers = layers.filter((l) => l.cat && cn(l.limit) > 0);
   return (
 
                 <div className="bbg-modal-backdrop" role="presentation" onClick={e => { if (e.target === e.currentTarget) setInsightOpen(false); }}>
@@ -77,11 +95,15 @@ export default function NpInsightModal({ pricing, open, contractId, isQuote, isT
                             catLayers={catLayers}
                             currency={currency}
                             onApplyToCat={(groundUpEqLoss) => {
-                              // Push the GEM ground-up EQ loss into the (first) cat
-                              // layer's burning-cost field via the normal layer
-                              // setter; the screen's existing Save persists it.
-                              const gi = layers.indexOf(catLayers[0]);
-                              if (gi >= 0) updateLayer(gi, 'catPureBurn', Math.round(groundUpEqLoss));
+                              // Convert the GEM ground-up EQ loss to the (first)
+                              // cat layer's pure-burn ROL % and push it via the
+                              // normal layer setter; the screen's existing Save
+                              // persists it.
+                              const target = catLayers[0];
+                              const gi = target ? layers.indexOf(target) : -1;
+                              if (gi < 0) return;
+                              const rolPct = eqLossToCatPureBurn(groundUpEqLoss, target);
+                              if (rolPct != null) updateLayer(gi, 'catPureBurn', rolPct);
                             }}
                             disabled={isTerminal}
                           />

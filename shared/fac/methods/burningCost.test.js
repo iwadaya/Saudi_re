@@ -53,6 +53,48 @@ describe('restateLoss — index, develop, as-if, layer', () => {
     expect(r.layer).toBe(0);
   });
 
+  it('honours an explicit development factor on a CLOSED claim (F94)', () => {
+    // A closed claim expected to reopen — recoveries pending, disputed
+    // reserve — is a legitimate use of the override column, and the header
+    // promises whatever the underwriter overrides is what gets used.
+    const r = restateLoss(
+      { loss_year: 2026, fgu_paid: 100_000, is_open: false, development_factor: 1.3 },
+      { ...OPTS, trend: 0 },
+    );
+    expect(r.developed).toBeCloseTo(130_000, 6);
+    expect(r.ldf).toBe(1.3);
+    expect(r.layer).toBeCloseTo(130_000, 6);
+  });
+
+  it('still leaves a closed claim with no override undeveloped', () => {
+    const r = restateLoss(
+      { loss_year: 2026, fgu_paid: 100_000, is_open: false },
+      { ...OPTS, trend: 0 },
+    );
+    expect(r.developed).toBeCloseTo(100_000, 6);
+    expect(r.ldf).toBe(1);
+  });
+
+  it('treats an empty-string fgu_incurred as absent, not as nil (F95)', () => {
+    // Screen-state rows hand the shared module '' for cleared inputs; the
+    // real incurred is paid + outstanding = 300,000, not zero.
+    const r = restateLoss(
+      { loss_year: 2026, fgu_incurred: '', fgu_paid: 250_000, fgu_outstanding: 50_000, is_open: false },
+      { ...OPTS, trend: 0 },
+    );
+    expect(r.included).toBe(true);
+    expect(r.incurred).toBe(300_000);
+    expect(r.layer).toBeCloseTo(300_000, 6);
+  });
+
+  it('still respects an explicit fgu_incurred of a real zero', () => {
+    const r = restateLoss(
+      { loss_year: 2026, fgu_incurred: 0, fgu_paid: 250_000, fgu_outstanding: 50_000 }, OPTS,
+    );
+    expect(r.included).toBe(false);
+    expect(r.reason).toMatch(/nil incurred/i);
+  });
+
   it('excludes a flagged loss and says why', () => {
     const r = restateLoss(
       { loss_year: 2022, fgu_paid: 5_000_000, exclude_from_rating: true, exclusion_reason: 'One-off, plant since sold' },
@@ -126,6 +168,53 @@ describe('burningCostLossCost', () => {
     expect(excess.claimCount).toBe(1);                       // only one reaches the layer
   });
 
+  it('excludes losses from years outside the exposure basis and says so (F8)', () => {
+    // The 2015 loss predates the 2022-2026 basis: its year contributes
+    // nothing to the denominator, so its money must not sit in the
+    // numerator. Burn = 1,000,000 / 5 = 200,000 — not (2m + 1m) / 5 = 600k.
+    const out = burningCostLossCost({
+      losses: [
+        { loss_year: 2015, fgu_paid: 2_000_000, is_open: false },
+        { loss_year: 2026, fgu_paid: 1_000_000, is_open: false },
+      ],
+      basis: BASIS, severityTrendPct: 0, asOfYear: 2026,
+    });
+    expect(out.available).toBe(true);
+    expect(out.lossCost).toBeCloseTo(200_000, 6);
+    expect(out.ratePm).toBeCloseTo(2.0, 9);             // 200k / 100m × 1000
+    expect(out.claimCount).toBe(1);
+    // The annual series covers exactly the denominator years — the 2015
+    // loss must not inject a sixth "year" into the volatility series.
+    expect(out.diagnostics.annual_layer_losses).toEqual([
+      { year: 2022, layer_loss: 0 },
+      { year: 2023, layer_loss: 0 },
+      { year: 2024, layer_loss: 0 },
+      { year: 2025, layer_loss: 0 },
+      { year: 2026, layer_loss: 1_000_000 },
+    ]);
+    expect(out.diagnostics.out_of_window_claims).toBe(1);
+    expect(out.diagnostics.out_of_window_layer_total).toBeCloseTo(2_000_000, 6);
+    expect(out.diagnostics.warnings.join(' '))
+      .toMatch(/2015.*outside the 5-year exposure window/);
+  });
+
+  it('windows the fallback path to the last fallbackYears years too', () => {
+    const out = burningCostLossCost({
+      losses: [
+        { loss_year: 2015, fgu_paid: 2_000_000, is_open: false },
+        { loss_year: 2026, fgu_paid: 1_000_000, is_open: false },
+      ],
+      basis: [], severityTrendPct: 0, asOfYear: 2026,
+      fallbackExposure: 100_000_000, fallbackYears: 5,
+    });
+    expect(out.diagnostics.denominator_source).toBe('CURRENT_EXPOSURE');
+    expect(out.lossCost).toBeCloseTo(200_000, 6);
+    expect(out.diagnostics.annual_layer_losses.map((r) => r.year))
+      .toEqual([2022, 2023, 2024, 2025, 2026]);
+    expect(out.diagnostics.out_of_window_claims).toBe(1);
+    expect(out.diagnostics.out_of_window_layer_total).toBeCloseTo(2_000_000, 6);
+  });
+
   it('reports an on-levelled loss ratio when premiums were recorded', () => {
     const basis = [
       { loss_year: 2025, exposure_base: 100_000_000, premium: 100_000, rate_change_pct: 0 },
@@ -138,6 +227,59 @@ describe('burningCostLossCost', () => {
     // 2025's premium is brought up to the 2026 rate level (×1.10), so the
     // denominator is 110,000 + 110,000.
     expect(out.diagnostics.on_levelled_loss_ratio).toBeCloseTo(100_000 / 220_000, 9);
+  });
+
+  it('keeps the rate change of a premium-less year in the on-level chain (F7)', () => {
+    // 2025 has no premium recorded but its +10% rate change is real: 2024's
+    // premium must chain through BOTH later movements, ×1.10 × 1.10 = ×1.21.
+    // Denominator = 100,000 × 1.21 + 121,000 = 242,000.
+    const basis = [
+      { loss_year: 2024, exposure_base: 100_000_000, premium: 100_000, rate_change_pct: 0 },
+      { loss_year: 2025, exposure_base: 100_000_000, premium: 0, rate_change_pct: 10 },
+      { loss_year: 2026, exposure_base: 100_000_000, premium: 121_000, rate_change_pct: 10 },
+    ];
+    const out = burningCostLossCost({
+      losses: [{ loss_year: 2026, fgu_paid: 100_000, is_open: false }],
+      basis, severityTrendPct: 0, asOfYear: 2026,
+    });
+    expect(out.diagnostics.on_levelled_loss_ratio).toBeCloseTo(100_000 / 242_000, 9);
+  });
+
+  it('divides losses by premiums over the SAME years in the loss ratio (F47)', () => {
+    // 2026 has a loss but no premium; 2025 has the premium. Dividing the
+    // 2026 loss by 2025's premium alone reported 150% for a period whose
+    // like-for-like figure is 0% — the ratio now covers only the premium
+    // years, and says which they are.
+    const basis = [
+      { loss_year: 2025, exposure_base: 100_000_000, premium: 100_000, rate_change_pct: 0 },
+      { loss_year: 2026, exposure_base: 100_000_000 },
+    ];
+    const out = burningCostLossCost({
+      losses: [{ loss_year: 2026, fgu_paid: 150_000, is_open: false }],
+      basis, severityTrendPct: 0, asOfYear: 2026,
+    });
+    // No 2025 losses, 2025 premium 100,000 → 0 / 100,000 = 0.
+    expect(out.diagnostics.on_levelled_loss_ratio).toBe(0);
+    expect(out.diagnostics.on_levelled_loss_ratio_years).toEqual([2025]);
+    expect(out.diagnostics.warnings.join(' ')).toMatch(/1 of 2 year/);
+    // The burn rate itself still counts every basis year: 150k over 2 years.
+    expect(out.lossCost).toBeCloseTo(75_000, 6);
+  });
+
+  it('keeps premium-year losses in the ratio numerator', () => {
+    const basis = [
+      { loss_year: 2025, exposure_base: 100_000_000, premium: 100_000, rate_change_pct: 0 },
+      { loss_year: 2026, exposure_base: 100_000_000 },
+    ];
+    const out = burningCostLossCost({
+      losses: [
+        { loss_year: 2025, fgu_paid: 40_000, is_open: false },
+        { loss_year: 2026, fgu_paid: 150_000, is_open: false },
+      ],
+      basis, severityTrendPct: 0, asOfYear: 2026,
+    });
+    // Only 2025 carries a premium: 40,000 / 100,000 = 40%.
+    expect(out.diagnostics.on_levelled_loss_ratio).toBeCloseTo(0.4, 9);
   });
 
   it('falls back to today\'s exposure when no history was entered, and says so', () => {

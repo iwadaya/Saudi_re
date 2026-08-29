@@ -146,4 +146,40 @@ describe('periodMonths', () => {
     expect(periodMonths({})).toBeNull();
     expect(periodMonths(null)).toBeNull();
   });
+
+  it('reads an inclusive expiry as the full period (F49)', () => {
+    // A slip states the LAST COVERED DAY. 1 Jan to 31 Dec is an annual
+    // policy, not eleven months — the old reading shaved a month of period
+    // loading off every project entered this way.
+    expect(periodMonths({ inception_date: '2026-01-01', expiry_date: '2026-12-31' })).toBe(12);
+    expect(periodMonths({ inception_date: '2026-01-01', expiry_date: '2027-12-31' })).toBe(24);
+    expect(periodMonths({ inception_date: '2026-04-15', expiry_date: '2026-10-14' })).toBe(6);
+  });
+
+  it('still reads an exclusive expiry as the same period', () => {
+    // Either convention lands on the same answer: the extra day truncates.
+    expect(periodMonths({ inception_date: '2026-01-01', expiry_date: '2027-01-01' })).toBe(12);
+    expect(periodMonths({ inception_date: '2026-04-15', expiry_date: '2026-10-15' })).toBe(6);
+  });
+
+  it('handles a leap-day anniversary (F49)', () => {
+    // 2024-02-29 to 2025-02-28 is 365 days of cover — a full year.
+    expect(periodMonths({ inception_date: '2024-02-29', expiry_date: '2025-02-28' })).toBe(12);
+  });
+
+  it('handles month-end inclusive periods', () => {
+    // One month from 31 Jan runs to the last day of February.
+    expect(periodMonths({ inception_date: '2026-01-31', expiry_date: '2026-02-28' })).toBe(1);
+    expect(periodMonths({ inception_date: '2026-01-31', expiry_date: '2027-01-30' })).toBe(12);
+  });
+
+  it('is timezone-independent — UTC getters on UTC-parsed dates (F97)', () => {
+    // '2026-03-01'..'2026-08-31' read as 5 months under TZ=UTC and 6 under
+    // TZ=America/New_York before the fix, because local getters shifted the
+    // UTC-midnight dates to Feb 28 / Aug 30 west of Greenwich. The fixed
+    // reading is 6 (inclusive expiry) whatever the host timezone; this
+    // pins the value so a CI box in another timezone catches a regression.
+    expect(periodMonths({ inception_date: '2026-03-01', expiry_date: '2026-08-31' })).toBe(6);
+    expect(periodMonths({ inception_date: '2026-06-01', expiry_date: '2027-05-31' })).toBe(12);
+  });
 });

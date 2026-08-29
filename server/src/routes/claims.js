@@ -438,6 +438,25 @@ async function transitionClaim(req, res, { toStatus, movementType, eventType }) 
         WHERE claim_id = $1 ORDER BY movement_no DESC LIMIT 1`, [id]);
     const last = lastRows[0] || { movement_no: 0, gross_paid_100: 0, gross_os_100: 0 };
 
+    // F82 — a CLOSURE on a FINALISED claim with outstanding reserve would zero
+    // the OS (a position change) while leaving the reviewer's FINALISED stamp
+    // over figures they never saw — exactly what the movements route (which
+    // resets FINALISED → DRAFT on every booked movement) and the PUT handler
+    // forbid. Close/decline is therefore blocked while the approval is
+    // FINALISED and the position would change; the user must first book a
+    // movement restating the position (which drops the approval to DRAFT for
+    // re-review), then close. A closure from OS = 0 restates identical figures,
+    // so the FINALISED stamp still describes the position and it may proceed.
+    if (toStatus !== 'REOPENED'
+      && claim.approval_status === 'FINALISED'
+      && Number(last.gross_os_100) !== 0) {
+      const e = new Error(
+        `Cannot ${toStatus === 'DECLINED' ? 'decline' : 'close'} a FINALISED claim with an outstanding reserve `
+        + `(${last.gross_os_100} at 100%) — that would zero the reserve behind the reviewer's approval. `
+        + `Book a movement restating the position to nil outstanding first (this returns the claim to DRAFT for re-review), then ${toStatus === 'DECLINED' ? 'decline' : 'close'} it.`);
+      e.status = 422; e.code = 'CLAIM_FINALISED_POSITION'; throw e;
+    }
+
     // CLOSURE/DECLINE zeroes the outstanding reserve; REOPEN restates the last position.
     const os = toStatus === 'REOPENED' ? last.gross_os_100 : 0;
     await client.query(

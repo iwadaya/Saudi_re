@@ -158,6 +158,9 @@ export function stripTriangleCells(cells, losses, amountField) {
   for (const l of losses) {
     const amt = num(l[amountField]);
     if (amt <= 0) continue;
+    // Number(null) === 0 passes isFinite — a missing uw_year must be skipped,
+    // not bucketed under year 0 (same guard as the client's sumByYear).
+    if (l.uw_year == null || l.uw_year === '') continue;
     const yr = Number(l.uw_year);
     if (!Number.isFinite(yr)) continue;
     if (!byYear.has(yr)) byYear.set(yr, []);

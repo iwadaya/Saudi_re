@@ -6,7 +6,7 @@ import PctInput from '../../../components/PctInput';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import { useFacRiskId } from '../../../hooks/useContractId';
 import FacLayerTower from './FacLayerTower';
-import { numOrNull, fmtComma, stripDigits, cleanNum } from '../../../utils/format';
+import { numOrNull, formatWithCommasDecimal, sanitizeNumber, cleanNum } from '../../../utils/format';
 
 const ROUTE_KEY = 'FAC_COVERAGE_STRUCTURE';
 
@@ -152,8 +152,8 @@ export default function FacCoverageStructure() {
           </Sec>
         ) : (
           <Sec title="Non-Proportional Structure">
-            <FR label="Retention / Priority"><input className="fi" type="text" inputMode="numeric" value={fmtComma(f.np_retention)} onChange={e => set('np_retention', stripDigits(e.target.value))} /></FR>
-            <FR label="Limit (xs Retention)"><input className="fi" type="text" inputMode="numeric" value={fmtComma(f.np_limit)} onChange={e => set('np_limit', stripDigits(e.target.value))} /></FR>
+            <FR label="Retention / Priority"><input className="fi" type="text" inputMode="decimal" value={formatWithCommasDecimal(f.np_retention)} onChange={e => set('np_retention', sanitizeNumber(e.target.value))} /></FR>
+            <FR label="Limit (xs Retention)"><input className="fi" type="text" inputMode="decimal" value={formatWithCommasDecimal(f.np_limit)} onChange={e => set('np_limit', sanitizeNumber(e.target.value))} /></FR>
             <FR label="Our Share %"><PctInput value={f.np_our_share_pct} onChange={v => set('np_our_share_pct', v)} style={{ width: 100 }} /></FR>
           </Sec>
         )}
@@ -172,8 +172,8 @@ export default function FacCoverageStructure() {
 
         <Sec title="Original Premium">
           <FR label="Original Rate (‰)"><input className="fi" type="number" value={f.original_rate} onChange={e => set('original_rate', e.target.value)} min={0} step={0.001} style={{ width: 120 }} placeholder="Rate per mille" /></FR>
-          <FR label="Original Premium (100%)"><input className="fi" type="text" inputMode="numeric" value={fmtComma(f.original_premium)} onChange={e => set('original_premium', stripDigits(e.target.value))} placeholder="Cedant's gross premium" /></FR>
-          <FR label="RI Premium (Our Share)"><input className="fi" type="text" inputMode="numeric" value={fmtComma(f.ri_premium)} onChange={e => set('ri_premium', stripDigits(e.target.value))} placeholder="Our reinsurance premium" /></FR>
+          <FR label="Original Premium (100%)"><input className="fi" type="text" inputMode="decimal" value={formatWithCommasDecimal(f.original_premium)} onChange={e => set('original_premium', sanitizeNumber(e.target.value))} placeholder="Cedant's gross premium" /></FR>
+          <FR label="RI Premium (Our Share)"><input className="fi" type="text" inputMode="decimal" value={formatWithCommasDecimal(f.ri_premium)} onChange={e => set('ri_premium', sanitizeNumber(e.target.value))} placeholder="Our reinsurance premium" /></FR>
         </Sec>
       </div>
     </WizardLayout>

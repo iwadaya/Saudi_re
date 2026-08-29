@@ -4,7 +4,7 @@ import api from '../../../api';
 import WizardLayout from '../../../components/WizardLayout';
 import { useScreenSave } from '../../../hooks/useScreenSave';
 import { useFacRiskId } from '../../../hooks/useContractId';
-import { numOrNull, fmtComma, stripDigits, cleanNum } from '../../../utils/format';
+import { numOrNull, formatWithCommasDecimal, sanitizeNumber, cleanNum } from '../../../utils/format';
 
 const ROUTE_KEY = 'FAC_DEDUCTIBLES';
 
@@ -104,7 +104,7 @@ export default function FacDeductibles() {
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(var(--accent-blue-rgb),0.75)', marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid var(--hairline)' }}>Deductible Structure</div>
 
         <FR label="Deductible Amount">
-          <input className="fi" type="text" inputMode="numeric" value={fmtComma(f.deductible_amount)} onChange={e => set('deductible_amount', stripDigits(e.target.value))} placeholder="0" />
+          <input className="fi" type="text" inputMode="decimal" value={formatWithCommasDecimal(f.deductible_amount)} onChange={e => set('deductible_amount', sanitizeNumber(e.target.value))} placeholder="0" />
         </FR>
         <FR label="Description / Schedule">
           <textarea className="fi" value={f.deductible_description} onChange={e => set('deductible_description', e.target.value)} rows={5}

@@ -52,12 +52,35 @@ describe('frequencySeverity', () => {
   it('trends severity from each loss year to the policy year', () => {
     const flat = frequencySeverity({ losses: LOSSES, basis: BASIS, asOfYear: 2026 });
     const trended = frequencySeverity({
-      losses: LOSSES, basis: BASIS, asOfYear: 2026, severityTrendPct: 0.10,
+      losses: LOSSES, basis: BASIS, asOfYear: 2026, severityTrendPct: 10,
     });
-    // 100k×1.1³ + 200k×1.1² + 300k×1.1, over three claims.
+    // 10 means 10%/yr: 100k×1.1³ + 200k×1.1² + 300k×1.1, over three claims.
     const expected = (100_000 * 1.1 ** 3 + 200_000 * 1.1 ** 2 + 300_000 * 1.1) / 3;
     expect(trended.severity).toBeCloseTo(expected, 4);
     expect(trended.severity).toBeGreaterThan(flat.severity);
+  });
+
+  it('takes the trend as a whole percent — the same unit burning cost takes (F41)', () => {
+    // risk.severity_trend_pct holds 6 for 6%/yr and index.js passes it to
+    // both experience methods verbatim. Under the old fraction reading, 6
+    // trended a 2023 claim ×(1+6)³ = ×343 — three hundred times the money.
+    const r = frequencySeverity({
+      losses: [{ loss_year: 2023, fgu_incurred: 100_000 }],
+      basis: BASIS, asOfYear: 2026, severityTrendPct: 6,
+    });
+    // 100,000 × 1.06³ = 119,101.60 — hand-derived.
+    expect(r.severity).toBeCloseTo(119_101.60, 2);
+    expect(r.diagnostics.severity_trend_pct).toBe(6);
+  });
+
+  it('applies the same whole-percent trend inside a layer split (F41)', () => {
+    const r = freqSeverityLossCost({
+      losses: [{ loss_year: 2023, fgu_incurred: 1_000_000 }],
+      basis: BASIS, exposureUnits: 500, asOfYear: 2026, severityTrendPct: 6,
+      attachment: 1_000_000, limit: 5_000_000,
+    });
+    // 1,000,000 × 1.06³ = 1,191,016; layer share above 1m = 191,016.
+    expect(r.diagnostics.severity).toBeCloseTo(191_016, 0);
   });
 
   it('prefers the restated amount the experience screen produced', () => {

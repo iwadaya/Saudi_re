@@ -14,4 +14,4 @@ export {
   insertApprovalEvent,
 } from './pricingOfferRepository.js';
 export { getCountryAggregates, getAggCobBreakdown, getAggDrilldown, getMarketAverage } from './pricingAggregateRepository.js';
-export { createComponentSnapshot, listComponentSnapshots, deleteComponentSnapshot } from './pricingSnapshotRepository.js';
+export { createComponentSnapshot, listComponentSnapshots, getComponentSnapshotById, deleteComponentSnapshot } from './pricingSnapshotRepository.js';

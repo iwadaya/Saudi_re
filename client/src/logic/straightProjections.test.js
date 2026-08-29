@@ -115,3 +115,75 @@ describe('projectStraightStats', () => {
     expect(liability[2].devFactor).toBeGreaterThan(property[2].devFactor);
   });
 });
+
+describe('projectStraightStats — dev age from year distance, not array position (F55)', () => {
+  // PROPERTY_NONCAT LDFs [1.250, 1.080, 1.025, 1.010, 1.005] give age-indexed
+  // CDFs (cdf[k] = product of ldfs[k..end], k = years since the newest year):
+  //   cdf[0] = 1.25 × 1.08 × 1.025 × 1.010 × 1.005 = 1.4045754375
+  //   cdf[1] = 1.08 × 1.025 × 1.010 × 1.005        = 1.1236603500
+  //   cdf[2] = 1.025 × 1.010 × 1.005               = 1.0404262500  (1.04042625)
+  //   cdf[3] = 1.010 × 1.005                       = 1.0150500000
+  //   cdf[4] = 1.005
+  //   cdf[5] = 1.0
+  // Premium LDFs [1.050, 1.015, 1.005, 1.0, ...] →
+  //   premCdf[0] = 1.050 × 1.015 × 1.005 = 1.07107875, premCdf[3] = 1.0.
+
+  it('a gap year no longer shifts every older year onto too-young factors', () => {
+    // Years [2019, 2020, 2023] — 2021/2022 missing. Newest = 2023.
+    //   2023: devIdx 2023−2023 = 0 → CDF 1.4045754375 → ult 60 × … = 84.27452625
+    //   2020: devIdx 2023−2020 = 3 → CDF 1.01505      → ult 60.903
+    //   2019: devIdx 2023−2019 = 4 → CDF 1.005        → ult 60.3
+    // The pre-fix positional devIdx (n−1−i) gave 2020 → cdf[1] = 1.12366035
+    // (ult 67.419621) and 2019 → cdf[2] = 1.04042625 (ult 62.425575).
+    const gap = [
+      { year: 2019, premium: 100, paid: 60, os: 0 },
+      { year: 2020, premium: 100, paid: 60, os: 0 },
+      { year: 2023, premium: 100, paid: 60, os: 0 },
+    ];
+    const byYear = Object.fromEntries(
+      projectStraightStats(gap, 'PROPERTY_NONCAT').map(r => [r.year, r]),
+    );
+    expect(byYear[2023].devFactor).toBeCloseTo(1.4045754375, 10);
+    expect(byYear[2023].ultLoss).toBeCloseTo(84.27452625, 8);
+    expect(byYear[2020].devFactor).toBeCloseTo(1.01505, 10);
+    expect(byYear[2020].ultLoss).toBeCloseTo(60.903, 8);
+    expect(byYear[2019].devFactor).toBeCloseTo(1.005, 10);
+    expect(byYear[2019].ultLoss).toBeCloseTo(60.3, 8);
+    // Premium side follows the same age convention: 2020 is 4 years
+    // developed → premium fully earned (CDF 1.0), not premCdf[1].
+    expect(byYear[2020].premDevFactor).toBe(1.0);
+    expect(byYear[2023].premDevFactor).toBeCloseTo(1.07107875, 10);
+  });
+
+  it('a complete (gap-free) triangle is unchanged by the distance-based age', () => {
+    const full = [2019, 2020, 2021, 2022, 2023].map(year => ({
+      year, premium: 100, paid: 60, os: 0,
+    }));
+    const r = projectStraightStats(full, 'PROPERTY_NONCAT');
+    // position == distance here, so factors read straight off the CDF array
+    expect(r.map(x => x.devFactor)).toEqual([1.005, 1.01505, 1.04042625, 1.12366035, 1.4045754375].map(v => expect.closeTo(v, 8)));
+  });
+
+  it('duplicate year rows share ONE dev age instead of two different ones', () => {
+    const dup = [
+      { year: 2023, premium: 100, paid: 30, os: 0 },
+      { year: 2023, premium: 100, paid: 50, os: 0 },
+    ];
+    const r = projectStraightStats(dup, 'PROPERTY_NONCAT');
+    expect(r[0].devFactor).toBeCloseTo(1.4045754375, 10);
+    expect(r[1].devFactor).toBe(r[0].devFactor);
+  });
+
+  it('years far older than the curve clamp to fully developed (CDF 1.0)', () => {
+    const wide = [
+      { year: 2010, premium: 100, paid: 60, os: 0 },
+      { year: 2023, premium: 100, paid: 60, os: 0 },
+    ];
+    const byYear = Object.fromEntries(
+      projectStraightStats(wide, 'PROPERTY_NONCAT').map(r => [r.year, r]),
+    );
+    expect(byYear[2010].devFactor).toBe(1.0); // devIdx 13 ≥ curve length → tail
+    expect(byYear[2010].ultLoss).toBe(60);
+    expect(byYear[2023].devFactor).toBeCloseTo(1.4045754375, 10);
+  });
+});

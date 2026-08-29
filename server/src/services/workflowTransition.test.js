@@ -90,6 +90,7 @@ vi.mock('./ldf/benchmark.js', () => ({ refreshBenchmarks: vi.fn(() => Promise.re
 const {
   assertWorkflowTransition, approveContract, markContractSigned, approveQuote,
   markNotTakenUp, returnToUnderwriter, recallOffer, getTerminalPermissions,
+  recordDecision,
 } = await import('./approvals.js');
 
 const M = 1_000_000;
@@ -114,6 +115,8 @@ function mockDb(cfg = {}) {
     const s = String(sql);
     const isSelect = /^\s*SELECT/i.test(s);
     if (isSelect && s.includes('created_by_user_id')) return { rows: cfg.quoteRow ? [cfg.quoteRow] : [] };
+    // quoteSubmittedBy — the latest SUBMITTED_FOR_APPROVAL workflow event actor.
+    if (isSelect && s.includes('offer_approval_event')) return { rows: cfg.submitEventActor ? [{ actor_user_id: cfg.submitEventActor }] : [] };
     if (isSelect && s.includes('assigned_to_user_id') && /FROM\s+public\.contract\s+WHERE/i.test(s)) return { rows: cfg.contractRow ? [cfg.contractRow] : [] };
     if (isSelect && s.includes('uw_status AS status')) return { rows: cfg.contractStatus ? [{ status: cfg.contractStatus }] : [] };
     if (isSelect && /SELECT\s+status\s+FROM\s+public\.quote/i.test(s)) return { rows: cfg.quoteStatus ? [{ status: cfg.quoteStatus }] : [] };
@@ -257,6 +260,54 @@ describe('markContractSigned (markSignedAction path) — state AND signer author
   });
 });
 
+describe('markContractSigned — server-side signed-line validation', () => {
+  // signed_line_pct feeds claims share snapshots + the finance push, so the
+  // client-side guard alone is not enough: the service must reject a negative
+  // line, a line over 100%, and a line above the approved written line.
+  const signableAt = (writtenLinePct) => ({
+    contractStatus: 'AWAITING_SIGNED_LINE',
+    offer: offer({ written_line_pct: writtenLinePct, approver_options: [{ user_id: 'u-cu', role_code: 'CU' }] }),
+    submitter: submitter(),
+    candidates: [cand('u-cu', 'CU', 2, null)],
+  });
+
+  it('422s a negative signed line', async () => {
+    poolMock.query = mockDb(signableAt(30));
+    await expectStatus(
+      markContractSigned({ contractId: 'c1', actorUserId: 'u-cu', actorRole: 'CU', signedLinePct: -5 }),
+      422, 'INVALID_SIGNED_LINE',
+    );
+  });
+
+  it('422s a signed line above 100%', async () => {
+    poolMock.query = mockDb(signableAt(30));
+    await expectStatus(
+      markContractSigned({ contractId: 'c1', actorUserId: 'u-cu', actorRole: 'CU', signedLinePct: 150 }),
+      422, 'INVALID_SIGNED_LINE',
+    );
+  });
+
+  it('422s a signed line exceeding the approved written line', async () => {
+    poolMock.query = mockDb(signableAt(30));
+    await expectStatus(
+      markContractSigned({ contractId: 'c1', actorUserId: 'u-cu', actorRole: 'CU', signedLinePct: 40 }),
+      422, 'SIGNED_LINE_EXCEEDS_WRITTEN',
+    );
+  });
+
+  it('accepts a signed line at or below the written line', async () => {
+    poolMock.query = mockDb(signableAt(30));
+    const r = await markContractSigned({ contractId: 'c1', actorUserId: 'u-cu', actorName: 'CU', actorRole: 'CU', signedLinePct: 30 });
+    expect(r.nextStatus).toBe('SIGNED');
+  });
+
+  it('a null written line skips the written-line comparison but keeps the 0–100 bounds', async () => {
+    poolMock.query = mockDb(signableAt(null));
+    const r = await markContractSigned({ contractId: 'c1', actorUserId: 'u-cu', actorName: 'CU', actorRole: 'CU', signedLinePct: 12 });
+    expect(r.nextStatus).toBe('SIGNED');
+  });
+});
+
 describe('getTerminalPermissions — the client-facing mirror of the SIGN/NTU/RECALL authority', () => {
   const cfg = (over = {}) => ({
     contractStatus: 'AWAITING_SIGNED_LINE',
@@ -292,6 +343,50 @@ describe('getTerminalPermissions — the client-facing mirror of the SIGN/NTU/RE
     poolMock.query = mockDb(cfg());
     const r = await markContractSigned({ contractId: 'c1', actorUserId: 'u-cu', actorName: 'CU', actorRole: 'CU', signedLinePct: 12 });
     expect(r.nextStatus).toBe('SIGNED');
+  });
+
+  // F77 — can_arbitrate mirrors recordArbiterSlot: an open dispute, TD-tier
+  // authority, and a THIRD party (never the submitter or a disputing peer).
+  describe('can_arbitrate (dispute-resolution mirror)', () => {
+    const disputedCfg = (over = {}) => cfg({
+      contractStatus: 'DISPUTE_PENDING',
+      offer: offer({
+        status: 'DISPUTE_PENDING',
+        peer1_user_id: 'u-td-peer', peer1_decision: 'APPROVED',
+        peer2_user_id: 'u-um-peer', peer2_decision: 'DECLINED',
+      }),
+      ...over,
+    });
+
+    it('a third-party Treaty Director may arbitrate', async () => {
+      poolMock.query = mockDb(disputedCfg());
+      const p = await getTerminalPermissions({ entityType: 'CONTRACT', entityId: 'c1', actorUserId: 'u-td-third', actorRole: 'TD' });
+      expect(p.can_arbitrate).toBe(true);
+    });
+
+    it('a disputing peer may NOT arbitrate, even at TD tier', async () => {
+      poolMock.query = mockDb(disputedCfg());
+      const p = await getTerminalPermissions({ entityType: 'CONTRACT', entityId: 'c1', actorUserId: 'u-td-peer', actorRole: 'TD' });
+      expect(p.can_arbitrate).toBe(false);
+    });
+
+    it('the submitter may NOT arbitrate their own dispute', async () => {
+      poolMock.query = mockDb(disputedCfg());
+      const p = await getTerminalPermissions({ entityType: 'CONTRACT', entityId: 'c1', actorUserId: 'u-sub', actorRole: 'CU' });
+      expect(p.can_arbitrate).toBe(false);
+    });
+
+    it('a Treaty Manager (below the TD tier) may NOT arbitrate', async () => {
+      poolMock.query = mockDb(disputedCfg());
+      const p = await getTerminalPermissions({ entityType: 'CONTRACT', entityId: 'c1', actorUserId: 'u-tm-third', actorRole: 'TM' });
+      expect(p.can_arbitrate).toBe(false);
+    });
+
+    it('no dispute → can_arbitrate is false for everyone', async () => {
+      poolMock.query = mockDb(cfg()); // offer still AWAITING_APPROVAL
+      const p = await getTerminalPermissions({ entityType: 'CONTRACT', entityId: 'c1', actorUserId: 'u-td-third', actorRole: 'TD' });
+      expect(p.can_arbitrate).toBe(false);
+    });
   });
 });
 
@@ -346,7 +441,11 @@ describe('markNotTakenUp (NTU) — assignee OR eligible senior, treaty + quote',
       quoteStatus: 'AWAITING_SIGNED_LINE',
       quoteRow: { created_by_user_id: 'u-sub', assigned_to_user_id: 'u-owner', next_approver: null },
     });
-    await expectStatus(markNotTakenUp({ quoteId: 'q1', actorUserId: 'u-rando', actorRole: 'UW', reason: 'x' }), 403, 'NTU_FORBIDDEN');
+    // AN (Analyst, hierarchy level 5) holds no approval authority. NOTE: an
+    // Underwriter is level 4 in the DB uw_role hierarchy — the approver tier —
+    // so a UW non-assignee IS an eligible senior here (the old in-code map
+    // wrongly put UW at level 5).
+    await expectStatus(markNotTakenUp({ quoteId: 'q1', actorUserId: 'u-rando', actorRole: 'AN', reason: 'x' }), 403, 'NTU_FORBIDDEN');
   });
 });
 
@@ -461,5 +560,91 @@ describe('approveQuote (quotes mark-approved path)', () => {
     poolMock.query = mockDb({ quoteRow: quoteRow({ next_approver: 'u-nom' }), quoteStatus: 'AWAITING_APPROVAL' });
     const r = await approveQuote({ quoteId: 'q1', actorUserId: 'u-nom', actorName: 'Nom', actorRole: 'TUW' });
     expect(r.nextStatus).toBe('AWAITING_SIGNED_LINE');
+  });
+
+  it('an Underwriter (level 4 in the DB uw_role hierarchy) is an eligible approver', async () => {
+    // The old in-code map put UW at level 5 (no authority) — the DB seed says 4.
+    poolMock.query = mockDb({ quoteRow: quoteRow(), quoteStatus: 'AWAITING_APPROVAL' });
+    const r = await approveQuote({ quoteId: 'q1', actorUserId: 'u-peer', actorName: 'Peer', actorRole: 'UW' });
+    expect(r.nextStatus).toBe('AWAITING_SIGNED_LINE');
+  });
+
+  it('rejects the ACTUAL submitter of a reassigned quote (submit-event actor ≠ creator)', async () => {
+    // Quote created by u-sub, later reassigned: u-b submitted it for approval
+    // (the SUBMITTED_FOR_APPROVAL event records u-b). u-b must not be able to
+    // approve their own submission even though created_by_user_id is u-sub.
+    poolMock.query = mockDb({
+      quoteRow: quoteRow(), quoteStatus: 'AWAITING_APPROVAL', submitEventActor: 'u-b',
+    });
+    await expectStatus(approveQuote({ quoteId: 'q1', actorUserId: 'u-b', actorRole: 'CU' }), 403);
+  });
+
+  it('a different senior still approves a reassigned quote (submit event present)', async () => {
+    poolMock.query = mockDb({
+      quoteRow: quoteRow(), quoteStatus: 'AWAITING_APPROVAL', submitEventActor: 'u-b',
+    });
+    const r = await approveQuote({ quoteId: 'q1', actorUserId: 'u-cu', actorName: 'CU', actorRole: 'CU' });
+    expect(r.nextStatus).toBe('AWAITING_SIGNED_LINE');
+  });
+});
+
+describe('arbiter slot — the arbiter must be a third party (recordDecision)', () => {
+  // A split between peer1 (a Treaty Director) and peer2 (an Underwriting
+  // Manager): neither side is CU/CE, so the offer sits in DISPUTE_PENDING
+  // awaiting a TD+ arbiter. The TD peer holds the required tier — the ONLY
+  // thing keeping them out of the arbiter seat is the disputing-peer
+  // exclusion, which is exactly what these tests pin.
+  const disputedOffer = () => offer({
+    status: 'DISPUTE_PENDING', arbiter_required: true,
+    peer1_user_id: 'u-td-peer', peer1_decision: 'APPROVED', peer1_role_code: 'TD',
+    peer2_user_id: 'u-um-peer', peer2_decision: 'DECLINED', peer2_role_code: 'UM',
+  });
+  // Self-contained SQL-text mock: serves the offer load and lets the atomic
+  // arbiter claim win; everything else (decision record, events, audits)
+  // falls through to rows:[].
+  const arbiterDb = (off = disputedOffer()) => vi.fn(async (sql) => {
+    const s = String(sql);
+    if (/^\s*SELECT/i.test(s) && (s.includes('v_offer_approval') || s.includes('contract_offer'))) {
+      return { rows: [off] };
+    }
+    if (s.includes('SET arbiter_user_id=$2')) return { rows: [{ offer_id: off.offer_id }] };
+    return { rows: [] };
+  });
+  const claimedArbiter = () =>
+    poolMock.query.mock.calls.some(([sql]) => String(sql).includes('SET arbiter_user_id=$2'));
+
+  it('403s peer1 (a TD, tier-sufficient) arbitrating the split they are part of', async () => {
+    poolMock.query = arbiterDb();
+    await expectStatus(
+      recordDecision({ offerId: 'o1', actorUserId: 'u-td-peer', actorRole: 'TD', slot: 'arbiter', decision: 'APPROVED' }),
+      403,
+    );
+    expect(claimedArbiter()).toBe(false); // rejected before the atomic claim
+  });
+
+  it('403s peer2 arbitrating the same dispute', async () => {
+    poolMock.query = arbiterDb();
+    await expectStatus(
+      recordDecision({ offerId: 'o1', actorUserId: 'u-um-peer', actorRole: 'UM', slot: 'arbiter', decision: 'DECLINED' }),
+      403,
+    );
+    expect(claimedArbiter()).toBe(false);
+  });
+
+  it('403s the submitter arbitrating their own submission (exclusion retained)', async () => {
+    poolMock.query = arbiterDb();
+    await expectStatus(
+      recordDecision({ offerId: 'o1', actorUserId: 'u-sub', actorRole: 'TD', slot: 'arbiter', decision: 'APPROVED' }),
+      403,
+    );
+    expect(claimedArbiter()).toBe(false);
+  });
+
+  it('a third-party Treaty Director resolves the dispute', async () => {
+    poolMock.query = arbiterDb();
+    const r = await recordDecision({ offerId: 'o1', actorUserId: 'u-td-third', actorName: 'TD3', actorRole: 'TD', slot: 'arbiter', decision: 'APPROVED' });
+    expect(claimedArbiter()).toBe(true);
+    expect(r.nextStatus).toBe('AWAITING_SIGNED_LINE');
+    expect(r.complete).toBe(true);
   });
 });

@@ -94,6 +94,9 @@ function recalcCdfs(matrix) {
  * @returns {Promise<{rows: Array, source: string}>}
  *   rows: [{year, ultPrem, ultLoss, actPrem, actLoss}]
  *   source: 'saved-factors' | 'triangle-recalc' | 'straight-blend' | 'straight-benchmark' | null
+ *     Provenance of the LOSS projection. 'saved-factors' means the incurred
+ *     (attritional) projection used saved CDFs; saved PREMIUM factors alone
+ *     do not qualify — the loss side may still be a triangle recalc.
  *   usedPlaceholderLdfs: true when the projection fell back to the hard-coded
  *     benchmark curves (straightProjections.js) — i.e. no saved factors, no
  *     triangle, and no saved LDF blend. Lets the UI warn that figures rest on
@@ -223,10 +226,12 @@ export async function loadProjectedRows(contractId, opts) {
       } catch (e) { paidProj = []; }
     }
 
-    // Project premiums — prefer saved factors
+    // Project premiums — prefer saved factors. Note: `source` reports the
+    // provenance of the LOSS projection only (set above); saved PREMIUM
+    // factors alone must not report 'saved-factors' while the loss numbers
+    // came from a triangle recalculation.
     if (savedPremCdfs) {
       premProj = projectWithCdfs(pm, yrs, savedPremCdfs);
-      if (source !== 'saved-factors') source = 'saved-factors';
     } else {
       try {
         const cdfs = recalcCdfs(pm);
@@ -326,16 +331,21 @@ export async function loadProjectedRows(contractId, opts) {
 // ── Saved-blend projection ───────────────────────────────────────────────
 //
 // Pulls the underwriter-chosen LDF blend for PREMIUM and CLAIMS_PAID
-// and projects each row by the latest-CDF-applies-to-newest-year
-// convention. Returns null when no blend has been saved for either
-// triangle type (caller falls back to the hard-coded curves).
+// and projects each row chain-ladder style: the newest year (age 12)
+// gets the dev_month-12 CDF (the largest — the full LDF product), each
+// older year the CDF for its age, and years beyond the curve the ≈1.0
+// tail. Returns null when no blend has been saved for either triangle
+// type (caller falls back to the hard-coded curves).
 
 function blendCurveToCdfArray(blended) {
   if (!Array.isArray(blended) || blended.length === 0) return null;
-  // contract_ldf_blend_curve stores CDFs per dev_month — sorted by dev_month.
-  // Index 0 = newest dev period (highest CDF), incrementing dev_month moves
-  // toward fully-developed. We feed our projection convention which expects
-  // [oldest...newest] but the screen renders [newest first], so reverse.
+  // contract_ldf_blend_curve stores one CDF per dev_month; the server
+  // accumulates the LDF product back-to-front, so the dev_month-12 row
+  // carries the full product (the LARGEST CDF) and the last dev_month is
+  // the ≈1.0 tail. Sorted ascending by dev_month, the array therefore
+  // reads cdfs[0] = factor for age 12 (newest, least-developed year),
+  // cdfs[last] = factor for the most-developed age — the same
+  // age-indexed convention as chainLadder.calculateCdfs.
   const sorted = [...blended].sort((a, b) => Number(a.devMonth) - Number(b.devMonth));
   return sorted.map(p => Number(p.cdf));
 }
@@ -351,19 +361,27 @@ async function projectFromSavedBlend(contractId, parsed, opts) {
 
   const n = parsed.length;
   const sorted = [...parsed].sort((a, b) => a.year - b.year);
+  const maxYear = Number(sorted[n - 1]?.year);
   const pickCdf = (cdfs, devIdx) => {
     if (!cdfs || cdfs.length === 0) return 1.0;
-    // devIdx grows newest→oldest; CDFs are sorted oldest→newest, so
-    // index from the end. Saturate at the largest CDF for any year
-    // less developed than our table.
-    const idx = cdfs.length - 1 - devIdx;
-    if (idx < 0) return cdfs[0];
-    if (idx >= cdfs.length) return cdfs[cdfs.length - 1];
-    return cdfs[idx];
+    // devIdx counts years since the newest (0 = newest year, age 12).
+    // The blend CDF array is age-indexed the same way (cdfs[0] = the
+    // dev_month-12 factor, the largest — see blendCurveToCdfArray), so
+    // devIdx indexes it directly. Years older than the curve extends are
+    // treated as fully developed: clamp to the last (≈1.0 tail) entry.
+    if (devIdx >= cdfs.length) return cdfs[cdfs.length - 1];
+    return cdfs[devIdx];
   };
 
   return sorted.map((row, i) => {
-    const devIdx  = n - 1 - i;
+    // Dev age from the year's DISTANCE to the newest year, not its array
+    // position — a gap in underwriting years must not shift every older
+    // year onto too-young (too-large) CDFs (F55, same fix as
+    // projectStraightStats). Positional fallback only for unparseable years.
+    const yr      = Number(row.year);
+    const devIdx  = Number.isFinite(maxYear) && Number.isFinite(yr)
+      ? maxYear - yr
+      : n - 1 - i;
     const lossCDF = pickCdf(claimsCdfs, devIdx);
     const premCDF = pickCdf(premCdfs, devIdx);
     const prem = parseFloat(row.premium) || 0;

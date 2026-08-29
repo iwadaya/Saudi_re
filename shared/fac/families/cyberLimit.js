@@ -197,6 +197,28 @@ export function cyberLossCost({ exposure, rates = {} }) {
     };
   }
 
+  // The rate quotes the loss cost AT its own basic limit and the curve is
+  // normalised to 1 AT its own; stepping one through the other is only valid
+  // when the two agree. They are loaded and selected independently, so a
+  // mismatch silently mis-prices by the ratio — refuse instead (F52, the
+  // same check ilfLossCost makes for casualty).
+  const rateBasic = numOrNull(rate.basic_limit);
+  const curveBasic = numOrNull(curve.basic_limit);
+  if (rateBasic !== null && curveBasic !== null && rateBasic !== curveBasic) {
+    return {
+      available: false,
+      unavailableReason: `The cyber base rate is quoted at a basic limit of `
+        + `${rateBasic.toLocaleString('en-US')} but the ILF curve`
+        + `${curve.curve_code ? ` (${curve.curve_code})` : ''} is normalised at `
+        + `${curveBasic.toLocaleString('en-US')}. Those are not interchangeable — load a curve `
+        + 'and a rate that share a basic limit.',
+      diagnostics: {
+        revenue, basic_limit: rateBasic, curve_basic_limit: curveBasic,
+        curve: curve.curve_code || null,
+      },
+    };
+  }
+
   const controls = resolveControlsFactor(rates.cyberControlFactors, exposure.controls);
   const basicLimit = num(rate.basic_limit);
   const basicLimitLossCost = (basicLimit / 1_000_000) * num(rate.rate_per_million)
@@ -243,6 +265,9 @@ export function cyberLossCost({ exposure, rates = {} }) {
       attachment: exposure.attachment,
       limit: num(exposure.limit),
       loss_cost_per_million: (lossCost / (num(exposure.limit) / 1_000_000)),
+      // Informational — recorded and echoed so it is visible beside the
+      // price, but no rate key or factor consumes it (F98).
+      records_held: exposure.recordsHeld,
       dependencies: exposure.dependencies.map(
         (d) => (typeof d === 'string' ? d : d?.vendor_key || d?.vendorKey),
       ).filter(Boolean),
@@ -253,12 +278,28 @@ export function cyberLossCost({ exposure, rates = {} }) {
 }
 
 /**
+ * @param {object} args
+ * @param {object|null} args.section
+ * @param {object} [args.structure] {attachment, limit} — the placement being
+ *   priced. On a non-proportional placement this is the reinsured layer, and
+ *   it overrides the section's own attachment and limit exactly as
+ *   liabilityLimit does: the burning-cost candidate in the same blend is
+ *   already cut to this layer, and blending a whole-tower exposure rate
+ *   against a layered experience rate averages incompatible quantities (F13).
  * @returns {Array<{code: string, result: object}>}
  */
-export function computeCandidates({ section, rates = {} }) {
+export function computeCandidates({ section, structure = {}, rates = {} }) {
+  const exposure = readExposure(section);
   return [{
     code: 'CYBER_RATE',
-    result: cyberLossCost({ exposure: readExposure(section), rates }),
+    result: cyberLossCost({
+      exposure: {
+        ...exposure,
+        attachment: numOrNull(structure.attachment) ?? exposure.attachment,
+        limit: numOrNull(structure.limit) ?? exposure.limit,
+      },
+      rates,
+    }),
   }];
 }
 

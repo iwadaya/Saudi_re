@@ -197,6 +197,18 @@ router.get('/fac/risks/:id', asyncHandler(async (req, res) => {
 // CREATE new risk
 router.post('/fac/risks', validateBody(facRiskSaveSchema), asyncHandler(async (req, res) => {
   const b = req.body;
+  // POLICY: a fac risk is always born DRAFT. Every later state is owned by a
+  // dedicated workflow route (submit-for-approval → QUOTED/REFERRED, decline →
+  // DECLINED, bind → BOUND — each with its own legality + capacity checks), and
+  // no caller creates non-DRAFT (FacHomeScreen sends status:'DRAFT'; the Excel
+  // import agent only writes data slices into existing entities). A requested
+  // non-DRAFT birth is therefore rejected instead of skipping those gates.
+  if (b.status != null && String(b.status).toUpperCase() !== 'DRAFT') {
+    return res.status(400).json({
+      error: `New fac risks are always created in DRAFT — status "${b.status}" cannot be set at creation`,
+      code: 'VALIDATION_FAILED',
+    });
+  }
   const { rows } = await pool.query(`
     INSERT INTO public.fac_risk (
       cedant_id, broker_id, country_id, currency_id,
@@ -239,7 +251,8 @@ router.post('/fac/risks', validateBody(facRiskSaveSchema), asyncHandler(async (r
     // immediately editable by them — the edit-lock guard requires ownership, and
     // an unassigned risk would otherwise be read-only the moment it's created.
     req.user?.userId || null, b.assigned_to_user_id || req.user?.userId || null,
-    b.linked_contract_id || null, b.underwriter_notes || null, b.status || 'DRAFT',
+    // status is pinned — see the DRAFT-birth policy at the top of this handler.
+    b.linked_contract_id || null, b.underwriter_notes || null, 'DRAFT',
     b.cedant_region || null, b.renewal_or_new || null, b.expiring_reference || null, b.risk_country_zone || null,
     b.multi_location_flag ?? false, b.multi_occupancy_flag ?? false, b.risk_location_top_address || null,
     numOrNull(b.occupancy_code), b.occupancy_name || null, numOrNull(b.hazard_grade_override),
@@ -310,7 +323,8 @@ const RISK_UPDATE_COLUMNS = {
   assigned_to_user_id: (b, req) => b.assigned_to_user_id || req.user?.userId || null,
   linked_contract_id: (b) => b.linked_contract_id || null,
   underwriter_notes:  (b) => b.underwriter_notes || null,
-  status:         (b) => b.status || 'DRAFT',
+  // `status` is deliberately NOT in this map: the raw merge PUT can never move
+  // the workflow state (see the fence in the handler below).
   cedant_region:  (b) => b.cedant_region || null,
   renewal_or_new: (b) => b.renewal_or_new || null,
   expiring_reference: (b) => b.expiring_reference || null,
@@ -354,6 +368,28 @@ router.put('/fac/risks/:id', captureSentKeys, validateBody(facRiskSaveSchema), a
       error: 'insured_name cannot be blank.',
       code: 'VALIDATION_FAILED',
     });
+  }
+
+  // POLICY: the raw merge PUT never CHANGES fac_risk.status. Every transition
+  // is owned by a dedicated workflow route with its own legality/capacity
+  // checks (submit-for-approval, decline, bind) — merging a caller-supplied
+  // status here would let a risk jump straight to BOUND and skip them all.
+  // A round-trip of the CURRENT value stays a no-op (FacRiskDetail's full-form
+  // save spreads the loaded state back, status included), and a sent-null is
+  // treated as "leave it alone" — status is NOT NULL and "cleared" is not a
+  // meaningful intent for a workflow state.
+  if (req.sentKeys.has('status') && b.status != null && String(b.status).trim() !== '') {
+    const { rows: curRows } = await pool.query(
+      'SELECT status FROM public.fac_risk WHERE fac_risk_id = $1', [id]);
+    if (!curRows.length) return res.status(404).json({ error: 'Risk not found' });
+    const current = String(curRows[0].status || '').toUpperCase();
+    if (String(b.status).toUpperCase() !== current) {
+      return res.status(409).json({
+        error: `Cannot change status from "${current}" to "${b.status}" through a risk save. `
+          + 'Use submit-for-approval, decline or bind.',
+        code: 'INVALID_STATE',
+      });
+    }
   }
 
   const params = [id];
@@ -728,17 +764,33 @@ router.put('/fac/risks/:id/losses', validateBody(facLossesSaveSchema), asyncHand
     await client.query('BEGIN');
     await assertExists(client, 'public.fac_risk', 'fac_risk_id', riskId, 'Risk');
     await assertParentEntityUnchanged(client, { parentTable: 'fac_risk', idColumn: 'fac_risk_id', id: riskId, ifUnmodifiedSince: req.headers['if-unmodified-since'] });
+    // Migration 135 also gave each loss an optional section_id so the pipeline
+    // can price a section-attributed loss inside that section's group. The
+    // delete-and-reinsert has to carry it — omitting the column meant every
+    // save wiped the attribution (F46). The FK only proves the section exists
+    // SOMEWHERE, so ownership by this risk is checked here.
+    const { rows: sectionRows } = await client.query(
+      `SELECT section_id FROM public.fac_risk_section WHERE fac_risk_id = $1`, [riskId]
+    );
+    const riskSectionIds = new Set(sectionRows.map((s) => s.section_id));
+    const foreignSection = losses.find((l) => l.section_id && !riskSectionIds.has(l.section_id));
+    if (foreignSection) {
+      const e = new Error(`Loss row references section ${foreignSection.section_id}, which does not belong to this risk`);
+      e.status = 400;
+      throw e;
+    }
     await client.query(`DELETE FROM public.fac_loss_history WHERE fac_risk_id = $1`, [riskId]);
     const lossesInsert = buildBatchInserts({
       table: 'public.fac_loss_history',
       columns: [
-        'fac_risk_id', 'loss_year', 'loss_date', 'loss_description',
+        'fac_risk_id', 'section_id', 'loss_year', 'loss_date', 'loss_description',
         'cause_of_loss', 'fgu_paid', 'fgu_outstanding', 'ri_paid', 'ri_outstanding',
         'mitigation_measures', 'is_open',
         'indexed_incurred', 'as_if_incurred', 'development_factor',
         'exclude_from_rating', 'exclusion_reason',
       ],
       rows: losses.map((l) => [
+        l.section_id || null,
         numOrNull(l.loss_year), dateOrNull(l.loss_date), l.loss_description || null,
         l.cause_of_loss || null, numOrNull(l.fgu_paid), numOrNull(l.fgu_outstanding),
         numOrNull(l.ri_paid), numOrNull(l.ri_outstanding),
@@ -1749,10 +1801,27 @@ router.post(
       });
     }
 
-    const { rowCount: exists } = await pool.query(
-      `SELECT 1 FROM public.fac_risk WHERE fac_risk_id = $1`, [id],
+    const { rows: riskRows } = await pool.query(
+      `SELECT fac_risk_id, status FROM public.fac_risk WHERE fac_risk_id = $1`, [id],
     );
-    if (!exists) return res.status(404).json({ error: 'Risk not found' });
+    if (!riskRows.length) return res.status(404).json({ error: 'Risk not found' });
+
+    // Assignee edit-lock. guardApiMutations classifies '/decline' as a
+    // workflow path on the premise that the handler enforces its own
+    // authority + legal transition — so both live here explicitly.
+    await assertCanEdit(req, 'FAC_RISK', id);
+
+    // Legal-transition guard: only pre-bind, in-flight states may be
+    // declined. BOUND/RENEWED are on risk and DECLINED/NTU/CANCELLED are
+    // already terminal — mirroring the bind route's INVALID_STATE check.
+    const DECLINABLE_STATUSES = ['DRAFT', 'QUOTED', 'REFERRED'];
+    const currentStatus = riskRows[0].status;
+    if (!DECLINABLE_STATUSES.includes(currentStatus)) {
+      return res.status(409).json({
+        error: `Cannot decline from status "${currentStatus}". Only ${DECLINABLE_STATUSES.join('/')} risks can be declined.`,
+        code: 'INVALID_STATE',
+      });
+    }
 
     const actor = actorLabel(req);
     const { rows: updated } = await pool.query(
@@ -1768,7 +1837,7 @@ router.post(
       facRiskId: id,
       eventType: 'FAC_DECLINED',
       actor,
-      payload: { reason },
+      payload: { reason, previous_status: currentStatus },
     });
     res.json({ risk: updated[0], status: 'DECLINED' });
   }),
@@ -1966,6 +2035,12 @@ router.post(
     );
     if (!riskRows.length) return res.status(404).json({ error: 'Risk not found' });
 
+    // Assignee edit-lock. guardApiMutations classifies '/bind' as a
+    // create-style path (permissions.js CREATE_SUFFIXES) and skips the
+    // guard, so the handler takes it explicitly: only the risk's current
+    // assignee may bind it into the book.
+    await assertCanEdit(req, 'FAC_RISK', id);
+
     // Only QUOTED / APPROVED risks may be bound. The fac_status enum
     // doesn't carry APPROVED, so we treat QUOTED as the only ready
     // state right now — when the workflow grows peer/arbiter steps a
@@ -2003,6 +2078,19 @@ router.post(
         capacity,
       });
     }
+    // Exercising the override IS the referral authority, so the actor must
+    // actually hold it: approver tier (hierarchy level <= 4 — the same
+    // canApprove tier requireMinLevel(4) enforces on claims/finance). The
+    // check reads the VERIFIED req.user, never the body.
+    if (capacity?.referral && req.body?.capacity_override) {
+      if (!req.user || Number(req.user.hierarchyLevel) > 4) {
+        return res.status(403).json({
+          error: 'You do not have sufficient authority to override a capacity breach. '
+            + 'A capacity referral must be overridden by an approver (Treaty Manager or above).',
+          code: 'FORBIDDEN',
+        });
+      }
+    }
 
     // Generate FAC-YYYY-NNNNN. Year prefers explicit effective_date,
     // falls back to inception_date, then today.
@@ -2036,6 +2124,14 @@ router.post(
         capacity_status: capacity?.status ?? 'NOT_CHECKED',
         capacity_override: Boolean(req.body?.capacity_override),
         capacity_override_reason: req.body?.capacity_override_reason || null,
+        // The VERIFIED overrider (never a client-supplied label) so the audit
+        // trail names who exercised the referral authority.
+        capacity_override_by: req.body?.capacity_override ? {
+          user_id: actorUserUuid(req),
+          name: req.user?.displayName || null,
+          role: req.user?.roleCode || null,
+          hierarchy_level: req.user?.hierarchyLevel ?? null,
+        } : null,
         capacity_reasons: capacity?.reasons || [],
       },
     });

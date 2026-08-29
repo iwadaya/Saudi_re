@@ -121,6 +121,67 @@ describe('applyWeightOverride', () => {
     expect(Object.keys(OVERRIDE_REASONS).length).toBeGreaterThan(3);
     expect(OVERRIDE_REASONS.DATA_QUALITY).toMatch(/unreliable/);
   });
+
+  it('drops override weight on a REFERENCE method, with a warning (F44)', () => {
+    // The benchmark's own contract: shown beside the blend, never weighted
+    // in it. An override must not be a side door around that invariant.
+    const candidates = [
+      experienceC('BURNING_COST', 4), exposureC('WORKBOOK_RATE', 2),
+      { code: 'BENCHMARK', role: 'REFERENCE', available: true, ratePm: 9 },
+    ];
+    const out = applyWeightOverride(mech, {
+      weights: { BENCHMARK: 1, WORKBOOK_RATE: 1 },
+      reasonCode: 'UNDERWRITER_JUDGEMENT',
+    }, candidates);
+    expect(out.source).toBe('OVERRIDE');
+    expect(out.weights.BENCHMARK).toBeUndefined();
+    expect(out.weights.WORKBOOK_RATE).toBe(1);          // renormalised over what remains
+    expect(out.error).toMatch(/BENCHMARK/);
+    expect(out.error).toMatch(/never weighted/i);
+  });
+
+  it('falls back to the mechanical weights when weight lands ONLY on the benchmark (F44)', () => {
+    const candidates = [
+      experienceC('BURNING_COST', 4), exposureC('WORKBOOK_RATE', 2),
+      { code: 'BENCHMARK', role: 'REFERENCE', available: true, ratePm: 9 },
+    ];
+    const out = applyWeightOverride(mech, {
+      weights: { BENCHMARK: 1 }, reasonCode: 'UNDERWRITER_JUDGEMENT',
+    }, candidates);
+    expect(out.source).toBe('MECHANICAL');
+    expect(out.weights).toEqual(mech);
+    expect(out.error).toMatch(/BENCHMARK/);
+  });
+
+  it('falls back with a warning when every named method is unavailable or unknown (F45)', () => {
+    // A stored override outlives the curve set it named: the risk must not
+    // silently stop pricing the day EXPOSURE_CURVE is deactivated.
+    const candidates = [
+      experienceC('BURNING_COST', 4), exposureC('WORKBOOK_RATE', 2),
+      { code: 'EXPOSURE_CURVE', role: 'EXPOSURE', available: false, ratePm: null },
+    ];
+    const out = applyWeightOverride(mech, {
+      weights: { EXPOSURE_CURVE: 1 }, reasonCode: 'DATA_QUALITY',
+    }, candidates);
+    expect(out.source).toBe('MECHANICAL');
+    expect(out.weights).toEqual(mech);
+    expect(out.error).toMatch(/EXPOSURE_CURVE/);
+    expect(out.error).toMatch(/mechanical weights/i);
+  });
+
+  it('keeps an override alive when at least one named method is usable', () => {
+    const candidates = [
+      experienceC('BURNING_COST', 4), exposureC('WORKBOOK_RATE', 2),
+      { code: 'EXPOSURE_CURVE', role: 'EXPOSURE', available: false, ratePm: null },
+    ];
+    const out = applyWeightOverride(mech, {
+      weights: { EXPOSURE_CURVE: 0.6, WORKBOOK_RATE: 0.4 }, reasonCode: 'DATA_QUALITY',
+    }, candidates);
+    // The stale code keeps its share here; blendRates renormalises over the
+    // candidates that actually carry a rate.
+    expect(out.source).toBe('OVERRIDE');
+    expect(out.weights.WORKBOOK_RATE).toBeCloseTo(0.4, 12);
+  });
 });
 
 describe('blendRates', () => {

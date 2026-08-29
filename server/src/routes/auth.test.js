@@ -18,6 +18,10 @@ function fakeQuery(sql, params = []) {
   if (sql.includes('FROM public.uw_role WHERE role_code')) {
     return Promise.resolve({ rows: scenario.roleId === null ? [] : [{ role_id: scenario.roleId || 'role-uw' }] });
   }
+  // Open-registration pin: the lowest-tier role in the hierarchy.
+  if (sql.includes('FROM public.uw_role ORDER BY hierarchy_level DESC')) {
+    return Promise.resolve({ rows: scenario.lowestRole ? [{ role_id: scenario.lowestRole }] : [] });
+  }
   if (sql.includes('SELECT 1 FROM public.uw_user WHERE username')) {
     const taken = scenario.takenUsernames || [];
     return Promise.resolve({ rows: taken.includes(params[0]) ? [{ exists: 1 }] : [] });
@@ -242,6 +246,54 @@ describe('A5 — privilege-escalation guards on user/mandate admin', () => {
     scenario.userAfter = { role_id: 'role-uw', is_active: true };
     const res = await call(buildApp(), { method: 'PATCH', path: '/auth/users/u-target', body: { role_id: 'role-uw' } });
     expect(res.status).toBe(200);
+  });
+
+  it('POST /auth/users cannot CREATE an account with a role senior to the actor (403)', async () => {
+    currentUser = cu; // level 2 (CU)
+    scenario.roleId = 'role-ce';
+    scenario.newRoleLevel = 1; // CE — senior to the CU actor
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/users',
+      body: { first_name: 'Eve', surname: 'Escalator', role_code: 'CE', password: 'correcthorse12', confirm_password: 'correcthorse12' },
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/senior/i);
+    expect(queryLog.some((q) => q.sql.includes('INSERT INTO public.uw_user'))).toBe(false);
+  });
+
+  it('POST /auth/users (admin payload) is equally guarded against a senior role_id (403)', async () => {
+    currentUser = cu;
+    scenario.newRoleLevel = 1;
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/users',
+      body: { username: 'eve', display_name: 'Eve E', email: 'eve@universe3.app', role_id: 'role-ce' },
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/senior/i);
+  });
+
+  it('POST /auth/users allows creating a peer/junior account (201)', async () => {
+    currentUser = cu;
+    scenario.newRoleLevel = 5; // Underwriter — junior to the CU actor
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/users',
+      body: { first_name: 'Jo', surname: 'Junior', role_code: 'UW', password: 'correcthorse12', confirm_password: 'correcthorse12' },
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it('open registration pins the new account to the LOWEST tier regardless of the submitted role', async () => {
+    currentUser = null; // anonymous, ALLOW_OPEN_REGISTRATION=true (beforeEach)
+    scenario.roleId = 'role-ce';        // the submitted title resolves to CE…
+    scenario.lowestRole = 'role-tuw';   // …but the pin swaps in the lowest tier
+    const res = await call(buildApp(), {
+      method: 'POST', path: '/auth/users',
+      body: { first_name: 'Anon', surname: 'Riser', role_code: 'CE', password: 'correcthorse12', confirm_password: 'correcthorse12' },
+    });
+    expect(res.status).toBe(201);
+    const insert = queryLog.find((q) => q.sql.includes('INSERT INTO public.uw_user'));
+    expect(insert.params[3]).toBe('role-tuw'); // role_id actually persisted
+    expect(res.body.role_id).toBe('role-tuw');
   });
 
   it('PUT /auth/mandates cannot raise the actor OWN mandate (403)', async () => {

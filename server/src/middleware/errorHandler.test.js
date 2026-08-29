@@ -1,5 +1,15 @@
-import { describe, it, expect } from 'vitest';
-import { errorHandler } from './errorHandler.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Mutable env mock so the production 5xx-masking behaviour can be exercised
+// without a real NODE_ENV switch (mirrors productionPosture.test.js).
+let isProd = false;
+vi.mock('../config/env.js', () => ({
+  get env() { return { isProduction: isProd }; },
+}));
+
+const { errorHandler } = await import('./errorHandler.js');
+
+beforeEach(() => { isProd = false; });
 
 function mockRes() {
   return {
@@ -62,5 +72,42 @@ describe('errorHandler — pg error mapping (Finding 2)', () => {
     const res = run({ status: 404, code: 'NOT_FOUND', message: 'Treaty not found' });
     expect(res.statusCode).toBe(404);
     expect(res.body.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('errorHandler — production 5xx message masking', () => {
+  it('replaces the raw internal message on a 500 in production, keeping code + requestId', () => {
+    isProd = true;
+    const res = mockRes();
+    res.locals.requestId = 'req-42';
+    errorHandler(new Error('connect ECONNREFUSED 10.0.0.5:5432 at Pool._acquire'), req, res, () => {});
+    expect(res.statusCode).toBe(500);
+    expect(res.body.error).toBe('Internal server error');
+    expect(res.body.error).not.toMatch(/ECONNREFUSED/);
+    expect(res.body.code).toBe('INTERNAL_SERVER_ERROR');
+    expect(res.body.requestId).toBe('req-42');
+    expect(res.body.stack).toBeUndefined();
+  });
+
+  it('masks any explicit 5xx status in production (e.g. 503)', () => {
+    isProd = true;
+    const res = run({ status: 503, code: 'STORAGE_NOT_DURABLE', message: 'disk /var/uploads is ephemeral' });
+    expect(res.statusCode).toBe(503);
+    expect(res.body.error).toBe('Internal server error');
+    expect(res.body.code).toBe('STORAGE_NOT_DURABLE'); // code survives for clients
+  });
+
+  it('keeps 4xx messages intact in production (intentional client-facing errors)', () => {
+    isProd = true;
+    const res = run({ status: 409, code: 'STALE_WRITE', message: 'changed since you loaded' });
+    expect(res.statusCode).toBe(409);
+    expect(res.body.error).toBe('changed since you loaded');
+  });
+
+  it('still echoes the real message on a 500 outside production', () => {
+    isProd = false;
+    const res = run(new Error('boom with internals'));
+    expect(res.statusCode).toBe(500);
+    expect(res.body.error).toBe('boom with internals');
   });
 });

@@ -23,7 +23,10 @@
 // structure attaches above the observed claims and the caller can see it.
 //
 // Severity trend applies from the midpoint of each experience year to the
-// midpoint of the policy period, the same convention burningCost.js uses.
+// midpoint of the policy period, the same convention burningCost.js uses —
+// including the UNIT: `severityTrendPct` is a whole percent (6 for 6%/yr),
+// because that is what `risk.severity_trend_pct` holds and what burning cost
+// divides by 100. A fraction here would be a 600%/yr trend there (F41).
 
 import { num, numOrNull } from '../num.js';
 
@@ -36,7 +39,8 @@ export const METHOD_CODE = 'FREQ_SEVERITY';
  * @param {Array<object>} args.losses            fac_loss_history rows
  * @param {Array<object>} args.basis             fac_experience_basis rows — the exposure
  *                                               UNITS per year (vehicles, members, …)
- * @param {number} [args.severityTrendPct]       annual severity trend, e.g. 0.06
+ * @param {number} [args.severityTrendPct]       annual severity trend, whole percent
+ *                                               (6 for 6%) — the burningCost.js unit
  * @param {number} [args.asOfYear]               the policy year being priced
  * @returns {{available: boolean, unavailableReason?: string, frequency?: number,
  *            severity?: number, years?: number, claimCount?: number, diagnostics: object}}
@@ -62,7 +66,8 @@ export function frequencySeverity({ losses, basis, severityTrendPct = 0, asOfYea
     };
   }
 
-  const trend = num(severityTrendPct);
+  // Whole percent → fraction, exactly as burningCost.js does (F41).
+  const trend = num(severityTrendPct) / 100;
   const target = numOrNull(asOfYear) ?? Math.max(...basisRows.map((b) => num(b.loss_year))) + 1;
 
   const usable = (losses || []).filter((l) => !l.exclude_from_rating);
@@ -139,7 +144,8 @@ export function frequencySeverity({ losses, basis, severityTrendPct = 0, asOfYea
       listing_count: trended.length,
       count_basis: countIsDeclared ? 'DECLARED' : 'LOSS_LISTING',
       total_trended_amount: totalAmount,
-      severity_trend_pct: trend,
+      // Reported in the unit it was entered — whole percent, as burning cost does.
+      severity_trend_pct: num(severityTrendPct),
       as_of_year: target,
       warnings,
     },
@@ -159,7 +165,7 @@ export function frequencySeverity({ losses, basis, severityTrendPct = 0, asOfYea
  * @param {Array<object>} args.losses
  * @param {Array<object>} args.basis
  * @param {number} args.exposureUnits    units being priced
- * @param {number} [args.severityTrendPct]
+ * @param {number} [args.severityTrendPct] whole percent (6 for 6%), as burningCost.js
  * @param {number} [args.asOfYear]
  * @param {number} [args.attachment]     a layer applies to each claim, not to the total
  * @param {number} [args.limit]
@@ -192,7 +198,7 @@ export function freqSeverityLossCost({
   let severity = split.severity;
   let layerCaution = false;
   if (d > 0 || l !== Infinity) {
-    const trend = num(severityTrendPct);
+    const trend = num(severityTrendPct) / 100;
     const target = numOrNull(asOfYear)
       ?? Math.max(...(basis || []).map((b) => num(b.loss_year)), 0) + 1;
     const perClaim = (losses || [])

@@ -226,6 +226,62 @@ describe('mapExtractionToPages — proportional', () => {
     expect(pages.premium_history.cells.map((c) => c.cum_value)).toEqual([100, 200, 300]);
   });
 
+  it('scales an index-labelled triangle with >= 12 dev columns consistently — no colliding cells (F74)', async () => {
+    // 13 dev years as plain indices — the shape the repo's own
+    // builder.test.js treats as realistic (13-year UW spans). The old
+    // per-cell `< 12` heuristic mapped index 12 → 12 months (colliding with
+    // index 1 on the quote_triangle_cells unique key and failing the whole
+    // import) and index 13 → a nonsense 13-month period. The scheme is now
+    // detected once per triangle: 1..13 is an index row, so EVERY column
+    // scales by 12.
+    const devPeriods = Array.from({ length: 13 }, (_, i) => i + 1);      // 1..13
+    const values = [devPeriods.map((d) => d * 1000)];                    // 1000..13000
+    const extraction = buildPropExtraction({
+      premium: {
+        triangle: {
+          uwYears: [2024],
+          devPeriods,
+          values,
+          source: 'Premium Triangle:A1:N2',
+          confidence: 1,
+        },
+        latestEarned: lf(1_000_000),
+        growthAssumption: lf(3),
+      },
+    });
+    const { pages } = await mapExtractionToPages(extraction, { treatyCategory: 'PROPORTIONAL' });
+    const cells = pages.premium_history.cells;
+    expect(cells.map((c) => c.dev_months)).toEqual(
+      devPeriods.map((d) => d * 12), // 12, 24, …, 144, 156
+    );
+    // No two cells share a dev_months key (the unique-violation shape).
+    expect(new Set(cells.map((c) => c.dev_months)).size).toBe(13);
+    // Index 12's value lands at 144 months and index 13's at 156 — not both at 12/13.
+    expect(cells.find((c) => c.dev_months === 144).cum_value).toBe(12_000);
+    expect(cells.find((c) => c.dev_months === 156).cum_value).toBe(13_000);
+    expect(cells.find((c) => c.dev_months === 12).cum_value).toBe(1_000);
+  });
+
+  it('treats a non-consecutive small-dev row (6,12,18 — half-year months) as months, not indices', async () => {
+    // Not the 1..n index shape, so nothing is scaled: 6 stays 6 months.
+    // (The old code turned 6 into 72 while leaving 12/18 alone.)
+    const extraction = buildPropExtraction({
+      premium: {
+        triangle: {
+          uwYears: [2024],
+          devPeriods: [6, 12, 18],
+          values: [[100, 200, 300]],
+          source: 'Premium Triangle:A1:D2',
+          confidence: 1,
+        },
+        latestEarned: lf(1_000_000),
+        growthAssumption: lf(3),
+      },
+    });
+    const { pages } = await mapExtractionToPages(extraction, { treatyCategory: 'PROPORTIONAL' });
+    expect(pages.premium_history.cells.map((c) => c.dev_months)).toEqual([6, 12, 18]);
+  });
+
   it('leaves dev periods already in months (12,24,36) unchanged', async () => {
     const extraction = buildPropExtraction({
       premium: {

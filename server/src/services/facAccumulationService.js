@@ -58,13 +58,17 @@ export async function refreshAccumulation() {
  */
 async function riskZoneContributions(riskId) {
   const { rows } = await pool.query(
+    // Unit note: carrier_*_share_pct are FRACTIONS 0..1; the fac_risk
+    // fallbacks our_share_pct / ri_share_pct are WHOLE PERCENT 0..100
+    // (validation/facultative.js pct100), so they are divided by 100 here —
+    // the same normalisation mv_fac_accumulation applies (migration 145).
     `SELECT l.cresta_zone AS zone,
             SUM(
               COALESCE(l.pd_si, 0) * COALESCE(l.pd_pml_pct, 1)
-              * COALESCE(l.carrier_pd_share_pct, r.our_share_pct, r.ri_share_pct, 1)
+              * COALESCE(l.carrier_pd_share_pct, r.our_share_pct / 100.0, r.ri_share_pct / 100.0, 1)
               + COALESCE(l.bi_si, 0) * COALESCE(l.bi_pml_pct, 1)
               * COALESCE(l.carrier_bi_share_pct, l.carrier_pd_share_pct,
-                         r.our_share_pct, r.ri_share_pct, 1)
+                         r.our_share_pct / 100.0, r.ri_share_pct / 100.0, 1)
             ) AS adding
        FROM public.fac_location l
        JOIN public.fac_risk r ON r.fac_risk_id = l.fac_risk_id
@@ -111,13 +115,15 @@ async function zoneExposure(zones, uwYear, excludeRiskId = null) {
     ),
     excludeRiskId
       ? pool.query(
+        // Same unit normalisation as riskZoneContributions: risk-level
+        // shares are whole percent, location-level shares are fractions.
         `SELECT l.cresta_zone AS zone,
                 SUM(
                   COALESCE(l.pd_si, 0) * COALESCE(l.pd_pml_pct, 1)
-                  * COALESCE(l.carrier_pd_share_pct, r.our_share_pct, r.ri_share_pct, 1)
+                  * COALESCE(l.carrier_pd_share_pct, r.our_share_pct / 100.0, r.ri_share_pct / 100.0, 1)
                   + COALESCE(l.bi_si, 0) * COALESCE(l.bi_pml_pct, 1)
                   * COALESCE(l.carrier_bi_share_pct, l.carrier_pd_share_pct,
-                             r.our_share_pct, r.ri_share_pct, 1)
+                             r.our_share_pct / 100.0, r.ri_share_pct / 100.0, 1)
                 ) AS committed
            FROM public.fac_location l
            JOIN public.fac_risk r ON r.fac_risk_id = l.fac_risk_id
@@ -150,6 +156,17 @@ async function zoneExposure(zones, uwYear, excludeRiskId = null) {
 /**
  * What the bound book already carries on each of a set of cyber vendors.
  *
+ * Dependencies live where the quoted side reads them: in the section JSON
+ * (fac_risk_section.exposure_detail.dependencies — the same values
+ * checkFacCapacity extracts for the risk being quoted), as either bare
+ * vendor-key strings or { vendor_key | vendorKey, criticality? } objects.
+ * The committed side is aggregated from the SAME source, exactly the pattern
+ * warRegionExposure uses below — reading the fac_cyber_dependency table here
+ * (which nothing ever writes) made this check always answer "not carried
+ * anywhere else in the bound book" (F27). An object tag whose criticality
+ * says otherwise is excluded; a bare string defaults to CRITICAL, matching
+ * the fac_cyber_dependency column default.
+ *
  * @param {Array<string>} vendorKeys
  * @param {string|null} excludeRiskId
  * @returns {Promise<Array<{vendor_key: string, committed_limit: number, risk_count: number}>>}
@@ -157,16 +174,29 @@ async function zoneExposure(zones, uwYear, excludeRiskId = null) {
 export async function vendorExposure(vendorKeys, excludeRiskId = null) {
   if (!vendorKeys || vendorKeys.length === 0) return [];
   const { rows } = await pool.query(
-    `SELECT d.vendor_key,
-            COALESCE(SUM(s.limit_amount * COALESCE(r.our_share_pct, r.ri_share_pct, 1)), 0)
-              AS committed_limit,
+    // fac_risk shares are whole percent 0..100, hence the /100. The committed
+    // quantity is the section's limit (the cyber rating basis — cyberLimit.js
+    // readExposure), falling back to sum_insured / exposure_base like the war
+    // check. DISTINCT in the lateral dedupes a vendor tagged twice on one
+    // section; the same vendor on two sections of one risk sums both limits.
+    `SELECT dep.vendor_key,
+            COALESCE(SUM(
+              COALESCE(s.limit_amount, s.sum_insured, s.exposure_base, 0)
+              * COALESCE(r.our_share_pct / 100.0, r.ri_share_pct / 100.0, 1)
+            ), 0) AS committed_limit,
             COUNT(DISTINCT r.fac_risk_id) AS risk_count
-       FROM public.fac_cyber_dependency d
-       JOIN public.fac_risk r ON r.fac_risk_id = d.fac_risk_id
-       LEFT JOIN public.fac_risk_section s ON s.fac_risk_id = r.fac_risk_id
+       FROM public.fac_risk_section s
+       JOIN public.fac_risk r ON r.fac_risk_id = s.fac_risk_id
+       CROSS JOIN LATERAL (
+         SELECT DISTINCT
+                UPPER(CASE WHEN jsonb_typeof(d.elem) = 'string' THEN d.elem #>> '{}'
+                           ELSE COALESCE(d.elem->>'vendor_key', d.elem->>'vendorKey') END) AS vendor_key
+           FROM jsonb_array_elements(s.exposure_detail->'dependencies') AS d(elem)
+          WHERE COALESCE(UPPER(d.elem->>'criticality'), 'CRITICAL') = 'CRITICAL'
+       ) dep
       WHERE r.status = 'BOUND'
-        AND d.criticality = 'CRITICAL'
-        AND d.vendor_key = ANY($1::text[])
+        AND jsonb_typeof(s.exposure_detail->'dependencies') = 'array'
+        AND dep.vendor_key = ANY($1::text[])
         AND ($2::uuid IS NULL OR r.fac_risk_id <> $2)
       GROUP BY 1`,
     [vendorKeys.map((v) => String(v).toUpperCase()), excludeRiskId],
@@ -188,10 +218,11 @@ export async function vendorExposure(vendorKeys, excludeRiskId = null) {
 export async function warRegionExposure(regions, excludeRiskId = null) {
   if (!regions || regions.length === 0) return [];
   const { rows } = await pool.query(
+    // fac_risk shares are whole percent 0..100, hence the /100.
     `SELECT UPPER(s.exposure_detail->>'war_region') AS region,
             COALESCE(SUM(
               COALESCE(s.sum_insured, s.exposure_base, 0)
-              * COALESCE(r.our_share_pct, r.ri_share_pct, 1)
+              * COALESCE(r.our_share_pct / 100.0, r.ri_share_pct / 100.0, 1)
             ), 0) AS committed
        FROM public.fac_risk_section s
        JOIN public.fac_risk r ON r.fac_risk_id = s.fac_risk_id
@@ -265,13 +296,20 @@ export async function checkFacCapacity(riskId) {
     warRegionExposure(warRegions, riskId),
   ]);
 
+  // fac_risk.our_share_pct / ri_share_pct are WHOLE PERCENT 0..100
+  // (validation/facultative.js pct100 — a 25% line is stored as 25), while
+  // perRiskLineCheck in shared/fac/accumulation.js works in fractions 0..1
+  // like max_capacity_pct (fac_capacity_band grades A=1.0, B=0.9, D=0.75).
+  // Convert here, null-safely, or every ordinary bind reads as e.g. 2500%
+  // of the line and is refused with a false CAPACITY_BREACH.
+  const rawShare = risk.our_share_pct ?? risk.ri_share_pct ?? null;
   const result = capacityCheck({
     family,
     sections,
     perRiskLine: {
       lineSize: line.amount,
       maxCapacityPct: pricingRes.rows[0]?.max_capacity_pct ?? null,
-      writtenShare: risk.our_share_pct ?? risk.ri_share_pct ?? null,
+      writtenShare: rawShare === null ? null : Number(rawShare) / 100,
     },
     zones: contributions.map((c) => ({
       zone: c.zone,

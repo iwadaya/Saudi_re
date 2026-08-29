@@ -160,20 +160,44 @@ export function applyLoading(pureRate, loadingPct) {
 /**
  * Canonical loose-number parser for pricing inputs. The client stores many
  * numeric fields as formatted strings ("10.00%", "1,250", "$2,000"); a bare
- * Number("10.00%") is NaN, which would silently zero the input. Stripping
- * everything except digits / dot / minus before parseFloat recovers the value
- * (10 / 1250 / 2000). Exported so BOTH the client/shared formula path and the
- * server-side pricing verifier parse identically — otherwise the verifier
- * re-derives a different "expected" total and flags phantom drift (or misses
- * real drift) on any formatted field. See docs/actuarial-audit.md.
+ * Number("10.00%") is NaN, which would silently zero the input. Exported so
+ * BOTH the client/shared formula path and the server-side pricing verifier
+ * parse identically — otherwise the verifier re-derives a different
+ * "expected" total and flags phantom drift (or misses real drift) on any
+ * formatted field. See docs/actuarial-audit.md.
+ *
+ * Parse order (audit F91 — each step only runs when the previous failed):
+ *   1. Number() on the trimmed raw string — keeps scientific notation
+ *      ("1e6", "2.5e-3") intact, which any character-stripping pass would
+ *      mangle into a small wrong number (e.g. "1e6" → "16").
+ *   2. Strip everything outside [0-9.eE+-] (the same character class as
+ *      retroImpact's num(), so the two shared parsers agree) — recovers
+ *      "8.00%" → 8, "$2,000" → 2000, "1.2e5%" → 120000.
+ *   3. Strip everything outside [0-9.-] — the legacy pass, kept as the
+ *      last resort so formats it accepted (e.g. an "EUR 2,000" prefix
+ *      whose letters include an E) still parse instead of newly zeroing.
+ * A fully parenthesised string is an accounting negative: "(2,000)" → −2000.
  *
  * @param {unknown} v
  * @returns {number} parsed value, or 0 when not finite
  */
 export function parseLooseNumber(v) {
   if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
-  const n = parseFloat(String(v ?? '').replace(/[^\d.-]/g, ''));
-  return Number.isFinite(n) ? n : 0;
+  let s = String(v ?? '').trim();
+  if (s === '') return 0;
+  let sign = 1;
+  const wrapped = /^\((.*)\)$/.exec(s);
+  if (wrapped) {
+    sign = -1;
+    s = wrapped[1].trim();
+  }
+  // `sign * n || 0` also normalises -0 back to 0.
+  const direct = Number(s);
+  if (Number.isFinite(direct)) return sign * direct || 0;
+  const kept = parseFloat(s.replace(/[^0-9.eE+-]/g, ''));
+  if (Number.isFinite(kept)) return sign * kept || 0;
+  const legacy = parseFloat(s.replace(/[^\d.-]/g, ''));
+  return Number.isFinite(legacy) ? sign * legacy || 0 : 0;
 }
 
 /**

@@ -268,23 +268,46 @@ export function buildSharedEngineArgs(inputs: StopLossInputs): StopLossArgs {
  * of yearly LRs for every layer, but the layer's own EPI is used to
  * convert LR → absolute aggregate so the engine's layer math lands in
  * the right currency space when EPI differs per layer.
+ *
+ * Window contract (see buildYearlyRows / annualiseLoss): every year of the
+ * experience window stays in the burning-cost denominator. A BLANK aggregate
+ * is a zero-loss year, not a missing year — it is fed to the engine as
+ * aggregate 0. (The old row filter `lossRatio != null` dropped blank years,
+ * annualising over entered years only and overstating the burning cost by
+ * windowYears / enteredYears.) A year with an ENTERED aggregate but no
+ * usable EGNPI premium cannot produce a loss ratio; it is excluded from
+ * numerator AND denominator with an explicit warning instead of a silent
+ * drop. When no year has a computable loss ratio at all, no burning-cost
+ * input is emitted (unchanged: the engine then prices on exposure only).
  */
 export function buildLayerEngineArgs(
   layers: NormalizedLayer[],
   sharedEngineArgs: StopLossArgs,
   burningCostRows: BurningCostRow[],
 ): StopLossArgs[] {
+  const engineRows: Array<{ year: number; lossRatio: number }> = [];
+  const warnings: string[] = [];
+  let computableRows = 0;
+  for (const r of burningCostRows) {
+    if (r.lossRatio != null) {
+      engineRows.push({ year: r.year, lossRatio: r.lossRatio });
+      computableRows += 1;
+    } else if (r.aggregate == null || r.aggregate === 0) {
+      // Blank (or explicit-zero) aggregate → zero-loss year, kept in the window.
+      engineRows.push({ year: r.year, lossRatio: 0 });
+    } else {
+      warnings.push(`Year ${r.year} has an aggregate loss but no EGNPI premium — it was excluded from the burning cost.`);
+    }
+  }
   return layers.map((l) => {
     const args: StopLossArgs = { ...sharedEngineArgs };
     args.attachmentLossRatio = toN(l.attachmentLossRatio);
     args.limitLossRatio = toN(l.limitLossRatio);
     args.epi = toN(l.epi);
     const epi = args.epi;
-    if (epi != null && epi > 0) {
-      const usable = burningCostRows.filter((r) => r.lossRatio != null);
-      if (usable.length > 0) {
-        args.yearlyAggregates = usable.map((r) => ({ year: r.year, aggregate: (r.lossRatio ?? 0) * epi }));
-      }
+    if (epi != null && epi > 0 && computableRows > 0) {
+      args.yearlyAggregates = engineRows.map((r) => ({ year: r.year, aggregate: r.lossRatio * epi }));
+      if (warnings.length > 0) args.warnings = [...warnings];
     }
     return args;
   });

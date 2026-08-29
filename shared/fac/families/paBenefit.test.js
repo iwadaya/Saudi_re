@@ -159,4 +159,13 @@ describe('computeCandidates and the descriptor', () => {
     expect(paBenefit.segment).toBe('ACCIDENT_HEALTH');
     expect(paBenefit.implemented).toBe(true);
   });
+
+  it('advertises only methods that can actually run (F42)', () => {
+    // FREQ_SEVERITY is implemented but wired into no computeCandidates —
+    // see meta.js. Not advertised until it is.
+    expect(paBenefit.methods).not.toContain('FREQ_SEVERITY');
+    expect(paBenefit.methods).toEqual(
+      expect.arrayContaining(['PA_RATE', 'BURNING_COST', 'BENCHMARK']),
+    );
+  });
 });

@@ -1,7 +1,7 @@
 // src/screens/facultative/loss_history/FacLossHistory.jsx
 import { useCallback, useMemo, useState } from 'react';
 import api from '../../../api';
-import { dateInputValue, numOrNull, fmtComma, stripDigits, cleanNum } from '../../../utils/format';
+import { dateInputValue, numOrNull, formatWithCommasDecimal, sanitizeNumber, cleanNum } from '../../../utils/format';
 import WizardLayout from '../../../components/WizardLayout';
 import PctInput from '../../../components/PctInput';
 import { useScreenSave } from '../../../hooks/useScreenSave';
@@ -82,6 +82,10 @@ export default function FacLossHistory() {
         loss_description: r.loss_description, cause_of_loss: r.cause_of_loss,
         fgu_paid: numOrNull(r.fgu_paid), fgu_outstanding: numOrNull(r.fgu_outstanding),
         mitigation_measures: r.mitigation_measures, is_open: r.is_open,
+        // Preserve section attribution loaded from the server — the save is a
+        // wipe-and-reinsert, so omitting this silently detached every loss
+        // from its section.
+        section_id: r.section_id ?? null,
       })),
     ),
     [],
@@ -191,7 +195,7 @@ export default function FacLossHistory() {
           if (key === 'loss_date') v = dateInputValue(v) || '';
           // Money arrives with thousands separators and sometimes a currency
           // symbol; the inputs hold bare digits.
-          if (key === 'fgu_paid' || key === 'fgu_outstanding') v = stripDigits(v);
+          if (key === 'fgu_paid' || key === 'fgu_outstanding') v = sanitizeNumber(v);
           if (key === 'loss_year') v = v.replace(/[^\d]/g, '');
           next[rowIdx] = { ...next[rowIdx], [key]: v };
         });
@@ -303,14 +307,14 @@ export default function FacLossHistory() {
                     {fmt0(m.fguIncurred)}
                   </td>
                   <td className="facexp-cell">
-                    <input className="fi facexp-input" inputMode="numeric" aria-label={`Exposure ${m.year}`}
-                           value={fmtComma(basis[m.year]?.exposure_base)}
-                           onChange={(e) => setBasisCell(m.year, 'exposure_base', stripDigits(e.target.value))} />
+                    <input className="fi facexp-input" inputMode="decimal" aria-label={`Exposure ${m.year}`}
+                           value={formatWithCommasDecimal(basis[m.year]?.exposure_base)}
+                           onChange={(e) => setBasisCell(m.year, 'exposure_base', sanitizeNumber(e.target.value))} />
                   </td>
                   <td className="facexp-cell">
-                    <input className="fi facexp-input--narrow" inputMode="numeric" aria-label={`Premium ${m.year}`}
-                           value={fmtComma(basis[m.year]?.premium)}
-                           onChange={(e) => setBasisCell(m.year, 'premium', stripDigits(e.target.value))} />
+                    <input className="fi facexp-input--narrow" inputMode="decimal" aria-label={`Premium ${m.year}`}
+                           value={formatWithCommasDecimal(basis[m.year]?.premium)}
+                           onChange={(e) => setBasisCell(m.year, 'premium', sanitizeNumber(e.target.value))} />
                   </td>
                   <td className={`facexp-ratio${m.claimRatio == null ? ''
                     : m.claimRatio > 1 ? ' facexp-ratio--over' : ' facexp-ratio--set'}`}>
@@ -372,8 +376,8 @@ export default function FacLossHistory() {
                     <td style={{ padding: '4px 4px', width: 120 }}><input className="fi" type="date" data-row={i} data-col={1} value={r.loss_date} onChange={e => setRow(i, 'loss_date', e.target.value)} style={{ fontSize: 11 }} /></td>
                     <td style={{ padding: '4px 4px' }}><input className="fi" data-row={i} data-col={2} value={r.loss_description || ''} onChange={e => setRow(i, 'loss_description', e.target.value)} placeholder="Loss details" style={{ fontSize: 12 }} /></td>
                     <td style={{ padding: '4px 4px', width: 110 }}><input className="fi" data-row={i} data-col={3} value={r.cause_of_loss || ''} onChange={e => setRow(i, 'cause_of_loss', e.target.value)} placeholder="Cause" style={{ fontSize: 12 }} /></td>
-                    <td style={{ padding: '4px 4px', width: 110 }}><input className="fi" type="text" inputMode="numeric" data-row={i} data-col={4} value={fmtComma(r.fgu_paid)} onChange={e => setRow(i, 'fgu_paid', stripDigits(e.target.value))} style={{ textAlign: 'right', fontSize: 12 }} /></td>
-                    <td style={{ padding: '4px 4px', width: 110 }}><input className="fi" type="text" inputMode="numeric" data-row={i} data-col={5} value={fmtComma(r.fgu_outstanding)} onChange={e => setRow(i, 'fgu_outstanding', stripDigits(e.target.value))} style={{ textAlign: 'right', fontSize: 12 }} /></td>
+                    <td style={{ padding: '4px 4px', width: 110 }}><input className="fi" type="text" inputMode="decimal" data-row={i} data-col={4} value={formatWithCommasDecimal(r.fgu_paid)} onChange={e => setRow(i, 'fgu_paid', sanitizeNumber(e.target.value))} style={{ textAlign: 'right', fontSize: 12 }} /></td>
+                    <td style={{ padding: '4px 4px', width: 110 }}><input className="fi" type="text" inputMode="decimal" data-row={i} data-col={5} value={formatWithCommasDecimal(r.fgu_outstanding)} onChange={e => setRow(i, 'fgu_outstanding', sanitizeNumber(e.target.value))} style={{ textAlign: 'right', fontSize: 12 }} /></td>
                     <td style={{ padding: '6px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: incurred ? 'var(--accent-amber)' : 'rgba(var(--text-rgb),0.4)', width: 110 }}>{incurred ? incurred.toLocaleString('en-US') : '—'}</td>
                     <td style={{ padding: '4px 4px', width: 140 }}><input className="fi" data-row={i} data-col={6} value={r.mitigation_measures || ''} onChange={e => setRow(i, 'mitigation_measures', e.target.value)} placeholder="Actions taken" style={{ fontSize: 11 }} /></td>
                     <td style={{ padding: '4px 4px', width: 28 }}><span role="button" tabIndex={0} aria-label="Remove loss record"

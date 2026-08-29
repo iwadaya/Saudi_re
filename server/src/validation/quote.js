@@ -266,6 +266,13 @@ export const pricingYearlySchema = z.preprocess(
  * POST /quotes — create body. Lenient + passthrough: validate FK/year types up
  * front (so a non-UUID cedant 400s instead of a Postgres FK error). The handler
  * still enforces inception_date presence with its own VALIDATION_FAILED reply.
+ *
+ * POLICY: a quote is always born DRAFT. `status` used to accept the full
+ * contractStatus enum, letting a create mint a SIGNED/BOUND quote and skip the
+ * approval gates; no caller creates non-DRAFT (the treaty screens send no
+ * status, the Excel import only writes data slices into an existing entity),
+ * so the field is pinned to DRAFT — anything else 400s here, and the handler
+ * hard-codes DRAFT in the INSERT regardless.
  */
 export const quoteCreateSchema = z.object({
   cedant_id:        optionalUuid,
@@ -274,7 +281,7 @@ export const quoteCreateSchema = z.object({
   country_id:       optionalUuid,
   treaty_type_id:   optionalUuid,
   uw_year:          uwYear,
-  status:           contractStatus.optional(),
+  status:           z.literal('DRAFT').nullish(),
   experience_source: z.enum(['TRIANGLE', 'STRAIGHT']).optional(),
   renewal_date:     isoDate,
   inception_date:   isoDate,

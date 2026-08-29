@@ -27,14 +27,15 @@ const IDENTITY_KEYS = [
 ];
 const STORAGE_KEYS = ['CLOUDINARY_URL', 'CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'ALLOW_LOCAL_UPLOADS'];
 const CLUSTER_KEYS = ['POOL_WATCHDOG_CLUSTER', 'NODE_APP_INSTANCE', 'WEB_CONCURRENCY'];
+const RISKY_FLAG_KEYS = ['ALLOW_NAME_AUTH', 'ALLOW_OPEN_REGISTRATION', 'LOAD_TEST'];
 
 beforeEach(() => {
   isProd = true;
   corsOrigin = 'https://app.example'; // non-wildcard by default; the G5 test opts in to '*'
-  for (const k of [...IDENTITY_KEYS, ...STORAGE_KEYS, ...CLUSTER_KEYS, 'REDIS_URL']) delete process.env[k];
+  for (const k of [...IDENTITY_KEYS, ...STORAGE_KEYS, ...CLUSTER_KEYS, ...RISKY_FLAG_KEYS, 'REDIS_URL']) delete process.env[k];
 });
 afterEach(() => {
-  for (const k of [...IDENTITY_KEYS, ...STORAGE_KEYS, ...CLUSTER_KEYS, 'REDIS_URL']) delete process.env[k];
+  for (const k of [...IDENTITY_KEYS, ...STORAGE_KEYS, ...CLUSTER_KEYS, ...RISKY_FLAG_KEYS, 'REDIS_URL']) delete process.env[k];
 });
 
 describe('inClusterMode', () => {
@@ -88,6 +89,42 @@ describe('checkProductionPosture', () => {
     const { log } = fakeLog();
     const { warnings } = checkProductionPosture({ log });
     expect(warnings.join('\n')).not.toMatch(/CORS_ORIGIN/);
+  });
+
+  it('flags ALLOW_NAME_AUTH / ALLOW_OPEN_REGISTRATION / LOAD_TEST as ERRORS in production', () => {
+    process.env.ALLOW_NAME_AUTH = 'true';
+    process.env.ALLOW_OPEN_REGISTRATION = 'true';
+    process.env.LOAD_TEST = 'true';
+    const { log, calls } = fakeLog();
+    const { errors } = checkProductionPosture({ log });
+    expect(errors.join('\n')).toMatch(/ALLOW_NAME_AUTH=true in production/);
+    expect(errors.join('\n')).toMatch(/ALLOW_OPEN_REGISTRATION=true in production/);
+    expect(errors.join('\n')).toMatch(/LOAD_TEST=true in production/);
+    // logged at error level (alertable), not warn
+    expect(calls.error.join('\n')).toMatch(/ALLOW_NAME_AUTH/);
+    expect(calls.error.join('\n')).toMatch(/ALLOW_OPEN_REGISTRATION/);
+    expect(calls.error.join('\n')).toMatch(/LOAD_TEST/);
+  });
+
+  it('does not flag the risky flags when unset, or when set to a non-"true" value', () => {
+    process.env.ALLOW_NAME_AUTH = 'false';
+    process.env.LOAD_TEST = '1'; // fail-closed flags only honour the literal "true"
+    const { log } = fakeLog();
+    const { errors, warnings } = checkProductionPosture({ log });
+    const all = [...errors, ...warnings].join('\n');
+    expect(all).not.toMatch(/ALLOW_NAME_AUTH/);
+    expect(all).not.toMatch(/ALLOW_OPEN_REGISTRATION/);
+    expect(all).not.toMatch(/LOAD_TEST/);
+  });
+
+  it('does not flag the risky flags outside production', () => {
+    isProd = false;
+    process.env.ALLOW_NAME_AUTH = 'true';
+    process.env.ALLOW_OPEN_REGISTRATION = 'true';
+    process.env.LOAD_TEST = 'true';
+    const { log } = fakeLog();
+    const { errors, warnings } = checkProductionPosture({ log });
+    expect([...errors, ...warnings].join('\n')).not.toMatch(/ALLOW_NAME_AUTH|ALLOW_OPEN_REGISTRATION|LOAD_TEST/);
   });
 
   it('treats ALLOW_LOCAL_UPLOADS as a warning, not an error', () => {

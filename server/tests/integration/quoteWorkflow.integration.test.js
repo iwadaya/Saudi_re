@@ -5,7 +5,10 @@
 // submit-for-approval — now routed through quoteWorkflow.js:
 //   • legal-transition guard (422 INVALID_TRANSITION on an illegal pre-state),
 //   • atomic status + quote_offer + offer_approval_event + critical audit row,
-//   • authority (assertCanEdit → 403 for a non-assignee),
+//   • authority — submit takes assertCanEdit (assignee-only); decline takes the
+//     terminal NTU rule (F78): the assignee OR a live eligible approver, so a
+//     reviewing approver can decline the quote they are reviewing while a user
+//     with no approval authority still gets 403 DECLINE_FORBIDDEN,
 //   • 404 for a missing quote.
 //
 // Gated by TEST_WITH_DB=1 — see helpers.js.
@@ -110,14 +113,46 @@ describe.skipIf(shouldSkipDb)('integration: quote workflow parity (decline / sub
     expect(q[0].status).toBe('DECLINED');
   });
 
-  it('authority: a non-assignee cannot decline → 403 READ_ONLY', async () => {
+  it('authority: a non-assignee with no approval authority cannot decline → 403 DECLINE_FORBIDDEN (F78)', async () => {
     const id = await newDraftQuote(); // assigned to the default demo user
+    // OTHER_USER has no uw_user profile, so it resolves to no role — neither
+    // the assignee nor an eligible approver. Decline now takes the terminal
+    // NTU authority rule (assignee OR eligible approver), so the code is
+    // DECLINE_FORBIDDEN, not the edit-lock's READ_ONLY.
     const res = await harness.fetchApp('POST', `/api/quotes/${id}/decline`, {
       body: { reason: 'nope' },
       headers: { 'x-user-id': OTHER_USER },
     });
     expect(res.status).toBe(403);
-    expect((await res.json()).code).toBe('READ_ONLY');
+    expect((await res.json()).code).toBe('DECLINE_FORBIDDEN');
+    const { rows: q } = await pool.query(`SELECT status FROM public.quote WHERE quote_id=$1`, [id]);
+    expect(q[0].status).toBe('DRAFT'); // untouched
+  });
+
+  it('authority: a reviewing approver (not the assignee) CAN decline a pending quote (F78)', async () => {
+    // The quote is created + submitted by the default demo CU (the assignee &
+    // submitter). The seeded underwriter1 (UW, level 4) is neither — exactly
+    // the reviewing-approver position four-eyes puts every reviewer in. Before
+    // F78 this 403'd READ_ONLY while the same reviewer could APPROVE the quote.
+    const REVIEWER = '00000000-0000-0000-0000-000000000002';
+    const id = await newDraftQuote();
+    await harness.fetchApp('POST', `/api/quotes/${id}/offer/submit-for-approval`, { body: { written_line_pct: 15 } });
+
+    const res = await harness.fetchApp('POST', `/api/quotes/${id}/decline`, {
+      body: { reason: 'pricing insufficient on review' },
+      headers: { 'x-user-id': REVIEWER, 'x-user-role': 'UW' },
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).status).toBe('DECLINED');
+
+    const { rows: q } = await pool.query(`SELECT status, decline_reason FROM public.quote WHERE quote_id=$1`, [id]);
+    expect(q[0].status).toBe('DECLINED');
+    expect(q[0].decline_reason).toBe('pricing insufficient on review');
+
+    // The decision is attributed to the reviewer in the audit trail.
+    const { rows: audit } = await pool.query(
+      `SELECT actor FROM public.audit_log WHERE entity_type='QUOTE' AND entity_id=$1 AND event_type='DECLINED' ORDER BY created_at DESC LIMIT 1`, [id]);
+    expect(String(audit[0].actor)).toBe(REVIEWER);
   });
 
   it('404 when the quote does not exist', async () => {

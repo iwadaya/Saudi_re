@@ -94,9 +94,48 @@ describe('evaluateRetroAtLine', () => {
     expect(r.xlCover).toBe(12_000_000);                          // limit × (1 + 1 reinst)
     expect(r.xlRecovery).toBeGreaterThan(0);
     expect(r.xlRecovery).toBeLessThan(r.lossAfterQs);
-    // Reinstatement premium is pro-rata to the expected burn.
-    expect(r.xlReinstatementPremium).toBeCloseTo(
-      r.xlPremium * Math.min(r.xlRecovery / PROGRAMME.xlLimit, 1), 6);
+  });
+
+  it('pins xlRecovery and the reinstatement premium to independently derived values', () => {
+    // Independent reference (machine-precision erf, cross-checked by Simpson
+    // integration of the lognormal survival function — two methods agreeing
+    // to 1e-9 relative; the module's A&S erf is allowed ~1.5e-7):
+    //   lossAfterQs = 2.2m × (1 − 0.15) = 1.87m, CV 0.9
+    //   σ² = ln(1 + 0.9²) = ln(1.81)  → σ = 0.7702771224
+    //   μ  = ln(1,870,000) − σ²/2     = 14.1447855662
+    //   π(K) = m·Φ((μ+σ²−lnK)/σ) − K·Φ((μ−lnK)/σ),  m = 1.87m
+    //   π(2.5m) = 383,599.84   π(8.5m) = 26,962.33   π(14.5m) = 4,563.28
+    // xlRecovery = E[min(max(S−2.5m,0), 12m)] = π(2.5m) − π(14.5m) = 379,036.56
+    expect(r.xlRecovery).toBeCloseTo(379_036.56, -1);
+    // Reinstatement premium must be premium × pct × E[min(layer loss, r·L)]/L
+    // (the reinstated amount is a capped variable INSIDE the expectation),
+    // not premium × pct × min(E[layer loss]/L, r):
+    //   E[min(layer loss, 1×6m)] = π(2.5m) − π(8.5m) = 356,637.51
+    //   reinstatement premium = 480,000 × 100% × 356,637.51/6m = 28,531.00
+    expect(r.xlReinstatementPremium).toBeCloseTo(28_531.0, 0);
+    // Jensen's inequality: the old min(E[burn], r) formula (= 30,322.9 here)
+    // must strictly overstate the correct expectation.
+    expect(r.xlReinstatementPremium).toBeLessThan(
+      r.xlPremium * Math.min(r.xlRecovery / PROGRAMME.xlLimit, PROGRAMME.xlReinstatements));
+  });
+
+  it('charges no reinstatement premium when none are bought or they are free', () => {
+    const none = evaluateRetroAtLine({
+      linePct: 10, subject: SUBJECT,
+      programme: { ...PROGRAMME, xlReinstatements: 0 },
+    });
+    expect(none.xlReinstatementPremium).toBe(0);
+    const free = evaluateRetroAtLine({
+      linePct: 10, subject: SUBJECT,
+      programme: { ...PROGRAMME, xlReinstatementPct: 0 },
+    });
+    expect(free.xlReinstatementPremium).toBe(0);
+    // …and a 50% term is exactly half the 100% charge.
+    const half = evaluateRetroAtLine({
+      linePct: 10, subject: SUBJECT,
+      programme: { ...PROGRAMME, xlReinstatementPct: 50 },
+    });
+    expect(half.xlReinstatementPremium).toBeCloseTo(r.xlReinstatementPremium / 2, 6);
   });
 
   it('nets spend/recovery consistently (spend − recovery = net cost)', () => {
@@ -437,7 +476,183 @@ describe('programmeFromStored — layered towers', () => {
   it('ignores blank layers and falls back to programme-level terms when none are usable', () => {
     const out = programmeFromStored([{ ...TOWER, layers: [{ occurrence_limit: 0 }], attachment: 1_000_000, occurrence_limit: 4_000_000, rol_pct: 12 }]);
     expect(out.layerCount).toBe(0);
+    expect(out.incompleteLayers).toBe(1);
     expect(out.programme.xlAttachment).toBe(1_000_000);
     expect(out.programme.xlLimit).toBe(4_000_000);
+  });
+});
+
+describe('programmeFromStored — incomplete layers (F38)', () => {
+  // attachment is NULLABLE in retro_programme_layer; a partially-entered
+  // layer must not be coerced to "attaches at ground-up".
+  const PARTIAL_TOWER = {
+    programme_type: 'XL_CAT', programme_name: 'Cat Tower',
+    layers: [
+      { layer_number: 1, attachment: null, occurrence_limit: 10_000_000, rol_pct: 18 },
+      { layer_number: 2, attachment: 15_000_000, occurrence_limit: 25_000_000, rol_pct: 9, reinstatements: 0 },
+    ],
+  };
+
+  it('excludes a NULL-attachment layer instead of dragging the tower to ground-up', () => {
+    const out = programmeFromStored([PARTIAL_TOWER]);
+    expect(out.programme.xlAttachment).toBe(15_000_000);  // NOT min(0, 15m) = 0
+    expect(out.programme.xlLimit).toBe(25_000_000);       // NOT 10m + 25m
+    expect(out.programme.xlRolPct).toBe(9);               // weighted over usable layers only
+    expect(out.layerCount).toBe(1);
+    expect(out.incompleteLayers).toBe(1);                 // surfaced for the UI
+  });
+
+  it('the excluded layer no longer flips recoveries to near-total (pinned)', () => {
+    const { programme } = programmeFromStored([PARTIAL_TOWER]);
+    const r = evaluateRetroAtLine({ linePct: 10, subject: SUBJECT, programme });
+    // Independent reference for E[min(max(S−15m,0), 25m)], S ~ Lognormal with
+    // mean 2.2m (no stored QS → lossAfterQs = grossExpectedLoss), CV 0.9:
+    //   σ = 0.7702771224, μ = ln(2,200,000) − σ²/2 = 14.3072171568
+    //   π(15m) − π(40m) = 8,411.90 (closed form with machine-precision erf,
+    //   cross-checked by numeric integration; module erf tolerance < 5).
+    expect(r.xlRecovery).toBeCloseTo(8_411.9, -1);
+    // The pre-fix flatten attached at 0 and recovered ~2.2m — the entire
+    // expected loss. Guard the order of magnitude too.
+    expect(r.xlRecovery).toBeLessThan(10_000);
+  });
+
+  it('a stored attachment of 0 is a real value, not an incomplete layer', () => {
+    const out = programmeFromStored([{
+      programme_type: 'XL_CAT', programme_name: 'GU',
+      layers: [{ layer_number: 1, attachment: 0, occurrence_limit: 10_000_000, rol_pct: 18 }],
+    }]);
+    expect(out.programme.xlAttachment).toBe(0);
+    expect(out.layerCount).toBe(1);
+    expect(out.incompleteLayers).toBe(0);
+  });
+
+  it('surfaces a missing programme-level attachment instead of passing it silently', () => {
+    const missing = programmeFromStored([
+      { programme_type: 'XL_CAT', programme_name: 'X', attachment: null, occurrence_limit: 10_000_000, rol_pct: 12 },
+    ]);
+    expect(missing.xlAttachmentMissing).toBe(true);
+    expect(missing.programme.xlAttachment).toBe(0);       // conservative back-compat value…
+    const present = programmeFromStored([
+      { programme_type: 'XL_CAT', programme_name: 'X', attachment: 2_000_000, occurrence_limit: 10_000_000, rol_pct: 12 },
+    ]);
+    expect(present.xlAttachmentMissing).toBe(false);      // …and no flag when it is stored
+  });
+});
+
+describe('programmeFromStored — stored reinstatement terms (F39)', () => {
+  it('honours a free (0%) stored reinstatement instead of the illustrative 100%', () => {
+    const { programme } = programmeFromStored([{
+      programme_type: 'XL_CAT', programme_name: 'Free reinst XL',
+      layers: [{ layer_number: 1, attachment: 2_500_000, occurrence_limit: 6_000_000, rol_pct: 8, reinstatements: 1, reinstatement_pct: 0 }],
+    }]);
+    expect(programme.xlReinstatementPct).toBe(0);
+    const r = evaluateRetroAtLine({ linePct: 10, subject: SUBJECT, programme });
+    expect(r.xlReinstatementPremium).toBe(0);             // the contract levies nothing
+    expect(r.xlSpend).toBeCloseTo(r.xlPremium, 6);
+  });
+
+  it('flattens the stored per-layer reinstatement % limit-weighted', () => {
+    const { programme } = programmeFromStored([{
+      programme_type: 'XL_CAT', programme_name: 'Tower',
+      layers: [
+        { layer_number: 1, attachment: 5_000_000, occurrence_limit: 10_000_000, rol_pct: 18, reinstatements: 1, reinstatement_pct: 0 },
+        { layer_number: 2, attachment: 15_000_000, occurrence_limit: 25_000_000, rol_pct: 9, reinstatements: 1, reinstatement_pct: 100 },
+      ],
+    }]);
+    // (0×10m + 100×25m) / 35m = 500/7 = 71.4285714…
+    expect(programme.xlReinstatementPct).toBeCloseTo(500 / 7, 10);
+  });
+
+  it('reads a programme-level reinstatement_pct when a flat row carries one', () => {
+    const { programme } = programmeFromStored([{
+      programme_type: 'XL_CAT', programme_name: 'X',
+      attachment: 2_500_000, occurrence_limit: 6_000_000, rol_pct: 8,
+      reinstatements: 1, reinstatement_pct: 50,
+    }]);
+    expect(programme.xlReinstatementPct).toBe(50);
+  });
+
+  it('falls back to the conservative 100% default only when nothing is stored', () => {
+    const { programme } = programmeFromStored([{
+      programme_type: 'XL_CAT', programme_name: 'X',
+      attachment: 2_500_000, occurrence_limit: 6_000_000, rol_pct: 8, reinstatements: 1,
+    }]);
+    expect(programme.xlReinstatementPct).toBe(DEFAULT_RETRO_PROGRAMME.xlReinstatementPct);
+  });
+});
+
+describe('programmeFromStored — stored premium / ROL (F40)', () => {
+  it('derives the flat ROL from stored premium ÷ limit instead of the 12% default', () => {
+    const out = programmeFromStored([{
+      programme_type: 'XL_CAT', programme_name: 'X',
+      attachment: 2_000_000, occurrence_limit: 10_000_000, rol_pct: null, premium: 500_000,
+    }]);
+    expect(out.programme.xlRolPct).toBe(5);               // 100 × 500k / 10m
+    expect(out.xlRolDefaulted).toBe(false);
+  });
+
+  it('both storage shapes of the same cover give the same premium-derived ROL', () => {
+    const flat = programmeFromStored([{
+      programme_type: 'XL_CAT', programme_name: 'X',
+      attachment: 2_000_000, occurrence_limit: 10_000_000, rol_pct: null, premium: 500_000,
+    }]);
+    const layered = programmeFromStored([{
+      programme_type: 'XL_CAT', programme_name: 'X',
+      layers: [{ layer_number: 1, attachment: 2_000_000, occurrence_limit: 10_000_000, rol_pct: null, premium: 500_000 }],
+    }]);
+    expect(layered.programme.xlRolPct).toBe(5);           // was 0 (free cover) pre-fix
+    expect(layered.programme.xlRolPct).toBe(flat.programme.xlRolPct);
+    expect(layered.xlRolDefaulted).toBe(false);
+  });
+
+  it('mixes stored rates and premium-derived rates limit-weighted in a tower', () => {
+    const out = programmeFromStored([{
+      programme_type: 'XL_CAT', programme_name: 'Tower',
+      layers: [
+        { layer_number: 1, attachment: 2_000_000, occurrence_limit: 10_000_000, rol_pct: 18 },
+        { layer_number: 2, attachment: 12_000_000, occurrence_limit: 30_000_000, rol_pct: null, premium: 1_500_000 },
+      ],
+    }]);
+    // layer 2 ROL = 100 × 1.5m/30m = 5 → (18×10m + 5×30m)/40m = 8.25
+    expect(out.programme.xlRolPct).toBeCloseTo(8.25, 10);
+    expect(out.xlRolDefaulted).toBe(false);
+  });
+
+  it('an explicitly stored 0% ROL is honoured, not treated as missing', () => {
+    const out = programmeFromStored([{
+      programme_type: 'XL_CAT', programme_name: 'X',
+      attachment: 2_000_000, occurrence_limit: 10_000_000, rol_pct: 0, premium: 500_000,
+    }]);
+    expect(out.programme.xlRolPct).toBe(0);
+    expect(out.xlRolDefaulted).toBe(false);
+  });
+
+  it('uses ONE illustrative fallback on both paths and flags it', () => {
+    const flat = programmeFromStored([{
+      programme_type: 'XL_CAT', programme_name: 'X',
+      attachment: 2_000_000, occurrence_limit: 10_000_000,
+    }]);
+    expect(flat.programme.xlRolPct).toBe(DEFAULT_RETRO_PROGRAMME.xlRolPct);
+    expect(flat.xlRolDefaulted).toBe(true);
+    const layered = programmeFromStored([{
+      programme_type: 'XL_CAT', programme_name: 'X',
+      layers: [{ layer_number: 1, attachment: 2_000_000, occurrence_limit: 10_000_000 }],
+    }]);
+    expect(layered.programme.xlRolPct).toBe(DEFAULT_RETRO_PROGRAMME.xlRolPct);
+    expect(layered.xlRolDefaulted).toBe(true);
+  });
+
+  it('premium-derived ROL is a rate — untouched by FX conversion and book scaling', () => {
+    const out = programmeFromStored(
+      [{
+        programme_type: 'XL_CAT', programme_name: 'EUR XL', currency_code: 'EUR',
+        attachment: 2_000_000, occurrence_limit: 10_000_000, rol_pct: null, premium: 500_000,
+        fx_to_subject: 4, fx_missing: false, book_exposure: 320_000_000,
+      }],
+      { subjectExposure: 80_000_000 },
+    );
+    expect(out.converted).toBe(true);
+    expect(out.scaled).toBe(true);
+    expect(out.programme.xlRolPct).toBe(5);               // ratio of raw stored terms
   });
 });

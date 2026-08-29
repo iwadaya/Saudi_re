@@ -79,16 +79,18 @@ export const DEFAULT_LDF_KEY = 'PROPERTY_NONCAT';
 // Premium develops slightly — mostly earned within 12 months for proportional
 const PREM_LDFS = [1.050, 1.015, 1.005, 1.000, 1.000, 1.000, 1.000, 1.000];
 
-// ── Build CDF array from LDFs (oldest year = index 0 = CDF 1.0) ──────────────
+// ── Build age-indexed CDF array from LDFs (index 0 = newest, largest CDF) ────
 function buildCDFs(ldfs) {
-  // CDF[i] = product of all LDFs from i to end
-  // CDF[last] = last LDF (tail), CDF[0] = 1.0 (fully developed)
+  // CDF[i] = product of all LDFs from i to end — the factor to ultimate
+  // from dev age (i+1)*12 months. CDF[0] = product of ALL LDFs (largest,
+  // applied to the NEWEST / least-developed year); CDF[n] = 1.0 (fully
+  // developed — no further development expected).
   const n = ldfs.length;
   const cdf = new Array(n + 1).fill(1.0);
   for (let i = n - 1; i >= 0; i--) {
     cdf[i] = cdf[i + 1] * ldfs[i];
   }
-  return cdf; // cdf[0] = most developed (oldest), cdf[n] = 1.0 (tail factor)
+  return cdf; // cdf[0] = newest / least developed (largest), cdf[n] = 1.0
 }
 
 // Pre-compute CDFs once so projectStraightStats stays cheap on hot paths.
@@ -98,7 +100,9 @@ const LDF_CDFS  = Object.fromEntries(
 );
 
 function getCDF(cdfs, devIdx) {
-  // devIdx: 0 = oldest (most developed), n = newest (least developed)
+  // devIdx counts years since the newest: 0 = newest (least developed,
+  // gets cdfs[0], the largest factor); larger devIdx = older years.
+  // Years beyond the curve clamp to the last (1.0, fully developed) entry.
   if (devIdx < 0) return 1.0;
   if (devIdx >= cdfs.length) return cdfs[cdfs.length - 1];
   return cdfs[devIdx];
@@ -128,10 +132,20 @@ export function projectStraightStats(stats, classKey = DEFAULT_LDF_KEY) {
   const lossCDFs = resolveCdfs(classKey);
   const sorted   = [...stats].sort((a, b) => a.year - b.year);
   const n        = sorted.length;
+  const maxYear  = Number(sorted[n - 1].year);
 
   return sorted.map((row, i) => {
-    // devIdx: newest year = n-1, oldest = 0
-    const devIdx    = n - 1 - i;
+    // devIdx: the year's DISTANCE to the newest year — newest = 0 (largest
+    // CDF), a year k calendar-years older = k. Derived from the year VALUE,
+    // not the array position: with a gap in underwriting years (e.g.
+    // [2019, 2020, 2023]) the positional n-1-i assigned too-young dev ages
+    // to every year before the gap and over-projected them (F55). Duplicate
+    // year rows now also share one dev age. Falls back to the positional
+    // index only when years are unparseable.
+    const yr        = Number(row.year);
+    const devIdx    = Number.isFinite(maxYear) && Number.isFinite(yr)
+      ? maxYear - yr
+      : n - 1 - i;
     const lossCDF   = getCDF(lossCDFs, devIdx);
     const premCDF   = getCDF(PREM_CDFS, devIdx);
 

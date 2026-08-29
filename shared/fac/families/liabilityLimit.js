@@ -60,13 +60,26 @@ export function readExposure(section) {
     );
   }
 
+  // Recorded for the slip, not priced: capping the aggregate needs a claim
+  // frequency this engine does not hold, and a factor invented for it would
+  // be worse than the caveat. Reinstatements, by contrast, ARE priced —
+  // each one is another full limit of exposure (F54).
+  const aggregateLimit = numOrNull(detail.aggregate_limit);
+  if (aggregateLimit !== null) {
+    warnings.push(
+      'The aggregate limit is recorded for information only — it does not change the price. '
+      + 'Pricing an aggregate cap needs a claim-frequency view this engine does not hold; '
+      + 'aggregate reinstatements are what the price responds to.',
+    );
+  }
+
   return {
     exposureBase,
     basisUnit,
     territory: (detail.territory || 'WORLDWIDE').toUpperCase(),
     limit: numOrNull(section?.limit_amount) ?? numOrNull(detail.limit),
     attachment: num(section?.attachment ?? detail.attachment),
-    aggregateLimit: numOrNull(detail.aggregate_limit),
+    aggregateLimit,
     claimsMade: Boolean(detail.claims_made),
     retroYears: numOrNull(detail.retro_years),
     defenceCostsInAddition: Boolean(detail.defence_costs_in_addition),

@@ -116,11 +116,25 @@ export function mechanicalWeights(candidates, credibility, experienceVolume) {
  * partial override cannot silently change the total. An override without a
  * recognised reason code is refused — that is the whole control.
  *
+ * Given the candidate list, two further checks mirror mechanicalWeights:
+ *
+ *   • Weight on a candidate that is not a competing view of the loss cost —
+ *     a REFERENCE method like the benchmark, or an ADDITIVE section like war
+ *     — is dropped, with a warning. The benchmark's own contract is that it
+ *     is shown and never blended (F44), and an additive section is already
+ *     added after the blend, so weighting it would count it twice.
+ *
+ *   • An override whose named methods are ALL unavailable or unknown falls
+ *     back to the mechanical weights, with a warning, instead of silently
+ *     un-pricing the risk. Stored overrides outlive the curve sets they
+ *     named (F45).
+ *
  * @param {Record<string, number>} mechanical
  * @param {{weights?: Record<string, number>, reasonCode?: string}|null} override
+ * @param {Array<{code: string, role?: string, available?: boolean, ratePm?: number|null}>} [candidates]
  * @returns {{weights: Record<string, number>, source: 'MECHANICAL'|'OVERRIDE', reasonCode?: string, error?: string}}
  */
-export function applyWeightOverride(mechanical, override) {
+export function applyWeightOverride(mechanical, override, candidates = null) {
   if (!override || !override.weights || Object.keys(override.weights).length === 0) {
     return { weights: mechanical, source: 'MECHANICAL' };
   }
@@ -132,16 +146,58 @@ export function applyWeightOverride(mechanical, override) {
         + `${Object.keys(OVERRIDE_REASONS).join(', ')}.`,
     };
   }
-  const entries = Object.entries(override.weights)
+  let entries = Object.entries(override.weights)
     .map(([code, w]) => [code, Math.max(num(w), 0)])
     .filter(([, w]) => w > 0);
+
+  const notes = [];
+  if (Array.isArray(candidates)) {
+    const byCode = new Map(candidates.map((c) => [c.code, c]));
+    const blendable = (role) => role === 'EXPERIENCE' || role === 'EXPOSURE';
+    const dropped = entries.filter(
+      ([code]) => byCode.has(code) && !blendable(byCode.get(code).role),
+    );
+    if (dropped.length > 0) {
+      notes.push(
+        `Weight on ${dropped.map(([code]) => code).join(', ')} is ignored — `
+        + 'a reference method is shown beside the blend and never weighted in it, and a '
+        + 'separately-rated section is added after the blend rather than averaged into it.',
+      );
+      entries = entries.filter(
+        ([code]) => !byCode.has(code) || blendable(byCode.get(code).role),
+      );
+    }
+    const usable = entries.some(([code]) => {
+      const c = byCode.get(code);
+      return c && c.available && blendable(c.role) && numOrNull(c.ratePm) !== null;
+    });
+    if (!usable) {
+      return {
+        weights: mechanical,
+        source: 'MECHANICAL',
+        error: [
+          ...notes,
+          'Weight override ignored — none of the methods it names '
+          + `(${Object.keys(override.weights).join(', ')}) currently produces a usable rate. `
+          + 'Falling back to the mechanical weights; review the stored override, which may name '
+          + 'a method whose reference data has since been unloaded.',
+        ].join(' '),
+      };
+    }
+  }
+
   const total = entries.reduce((acc, [, w]) => acc + w, 0);
   if (total <= 0) {
     return { weights: mechanical, source: 'MECHANICAL', error: 'Weight override ignored — the weights sum to zero.' };
   }
   const weights = {};
   for (const [code, w] of entries) weights[code] = w / total;
-  return { weights, source: 'OVERRIDE', reasonCode: override.reasonCode };
+  return {
+    weights,
+    source: 'OVERRIDE',
+    reasonCode: override.reasonCode,
+    ...(notes.length > 0 ? { error: notes.join(' ') } : {}),
+  };
 }
 
 /**

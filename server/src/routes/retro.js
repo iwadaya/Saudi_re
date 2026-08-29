@@ -684,7 +684,8 @@ router.get('/retro/applicable', asyncHandler(async (req, res) => {
                  'occurrence_limit', l.occurrence_limit,
                  'reinstatements', l.reinstatements,
                  'reinstatement_pct', l.reinstatement_pct,
-                 'rol_pct', l.rol_pct
+                 'rol_pct', l.rol_pct,
+                 'premium', l.premium
                ) ORDER BY l.layer_number), '[]'::json) AS layers
           FROM public.retro_programme_layer l
          WHERE l.retro_programme_id = p.retro_programme_id

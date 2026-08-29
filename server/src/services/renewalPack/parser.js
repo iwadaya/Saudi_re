@@ -217,7 +217,10 @@ function classifyType(sheets) {
 
 const SHEET_KIND_PATTERNS = [
   // Order matters: more-specific patterns (OS Claims, Cat Loss) before generic.
-  { kind: 'osClaimsTriangle', re: /\bo\.?s\.?\b.*claims?.*triangle|os\s*claims?\s*triangle/i },
+  // 'Outstanding' is the spelled-out form of 'OS' (F73): without it a sheet
+  // named 'Outstanding Claims Triangle' fell through to the PAID claims
+  // pattern and booked OS figures as paid.
+  { kind: 'osClaimsTriangle', re: /\b(o\.?s\.?|outstanding)\b.*claims?.*triangle|os\s*claims?\s*triangle/i },
   { kind: 'premiumTriangle', re: /premium\s*triangle/i },
   { kind: 'claimsTriangle', re: /(?<!os\s)(claims?|paid)\s*triangle/i },
   { kind: 'catLossRecords', re: /(cat|catastrophe)\s*loss(es)?(\s*records?)?/i },
@@ -281,10 +284,28 @@ function extractTriangle(sheet, warnings) {
     warnings.push(`Triangle in "${sheet.name}": header row not found`);
     return { uwYears: [], devPeriods: [], values: [] };
   }
-  const devPeriods = rows[headerIdx]
-    .slice(1)
-    .map((v) => toNumberOrNull(v))
-    .filter((v) => v != null && Number.isFinite(v));
+
+  // Map header cells to { dev, colIdx } BEFORE filtering, so a non-numeric
+  // column in the middle of the header (a 'Total'/'Ultimate'/note column)
+  // cannot shift later values onto the wrong development period (F71) —
+  // values are read at each surviving header's own column index, never
+  // positionally. Any non-empty header cell that fails to parse as a dev
+  // period is skipped WITH a warning instead of silently (F72).
+  const header = rows[headerIdx];
+  const devCols = [];
+  for (let c = 1; c < header.length; c++) {
+    const cell = header[c];
+    if (cell == null || (typeof cell === 'string' && cell.trim() === '')) continue;
+    const dev = toDevPeriodOrNull(cell);
+    if (dev == null) {
+      warnings.push(
+        `Triangle in "${sheet.name}": ignored non-development column "${toStr(cell)}"`,
+      );
+      continue;
+    }
+    devCols.push({ dev, colIdx: c });
+  }
+  const devPeriods = devCols.map((d) => d.dev);
 
   const uwYears = [];
   const values = [];
@@ -294,10 +315,32 @@ function extractTriangle(sheet, warnings) {
     const year = toIntOrNull(yearCell);
     if (year == null || year < 1900 || year > 2200) continue;
     uwYears.push(year);
-    const lineValues = devPeriods.map((_, j) => toNumberOrNull(row[j + 1]));
+    const lineValues = devCols.map(({ colIdx }) => toNumberOrNull(row[colIdx]));
     values.push(lineValues);
   }
   return { uwYears, devPeriods, values };
+}
+
+// Textual development-year labels: 'DY 1', 'Dev 2', 'Dev Year 3', 'Year 4',
+// 'Yr 5' — the tool's own renewal-pack export writes 'DY n'-style labels
+// (renewalPackExport/builder.js devLabel), so a pack produced by this system
+// must round-trip (F72). n is a development YEAR index, mapped to n*12 months.
+// Capped at 100 development years so a stray calendar-year header ('Year
+// 2020') is not read as a 24,240-month dev period.
+const DEV_YEAR_LABEL_RE = /^(?:d\.?y\.?|dev(?:elopment)?(?:\s*(?:year|yr))?|year|yr)\s*\.?\s*(\d{1,3})$/i;
+
+// A triangle dev-period header cell: numeric (12, '24', '36m' …) or a textual
+// development-year label ('DY 1' → 12). Returns months-or-index exactly as
+// the sheet expressed it for numerics; textual year labels are months.
+function toDevPeriodOrNull(v) {
+  const n = toNumberOrNull(v);
+  if (n != null) return n;
+  const m = DEV_YEAR_LABEL_RE.exec(String(v).trim());
+  if (m) {
+    const yearIdx = Number(m[1]);
+    if (yearIdx >= 1 && yearIdx <= 100) return yearIdx * 12;
+  }
+  return null;
 }
 
 function extractLossRecords(sheet, isCat) {

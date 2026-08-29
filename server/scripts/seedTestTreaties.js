@@ -42,6 +42,7 @@
 //   Everything else is populated. --verify proves it.
 
 import { pool } from '../src/db/pool.js';
+import { deriveComponentTotal } from '../../shared/pricingMath.js';
 
 const SEED_SOURCE = 'seed:test-treaties';
 const PROP_COUNT = Number(process.env.SEED_PROP_COUNT || 50);
@@ -1123,7 +1124,8 @@ async function insertWorkflow(client, cid, spec, econ, header, ref, layers) {
     from_user_id: null,
     to_user_id: owner.user_id,
     assigned_by: owner.user_id,
-    assignment_type: 'CREATED',
+    // Column is `action` since migration 147 (was assignment_type pre-147).
+    action: 'CREATED',
     comment: 'Created by the seed generator.',
     assigned_at: stamps[0],
   });
@@ -1134,7 +1136,7 @@ async function insertWorkflow(client, cid, spec, econ, header, ref, layers) {
     from_user_id: owner.user_id,
     to_user_id: approver.user_id,
     assigned_by: owner.user_id,
-    assignment_type: 'REASSIGNED',
+    action: 'REASSIGNED',
     comment: 'Referred to the approver for the authority check.',
     assigned_at: submitted,
   });
@@ -1444,20 +1446,25 @@ async function insertNp(client, cid, spec, econ, header) {
       const exposure = round4(layer.rol * rand(0.6, 1.05));
       const burnW = 40; const expW = 40; const paretoW = 20;
       const loading = round2(rand(2, 15));
-      const blended = (burn * burnW + exposure * expW + pareto * paretoW) / 100;
       await ins(client, 'contract_np_pricing_outputs', {
         contract_id: cid,
         layer_number: layer.layer_number,
         section,
         pure_burning_cost: burn,
         pareto_pricing: pareto,
-        burn_plus_pareto: round4((burn + pareto) / 2),
+        // Client convention (fqQuoteMath.js): burnPlusPareto = pureBurn + pareto
+        // (NOT an average — the stored column must match its reader).
+        burn_plus_pareto: round4(burn + pareto),
         exposure_rating: exposure,
         burn_weight_pct: burnW,
         exposure_weight_pct: expW,
         pareto_weight_pct: paretoW,
         pricing_loading_pct: loading,
-        total_price: round4(blended * (1 + loading / 100)),
+        // Canonical shared formula: blended / (1 - loading/100). The previous
+        // blended * (1 + loading/100) breached pricingVerifier's 0.2% relative
+        // tolerance for any loading above ~3%, flagging nearly every seeded
+        // layer as drifted.
+        total_price: round4(deriveComponentTotal(burn, pareto, exposure, burnW, paretoW, expW, loading)),
         prob_attach: round4(rand(0.05, 0.9)),
         prob_exhaust: round4(rand(0.01, 0.45)),
       }, { conflict: '(contract_id, layer_number, section) DO UPDATE SET total_price=EXCLUDED.total_price, updated_at=now()' });

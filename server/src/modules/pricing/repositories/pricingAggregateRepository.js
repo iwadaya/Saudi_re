@@ -38,6 +38,14 @@ const PERIL_TOTAL = "COALESCE(cd.eq_agg,0)+COALESCE(cd.ws_agg,0)+COALESCE(cd.flo
 // Contracts that still count toward accumulations.
 const LIVE_STATUS_FILTER = "c.uw_status NOT IN ('DECLINED','NTU')";
 
+// actuarial_value is free text (saveCompositePricing stores the grid verbatim),
+// so a cell can legitimately hold 'TBD' or a note. Cast only values that are
+// numeric after the same %/comma stripping the parsed CTE applies — one junk
+// cell must drop ONE row, not blow up the whole tier query (::numeric throws,
+// and the per-tier catch then skips the tier — including the global fallback).
+const NUMERIC_VALUE_GUARD =
+  "replace(replace(pc.actuarial_value, '%', ''), ',', '') ~ '^\\s*-?([0-9]+\\.?[0-9]*|\\.[0-9]+)\\s*$'";
+
 function cobJoin(cols) {
   return `LEFT JOIN public.class_of_business cob ON cob.${cols.pk}::text = cd.cob_id::text`;
 }
@@ -103,6 +111,9 @@ export async function getAggCobBreakdown(contractId) {
   );
 
   let countryOtherRows = [];
+  // cd.country_id is filtered as well as c.country_id: a contract's CRESTA rows
+  // can live in several countries, and only this country's slices belong in the
+  // "rest of the country book" figure (matches getCountryAggregates — F21).
   if (countryId) {
     const result = await pool.query(
       `SELECT
@@ -117,6 +128,7 @@ export async function getAggCobBreakdown(contractId) {
        JOIN public.contract c ON c.contract_id = cd.contract_id
        ${cobJoin(cols)}
        WHERE c.country_id = $1
+         AND cd.country_id::text = $1::text
          AND c.contract_id != $2
          AND ${LIVE_STATUS_FILTER}
        GROUP BY ${labelWithId}
@@ -209,6 +221,11 @@ export async function getAggDrilldown(contractId) {
   let portfolioZones = [];
   let portfolioCob = [];
   let portfolioContracts = [];
+  // A contract can carry CRESTA slices for SEVERAL countries (crestaSave keys
+  // rows by per-row country_id), so the country-portfolio rollups must filter
+  // cd.country_id as well as c.country_id — exactly as getCountryAggregates
+  // does — or a regional treaty's foreign slices are counted into this
+  // country's portfolio (F21).
   if (countryId) {
     const pzRes = await pool.query(
       `SELECT
@@ -221,6 +238,7 @@ export async function getAggDrilldown(contractId) {
        FROM public.contract_cresta_data cd
        JOIN public.contract c ON c.contract_id = cd.contract_id
        WHERE c.country_id::text = $1::text
+         AND cd.country_id::text = $1::text
          AND ${LIVE_STATUS_FILTER}
        GROUP BY cd.zone_id
        ORDER BY total_agg DESC`,
@@ -239,6 +257,7 @@ export async function getAggDrilldown(contractId) {
        JOIN public.contract c ON c.contract_id = cd.contract_id
        ${cobJoin(cols)}
        WHERE c.country_id::text = $1::text
+         AND cd.country_id::text = $1::text
          AND ${LIVE_STATUS_FILTER}
        GROUP BY ${label}
        ORDER BY total_agg DESC`,
@@ -318,6 +337,7 @@ function buildAvgQuery(joinClause, whereClause) {
       JOIN eligible e ON e.contract_id = pc.contract_id
       WHERE pc.actuarial_value IS NOT NULL
         AND pc.actuarial_value <> ''
+        AND ${NUMERIC_VALUE_GUARD}
     ),
     weights AS (
       SELECT c.contract_id,

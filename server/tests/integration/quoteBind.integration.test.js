@@ -78,6 +78,15 @@ describe.skipIf(shouldSkipDb)('integration: quote → contract bind lifecycle', 
     // `kpis.contracts === 0` assertion on a later run.
     try {
       const { rows: cs } = await pool.query(`SELECT contract_id FROM public.contract WHERE uw_year=$1`, [UW_YEAR]);
+      // The bind pushed a finance ledger entry whose FK (NO ACTION) blocks the
+      // contract DELETE — remove it first or the cleanup silently fails and the
+      // leftover breaks the next run's pre-bind `kpis.contracts === 0` check.
+      if (cs.length) {
+        await pool.query(
+          `DELETE FROM public.finance_treaty_entry WHERE contract_id = ANY($1::uuid[])`,
+          [cs.map((r) => r.contract_id)],
+        ).catch(() => {});
+      }
       for (const r of cs) { try { await harness.fetchApp('DELETE', `/api/treaties/${r.contract_id}`); } catch {} }
       const { rows: qs } = await pool.query(`SELECT quote_id FROM public.quote WHERE uw_year=$1`, [UW_YEAR]);
       for (const r of qs) { try { await harness.fetchApp('DELETE', `/api/quotes/${r.quote_id}`); } catch {} }
@@ -150,6 +159,18 @@ describe.skipIf(shouldSkipDb)('integration: quote → contract bind lifecycle', 
     const second = await harness.fetchApp('POST', `/api/quotes/${quoteId}/bind`);
     expect(second.status).toBe(409);
     expect((await second.json()).code).toBe('ALREADY_BOUND');
+  });
+
+  it('rejects binding by a non-assignee with 403 READ_ONLY (assignee edit-lock)', async () => {
+    const quoteId = await newSignedQuoteWithData();
+    const res = await harness.fetchApp('POST', `/api/quotes/${quoteId}/bind`, {
+      headers: { 'x-user-role': 'TUW', 'x-user-id': '00000000-0000-0000-0000-00000000dead' },
+    });
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('READ_ONLY');
+    // No contract was created for this quote.
+    const n = Number((await pool.query(`SELECT count(*) n FROM public.contract WHERE source_quote_id=$1`, [quoteId])).rows[0].n);
+    expect(n).toBe(0);
   });
 
   it('rejects binding a quote that is not SIGNED', async () => {

@@ -129,11 +129,18 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
   });
 
   it('list honours the status filter', async () => {
-    // Create a SIGNED treaty to ensure at least one row matches
+    // Seed a SIGNED treaty so at least one row matches. The create route now
+    // pins births to DRAFT (privileged states are engine-only), so the SIGNED
+    // state is set via direct SQL — the same setup idiom the claims/finance
+    // integration tests use.
     const signed = await harness.fetchApp('POST', '/api/treaties', {
-      body: { ...refs, uw_year: 2025, uw_status: 'SIGNED', inception_date: '2025-01-01' },
+      body: { ...refs, uw_year: 2025, inception_date: '2025-01-01' },
     }).then((r) => r.json());
     created.push(signed.contract_id);
+    await pool.query(
+      `UPDATE public.contract SET status='SIGNED', uw_status='SIGNED', signed_at=now() WHERE contract_id=$1`,
+      [signed.contract_id],
+    );
 
     const res = await harness.fetchApp('GET', '/api/treaties?status=SIGNED&limit=50');
     expect(res.status).toBe(200);
@@ -144,6 +151,67 @@ describe.skipIf(shouldSkipDb)('integration: /api/treaties end-to-end', () => {
     }
     // And the one we just created must be in there
     expect(rows.some((r) => r.contract_id === signed.contract_id)).toBe(true);
+  });
+
+  it('POST refuses a non-DRAFT birth (status and uw_status are pinned to DRAFT)', async () => {
+    for (const body of [
+      { ...refs, uw_year: 2025, uw_status: 'SIGNED', inception_date: '2025-01-01' },
+      { ...refs, uw_year: 2025, status: 'BOUND', inception_date: '2025-01-01' },
+    ]) {
+      const res = await harness.fetchApp('POST', '/api/treaties', { body });
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe('VALIDATION_FAILED');
+    }
+    // An explicit DRAFT stays accepted.
+    const ok = await harness.fetchApp('POST', '/api/treaties', {
+      body: { ...refs, uw_year: 2025, status: 'DRAFT', uw_status: 'DRAFT', inception_date: '2025-01-01' },
+    });
+    expect(ok.status).toBe(201);
+    const c = await ok.json();
+    created.push(c.contract_id);
+    expect(c.status).toBe('DRAFT');
+    expect(c.uw_status).toBe('DRAFT');
+  });
+
+  it('PUT header cannot mint a privileged status — SIGNED/BOUND stay engine-only', async () => {
+    const c = await harness.fetchApp('POST', '/api/treaties', {
+      body: { ...refs, uw_year: 2026, inception_date: '2026-01-01' },
+    }).then((r) => r.json());
+    created.push(c.contract_id);
+
+    for (const header of [{ status: 'SIGNED' }, { status: 'BOUND' }, { uw_status: 'SIGNED' }]) {
+      const res = await harness.fetchApp('PUT', `/api/treaties/${c.contract_id}`, {
+        body: { terms: { header: { uw_year: 2026, ...header } } },
+      });
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe('PRIVILEGED_STATUS');
+    }
+
+    // The DB row never moved — still DRAFT, never claims-eligible.
+    const { rows } = await pool.query(
+      `SELECT status, uw_status FROM public.contract WHERE contract_id=$1`, [c.contract_id]);
+    expect(rows[0]).toMatchObject({ status: 'DRAFT', uw_status: 'DRAFT' });
+  });
+
+  it('PUT header re-saving the CURRENT status is still a no-op (client round-trips it)', async () => {
+    // The treaty screens send `status: cur.status` on every save; on an
+    // already-signed treaty that must stay a silent no-op, not a 403.
+    const c = await harness.fetchApp('POST', '/api/treaties', {
+      body: { ...refs, uw_year: 2026, inception_date: '2026-01-01' },
+    }).then((r) => r.json());
+    created.push(c.contract_id);
+    await pool.query(
+      `UPDATE public.contract SET status='SIGNED', uw_status='SIGNED', signed_at=now() WHERE contract_id=$1`,
+      [c.contract_id],
+    );
+
+    const res = await harness.fetchApp('PUT', `/api/treaties/${c.contract_id}`, {
+      body: { terms: { header: { status: 'SIGNED', contract_description: 'post-sign note' } } },
+    });
+    expect(res.status).toBe(200);
+    const { rows } = await pool.query(
+      `SELECT status, contract_description FROM public.contract WHERE contract_id=$1`, [c.contract_id]);
+    expect(rows[0]).toMatchObject({ status: 'SIGNED', contract_description: 'post-sign note' });
   });
 
   it('honours If-Unmodified-Since — stale timestamp → 409 STALE_WRITE', async () => {

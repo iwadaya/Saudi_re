@@ -85,7 +85,15 @@ async function main() {
     for (const [slot, paramKey] of Object.entries(occupancyToKey)) {
       const entry = params[paramKey];
       if (!entry) { console.warn(`  ! no params for ${paramKey} (${slot})`); continue; }
-      const taxonomy = `HAZUS:${paramKey}`;
+      // Slot-specific taxonomy: the row's identity is (model_version,
+      // country_code, loss_category, taxonomy, imt), so when the operator maps
+      // two slots with the same loss category to ONE HAZUS param key (e.g.
+      // commercial AND industrial buildings both → C2M — an explicitly
+      // permitted mapping), a shared `HAZUS:${paramKey}` taxonomy collapses
+      // them into one row whose occupancy the second upsert overwrites,
+      // emptying the first slot's occupancy-filtered dropdown. Keying by slot
+      // keeps one row PER mapping (and makes the `upserted` count honest).
+      const taxonomy = `HAZUS:${paramKey}:${slot}`;
       const lossCategory = SLOT_LOSS_CATEGORY[slot];
       const occupancy = SLOT_OCCUPANCY[slot];
       const curve = buildHazusMdrCurve({ fragility: entry.fragility, damageRatios: entry.damageRatios, taxonomy });
@@ -100,6 +108,14 @@ async function main() {
          DO UPDATE SET source='HAZUS', occupancy=EXCLUDED.occupancy, imls=EXCLUDED.imls,
            mean_lrs=EXCLUDED.mean_lrs, updated_at=now()`,
         [modelVersion, COUNTRY, lossCategory, taxonomy, occupancy, curve.imt, curve.imls, curve.meanLRs],
+      );
+      // Retire the legacy ambiguous row (`HAZUS:${paramKey}` with no slot
+      // suffix) this row replaces, so a re-seeded DB doesn't list both.
+      await client.query(
+        `DELETE FROM public.gem_vulnerability_function
+          WHERE source='HAZUS' AND model_version=$1 AND country_code=$2
+            AND loss_category=$3 AND imt=$4 AND taxonomy=$5`,
+        [modelVersion, COUNTRY, lossCategory, curve.imt, `HAZUS:${paramKey}`],
       );
       upserted += 1;
     }

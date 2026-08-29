@@ -193,4 +193,21 @@ describe('Cross-check — both Pareto engines now AGREE (and match direct integr
       close(screenSev, engineSev, 1);
     }
   });
+
+  it('layer attaching BELOW xm: retention is not clamped to the threshold', () => {
+    // Layer 1M xs 500k with the workbook fit (α = 1.283856, xm = 1M, λ = 1.8).
+    // Every fitted tail loss X ≥ 1M pierces the 500k retention in full:
+    //   severity = ∫_{500k}^{1M} 1 dx + ∫_{1M}^{1.5M} (1M/x)^α dx = 883,001.87
+    // (hand-verified by numeric integration of the survival function), so
+    //   annual RPP = 1.8 × 883,001.87 = 1,589,403.36.
+    // The old clamp priced this layer as 1M xs 1M → 629,218 severity
+    // (1,132,593 annual) — 28.7% understated.
+    const ret = 500_000;
+    const lim = 1_000_000;
+    const { severity, rpp } = calcLayerPrice(ALPHA_FIT, XM, EXPECTED_FREQ, ret, lim);
+    close(severity, 883_001.87, 1);
+    close(rpp, 1_589_403.36, 1);
+    const engineSev = paretoLayerExpectedLoss(ALPHA_FIT, XM, ret, lim, /*n=*/18, /*years=*/10);
+    close(engineSev, 1_589_403.36, 1);
+  });
 });

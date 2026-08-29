@@ -15,12 +15,7 @@ import { useCallback, useMemo } from 'react';
 import { rateOnLine, paybackYears, totalCover } from '../../../../../shared/fac/layers.js';
 import './FacLayerTower.css';
 
-import { numOrNull } from '../../../utils/format';
-const stripDigits = (v) => String(v ?? '').replace(/[^\d]/g, '');
-const fmtComma = (v) => {
-  const d = stripDigits(v);
-  return d ? Number(d).toLocaleString('en-US') : '';
-};
+import { formatWithCommasDecimal, numOrNull, sanitizeNumber } from '../../../utils/format';
 const money = (v) => (v === null || v === undefined || !Number.isFinite(Number(v))
   ? '—'
   : Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 }));
@@ -132,19 +127,19 @@ export default function FacLayerTower({ layers, onChange, readOnly = false }) {
                   <td>{r.layer_no}</td>
                   <td>
                     <input
-                      className="fi" type="text" inputMode="numeric" readOnly={readOnly}
+                      className="fi" type="text" inputMode="decimal" readOnly={readOnly}
                       aria-label={`Layer ${r.layer_no} attachment`}
-                      value={fmtComma(r.attachment)}
-                      onChange={(e) => setRow(i, 'attachment', stripDigits(e.target.value))}
+                      value={formatWithCommasDecimal(r.attachment)}
+                      onChange={(e) => setRow(i, 'attachment', sanitizeNumber(e.target.value))}
                     />
                   </td>
                   <td>
                     <input
-                      className="fi" type="text" inputMode="numeric" readOnly={readOnly}
+                      className="fi" type="text" inputMode="decimal" readOnly={readOnly}
                       aria-label={`Layer ${r.layer_no} limit`}
                       placeholder="Unlimited"
-                      value={fmtComma(r.limit_amount)}
-                      onChange={(e) => setRow(i, 'limit_amount', stripDigits(e.target.value))}
+                      value={formatWithCommasDecimal(r.limit_amount)}
+                      onChange={(e) => setRow(i, 'limit_amount', sanitizeNumber(e.target.value))}
                     />
                   </td>
                   <td>
@@ -167,10 +162,10 @@ export default function FacLayerTower({ layers, onChange, readOnly = false }) {
                   </td>
                   <td>
                     <input
-                      className="fi" type="text" inputMode="numeric" readOnly={readOnly}
+                      className="fi" type="text" inputMode="decimal" readOnly={readOnly}
                       aria-label={`Layer ${r.layer_no} premium`}
-                      value={fmtComma(r.premium)}
-                      onChange={(e) => setRow(i, 'premium', stripDigits(e.target.value))}
+                      value={formatWithCommasDecimal(r.premium)}
+                      onChange={(e) => setRow(i, 'premium', sanitizeNumber(e.target.value))}
                     />
                   </td>
                   <td className="fac-tower__num fac-tower__derived">{pct(derived[i].rol)}</td>

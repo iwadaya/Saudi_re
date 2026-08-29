@@ -950,6 +950,23 @@ describe.skipIf(shouldSkipDb)('integration: contract save and rehydrate every ro
     });
     expect(badId.status).toBe(400);
 
+    // ── Treaty-side Zod validation (lossesSaveSchema, shared with the quote
+    // twin): a malformed payload (losses not an array) is rejected 400
+    // VALIDATION_FAILED before touching the DB — for large AND cat losses. ──
+    for (const path of ['large-losses', 'cat-losses']) {
+      const malformed = await harness.fetchApp('PUT', `/api/treaties/${contractId}/${path}`, {
+        body: { report_date: '2026-03-31', losses: { not: 'an array' } },
+      });
+      expect(malformed.status).toBe(400);
+      expect((await malformed.json()).code).toBe('VALIDATION_FAILED');
+    }
+    // risk-profiles: bands over the 1000-row cap are rejected up front.
+    const hugeBands = await harness.fetchApp('PUT', `/api/treaties/${contractId}/risk-profiles/${refs.cob1}`, {
+      body: { bands: Array.from({ length: 1001 }, () => ({ from_amt: 0, to_amt: 1 })) },
+    });
+    expect(hugeBands.status).toBe(400);
+    expect((await hugeBands.json()).code).toBe('VALIDATION_FAILED');
+
     // ── Loss-selection staleness (migration 114) ──
     // Large losses were re-saved (above) after the loss-selection snapshot was
     // saved, so the selection is now stale.

@@ -4,6 +4,7 @@ import { pool } from "../db/pool.js";
 import { asyncHandler, numOrNull, dateOrNull, boolOrDefault } from '../helpers.js';
 import { logAudit } from "../services/audit.js";
 import { changeUwStatus } from "../services/workflow.js";
+import { UW_STATUSES, isTerminal, InvalidTransitionError } from "../lib/statusMachine.js";
 import { actorFromReq } from "../middleware/requestContext.js";
 import { contractContextJoins } from "../db/contractJoins.js";
 import { assertEntityUnchanged, optimisticLockOverrideRequested } from "../db/optimisticLock.js";
@@ -16,6 +17,16 @@ import { getAssignmentHistory } from "../services/assignments.js";
 import { getContractHistory } from "../services/contractHistory.js";
 const router = Router();
 
+// ── Lifecycle-status fences ──────────────────────────────────────────────────
+// Engine-owned contract statuses. Reachable ONLY through the approval engine
+// (services/approvals.js approve/sign) and the quote-bind flow
+// (services/quoteBind.js) — claims eligibility keys on
+// c.status IN ('SIGNED','BOUND') (routes/claims.js), so neither a create nor a
+// header edit may ever mint one of these.
+const PRIVILEGED_CONTRACT_STATUSES = new Set(['APPROVED', 'AWAITING_SIGNED_LINE', 'SIGNED', 'BOUND']);
+// contract_status values with no counterpart on the uw_workflow_status machine:
+// commercial labels, not workflow states. They carry no privilege.
+const COMMERCIAL_CONTRACT_STATUSES = new Set(['QUOTED', 'OFFERED', 'RENEWED', 'CANCELLED']);
 
 // ── POST /api/treaties ──
 router.post("/treaties", asyncHandler(async (req, res) => {
@@ -25,12 +36,27 @@ router.post("/treaties", asyncHandler(async (req, res) => {
   if (!inception_date) {
     return res.status(400).json({ error: 'inception_date is required', code: 'VALIDATION_FAILED' });
   }
+  // POLICY: a treaty is always born DRAFT/DRAFT. No caller creates non-DRAFT
+  // in the app (the treaty screens send no status; the Excel import agent only
+  // writes data slices into an EXISTING contract; the quote-bind flow creates
+  // its SIGNED contract inside services/quoteBind.js, not through this route),
+  // so an explicitly requested non-DRAFT birth is rejected rather than letting
+  // an entity skip the approval/capacity gates. Lifecycle moves after creation
+  // go through PUT (fenced below) and the approval engine.
+  for (const [field, value] of [['status', b.status], ['uw_status', b.uw_status]]) {
+    if (value != null && String(value).toUpperCase() !== 'DRAFT') {
+      return res.status(400).json({
+        error: `New treaties are always created in DRAFT — ${field} cannot be set at creation`,
+        code: 'VALIDATION_FAILED',
+      });
+    }
+  }
   const creatorUserId = req.user?.userId || null;
   const { rows } = await pool.query(
     `INSERT INTO public.contract (uw_year,cedant_id,broker_id,currency_id,country_id,treaty_type_id,status,uw_status,experience_source,primary_class_of_business_id,created_by_user_id,assigned_to_user_id,inception_date)
-     VALUES ($1,$2,$3,$4,$5,$6,$7::public.contract_status,$8::public.uw_workflow_status,$9,$10,$11,$11,$12) RETURNING contract_id,uw_year,status,uw_status,created_at`,
+     VALUES ($1,$2,$3,$4,$5,$6,'DRAFT'::public.contract_status,'DRAFT'::public.uw_workflow_status,$7,$8,$9,$9,$10) RETURNING contract_id,uw_year,status,uw_status,created_at`,
     [uw_year, b.cedant_id || null, b.broker_id || null, b.currency_id || null, b.country_id || null, b.treaty_type_id || null,
-     b.status || 'DRAFT', b.uw_status || 'DRAFT', b.experience_source || 'TRIANGLE',
+     b.experience_source || 'TRIANGLE',
      b.primary_class_of_business_id || null, creatorUserId, inception_date]
   );
   const c = rows[0];
@@ -42,7 +68,10 @@ router.post("/treaties", asyncHandler(async (req, res) => {
 router.get("/treaties", asyncHandler(async (req, res) => {
   const {status,uw_year,cedant_id,country_id,category,limit,offset,page}=req.query;const conds=[];const params=[];let i=1;
   if(status){
-    const VALID_STATUSES = new Set(['DRAFT','AWAITING_APPROVAL','APPROVED','AWAITING_SIGNED_LINE','SIGNED','NTU','DECLINED']);
+    // DISPUTE_PENDING included (F77): the approvals dashboard lists disputed
+    // offers so an arbiter can resolve a split decision; it is a real
+    // uw_workflow_status enum value (migration 040).
+    const VALID_STATUSES = new Set(['DRAFT','AWAITING_APPROVAL','APPROVED','AWAITING_SIGNED_LINE','SIGNED','NTU','DECLINED','DISPUTE_PENDING']);
     const statuses = status.split(',').map(s=>s.trim().toUpperCase()).filter(s=>VALID_STATUSES.has(s));
     if(statuses.length === 1){ conds.push(`c.uw_status=$${i++}`); params.push(statuses[0]); }
     else if(statuses.length > 1){ conds.push(`c.uw_status=ANY($${i++}::public.uw_workflow_status[])`); params.push(statuses); }
@@ -227,20 +256,70 @@ router.put("/treaties/:id", validateBody(treatyPutBodySchema), asyncHandler(asyn
          experience_source=COALESCE($8,experience_source),renewal_date=COALESCE($9,renewal_date),
          inception_date=COALESCE($10,inception_date),primary_class_of_business_id=COALESCE($11,primary_class_of_business_id),
          contract_description=COALESCE($12,contract_description),alt_contract_id=COALESCE($13,alt_contract_id),
-         status=COALESCE($14::public.contract_status,status),
-         signed_line_pct=COALESCE($15,signed_line_pct),
+         signed_line_pct=COALESCE($14,signed_line_pct),
          updated_at=now() WHERE contract_id=$1`,
         [id,h.cedant_id||null,h.broker_id||null,h.currency_id||null,h.country_id||null,
          h.treaty_type_id||null,numOrNull(h.uw_year??h.underwriting_year??d.start_year),
          h.experience_source||null,dateOrNull(d.renewal_date??h.renewal_date),dateOrNull(d.inception_date??h.inception_date),
          h.primary_class_of_business_id||null,h.contract_description??null,h.alt_contract_id??null,
-         h.status||null,numOrNull(h.signed_line_pct)]);
+         numOrNull(h.signed_line_pct)]);
       // uw_status is NOT written by the raw header UPDATE: a workflow-state move
       // must leave a workflow event + STATUS_CHANGED audit and clear the transition
       // guard. Route any requested change through changeUwStatus — a re-save of the
       // same status is a no-op, an illegal jump (e.g. SIGNED→DRAFT) is a clean 422.
+      // The engine-owned targets are additionally 403'd outright: approve/sign/bind
+      // (services/approvals.js + quoteBind.js) are the ONLY paths into them.
       if (h.uw_status) {
+        const requestedUw = String(h.uw_status).toUpperCase();
+        const { rows: uwRows } = await client.query(
+          `SELECT uw_status FROM public.contract WHERE contract_id=$1`, [id]);
+        const currentUw = String(uwRows[0]?.uw_status || '').toUpperCase();
+        if (requestedUw !== currentUw && PRIVILEGED_CONTRACT_STATUSES.has(requestedUw)) {
+          throw Object.assign(
+            new Error(`uw_status ${requestedUw} can only be set by the approval engine (approve/sign)`),
+            { status: 403, code: 'PRIVILEGED_STATUS' });
+        }
         await changeUwStatus(client, { contractId: id, to: h.uw_status, actor, comment: 'treaty header edit' });
+      }
+      // POLICY (contract.status fence): `status` is never written raw from the
+      // header payload. Unchanged/absent status is a no-op (the client
+      // round-trips the current value on every save). A CHANGE is allowed only
+      // for legal, non-privileged moves:
+      //   • engine-owned targets (PRIVILEGED_CONTRACT_STATUSES) → 403 — sign
+      //     (approvals.js) and quote-bind remain the only path to SIGNED/BOUND;
+      //   • a canonical workflow state routes through changeUwStatus (status-
+      //     machine legality, 422 on an illegal edge, workflow event + critical
+      //     audit, and the status mirror);
+      //   • a commercial-only label (QUOTED/OFFERED/RENEWED/CANCELLED) is
+      //     written directly with its own critical STATUS_CHANGED audit, and
+      //     only while the workflow state is non-terminal.
+      if (h.status) {
+        const requested = String(h.status).toUpperCase();
+        const { rows: curRows } = await client.query(
+          `SELECT status, uw_status FROM public.contract WHERE contract_id=$1`, [id]);
+        const current = String(curRows[0]?.status || '').toUpperCase();
+        const currentUw = String(curRows[0]?.uw_status || '').toUpperCase();
+        if (requested !== current) {
+          if (PRIVILEGED_CONTRACT_STATUSES.has(requested)) {
+            throw Object.assign(
+              new Error(`status ${requested} can only be set by the approval engine (sign/bind)`),
+              { status: 403, code: 'PRIVILEGED_STATUS' });
+          }
+          if (UW_STATUSES.includes(requested)) {
+            // Canonical workflow target → the same chokepoint uw_status uses.
+            await changeUwStatus(client, { contractId: id, to: requested, actor, comment: 'treaty header edit' });
+          } else if (COMMERCIAL_CONTRACT_STATUSES.has(requested) && !isTerminal(currentUw)) {
+            await client.query(
+              `UPDATE public.contract SET status=$2::public.contract_status, updated_at=now() WHERE contract_id=$1`,
+              [id, requested]);
+            await logAudit(client, {
+              entityType: 'CONTRACT', entityId: id, eventType: 'STATUS_CHANGED',
+              actor, payload: { from: current, to: requested, field: 'status' },
+            }, { critical: true });
+          } else {
+            throw new InvalidTransitionError(current, requested);
+          }
+        }
       }
     }
 

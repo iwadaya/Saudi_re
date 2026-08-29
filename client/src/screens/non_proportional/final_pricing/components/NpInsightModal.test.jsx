@@ -33,7 +33,10 @@ function makePricing(over = {}) {
   return {
     insightKey: 'GEM',
     setInsightOpen: vi.fn(),
-    layers: [{ layer: 1, risk: true }, { layer: 2, cat: true, catPureBurn: '0.00%' }],
+    layers: [
+      { layer: 1, risk: true },
+      { layer: 2, cat: true, catPureBurn: '0.00%', limit: '1000000', deductible: '100000' },
+    ],
     updateLayer: vi.fn(),
     treatyMetrics: {}, quotePricing: {}, portfolioTreaties: [],
     ...over,
@@ -79,7 +82,30 @@ describe('NpInsightModal — GEM insight', () => {
     const applyBtn = await screen.findByRole('button', { name: /Apply to cat burning cost/i });
     fireEvent.click(applyBtn);
 
-    // Cat layer is the 2nd entry (index 1); value is the ground-up EQ loss.
-    await waitFor(() => expect(updateLayer).toHaveBeenCalledWith(1, 'catPureBurn', 250000));
+    // Cat layer is the 2nd entry (index 1). The 250,000 ground-up EQ loss is
+    // cut to the layer (1,000,000 xs 100,000 → 150,000) and rated on the
+    // limit: 150,000 / 1,000,000 = 15.00% — an engine-convention ROL string,
+    // never the raw currency amount.
+    await waitFor(() => expect(updateLayer).toHaveBeenCalledWith(1, 'catPureBurn', '15.00%'));
+  });
+
+  it('disables Apply when no cat layer has a limit (no ROL denominator)', async () => {
+    const updateLayer = vi.fn();
+    const pricing = makePricing({
+      updateLayer,
+      layers: [{ layer: 1, risk: true }, { layer: 2, cat: true, catPureBurn: '0.00%' }],
+    });
+    render(<NpInsightModal pricing={pricing} open contractId="c-1" isQuote={false} currency="SAR" npDetail={{}} />);
+
+    const pga = await screen.findByLabelText('PGA');
+    fireEvent.change(pga, { target: { value: '0.18' } });
+    const calc = screen.getByRole('button', { name: /Calculate/i });
+    await waitFor(() => expect(calc).toBeEnabled());
+    fireEvent.click(calc);
+
+    const applyBtn = await screen.findByRole('button', { name: /Apply to cat burning cost/i });
+    expect(applyBtn).toBeDisabled();
+    fireEvent.click(applyBtn);
+    expect(updateLayer).not.toHaveBeenCalled();
   });
 });

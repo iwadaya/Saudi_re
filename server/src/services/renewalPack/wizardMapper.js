@@ -111,6 +111,23 @@ function trianglesToCells(tri, pathPrefix, setLeaf) {
   const uwYears = Array.isArray(tri.uwYears) ? tri.uwYears : [];
   const devPeriods = Array.isArray(tri.devPeriods) ? tri.devPeriods : [];
   const values = Array.isArray(tri.values) ? tri.values : [];
+
+  // Normalise dev periods to months. A pack may carry dev columns as plain
+  // integer indices (1, 2, 3, …) rather than months (12, 24, 36); downstream
+  // 12/24/36-keyed LDF logic can't match bare indices. The labelling scheme
+  // is detected ONCE for the whole header row (F74): the triangle is
+  // index-labelled only when its dev periods are exactly the consecutive
+  // integer sequence 1..n, and then EVERY column is scaled by 12 — including
+  // columns 12 and beyond. The old per-cell `< 12` heuristic split a
+  // 13-column index triangle into colliding cells (index 12 → 12 months,
+  // same key as index 1 → unique-constraint failure on quote_triangle_cells)
+  // and nonsense 13-month periods. Anything not shaped 1..n is treated as
+  // already being months for every column.
+  const numericDevs = devPeriods.map(Number);
+  const isIndexScheme = numericDevs.length > 0
+    && numericDevs.every((d) => Number.isInteger(d))
+    && [...numericDevs].sort((a, b) => a - b).every((d, i) => d === i + 1);
+
   const out = [];
   for (let i = 0; i < uwYears.length; i++) {
     const oy = Number(uwYears[i]);
@@ -119,13 +136,7 @@ function trianglesToCells(tri, pathPrefix, setLeaf) {
     for (let j = 0; j < devPeriods.length; j++) {
       const rawDev = Number(devPeriods[j]);
       if (!Number.isFinite(rawDev)) continue;
-      // Normalise dev periods to months, mirroring triangleBounds.js's
-      // normalizeTriangleRequest: a pack may carry dev columns as plain
-      // integer indices (1, 2, 3, …) rather than months (12, 24, 36).
-      // Downstream 12/24/36-keyed LDF logic can't match bare indices, so
-      // anything < 12 is treated as a year index and scaled to months;
-      // values already in months (>= 12) pass through unchanged.
-      const dm = rawDev < 12 ? rawDev * 12 : rawDev;
+      const dm = isIndexScheme ? rawDev * 12 : rawDev;
       const cv = row[j];
       if (cv == null) continue;
       const n = Number(cv);

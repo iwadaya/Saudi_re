@@ -656,15 +656,24 @@ export function computeCandidates({ engine, exposure, structure = {}, rates = {}
     result: { available: true, ratePm: engine?.final_net_rate_pm ?? null },
   }];
 
-  candidates.push({
-    code: 'EXPOSURE_CURVE',
-    result: exposureCurveLossCost({
-      bands: buildCurveBands({ exposure, curveBands: rates.curveBands, engine }),
-      attachment: structure.attachment ?? 0,
-      limit: structure.limit ?? Infinity,
-      exposureTotal: exposure?.total_si,
-    }),
+  const curveResult = exposureCurveLossCost({
+    bands: buildCurveBands({ exposure, curveBands: rates.curveBands, engine }),
+    attachment: structure.attachment ?? 0,
+    limit: structure.limit ?? Infinity,
+    exposureTotal: exposure?.total_si,
   });
+  // With no PML recorded anywhere the MPL defaults to the full sum insured
+  // (the conservative reading for the ground-up cost, but it misallocates
+  // every layered tower), and that default is said out loud rather than
+  // ridden silently (F9/F12).
+  if (curveResult.available && numOrNull(exposure?.pml_pct) == null) {
+    curveResult.diagnostics.warnings = [
+      ...(curveResult.diagnostics.warnings || []),
+      'No PML is recorded on the risk or its locations, so the exposure curve is applied '
+      + 'with MPL = full sum insured. Enter a PML to allocate the layers correctly.',
+    ];
+  }
+  candidates.push({ code: 'EXPOSURE_CURVE', result: curveResult });
 
   return candidates;
 }
@@ -691,6 +700,10 @@ function buildCurveBands({ exposure, curveBands, engine }) {
   if (!band?.curve) return [];
   return [{
     exposure: total,
+    // exposure.pml_pct is the profile's 0..1 FRACTION (buildExposureProfile
+    // converts the percent-scale risk header value once, at the boundary);
+    // bandLayerLoss expects the same 0..1 scale. Absent PML means MPL = SI,
+    // and computeCandidates warns about that default.
     pmlPct: numOrNull(exposure.pml_pct) ?? 1,
     groundUpRatePm,
     curve: band.curve,

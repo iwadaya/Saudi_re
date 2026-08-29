@@ -14,6 +14,7 @@ import {
   getMarketAverage,
   createComponentSnapshot,
   listComponentSnapshots,
+  getComponentSnapshotById,
   deleteComponentSnapshot,
 } from '../repositories/pricingRepository.js';
 import {
@@ -34,6 +35,7 @@ import {
   getOfferPermissionsAction,
 } from '../services/pricingWorkflowService.js';
 import { resolveActor } from '../services/pricingHelpers.js';
+import { assertCanEdit } from '../../../services/permissions.js';
 import { logger } from '../../../lib/logger.js';
 import { verifyNpPricingOutputs, summariseDrifts, isStrictMode, pricingDriftStats } from '../../../lib/pricingVerifier.js';
 import { recordPricingDrift } from '../../../observability/businessMetrics.js';
@@ -47,8 +49,12 @@ export async function getPricingOutputsController(req, res) {
 }
 
 export async function putPricingOutputsController(req, res) {
-  await upsertPricingOutputs(req.params.id, req.body);
-  res.json({ ok: true });
+  // Same opt-in stale-write guard as POST /pricing/save: a stale
+  // If-Unmodified-Since token → 409 STALE_WRITE (see optimisticLock.js).
+  const updatedAt = await upsertPricingOutputs(req.params.id, req.body, {
+    ifUnmodifiedSince: req.headers['if-unmodified-since'],
+  });
+  res.json({ ok: true, updated_at: updatedAt });
 }
 
 export async function getPricingYearlyController(req, res) {
@@ -56,8 +62,12 @@ export async function getPricingYearlyController(req, res) {
 }
 
 export async function putPricingYearlyController(req, res) {
-  await replacePricingYearly(req.params.id, req.body.rows ?? []);
-  res.json({ ok: true });
+  // Delete-then-reinsert of ALL yearly rows — guarded like the composite save
+  // so a stale tab can't silently wipe another underwriter's projections.
+  const updatedAt = await replacePricingYearly(req.params.id, req.body.rows ?? [], {
+    ifUnmodifiedSince: req.headers['if-unmodified-since'],
+  });
+  res.json({ ok: true, updated_at: updatedAt });
 }
 
 export async function saveCompositePricingController(req, res) {
@@ -228,17 +238,17 @@ export async function markNtuController(req, res) {
 }
 
 export async function countryAggregatesController(req, res) {
-  try {
-    const row = await getCountryAggregates(req.params.countryId, req.query.excludeContractId);
-    res.json({
-      total_agg: row?.weighted_country_agg ?? 0,
-      total_country_agg: row?.total_country_agg ?? 0,
-      weighted_country_agg: row?.weighted_country_agg ?? 0,
-    });
-  } catch (error) {
-    logger.error('[aggregates/country] error', { error: error.message });
-    res.json({ total_agg: 0, total_country_agg: 0, weighted_country_agg: 0 });
-  }
+  // A DB failure must surface as an error (asyncHandler → errorHandler → 5xx),
+  // NOT as a 200 with zeros: 0 here reads as "no other exposure in this
+  // country" and silently understates accumulation exactly when the DB is
+  // unhealthy. A country with no aggregate rows legitimately returns zeros via
+  // the null-coalescing below — that is the only soft-fallback kept.
+  const row = await getCountryAggregates(req.params.countryId, req.query.excludeContractId);
+  res.json({
+    total_agg: row?.weighted_country_agg ?? 0,
+    total_country_agg: row?.total_country_agg ?? 0,
+    weighted_country_agg: row?.weighted_country_agg ?? 0,
+  });
 }
 
 export async function aggCobBreakdownController(req, res) {
@@ -267,8 +277,14 @@ export async function marketAverageController(req, res) {
 }
 
 export async function createComponentSnapshotController(req, res) {
-  const { label, components, created_by } = req.body;
-  res.json(await createComponentSnapshot(req.params.id, label, components, created_by));
+  const { label, components } = req.body;
+  // Attribution comes from the VERIFIED actor (pricingHelpers.js rule), never
+  // from a client-supplied created_by, which would be forgeable.
+  const actor = await resolveActor(req);
+  const createdBy = actor.actorUserId
+    ? (actor.actorName && actor.actorName !== 'SYSTEM' ? actor.actorName : actor.actorUserId)
+    : null;
+  res.json(await createComponentSnapshot(req.params.id, label, components, createdBy));
 }
 
 export async function listComponentSnapshotsController(req, res) {
@@ -276,6 +292,17 @@ export async function listComponentSnapshotsController(req, res) {
 }
 
 export async function deleteComponentSnapshotController(req, res) {
-  await deleteComponentSnapshot(req.params.snapId);
+  // Snapshot ids are a guessable integer sequence, so resolve the owning
+  // contract FIRST, take the assignee edit-lock on it, and run the DELETE
+  // scoped to (id, contract_id). guardApiMutations already resolves + locks
+  // this path app-side; enforcing it here keeps the guarantee if the route is
+  // ever mounted without the app guard, and turns an unknown id into a 404
+  // instead of a silent no-op 200.
+  const snapId = Number(req.params.snapId);
+  if (!Number.isInteger(snapId)) return res.status(404).json({ error: 'Snapshot not found' });
+  const snapshot = await getComponentSnapshotById(snapId);
+  if (!snapshot) return res.status(404).json({ error: 'Snapshot not found' });
+  await assertCanEdit(req, 'CONTRACT', snapshot.contract_id);
+  await deleteComponentSnapshot(snapshot.id, snapshot.contract_id);
   res.json({ ok: true });
 }

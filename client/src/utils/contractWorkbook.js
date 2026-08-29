@@ -168,7 +168,9 @@ function writeThemedSheet(theme, workbook, name, title, aoa) {
     for (let rr = hdr; rr <= lastData; rr++) {
       const v = ws.getCell(rr, c).value;
       w = Math.max(w, String(v ?? '').length + 2);
-      if (rr >= firstData && typeof v === 'number') ws.getCell(rr, c).numFmt = UT.fmtInt;
+      // Integers keep the integer format; anything fractional keeps its 2dp
+      // (fmtInt on every numeric cell exported 1234.56 as a rounded 1,235).
+      if (rr >= firstData && typeof v === 'number') ws.getCell(rr, c).numFmt = Number.isInteger(v) ? UT.fmtInt : UT.fmtMoney2;
     }
     ws.getColumn(c).width = Math.min(60, w);
   }

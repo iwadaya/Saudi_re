@@ -28,7 +28,7 @@ vi.mock('recharts', () => {
 const structure = {
   layers: [
     { layer: 1, risk: true, cat: false },
-    { layer: 2, cat: true, catExposure: '0.00%' },
+    { layer: 2, cat: true, catExposure: '0.00%', limit: '1000000', attachment: '100000' },
   ],
 };
 
@@ -70,8 +70,28 @@ describe('FQEqDamageRatioTab', () => {
     const applyBtn = await screen.findByRole('button', { name: /Apply to cat burning cost/i });
     fireEvent.click(applyBtn);
 
-    // First cat layer → the 2nd structure layer (lIdx 1); sIdx is threaded through,
-    // value is the ground-up EQ loss written to catPureBurn.
-    await waitFor(() => expect(updateClientStructureLayer).toHaveBeenCalledWith(3, 1, 'catPureBurn', 250000));
+    // First cat layer → the 2nd structure layer (lIdx 1); sIdx is threaded
+    // through. The 250,000 ground-up EQ loss is cut to the layer (1,000,000
+    // xs 100,000 → 150,000) and rated on the limit: 15.00% — an
+    // engine-convention ROL string, never the raw currency amount (which
+    // saneRolOrEmpty would silently discard).
+    await waitFor(() => expect(updateClientStructureLayer).toHaveBeenCalledWith(3, 1, 'catPureBurn', '15.00%'));
+  });
+
+  it('disables Apply when the cat layer has no limit (no ROL denominator)', async () => {
+    const updateClientStructureLayer = vi.fn();
+    const noLimit = { layers: [{ layer: 1, cat: true, catExposure: '0.00%' }] };
+    render(<FQEqDamageRatioTab structure={noLimit} sIdx={0} contractId="c-1" currency="SAR" catDisabled={false} updateClientStructureLayer={updateClientStructureLayer} />);
+
+    const pga = await screen.findByLabelText('PGA');
+    fireEvent.change(pga, { target: { value: '0.18' } });
+    const calc = screen.getByRole('button', { name: /Calculate/i });
+    await waitFor(() => expect(calc).toBeEnabled());
+    fireEvent.click(calc);
+
+    const applyBtn = await screen.findByRole('button', { name: /Apply to cat burning cost/i });
+    expect(applyBtn).toBeDisabled();
+    fireEvent.click(applyBtn);
+    expect(updateClientStructureLayer).not.toHaveBeenCalled();
   });
 });
