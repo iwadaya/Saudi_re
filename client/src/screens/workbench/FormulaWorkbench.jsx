@@ -36,20 +36,25 @@ function Pill({ tone = 'neutral', children }) {
 
 export default function FormulaWorkbench() {
   const navigate = useNavigate();
-  const session = getSession();
+  // getSession() JSON-parses localStorage, so it returns a NEW object on every
+  // render. Effects must depend on the stable userId primitive, never the
+  // object itself — an object dep re-runs the effect after every render, and
+  // each fetch completion triggers a render, producing an unbounded refetch
+  // loop (hundreds of requests per second until the rate limiter starves it).
+  const userId = getSession()?.userId ?? null;
   const [serverFormulas, setServerFormulas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
   useEffect(() => {
-    if (!session) { navigate('/login'); return; }
+    if (!userId) { navigate('/login'); return; }
     let mounted = true;
     api.workbenchListFormulas()
       .then(rows => { if (mounted) setServerFormulas(Array.isArray(rows) ? rows : []); })
       .catch(e => { if (mounted) setErr(e.message || 'Failed to load formula list'); })
       .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
-  }, [navigate, session]);
+  }, [navigate, userId]);
 
   const indexed = useMemo(() => {
     const map = new Map();

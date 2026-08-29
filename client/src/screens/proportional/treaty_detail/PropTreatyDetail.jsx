@@ -15,6 +15,7 @@ import { logger } from '../../../utils/logger';
 import { dateInputValue } from '../../../utils/format';
 import { handleStaleWrite } from '../../../utils/handleStaleWrite';
 import { isReadOnlyError } from '../../../utils/readOnlyError';
+import { throwIfSaveRejection } from '../../shared/saveErrorMessage';
 import { useGlobalToast } from '../../../hooks/useToast';
 import { useUnsavedChangesGuard } from '../../../hooks/useUnsavedChangesGuard';
 import { useTreatyHeaderUnmountAutosave } from '../../../hooks/useTreatyHeaderUnmountAutosave';
@@ -462,7 +463,7 @@ export default function PropTreatyDetail() {
         },
       });
       if (stale.handled) return stale.action === 'overwrite';
-      logger.error('Save failed:', e); return false;
+      logger.error('Save failed:', e); throwIfSaveRejection(e); return false;
     }
     finally { setSaving(false); }
   }, [contractId, update, contractDescription, treatyTypes, readOnly, markReadOnly]);
@@ -796,4 +797,3 @@ export default function PropTreatyDetail() {
     </WizardLayout>
   );
 }
-

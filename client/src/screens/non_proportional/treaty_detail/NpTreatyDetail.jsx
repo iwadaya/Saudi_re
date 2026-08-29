@@ -22,6 +22,7 @@ import {
 } from '../../../utils/format';
 import { handleStaleWrite } from '../../../utils/handleStaleWrite';
 import { isReadOnlyError } from '../../../utils/readOnlyError';
+import { throwIfSaveRejection } from '../../shared/saveErrorMessage';
 import { useGlobalToast } from '../../../hooks/useToast';
 import { useUnsavedChangesGuard } from '../../../hooks/useUnsavedChangesGuard';
 import { useTreatyHeaderUnmountAutosave } from '../../../hooks/useTreatyHeaderUnmountAutosave';
@@ -486,6 +487,10 @@ export default function NpTreatyDetail() {
       });
       if (stale.handled) return stale.action === 'overwrite';
       logger.error('Save:', e);
+      // Validation rejections (400/422) carry the exact field problem — throw
+      // so the WizardLayout banner names it instead of a bare "Save failed"
+      // that leaves the user stuck on the screen with no visible reason.
+      throwIfSaveRejection(e);
       return false;
     }
   }, [contractId, update, contractDescription, quoteMode, readOnly, markReadOnly]);
@@ -691,8 +696,8 @@ export default function NpTreatyDetail() {
             <div className="card glass" style={{ display: 'flex', flexDirection: 'column' }}>
               <div className="card-head"><span className="card-header-label">BROKERAGE &amp; TAXES</span><span className="card-header-tag">QUOTE INPUT</span></div>
               <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-                <FR label="Brokerage %"><PctInput className="fi" placeholder="e.g. 10%" value={s.brokeragePct || ''} onChange={v => update({ brokeragePct: v })} /></FR>
-                <FR label="Taxes %"><PctInput className="fi" placeholder="e.g. 2%" value={s.taxesPct || ''} onChange={v => update({ taxesPct: v })} /></FR>
+                <FR label="Brokerage %"><PctInput className="fi" placeholder="e.g. 10%" min={0} max={100} value={s.brokeragePct || ''} onChange={v => update({ brokeragePct: v })} /></FR>
+                <FR label="Taxes %"><PctInput className="fi" placeholder="e.g. 2%" min={0} max={100} value={s.taxesPct || ''} onChange={v => update({ taxesPct: v })} /></FR>
               </div>
             </div>
           ) : (
@@ -723,10 +728,10 @@ export default function NpTreatyDetail() {
 
                 <div className="mini-title" style={{ marginTop: 12 }}>PREMIUM &amp; COMMISSIONS</div>
                 <FR label="Est. GNPI"><CommaInput value={s.estGnpi} onChange={v => update({ estGnpi: v })} placeholder="e.g. 50,000,000" suffix={currencyCode} /></FR>
-                <FR label="Brokerage %"><PctInput className="fi" placeholder="e.g. 10%" value={s.brokeragePct || ''} onChange={v => update({ brokeragePct: v })} /></FR>
-                <FR label="Taxes %"><PctInput className="fi" placeholder="e.g. 2%" value={s.taxesPct || ''} onChange={v => update({ taxesPct: v })} /></FR>
-                <FR label="No Claims Bonus %"><PctInput className="fi" placeholder="e.g. 5%" value={s.noClaimsBonusPct || ''} onChange={v => update({ noClaimsBonusPct: v })} /></FR>
-                <FR label="Profit Commission %"><PctInput className="fi" placeholder="e.g. 10%" value={s.profitCommissionPct || ''} onChange={v => update({ profitCommissionPct: v })} /></FR>
+                <FR label="Brokerage %"><PctInput className="fi" placeholder="e.g. 10%" min={0} max={100} value={s.brokeragePct || ''} onChange={v => update({ brokeragePct: v })} /></FR>
+                <FR label="Taxes %"><PctInput className="fi" placeholder="e.g. 2%" min={0} max={100} value={s.taxesPct || ''} onChange={v => update({ taxesPct: v })} /></FR>
+                <FR label="No Claims Bonus %"><PctInput className="fi" placeholder="e.g. 5%" min={0} max={100} value={s.noClaimsBonusPct || ''} onChange={v => update({ noClaimsBonusPct: v })} /></FR>
+                <FR label="Profit Commission %"><PctInput className="fi" placeholder="e.g. 10%" min={0} max={100} value={s.profitCommissionPct || ''} onChange={v => update({ profitCommissionPct: v })} /></FR>
               </div>
             </div>
           )}

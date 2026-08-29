@@ -41,8 +41,8 @@ export function useTreatyHeaderUnmountAutosave({
         // partially-filled form on navigation (screens whose save() has no
         // draft mode simply ignore the option). save() resolves false for
         // ordinary failures (network/5xx — it swallows and logs internally)
-        // and only REJECTS for re-thrown required-field errors, so both
-        // shapes must reach the toast.
+        // and only REJECTS for re-thrown required-field errors and 400/422
+        // validation rejections, so both shapes must reach the toast.
         saveRef.current({ draft: true }).then((ok) => {
           if (ok === false) showToast('Treaty Detail not saved — the save failed. Reopen the screen and try again.', 6000);
         }).catch(e => {

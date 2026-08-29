@@ -9,6 +9,10 @@ const PG_ERROR = {
   '23503': { status: 400, code: 'FK_VIOLATION',    message: 'Referenced record does not exist' },
   '22P02': { status: 400, code: 'INVALID_ID',      message: 'Invalid identifier format' },
   '23505': { status: 409, code: 'DUPLICATE',       message: 'Record already exists' },
+  // numeric_value_out_of_range — a value too large for its NUMERIC(p,s) column
+  // (e.g. 1010 into a numeric(5,2) percent). The schemas bound the known percent
+  // fields, but any column a schema doesn't cover lands here instead of a 500.
+  '22003': { status: 422, code: 'NUMERIC_OVERFLOW', message: 'A numeric value is too large for its field' },
   // raise_exception from a trigger — keep the trigger's own message, just the status.
   'P0001': { status: 422, code: 'CHECK_VIOLATION', message: null },
 };
