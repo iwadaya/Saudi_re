@@ -88,7 +88,10 @@ function formatJsonDelta(oldV, newV) {
 export default function FormulaDetail() {
   const navigate = useNavigate();
   const { module: mod, name } = useParams();
-  const session = getSession();
+  // Stable primitive, not the getSession() object — a fresh object every
+  // render as an effect dep causes an unbounded refetch loop (see
+  // FormulaWorkbench.jsx for the full explanation).
+  const userId = getSession()?.userId ?? null;
   const formula = findFormula(mod, name);
 
   const [serverData, setServerData] = useState(null);
@@ -104,7 +107,7 @@ export default function FormulaDetail() {
   const canApprove = isAtLeast(2);
 
   useEffect(() => {
-    if (!session) { navigate('/login'); return; }
+    if (!userId) { navigate('/login'); return; }
     if (!formula) return;
     let mounted = true;
     setLoading(true);
@@ -123,7 +126,7 @@ export default function FormulaDetail() {
       .catch(e => { if (mounted) setErr(e.message || 'Failed to load formula'); })
       .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
-  }, [mod, name, navigate, session, formula]);
+  }, [mod, name, navigate, userId, formula]);
 
   const preview = useMemo(() => {
     if (!formula) return null;

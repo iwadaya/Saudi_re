@@ -40,4 +40,38 @@ describe('PctInput', () => {
     render(<PctInput value="85" onChange={() => {}} displayMaxDp={2} />);
     expect(screen.getByRole('textbox')).toHaveValue('85%');
   });
+
+  // min/max live on a type="text" input, where the native attributes are
+  // inert — the component clamps the committed value itself on blur.
+  it('clamps an over-max value to max on blur', () => {
+    const onChange = vi.fn();
+    render(<PctInput value="8080" onChange={onChange} min={0} max={100} />);
+    const input = screen.getByRole('textbox');
+    fireEvent.focus(input);
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith('100');
+  });
+
+  it('clamps a below-min value to min on blur', () => {
+    const onChange = vi.fn();
+    render(<PctInput value="-5" onChange={onChange} min={0} max={100} />);
+    fireEvent.blur(screen.getByRole('textbox'));
+    expect(onChange).toHaveBeenCalledWith('0');
+  });
+
+  it('leaves in-range values and empty entries untouched on blur', () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<PctInput value="27.5" onChange={onChange} min={0} max={100} />);
+    fireEvent.blur(screen.getByRole('textbox'));
+    rerender(<PctInput value="" onChange={onChange} min={0} max={100} />);
+    fireEvent.blur(screen.getByRole('textbox'));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('does not clamp when no bounds are given', () => {
+    const onChange = vi.fn();
+    render(<PctInput value="130" onChange={onChange} />);
+    fireEvent.blur(screen.getByRole('textbox'));
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });

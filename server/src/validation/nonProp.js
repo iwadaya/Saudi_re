@@ -9,10 +9,18 @@
 // omitted entirely from the NP save).
 
 import { z } from 'zod';
-import { uuid, uwYear } from './common.js';
+import { uuid, uwYear, money, pct100, pctOpen } from './common.js';
 import { primitives } from './pricing.js';
 
 const { numish } = primitives;
+
+// Layer / expiring-layer count. Bounded so garbage (4.5, 1e12) is rejected
+// with a field message instead of failing the INSERT into an integer column.
+const layerCount = z.preprocess((v) => {
+  if (v === null || v === undefined || v === '') return undefined;
+  const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, ''));
+  return Number.isFinite(n) ? n : undefined;
+}, z.number().int().min(0).max(50).optional());
 
 // ─── Layer (NP excess-of-loss structure) ──────────────────────────
 // Matches the columns of contract_np_layers. All numeric fields are
@@ -27,7 +35,10 @@ const npLayerSchema = z.object({
   rate:                  numish,
   rol:                   numish,
   num_reinstatements:    numish,
-  reinstatement_pct:     numish,
+  // numeric(5,2) column — an unbounded value (e.g. a fat-fingered 1010) used
+  // to surface as a raw Postgres overflow. pctOpen allows >100% market terms
+  // (e.g. "1 @ 125%") while rejecting garbage.
+  reinstatement_pct:     pctOpen,
   annual_agg_deductible: numish,
   peril_scope:           z.enum(['RISK', 'CAT', 'BOTH']).optional(),
   mdp:                   numish,
@@ -53,20 +64,23 @@ const termsObject = z.object({}).passthrough();
  */
 export const npSaveSchema = z.object({
   detail: z.object({
-    number_of_layers:           numish,
-    expiring_number_of_layers:  numish,
-    deductible:                 numish,
-    max_retention:              numish,
+    number_of_layers:           layerCount,
+    expiring_number_of_layers:  layerCount,
+    deductible:                 money,
+    max_retention:              money,
     accounting_method:          z.string().optional(),
     xl_type:                    z.string().optional(),
     accounts:                   z.string().optional(),
-    brokerage_pct:              numish,
-    taxes_pct:                  numish,
-    no_claims_bonus_pct:        numish,
-    profit_commission_pct:      numish,
-    est_gnpi:                   numish,
+    // Percent columns are numeric(5,2) — before these bounds, an out-of-range
+    // value (e.g. brokerage_pct 1010 from a mangled input) reached Postgres
+    // and came back as a raw `numeric field overflow` 500.
+    brokerage_pct:              pct100,
+    taxes_pct:                  pct100,
+    no_claims_bonus_pct:        pct100,
+    profit_commission_pct:      pct100,
+    est_gnpi:                   money,
     adjustment_rate:            numish,
-    deposit_premium:            numish,
+    deposit_premium:            money,
     experience_start_year:      uwYear,
     experienceStartYear:        uwYear,     // legacy camelCase alias the handler still accepts
   }).passthrough().optional(),

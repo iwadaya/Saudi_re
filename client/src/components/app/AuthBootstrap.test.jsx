@@ -81,5 +81,17 @@ describe('AuthBootstrap — verify-on-boot', () => {
 
     expect(await screen.findByRole('button', { name: /Retry/i })).toBeInTheDocument();
     expect(getSession()).not.toBeNull();
+    expect(screen.getByText(/Can’t reach the server/)).toBeInTheDocument();
+  });
+
+  it('a 429 keeps the session and says the server is busy — not "check your connection"', async () => {
+    setSession(validSession);
+    apiMock.getMe.mockRejectedValueOnce(httpErr(429));
+    render(<AuthBootstrap><Child /></AuthBootstrap>);
+
+    expect(await screen.findByRole('button', { name: /Retry/i })).toBeInTheDocument();
+    expect(getSession()).not.toBeNull();
+    expect(screen.getByText(/The server is busy/)).toBeInTheDocument();
+    expect(screen.queryByText(/check your connection/)).toBeNull();
   });
 });

@@ -4,7 +4,56 @@
 // the Stop Loss / Aggregate XL pricing schema.
 
 import { describe, it, expect } from 'vitest';
-import { stopLossPricingPutSchema } from './nonProp.js';
+import { npSaveSchema, stopLossPricingPutSchema } from './nonProp.js';
+
+describe('npSaveSchema detail bounds', () => {
+  it('accepts a realistic detail payload (comma strings included)', () => {
+    const out = npSaveSchema.parse({
+      detail: {
+        number_of_layers: 3,
+        deductible: '2,000,000',
+        max_retention: 5_000_000,
+        accounting_method: 'Losses Occurring',
+        xl_type: 'Gross XL',
+        accounts: 'Annual',
+        brokerage_pct: 10,
+        taxes_pct: '0',
+        profit_commission_pct: '12.5',
+        est_gnpi: '25,000,000',
+        experience_start_year: 2019,
+      },
+    });
+    expect(out.detail.deductible).toBe(2_000_000);
+    expect(out.detail.brokerage_pct).toBe(10);
+    expect(out.detail.profit_commission_pct).toBeCloseTo(12.5);
+  });
+
+  it('rejects an out-of-range percent instead of letting numeric(5,2) overflow', () => {
+    // Regression: brokerage_pct 1010 (a mangled "10" entry) used to reach
+    // Postgres and come back as a raw `numeric field overflow` 500.
+    expect(() => npSaveSchema.parse({ detail: { brokerage_pct: 1010 } })).toThrow();
+    expect(() => npSaveSchema.parse({ detail: { taxes_pct: 101 } })).toThrow();
+    expect(() => npSaveSchema.parse({ detail: { profit_commission_pct: -1 } })).toThrow();
+  });
+
+  it('rejects fractional or absurd layer counts destined for an integer column', () => {
+    expect(() => npSaveSchema.parse({ detail: { number_of_layers: 4.5 } })).toThrow();
+    expect(() => npSaveSchema.parse({ detail: { number_of_layers: 1e12 } })).toThrow();
+    expect(npSaveSchema.parse({ detail: { number_of_layers: '4' } }).detail.number_of_layers).toBe(4);
+  });
+
+  it('accepts >100% reinstatement terms but rejects numeric(5,2) overflow values', () => {
+    const ok = npSaveSchema.parse({ layers: [{ layer_number: 1, reinstatement_pct: 125 }] });
+    expect(ok.layers[0].reinstatement_pct).toBe(125);
+    expect(() => npSaveSchema.parse({ layers: [{ layer_number: 1, reinstatement_pct: 2000 }] })).toThrow();
+  });
+
+  it('still accepts an empty save and omitted detail keys', () => {
+    expect(npSaveSchema.parse({})).toEqual({});
+    const out = npSaveSchema.parse({ detail: {} });
+    expect(out.detail).toEqual({});
+  });
+});
 
 describe('stopLossPricingPutSchema', () => {
   it('accepts the full screen-state payload sent by NpStopLossPricing', () => {

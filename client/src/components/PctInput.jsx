@@ -2,6 +2,11 @@
 // Shows "<value>%" when not focused; strips "%" on focus for editing.
 // Calls onChange with the bare numeric string (no "%"). Includes a
 // title tooltip so underwriters know "%" is appended automatically.
+//
+// `min` / `max` clamp the committed value on blur. The underlying input is
+// type="text" (for the % suffix), where the native min/max attributes do
+// nothing — so the clamp must be ours or out-of-range entries (e.g. a
+// mangled "8080") flow into autosave and only fail server-side.
 import { useState } from 'react';
 
 const DEFAULT_TOOLTIP = 'Enter a number — % is added automatically.';
@@ -68,6 +73,11 @@ export default function PctInput({
       }}
       onBlur={(e) => {
         setEditing(false);
+        const n = Number(bare);
+        if (bare !== '' && Number.isFinite(n)) {
+          const clamped = Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n));
+          if (clamped !== n) onChange(String(clamped));
+        }
         if (onBlur) onBlur(e);
       }}
     />
