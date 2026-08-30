@@ -1,0 +1,149 @@
+# Prometheus alerting rules for the universe-server OTel metrics.
+#
+# Scrape target: the app's Prometheus endpoint (private by default —
+# 127.0.0.1:9464/metrics; see docs/observability.md and PROM_EXPORTER_HOST).
+#
+# Thresholds below are STARTING POINTS. Tune them against a baseline week of
+# production traffic before paging on them — see each rule's comment. Severity
+# convention: `warning` → notify (Slack), `critical` → page.
+#
+# Load into Prometheus via `rule_files:` in prometheus.yml, e.g.
+#   rule_files:
+#     - /etc/prometheus/rules/universe-alerts.yml
+
+groups:
+  # ── API latency ────────────────────────────────────────────────────────────
+  - name: universe-api-latency
+    rules:
+      - alert: ApiLatencyP95High
+        # p95 over all routes. histogram_quantile over the _bucket series.
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_server_request_duration_bucket[5m]))
+          ) > 1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "API p95 latency > 1s for 10m"
+          description: "p95 request latency is {{ $value | humanizeDuration }} (threshold 1s). Check pg_pool_waiting and slow routes."
+
+      - alert: ApiLatencyP95Critical
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_server_request_duration_bucket[5m]))
+          ) > 2.5
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "API p95 latency > 2.5s for 5m"
+          description: "p95 request latency is {{ $value | humanizeDuration }} (threshold 2.5s)."
+
+  # ── 5xx error rate ───────────────────────────────────────────────────────────
+  - name: universe-api-errors
+    rules:
+      - alert: Api5xxRateHigh
+        # Fraction of responses that are 5xx. Guarded with `> 0` on the
+        # denominator so the rule is inert when there's no traffic.
+        expr: |
+          (
+            sum(rate(http_server_requests_total{status_class="5xx"}[5m]))
+            /
+            sum(rate(http_server_requests_total[5m]))
+          ) > 0.02
+          and sum(rate(http_server_requests_total[5m])) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "5xx error rate > 2% for 5m"
+          description: "{{ $value | humanizePercentage }} of responses are 5xx."
+
+      - alert: Api5xxRateCritical
+        expr: |
+          (
+            sum(rate(http_server_requests_total{status_class="5xx"}[5m]))
+            /
+            sum(rate(http_server_requests_total[5m]))
+          ) > 0.05
+          and sum(rate(http_server_requests_total[5m])) > 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "5xx error rate > 5% for 5m"
+          description: "{{ $value | humanizePercentage }} of responses are 5xx."
+
+  # ── Postgres pool pressure ──────────────────────────────────────────────────
+  - name: universe-db-pool
+    rules:
+      - alert: PgPoolWaiting
+        # waitingCount > 0 sustained is the leading indicator of pool starvation.
+        expr: max(pg_pool_waiting) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Postgres pool has waiters for 5m"
+          description: "{{ $value }} request(s) queued for a DB connection. Consider DB_POOL_MAX or query hold time."
+
+      - alert: PgPoolWaitingCritical
+        expr: max(pg_pool_waiting) > 5
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "Postgres pool starvation (>5 waiters) for 5m"
+          description: "{{ $value }} requests queued for a DB connection — the DB is the bottleneck."
+
+  # ── Pricing drift ────────────────────────────────────────────────────────────
+  - name: universe-pricing-drift
+    rules:
+      - alert: PricingDriftDetected
+        # Target steady state is ZERO drifted rows (see docs/pricing-signoff-required.md).
+        # Any sustained drift means the canonical math or tolerance needs a look.
+        expr: increase(pricing_drift_rows_total[1h]) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "NP pricing drift detected in the last hour"
+          description: "{{ $value }} drifted pricing row(s) by endpoint {{ $labels.endpoint }}. In strict mode these saves were rejected (422)."
+
+  # ── Upload failures ──────────────────────────────────────────────────────────
+  - name: universe-uploads
+    rules:
+      - alert: UploadFailureRateHigh
+        expr: |
+          (
+            sum(rate(upload_requests_total{outcome="error"}[15m]))
+            /
+            sum(rate(upload_requests_total[15m]))
+          ) > 0.1
+          and sum(rate(upload_requests_total[15m])) > 0
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Document upload failure rate > 10% for 10m"
+          description: "{{ $value | humanizePercentage }} of uploads are failing — check the storage sink (Cloudinary/disk)."
+
+  # ── AI provider failures / cost ─────────────────────────────────────────────
+  - name: universe-ai-provider
+    rules:
+      - alert: AiProviderErrorRateHigh
+        expr: |
+          (
+            sum(rate(ai_provider_requests_total{outcome="error"}[15m]))
+            /
+            sum(rate(ai_provider_requests_total[15m]))
+          ) > 0.25
+          and sum(rate(ai_provider_requests_total[15m])) > 0
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "AI provider error rate > 25% for 10m"
+          description: "{{ $value | humanizePercentage }} of AI provider attempts are failing (Gemini falls back to OpenAI; both failing = no AI)."
+
+      - alert: AiSpendHourlyHigh
+        # Budget guard. Set the dollar threshold to your hourly ceiling — this
+        # default ($25/h) is illustrative and MUST be tuned to the AI budget.
+        expr: sum(increase(ai_provider_cost_usd_total[1h])) > 25
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Estimated AI spend > $25 in the last hour"
+          description: "Estimated AI spend is ${{ $value | printf \"%.2f\" }}/h (list-price approximation). Review usage."

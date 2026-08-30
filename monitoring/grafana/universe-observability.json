@@ -1,0 +1,117 @@
+{
+  "__comment": "Grafana dashboard for universe-server OTel metrics. Import via Dashboards → Import; pick your Prometheus datasource when prompted. Queries use the exact metric/label names the OTel Prometheus exporter emits (see docs/observability.md).",
+  "title": "Universe — Service Observability",
+  "uid": "universe-observability",
+  "schemaVersion": 39,
+  "editable": true,
+  "tags": ["universe", "observability"],
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "API latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "legendFormat": "p50", "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_request_duration_bucket[5m])))" },
+        { "refId": "B", "legendFormat": "p95", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_bucket[5m])))" },
+        { "refId": "C", "legendFormat": "p99", "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_request_duration_bucket[5m])))" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Request rate by status class",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{status_class}}", "expr": "sum by (status_class) (rate(http_server_requests_total[5m]))" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "5xx error rate",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0 }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "legendFormat": "5xx rate", "expr": "sum(rate(http_server_requests_total{status_class=\"5xx\"}[5m])) / clamp_min(sum(rate(http_server_requests_total[5m])), 1)" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Postgres pool (size / idle / waiting)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "legendFormat": "size", "expr": "max(pg_pool_size)" },
+        { "refId": "B", "legendFormat": "idle", "expr": "max(pg_pool_idle)" },
+        { "refId": "C", "legendFormat": "waiting", "expr": "max(pg_pool_waiting)" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Pricing drift — drifted rows/hr by endpoint",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{endpoint}}", "expr": "sum by (endpoint) (increase(pricing_drift_rows_total[1h]))" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Upload failure rate by sink",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0 }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{sink}}", "expr": "sum by (sink) (rate(upload_requests_total{outcome=\"error\"}[15m])) / clamp_min(sum by (sink) (rate(upload_requests_total[15m])), 1)" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "AI provider error rate",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0 }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{provider}}", "expr": "sum by (provider) (rate(ai_provider_requests_total{outcome=\"error\"}[15m])) / clamp_min(sum by (provider) (rate(ai_provider_requests_total[15m])), 1)" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Estimated AI spend ($/hr) & tokens",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [{ "matcher": { "id": "byName", "options": "$/hr" }, "properties": [{ "id": "unit", "value": "currencyUSD" }] }] },
+      "targets": [
+        { "refId": "A", "legendFormat": "$/hr", "expr": "sum(increase(ai_provider_cost_usd_total[1h]))" },
+        { "refId": "B", "legendFormat": "{{provider}} {{token_type}} tok/min", "expr": "sum by (provider, token_type) (rate(ai_provider_tokens_total[5m])) * 60" }
+      ]
+    }
+  ]
+}

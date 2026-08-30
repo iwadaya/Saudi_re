@@ -11,6 +11,9 @@ config. Traces are only exported when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, so
 a default production deploy emits metrics without an OTLP exporter retrying a
 non-existent collector.
 
+A ready-to-load Grafana dashboard and Prometheus alert rules for all of the
+metrics below live in [`monitoring/`](../monitoring/README.md).
+
 The metrics endpoint is **private by default**: the Prometheus scrape server
 binds to loopback (`127.0.0.1`), so `/metrics` is reachable only from the same
 host — a sidecar collector or an SSH tunnel — never from the public internet,
