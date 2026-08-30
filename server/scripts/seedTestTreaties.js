@@ -300,6 +300,8 @@ async function ensureReference(client) {
   }
 
   // GHS currency + its USD rate, so Ghanaian treaties convert on the dashboards.
+  // Critical safety rule: reference mode must "top up", never overwrite any
+  // existing rate maintained by real operations data.
   let { rows: ghs } = await client.query(`SELECT currency_id FROM public.currency WHERE currency_code='GHS'`);
   if (!ghs.length) {
     ghs = [await ins(client, 'currency', { currency_code: 'GHS', currency_name: 'Ghanaian Cedi' }, { returning: 'currency_id' })];
@@ -307,14 +309,15 @@ async function ensureReference(client) {
   }
   await ins(client, 'ref_exchange_rate', {
     currency_code: 'GHS', rate_to_usd: 0.09, effective_date: ymd(CUR_YEAR, 0, 1), source: 'SEED',
-  }, { conflict: '(currency_code, effective_date) DO UPDATE SET rate_to_usd=EXCLUDED.rate_to_usd, updated_at=now()' });
+  }, { conflict: '(currency_code, effective_date) DO NOTHING' });
 
-  // Ghana CPI series — the loss-inflation screens read ref_country_inflation.
+  // Ghana CPI series — insert missing years only; never overwrite values that
+  // may already be curated in the target environment.
   for (const [year, pct] of GHANA_CPI) {
     await ins(client, 'ref_country_inflation', {
       country_id: ghanaId, uw_year: year, inflation_pct: pct,
       source: year >= GHANA_CPI_PROJECTED_FROM ? 'IMF WEO Proj' : 'World Bank',
-    }, { conflict: '(country_id, uw_year) DO UPDATE SET inflation_pct=EXCLUDED.inflation_pct, source=EXCLUDED.source' });
+    }, { conflict: '(country_id, uw_year) DO NOTHING' });
   }
   console.log(`  ✓ Ghana CPI ${GHANA_CPI[0][0]}–${GHANA_CPI[GHANA_CPI.length - 1][0]} (${GHANA_CPI.length} years)`);
 
