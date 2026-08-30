@@ -12,14 +12,21 @@
 //
 // SEED_ON_DEPLOY (read from the environment or the .env file):
 //   unset | 0 | false | no | off   do nothing — the default, exits 0
-//   1 | true | yes | on | if-empty seed only when the database holds no
-//                                  seeded treaties yet; a redeploy against an
-//                                  already-seeded database is a fast no-op,
-//                                  and testers' edits to seeded data survive
-//   reset | always                 delete the previous seed and reseed on
-//                                  every deploy — the generator is
-//                                  deterministic, so the portfolio comes back
-//                                  identical unless reference data changed
+//   reference | reference-only | ref
+//                                  top up reference data only, on every
+//                                  deploy — currencies/FX, Ghana CPI, CRESTA
+//                                  zones, cedant companies. Never writes a
+//                                  contract; idempotent, so rerunning is safe
+//   1 | true | yes | on | if-empty seed the full treaty portfolio, but only
+//                                  when the database holds no seeded treaties
+//                                  yet; a redeploy against an already-seeded
+//                                  database is a fast no-op, and testers'
+//                                  edits to seeded data survive
+//   reset | always                 delete the previous seed and reseed the
+//                                  full portfolio on every deploy — the
+//                                  generator is deterministic, so the
+//                                  portfolio comes back identical unless
+//                                  reference data changed
 //
 // Setting SEED_ON_DEPLOY on a deployed environment is the deliberate opt-in
 // that seedTestTreaties.js's production guard asks for, so this wrapper runs
@@ -40,6 +47,7 @@ const SEED_SOURCE = 'seed:test-treaties';
 const SEED_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'seedTestTreaties.js');
 
 const OFF = new Set(['', '0', 'false', 'no', 'off']);
+const REFERENCE = new Set(['reference', 'reference-only', 'ref']);
 const IF_EMPTY = new Set(['1', 'true', 'yes', 'on', 'if-empty']);
 const EVERY_DEPLOY = new Set(['reset', 'always']);
 
@@ -62,10 +70,12 @@ async function seededCount() {
   }
 }
 
-// 'skip' | 'seed' | 'reseed' | 'bad-flag' — pool queries happen only in here,
-// so the caller can close the pool before the (long) child process starts.
+// 'skip' | 'reference' | 'seed' | 'reseed' | 'bad-flag' — pool queries happen
+// only in here, so the caller can close the pool before the (long) child
+// process starts.
 async function decide() {
   if (OFF.has(mode)) return { action: 'skip', why: 'SEED_ON_DEPLOY is not set' };
+  if (REFERENCE.has(mode)) return { action: 'reference' };
   if (EVERY_DEPLOY.has(mode)) return { action: 'reseed' };
   if (!IF_EMPTY.has(mode)) return { action: 'bad-flag' };
   const existing = await seededCount();
@@ -96,12 +106,17 @@ async function main() {
   switch (plan.action) {
     case 'skip':
       console.log(`seed-on-deploy: ${plan.why} — skipping. `
-        + `(SEED_ON_DEPLOY=1 seeds an empty database; SEED_ON_DEPLOY=reset reseeds every deploy.)`);
+        + `(SEED_ON_DEPLOY=reference tops up reference data only; 1 seeds an empty database; `
+        + `reset reseeds every deploy.)`);
       return 0;
     case 'bad-flag':
       console.error(`seed-on-deploy: unrecognised SEED_ON_DEPLOY value "${mode}".\n`
-        + `  Use 1 (seed only when no seeded treaties exist) or reset (reseed on every deploy).`);
+        + `  Use reference (reference data only, no contracts), 1 (full portfolio, only when\n`
+        + `  no seeded treaties exist) or reset (full portfolio, reseeded on every deploy).`);
       return 1;
+    case 'reference':
+      console.log(`seed-on-deploy: SEED_ON_DEPLOY=${mode} — topping up reference data (no contracts)…`);
+      return runSeed(['--reference-only']);
     case 'reseed':
       console.log(`seed-on-deploy: SEED_ON_DEPLOY=${mode} — resetting and reseeding the treaty test portfolio…`);
       return runSeed(['--reset']);

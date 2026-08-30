@@ -8,7 +8,8 @@ the Ghanaian reference data they need.
 npm run seed:treaties          # add the portfolio
 npm run seed:treaties:reset    # delete the previous seed, then reseed
 npm run seed:treaties:verify   # NULL-coverage report, no writes
-node server/scripts/seedTestTreaties.js --reset-only   # delete only
+node server/scripts/seedTestTreaties.js --reset-only        # delete only
+node server/scripts/seedTestTreaties.js --reference-only    # reference data only — no contracts
 ```
 
 `DATABASE_URL` selects the target database, as everywhere else in the server.
@@ -22,9 +23,10 @@ reload, and `render.yaml` runs it from `preDeployCommand` after migrations.
 
 | `SEED_ON_DEPLOY` | On each redeploy |
 |---|---|
-| unset / `0` | nothing — the default, and what production should keep |
-| `1` (or `if-empty`) | seed **only when the database holds no seeded treaties** — a redeploy against an already-seeded database is a fast no-op, so testers' edits to seeded data survive |
-| `reset` (or `always`) | delete the previous seed, then reseed — a fresh, deterministic portfolio every deploy |
+| unset / `0` | nothing — the default |
+| `reference` (or `ref`) | top up **reference data only** — currencies and the GHS/USD rate, the Ghana CPI series, CRESTA zones, Ghanaian cedant companies. **Never writes a contract.** Idempotent, so it simply re-asserts the same rows on every deploy — the mode for a server that wants the lookup variables but no fabricated treaties |
+| `1` (or `if-empty`) | seed the full portfolio **only when the database holds no seeded treaties** — a redeploy against an already-seeded database is a fast no-op, so testers' edits to seeded data survive |
+| `reset` (or `always`) | delete the previous seed, then reseed the full portfolio — fresh and deterministic every deploy |
 
 Set the variable in the deployed box's `.env` (or the Render service's
 environment) — that is the deliberate opt-in the production guard below asks
