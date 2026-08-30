@@ -8,10 +8,36 @@ the Ghanaian reference data they need.
 npm run seed:treaties          # add the portfolio
 npm run seed:treaties:reset    # delete the previous seed, then reseed
 npm run seed:treaties:verify   # NULL-coverage report, no writes
-node server/scripts/seedTestTreaties.js --reset-only   # delete only
+node server/scripts/seedTestTreaties.js --reset-only        # delete only
+node server/scripts/seedTestTreaties.js --reference-only    # reference data only — no contracts
 ```
 
 `DATABASE_URL` selects the target database, as everywhere else in the server.
+
+## Seeding on redeploy
+
+`server/scripts/seedOnDeploy.js` (`npm run seed:deploy`) runs the seed as part
+of a deploy, gated by `SEED_ON_DEPLOY` so it is safe to call from every deploy
+path unconditionally. Both paths already do: `deploy.sh` runs it after the PM2
+reload, and `render.yaml` runs it from `preDeployCommand` after migrations.
+
+| `SEED_ON_DEPLOY` | On each redeploy |
+|---|---|
+| unset / `0` | nothing — the default |
+| `reference` (or `ref`) | top up **reference data only** — currencies and the GHS/USD rate, the Ghana CPI series, CRESTA zones, Ghanaian cedant companies. **Never writes a contract.** Idempotent, so it simply re-asserts the same rows on every deploy — the mode for a server that wants the lookup variables but no fabricated treaties |
+| `1` (or `if-empty`) | seed the full portfolio **only when the database holds no seeded treaties** — a redeploy against an already-seeded database is a fast no-op, so testers' edits to seeded data survive |
+| `reset` (or `always`) | delete the previous seed, then reseed the full portfolio — fresh and deterministic every deploy |
+
+Set the variable in the deployed box's `.env` (or the Render service's
+environment) — that is the deliberate opt-in the production guard below asks
+for, so the wrapper passes `SEED_ALLOW_PRODUCTION=1` through for you. The
+target URL is still printed, password-redacted, before anything is written.
+
+The wrapper must run after migrations (both deploy paths already order it
+that way): it reads the schema, it never creates it. A seed failure exits
+non-zero and fails the deploy step loudly; on `deploy.sh` this happens after
+the app reload, so a failed seed can never keep the new version from going
+live.
 
 ## What you get
 

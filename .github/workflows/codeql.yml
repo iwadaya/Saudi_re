@@ -78,8 +78,58 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "::warning title=SAST disabled::CodeQL skipped — enable Code Security to scan first-party code."
 
-      - name: Initialize CodeQL
+      # GitHub refuses SARIF from advanced (workflow-based) CodeQL configs
+      # while the repository has CodeQL DEFAULT SETUP enabled — "CodeQL
+      # analyses from advanced configurations cannot be processed when the
+      # default setup is enabled" — so with default setup on, running here can
+      # only manufacture a permanently red check while default setup already
+      # scans every push and PR. Same philosophy as the probe above: detect
+      # the situation and stand down loudly instead of failing. Default setup
+      # is visible to the job's token as the dynamic workflow it installs
+      # (path dynamic/github-code-scanning/codeql), readable with the job's
+      # `actions: read` permission. If the probe cannot tell, it answers
+      # "not active" and the analysis runs exactly as before.
+      - name: Check whether CodeQL default setup is enabled
+        id: defaultsetup
         if: steps.availability.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          state=$(curl -sS \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows?per_page=100" \
+            | jq -r '[.workflows[]? | select(.path == "dynamic/github-code-scanning/codeql") | .state] | first // "absent"' \
+            || echo probe-failed)
+          if [ "$state" = "active" ]; then
+            echo "active=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "active=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "default-setup probe: state=$state"
+
+      - name: Report that the advanced workflow is standing down
+        if: steps.availability.outputs.enabled == 'true' && steps.defaultsetup.outputs.active == 'true'
+        run: |
+          {
+            echo "### CodeQL advanced workflow standing down — default setup is scanning"
+            echo
+            echo "This repository has CodeQL **default setup** enabled, which already"
+            echo "scans every push and pull request (see the \`Analyze\` checks it posts)."
+            echo "GitHub rejects SARIF uploads from advanced configurations while default"
+            echo "setup is on, so running the analysis here could only fail."
+            echo
+            echo "First-party SAST coverage is **active** via default setup. To use this"
+            echo "workflow's \`security-and-quality\` suite instead, switch the repository"
+            echo "to advanced setup under Settings → Code security (disable default"
+            echo "setup), after which this workflow resumes unchanged."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=CodeQL default setup active::Advanced CodeQL workflow standing down — default setup provides the scan."
+
+      - name: Initialize CodeQL
+        if: steps.availability.outputs.enabled == 'true' && steps.defaultsetup.outputs.active == 'false'
         uses: github/codeql-action/init@f09c1c0a94de965c15400f5634aa42fac8fb8f88 # v3.27.5
         with:
           languages: javascript-typescript
@@ -90,11 +140,11 @@ jobs:
       # No compiled build step — JS/TS is analysed as-is. Autobuild is a no-op
       # here but kept for forward-compat if a build-required language is added.
       - name: Autobuild
-        if: steps.availability.outputs.enabled == 'true'
+        if: steps.availability.outputs.enabled == 'true' && steps.defaultsetup.outputs.active == 'false'
         uses: github/codeql-action/autobuild@f09c1c0a94de965c15400f5634aa42fac8fb8f88 # v3.27.5
 
       - name: Perform CodeQL analysis
-        if: steps.availability.outputs.enabled == 'true'
+        if: steps.availability.outputs.enabled == 'true' && steps.defaultsetup.outputs.active == 'false'
         uses: github/codeql-action/analyze@f09c1c0a94de965c15400f5634aa42fac8fb8f88 # v3.27.5
         with:
           category: /language:javascript-typescript

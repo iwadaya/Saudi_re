@@ -12,7 +12,11 @@ services:
     # fails the deploy cleanly instead of taking the previous version
     # down on boot. RUN_MIGRATIONS_ON_BOOT stays at its default (false)
     # so the server only ever starts against a known-good schema.
-    preDeployCommand: npm run migrate:up --prefix server
+    # seed:deploy is a no-op unless SEED_ON_DEPLOY is set on the service —
+    # set it to 1 on a dev/preview service to seed the treaty test portfolio
+    # when the database is empty, or to "reset" to reseed on every deploy.
+    # Leave it unset here: this is the production service.
+    preDeployCommand: npm run migrate:up --prefix server && npm run seed:deploy --prefix server
     startCommand: node server/src/index.js
     healthCheckPath: /api/health
     envVars:

@@ -11,6 +11,7 @@
     "migrate:up": "node src/db/migrate.js",
     "migrate:status": "node src/db/migrateStatus.js",
     "seed": "node src/db/seeds/run.js",
+    "seed:deploy": "node scripts/seedOnDeploy.js",
     "seed:hazus": "node src/db/seeds/generate_hazus_curves.js",
     "seed:gem": "node src/db/seeds/import_gem_vulnerability.js",
     "seed:loadtest": "node src/db/seeds/seed_1000_test_contracts.js",

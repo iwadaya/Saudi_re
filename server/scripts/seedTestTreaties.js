@@ -15,6 +15,9 @@
 //   node server/scripts/seedTestTreaties.js --reset    # delete prior seed, then reseed
 //   node server/scripts/seedTestTreaties.js --reset-only
 //   node server/scripts/seedTestTreaties.js --verify   # NULL-coverage report only
+//   node server/scripts/seedTestTreaties.js --reference-only
+//                            # reference data only — currencies/FX, Ghana CPI,
+//                            # CRESTA zones, cedant companies; writes NO contracts
 //
 // Environment:
 //   DATABASE_URL       standard (server/src/config/env.js)
@@ -52,6 +55,7 @@ const RANDOM_SEED = Number(process.env.SEED_RANDOM_SEED || 20260820);
 const RESET = process.argv.includes('--reset') || process.argv.includes('--reset-only');
 const RESET_ONLY = process.argv.includes('--reset-only');
 const VERIFY_ONLY = process.argv.includes('--verify');
+const REFERENCE_ONLY = process.argv.includes('--reference-only');
 
 const CUR_YEAR = new Date().getFullYear();
 const BATCH_DATE = new Date().toISOString().slice(0, 10);
@@ -1837,11 +1841,15 @@ function assertSeedableTarget() {
     console.log(`   Target: ${redactUrl(process.env.DATABASE_URL)}`);
     return;
   }
+  const writes = REFERENCE_ONLY
+    ? `  This writes reference data (currencies, FX rate, Ghana CPI, CRESTA zones,\n`
+      + `  cedant companies) that will appear in the app's dropdowns and lookups.\n`
+    : `  This inserts ${PROP_COUNT + NP_COUNT} fabricated treaties that will show up in the\n`
+      + `  dashboards, home summary and portfolio exports everyone sees.\n`;
   console.error(
     `Refusing to seed: NODE_ENV=production.\n`
     + `  Target: ${redactUrl(process.env.DATABASE_URL)}\n`
-    + `  This inserts ${PROP_COUNT + NP_COUNT} fabricated treaties that will show up in the\n`
-    + `  dashboards, home summary and portfolio exports everyone sees.\n`
+    + writes
     + `  If that is what you want, re-run with SEED_ALLOW_PRODUCTION=1.\n`
     + `  To undo a seed: node server/scripts/seedTestTreaties.js --reset-only`,
   );
@@ -1893,6 +1901,10 @@ async function main() {
 
     console.log('Ensuring reference data…');
     const ref = await ensureReference(client);
+    if (REFERENCE_ONLY) {
+      console.log('Reference data ensured — no contracts written (--reference-only).');
+      return;
+    }
 
     const specs = [
       ...buildPlan(ref, 'PROPORTIONAL', PROP_COUNT),

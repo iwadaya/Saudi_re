@@ -360,6 +360,7 @@ Key variables (full list in `.env.example`):
 | `AUTH_JWT_SECRET` | **Yes (production)** | Signs/verifies the login bearer token. Must be ≥ 32 chars. **The server refuses to start in production without a strong value** (`server/src/config/env.js` → `validateEnv()` exits 1). Generate with `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`. In dev/test a per-process ephemeral secret is minted automatically. |
 | `SESSION_SECRET` | No (reserved) | Reserved for future cookie/session use; not consumed at runtime today, so it does **not** block boot. If you set it, it is strength-checked (≥ 32 chars, not the dev placeholder). Generate the same way as `AUTH_JWT_SECRET`. |
 | `RUN_MIGRATIONS_ON_BOOT` | No | Defaults to `false`. Leave unset in production — run `npm run migrate:up --prefix server` as a pre-deploy step instead. Set to `true` only for the local docker-compose path. |
+| `SEED_ON_DEPLOY` | No | Makes `npm run seed:deploy` (run by `deploy.sh` and Render's `preDeployCommand`) seed on redeploy. `reference` tops up reference data only — currencies/FX, Ghana CPI, CRESTA zones, cedant companies — with **no contracts** (idempotent, safe to repeat). **Test/demo only:** `1` seeds the full treaty test portfolio when the database has no seeded treaties yet; `reset` wipes the previous seed and reseeds every deploy. Unset (the default) it does nothing, so deploys stay clean. See `docs/seed-test-treaties.md`. |
 | `CORS_ORIGIN` | Yes | Set to the public URL, e.g. `https://universe.internal.company.com`. **Do not use `*` in production.** |
 | `ALLOW_DEMO_AUTH` | No | **Dev/test only.** When `true`, enables the `demo2026` shortcut and `x-user-*` header identity. NEVER set in production — leave unset so only verified bearer tokens authenticate. |
 | `ALLOW_NAME_AUTH` | No | **Client-pilot testing only** (e.g. the Saudi Re pilot). When `true`, `POST /api/auth/name-login` signs a tester in with just first name + surname (no password) and issues a normal revocable cookie session; an unknown name gets an Underwriter account with an unusable random password. Fail-closed — off unless exactly `true`. Remove once the pilot moves to credential/SSO login. |
@@ -440,6 +441,11 @@ npm run build
 # can't take the running version down. migrate:up is idempotent.
 npm run migrate:status --prefix server   # confirm pending set
 npm run migrate:up     --prefix server
+
+# Test/demo boxes only: reseed the treaty test portfolio on redeploy.
+# No-op unless SEED_ON_DEPLOY is set (see docs/seed-test-treaties.md);
+# deploy.sh already runs this step for you.
+npm run seed:deploy    --prefix server
 
 # Then, depending on runtime:
 pm2 reload ecosystem.config.cjs                # Option A
