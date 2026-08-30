@@ -1033,7 +1033,7 @@ async function claimPeerSlot({ offerId, slot, actorUserId, decision, comment, cl
   if (slot === 'peer1') {
     const { rows } = await db.query(
       `UPDATE public.contract_offer
-          SET peer1_user_id=$2, peer1_decision=$3, peer1_comment=$4, peer1_at=now(), updated_at=now()
+          SET peer1_user_id=$2::uuid, peer1_decision=$3, peer1_comment=$4, peer1_at=now(), updated_at=now()
         WHERE offer_id=$1
           AND status='AWAITING_APPROVAL'
           AND peer1_user_id IS NULL
@@ -1047,13 +1047,13 @@ async function claimPeerSlot({ offerId, slot, actorUserId, decision, comment, cl
   // peer2 — also enforces, atomically, that the second approver ≠ the first.
   const { rows } = await db.query(
     `UPDATE public.contract_offer
-        SET peer2_user_id=$2, peer2_decision=$3, peer2_comment=$4, peer2_at=now(), updated_at=now()
+        SET peer2_user_id=$2::uuid, peer2_decision=$3, peer2_comment=$4, peer2_at=now(), updated_at=now()
       WHERE offer_id=$1
         AND status='AWAITING_APPROVAL'
         AND peer2_user_id IS NULL
         AND peer2_decision IS NULL
         AND peer1_decision IS NOT NULL
-        AND peer1_user_id IS DISTINCT FROM $2
+        AND peer1_user_id IS DISTINCT FROM $2::uuid
         AND ${membership}
       RETURNING offer_id`,
     [offerId, actorUserId, decision, comment || null, actorUserId]
