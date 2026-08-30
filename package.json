@@ -21,6 +21,8 @@
     "seed:treaties": "node server/scripts/seedTestTreaties.js",
     "seed:treaties:reset": "node server/scripts/seedTestTreaties.js --reset",
     "seed:treaties:verify": "node server/scripts/seedTestTreaties.js --verify",
+    "seed:lists:export": "node server/scripts/syncRefLists.js export",
+    "seed:lists:import": "node server/scripts/syncRefLists.js import",
     "verify:actuarial": "node test/verifyChainLadderRAA.mjs && node test/verifyBornhuetterFergusonRAA.mjs && node test/verifyMunichChainLadderQuarg.mjs",
     "test": "npm run test:server && npm run test:client",
     "test:server": "vitest run --config server/vitest.config.js",

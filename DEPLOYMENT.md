@@ -412,6 +412,13 @@ After starting the service for the first time:
    SELECT COUNT(*) FROM public.currency;    -- expect 32
    ```
 
+   Those are only the **defaults**. To bring over the lists your team has
+   actually curated in an existing environment (e.g. the Render production
+   DB — real cedants, brokers, reinsurers, FX rates, …), run the reference-list
+   sync: export with `npm run seed:lists:export` against the source DB, import
+   with `npm run seed:lists:import` on this server. Full walkthrough, merge
+   semantics and the full-clone alternative: `docs/seed-ref-lists.md`.
+
 6. **Test login (cookie + CSRF auth).** Browse to `https://universe.internal.company.com`. Login is a real credential check: `POST /api/auth/login` verifies the password against the user's stored scrypt hash and sets a signed token in an **httpOnly `auth_token` cookie** plus a readable `csrf_token` cookie — the token is never returned in the JSON body and the SPA never stores it. The browser sends the cookies automatically; state-changing requests must echo the CSRF token in the `X-CSRF-Token` header (signed double-submit — see `SECURITY.md`). The server re-reads the user's role and authority level from the database on each request (the token carries only the user id), so a demotion takes effect immediately. There is **no** `demo2026`-for-everyone and **no** `x-user-*` header auth in production — those exist only under `ALLOW_DEMO_AUTH=true` for local dev (§7, §10).
 
    **First login / seeded users.** Migration `123_seed_users_force_change.sql` seeds three real accounts, each with the temporary password `Universe#1234` and `must_change_password=true`, so each is **forced to set a new password on first login** (hard server-side gate + mandatory client modal):
@@ -566,6 +573,7 @@ Logs go to stdout in JSON. Capture with PM2 / Docker / journalctl as appropriate
 | `docs/database-design-audit.md` | Known schema-level issues and what's been addressed |
 | `docs/optimistic-locking-coverage.md` | Where stale-write protection is wired |
 | `docs/observability.md` | OTel + Prometheus setup |
+| `docs/seed-ref-lists.md` | Copying the reference lists (cedants, brokers, …) from an existing environment (e.g. Render) onto a new server |
 | `docs/scaling.md` | Capacity testing protocol (numbers TBD) |
 | `docs/actuarial-audit.md` | Math review findings, awaiting credentialed actuary signoff |
 | `docs/migration-audit.md` | Migration discipline notes |
