@@ -521,6 +521,46 @@ describe('POST /auth/login', () => {
     expect(authCookieOf(ok).value).toMatch(/.+\..+/);       // it lives in the cookie
   });
 
+  it('blocks retro.manager from authenticating with shared demo2026 when ALLOW_DEMO_AUTH is off', async () => {
+    delete process.env.ALLOW_DEMO_AUTH;
+    scenario.loginUser = {
+      ...adaRow(await hashPassword('demo2026')),
+      user_id: 'u-rm',
+      username: 'retro.manager',
+      display_name: 'Reinsurance Manager',
+      role_code: 'RM',
+      role_name: 'Retro Manager',
+      hierarchy_level: 3,
+    };
+    const res = await call(buildApp(), {
+      method: 'POST',
+      path: '/auth/login',
+      body: { username: 'retro.manager', password: 'demo2026' },
+    });
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: 'Invalid credentials.' });
+  });
+
+  it('still allows retro.manager once the password is rotated away from demo2026', async () => {
+    delete process.env.ALLOW_DEMO_AUTH;
+    scenario.loginUser = {
+      ...adaRow(await hashPassword('realpass1')),
+      user_id: 'u-rm',
+      username: 'retro.manager',
+      display_name: 'Reinsurance Manager',
+      role_code: 'RM',
+      role_name: 'Retro Manager',
+      hierarchy_level: 3,
+    };
+    const res = await call(buildApp(), {
+      method: 'POST',
+      path: '/auth/login',
+      body: { username: 'retro.manager', password: 'realpass1' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.session.username).toBe('retro.manager');
+  });
+
   it('sets an httpOnly Secure-capable SameSite auth cookie + a readable CSRF cookie, and never returns the token in the body', async () => {
     scenario.loginUser = adaRow(await hashPassword('realpass1'));
     const res = await call(buildApp(), { method: 'POST', path: '/auth/login', body: { username: 'ada.lovelace', password: 'realpass1' } });

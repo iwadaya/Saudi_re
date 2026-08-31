@@ -309,11 +309,15 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
   //     honoured ONLY when ALLOW_DEMO_AUTH=true (never in production).
   const storedHash = user.password_hash;
   const demoAuthAllowed = process.env.ALLOW_DEMO_AUTH === 'true';
+  // Shared bootstrap credential. Keep it strictly demo-only even when legacy
+  // seeded users still carry a matching scrypt hash.
+  const blockedSharedDemoPassword = !demoAuthAllowed && password === DEMO_PASSWORD;
   // verifyPassword is async (off-loop scrypt). Only evaluated for a real
   // scrypt hash; the demo shortcut short-circuits first so the await is skipped.
   const hashMatches = typeof storedHash === 'string' && storedHash.startsWith('scrypt$')
     && await verifyPassword(password, storedHash);
-  const passwordOk = (demoAuthAllowed && password === DEMO_PASSWORD) || hashMatches;
+  const passwordOk = !blockedSharedDemoPassword
+    && ((demoAuthAllowed && password === DEMO_PASSWORD) || hashMatches);
 
   if (!passwordOk) {
     // Increment failed attempts (fire-and-forget)
