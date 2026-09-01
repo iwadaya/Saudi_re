@@ -39,6 +39,24 @@ non-zero and fails the deploy step loudly; on `deploy.sh` this happens after
 the app reload, so a failed seed can never keep the new version from going
 live.
 
+## Seeding directly with psql (no Node required)
+
+`server/src/db/seeds/003_ghana_reference.sql` is the reference pack as plain
+SQL — the same rows `--reference-only` writes (GH top-up, GHS + USD rate,
+Ghana CPI 2000–2026, CRESTA zones, Ghanaian cedants), runnable straight
+against PostgreSQL when the Node toolchain is unavailable or the deploy hook
+cannot run:
+
+```bash
+psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f server/src/db/seeds/003_ghana_reference.sql
+```
+
+It is idempotent, writes **no contracts**, needs a migrated database, and
+ends with a summary result set showing the catalogue counts. It also runs as
+part of `npm run seed` (after `001_roles.sql` and `002_reference_data.sql`).
+The values must stay aligned with `ensureReference()` in
+`seedTestTreaties.js` — edit both together.
+
 ## What you get
 
 | | |
