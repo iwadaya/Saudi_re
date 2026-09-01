@@ -41,21 +41,31 @@ live.
 
 ## Seeding directly with psql (no Node required)
 
-`server/src/db/seeds/003_ghana_reference.sql` is the reference pack as plain
-SQL — the same rows `--reference-only` writes (GH top-up, GHS + USD rate,
-Ghana CPI 2000–2026, CRESTA zones, Ghanaian cedants), runnable straight
-against PostgreSQL when the Node toolchain is unavailable or the deploy hook
-cannot run:
+Two plain-SQL seeds run straight against PostgreSQL when the Node toolchain
+is unavailable or the deploy hook cannot run. Both are idempotent, write
+**no contracts**, need a migrated schema, and end with a summary result set
+showing the catalogue counts; both also run as part of `npm run seed`.
+
+**The full base catalogue** — 75 countries, 32 currencies with USD rates,
+15 classes of business, 11 brokers, 11 treaty types, 15 rated reinsurers,
+22 cedant companies, and migration 013's country-inflation rows. Normally
+migrations + boot seeding provide all of this; run it to verify or heal a
+database whose catalogue is missing or partial:
+
+```bash
+psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f server/src/db/seeds/004_reference_catalogue.sql
+```
+
+`004` is generated from a freshly migrated database — regenerate it rather
+than editing rows by hand when the migrations' catalogue changes.
+
+**The Ghana pack** — the same rows `--reference-only` writes (GH top-up,
+GHS + USD rate, Ghana CPI 2000–2026, CRESTA zones, Ghanaian cedants); must
+stay aligned with `ensureReference()` in `seedTestTreaties.js`:
 
 ```bash
 psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f server/src/db/seeds/003_ghana_reference.sql
 ```
-
-It is idempotent, writes **no contracts**, needs a migrated database, and
-ends with a summary result set showing the catalogue counts. It also runs as
-part of `npm run seed` (after `001_roles.sql` and `002_reference_data.sql`).
-The values must stay aligned with `ensureReference()` in
-`seedTestTreaties.js` — edit both together.
 
 ## What you get
 

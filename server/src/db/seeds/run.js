@@ -5,7 +5,7 @@ import { pool } from '../pool.js';
 import { logger } from '../../lib/logger.js';
 
 const seedsDir = dirname(fileURLToPath(import.meta.url));
-const files = ['001_roles.sql', '002_reference_data.sql', '003_ghana_reference.sql'];
+const files = ['001_roles.sql', '002_reference_data.sql', '003_ghana_reference.sql', '004_reference_catalogue.sql'];
 
 (async () => {
   try {
