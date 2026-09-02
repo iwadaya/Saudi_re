@@ -71,12 +71,30 @@ data model and quote/treaty duality, `docs/migration-audit.md` for the
 prod-schema rebase checklist, and `docs/css-roadmap.md` for the CSS
 tokens-to-pilot plan.
 
-## Docker
+## Deploying on a Linux server
+
+The supported production path is one Ubuntu server running the app under
+systemd behind nginx (TLS) with PostgreSQL 16. Everything needed lives in
+`deploy/` — scripts, the systemd unit, the nginx site, the environment
+template — and the step-by-step manual is
+[`deploy/README.md`](deploy/README.md). In short:
+
+```bash
+sudo APP_DOMAIN=universe.example.internal REPO_URL=<git url> bash deploy/install-server.sh
+sudo /opt/universe/deploy/deploy.sh          # build → migrate → seed reference data → restart → smoke test
+```
+
+The deploy seeds reference data only (countries, currencies, brokers,
+reinsurers, cedants, treaty types, classes of business, roles) — never
+contracts. `npm run seed:reference:check` shows what a database holds.
+
+## Docker (local development)
 ```bash
 docker compose up --build
 ```
 
-The compose file starts the application and a PostgreSQL database.
+The compose file starts the application and a PostgreSQL database with
+development settings; it is not the production path.
 
 ## Notes
 - Legacy snapshot directories were removed from the deployment package.
