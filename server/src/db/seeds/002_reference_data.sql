@@ -181,3 +181,43 @@ INSERT INTO public.reinsurers (reinsurer_name) VALUES
   ('Qatar Re'),
   ('Maiden Re')
 ON CONFLICT (reinsurer_name) DO NOTHING;
+
+-- ═══════════════════════════════════════════════════════════════════
+-- GCC / MENA market extras — cedants and reinsurers a Gulf reinsurer meets
+-- daily that the canonical lists above do not carry. Reference data only;
+-- same natural-key ON CONFLICT guards (migration 150) so re-runs are no-ops.
+-- Applied by `npm run seed:reference` (deploy/deploy.sh step 5) after
+-- startup/ensureReferenceData.js. Never inserts contracts, quotes or users.
+-- ═══════════════════════════════════════════════════════════════════
+INSERT INTO public.companies (company_name, country_id)
+SELECT v.company_name, c.country_id
+FROM (VALUES
+  ('Saudi Arabian Cooperative Insurance (SAICO)', 'SA'),
+  ('Allianz Saudi Fransi',               'SA'),
+  ('AXA Cooperative Insurance',          'SA'),
+  ('Dubai National Insurance',           'AE'),
+  ('Al Ahleia Insurance',                'KW'),
+  ('Qatar Insurance Company',            'QA'),
+  ('Doha Insurance Group',               'QA'),
+  ('Jordan Insurance Company',           'JO'),
+  ('Misr Life Insurance',                'EG')
+) AS v(company_name, country_code)
+JOIN LATERAL (
+  SELECT country_id FROM public.country
+   WHERE country_code = v.country_code AND is_active IS NOT FALSE
+   LIMIT 1
+) c ON true
+ON CONFLICT (company_name) WHERE is_active IS NOT FALSE DO NOTHING;
+
+INSERT INTO public.reinsurers (reinsurer_name) VALUES
+  ('Saudi Re'),
+  ('Kuwait Re'),
+  ('Arab Re'),
+  ('Gulf Re'),
+  ('Milli Re'),
+  ('GIC Re'),
+  ('Malaysian Re'),
+  ('RenaissanceRe'),
+  ('Berkshire Hathaway Re'),
+  ('AXA XL Re')
+ON CONFLICT (reinsurer_name) DO NOTHING;

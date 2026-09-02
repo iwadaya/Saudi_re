@@ -1,5 +1,11 @@
 # Deployment — internal test environment
 
+> **Superseded for new installs** by [`../deploy/README.md`](../deploy/README.md),
+> which uses a single Node process under systemd (no PM2 cluster, so no Redis
+> requirement), installs everything with `deploy/install-server.sh`, and seeds
+> reference data only. Keep reading here for the PM2 cluster variant and the
+> observability notes.
+
 Everything needed to stand up Universe 3 on a single Linux server for
 internal testing by ~30 concurrent users. The target environment is
 intentionally modest; production-grade scale-out lives in

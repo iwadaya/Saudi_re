@@ -1,0 +1,53 @@
+# /etc/systemd/system/universe.service — Universe API + SPA (single Node process).
+#
+#   sudo install -m 644 deploy/universe.service /etc/systemd/system/universe.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now universe
+#
+# The unit runs one Node process on 127.0.0.1:4000 behind nginx (deploy/nginx/).
+# Configuration comes exclusively from /etc/universe/universe.env.
+
+[Unit]
+Description=Universe reinsurance pricing platform
+Documentation=file:///opt/universe/deploy/README.md
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=universe
+Group=universe
+WorkingDirectory=/opt/universe
+EnvironmentFile=/etc/universe/universe.env
+ExecStart=/usr/bin/node server/src/index.js
+Restart=always
+RestartSec=5s
+
+# SIGTERM triggers the app's graceful shutdown (drains in-flight requests for
+# SHUTDOWN_GRACE_MS, default 10 s). TimeoutStopSec must exceed that.
+KillSignal=SIGTERM
+TimeoutStopSec=25s
+LimitNOFILE=65536
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=universe
+
+# ── Hardening ──
+# The code checkout is read-only to the service; the only writable path is
+# /var/lib/universe (uploads). Postgres is reached over localhost TCP.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/universe
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

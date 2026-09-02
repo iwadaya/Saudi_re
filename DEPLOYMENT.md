@@ -6,6 +6,13 @@
 **Last verified:** 2026-08-23 (httpOnly-cookie + CSRF auth, enforcing CSP, 12-char password policy, and dev-only Compose all reflected below).
 **Maintainer contact:** Isheanesu Wadaya (Riyadh, UTC+3)
 
+> **Deploying on a single Linux server with PostgreSQL?** Use the step-by-step
+> manual in [`deploy/README.md`](deploy/README.md) — it is the maintained,
+> tested path (systemd + nginx + PostgreSQL 16, reference data seeded, no
+> contracts) and ships the scripts, unit files and environment template under
+> `deploy/`. This document is the broader handover/background reference; where
+> the two differ, `deploy/README.md` wins.
+
 ---
 
 ## 1. What this application does
@@ -415,15 +422,27 @@ After starting the service for the first time:
 
 6. **Test login (cookie + CSRF auth).** Browse to `https://universe.internal.company.com`. Login is a real credential check: `POST /api/auth/login` verifies the password against the user's stored scrypt hash and sets a signed token in an **httpOnly `auth_token` cookie** plus a readable `csrf_token` cookie — the token is never returned in the JSON body and the SPA never stores it. The browser sends the cookies automatically; state-changing requests must echo the CSRF token in the `X-CSRF-Token` header (signed double-submit — see `SECURITY.md`). The server re-reads the user's role and authority level from the database on each request (the token carries only the user id), so a demotion takes effect immediately. There is **no** `demo2026`-for-everyone and **no** `x-user-*` header auth in production — those exist only under `ALLOW_DEMO_AUTH=true` for local dev (§7, §10).
 
-   **First login / seeded users.** Migration `123_seed_users_force_change.sql` seeds three real accounts, each with the temporary password `Universe#1234` and `must_change_password=true`, so each is **forced to set a new password on first login** (hard server-side gate + mandatory client modal):
+   **First login / seeded users.** The migrations leave six generic demo
+   personas (migrations `132_saudi_re_demo_personas.sql` and `143_retro_module.sql`),
+   all with the password `demo2026` and no forced change:
 
    | Username | Name | Role | Can create users? |
    |---|---|---|---|
-   | `chongo.nkalamo` | Chongo Nkalamo | Chief Actuary (level 2) | Yes |
-   | `edwin.taruvinga` | Edwin Taruvinga | Underwriter (level 5) | No |
-   | `catho.ba` | Catho Ba | Underwriter (level 5) | No |
+   | `chief.underwriter` | Chief Underwriter | Chief Underwriter (level 2) | Yes |
+   | `retro.manager` | Reinsurance Manager | Retro Manager (level 3) | No |
+   | `underwriter1` … `underwriter4` | Underwriter 1–4 | Underwriter (level 4) | No |
 
-   **Seed a real admin / provision users.** Log in as the Chief Actuary (`chongo.nkalamo` / `Universe#1234`) — the only seeded account with user-creation authority (Chief level, ≤ 2) — and change its password when prompted. Then create real accounts via **Admin → Add User** (restricted to Chief Underwriter / Chief Executive / Chief Actuary). An account created without a password is given a generated one-time temp (returned to the creating admin to relay) and `must_change_password=true`; it never carries a shared/static hash. Rotate or deactivate any seeded account you don't need.
+   **Rotate them before anyone else gets the URL.** From the server:
+
+   ```bash
+   cd /opt/universe/server
+   NEW_PASSWORD='<strong password>' node scripts/manage-user.js set-password chief.underwriter
+   node scripts/manage-user.js deactivate underwriter1   # repeat for 2–4 and retro.manager, or reset with --must-change
+   ```
+
+   Then log in as `chief.underwriter` and create real accounts via the **⚙ USERS**
+   screen (each gets a generated one-time temp password and `must_change_password
+   = true`). See `deploy/README.md` → Step 9.
 
 7. **Confirm logs flow.** Tail your chosen runtime's logs and confirm one or two real requests show up cleanly with request IDs.
 
