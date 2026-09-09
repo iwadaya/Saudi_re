@@ -88,6 +88,11 @@ The deploy seeds reference data only (countries, currencies, brokers,
 reinsurers, cedants, treaty types, classes of business, roles) — never
 contracts. `npm run seed:reference:check` shows what a database holds.
 
+Switching an existing server from the old `Darchville-Analytics/modelling_tool`
+checkout to this repository, and proving the app is linked to (and aligned with)
+its database: [`docs/Universe_Repo_Migration_and_DB_Alignment_Guide.md`](docs/Universe_Repo_Migration_and_DB_Alignment_Guide.md)
+(PDF alongside it in `docs/`).
+
 ## Docker (local development)
 ```bash
 docker compose up --build

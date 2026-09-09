@@ -1,7 +1,7 @@
 # Universe — Deployment Handover
 
 **Audience:** IT team standing up the Universe reinsurance pricing tool on an Ubuntu server.
-**Source repo:** https://github.com/Darchville-Analytics/modelling_tool
+**Source repo:** https://github.com/iwadaya/Saudi_re (moved from Darchville-Analytics/modelling_tool — see `docs/Universe_Repo_Migration_and_DB_Alignment_Guide.md`)
 **Snapshot date:** 14 May 2026
 **Last verified:** 2026-08-23 (httpOnly-cookie + CSRF auth, enforcing CSP, 12-char password policy, and dev-only Compose all reflected below).
 **Maintainer contact:** Isheanesu Wadaya (Riyadh, UTC+3)
@@ -169,7 +169,7 @@ Clone and build:
 
 ```bash
 cd /opt
-sudo git clone https://github.com/Darchville-Analytics/modelling_tool.git universe
+sudo git clone https://github.com/iwadaya/Saudi_re.git universe
 sudo chown -R $USER:$USER /opt/universe
 cd /opt/universe
 npm run install:all
@@ -259,7 +259,7 @@ Clone and configure:
 
 ```bash
 cd /opt
-sudo git clone https://github.com/Darchville-Analytics/modelling_tool.git universe
+sudo git clone https://github.com/iwadaya/Saudi_re.git universe
 sudo chown -R $USER:$USER /opt/universe
 cd /opt/universe
 cp .env.example .env
@@ -301,7 +301,7 @@ Create a service user and clone:
 
 ```bash
 sudo useradd --system --create-home --shell /bin/false universe
-sudo -u universe git clone https://github.com/Darchville-Analytics/modelling_tool.git /home/universe/app
+sudo -u universe git clone https://github.com/iwadaya/Saudi_re.git /home/universe/app
 cd /home/universe/app
 sudo -u universe npm run install:all
 sudo -u universe npm run build

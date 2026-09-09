@@ -1,4 +1,4 @@
--- Migration 123: seed three real users with a forced first-login password change.
+-- Migration 123: seed three placeholder users with a forced first-login password change.
 --
 -- Temp password for all three is 'Universe#1234' (meets the >= 8 policy). The
 -- scrypt hash below was generated ONCE, out-of-band, with the app's own
@@ -60,7 +60,8 @@ WHERE NOT EXISTS (
   SELECT 1 FROM public.class_of_business WHERE class_of_business = 'Political Violence'
 );
 
--- 4. Seed the three users + a default mandate each. Idempotent via NOT EXISTS on
+-- 4. Seed the three placeholder users + a default mandate each (migration 132 turns
+--    them into the generic Underwriter 2-4 personas). Idempotent via NOT EXISTS on
 --    username (its only unique index is partial — WHERE username IS NOT NULL — so
 --    ON CONFLICT (username) can't infer it cleanly; NOT EXISTS is the robust form).
 --    Limits are set explicitly on the mandate to the spec's figures (the UW role
@@ -84,9 +85,9 @@ BEGIN
 
   FOR rec IN
     SELECT * FROM (VALUES
-      ('edwin.taruvinga',  'edwin.taruvinga@universe3.app',  'Edwin Taruvinga', v_role_uw,  25000000::numeric, v_excl),
-      ('catho.ba',         'catho.ba@universe3.app',         'Catho Ba',        v_role_uw,  25000000::numeric, v_excl),
-      ('chongo.nkalamo',   'chongo.nkalamo@universe3.app',   'Chongo Nkalamo',  v_role_ca, 100000000::numeric, ARRAY[]::uuid[])
+      ('seed.underwriter2',   'seed.underwriter2@universe3.app',   'Seeded Underwriter 2',  v_role_uw,  25000000::numeric, v_excl),
+      ('seed.underwriter3',   'seed.underwriter3@universe3.app',   'Seeded Underwriter 3',  v_role_uw,  25000000::numeric, v_excl),
+      ('seed.chief.actuary',  'seed.chief.actuary@universe3.app',  'Seeded Chief Actuary',  v_role_ca, 100000000::numeric, ARRAY[]::uuid[])
     ) AS t(username, email, display_name, role_id, treaty_limit, restricted)
   LOOP
     IF rec.role_id IS NULL THEN

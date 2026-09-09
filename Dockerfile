@@ -84,5 +84,5 @@ CMD ["node", "server/src/index.js"]
 
 LABEL org.opencontainers.image.title="Universe 3" \
       org.opencontainers.image.description="Reinsurance treaty pricing & modelling tool" \
-      org.opencontainers.image.source="https://github.com/darchville-analytics/modelling_tool" \
+      org.opencontainers.image.source="https://github.com/iwadaya/Saudi_re" \
       org.opencontainers.image.licenses="UNLICENSED"

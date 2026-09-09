@@ -1,14 +1,18 @@
 -- Migration 132: Saudi Re pilot — generic demo personas.
 --
--- The seeded demo/test users carried real-looking names (Edwin Taruvinga,
--- Catho Ba, Chongo Nkalamo) plus the cuo/underwriter pair. For the Saudi Re
--- pilot the login list should show generic personas instead:
+-- The seeded demo/test users were the cuo/underwriter pair plus the three
+-- placeholder logins from migration 123. For the Saudi Re pilot the login list
+-- should show generic personas instead:
 --
---   cuo             → Chief Underwriter (CU role — approvals authority)
---   underwriter     → Underwriter 1
---   edwin.taruvinga → Underwriter 2
---   catho.ba        → Underwriter 3
---   chongo.nkalamo  → Underwriter 4   (Underwriter role; was Chief Actuary)
+--   cuo                → Chief Underwriter (CU role — approvals authority)
+--   underwriter        → Underwriter 1
+--   seed.underwriter2  → Underwriter 2
+--   seed.underwriter3  → Underwriter 3
+--   seed.chief.actuary → Underwriter 4   (Underwriter role; was Chief Actuary)
+--
+-- Only those usernames are matched. Any other account — including personal
+-- logins an earlier seed created under other names — is left untouched; retire
+-- such accounts with server/scripts/manage-user.js.
 --
 -- Every persona gets a REAL scrypt hash of 'demo2026' so the password works in
 -- production where ALLOW_DEMO_AUTH is off (the demo2026 shortcut is dev-only;
@@ -52,10 +56,10 @@ BEGIN
   -- Underwriter 1..4 — generic underwriting personas.
   FOR rec IN
     SELECT * FROM (VALUES
-      ('underwriter',     'underwriter1', 'Underwriter 1'),
-      ('edwin.taruvinga', 'underwriter2', 'Underwriter 2'),
-      ('catho.ba',        'underwriter3', 'Underwriter 3'),
-      ('chongo.nkalamo',  'underwriter4', 'Underwriter 4')
+      ('underwriter',        'underwriter1', 'Underwriter 1'),
+      ('seed.underwriter2',  'underwriter2', 'Underwriter 2'),
+      ('seed.underwriter3',  'underwriter3', 'Underwriter 3'),
+      ('seed.chief.actuary', 'underwriter4', 'Underwriter 4')
     ) AS t(old_username, new_username, new_display)
   LOOP
     IF EXISTS (SELECT 1 FROM public.uw_user WHERE username = rec.new_username) THEN
