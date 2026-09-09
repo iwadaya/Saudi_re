@@ -16,7 +16,7 @@ The new repository contains the full history of the old one plus a maintained de
 
 | Area | v2.0 specification (`modelling_tool`) | Now (`iwadaya/Saudi_re`) |
 |---|---|---|
-| Repository and access | Org-owned private repo. Fine-grained PAT with resource owner *Darchville-Analytics*, or a deploy key on `modelling_tool`. | Private repo under the personal account **iwadaya**. The old token or deploy key **does not** open it — you need a new fine-grained PAT (resource owner *iwadaya*, repository *Saudi_re*, Contents: read) or a new deploy key added to `Saudi_re` (§3). |
+| Repository and access | Org-owned private repo. Fine-grained PAT with resource owner *Darchville-Analytics*, or a deploy key on `modelling_tool`. | Repo under the personal account **iwadaya**, currently **public**: anonymous HTTPS `fetch` works, no token or key needed. If it is made private again, the old token or deploy key **does not** open it — you need a new fine-grained PAT (resource owner *iwadaya*, repository *Saudi_re*, Contents: read) or a new deploy key added to `Saudi_re` (§3). |
 | `deploy.sh` | Pulled `main`, ran `npm ci`, built, migrated, reloaded PM2. Run as the app user. | The root `deploy.sh` is now a one-line wrapper that runs **`deploy/deploy.sh`**: fetch/checkout → `npm ci` → build → `migrate:status` + `migrate:up` → **reference-data seed** → `systemctl restart universe` → smoke test. It is written for **sudo** (it drops to `universe` for the Git/npm/build/migrate/seed steps itself), and it reads **`/etc/universe/universe.env`** by default. On a PM2 server you therefore run it with `ENV_FILE=/opt/universe/.env` and `--no-restart`, then reload PM2 yourself (§4, step 5). |
 | Reference-data seeding | Happened on application boot only (`ensureReferenceData`), plus the optional `SEED_ON_DEPLOY=reference` hook. | Still happens on boot, **and** is an explicit deploy step: `node server/src/db/seeds/run.js` (`npm run seed:reference`). It adds the GCC market extras (Saudi/GCC cedants and reinsurers) and refuses to touch contracts, quotes, claims or users. `npm run seed:reference:check` reports the counts without writing anything (§5). |
 | Migrations | Same runner and commands. | Same chain (`_migrations` table keyed by filename). This snapshot ships **149** migration files, the last being `157_quote_offer_status_checks.sql`. Nothing is re-applied; only files your database has not seen run. |
@@ -41,7 +41,7 @@ Collect these facts first; several steps depend on them.
 | Node.js seen by root and by `universe` | `node -v` and `sudo -u universe -H node -v` → both Node 20 or newer, ideally the same version. `deploy/deploy.sh` builds and migrates with **root's** `node`; PM2 runs the app with the **`universe`** user's. | |
 | `pm2` on the `universe` user's PATH | `sudo -u universe -H pm2 -v` → prints a version (v2.0 installed PM2 globally). If it prints `command not found`, use `/opt/universe/node_modules/.bin/pm2` wherever this guide says `pm2`. | |
 | Database | `DATABASE_URL` in the env file (host, port, database name, role). `psql "$DATABASE_URL" -c 'select 1'` must work from the app server. | |
-| Who owns GitHub access | A GitHub account with read access to `iwadaya/Saudi_re` to mint the token or approve the deploy key (§3). | |
+| Repository visibility | `git ls-remote --heads https://github.com/iwadaya/Saudi_re.git main` from the server without any credentials: prints a commit id → public, §3 can be skipped; `Repository not found` → private, do §3 first. | |
 | Seeding decision | Which reference layers you want on this server (§5.1). Default: base catalogue + GCC extras (automatic), no Ghana pack, **never** the fabricated test portfolio. | |
 | Maintenance window | The PM2 reload is zero-downtime, but migrations may hold locks for a few seconds. Choose a quiet moment. | |
 
@@ -49,7 +49,9 @@ Also confirm outbound HTTPS from the server to `github.com` (or SSH port 22 if y
 
 ## 3. GitHub access to the new repository
 
-GitHub does not accept account passwords for Git operations, and credentials are scoped to a repository — the token or key that opened `Darchville-Analytics/modelling_tool` will fail against `iwadaya/Saudi_re` with `remote: Repository not found` or `Permission denied`. Set up one of the two options below **before** touching the checkout.
+> **If `iwadaya/Saudi_re` is public** (the decision taken in September 2026 for simplicity), **skip this section**: anonymous read-only `clone`/`fetch` over HTTPS works with the plain URL `https://github.com/iwadaya/Saudi_re.git`, no token or key is involved, and any credential still stored for `github.com` is simply not used (Git only sends credentials after a 401 challenge). Check with `git ls-remote --heads https://github.com/iwadaya/Saudi_re.git main` from any machine — it prints the commit id without prompting. Keep this section for the day the repository is made private again: the first symptom will be `remote: Repository not found` on fetch, and one of the two options below fixes it. Remember that a public repository exposes the whole codebase and every document in it, so keep secrets, real data and internal hostnames out of commits.
+
+GitHub does not accept account passwords for Git operations, and credentials are scoped to a repository — the token or key that opened `Darchville-Analytics/modelling_tool` will fail against a **private** `iwadaya/Saudi_re` with `remote: Repository not found` or `Permission denied`. For a private repository set up one of the two options below **before** touching the checkout.
 
 ### 3.1 Option 1 — fine-grained personal access token (HTTPS, recommended)
 
@@ -108,7 +110,7 @@ If `BACKUP_DIR` differs on your server, use the value from your cron entry (v2.0
 
 ### Step 2 — Confirm access to the new repository
 
-Complete §3 and make sure `git ls-remote` (or `ssh -T`) succeeded **as the `universe` user**. `deploy/deploy.sh` fetches as that user and cannot answer a password prompt.
+Make sure `git ls-remote --heads https://github.com/iwadaya/Saudi_re.git main` succeeds **as the `universe` user** without prompting — `deploy/deploy.sh` fetches as that user and cannot answer a password prompt. With the repository public it just works; if it prompts or says `Repository not found`, the repository is private: complete §3 first.
 
 ### Step 3 — Point the checkout at `iwadaya/Saudi_re`
 
@@ -183,7 +185,7 @@ Run the checklist in §7. At minimum, before you tell users: `Pending (0)` from 
 
 - `pm2 save` was run (step 5), so the process list survives a reboot; `pm2 startup` from v2.0 is unchanged.
 - The backup cron, nginx site and TLS certificate reference paths, not the repository — nothing to change. Run `scripts/backup-db.sh` once more now so the newest dump reflects the migrated schema.
-- Delete or let expire the old token/deploy key for `modelling_tool`; record the new token's expiry.
+- Delete or let expire the old token/deploy key for `modelling_tool`; if you created a new token for a private `Saudi_re`, record its expiry.
 - Add a line to your deployment log: date, old commit → new commit, migrations applied (from step 5 output), seed counts, who signed off (Appendix B).
 
 ### Rollback
@@ -259,7 +261,7 @@ In the browser: open a new treaty — the **Cedant** dropdown lists the Saudi an
 
 Use this when you want a clean box rather than switching in place. The kit is documented step by step in `deploy/README.md` (systemd + nginx + PostgreSQL 16, reference data only). The outline, with the data move from the old server:
 
-**B1 — Prepare the host.** Ubuntu 22.04/24.04, a sudo user, DNS for `APP_DOMAIN`, the TLS certificate at hand. The kit already points at the new repository; the clone prompts for your GitHub username and the fine-grained token (§3.1):
+**B1 — Prepare the host.** Ubuntu 22.04/24.04, a sudo user, DNS for `APP_DOMAIN`, the TLS certificate at hand. The kit already points at the new repository; while the repository is public the clone needs no credentials (if it is private, it prompts for your GitHub username and the fine-grained token, §3.1):
 
 ```bash
 git clone https://github.com/iwadaya/Saudi_re.git /tmp/universe-kit
@@ -369,7 +371,7 @@ Work through the groups in order. "Command" runs on the application server; `psq
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `remote: Repository not found` / `fatal: Authentication failed` on fetch or `ls-remote` | Old token (scoped to `modelling_tool`) still in `~universe/.git-credentials`, or the new token's resource owner/repository is wrong | Remove the `github.com` line from the credential file (§3.1), mint the token with resource owner **iwadaya** and repository **Saudi_re**, Contents: Read; retry `git ls-remote` interactively as `universe` |
+| `remote: Repository not found` / `fatal: Authentication failed` on fetch or `ls-remote` | The repository is (or has become) private and no valid credential is stored: the old token (scoped to `modelling_tool`) is still in `~universe/.git-credentials`, or the new token's resource owner/repository is wrong. A public repository never produces this for a read. | Remove the `github.com` line from the credential file (§3.1), mint the token with resource owner **iwadaya** and repository **Saudi_re**, Contents: Read; retry `git ls-remote` interactively as `universe` |
 | `Permission denied (publickey)` | Deploy key not added to `Saudi_re`, or the SSH alias/IdentityFile is wrong | §3.2; a deploy key works for one repository only — generate a new key for `Saudi_re` |
 | `remote: Invalid username or token. Password authentication is not supported` | An account password was typed at the prompt | Paste the fine-grained token as the password (v2.0 §12.1) |
 | `deploy.sh` stops at `DATABASE_URL is not set (create /etc/universe/universe.env …)` | The script defaults to the kit's env file; your v2.0 server keeps it at `/opt/universe/.env` | Run it as `sudo env ENV_FILE=/opt/universe/.env /opt/universe/deploy/deploy.sh --ref main --no-restart` |
