@@ -38,6 +38,8 @@ Collect these facts first; several steps depend on them.
 | Currently deployed commit | `git -C /opt/universe log -1 --format='%h %ci %s'` | |
 | Current remote | `git -C /opt/universe remote -v` — expect `Darchville-Analytics/modelling_tool` | |
 | Migration state before the switch | `sudo -u universe -H npm run migrate:status --prefix server` from `/opt/universe` → the last lines must read `Pending (0):`. If anything is pending *before* you start, resolve that first. | |
+| Node.js seen by root and by `universe` | `node -v` and `sudo -u universe -H node -v` → both Node 20 or newer, ideally the same version. `deploy/deploy.sh` builds and migrates with **root's** `node`; PM2 runs the app with the **`universe`** user's. | |
+| `pm2` on the `universe` user's PATH | `sudo -u universe -H pm2 -v` → prints a version (v2.0 installed PM2 globally). If it prints `command not found`, use `/opt/universe/node_modules/.bin/pm2` wherever this guide says `pm2`. | |
 | Database | `DATABASE_URL` in the env file (host, port, database name, role). `psql "$DATABASE_URL" -c 'select 1'` must work from the app server. | |
 | Who owns GitHub access | A GitHub account with read access to `iwadaya/Saudi_re` to mint the token or approve the deploy key (§3). | |
 | Seeding decision | Which reference layers you want on this server (§5.1). Default: base catalogue + GCC extras (automatic), no Ghana pack, **never** the fabricated test portfolio. | |
@@ -97,11 +99,12 @@ git log -1 --format='%h %ci %s'                       # currently deployed commi
 sudo -u universe -H npm run migrate:status --prefix server | tail -n 3     # must end with "Pending (0):"
 
 # Full database dump with the checked-in script (same as the nightly job). Prints the dump path.
+sudo install -d -o universe -g universe -m 750 /var/backups/universe      # harmless if it already exists; universe cannot create it itself
 sudo -u universe -H bash -c 'cd /opt/universe && set -a && . ./.env && set +a && BACKUP_DIR=/var/backups/universe scripts/backup-db.sh'
 ls -lt /var/backups/universe | head -3                # the new .dump file is at the top
 ```
 
-If `BACKUP_DIR` differs on your server, use the value from your cron entry (v2.0 §4.3). If the directory does not exist or `universe` cannot write to it, create it first: `sudo install -d -o universe -g universe -m 750 /var/backups/universe`. Do not continue without a dump you can see on disk.
+If `BACKUP_DIR` differs on your server, use the value from your cron entry (v2.0 §4.3). Do not continue without a dump you can see on disk.
 
 ### Step 2 — Confirm access to the new repository
 
@@ -141,9 +144,9 @@ Expected: `-rw-------` owned by `universe`; `NODE_ENV=production`; `PORT=4000`; 
 sudo env ENV_FILE=/opt/universe/.env /opt/universe/deploy/deploy.sh --ref main --no-restart
 ```
 
-What it prints, in order: `1. fetching origin and checking out 'main'` (and the commit it landed on) → `2. installing dependencies from lockfiles (npm ci)` → `3. building the client bundle` → `4. database migrations` (the applied/pending list, then the migration log) → `5. reference data (countries, currencies, brokers, cedants, …) — never contracts` (the counts block shown in §5.2, then the `seed-on-deploy:` line) → `6. restart skipped (--no-restart)` → `done — <commit> is deployed`. The migrations and the seed run **before** the reload, so a failure leaves the old version running.
+What it prints, in order (each step is a `▶` header): `1. fetching origin and checking out 'main'` (and the commit it landed on) → `2. installing dependencies from lockfiles (npm ci)` → `3. building the client bundle` → `4. database migrations` (the applied/pending list, then one `migration completed` line per file and `migrations complete`) → `5. reference data (countries, currencies, brokers, cedants, …) — never contracts` (the counts block shown in §5.2, then the `seed-on-deploy:` line) → `6. restart skipped (--no-restart) — run: sudo systemctl restart universe && deploy/smoke-test.sh` → `done — <commit> is deployed`. **Ignore the `systemctl` hint in step 6 on a PM2 server** — reload PM2 as shown next. Normal noise between the headers: a dotenv banner (`◇ injected env (N) from ../.env`) before every Node step, JSON `DB pool connecting` / `DB pool configured` lines, and inside step 5 an early `reference data ready … "cedants":22` line *before* the counts block reports 40 — the block is the authoritative result. The migrations and the seed run **before** the reload, so a failure leaves the old version running.
 
-Now reload the application under PM2 — as the user that owns the PM2 daemon (`universe` per v2.0) and with the same `pm2` you started it with — and smoke-test it:
+Now reload the application under PM2 — as the user that owns the PM2 daemon (`universe` per v2.0), with the same `pm2` you started it with, and with the same environment overrides (`PM2_INSTANCES`, `DB_POOL_MAX`) exported if you used any at start, because `ecosystem.config.cjs` re-derives the worker count and per-worker pool on every reload — and smoke-test it:
 
 ```bash
 sudo -u universe -H bash -c 'cd /opt/universe && pm2 reload ecosystem.config.cjs && pm2 save'   # zero-downtime rolling reload (= npm run cluster:reload)
@@ -212,7 +215,7 @@ Migrations are forward-only. If a migration itself is the problem, stop the app 
 
 ### 5.2 What "seeded correctly" looks like
 
-Verified against a freshly migrated PostgreSQL 16 database at this commit. The reference seed prints this block; `npm run seed:reference:check` prints the same counts read-only:
+Verified against a freshly migrated PostgreSQL 16 database at this commit. The reference seed prints this block; `npm run seed:reference:check` prints the same counts read-only under the headings `Reference data (read-only check):` and `Business data (never written by this script):`.
 
 ```
 Reference data after seeding:
@@ -298,10 +301,10 @@ Work through the groups in order. "Command" runs on the application server; `psq
 |---|---|---|---|---|
 | C1 | One env file, locked down | `ls -l /opt/universe/.env` | `-rw------- universe universe` | Secrets readable by the app user only |
 | C2 | Exactly one `DATABASE_URL` | `grep -c '^DATABASE_URL=' /opt/universe/.env` | `1` | No duplicate/overridden connection string |
-| C3 | No placeholders | `grep -c CHANGE_ME /opt/universe/.env` | `0` | Real values everywhere |
-| C4 | Production mode, migrations explicit | `grep -E '^(NODE_ENV\|RUN_MIGRATIONS_ON_BOOT)=' /opt/universe/.env` | `NODE_ENV=production`, `RUN_MIGRATIONS_ON_BOOT=false` (or absent) | Schema changes only happen in the deploy step |
-| C5 | Seeding posture | `grep -E '^SEED_ON_DEPLOY=' /opt/universe/.env` | absent, or `SEED_ON_DEPLOY=reference` — never `1`/`reset` | No fabricated treaties can be seeded |
-| C6 | The app loaded *that* file | `sudo -u universe -H pm2 logs universe --lines 300 --nostream \| grep -m1 'startup configuration loaded'` | JSON line with `"envFile":"/opt/universe/.env"` | The running process read this env file, not another |
+| C3 | No placeholders | `grep -c CHANGE_ME /opt/universe/.env` | `0` (grep exits 1 when the count is 0 — expected) | Real values everywhere |
+| C4 | Production mode, migrations explicit | `grep -e '^NODE_ENV=' -e '^RUN_MIGRATIONS_ON_BOOT=' /opt/universe/.env` | `NODE_ENV=production`, `RUN_MIGRATIONS_ON_BOOT=false` (or absent) | Schema changes only happen in the deploy step |
+| C5 | Seeding posture | `grep '^SEED_ON_DEPLOY=' /opt/universe/.env` | no output (absent; grep exits 1), or `SEED_ON_DEPLOY=reference` — never `1`/`reset` | No fabricated treaties can be seeded |
+| C6 | The app loaded *that* file | `sudo -u universe -H pm2 logs universe --lines 300 --nostream 2>/dev/null \| grep 'startup configuration loaded' \| tail -n 1` | newest line (format `0\|universe \| <date>: {json}`) with `"envFile":"/opt/universe/.env"` | The running process read this env file, not another |
 
 ### 7.2 Connectivity — the database answers with the app's own credentials
 
@@ -309,20 +312,20 @@ Work through the groups in order. "Command" runs on the application server; `psq
 |---|---|---|---|---|
 | D1 | Connect with the app's URL | `psql "$DATABASE_URL" -c 'select 1'` | one row, `1` | Host, port, role, password and database name are right |
 | D2 | Identify what you are connected to | `psql "$DATABASE_URL" -tAc "select current_database(), current_user, inet_server_addr(), inet_server_port(), version()"` | `universe\|universe\|127.0.0.1\|5432\|PostgreSQL 16…` (your values) | You are looking at the intended database, not a stray one |
-| D3 | Postgres is up and listening locally | `sudo systemctl status postgresql --no-pager \| head -3` and `ss -tlnp \| grep 5432` | `active (running)`; `127.0.0.1:5432` only | Database service healthy and not exposed |
+| D3 | Postgres is up and listening locally | `sudo systemctl status postgresql --no-pager \| head -3` and `ss -tlnp \| grep 5432` (alternatives: `pg_lsclusters`; `psql "$DATABASE_URL" -tAc "show listen_addresses"`) | `active (running)`; `127.0.0.1:5432` only (`pg_lsclusters` → `online`; `listen_addresses` → `localhost`) | Database service healthy and not exposed |
 | D4 | Role owns the schema | `psql "$DATABASE_URL" -tAc "select pg_get_userbyid(datdba) from pg_database where datname=current_database()"` | `universe` | Migrations can create/alter objects without superuser help |
 
 ### 7.3 Runtime — the *running* application is connected to *that* database
 
 | # | Check | Command | Expected | Proves |
 |---|---|---|---|---|
-| R1 | Boot log names the database | `sudo -u universe -H pm2 logs universe --lines 300 --nostream \| grep -m1 'DB pool connecting'` | `"url":"postgresql://universe:***@localhost:5432/universe"` matching `DATABASE_URL` (password masked) | The process is using the same host/port/db you tested in D1–D2 |
-| R2 | Boot sequence completed | same log, `grep -E 'database connection verified\|migrations skipped\|migrations complete\|reference data ready\|http server listening'` | All four stages present for the current start: `migrations skipped` is correct (the deploy applied them; you see `migrations complete` instead only if `RUN_MIGRATIONS_ON_BOOT=true`) | App verified the DB, found the schema, seeded, and is serving |
-| R3 | Deep health via the app port | `curl -sS -D - http://127.0.0.1:4000/api/health/deep` | HTTP 200, `"db":{"ok":true,"pingMs":<small>,"pool":{…,"max":50,…}}`, header `X-Pool-Waiting: 0` | Live round-trip from the app to the DB, pool not saturated |
+| R1 | Boot log names the database | `sudo -u universe -H pm2 logs universe --lines 300 --nostream 2>/dev/null \| grep 'DB pool connecting' \| tail -n 1` | `"url":"postgresql://universe:***@localhost:5432/universe"` matching `DATABASE_URL` (password masked) | The process is using the same host/port/db you tested in D1–D2 |
+| R2 | Boot sequence completed | same log, `grep -e 'database connection verified' -e 'migrations skipped' -e 'migrations complete' -e 'reference data ready' -e 'http server listening' \| tail -n 12` | For the most recent start, once **per worker**: `database connection verified`, `migrations skipped`, `reference data ready` (appears twice per worker), `http server listening`. `migrations skipped` is correct — the deploy applied them; `migrations complete` appears instead only if `RUN_MIGRATIONS_ON_BOOT=true` | App verified the DB, found the schema, seeded, and is serving |
+| R3 | Deep health via the app port | `curl -sS -D - http://127.0.0.1:4000/api/health/deep` | HTTP 200, `"db":{"ok":true,"pingMs":<small>,"pool":{…,"max":<per-worker pool>,…}}`, header `X-Pool-Waiting: 0`. Under `ecosystem.config.cjs` the per-worker pool is `floor(80 / workers)` — 20 on a 4-worker box, 40 with 2 workers; 50 only when `DB_POOL_MAX` is set or the app runs outside the ecosystem file (see P1) | Live round-trip from the app to the DB, pool not saturated |
 | R4 | Deep health through nginx/TLS | `curl -sS https://<APP_DOMAIN>/api/health/deep` | same body, `"env":"production"` | Users' path reaches the same connected app |
 | R5 | DB sees the app's connections | `psql "$DATABASE_URL" -c "select usename, client_addr, state, count(*) from pg_stat_activity where datname=current_database() group by 1,2,3"` | rows with `usename = universe` (idle/active) from the app host | The connections exist in Postgres, from the expected role and host |
 | R6 | Read path: app data = DB data | `curl -sS http://127.0.0.1:4000/api/auth/users \| grep -o '"username":"[^"]*"' \| cut -d'"' -f4 \| sort` vs `psql "$DATABASE_URL" -tAc "select username from public.uw_user where is_active order by 1"` | identical lists (and **not** the two-user demo fallback `cuo`/`underwriter`) | The login screen is served from this database |
-| R7 | Write path: a login lands in the audit log | Log in once in the browser, then `psql "$DATABASE_URL" -c "select event_type, actor, created_at from public.audit_log where event_type='LOGIN' order by created_at desc limit 3"` | top row = your username, `created_at` = just now | The app writes to this database, and the clock/timezone are sane |
+| R7 | Write path: a login lands in the audit log | Log in once in the browser, then `psql "$DATABASE_URL" -c "select event_type, payload->'actor'->>'name' as username, actor as user_id, created_at from public.audit_log where event_type='LOGIN' order by created_at desc limit 3"` | top row: `username` = the account you just used (the `actor` column holds its user id), `created_at` = just now | The app writes to this database, and the clock/timezone are sane |
 | R8 | Smoke test | `BASE_URL=https://<APP_DOMAIN> /opt/universe/deploy/smoke-test.sh` (add `SMOKE_USER`/`SMOKE_PASSWORD` to test a real login) | `PASSED` | All of R3–R6 in one exit code |
 
 ### 7.4 Schema alignment — the code and the database agree on the migrations
@@ -351,7 +354,7 @@ Work through the groups in order. "Command" runs on the application server; `psq
 |---|---|---|---|---|
 | P1 | Connection budget | `psql "$DATABASE_URL" -tAc "show max_connections"`; PM2 workers from `pm2 status`; per-worker pool from R3 `pool.max`; `grep -E '^DB_POOL_MAX=' /opt/universe/.env` | workers × pool.max ≤ max_connections − 20 (e.g. 4 × 20 = 80 ≤ 80). `ecosystem.config.cjs` derives 20 per worker on a 4-core box **only while `DB_POOL_MAX` is not set in `.env`** — a `DB_POOL_MAX=50` line (as in older notes) is used verbatim per worker: 4 × 50 = 200 > 100. Remove it or set it to the per-worker value | The cluster cannot exhaust Postgres |
 | P2 | Accounts | `cd /opt/universe/server && sudo -u universe -H node scripts/manage-user.js list` | your real users active; seeded personas (`chief.underwriter`, `retro.manager`, `underwriter1–4`) rotated or deactivated | No `demo2026` login remains |
-| P3 | Backup after the switch | `ls -lt /var/backups/universe \| head -2`; weekly `scripts/verify-restore.sh` exit 0 | a dump newer than the deploy | Recovery point reflects the migrated schema |
+| P3 | Backup after the switch | `ls -lt /var/backups/universe \| head -2`; weekly `scripts/verify-restore.sh` exit 0 | a dump newer than the deploy. `verify-restore.sh` creates and drops a scratch database, so the role in its `DATABASE_URL` needs `CREATEDB` — grant it once with `sudo -u postgres psql -c 'ALTER ROLE universe CREATEDB'` (as `deploy/README.md` step 10 does), or run it with a superuser URL; otherwise it fails with `permission denied to create database` | Recovery point reflects the migrated schema |
 
 ### 7.7 Sign-off summary
 
@@ -371,7 +374,9 @@ Work through the groups in order. "Command" runs on the application server; `psq
 | `remote: Invalid username or token. Password authentication is not supported` | An account password was typed at the prompt | Paste the fine-grained token as the password (v2.0 §12.1) |
 | `deploy.sh` stops at `DATABASE_URL is not set (create /etc/universe/universe.env …)` | The script defaults to the kit's env file; your v2.0 server keeps it at `/opt/universe/.env` | Run it as `sudo env ENV_FILE=/opt/universe/.env /opt/universe/deploy/deploy.sh --ref main --no-restart` |
 | `deploy.sh` stops at `run as root (sudo) or as universe` | Started as your admin user without `sudo` | Prefix with `sudo` (it drops to `universe` for the Git/npm/build/migrate/seed steps itself) |
-| `Failed to restart universe.service: Unit universe.service not found` | `deploy.sh` was run without `--no-restart` on a PM2 server | Nothing is broken — migrations and seed already ran. Reload PM2: `sudo -u universe -H bash -c 'cd /opt/universe && npm run cluster:reload'` |
+| `Failed to restart universe.service: Unit universe.service not found` | `deploy.sh` was run without `--no-restart` on a PM2 server | Nothing is broken — migrations and seed already ran. Reload PM2: `sudo -u universe -H bash -c 'cd /opt/universe && pm2 reload ecosystem.config.cjs'` |
+| `sudo -u universe -H pm2 …` → `pm2: command not found` | PM2 is not installed globally for that user (only as the repository's devDependency) | Use `/opt/universe/node_modules/.bin/pm2` in place of `pm2`, or install it globally as v2.0 §3.1 did (`sudo npm install -g pm2`) |
+| `scripts/verify-restore.sh` fails with `permission denied to create database` | The `universe` role cannot create the scratch database the restore drill uses | `sudo -u postgres psql -c 'ALTER ROLE universe CREATEDB'` once, or run the drill with a superuser `DATABASE_URL` (§7.6 P3) |
 | `deploy.sh` errors while reading the env file (`command not found`, `unexpected token`) | A value in `.env` contains shell-special characters (`&`, spaces, `$`) and the script sources the file | Quote that value in `.env` (`KEY='value'`), or export `DATABASE_URL` in the shell and rerun |
 | `vite: not found` during the client build | `npm ci` ran with `NODE_ENV=production` exported and skipped devDependencies | Use `deploy.sh` (it passes `--include=dev`) or `npm ci --include=dev --prefix client` |
 | `migrate:status` still shows pending files after the deploy | Migration step failed earlier (read its error), or it ran against a different `DATABASE_URL` than the app uses | Fix the cause, `npm run migrate:up --prefix server`, then §7.4 S1–S4 |
