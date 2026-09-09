@@ -383,7 +383,10 @@ restore the last dump first:
 
 ```bash
 sudo systemctl stop universe
-sudo -u postgres pg_restore --clean --if-exists -d universe /var/backups/universe/universe-<stamp>.dump
+# Restore into an EMPTY database: tables and foreign keys added by newer migrations make
+# `pg_restore --clean` over the migrated database fail half-way (uw_user, contract, quote…).
+sudo -u postgres psql -v ON_ERROR_STOP=1 -c "DROP DATABASE universe WITH (FORCE)" -c "CREATE DATABASE universe OWNER universe TEMPLATE template0"
+sudo -u postgres pg_restore --exit-on-error --no-owner --no-privileges --role=universe -d universe /var/backups/universe/universe-<stamp>.dump
 sudo deploy/deploy.sh --ref <previous ref>
 ```
 

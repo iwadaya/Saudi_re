@@ -27,6 +27,8 @@ The new repository contains the full history of the old one plus a maintained de
 
 Everything else in the v2.0 specification — sizing, ports, nginx, TLS, backups, secrets, PM2, the security baseline — still applies as written.
 
+**Retire the August quick reference's §1–§3 commands.** `./deploy.sh` run as `universe` now stops with `DATABASE_URL is not set`, the seed runs *before* the reload rather than after, and `npm run cluster:reload` resolves the repository's own `pm2` rather than the daemon's. The standard redeploy on this server is now Appendix A ("Full deploy, keep PM2", then "Reload app").
+
 > **Two paths.** §4 switches the **existing** server in place (recommended: no re-provisioning, no data movement, ~15 minutes). §6 builds a **fresh** server from the new repository with the deployment kit and moves the data across. Both end at the same checklist in §7.
 
 ## 2. Before you start
@@ -40,6 +42,8 @@ Collect these facts first; several steps depend on them.
 | Currently deployed commit | `sudo -u universe -H git -C /opt/universe log -1 --format='%h %ci %s'` (Git refuses to open a checkout owned by another user — `dubious ownership` — so always run Git as `universe`) | |
 | Current remote | `sudo -u universe -H git -C /opt/universe remote -v` — expect `Darchville-Analytics/modelling_tool` | |
 | Migration state before the switch | `sudo -u universe -H npm run migrate:status --prefix server` from `/opt/universe` → the last lines must read `Pending (0):`. If anything is pending *before* you start, resolve that first. | |
+| Checkout clean and owned by `universe` | `sudo -u universe -H git -C /opt/universe status --porcelain --untracked-files=no` → no output (a listed `package-lock.json` or `client/package-lock.json` was rewritten by an `npm install`; reset it with `sudo -u universe -H git -C /opt/universe checkout -- <file>`, `npm ci` regenerates nothing it needs). `sudo find /opt/universe -not -user universe -print -quit` → no output (otherwise `sudo chown -R universe:universe /opt/universe`, v2.0 §9.1). A dirty file aborts the checkout in Step 3; admin-owned `node_modules` makes `npm ci` fail with `EACCES`. | |
+| Largest tables | `psql "$DATABASE_URL" -c "select relname, n_live_tup from pg_stat_user_tables order by 2 desc limit 5"` — if any table exceeds roughly one million rows, tell the maintainer before Step 5: every migration statement is capped at 30 s by the application's pool settings, and migrations 150 and 156 scan the largest tables. | |
 | Node.js seen by root and by `universe` | `sudo node -v` and `sudo -u universe -H node -v` → both Node 20 or newer, ideally the same version. `deploy/deploy.sh` builds and migrates with the `node` on **root's** PATH (under `sudo`); PM2 runs the app with the **`universe`** user's. If Node was installed with nvm for `universe` only, `sudo node -v` fails and Option A1 dies with `node is not installed` — either install Node system-wide (NodeSource) or use Option A2. | |
 | `pm2` on the `universe` user's PATH | `sudo -u universe -H pm2 -v` → prints a version (v2.0 installed PM2 globally). If it prints `command not found`, use `/opt/universe/node_modules/.bin/pm2` wherever this guide says `pm2`. | |
 | Database | `DATABASE_URL` in the env file (host, port, database name, role). `psql "$DATABASE_URL" -c 'select 1'` must work from the app server. | |
@@ -103,13 +107,21 @@ cd /opt/universe
 sudo -u universe -H git log -1 --format='%h %ci %s'   # currently deployed commit — keep this for rollback
 sudo -u universe -H npm run migrate:status --prefix server | tail -n 3     # must end with "Pending (0):"
 
+# Pin the rollback point as a tag (a commit hash on a scrap of paper can be lost to git's garbage collection).
+sudo -u universe -H git -C /opt/universe tag -f pre-saudi-re-switch
+
 # Full database dump with the checked-in script (same as the nightly job). Prints the dump path.
+# BACKUP_RETENTION_DAYS=0 stops this run from pruning dumps older than 30 days, which the script does by default.
 sudo install -d -o universe -g universe -m 750 /var/backups/universe      # harmless if it already exists; universe cannot create it itself
-sudo -u universe -H bash -c 'cd /opt/universe && set -a && . ./.env && set +a && BACKUP_DIR=/var/backups/universe scripts/backup-db.sh'
+sudo -u universe -H bash -c 'cd /opt/universe && set -a && . ./.env && set +a && BACKUP_RETENTION_DAYS=0 BACKUP_DIR=/var/backups/universe scripts/backup-db.sh'
 ls -lt /var/backups/universe | head -3                # the new .dump file is at the top
+psql "$DATABASE_URL" -tAc "select count(*) from public._migrations"      # write this number down — the rollback check needs it
+
+# Custom treaty types? The new code hides every treaty type that is not one of its 11 canonical names (§5.1).
+psql "$DATABASE_URL" -c "select treaty_type, is_active, (select count(*) from public.contract x where x.treaty_type_id=t.treaty_type_id) contracts from public.treaty_type t where treaty_type not in ('Quota Share','Quota Share & Surplus','First Surplus','Second Surplus','Third Surplus','Fac Oblig','Risk XL','CAT XL','Risk & CAT XL','Stop Loss','Aggregate XL')"
 ```
 
-If `BACKUP_DIR` differs on your server, use the value from your cron entry (v2.0 §4.3). Do not continue without a dump you can see on disk.
+If `BACKUP_DIR` differs on your server, use the value from your cron entry (v2.0 §4.3). Copy the new dump off the box, and do not continue without a dump you can see on disk. The treaty-type query should return no rows; if it lists a type that real contracts use, decide with the business before Step 5 — after the switch that type disappears from the dropdown (existing contracts keep it), and the only supported way to keep it selectable is a code change to the canonical list.
 
 ### Step 2 — Confirm access to the new repository
 
@@ -129,7 +141,9 @@ sudo -u universe -H git -C /opt/universe diff --stat HEAD origin/main -- server/
 sudo -u universe -H git -C /opt/universe merge-base --is-ancestor HEAD origin/main && echo "OK: fast-forward" || echo "WARNING: deployed commit is not in the new history — read §7.4 (orphan check) before migrating"
 
 # Which migrations the deploy will apply — look for 132 and 143 (they rename/reset the seeded accounts, see Step 6):
-sudo -u universe -H git -C /opt/universe diff --name-only HEAD origin/main -- server/src/db/migrations
+sudo -u universe -H git -C /opt/universe diff --diff-filter=A --name-only HEAD origin/main -- server/src/db/migrations
+# Must be EMPTY: a migration file that changed after it was recorded is never re-applied (review by hand if listed):
+sudo -u universe -H git -C /opt/universe diff --diff-filter=M --name-only HEAD origin/main -- server/src/db/migrations
 
 # Put the new tree on disk. The old modelling_tool checkout has no deploy/ directory — the deployment
 # kit arrives with this checkout, so it must exist before Step 5 can call it.
@@ -150,6 +164,8 @@ sudo -u universe -H bash -c 'cd /opt/universe && ls -l .env && grep -E "^(NODE_E
 
 Expected: `-rw-------` owned by `universe`; `NODE_ENV=production`; `PORT=4000`; exactly one `DATABASE_URL`; `RUN_MIGRATIONS_ON_BOOT=false` (or absent — the default is false); `ALLOW_DEMO_AUTH` absent; `SEED_ON_DEPLOY` absent, or `reference` if you want the Ghana pack (§5.1). If you want to add `SEED_ON_DEPLOY=reference`, do it now — the deploy step reads it.
 
+Also make sure there is **no second env file**: `sudo ls -la /opt/universe/server/.env` must say `No such file or directory`. The CLI scripts run with `--prefix server` (migrate, seed, `manage-user.js`) load `server/.env` *before* `/opt/universe/.env`, while the application itself does not — a stray copy of `server/.env.example` would send the migrations and the seed to a different database than the one the app uses.
+
 ### Step 5 — Deploy from the new repository
 
 **Option A1 — the repository's deploy script (recommended).** It does every step in order, stops at the first failure, and runs the Git/npm/build/migrate/seed steps as the `universe` user. On a PM2 server pass the env-file location and skip the systemd restart:
@@ -158,14 +174,17 @@ Expected: `-rw-------` owned by `universe`; `NODE_ENV=production`; `PORT=4000`; 
 sudo env ENV_FILE=/opt/universe/.env /opt/universe/deploy/deploy.sh --ref main --no-restart
 ```
 
-What it prints, in order (each step is a `▶` header): `1. fetching origin and checking out 'main'` (and the commit it landed on) → `2. installing dependencies from lockfiles (npm ci)` → `3. building the client bundle` → `4. database migrations` (the applied/pending list, then one `migration completed` line per file and `migrations complete`) → `5. reference data (countries, currencies, brokers, cedants, …) — never contracts` (the counts block shown in §5.2, then the `seed-on-deploy:` line) → `6. restart skipped (--no-restart) — run: sudo systemctl restart universe && deploy/smoke-test.sh` → `done — <commit> is deployed`. **Ignore the `systemctl` hint in step 6 on a PM2 server** — reload PM2 as shown next. Normal noise between the headers: a dotenv banner (`◇ injected env (N) from ../.env`) before every Node step, JSON `DB pool connecting` / `DB pool configured` lines, and inside step 5 an early `reference data ready … "cedants":22` line *before* the counts block reports 40 — the block is the authoritative result. The migrations and the seed run **before** the reload, so a failure leaves the old API workers running — but the new client bundle and dependencies are already on disk by then, and the workers serve `client/dist` from disk. Do not leave the server in that state: fix the cause and re-run the deploy, or put the old tree back (Rollback below) before walking away.
+What it prints, in order (each step is a `▶` header): `1. fetching origin and checking out 'main'` (and the commit it landed on) → `2. installing dependencies from lockfiles (npm ci)` → `3. building the client bundle` → `4. database migrations` (the applied/pending list, then `migration already applied, skipping` for every file already recorded, `migration completed` for each file it runs, and finally `migrations complete {"ran":N,"alreadyApplied":M}` — N is the number for Appendix B) → `5. reference data (countries, currencies, brokers, cedants, …) — never contracts` (the counts block shown in §5.2, then the `seed-on-deploy:` line) → `6. restart skipped (--no-restart) — run: sudo systemctl restart universe && deploy/smoke-test.sh` → `done — <commit> is deployed`. **Ignore the `systemctl` hint in step 6 on a PM2 server** — reload PM2 as shown next. Normal noise between the headers: a dotenv banner (`◇ injected env (N) from ../.env`) before every Node step, JSON `DB pool connecting` / `DB pool configured` lines, and inside step 5 an early `reference data ready … "cedants":22` line *before* the counts block reports 40 — the block is the authoritative result.
+
+> **The window between the build and the reload is not invisible to users.** Step 3 of the script rebuilds `client/dist`, which removes the previous bundle's hashed files, while the running workers still serve the *old* `index.html` they loaded at start. From that moment until the PM2 reload, new page loads get a blank page and open sessions break on their next lazily loaded screen. Keep the window short: run the reload immediately after the script finishes. If step 4 or 5 fails, put the previous bundle back at once — the old API workers are still up, so no reload is needed: `sudo -u universe -H bash -c 'cd /opt/universe && git checkout -q pre-saudi-re-switch && npm ci --include=dev --prefix client && npm run build --prefix client'` — then fix the cause, repeat Step 3 and run Step 5 again.
 
 Now reload the application under PM2 — as the user that owns the PM2 daemon (`universe` per v2.0), with the same `pm2` you started it with, and with the same environment overrides (`PM2_INSTANCES`, `DB_POOL_MAX`) exported if you used any at start, because `ecosystem.config.cjs` re-derives the worker count and per-worker pool on every reload — and smoke-test it:
 
 ```bash
 sudo -u universe -H bash -c 'cd /opt/universe && pm2 reload ecosystem.config.cjs && pm2 save'   # zero-downtime rolling reload (= npm run cluster:reload)
-sudo -u universe -H pm2 status                                                                 # every universe worker "online", uptime just reset
+sudo -u universe -H pm2 status                                                                 # every universe worker "online", uptime just reset, ↺ (restarts) unchanged
 BASE_URL=http://127.0.0.1:4000 /opt/universe/deploy/smoke-test.sh                              # must end with PASSED
+sleep 30; sudo -u universe -H pm2 describe universe | grep -E 'restarts|unstable|uptime'      # 0 unstable restarts — a rising ↺ with tiny uptime is a crash loop on the new code: pm2 logs universe --err --lines 50
 ```
 
 **Option A2 — the same steps by hand** (when each step must be inspected individually):
@@ -221,22 +240,26 @@ Run the checklist in §7. At minimum, before you tell users: `Pending (0)` from 
 
 ### Rollback
 
-The previous commit is still in the local repository and in the new repository's history. It predates the deployment kit, so roll back by hand rather than with `deploy/deploy.sh` (checking the old commit out removes `deploy/` again):
+The previous commit is pinned locally as the tag `pre-saudi-re-switch` (Step 1); it is also in the new repository's history unless Step 3 warned otherwise. It predates the deployment kit, so roll back by hand rather than with `deploy/deploy.sh` (checking the old commit out removes `deploy/` again):
 
 ```bash
 sudo -u universe -H bash
 cd /opt/universe
-git checkout -q <old commit from step 1>
+git checkout -q pre-saudi-re-switch
 npm ci --include=dev && npm ci --include=dev --prefix client && npm ci --prefix server
 npm run build --prefix client
 pm2 reload ecosystem.config.cjs && pm2 save
 exit
 ```
 
-Migrations are forward-only. If a migration itself is the problem, stop the app (`sudo -u universe -H pm2 stop universe`), restore the step-1 dump as the `postgres` superuser, then roll the code back as above. The custom-format archive records that `universe` owns every object, so the restore hands ownership back to the application role (verify afterwards with `psql "$DATABASE_URL" -tAc "select tableowner from pg_tables where tablename='contract'"` → `universe`):
+Migrations are forward-only. If a migration itself is the problem, restore the step-1 dump **into an empty database, never over the migrated one** — the new tables and foreign keys the dump does not know about make `pg_restore --clean` fail half-way and leave, for example, `uw_user` unrestored. Stop the app, drop and recreate the database, restore, check the migration count against the number you wrote down in Step 1, then roll the code back as above:
 
 ```bash
-sudo -u postgres pg_restore --clean --if-exists -d universe /var/backups/universe/<file>.dump
+sudo -u universe -H pm2 stop universe
+sudo -u postgres psql -v ON_ERROR_STOP=1 -c "DROP DATABASE universe WITH (FORCE)" -c "CREATE DATABASE universe OWNER universe TEMPLATE template0"
+sudo -u postgres pg_restore --exit-on-error --no-owner --no-privileges --role=universe -d universe /var/backups/universe/<file>.dump
+psql "$DATABASE_URL" -tAc "select count(*) from public._migrations"        # must equal the Step 1 number
+psql "$DATABASE_URL" -tAc "select tableowner from pg_tables where tablename='contract'"   # universe
 ```
 
 To move forward again after a rollback, check `main` out first (`sudo -u universe -H git -C /opt/universe checkout -B main origin/main`) so the kit is back on disk, then repeat Step 5.
@@ -250,12 +273,12 @@ To move forward again after a rollback, check `main` out first (`sudo -u univers
 | Layer | What it writes | When it runs | Writes contracts? |
 |---|---|---|---|
 | **Migrations** (`npm run migrate:up`) | The schema, and the base catalogue that ships inside it: **75 countries** with regions (migration 045 — GCC, Levant, North Africa, Sub-Saharan Africa incl. Ghana, Europe, Americas, South/Southeast/East Asia; not every country in the world, add others on the reference screens), 32 currencies each with a USD rate, 11 brokers, 15 core reinsurers and 22 cedants (005), inflation (CPI) series for Saudi Arabia, the UAE and the UK (2000–2026), the CRESTA-zone table (empty until zones are added), facultative reference tables and taxonomies, 11 treaty types, 15 classes of business (the 15th, *Political Violence*, from 123), roles and the mandate hierarchy, and the demo personas (`chief.underwriter`, `retro.manager`, `underwriter1–4`, password `demo2026`) — **132 and 143 also rename and reset existing accounts, see §4 Step 6**. | Deploy step 4. Each file runs once, recorded in `public._migrations`. | No |
-| **Boot seed** (`ensureReferenceData`) | Re-asserts its hard-coded canonical lists (45 countries, 32 currencies, 11 brokers, 11 treaty types, 14 classes, 15 reinsurers, 22 cedants) with `WHERE NOT EXISTS` — on a migrated database this is normally a no-op. | Every application start, and inside the reference seed. | No |
+| **Boot seed** (`ensureReferenceData`) | Re-asserts its hard-coded canonical lists (45 countries, 32 currencies, 11 brokers, 11 treaty types, 14 classes, 15 reinsurers, 22 cedants) with `WHERE NOT EXISTS` — on a migrated database this is normally a no-op. **It also deactivates every treaty type whose name is not one of the 11 canonical names**, on every start: a custom treaty type disappears from the dropdown after the switch (existing contracts keep it). Check for such types in §4 Step 1. | Every application start, and inside the reference seed. | No |
 | **Reference seed** (`node server/src/db/seeds/run.js`, `npm run seed:reference`) | The boot seed plus `002_reference_data.sql`: the canonical mirror and the **GCC/MENA market extras**. Net effect on a migrated database: **+18 cedants** — MEDGULF, SALAMA, Oman Insurance Co, Sukoon Insurance, GIG Bahrain, Solidarity Bahrain, Kuwait Insurance Co, Dhofar Insurance, National Life & General, SAICO, Allianz Saudi Fransi, AXA Cooperative Insurance, Dubai National Insurance, Al Ahleia Insurance, Qatar Insurance Company, Doha Insurance Group, Jordan Insurance Company, Misr Life Insurance — and **+10 reinsurers** — Saudi Re, Kuwait Re, Arab Re, Gulf Re, Milli Re, GIC Re, Malaysian Re, RenaissanceRe, Berkshire Hathaway Re, AXA XL Re. Idempotent (upserts on the natural keys from migration 150; see the soft-delete caveat in §5.3). | Deploy step 5 in `deploy/deploy.sh` (skip with `--no-seed`), or by hand at any time. | **No** — it counts `contract`, `quote`, `claim` and `uw_user` before and after and **exits non-zero if any of them changed**. |
 | **Ghana pack** (`npm run seed:deploy` with `SEED_ON_DEPLOY=reference`) | Ghana country metadata, the `GHS` currency and its USD rate, the Ghana CPI series 2000–2026, 8 Ghana CRESTA zones, 8 Ghanaian cedants. Idempotent. | Deploy step 5 (after the reference seed), only while `SEED_ON_DEPLOY=reference` is in the env file. Otherwise the hook prints `seed-on-deploy: SEED_ON_DEPLOY is not set — skipping.` | No |
 | Test portfolio (`SEED_ON_DEPLOY=1` / `reset`, or `npm run seed:treaties`) | 100 **fabricated** treaties with full pricing, triangles, workflow and audit rows. | Only when someone sets those values. | **YES — test/demo databases only. Never on this server.** |
 
-**Decision for this server.** Leave `SEED_ON_DEPLOY` unset unless the Ghana lookups are wanted; if they are, add exactly one line `SEED_ON_DEPLOY=reference` to `/opt/universe/.env` (no restart needed — the deploy hook reads the file). Never set `1` or `reset` here. If fabricated treaties ever appear, remove only them with `node server/scripts/seedTestTreaties.js --reset-only` (deletes rows stamped `seed:test-treaties`, nothing else).
+**Decision for this server.** Leave `SEED_ON_DEPLOY` unset unless the Ghana lookups are wanted; if they are, add exactly one line `SEED_ON_DEPLOY=reference` to `/opt/universe/.env` (no restart needed — the deploy hook reads the file; `ref` and `reference-only` are synonyms). **Any other value loads the fabricated portfolio**: `1`, `true`, `yes`, `on` and `if-empty` seed it when no seeded treaties exist yet, `reset` and `always` reload it on every deploy. If fabricated treaties ever appear, remove only them with `node server/scripts/seedTestTreaties.js --reset-only` (deletes rows stamped `seed:test-treaties`, nothing else).
 
 ### 5.2 What "seeded correctly" looks like
 
@@ -280,7 +303,9 @@ Business data (unchanged):
 
 On your existing database expect **at least** these reference counts: reinsurers rise from 15 to 25 and cedants from 22 to 40 the first time the reference seed runs (the GCC extras), the Ghana pack adds 1 currency and 8 cedants, anything users have created on the reference screens adds to the totals, and the check counts **deactivated rows too** (soft-deleted or superseded entries stay in the tables). Only a fresh database shows the exact block above. The business rows (`contracts`, `quotes`, `claims`, `users`) must show **your real numbers, unchanged** by the seed — that is the invariant the script enforces.
 
-Spot checks that prove the rows landed in *this* database and are visible to the app. The four Saudi names MEDGULF, SALAMA, SAICO, Allianz Saudi Fransi and AXA Cooperative Insurance exist **only** because of the reference seed (the others were already there from the migrations), so they are the ones to look for:
+Expect three look-alike pairs in the Cedant list afterwards — *Kuwait Insurance* / *Kuwait Insurance Co*, *Oman Insurance* / *Oman Insurance Co*, *Salama Islamic Insurance* / *SALAMA*. Both rows of each pair are seeded (migration 005 and the reference seed respectively) and deactivating either only brings it back on the next seed (§5.3). Leave them until the two lists are reconciled in code; do not merge them by hand.
+
+Spot checks that prove the rows landed in *this* database and are visible to the app. The five Saudi names MEDGULF, SALAMA, SAICO, Allianz Saudi Fransi and AXA Cooperative Insurance exist **only** because of the reference seed (the others were already there from the migrations), so they are the ones to look for:
 
 ```bash
 cd /opt/universe && set -a && . ./.env && set +a
@@ -341,7 +366,9 @@ The expected tail of the seed output is the block in §5.2 (with your real busin
 
 Work through the groups in order. "Command" runs on the application server; `psql` commands need `DATABASE_URL` in the shell — load it once with `cd /opt/universe && set -a && . ./.env && set +a` (as `universe` or root) **in a shell you will not use for `pm2` commands** (see P1). Tick every row before sign-off.
 
-> **Deployment-kit (systemd) server?** Use these variants: C1 → `ls -lL /opt/universe/.env` = `-rw-r----- root universe` (a symlink to `/etc/universe/universe.env`); C6, R1, R2 → `sudo journalctl -u universe --no-pager -n 300 | grep …` instead of `pm2 logs`; P1 → one process, `pool.max` 50 unless `DB_POOL_MAX` is set in the env file; P2 unchanged.
+> **Deployment-kit (systemd) server?** Use these variants: C1 → `ls -lL /opt/universe/.env` = `-rw-r----- root universe` (a symlink to `/etc/universe/universe.env`); C6, R1, R2 → `sudo journalctl -u universe --no-pager -n 300 | grep …` instead of `pm2 logs`; C7 → `sudo systemctl show universe -p Environment` (should be empty apart from what the unit file sets); P1 → one process, `pool.max` 50 unless `DB_POOL_MAX` is set in the env file; P2 unchanged.
+
+> **Boot lines scroll away.** C6, R1 and R2 read lines written at start; with four workers and normal traffic they leave the last 300 `pm2 logs` lines within minutes (every request logs a line). Run them right after the reload, or grep the merged log file, which keeps everything: `grep 'DB pool connecting' /opt/universe/logs/pm2-out.log | tail -n 4` (same for `startup configuration loaded` and R2's patterns).
 
 ### 7.1 Configuration — the app is told about exactly one database
 
@@ -351,8 +378,10 @@ Work through the groups in order. "Command" runs on the application server; `psq
 | C2 | Exactly one `DATABASE_URL` | `grep -c '^DATABASE_URL=' /opt/universe/.env` | `1` | No duplicate/overridden connection string |
 | C3 | No placeholders | `grep -c CHANGE_ME /opt/universe/.env` | `0` (grep exits 1 when the count is 0 — expected) | Real values everywhere |
 | C4 | Production mode, migrations explicit | `grep -e '^NODE_ENV=' -e '^RUN_MIGRATIONS_ON_BOOT=' /opt/universe/.env` | `NODE_ENV=production`, `RUN_MIGRATIONS_ON_BOOT=false` (or absent) | Schema changes only happen in the deploy step |
-| C5 | Seeding posture | `grep '^SEED_ON_DEPLOY=' /opt/universe/.env` | no output (absent; grep exits 1), or `SEED_ON_DEPLOY=reference` — never `1`/`reset` | No fabricated treaties can be seeded |
-| C6 | The app loaded *that* file | `sudo -u universe -H pm2 logs universe --lines 300 --nostream 2>/dev/null \| grep 'startup configuration loaded' \| tail -n 1` | newest line (format `0\|universe \| <date>: {json}`) with `"envFile":"/opt/universe/.env"` | The running process read this env file, not another |
+| C5 | Seeding posture | `grep '^SEED_ON_DEPLOY=' /opt/universe/.env` | no output (absent; grep exits 1), or exactly `SEED_ON_DEPLOY=reference` (`ref` / `reference-only` are synonyms). **Any other value** — `1`, `true`, `yes`, `on`, `if-empty`, `reset`, `always` — loads the fabricated treaty portfolio on the next deploy: remove it | No fabricated treaties can be seeded |
+| C6 | The app found *that* file | `sudo -u universe -H pm2 logs universe --lines 300 --nostream 2>/dev/null \| grep 'startup configuration loaded' \| tail -n 1` | newest line (format `0\|universe \| <date>: {json}`) with `"envFile":"/opt/universe/.env"` | The file exists where the app looks for it (C7 proves it is the one in effect) |
+| C7 | Nothing overrides the file inside the workers | `for p in $(pgrep -u universe -f 'server/src/index.js'); do sudo tr '\0' '\n' < /proc/$p/environ \| grep -E '^(DATABASE_URL\|AUTH_JWT_SECRET\|SESSION_SECRET\|SEED_ON_DEPLOY\|PORT\|RUN_MIGRATIONS_ON_BOOT\|DB_POOL_MAX)=' \| sed -E 's#(://[^:]+:)[^@]*@#\1***@#'; done` and `sudo grep -c '"DATABASE_URL"' /home/universe/.pm2/dump.pm2` | exactly one `DB_POOL_MAX=<n>` line per worker (injected by `ecosystem.config.cjs`) and nothing else; `0` from the dump file. PM2 copies the *whole shell environment* of the `pm2 start`/`pm2 reload` command into the workers, and dotenv never overrides a variable that is already set — so a shell that had sourced `.env` (or exported `DATABASE_URL` for a backup) bakes those values in, and `pm2 save` carries them across reboots; every later `.env` edit is then ignored. Fix: reload from a clean environment — `sudo -u universe -H env -i HOME=/home/universe PATH="$PATH" bash -c 'cd /opt/universe && pm2 reload ecosystem.config.cjs && pm2 save'` | The workers take these values from `/opt/universe/.env`, and will again after a reboot |
+| C8 | No second env file | `sudo ls -la /opt/universe/server/.env` | `No such file or directory` | The `--prefix server` scripts (migrate, seed, `manage-user.js`) and the app read the same file (§4 Step 4) |
 
 ### 7.2 Connectivity — the database answers with the app's own credentials
 
@@ -386,6 +415,7 @@ Work through the groups in order. "Command" runs on the application server; `psq
 | S4 | No stragglers (code ahead of DB) | `comm -13 /tmp/applied.txt /tmp/ondisk.txt` | **empty** | Same as S1, file-by-file |
 | S5 | Last migration is recent and expected | `psql "$DATABASE_URL" -c "select filename, applied_at from public._migrations order by applied_at desc limit 5"` | newest = `157_quote_offer_status_checks.sql` at this commit, `applied_at` = your deploy time | The deploy's migration step ran against this database |
 | S6 | Core tables answer | `psql "$DATABASE_URL" -c "select (select count(*) from public.contract) contracts, (select count(*) from public.quote) quotes, (select count(*) from public.claim) claims, (select count(*) from public.uw_user) users"` | your real business counts, unchanged from before the switch | The data survived; the app's tables exist |
+| S7 | Recorded migrations really applied | `psql "$DATABASE_URL" -tAc "select (select count(*) from pg_indexes where schemaname='public' and indexname in ('uq_country_code_active','uq_class_of_business_name_active','uq_brokers_name_active','uq_companies_name_active')) idx150, (select count(*) from pg_constraint where conname in ('quote_status_check','quote_uw_status_check','contract_offer_status_check','quote_offer_status_check')) chk157, (select count(*) from pg_constraint where conname='uw_user_role_id_fkey') fk156, (select count(*) from public.uw_user where username in ('cuo','underwriter','edwin.taruvinga','catho.ba','chongo.nkalamo')) old132"` | `4\|4\|1\|0` | S1–S5 only prove the bookkeeping (`_migrations` stores filenames, no checksums). The July-2026 runner on the v2.0 server recorded a file as applied even when it skipped `undefined table/object` errors, so this checks that objects from 150, 156 and 157 exist and 132's renames happened. Anything else: follow `docs/migration-audit.md`; never edit `_migrations` by hand |
 
 ### 7.5 Reference-data alignment — the lookups the app expects are present
 
@@ -406,10 +436,10 @@ Work through the groups in order. "Command" runs on the application server; `psq
 
 ### 7.7 Sign-off summary
 
-- ☐ §7.1 C1–C6: one env file, one `DATABASE_URL`, production mode, seeding posture correct, app loaded that file.
+- ☐ §7.1 C1–C8: one env file, one `DATABASE_URL`, production mode, seeding posture correct, app found that file, nothing baked into the PM2 workers or the PM2 dump, no `server/.env`.
 - ☐ §7.2 D1–D4: `psql` with the app's URL works and identifies the intended database; role owns it.
 - ☐ §7.3 R1–R8: boot log, deep health (direct and via nginx), `pg_stat_activity`, user list = `uw_user`, login audited, smoke test `PASSED`.
-- ☐ §7.4 S1–S6: `Pending (0)`, counts equal, no orphans, no stragglers, last migration as expected, business counts unchanged.
+- ☐ §7.4 S1–S7: `Pending (0)`, counts equal, no orphans, no stragglers, last migration as expected, business counts unchanged, key objects really exist.
 - ☐ §7.5 F1–F4: reference counts as in §5.2, GCC cedants visible, zero fabricated treaties, dropdowns populated.
 - ☐ §7.6 P1–P3: connection budget, accounts rotated, fresh backup.
 
@@ -433,7 +463,9 @@ Work through the groups in order. "Command" runs on the application server; `psq
 | Seed fails: `no unique or exclusion constraint matching the ON CONFLICT specification` | Migration 150 not applied yet | Run `migrate:up` first; the seed must follow the migrations |
 | Seed aborts: `seed:reference changed business table` | A business row was written by a user during the run | Re-run at a quiet moment; the seed itself never writes those tables |
 | `seed-on-deploy: SEED_ON_DEPLOY is not set — skipping.` | Expected unless you wanted the Ghana pack | Add `SEED_ON_DEPLOY=reference` to `.env` and re-run `npm run seed:deploy --prefix server` |
-| Fabricated treaties appeared on the dashboards | Someone set `SEED_ON_DEPLOY=1`/`reset` or ran `seed:treaties` | `node server/scripts/seedTestTreaties.js --reset-only` removes only rows stamped `seed:test-treaties`; remove the variable |
+| Fabricated treaties appeared on the dashboards | `SEED_ON_DEPLOY` was set to anything other than `reference` (`1`, `true`, `yes`, `on`, `if-empty`, `reset`, `always`), or someone ran `seed:treaties` | `node server/scripts/seedTestTreaties.js --reset-only` removes only rows stamped `seed:test-treaties`; remove the variable |
+| Migration step fails with `canceling statement due to statement timeout` | A single migration statement ran longer than the 30 s cap the application's pool applies to every connection, including the migration runner's — typically 150 or 156 on a large table | Nothing in the env file changes the cap. Re-run `npm run migrate:up --prefix server` at a quiet moment (files already applied are skipped); if it repeats, escalate to the maintainer |
+| A custom treaty type vanished from the dropdown after the switch | The boot seed deactivates every treaty type that is not one of the 11 canonical names (§5.1) | Existing contracts keep it. Keeping it selectable needs a code change to the canonical list — raise it with the maintainer; do not re-activate it by hand (the next start deactivates it again) |
 | Login screen lists exactly two users, *Chief Underwriter* and *Underwriter 1*, and `curl -s localhost:4000/api/auth/users` shows `user_id` `00000000-0000-0000-0000-000000000001`/`…0002` | The auth route served its static fallback because `uw_user` is empty or missing — migrations did not run, or the app points at an empty database | §7.3 R1 + §7.4 S1; fix `DATABASE_URL` or run `migrate:up`, reload |
 | `/api/health/deep` returns 503 `db.ok` false | Postgres down, wrong `DATABASE_URL`, or pool exhausted | §7.2 D1–D3; `X-Pool-Waiting` > 0 sustained → raise `DB_POOL_MAX` within §7.6 P1 |
 | Postgres logs / app errors `FATAL: sorry, too many clients already` | workers × per-worker pool exceeds `max_connections` — typically because `DB_POOL_MAX=50` was exported in the shell (e.g. after sourcing `.env`) when `pm2 start`/`pm2 reload` ran, so every worker got 50 | Reload from a clean shell: `sudo -u universe -H bash -c 'cd /opt/universe && env -u DB_POOL_MAX pm2 reload ecosystem.config.cjs && pm2 save'`, then confirm `pool.max` in `/api/health/deep` (§7.6 P1) |
@@ -457,8 +489,8 @@ Work through the groups in order. "Command" runs on the application server; `psq
 | Health | `curl -s localhost:4000/api/health/deep` |
 | Logs | `sudo -u universe -H pm2 logs universe --lines 100` |
 | Backup / verify | `scripts/backup-db.sh` / `scripts/verify-restore.sh` (with `DATABASE_URL` set; the role needs `CREATEDB` for the verify) |
-| Restore a dump | `sudo -u postgres pg_restore --clean --if-exists -d universe <file>.dump` (stop the app first) |
-| Rollback code | as `universe`: `git checkout <old commit>` → `npm ci` (root, client `--include=dev`, server) → `npm run build --prefix client` → `pm2 reload ecosystem.config.cjs` |
+| Restore a dump | stop the app; `DROP DATABASE universe WITH (FORCE)` + `CREATE DATABASE universe OWNER universe TEMPLATE template0` as `postgres`; then `sudo -u postgres pg_restore --exit-on-error --no-owner --no-privileges --role=universe -d universe <file>.dump` (§4 Rollback — never `--clean` over a migrated database) |
+| Rollback code | as `universe`: `git checkout pre-saudi-re-switch` → `npm ci` (root, client `--include=dev`, server) → `npm run build --prefix client` → `pm2 reload ecosystem.config.cjs` |
 
 ## Appendix B — Sign-off record
 
