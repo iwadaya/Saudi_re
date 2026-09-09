@@ -10,7 +10,7 @@ vi.mock('../../api', () => ({ api: apiMock }));
 
 afterEach(() => { cleanup(); clearSession(); clearPasswordChange(); vi.clearAllMocks(); });
 beforeEach(() => {
-  setSession({ userId: 'edwin', roleCode: 'UW', hierarchyLevel: 4, displayName: 'Edwin Taruvinga', mustChangePassword: true, token: 't' });
+  setSession({ userId: 'underwriter2', roleCode: 'UW', hierarchyLevel: 4, displayName: 'Underwriter 2', mustChangePassword: true, token: 't' });
   requirePasswordChange();
 });
 

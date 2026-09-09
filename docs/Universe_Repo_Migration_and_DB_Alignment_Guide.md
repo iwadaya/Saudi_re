@@ -22,7 +22,7 @@ The new repository contains the full history of the old one plus a maintained de
 | Migrations | Same runner and commands. | Same chain (`_migrations` table keyed by filename). This snapshot ships **149** migration files, the last being `157_quote_offer_status_checks.sql`. Nothing is re-applied; only files your database has not seen run. |
 | Deployment kit | — | New `deploy/` directory: `install-server.sh`, `provision-db.sh`, `deploy.sh`, `smoke-test.sh`, a hardened systemd unit, an nginx site and an environment template — the maintained path for a **fresh** server (§6). |
 | Smoke test | Manual `curl`. | `deploy/smoke-test.sh`: shallow health, deep health (DB round-trip), a non-empty login user list, SPA served, optional real login. Exit 0 = green. |
-| Seeded accounts | v2.0 §11.5: log in as the seeded Chief Actuary account with its temporary password and a forced change. | Migrations 132 and 143 (July/August 2026) replace that with six generic personas — `chief.underwriter`, `retro.manager`, `underwriter1–4` — password `demo2026`, no forced change. On a database that has not run 132 yet, the deploy **renames the old accounts and resets their passwords** (§4 Step 6). Rotate or deactivate them before users are told. |
+| Seeded accounts | v2.0 §11.5: log in as the seeded Chief Actuary account with its temporary password and a forced change. | Migrations 132 and 143 (July/August 2026) replace that with six generic personas — `chief.underwriter`, `retro.manager`, `underwriter1–4` — password `demo2026`, no forced change. On a database that has not run 132 yet, the deploy **renames `cuo`/`underwriter` and resets their passwords**; the three personal logins seeded under v2.0 are left exactly as they are and must be deactivated by hand (§4 Step 6). |
 | Connection headroom | v2.0 §4.2: leave at least 30 of the 100 connections free. | `ecosystem.config.cjs` derives the per-worker pool so the cluster total is ≤ 80, i.e. 20 free; this guide's P1 uses that rule. To keep the spec's 30, export `DB_POOL_MAX=17` (4 workers) when starting/reloading PM2. |
 
 Everything else in the v2.0 specification — sizing, ports, nginx, TLS, backups, secrets, PM2, the security baseline — still applies as written.
@@ -212,7 +212,7 @@ BASE_URL=http://127.0.0.1:4000 /opt/universe/deploy/smoke-test.sh
 
 Two migrations touch user accounts, and they run against **any** database that has not seen them yet — including one that already holds real users:
 
-- **132** renames the five v2.0-era seeded accounts — `cuo`, `underwriter` and the three personal logins listed in v2.0 §11.5, including the Chief Actuary's — to `chief.underwriter` and `underwriter1`–`4`, **resets their passwords to `demo2026`**, re-activates them, clears any forced password change, and puts the former Chief Actuary login on the Underwriter role with a 25 M mandate. Rotated passwords on those five accounts are lost. Accounts with any other username are not touched.
+- **132** renames `cuo` to `chief.underwriter` and `underwriter` to `underwriter1` (on a fresh database also the placeholder logins from migration 123 to `underwriter2`–`4`), **resets those passwords to `demo2026`**, re-activates the accounts and clears any forced password change. Rotated passwords on `cuo`/`underwriter` are lost. **The three personal logins seeded under v2.0 §11.5 (including the Chief Actuary's) are not touched by any migration**: they keep their usernames, roles and passwords, so they must be retired by hand below. Accounts with any other username are not touched either.
 - **143** inserts `retro.manager` (password `demo2026`) if no account with that username exists.
 
 Step 3 showed whether these files were pending. Whether or not they were, do this now, before users are told:
@@ -222,9 +222,10 @@ cd /opt/universe/server
 sudo -u universe -H node scripts/manage-user.js list                       # who exists now, and who is active
 sudo -u universe -H node scripts/manage-user.js set-password chief.underwriter        # prompts for a real password
 sudo -u universe -H node scripts/manage-user.js deactivate underwriter1               # …2, 3, 4 and retro.manager — or set-password <user> --must-change to hand them to real people
+sudo -u universe -H node scripts/manage-user.js deactivate <personal login>          # each of the three v2.0 §11.5 logins still present in the list
 ```
 
-Every `manage-user` action revokes the account's live sessions and writes an `audit_log` row (actor `OPS_CLI`). If the v2.0 Chief Actuary used the personal login from v2.0 §11.5, that login is now `underwriter4`: give the person a fresh account from the **⚙ USERS** screen (or re-point `underwriter4` with `set-password --must-change`).
+Every `manage-user` action revokes the account's live sessions and writes an `audit_log` row (actor `OPS_CLI`). If the v2.0 Chief Actuary still uses the personal login from v2.0 §11.5, give the person a fresh account from the **⚙ USERS** screen first, then deactivate the old one.
 
 ### Step 7 — Verify
 
@@ -360,7 +361,7 @@ The expected tail of the seed output is the block in §5.2 (with your real busin
 
 **B5 — Cut over.** Point DNS at the new server, make sure `CORS_ORIGIN` is exactly the URL users type, restart (`sudo systemctl restart universe`), install the backup cron (`deploy/README.md` step 10), and decommission the old server after the retention period.
 
-**Accounts.** On a fresh database the migrations create the demo personas (`demo2026`). On a *restored* database the pending migrations may still add or rename accounts — 143 adds `retro.manager` if absent, and 132 renames the five v2.0-era seeded accounts (`cuo`, `underwriter` and the three personal logins from v2.0 §11.5) to `chief.underwriter`/`underwriter1–4` and resets their passwords to `demo2026` (§4 Step 6). Either way, run `node scripts/manage-user.js list` after B3 and rotate or deactivate every persona before sharing the URL (`deploy/README.md` step 9).
+**Accounts.** On a fresh database the migrations create the demo personas (`demo2026`). On a *restored* database the pending migrations may still add or rename accounts — 143 adds `retro.manager` if absent, and 132 renames `cuo`/`underwriter` to `chief.underwriter`/`underwriter1` and resets their passwords to `demo2026`; the personal logins seeded under v2.0 are left untouched (§4 Step 6). Either way, run `node scripts/manage-user.js list` after B3 and rotate or deactivate every persona and every leftover personal login before sharing the URL (`deploy/README.md` step 9).
 
 ## 7. Checklist — is the database linked to the app, and does it align?
 
