@@ -21,7 +21,7 @@ The new repository contains the full history of the old one plus a maintained de
 | Reference-data seeding | Happened on application boot only (`ensureReferenceData`), plus the optional `SEED_ON_DEPLOY=reference` hook. | Still happens on boot, **and** is an explicit deploy step: `node server/src/db/seeds/run.js` (`npm run seed:reference`). It adds the GCC market extras (Saudi/GCC cedants and reinsurers) and refuses to touch contracts, quotes, claims or users. `npm run seed:reference:check` reports the counts without writing anything (§5). |
 | Migrations | Same runner and commands. | Same chain (`_migrations` table keyed by filename). This snapshot ships **149** migration files, the last being `157_quote_offer_status_checks.sql`. Nothing is re-applied; only files your database has not seen run. |
 | Deployment kit | — | New `deploy/` directory: `install-server.sh`, `provision-db.sh`, `deploy.sh`, `smoke-test.sh`, a hardened systemd unit, an nginx site and an environment template — the maintained path for a **fresh** server (§6). |
-| Smoke test | Manual `curl`. | `deploy/smoke-test.sh`: shallow health, deep health (DB round-trip), user list served from the database, SPA served, optional real login. Exit 0 = green. |
+| Smoke test | Manual `curl`. | `deploy/smoke-test.sh`: shallow health, deep health (DB round-trip), a non-empty login user list, SPA served, optional real login. Exit 0 = green. |
 
 Everything else in the v2.0 specification — sizing, ports, nginx, TLS, backups, secrets, PM2, the security baseline — still applies as written.
 
@@ -35,17 +35,17 @@ Collect these facts first; several steps depend on them.
 |---|---|---|
 | Runtime in use | `pm2 status` (as the `universe` user) shows an `online` `universe` process → **PM2** (v2.0). `systemctl status universe` shows `active (running)` → **systemd** (deployment kit). | |
 | Application root and env file | v2.0: `/opt/universe` and `/opt/universe/.env`. Kit: `/opt/universe` and `/etc/universe/universe.env` (symlinked to `/opt/universe/.env`). | |
-| Currently deployed commit | `git -C /opt/universe log -1 --format='%h %ci %s'` | |
-| Current remote | `git -C /opt/universe remote -v` — expect `Darchville-Analytics/modelling_tool` | |
+| Currently deployed commit | `sudo -u universe -H git -C /opt/universe log -1 --format='%h %ci %s'` (Git refuses to open a checkout owned by another user — `dubious ownership` — so always run Git as `universe`) | |
+| Current remote | `sudo -u universe -H git -C /opt/universe remote -v` — expect `Darchville-Analytics/modelling_tool` | |
 | Migration state before the switch | `sudo -u universe -H npm run migrate:status --prefix server` from `/opt/universe` → the last lines must read `Pending (0):`. If anything is pending *before* you start, resolve that first. | |
-| Node.js seen by root and by `universe` | `node -v` and `sudo -u universe -H node -v` → both Node 20 or newer, ideally the same version. `deploy/deploy.sh` builds and migrates with **root's** `node`; PM2 runs the app with the **`universe`** user's. | |
+| Node.js seen by root and by `universe` | `sudo node -v` and `sudo -u universe -H node -v` → both Node 20 or newer, ideally the same version. `deploy/deploy.sh` builds and migrates with the `node` on **root's** PATH (under `sudo`); PM2 runs the app with the **`universe`** user's. If Node was installed with nvm for `universe` only, `sudo node -v` fails and Option A1 dies with `node is not installed` — either install Node system-wide (NodeSource) or use Option A2. | |
 | `pm2` on the `universe` user's PATH | `sudo -u universe -H pm2 -v` → prints a version (v2.0 installed PM2 globally). If it prints `command not found`, use `/opt/universe/node_modules/.bin/pm2` wherever this guide says `pm2`. | |
 | Database | `DATABASE_URL` in the env file (host, port, database name, role). `psql "$DATABASE_URL" -c 'select 1'` must work from the app server. | |
 | Repository visibility | `git ls-remote --heads https://github.com/iwadaya/Saudi_re.git main` from the server without any credentials: prints a commit id → public, §3 can be skipped; `Repository not found` → private, do §3 first. | |
 | Seeding decision | Which reference layers you want on this server (§5.1). Default: base catalogue + GCC extras (automatic), no Ghana pack, **never** the fabricated test portfolio. | |
 | Maintenance window | The PM2 reload is zero-downtime, but migrations may hold locks for a few seconds. Choose a quiet moment. | |
 
-Also confirm outbound HTTPS from the server to `github.com` (or SSH port 22 if you use a deploy key): `curl -sI https://github.com | head -1` should print `HTTP/2 200`.
+Also confirm outbound HTTPS from the server to `github.com` (or SSH port 22 if you use a deploy key): `curl -sSo /dev/null -w '%{http_code}\n' https://github.com` should print `200` (this form also works behind a corporate proxy, where `curl -I` would show the proxy's own reply first).
 
 ## 3. GitHub access to the new repository
 
@@ -55,7 +55,7 @@ GitHub does not accept account passwords for Git operations, and credentials are
 
 ### 3.1 Option 1 — fine-grained personal access token (HTTPS, recommended)
 
-1. On GitHub, signed in as **`iwadaya`** — the account that owns the repository. A fine-grained token can only reach repositories owned by the account (or organisation) that creates it, so a collaborator cannot mint one for `iwadaya/Saudi_re`; a collaborator uses a deploy key (§3.2) or a classic token with the `repo` scope instead. Go to **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
+1. On GitHub, signed in as **`iwadaya`** — the account that owns the repository. A fine-grained token can only reach repositories owned by the account (or organisation) that creates it, so a collaborator cannot mint one for `iwadaya/Saudi_re`; a collaborator uses a deploy key (§3.2) or asks the owner for the token (a classic full-scope token stays off the table, as v2.0 §9.2 requires). Go to **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
 2. **Resource owner:** `iwadaya`. **Repository access:** *Only select repositories* → `Saudi_re`. **Permissions → Repository permissions → Contents: Read-only** (Metadata: Read is added automatically). Expiry: 90 days; put the rotation date in your calendar (v2.0 §9.2).
 3. On the server, remove the stored token for the old repository so Git prompts for the new one, then test access **interactively once** as the deploy user so the new token is stored and later deploys never prompt:
 
@@ -73,6 +73,7 @@ sudo -u universe -H git ls-remote --heads https://github.com/iwadaya/Saudi_re.gi
 A GitHub deploy key can be attached to **one** repository only, so the key on `modelling_tool` cannot simply be reused. Generate a second key and give it its own host alias:
 
 ```bash
+sudo -u universe -H install -d -m 700 /home/universe/.ssh          # a server that used HTTPS so far has no .ssh directory yet
 sudo -u universe -H ssh-keygen -t ed25519 -C "universe-deploy-saudi_re" -N "" -f /home/universe/.ssh/id_ed25519_saudi_re
 sudo -u universe -H cat /home/universe/.ssh/id_ed25519_saudi_re.pub
 #   → GitHub: iwadaya/Saudi_re → Settings → Deploy keys → Add deploy key (leave "Allow write access" unticked)
@@ -97,7 +98,7 @@ All commands assume the v2.0 layout (`/opt/universe`, user `universe`, PM2). Run
 
 ```bash
 cd /opt/universe
-git log -1 --format='%h %ci %s'                       # currently deployed commit — keep this for rollback
+sudo -u universe -H git log -1 --format='%h %ci %s'   # currently deployed commit — keep this for rollback
 sudo -u universe -H npm run migrate:status --prefix server | tail -n 3     # must end with "Pending (0):"
 
 # Full database dump with the checked-in script (same as the nightly job). Prints the dump path.
@@ -124,9 +125,18 @@ sudo -u universe -H git -C /opt/universe fetch --prune --tags origin        # re
 sudo -u universe -H git -C /opt/universe log --oneline HEAD..origin/main | wc -l        # number of new commits
 sudo -u universe -H git -C /opt/universe diff --stat HEAD origin/main -- server/src/db/migrations | tail -n 1   # new migration files, if any
 sudo -u universe -H git -C /opt/universe merge-base --is-ancestor HEAD origin/main && echo "OK: fast-forward" || echo "WARNING: deployed commit is not in the new history — read §7.4 (orphan check) before migrating"
+
+# Which migrations the deploy will apply — look for 132 and 143 (they rename/reset the seeded accounts, see Step 6):
+sudo -u universe -H git -C /opt/universe diff --name-only HEAD origin/main -- server/src/db/migrations
+
+# Put the new tree on disk. The old modelling_tool checkout has no deploy/ directory — the deployment
+# kit arrives with this checkout, so it must exist before Step 5 can call it.
+sudo -u universe -H git -C /opt/universe checkout -B main origin/main
+sudo -u universe -H git -C /opt/universe log -1 --format='%h %ci %s'
+ls /opt/universe/deploy/deploy.sh                                          # must exist now
 ```
 
-Nothing has changed on disk yet apart from the remote name; the running application is untouched.
+Only the source tree on disk has moved to the new commit. The running PM2 workers keep the code they loaded at start, and `client/dist` and `node_modules` are untracked, so users notice nothing until the reload in Step 5.
 
 ### Step 4 — Check the environment file
 
@@ -170,34 +180,64 @@ npm run migrate:status --prefix server        # review the pending list before a
 npm run migrate:up --prefix server            # apply BEFORE reloading the app
 node server/src/db/seeds/run.js               # reference data — prints the counts block (§5.2); aborts if any business table changed
 npm run seed:deploy --prefix server           # Ghana pack if SEED_ON_DEPLOY=reference; otherwise prints "skipping" (expected)
-pm2 reload ecosystem.config.cjs && pm2 save   # zero-downtime PM2 reload (= npm run cluster:reload)
+pm2 reload ecosystem.config.cjs && pm2 save   # zero-downtime PM2 reload (= npm run cluster:reload). Do NOT source .env in this shell first — see §7.6 P1
 exit
 BASE_URL=http://127.0.0.1:4000 /opt/universe/deploy/smoke-test.sh
 ```
 
 **On a systemd (deployment-kit) server** the whole step is simply `sudo /opt/universe/deploy/deploy.sh --ref main` — it reads `/etc/universe/universe.env`, restarts the service and runs the smoke test itself.
 
-### Step 6 — Verify
+### Step 6 — Check the accounts the migrations may have changed
 
-Run the checklist in §7. At minimum, before you tell users: `Pending (0)` from `migrate:status`, `PASSED` from the smoke test, `db.ok:true` from `/api/health/deep` **through nginx** (`curl -fsS https://<APP_DOMAIN>/api/health/deep`), the seed counts from `npm run seed:reference:check`, and one real login over HTTPS.
+Two migrations touch user accounts, and they run against **any** database that has not seen them yet — including one that already holds real users:
 
-### Step 7 — After the switch
+- **132** renames the v2.0-era seeded accounts `cuo`, `underwriter`, `edwin.taruvinga`, `catho.ba` and `chongo.nkalamo` to `chief.underwriter` and `underwriter1`–`4`, **resets their passwords to `demo2026`**, re-activates them, clears any forced password change, and puts `chongo.nkalamo` (the v2.0 Chief Actuary login) on the Underwriter role with a 25 M mandate. Rotated passwords on those five accounts are lost. Accounts with any other username are not touched.
+- **143** inserts `retro.manager` (password `demo2026`) if no account with that username exists.
+
+Step 3 showed whether these files were pending. Whether or not they were, do this now, before users are told:
+
+```bash
+cd /opt/universe/server
+sudo -u universe -H node scripts/manage-user.js list                       # who exists now, and who is active
+sudo -u universe -H node scripts/manage-user.js set-password chief.underwriter        # prompts for a real password
+sudo -u universe -H node scripts/manage-user.js deactivate underwriter1               # …2, 3, 4 and retro.manager — or set-password <user> --must-change to hand them to real people
+```
+
+Every `manage-user` action revokes the account's live sessions and writes an `audit_log` row (actor `OPS_CLI`). If the v2.0 Chief Actuary used `chongo.nkalamo`, that login is now `underwriter4`: give the person a fresh account from the **⚙ USERS** screen (or re-point `underwriter4` with `set-password --must-change`).
+
+### Step 7 — Verify
+
+Run the checklist in §7. At minimum, before you tell users: `Pending (0)` from `migrate:status`, `PASSED` from the smoke test, `db.ok:true` from `/api/health/deep` **through nginx** (`curl -fsS https://<APP_DOMAIN>/api/health/deep`), the seed counts from `npm run seed:reference:check`, the user list check (R6), and one real login over HTTPS.
+
+### Step 8 — After the switch
 
 - `pm2 save` was run (step 5), so the process list survives a reboot; `pm2 startup` from v2.0 is unchanged.
+- If you will run the weekly restore drill (`scripts/verify-restore.sh`) with the app's `DATABASE_URL`, grant the role the right to create its scratch database once: `sudo -u postgres psql -c 'ALTER ROLE universe CREATEDB'`.
 - The backup cron, nginx site and TLS certificate reference paths, not the repository — nothing to change. Run `scripts/backup-db.sh` once more now so the newest dump reflects the migrated schema.
 - Delete or let expire the old token/deploy key for `modelling_tool`; if you created a new token for a private `Saudi_re`, record its expiry.
 - Add a line to your deployment log: date, old commit → new commit, migrations applied (from step 5 output), seed counts, who signed off (Appendix B).
 
 ### Rollback
 
-The previous commit is still in the local repository and in the new repository's history:
+The previous commit is still in the local repository and in the new repository's history. It predates the deployment kit, so roll back by hand rather than with `deploy/deploy.sh` (checking the old commit out removes `deploy/` again):
 
 ```bash
-sudo env ENV_FILE=/opt/universe/.env /opt/universe/deploy/deploy.sh --ref <old commit from step 1> --no-restart --no-seed
-sudo -u universe -H bash -c 'cd /opt/universe && pm2 reload ecosystem.config.cjs'
+sudo -u universe -H bash
+cd /opt/universe
+git checkout -q <old commit from step 1>
+npm ci --include=dev && npm ci --include=dev --prefix client && npm ci --prefix server
+npm run build --prefix client
+pm2 reload ecosystem.config.cjs && pm2 save
+exit
 ```
 
-Migrations are forward-only. If a migration itself is the problem, stop the app (`sudo -u universe -H pm2 stop universe`), restore the step-1 dump (`sudo -u postgres pg_restore --clean --if-exists -d universe /var/backups/universe/<file>.dump`), then redeploy the old commit as above.
+Migrations are forward-only. If a migration itself is the problem, stop the app (`sudo -u universe -H pm2 stop universe`), restore the step-1 dump, then roll the code back as above. The dump was taken with `--no-owner`, so restore it **with `--role=universe`** — without it every restored table ends up owned by `postgres` and the application gets `permission denied for table …`:
+
+```bash
+sudo -u postgres pg_restore --clean --if-exists --no-owner --role=universe -d universe /var/backups/universe/<file>.dump
+```
+
+To move forward again after a rollback, check `main` out first (`sudo -u universe -H git -C /opt/universe checkout -B main origin/main`) so the kit is back on disk, then repeat Step 5.
 
 ## 5. Seeding the database
 
@@ -207,9 +247,9 @@ Migrations are forward-only. If a migration itself is the problem, stop the app 
 
 | Layer | What it writes | When it runs | Writes contracts? |
 |---|---|---|---|
-| **Migrations** (`npm run migrate:up`) | The schema, and the base catalogue that ships inside it: **75 countries** with regions (GCC, Levant, North Africa, Sub-Saharan Africa incl. Ghana, Europe, Americas, South/Southeast/East Asia — not every country in the world; add others on the reference screens), 32 currencies each with a USD rate, inflation (CPI) series for Saudi Arabia, the UAE and the UK (2000–2026), the CRESTA-zone table (empty until zones are added), facultative reference tables and taxonomies, treaty types, classes of business, roles and the mandate hierarchy, and six generic demo personas (`chief.underwriter`, `retro.manager`, `underwriter1–4`, password `demo2026` on a fresh database). | Deploy step 4. Each file runs once, recorded in `public._migrations`. | No |
-| **Boot seed** (`ensureReferenceData`) | The canonical lists: 45 countries, 32 currencies, 11 brokers, 11 treaty types, 14 classes of business, 15 reinsurers, 22 cedants. Every insert is `WHERE NOT EXISTS`. | Every application start, and inside the reference seed. | No |
-| **Reference seed** (`node server/src/db/seeds/run.js`, `npm run seed:reference`) | The boot seed plus `002_reference_data.sql`: the canonical mirror and the **GCC market extras** — 18 cedants (Tawuniya, MEDGULF, Al Rajhi Takaful, Bupa Arabia, Walaa, SALAMA, Orient, Sukoon, GIG Bahrain, Solidarity, Kuwait Insurance, Gulf Insurance Group, Misr, GIG Egypt, Dhofar, National Life & General, …) and 10 reinsurers. Idempotent (upserts on natural keys from migration 150). | Deploy step 5 in `deploy/deploy.sh` (skip with `--no-seed`), or by hand at any time. | **No** — it counts `contract`, `quote`, `claim` and `uw_user` before and after and **exits non-zero if any of them changed**. |
+| **Migrations** (`npm run migrate:up`) | The schema, and the base catalogue that ships inside it: **75 countries** with regions (migration 045 — GCC, Levant, North Africa, Sub-Saharan Africa incl. Ghana, Europe, Americas, South/Southeast/East Asia; not every country in the world, add others on the reference screens), 32 currencies each with a USD rate, 11 brokers, 15 core reinsurers and 22 cedants (005), inflation (CPI) series for Saudi Arabia, the UAE and the UK (2000–2026), the CRESTA-zone table (empty until zones are added), facultative reference tables and taxonomies, 11 treaty types, 15 classes of business (the 15th, *Political Violence*, from 123), roles and the mandate hierarchy, and the demo personas (`chief.underwriter`, `retro.manager`, `underwriter1–4`, password `demo2026`) — **132 and 143 also rename and reset existing accounts, see §4 Step 6**. | Deploy step 4. Each file runs once, recorded in `public._migrations`. | No |
+| **Boot seed** (`ensureReferenceData`) | Re-asserts its hard-coded canonical lists (45 countries, 32 currencies, 11 brokers, 11 treaty types, 14 classes, 15 reinsurers, 22 cedants) with `WHERE NOT EXISTS` — on a migrated database this is normally a no-op. | Every application start, and inside the reference seed. | No |
+| **Reference seed** (`node server/src/db/seeds/run.js`, `npm run seed:reference`) | The boot seed plus `002_reference_data.sql`: the canonical mirror and the **GCC/MENA market extras**. Net effect on a migrated database: **+18 cedants** — MEDGULF, SALAMA, Oman Insurance Co, Sukoon Insurance, GIG Bahrain, Solidarity Bahrain, Kuwait Insurance Co, Dhofar Insurance, National Life & General, SAICO, Allianz Saudi Fransi, AXA Cooperative Insurance, Dubai National Insurance, Al Ahleia Insurance, Qatar Insurance Company, Doha Insurance Group, Jordan Insurance Company, Misr Life Insurance — and **+10 reinsurers** — Saudi Re, Kuwait Re, Arab Re, Gulf Re, Milli Re, GIC Re, Malaysian Re, RenaissanceRe, Berkshire Hathaway Re, AXA XL Re. Idempotent (upserts on the natural keys from migration 150; see the soft-delete caveat in §5.3). | Deploy step 5 in `deploy/deploy.sh` (skip with `--no-seed`), or by hand at any time. | **No** — it counts `contract`, `quote`, `claim` and `uw_user` before and after and **exits non-zero if any of them changed**. |
 | **Ghana pack** (`npm run seed:deploy` with `SEED_ON_DEPLOY=reference`) | Ghana country metadata, the `GHS` currency and its USD rate, the Ghana CPI series 2000–2026, 8 Ghana CRESTA zones, 8 Ghanaian cedants. Idempotent. | Deploy step 5 (after the reference seed), only while `SEED_ON_DEPLOY=reference` is in the env file. Otherwise the hook prints `seed-on-deploy: SEED_ON_DEPLOY is not set — skipping.` | No |
 | Test portfolio (`SEED_ON_DEPLOY=1` / `reset`, or `npm run seed:treaties`) | 100 **fabricated** treaties with full pricing, triangles, workflow and audit rows. | Only when someone sets those values. | **YES — test/demo databases only. Never on this server.** |
 
@@ -236,24 +276,26 @@ Business data (unchanged):
   users      6
 ```
 
-On your existing database expect **at least** these reference counts: reinsurers rise from 15 to 25 and cedants from 22 to 40 the first time the reference seed runs (the GCC extras), the Ghana pack adds 1 currency and 8 cedants, and anything users have created on the reference screens adds to the totals. The business rows (`contracts`, `quotes`, `claims`, `users`) must show **your real numbers, unchanged** by the seed — that is the invariant the script enforces.
+On your existing database expect **at least** these reference counts: reinsurers rise from 15 to 25 and cedants from 22 to 40 the first time the reference seed runs (the GCC extras), the Ghana pack adds 1 currency and 8 cedants, anything users have created on the reference screens adds to the totals, and the check counts **deactivated rows too** (soft-deleted or superseded entries stay in the tables). Only a fresh database shows the exact block above. The business rows (`contracts`, `quotes`, `claims`, `users`) must show **your real numbers, unchanged** by the seed — that is the invariant the script enforces.
 
-Spot checks that prove the rows landed in *this* database and are visible to the app:
+Spot checks that prove the rows landed in *this* database and are visible to the app. The four Saudi names MEDGULF, SALAMA, SAICO, Allianz Saudi Fransi and AXA Cooperative Insurance exist **only** because of the reference seed (the others were already there from the migrations), so they are the ones to look for:
 
 ```bash
 cd /opt/universe && set -a && . ./.env && set +a
 psql "$DATABASE_URL" -c "SELECT company_name FROM public.companies c JOIN public.country k USING (country_id) WHERE k.country_code='SA' AND c.is_active IS NOT FALSE ORDER BY 1"
-#   Tawuniya, MEDGULF, Al Rajhi Takaful, Bupa Arabia, Walaa Insurance, SALAMA, Malath Insurance, Gulf Union Insurance …
+#   AXA Cooperative Insurance, Al Rajhi Takaful, Allianz Saudi Fransi, Bupa Arabia, Gulf Union Insurance, MEDGULF,
+#   Malath Insurance, SALAMA, Saudi Arabian Cooperative Insurance (SAICO), Tawuniya, Walaa Insurance   (11 rows on a fresh database)
+psql "$DATABASE_URL" -tAc "SELECT count(*) FROM public.reinsurers WHERE reinsurer_name IN ('Saudi Re','Kuwait Re','Arab Re','Gulf Re')"   # 4
 psql "$DATABASE_URL" -tAc "SELECT count(*) FROM public.contract WHERE import_metadata->>'source'='seed:test-treaties'"   # 0 — no fabricated treaties
 psql "$DATABASE_URL" -tAc "SELECT count(*) FROM public.currency WHERE currency_code='GHS'"   # 1 only if the Ghana pack was requested
 ```
 
-In the browser: open a new treaty — the **Cedant** dropdown lists the Saudi and GCC companies above, the **Currency** dropdown includes SAR/AED/KWD, and the **Reinsurer** panel includes Qatar Re, Trust Re and CCR Re.
+In the browser: open a new treaty — the **Cedant** dropdown lists the Saudi companies above (including MEDGULF and SAICO), the **Currency** dropdown includes SAR/AED/KWD, and the **Reinsurer** panel includes Saudi Re, Kuwait Re and Arab Re.
 
 ### 5.3 Re-running the seed, and what can go wrong
 
-- The seed is idempotent: run `sudo -u universe -H node server/src/db/seeds/run.js` from `/opt/universe` as often as you like.
-- It must run **after** `migrate:up`. On a database that has not reached migration 150 it fails with `there is no unique or exclusion constraint matching the ON CONFLICT specification` — apply migrations, then re-run.
+- The seed is idempotent: run `sudo -u universe -H node server/src/db/seeds/run.js` from `/opt/universe` as often as you like. One caveat: the natural keys from migration 150 cover **active** rows only, so a seeded country, class of business, broker or cedant that a user has *deactivated* on the reference screens is re-created as a new active row by the next seed (the deactivated row stays; counts grow by one). If a seeded name must stay hidden, rename it instead of deactivating it. Currencies, treaty types and reinsurers are not affected.
+- It must run **after** `migrate:up`. On a database that is behind migration 150 it fails inside `002_reference_data.sql` — with `column "is_active" does not exist` if it is behind 141, or `there is no unique or exclusion constraint matching the ON CONFLICT specification` if it is at 141–149 — apply migrations, then re-run.
 - If it aborts with `seed:reference changed business table "…"`, something other than reference data moved during the run (most likely a user working at that moment). Nothing is rolled back that users did; re-run at a quiet moment and compare the two counts.
 - A seed failure inside `deploy/deploy.sh` stops the script before the reload — the old version keeps running. Fix, then re-run the deploy.
 
@@ -269,7 +311,7 @@ sudo APP_DOMAIN=universe.example.internal REPO_URL=https://github.com/iwadaya/Sa
      bash /tmp/universe-kit/deploy/install-server.sh
 ```
 
-It installs Node 20, PostgreSQL 16 and nginx, creates the `universe` user, clones the repository into `/opt/universe`, creates the database role and database, writes `/etc/universe/universe.env` with generated secrets and the ready `DATABASE_URL`, and installs the systemd unit and nginx site. Review the env file (`sudo -e /etc/universe/universe.env`), in particular `CORS_ORIGIN`.
+It installs Node 20, PostgreSQL 16 and nginx, creates the `universe` user, clones the repository into `/opt/universe`, creates the database role and database, writes `/etc/universe/universe.env` with generated secrets and the ready `DATABASE_URL`, and installs the systemd unit and nginx site. Review the env file (`sudo -e /etc/universe/universe.env`), in particular `CORS_ORIGIN`. If the repository is private, store the token for the deploy user once so later `deploy.sh` runs never prompt: `sudo -u universe -H git config --global credential.helper store && sudo -u universe -H git -C /opt/universe ls-remote --heads origin main` (enter username + token).
 
 **B2 — Move the data (optional; skip for an empty pilot database).** On the old server take a fresh dump (`scripts/backup-db.sh`), copy the `.dump` file and the uploads directory (`/opt/universe/uploads`, or your `UPLOAD_DIR`) across, then on the new server restore **before** the first deploy so the migrations bring the restored schema forward:
 
@@ -287,15 +329,17 @@ sudo /opt/universe/deploy/deploy.sh --ref main
 
 The expected tail of the seed output is the block in §5.2 (with your real business counts if you restored data), followed by `systemctl restart universe` and the smoke test ending in `PASSED`.
 
-**B4 — Install the real TLS certificate** (`deploy/README.md` step 7), then run the §7 checklist through nginx: `BASE_URL=https://<APP_DOMAIN> /opt/universe/deploy/smoke-test.sh`.
+**B4 — Install the real TLS certificate** (`deploy/README.md` step 7), then run the §7 checklist through nginx: `BASE_URL=https://<APP_DOMAIN> /opt/universe/deploy/smoke-test.sh`. Use the kit variants noted at the top of §7 for the rows that mention PM2 or the env-file location.
 
 **B5 — Cut over.** Point DNS at the new server, make sure `CORS_ORIGIN` is exactly the URL users type, restart (`sudo systemctl restart universe`), install the backup cron (`deploy/README.md` step 10), and decommission the old server after the retention period.
 
-The seeded demo personas (`demo2026`) exist on a fresh database: rotate or deactivate them with `server/scripts/manage-user.js` before sharing the URL (`deploy/README.md` step 9). A restored production database keeps your real users instead.
+**Accounts.** On a fresh database the migrations create the demo personas (`demo2026`). On a *restored* database the pending migrations may still add or rename accounts — 143 adds `retro.manager` if absent, and 132 renames `cuo`/`underwriter`/`edwin.taruvinga`/`catho.ba`/`chongo.nkalamo` to `chief.underwriter`/`underwriter1–4` and resets their passwords to `demo2026` (§4 Step 6). Either way, run `node scripts/manage-user.js list` after B3 and rotate or deactivate every persona before sharing the URL (`deploy/README.md` step 9).
 
 ## 7. Checklist — is the database linked to the app, and does it align?
 
-Work through the groups in order. "Command" runs on the application server; `psql` commands need `DATABASE_URL` in the shell — load it once with `cd /opt/universe && set -a && . ./.env && set +a` (as `universe` or root). Tick every row before sign-off.
+Work through the groups in order. "Command" runs on the application server; `psql` commands need `DATABASE_URL` in the shell — load it once with `cd /opt/universe && set -a && . ./.env && set +a` (as `universe` or root) **in a shell you will not use for `pm2` commands** (see P1). Tick every row before sign-off.
+
+> **Deployment-kit (systemd) server?** Use these variants: C1 → `ls -lL /opt/universe/.env` = `-rw-r----- root universe` (a symlink to `/etc/universe/universe.env`); C6, R1, R2 → `sudo journalctl -u universe --no-pager -n 300 | grep …` instead of `pm2 logs`; P1 → one process, `pool.max` 50 unless `DB_POOL_MAX` is set in the env file; P2 unchanged.
 
 ### 7.1 Configuration — the app is told about exactly one database
 
@@ -314,7 +358,7 @@ Work through the groups in order. "Command" runs on the application server; `psq
 |---|---|---|---|---|
 | D1 | Connect with the app's URL | `psql "$DATABASE_URL" -c 'select 1'` | one row, `1` | Host, port, role, password and database name are right |
 | D2 | Identify what you are connected to | `psql "$DATABASE_URL" -tAc "select current_database(), current_user, inet_server_addr(), inet_server_port(), version()"` | `universe\|universe\|127.0.0.1\|5432\|PostgreSQL 16…` (your values) | You are looking at the intended database, not a stray one |
-| D3 | Postgres is up and listening locally | `sudo systemctl status postgresql --no-pager \| head -3` and `ss -tlnp \| grep 5432` (alternatives: `pg_lsclusters`; `psql "$DATABASE_URL" -tAc "show listen_addresses"`) | `active (running)`; `127.0.0.1:5432` only (`pg_lsclusters` → `online`; `listen_addresses` → `localhost`) | Database service healthy and not exposed |
+| D3 | Postgres is up and listening locally | `sudo systemctl status postgresql --no-pager \| head -3` and `ss -tlnp \| grep 5432` (alternatives: `pg_lsclusters`; `psql "$DATABASE_URL" -tAc "show listen_addresses"`) | `active (running)`; only loopback sockets — `127.0.0.1:5432` and/or `[::1]:5432`, never `0.0.0.0:5432`, `*:5432` or `[::]:5432` (`pg_lsclusters` → `online`; `listen_addresses` → `localhost`) | Database service healthy and not exposed |
 | D4 | Role owns the schema | `psql "$DATABASE_URL" -tAc "select pg_get_userbyid(datdba) from pg_database where datname=current_database()"` | `universe` | Migrations can create/alter objects without superuser help |
 
 ### 7.3 Runtime — the *running* application is connected to *that* database
@@ -326,9 +370,9 @@ Work through the groups in order. "Command" runs on the application server; `psq
 | R3 | Deep health via the app port | `curl -sS -D - http://127.0.0.1:4000/api/health/deep` | HTTP 200, `"db":{"ok":true,"pingMs":<small>,"pool":{…,"max":<per-worker pool>,…}}`, header `X-Pool-Waiting: 0`. Under `ecosystem.config.cjs` the per-worker pool is `floor(80 / workers)` — 20 on a 4-worker box, 40 with 2 workers; 50 only when `DB_POOL_MAX` is set or the app runs outside the ecosystem file (see P1) | Live round-trip from the app to the DB, pool not saturated |
 | R4 | Deep health through nginx/TLS | `curl -sS https://<APP_DOMAIN>/api/health/deep` | same body, `"env":"production"` | Users' path reaches the same connected app |
 | R5 | DB sees the app's connections | `psql "$DATABASE_URL" -c "select usename, client_addr, state, count(*) from pg_stat_activity where datname=current_database() group by 1,2,3"` | rows with `usename = universe` (idle/active) from the app host | The connections exist in Postgres, from the expected role and host |
-| R6 | Read path: app data = DB data | `curl -sS http://127.0.0.1:4000/api/auth/users \| grep -o '"username":"[^"]*"' \| cut -d'"' -f4 \| sort` vs `psql "$DATABASE_URL" -tAc "select username from public.uw_user where is_active order by 1"` | identical lists (and **not** the two-user demo fallback `cuo`/`underwriter`) | The login screen is served from this database |
+| R6 | Read path: app data = DB data | `curl -sS http://127.0.0.1:4000/api/auth/users \| grep -o '"username":"[^"]*"' \| cut -d'"' -f4 \| sort` vs `psql "$DATABASE_URL" -tAc "select username from public.uw_user where is_active order by 1"` | identical lists with the same row count. Beware the static fallback the API serves when `uw_user` is empty or missing: exactly two rows, `chief.underwriter` and `underwriter1`, with `user_id` `00000000-…-0001`/`-0002` — the same names a migrated database has, so compare the **count** with `select count(*) from public.uw_user where is_active` | The login screen is served from this database |
 | R7 | Write path: a login lands in the audit log | Log in once in the browser, then `psql "$DATABASE_URL" -c "select event_type, payload->'actor'->>'name' as username, actor as user_id, created_at from public.audit_log where event_type='LOGIN' order by created_at desc limit 3"` | top row: `username` = the account you just used (the `actor` column holds its user id), `created_at` = just now | The app writes to this database, and the clock/timezone are sane |
-| R8 | Smoke test | `BASE_URL=https://<APP_DOMAIN> /opt/universe/deploy/smoke-test.sh` (add `SMOKE_USER`/`SMOKE_PASSWORD` to test a real login) | `PASSED` | All of R3–R6 in one exit code |
+| R8 | Smoke test | `BASE_URL=https://<APP_DOMAIN> /opt/universe/deploy/smoke-test.sh` (add `SMOKE_USER`/`SMOKE_PASSWORD` to test a real login) | `PASSED` | R3–R4 plus the SPA in one exit code. Its user-list step only checks that the list is non-empty, so it does **not** replace R6 |
 
 ### 7.4 Schema alignment — the code and the database agree on the migrations
 
@@ -345,8 +389,8 @@ Work through the groups in order. "Command" runs on the application server; `psq
 
 | # | Check | Command | Expected | Proves |
 |---|---|---|---|---|
-| F1 | Reference counts | `cd /opt/universe && sudo -u universe -H npm run seed:reference:check` | the §5.2 block: countries 75, currencies ≥32, brokers 11, reinsurers 25, cedants ≥40, treaty types 11, classes 15, roles 9; business rows = yours | The reference seed reached this database |
-| F2 | Saudi/GCC cedants visible | SQL in §5.2 | Tawuniya, MEDGULF, … listed | GCC extras present |
+| F1 | Reference counts | `cd /opt/universe && sudo -u universe -H npm run seed:reference:check` | headings `Reference data (read-only check):` / `Business data (never written by this script):`; countries ≥75, currencies ≥32, brokers ≥11, reinsurers ≥25, cedants ≥40, treaty types ≥11, classes ≥15, roles ≥9 (the check counts deactivated rows too; only a fresh database shows the exact §5.2 numbers); business rows = yours, unchanged | The reference seed reached this database |
+| F2 | Seed-only cedants and reinsurers visible | SQL in §5.2 | MEDGULF, SALAMA, SAICO, Allianz Saudi Fransi and AXA Cooperative Insurance listed; reinsurer count query = 4 | GCC/MENA extras present — these names come only from the reference seed |
 | F3 | No fabricated treaties | `psql "$DATABASE_URL" -tAc "select count(*) from public.contract where import_metadata->>'source'='seed:test-treaties'"` | `0` | The test portfolio was never loaded |
 | F4 | UI dropdowns | New treaty screen: Cedant, Currency, Reinsurer, Class of business, Treaty type | populated as in §5.2 | The app reads the seeded lookups |
 
@@ -354,7 +398,7 @@ Work through the groups in order. "Command" runs on the application server; `psq
 
 | # | Check | Command | Expected | Proves |
 |---|---|---|---|---|
-| P1 | Connection budget | `psql "$DATABASE_URL" -tAc "show max_connections"`; PM2 workers from `pm2 status`; per-worker pool from R3 `pool.max`; `grep -E '^DB_POOL_MAX=' /opt/universe/.env` | workers × pool.max ≤ max_connections − 20 (e.g. 4 × 20 = 80 ≤ 80). `ecosystem.config.cjs` derives 20 per worker on a 4-core box **only while `DB_POOL_MAX` is not set in `.env`** — a `DB_POOL_MAX=50` line (as in older notes) is used verbatim per worker: 4 × 50 = 200 > 100. Remove it or set it to the per-worker value | The cluster cannot exhaust Postgres |
+| P1 | Connection budget | `psql "$DATABASE_URL" -tAc "show max_connections"`; PM2 workers from `pm2 status`; per-worker pool from R3 `pool.max` or `sudo -u universe -H pm2 env 0 \| grep DB_POOL_MAX` | workers × pool.max ≤ max_connections − 20 (e.g. 4 × 20 = 80 ≤ 80). Under PM2 the per-worker pool is what `ecosystem.config.cjs` injects: `floor(80 / workers)` (min 8), **unless `DB_POOL_MAX` was exported in the shell that ran `pm2 start`/`pm2 reload`** — then that value is used verbatim per worker (4 × 50 = 200 > 100). A `DB_POOL_MAX` line in `.env` does **not** reach the PM2 workers (they already carry the injected value); it only affects CLI scripts and the single-process systemd path. So never run `pm2 reload` from a shell that has sourced `.env`; if in doubt reload with `env -u DB_POOL_MAX pm2 reload ecosystem.config.cjs` | The cluster cannot exhaust Postgres |
 | P2 | Accounts | `cd /opt/universe/server && sudo -u universe -H node scripts/manage-user.js list` | your real users active; seeded personas (`chief.underwriter`, `retro.manager`, `underwriter1–4`) rotated or deactivated | No `demo2026` login remains |
 | P3 | Backup after the switch | `ls -lt /var/backups/universe \| head -2`; weekly `scripts/verify-restore.sh` exit 0 | a dump newer than the deploy. `verify-restore.sh` creates and drops a scratch database, so the role in its `DATABASE_URL` needs `CREATEDB` — grant it once with `sudo -u postgres psql -c 'ALTER ROLE universe CREATEDB'` (as `deploy/README.md` step 10 does), or run it with a superuser URL; otherwise it fails with `permission denied to create database` | Recovery point reflects the migrated schema |
 
@@ -374,12 +418,13 @@ Work through the groups in order. "Command" runs on the application server; `psq
 | `remote: Repository not found` / `fatal: Authentication failed` on fetch or `ls-remote` | The repository is (or has become) private and no valid credential is stored: the old token (scoped to `modelling_tool`) is still in `~universe/.git-credentials`, or the new token's resource owner/repository is wrong. A public repository never produces this for a read. | Remove the `github.com` line from the credential file (§3.1), mint the token with resource owner **iwadaya** and repository **Saudi_re**, Contents: Read; retry `git ls-remote` interactively as `universe` |
 | `Permission denied (publickey)` | Deploy key not added to `Saudi_re`, or the SSH alias/IdentityFile is wrong | §3.2; a deploy key works for one repository only — generate a new key for `Saudi_re` |
 | `remote: Invalid username or token. Password authentication is not supported` | An account password was typed at the prompt | Paste the fine-grained token as the password (v2.0 §12.1) |
-| `deploy.sh` stops at `DATABASE_URL is not set (create /etc/universe/universe.env …)` | The script defaults to the kit's env file; your v2.0 server keeps it at `/opt/universe/.env` | Run it as `sudo env ENV_FILE=/opt/universe/.env /opt/universe/deploy/deploy.sh --ref main --no-restart` |
-| `deploy.sh` stops at `run as root (sudo) or as universe` | Started as your admin user without `sudo` | Prefix with `sudo` (it drops to `universe` for the Git/npm/build/migrate/seed steps itself) |
+| `deploy.sh` stops at `DATABASE_URL is not set (create /etc/universe/universe.env …)`, usually after `! … not readable` | The script defaults to the kit's env file; your v2.0 server keeps it at `/opt/universe/.env`. Also what you see when the script is started **without `sudo`**: the env file is unreadable to your admin user | Run it as `sudo env ENV_FILE=/opt/universe/.env /opt/universe/deploy/deploy.sh --ref main --no-restart` (it drops to `universe` for the Git/npm/build/migrate/seed steps itself) |
+| `deploy.sh` stops at `run as root (sudo) or as universe` | Started as your admin user without `sudo`, with `DATABASE_URL` already exported in that shell | Prefix with `sudo` |
+| `sudo env ENV_FILE=… deploy/deploy.sh` → `No such file or directory` | The checkout is still the old `modelling_tool` tree, which has no `deploy/` directory | Step 3: `sudo -u universe -H git -C /opt/universe checkout -B main origin/main` puts the kit on disk, then retry |
 | `Failed to restart universe.service: Unit universe.service not found` | `deploy.sh` was run without `--no-restart` on a PM2 server | Nothing is broken — migrations and seed already ran. Reload PM2: `sudo -u universe -H bash -c 'cd /opt/universe && pm2 reload ecosystem.config.cjs'` |
 | `sudo -u universe -H pm2 …` → `pm2: command not found` | PM2 is not installed globally for that user (only as the repository's devDependency) | Use `/opt/universe/node_modules/.bin/pm2` in place of `pm2`, or install it globally as v2.0 §3.1 did (`sudo npm install -g pm2`) |
 | `scripts/verify-restore.sh` fails with `permission denied to create database` | The `universe` role cannot create the scratch database the restore drill uses | `sudo -u postgres psql -c 'ALTER ROLE universe CREATEDB'` once, or run the drill with a superuser `DATABASE_URL` (§7.6 P3) |
-| `deploy.sh` errors while reading the env file (`command not found`, `unexpected token`) | A value in `.env` contains shell-special characters (`&`, spaces, `$`) and the script sources the file | Quote that value in `.env` (`KEY='value'`), or export `DATABASE_URL` in the shell and rerun |
+| `deploy.sh` errors while reading the env file (`command not found`, `unexpected token`) | A value in `.env` contains shell-special characters (`&`, spaces, `$`) and the script sources the file with `set -e`, so it dies before anything else runs | Quote that value in `.env` (`KEY='value'` — dotenv and systemd both strip the quotes). As a last resort run with `ENV_FILE=/dev/null` and export `DATABASE_URL` and `PORT` yourself |
 | `vite: not found` during the client build | `npm ci` ran with `NODE_ENV=production` exported and skipped devDependencies | Use `deploy.sh` (it passes `--include=dev`) or `npm ci --include=dev --prefix client` |
 | `migrate:status` still shows pending files after the deploy | Migration step failed earlier (read its error), or it ran against a different `DATABASE_URL` than the app uses | Fix the cause, `npm run migrate:up --prefix server`, then §7.4 S1–S4 |
 | §7.4 S3 prints a filename (orphan migration) | The database was migrated by a version of the old repository that shipped a file this checkout lacks | Do not "fix" the `_migrations` table. Compare the old checkout's `server/src/db/migrations/` with the new one, port the missing file forward as a new additive migration, and follow `docs/migration-audit.md` |
@@ -387,10 +432,10 @@ Work through the groups in order. "Command" runs on the application server; `psq
 | Seed aborts: `seed:reference changed business table` | A business row was written by a user during the run | Re-run at a quiet moment; the seed itself never writes those tables |
 | `seed-on-deploy: SEED_ON_DEPLOY is not set — skipping.` | Expected unless you wanted the Ghana pack | Add `SEED_ON_DEPLOY=reference` to `.env` and re-run `npm run seed:deploy --prefix server` |
 | Fabricated treaties appeared on the dashboards | Someone set `SEED_ON_DEPLOY=1`/`reset` or ran `seed:treaties` | `node server/scripts/seedTestTreaties.js --reset-only` removes only rows stamped `seed:test-treaties`; remove the variable |
-| Login screen lists only `cuo` and `underwriter` | The auth route fell back to demo users because the tables were not ready — migrations did not run, or the app points at an empty database | §7.3 R1 + §7.4 S1; fix `DATABASE_URL` or run `migrate:up`, reload |
+| Login screen lists exactly two users, *Chief Underwriter* and *Underwriter 1*, and `curl -s localhost:4000/api/auth/users` shows `user_id` `00000000-0000-0000-0000-000000000001`/`…0002` | The auth route served its static fallback because `uw_user` is empty or missing — migrations did not run, or the app points at an empty database | §7.3 R1 + §7.4 S1; fix `DATABASE_URL` or run `migrate:up`, reload |
 | `/api/health/deep` returns 503 `db.ok` false | Postgres down, wrong `DATABASE_URL`, or pool exhausted | §7.2 D1–D3; `X-Pool-Waiting` > 0 sustained → raise `DB_POOL_MAX` within §7.6 P1 |
-| Postgres logs / app errors `FATAL: sorry, too many clients already` | workers × `DB_POOL_MAX` exceeds `max_connections` (typically `DB_POOL_MAX=50` left in `.env` under a 4-worker cluster) | §7.6 P1: remove `DB_POOL_MAX` from `.env` (the ecosystem file derives a safe per-worker value) or set it to ≤ 20, then `pm2 reload ecosystem.config.cjs` |
-| PM2 prints `In-memory PM2 is out-of-date` / version mismatch after the deploy | The repository's `npm ci` installed a local `pm2` that differs from the daemon's version | Keep using the `pm2` you started the app with; if you want them aligned run `pm2 update` (as the PM2 user) — it restarts the daemon, not the app |
+| Postgres logs / app errors `FATAL: sorry, too many clients already` | workers × per-worker pool exceeds `max_connections` — typically because `DB_POOL_MAX=50` was exported in the shell (e.g. after sourcing `.env`) when `pm2 start`/`pm2 reload` ran, so every worker got 50 | Reload from a clean shell: `sudo -u universe -H bash -c 'cd /opt/universe && env -u DB_POOL_MAX pm2 reload ecosystem.config.cjs && pm2 save'`, then confirm `pool.max` in `/api/health/deep` (§7.6 P1) |
+| PM2 prints `In-memory PM2 is out-of-date` / version mismatch after the deploy | The repository's `npm ci` installed a local `pm2` that differs from the daemon's version | Keep using the `pm2` you started the app with. If you want them aligned, `pm2 update` (as the PM2 user) saves the list, kills the daemon and resurrects the workers — expect a few seconds of downtime, so do it in the maintenance window and follow with `pm2 save` |
 | App starts with `AUTH_JWT_SECRET is required` / `must not be a placeholder` | Env file incomplete | v2.0 §5.1 — set a ≥32-char secret, reload |
 | Page looks unchanged after the deploy | Browser cache | Hard refresh (Ctrl/Cmd-Shift-R); confirm `git log -1` and PM2 uptime |
 
@@ -409,8 +454,9 @@ Work through the groups in order. "Command" runs on the application server; `psq
 | Users | `cd server && node scripts/manage-user.js list \| set-password <user> [--must-change] \| deactivate <user>` |
 | Health | `curl -s localhost:4000/api/health/deep` |
 | Logs | `sudo -u universe -H pm2 logs universe --lines 100` |
-| Backup / verify | `scripts/backup-db.sh` / `scripts/verify-restore.sh` (with `DATABASE_URL` set) |
-| Rollback code | `… deploy/deploy.sh --ref <old commit> --no-restart --no-seed` then reload |
+| Backup / verify | `scripts/backup-db.sh` / `scripts/verify-restore.sh` (with `DATABASE_URL` set; the role needs `CREATEDB` for the verify) |
+| Restore a dump | `sudo -u postgres pg_restore --clean --if-exists --no-owner --role=universe -d universe <file>.dump` |
+| Rollback code | as `universe`: `git checkout <old commit>` → `npm ci` (root, client `--include=dev`, server) → `npm run build --prefix client` → `pm2 reload ecosystem.config.cjs` |
 
 ## Appendix B — Sign-off record
 

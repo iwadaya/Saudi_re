@@ -404,7 +404,7 @@ npm run cluster:reload
 If a migration itself is the problem, restore the Postgres dump:
 
 ```bash
-sudo -u postgres pg_restore --clean --if-exists \
+sudo -u postgres pg_restore --clean --if-exists --no-owner --role=universe \
   -d universe /var/backups/universe/universe-<date>.dump
 ```
 
