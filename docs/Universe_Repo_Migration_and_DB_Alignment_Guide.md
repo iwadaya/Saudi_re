@@ -22,6 +22,8 @@ The new repository contains the full history of the old one plus a maintained de
 | Migrations | Same runner and commands. | Same chain (`_migrations` table keyed by filename). This snapshot ships **149** migration files, the last being `157_quote_offer_status_checks.sql`. Nothing is re-applied; only files your database has not seen run. |
 | Deployment kit | — | New `deploy/` directory: `install-server.sh`, `provision-db.sh`, `deploy.sh`, `smoke-test.sh`, a hardened systemd unit, an nginx site and an environment template — the maintained path for a **fresh** server (§6). |
 | Smoke test | Manual `curl`. | `deploy/smoke-test.sh`: shallow health, deep health (DB round-trip), a non-empty login user list, SPA served, optional real login. Exit 0 = green. |
+| Seeded accounts | v2.0 §11.5: log in as `chongo.nkalamo` / `Universe#1234` with a forced password change. | Migrations 132 and 143 (July/August 2026) replace that with six generic personas — `chief.underwriter`, `retro.manager`, `underwriter1–4` — password `demo2026`, no forced change. On a database that has not run 132 yet, the deploy **renames the old accounts and resets their passwords** (§4 Step 6). Rotate or deactivate them before users are told. |
+| Connection headroom | v2.0 §4.2: leave at least 30 of the 100 connections free. | `ecosystem.config.cjs` derives the per-worker pool so the cluster total is ≤ 80, i.e. 20 free; this guide's P1 uses that rule. To keep the spec's 30, export `DB_POOL_MAX=17` (4 workers) when starting/reloading PM2. |
 
 Everything else in the v2.0 specification — sizing, ports, nginx, TLS, backups, secrets, PM2, the security baseline — still applies as written.
 
@@ -156,7 +158,7 @@ Expected: `-rw-------` owned by `universe`; `NODE_ENV=production`; `PORT=4000`; 
 sudo env ENV_FILE=/opt/universe/.env /opt/universe/deploy/deploy.sh --ref main --no-restart
 ```
 
-What it prints, in order (each step is a `▶` header): `1. fetching origin and checking out 'main'` (and the commit it landed on) → `2. installing dependencies from lockfiles (npm ci)` → `3. building the client bundle` → `4. database migrations` (the applied/pending list, then one `migration completed` line per file and `migrations complete`) → `5. reference data (countries, currencies, brokers, cedants, …) — never contracts` (the counts block shown in §5.2, then the `seed-on-deploy:` line) → `6. restart skipped (--no-restart) — run: sudo systemctl restart universe && deploy/smoke-test.sh` → `done — <commit> is deployed`. **Ignore the `systemctl` hint in step 6 on a PM2 server** — reload PM2 as shown next. Normal noise between the headers: a dotenv banner (`◇ injected env (N) from ../.env`) before every Node step, JSON `DB pool connecting` / `DB pool configured` lines, and inside step 5 an early `reference data ready … "cedants":22` line *before* the counts block reports 40 — the block is the authoritative result. The migrations and the seed run **before** the reload, so a failure leaves the old version running.
+What it prints, in order (each step is a `▶` header): `1. fetching origin and checking out 'main'` (and the commit it landed on) → `2. installing dependencies from lockfiles (npm ci)` → `3. building the client bundle` → `4. database migrations` (the applied/pending list, then one `migration completed` line per file and `migrations complete`) → `5. reference data (countries, currencies, brokers, cedants, …) — never contracts` (the counts block shown in §5.2, then the `seed-on-deploy:` line) → `6. restart skipped (--no-restart) — run: sudo systemctl restart universe && deploy/smoke-test.sh` → `done — <commit> is deployed`. **Ignore the `systemctl` hint in step 6 on a PM2 server** — reload PM2 as shown next. Normal noise between the headers: a dotenv banner (`◇ injected env (N) from ../.env`) before every Node step, JSON `DB pool connecting` / `DB pool configured` lines, and inside step 5 an early `reference data ready … "cedants":22` line *before* the counts block reports 40 — the block is the authoritative result. The migrations and the seed run **before** the reload, so a failure leaves the old API workers running — but the new client bundle and dependencies are already on disk by then, and the workers serve `client/dist` from disk. Do not leave the server in that state: fix the cause and re-run the deploy, or put the old tree back (Rollback below) before walking away.
 
 Now reload the application under PM2 — as the user that owns the PM2 daemon (`universe` per v2.0), with the same `pm2` you started it with, and with the same environment overrides (`PM2_INSTANCES`, `DB_POOL_MAX`) exported if you used any at start, because `ecosystem.config.cjs` re-derives the worker count and per-worker pool on every reload — and smoke-test it:
 
@@ -231,10 +233,10 @@ pm2 reload ecosystem.config.cjs && pm2 save
 exit
 ```
 
-Migrations are forward-only. If a migration itself is the problem, stop the app (`sudo -u universe -H pm2 stop universe`), restore the step-1 dump, then roll the code back as above. The dump was taken with `--no-owner`, so restore it **with `--role=universe`** — without it every restored table ends up owned by `postgres` and the application gets `permission denied for table …`:
+Migrations are forward-only. If a migration itself is the problem, stop the app (`sudo -u universe -H pm2 stop universe`), restore the step-1 dump as the `postgres` superuser, then roll the code back as above. The custom-format archive records that `universe` owns every object, so the restore hands ownership back to the application role (verify afterwards with `psql "$DATABASE_URL" -tAc "select tableowner from pg_tables where tablename='contract'"` → `universe`):
 
 ```bash
-sudo -u postgres pg_restore --clean --if-exists --no-owner --role=universe -d universe /var/backups/universe/<file>.dump
+sudo -u postgres pg_restore --clean --if-exists -d universe /var/backups/universe/<file>.dump
 ```
 
 To move forward again after a rollback, check `main` out first (`sudo -u universe -H git -C /opt/universe checkout -B main origin/main`) so the kit is back on disk, then repeat Step 5.
@@ -297,7 +299,7 @@ In the browser: open a new treaty — the **Cedant** dropdown lists the Saudi co
 - The seed is idempotent: run `sudo -u universe -H node server/src/db/seeds/run.js` from `/opt/universe` as often as you like. One caveat: the natural keys from migration 150 cover **active** rows only, so a seeded country, class of business, broker or cedant that a user has *deactivated* on the reference screens is re-created as a new active row by the next seed (the deactivated row stays; counts grow by one). If a seeded name must stay hidden, rename it instead of deactivating it. Currencies, treaty types and reinsurers are not affected.
 - It must run **after** `migrate:up`. On a database that is behind migration 150 it fails inside `002_reference_data.sql` — with `column "is_active" does not exist` if it is behind 141, or `there is no unique or exclusion constraint matching the ON CONFLICT specification` if it is at 141–149 — apply migrations, then re-run.
 - If it aborts with `seed:reference changed business table "…"`, something other than reference data moved during the run (most likely a user working at that moment). Nothing is rolled back that users did; re-run at a quiet moment and compare the two counts.
-- A seed failure inside `deploy/deploy.sh` stops the script before the reload — the old version keeps running. Fix, then re-run the deploy.
+- A seed failure inside `deploy/deploy.sh` stops the script before the reload — the old API workers keep running, although the new build is already on disk (§4 Step 5). Fix, then re-run the deploy; do not leave it half-done.
 
 ## 6. Path B — fresh server from the new repository (deployment kit)
 
@@ -317,7 +319,7 @@ It installs Node 20, PostgreSQL 16 and nginx, creates the `universe` user, clone
 
 ```bash
 sudo systemctl stop universe 2>/dev/null || true
-sudo -u postgres pg_restore --clean --if-exists --no-owner --role=universe -d universe /path/to/universe-<stamp>.dump
+sudo -u postgres pg_restore --clean --if-exists -d universe /path/to/universe-<stamp>.dump     # archive carries ownership → objects owned by universe
 sudo rsync -a --chown=universe:universe old-server:/opt/universe/uploads/ /var/lib/universe/uploads/
 ```
 
@@ -398,7 +400,7 @@ Work through the groups in order. "Command" runs on the application server; `psq
 
 | # | Check | Command | Expected | Proves |
 |---|---|---|---|---|
-| P1 | Connection budget | `psql "$DATABASE_URL" -tAc "show max_connections"`; PM2 workers from `pm2 status`; per-worker pool from R3 `pool.max` or `sudo -u universe -H pm2 env 0 \| grep DB_POOL_MAX` | workers × pool.max ≤ max_connections − 20 (e.g. 4 × 20 = 80 ≤ 80). Under PM2 the per-worker pool is what `ecosystem.config.cjs` injects: `floor(80 / workers)` (min 8), **unless `DB_POOL_MAX` was exported in the shell that ran `pm2 start`/`pm2 reload`** — then that value is used verbatim per worker (4 × 50 = 200 > 100). A `DB_POOL_MAX` line in `.env` does **not** reach the PM2 workers (they already carry the injected value); it only affects CLI scripts and the single-process systemd path. So never run `pm2 reload` from a shell that has sourced `.env`; if in doubt reload with `env -u DB_POOL_MAX pm2 reload ecosystem.config.cjs` | The cluster cannot exhaust Postgres |
+| P1 | Connection budget | `psql "$DATABASE_URL" -tAc "show max_connections"`; PM2 workers from `pm2 status`; per-worker pool from R3 `pool.max` or `sudo -u universe -H pm2 env 0 \| grep DB_POOL_MAX` | workers × pool.max ≤ max_connections − 20 (e.g. 4 × 20 = 80 ≤ 80; this 20-connection headroom is what the ecosystem file enforces and supersedes v2.0 §4.2's 30 — see §1). Under PM2 the per-worker pool is what `ecosystem.config.cjs` injects: `floor(80 / workers)` (min 8), **unless `DB_POOL_MAX` was exported in the shell that ran `pm2 start`/`pm2 reload`** — then that value is used verbatim per worker (4 × 50 = 200 > 100). A `DB_POOL_MAX` line in `.env` does **not** reach the PM2 workers (they already carry the injected value); it only affects CLI scripts and the single-process systemd path. So never run `pm2 reload` from a shell that has sourced `.env`; if in doubt reload with `env -u DB_POOL_MAX pm2 reload ecosystem.config.cjs` | The cluster cannot exhaust Postgres |
 | P2 | Accounts | `cd /opt/universe/server && sudo -u universe -H node scripts/manage-user.js list` | your real users active; seeded personas (`chief.underwriter`, `retro.manager`, `underwriter1–4`) rotated or deactivated | No `demo2026` login remains |
 | P3 | Backup after the switch | `ls -lt /var/backups/universe \| head -2`; weekly `scripts/verify-restore.sh` exit 0 | a dump newer than the deploy. `verify-restore.sh` creates and drops a scratch database, so the role in its `DATABASE_URL` needs `CREATEDB` — grant it once with `sudo -u postgres psql -c 'ALTER ROLE universe CREATEDB'` (as `deploy/README.md` step 10 does), or run it with a superuser URL; otherwise it fails with `permission denied to create database` | Recovery point reflects the migrated schema |
 
@@ -455,7 +457,7 @@ Work through the groups in order. "Command" runs on the application server; `psq
 | Health | `curl -s localhost:4000/api/health/deep` |
 | Logs | `sudo -u universe -H pm2 logs universe --lines 100` |
 | Backup / verify | `scripts/backup-db.sh` / `scripts/verify-restore.sh` (with `DATABASE_URL` set; the role needs `CREATEDB` for the verify) |
-| Restore a dump | `sudo -u postgres pg_restore --clean --if-exists --no-owner --role=universe -d universe <file>.dump` |
+| Restore a dump | `sudo -u postgres pg_restore --clean --if-exists -d universe <file>.dump` (stop the app first) |
 | Rollback code | as `universe`: `git checkout <old commit>` → `npm ci` (root, client `--include=dev`, server) → `npm run build --prefix client` → `pm2 reload ecosystem.config.cjs` |
 
 ## Appendix B — Sign-off record

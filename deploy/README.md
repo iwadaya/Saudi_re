@@ -383,7 +383,7 @@ restore the last dump first:
 
 ```bash
 sudo systemctl stop universe
-sudo -u postgres pg_restore --clean --if-exists --no-owner --role=universe -d universe /var/backups/universe/universe-<stamp>.dump
+sudo -u postgres pg_restore --clean --if-exists -d universe /var/backups/universe/universe-<stamp>.dump
 sudo deploy/deploy.sh --ref <previous ref>
 ```
 
